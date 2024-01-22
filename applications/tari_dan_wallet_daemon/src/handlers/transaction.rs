@@ -10,7 +10,7 @@ use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager},
     network::{TransactionFinalizedResult, TransactionQueryResult},
 };
-use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{instruction::Instruction, substate::SubstateId};
 use tari_template_lib::{args, models::Amount};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
@@ -101,7 +101,7 @@ pub async fn handle_submit(
     let inputs = if req.override_inputs {
         req.inputs
     } else {
-        // If we are not overriding inputs, we will use inputs that we know about in the local substate address db
+        // If we are not overriding inputs, we will use inputs that we know about in the local substate id db
         let mut substates = get_referenced_component_addresses(&req.instructions);
         substates.extend(get_referenced_component_addresses(&req.fee_instructions));
         let substates = substates.iter().collect::<Vec<_>>();
@@ -191,6 +191,7 @@ pub async fn handle_get(
         transaction: transaction.transaction,
         result: transaction.finalize,
         status: transaction.status,
+        last_update_time: transaction.last_update_time,
     })
 }
 
@@ -210,7 +211,7 @@ pub async fn handle_get_all(
     Ok(TransactionGetAllResponse {
         transactions: transactions
             .into_iter()
-            .map(|tx| (tx.transaction, tx.finalize, tx.status))
+            .map(|tx| (tx.transaction, tx.finalize, tx.status, tx.last_update_time))
             .collect(),
     })
 }
@@ -320,11 +321,11 @@ pub async fn handle_wait_result(
     }
 }
 
-fn get_referenced_component_addresses(instructions: &[Instruction]) -> HashSet<SubstateAddress> {
+fn get_referenced_component_addresses(instructions: &[Instruction]) -> HashSet<SubstateId> {
     let mut components = HashSet::new();
     for instruction in instructions {
         if let Instruction::CallMethod { component_address, .. } = instruction {
-            components.insert(SubstateAddress::Component(*component_address));
+            components.insert(SubstateId::Component(*component_address));
         }
     }
     components

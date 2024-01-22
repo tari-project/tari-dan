@@ -2,7 +2,7 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::traits::StateManager;
-use tari_dan_common_types::{committee::CommitteeShard, ShardId};
+use tari_dan_common_types::{committee::CommitteeShard, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{Block, ExecutedTransaction, SubstateRecord},
     StateStore,
@@ -23,7 +23,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for TariStateManager {
     fn commit_transaction(
         &self,
         tx: &mut TStateStore::WriteTransaction<'_>,
-        block: &Block<TStateStore::Addr>,
+        block: &Block,
         transaction: &ExecutedTransaction,
         local_committee_shard: &CommitteeShard,
     ) -> Result<(), Self::Error> {
@@ -34,8 +34,8 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for TariStateManager {
 
         let down_shards = diff
             .down_iter()
-            .map(|(addr, version)| ShardId::from_address(addr, *version))
-            .filter(|shard| local_committee_shard.includes_shard(shard));
+            .map(|(addr, version)| SubstateAddress::from_address(addr, *version))
+            .filter(|shard| local_committee_shard.includes_substate_address(shard));
         SubstateRecord::destroy_many(
             tx,
             down_shards,
@@ -47,8 +47,8 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for TariStateManager {
         )?;
 
         let to_up = diff.up_iter().filter_map(|(addr, substate)| {
-            let shard_id = ShardId::from_address(addr, substate.version());
-            if local_committee_shard.includes_shard(&shard_id) {
+            let address = SubstateAddress::from_address(addr, substate.version());
+            if local_committee_shard.includes_substate_address(&address) {
                 Some(SubstateRecord::new(
                     addr.clone(),
                     substate.version(),

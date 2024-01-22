@@ -180,14 +180,8 @@ async fn when_i_create_account_via_wallet_daemon_with_free_coins(
     wallet_daemon_name: String,
     amount: i64,
 ) {
-    wallet_daemon_cli::create_account_with_free_coins(
-        world,
-        account_name,
-        wallet_daemon_name,
-        amount.try_into().unwrap(),
-        None,
-    )
-    .await;
+    wallet_daemon_cli::create_account_with_free_coins(world, account_name, wallet_daemon_name, amount.into(), None)
+        .await;
 }
 
 #[when(expr = "I create a key named {word} for {word}")]
@@ -209,7 +203,7 @@ async fn when_i_create_account_via_wallet_daemon_with_free_coins_using_key(
         world,
         account_name,
         wallet_daemon_name,
-        amount.try_into().unwrap(),
+        amount.into(),
         Some(key_name),
     )
     .await;
@@ -406,7 +400,7 @@ async fn when_transfer_via_wallet_daemon(
         .find(|(name, _)| **name == resource_name)
         .map(|(_, data)| data.clone())
         .unwrap_or_else(|| panic!("No resource named {}", resource_name))
-        .address
+        .substate_id
         .as_resource_address()
         .unwrap_or_else(|| panic!("{} is not a resource", resource_name));
 

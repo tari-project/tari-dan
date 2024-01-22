@@ -5,14 +5,14 @@ use std::{collections::HashSet, time::Instant};
 
 use async_trait::async_trait;
 use log::*;
-use tari_comms::types::CommsPublicKey;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_engine::{runtime::VirtualSubstates, state_store::memory::MemoryStateStore};
 use tari_dan_storage::{consensus_models::SubstateRecord, StateStore, StorageError};
 use tari_engine_types::{
     instruction::Instruction,
-    substate::SubstateAddress,
-    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
+    substate::SubstateId,
+    virtual_substate::{VirtualSubstate, VirtualSubstateId},
 };
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
 use tari_indexer_lib::{error::IndexerError, substate_cache::SubstateCache, substate_scanner::SubstateScanner};
@@ -38,8 +38,8 @@ impl<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache>
     TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache>
 where
     TStateStore: StateStore,
-    TEpochManager: EpochManagerReader<Addr = CommsPublicKey>,
-    TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey>,
+    TEpochManager: EpochManagerReader<Addr = TStateStore::Addr>,
+    TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = TStateStore::Addr>,
     TSubstateCache: SubstateCache,
 {
     pub fn new(
@@ -60,7 +60,7 @@ where
         &self,
         transaction: &Transaction,
         out: &MemoryStateStore,
-    ) -> Result<HashSet<ShardId>, SubstateResolverError> {
+    ) -> Result<HashSet<SubstateAddress>, SubstateResolverError> {
         let (local_substates, missing_shards) = self
             .store
             .with_read_tx(|tx| SubstateRecord::get_any(tx, transaction.all_inputs_iter()))?;
@@ -74,7 +74,7 @@ where
         out.set_all(
             local_substates
                 .into_iter()
-                .map(|s| (s.address.clone(), s.into_substate())),
+                .map(|s| (s.substate_id.clone(), s.into_substate())),
         );
 
         Ok(missing_shards)
@@ -82,32 +82,34 @@ where
 
     async fn resolve_remote_substates(
         &self,
-        shards: HashSet<ShardId>,
+        substate_addresses: HashSet<SubstateAddress>,
         out: &MemoryStateStore,
     ) -> Result<(), SubstateResolverError> {
-        let mut retrieved_substates = Vec::with_capacity(shards.len());
-        for shard in shards {
+        let mut retrieved_substates = Vec::with_capacity(substate_addresses.len());
+        for substate_address in substate_addresses {
             let timer = Instant::now();
             let substate_result = self
                 .scanner
-                .get_specific_substate_from_committee_by_shard(shard)
+                .get_specific_substate_from_committee_by_shard(substate_address)
                 .await?;
 
             match substate_result {
-                SubstateResult::Up { address, substate, .. } => {
+                SubstateResult::Up { id, substate, .. } => {
                     info!(
                         target: LOG_TARGET,
                         "Retrieved substate {} in {}ms",
-                        address,
+                        id,
                         timer.elapsed().as_millis()
                     );
-                    retrieved_substates.push((address, substate));
+                    retrieved_substates.push((id, substate));
                 },
-                SubstateResult::Down { address, version, .. } => {
-                    return Err(SubstateResolverError::InputSubstateDowned { address, version });
+                SubstateResult::Down { id, version, .. } => {
+                    return Err(SubstateResolverError::InputSubstateDowned { id, version });
                 },
                 SubstateResult::DoesNotExist => {
-                    return Err(SubstateResolverError::InputSubstateDoesNotExist { shard });
+                    return Err(SubstateResolverError::InputSubstateDoesNotExist {
+                        address: substate_address,
+                    });
                 },
             }
         }
@@ -119,12 +121,12 @@ where
 
     async fn resolve_remote_virtual_substates(
         &self,
-        claim_instructions: Vec<(Epoch, CommsPublicKey, ShardId)>,
+        claim_instructions: Vec<(Epoch, PublicKey, SubstateAddress)>,
     ) -> Result<VirtualSubstates, SubstateResolverError> {
         let mut retrieved_substates = VirtualSubstates::with_capacity(claim_instructions.len());
         for (epoch, vn_pk, shard) in claim_instructions {
             let timer = Instant::now();
-            let address = VirtualSubstateAddress::UnclaimedValidatorFee {
+            let address = VirtualSubstateId::UnclaimedValidatorFee {
                 epoch: epoch.as_u64(),
                 address: vn_pk,
             };
@@ -151,9 +153,9 @@ where
 impl<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache> SubstateResolver
     for TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache>
 where
-    TStateStore: StateStore<Addr = CommsPublicKey> + Sync + Send,
-    TEpochManager: EpochManagerReader<Addr = CommsPublicKey>,
-    TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey>,
+    TStateStore: StateStore + Sync + Send,
+    TEpochManager: EpochManagerReader<Addr = TStateStore::Addr>,
+    TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = TStateStore::Addr>,
     TSubstateCache: SubstateCache,
 {
     type Error = SubstateResolverError;
@@ -193,7 +195,7 @@ where
 
         let mut virtual_substates = VirtualSubstates::new();
         virtual_substates.insert(
-            VirtualSubstateAddress::CurrentEpoch,
+            VirtualSubstateId::CurrentEpoch,
             VirtualSubstate::CurrentEpoch(current_epoch.as_u64()),
         );
 
@@ -211,8 +213,8 @@ where
         let signer = transaction.signer_public_key();
         if let Some(vn) = validators.values().find(|vn| vn.fee_claim_public_key != *signer) {
             return Err(SubstateResolverError::UnauthorizedFeeClaim {
-                validator_address: vn.address.clone(),
-                signer: signer.clone(),
+                validator_address: vn.address.to_string(),
+                signer: signer.to_string(),
             });
         }
 
@@ -221,7 +223,7 @@ where
         let mut remote_claim_vns = Vec::new();
         claim_instructions.into_iter().for_each(|(epoch, public_key)| {
             let vn = validators.get(&(epoch, public_key.clone())).unwrap();
-            if local_committee_shard.includes_shard(&vn.shard_key) {
+            if local_committee_shard.includes_substate_address(&vn.shard_key) {
                 local_claim_vns.push((epoch, public_key))
             } else {
                 remote_claim_vns.push((epoch, public_key, vn.shard_key))
@@ -245,17 +247,14 @@ pub enum SubstateResolverError {
     StorageError(#[from] StorageError),
     #[error("Indexer error: {0}")]
     IndexerError(#[from] IndexerError),
-    #[error("Input substate does not exist: {shard}")]
-    InputSubstateDoesNotExist { shard: ShardId },
-    #[error("Input substate is downed: {address} (version: {version})")]
-    InputSubstateDowned { address: SubstateAddress, version: u32 },
+    #[error("Input substate does not exist: {address}")]
+    InputSubstateDoesNotExist { address: SubstateAddress },
+    #[error("Input substate is downed: {id} (version: {version})")]
+    InputSubstateDowned { id: SubstateId, version: u32 },
     #[error("Virtual substate error: {0}")]
     VirtualSubstateError(#[from] VirtualSubstateError),
     #[error("Epoch manager error: {0}")]
     EpochManagerError(#[from] EpochManagerError),
     #[error("Unauthorized fee claim: validator node {validator_address} (transaction signed by: {signer})")]
-    UnauthorizedFeeClaim {
-        validator_address: CommsPublicKey,
-        signer: CommsPublicKey,
-    },
+    UnauthorizedFeeClaim { validator_address: String, signer: String },
 }

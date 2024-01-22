@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-/// A tag applied to various engine types. We use an unassigned CBOR tag range (128 to 255 inclusive). https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
+/// A tag applied to various engine types. We use an unassigned CBOR tag range (128 to 255 inclusive). <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
 #[derive(Clone, Copy)]
 #[repr(u8)]
 pub enum BinaryTag {

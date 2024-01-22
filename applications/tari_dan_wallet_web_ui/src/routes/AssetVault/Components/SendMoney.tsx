@@ -36,26 +36,36 @@ import useAccountStore from "../../../store/accountStore";
 
 export default function SendMoney() {
   const [open, setOpen] = useState(false);
+  const [disabled, setDisabled] = useState(false);
+  const [estimatedFee, setEstimatedFee] = useState(0);
   const [transferFormState, setTransferFormState] = useState({
     publicKey: "",
     confidential: false,
     amount: "",
-    fee: "",
   });
 
-  const { accountName } = useAccountStore();
+  const { accountName, setPopup } = useAccountStore();
 
   const theme = useTheme();
-
-  console.log(accountName, transferFormState.amount, transferFormState.publicKey, transferFormState.fee);
 
   const { mutateAsync: sendIt } = useAccountsTransfer(
     accountName,
     parseInt(transferFormState.amount),
     "resource_0101010101010101010101010101010101010101010101010101010101010101",
     transferFormState.publicKey,
-    parseInt(transferFormState.fee),
-    transferFormState.confidential
+    estimatedFee,
+    transferFormState.confidential,
+    false,
+  );
+
+  const { mutateAsync: calculateFeeEstimate } = useAccountsTransfer(
+    accountName,
+    parseInt(transferFormState.amount),
+    "resource_0101010101010101010101010101010101010101010101010101010101010101",
+    transferFormState.publicKey,
+    1000,
+    transferFormState.confidential,
+    true,
   );
 
   const onPublicKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,6 +75,7 @@ export default function SendMoney() {
         [e.target.name]: e.target.value,
       });
     }
+    setEstimatedFee(0);
   };
 
   const onConfidentialChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -72,6 +83,7 @@ export default function SendMoney() {
       ...transferFormState,
       [e.target.name]: e.target.checked,
     });
+    setEstimatedFee(0);
   };
 
   const onNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -81,13 +93,34 @@ export default function SendMoney() {
         [e.target.name]: e.target.value,
       });
     }
+    setEstimatedFee(0);
   };
 
   const onTransfer = async () => {
     if (accountName) {
-      await sendIt();
-      setTransferFormState({ publicKey: "", confidential: false, amount: "", fee: "" });
-      setOpen(false);
+      setDisabled(true);
+      if (estimatedFee) {
+        sendIt()
+          .then(() => {
+            setTransferFormState({
+              publicKey: "",
+              confidential: false,
+              amount: "",
+            });
+            setOpen(false);
+            setPopup({ title: "Send successful", error: false });
+          })
+          .catch((e) => {
+            setPopup({ title: "Send failed", error: true, message: e.message });
+          })
+          .finally(() => {
+            setDisabled(false);
+          });
+      } else {
+        let result = await calculateFeeEstimate();
+        setEstimatedFee(result.fee);
+        setDisabled(false);
+      }
     }
   };
 
@@ -114,6 +147,7 @@ export default function SendMoney() {
               value={transferFormState.publicKey}
               onChange={onPublicKeyChange}
               style={{ flexGrow: 1 }}
+              disabled={disabled}
             />
             <FormControlLabel
               control={
@@ -121,6 +155,7 @@ export default function SendMoney() {
                   name="confidential"
                   checked={transferFormState.confidential}
                   onChange={onConfidentialChange}
+                  disabled={disabled}
                 />
               }
               label="Confidential"
@@ -131,13 +166,15 @@ export default function SendMoney() {
               value={transferFormState.amount}
               onChange={onNumberChange}
               style={{ flexGrow: 1 }}
+              disabled={disabled}
             />
             <TextField
               name="fee"
               label="Fee"
-              value={transferFormState.fee}
-              onChange={onNumberChange}
+              value={estimatedFee || "Press fee estimate to calculate"}
               style={{ flexGrow: 1 }}
+              disabled={disabled}
+              InputProps={{ readOnly: true }}
             />
             <Box
               className="flex-container"
@@ -145,11 +182,11 @@ export default function SendMoney() {
                 justifyContent: "flex-end",
               }}
             >
-              <Button variant="outlined" onClick={handleClose}>
+              <Button variant="outlined" onClick={handleClose} disabled={disabled}>
                 Cancel
               </Button>
-              <Button variant="contained" type="submit">
-                Send Tari
+              <Button variant="contained" type="submit" disabled={disabled}>
+                {estimatedFee ? "Send" : "Estimate fee"}
               </Button>
             </Box>
           </Form>

@@ -20,7 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::time::{Duration, Instant};
+use std::{
+    fmt::{Debug, Formatter},
+    time::{Duration, Instant},
+};
 
 use base_node::BaseNodeProcess;
 use cucumber::gherkin::Scenario;
@@ -29,8 +32,9 @@ use indexer::IndexerProcess;
 use indexmap::IndexMap;
 use miner::MinerProcess;
 use tari_common_types::types::PublicKey;
+use tari_core::transactions::test_helpers::{create_test_core_key_manager_with_memory_db, TestKeyManager};
 use tari_crypto::ristretto::{RistrettoComSig, RistrettoSecretKey};
-use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
+use tari_validator_node_cli::versioned_substate_id::VersionedSubstateId;
 use template::RegisteredTemplate;
 use validator_node::ValidatorNodeProcess;
 use wallet::WalletProcess;
@@ -49,7 +53,7 @@ pub mod wallet;
 pub mod wallet_daemon;
 pub mod wallet_daemon_cli;
 
-#[derive(Debug, Default, cucumber::World)]
+#[derive(cucumber::World)]
 pub struct TariWorld {
     pub base_nodes: IndexMap<String, BaseNodeProcess>,
     pub wallets: IndexMap<String, WalletProcess>,
@@ -58,7 +62,7 @@ pub struct TariWorld {
     pub vn_seeds: IndexMap<String, ValidatorNodeProcess>,
     pub miners: IndexMap<String, MinerProcess>,
     pub templates: IndexMap<String, RegisteredTemplate>,
-    pub outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
+    pub outputs: IndexMap<String, IndexMap<String, VersionedSubstateId>>,
     pub http_server: Option<MockHttpServer>,
     pub template_mock_server_port: Option<u16>,
     pub current_scenario_name: Option<String>,
@@ -68,6 +72,7 @@ pub struct TariWorld {
     pub addresses: IndexMap<String, String>,
     pub num_databases_saved: usize,
     pub account_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
+    pub key_manager: TestKeyManager,
     /// Key name -> key index
     pub wallet_keys: IndexMap<String, u64>,
     pub claim_public_keys: IndexMap<String, PublicKey>,
@@ -121,7 +126,7 @@ impl TariWorld {
             .unwrap_or_else(|| panic!("Base node {} not found", name))
     }
 
-    pub fn get_account_component_address(&self, name: &str) -> Option<VersionedSubstateAddress> {
+    pub fn get_account_component_address(&self, name: &str) -> Option<VersionedSubstateId> {
         let all_components = self
             .outputs
             .get(name)
@@ -192,5 +197,62 @@ impl TariWorld {
 
             break;
         }
+    }
+}
+
+impl Default for TariWorld {
+    fn default() -> Self {
+        Self {
+            base_nodes: IndexMap::new(),
+            wallets: IndexMap::new(),
+            validator_nodes: IndexMap::new(),
+            indexers: IndexMap::new(),
+            vn_seeds: IndexMap::new(),
+            miners: IndexMap::new(),
+            templates: IndexMap::new(),
+            outputs: IndexMap::new(),
+            http_server: None,
+            template_mock_server_port: None,
+            current_scenario_name: None,
+            commitments: IndexMap::new(),
+            commitment_ownership_proofs: IndexMap::new(),
+            rangeproofs: IndexMap::new(),
+            addresses: IndexMap::new(),
+            num_databases_saved: 0,
+            account_keys: IndexMap::new(),
+            key_manager: create_test_core_key_manager_with_memory_db(),
+            wallet_keys: IndexMap::new(),
+            claim_public_keys: IndexMap::new(),
+            wallet_daemons: IndexMap::new(),
+            fees_enabled: true,
+        }
+    }
+}
+
+impl Debug for TariWorld {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TariWorld")
+            .field("base_nodes", &self.base_nodes.keys())
+            .field("wallets", &self.wallets.keys())
+            .field("validator_nodes", &self.validator_nodes.keys())
+            .field("indexers", &self.indexers.keys())
+            .field("vn_seeds", &self.vn_seeds.keys())
+            .field("miners", &self.miners.keys())
+            .field("templates", &self.templates.keys())
+            .field("outputs", &self.outputs.keys())
+            .field("http_server", &self.http_server)
+            .field("template_mock_server_port", &self.template_mock_server_port)
+            .field("current_scenario_name", &self.current_scenario_name)
+            .field("commitments", &self.commitments.keys())
+            .field("commitment_ownership_proofs", &self.commitment_ownership_proofs.keys())
+            .field("rangeproofs", &self.rangeproofs.keys())
+            .field("addresses", &self.addresses.keys())
+            .field("num_databases_saved", &self.num_databases_saved)
+            .field("account_keys", &self.account_keys.keys())
+            .field("wallet_keys", &self.wallet_keys.keys())
+            .field("claim_public_keys", &self.claim_public_keys.keys())
+            .field("wallet_daemons", &self.wallet_daemons.keys())
+            .field("fees_enabled", &self.fees_enabled)
+            .finish()
     }
 }

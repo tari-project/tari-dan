@@ -4,15 +4,15 @@
 use std::str::FromStr;
 
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_template_lib::models::EncryptedData;
 
 use crate::models::ConfidentialProofId;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ConfidentialOutputModel {
-    pub account_address: SubstateAddress,
-    pub vault_address: SubstateAddress,
+    pub account_address: SubstateId,
+    pub vault_address: SubstateId,
     pub commitment: Commitment,
     pub value: u64,
     pub sender_public_nonce: Option<PublicKey>,

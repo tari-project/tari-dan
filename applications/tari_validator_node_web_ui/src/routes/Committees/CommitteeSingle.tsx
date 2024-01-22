@@ -20,15 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import TableRow from '@mui/material/TableRow';
-import { DataTableCell } from '../../Components/StyledComponents';
-import { Typography } from '@mui/material';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableContainer from '@mui/material/TableContainer';
-import TablePagination from '@mui/material/TablePagination';
-import './Committees.css';
+import { useState } from "react";
+import TableRow from "@mui/material/TableRow";
+import { DataTableCell } from "../../Components/StyledComponents";
+import { Typography } from "@mui/material";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableContainer from "@mui/material/TableContainer";
+import TablePagination from "@mui/material/TablePagination";
+import "./Committees.css";
 
 function Committee({
   begin,
@@ -44,16 +44,13 @@ function Committee({
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  const emptyRows =
-    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - members.length) : 0;
+  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - members.length) : 0;
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
@@ -69,15 +66,9 @@ function Committee({
                 <DataTableCell>
                   {end < begin ? (
                     <>
-                      [<span>{begin}</span>,{' '}
-                      <span>
-                        ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-                      </span>
-                      ] [
-                      <span>
-                        0000000000000000000000000000000000000000000000000000000000000000
-                      </span>
-                      , <span>{end}</span>]
+                      [<span>{begin}</span>,{" "}
+                      <span>ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff</span>] [
+                      <span>0000000000000000000000000000000000000000000000000000000000000000</span>, <span>{end}</span>]
                     </>
                   ) : (
                     <div>
@@ -93,17 +84,11 @@ function Committee({
           <Typography variant="h6">Public Keys</Typography>
           <Table>
             <TableBody>
-              {members
-                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                .map((member) => (
-                  <TableRow key={member}>
-                    <DataTableCell
-                      className={`member ${member === publicKey ? 'me' : ''}`}
-                    >
-                      {member}
-                    </DataTableCell>
-                  </TableRow>
-                ))}
+              {members.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((member) => (
+                <TableRow key={member}>
+                  <DataTableCell className={`member ${member === publicKey ? "me" : ""}`}>{member}</DataTableCell>
+                </TableRow>
+              ))}
               {emptyRows > 0 && (
                 <TableRow
                   style={{

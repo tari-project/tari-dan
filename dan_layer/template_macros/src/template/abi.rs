@@ -34,11 +34,14 @@ use tari_template_abi::{
 
 use crate::template::ast::{TemplateAst, TypeAst};
 
+pub const TARI_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
     let template_name_as_str = ast.template_name.to_string();
 
     let template_def = TemplateDef::V1(TemplateDefV1 {
         template_name: template_name_as_str.clone(),
+        tari_version: TARI_VERSION.to_owned(),
         functions: ast
             .get_functions()
             .map(|func| {

@@ -23,12 +23,11 @@
 use std::{collections::HashMap, sync::Arc};
 
 use log::info;
-use tari_comms::types::CommsPublicKey;
 use tari_dan_app_utilities::{
     template_manager::implementation::TemplateManager,
     transaction_executor::{TariDanTransactionProcessor, TransactionExecutor},
 };
-use tari_dan_common_types::{optional::IsNotFoundError, Epoch, ShardId};
+use tari_dan_common_types::{Epoch, PeerAddress, SubstateAddress};
 use tari_dan_engine::{
     bootstrap_state,
     fees::FeeTable,
@@ -37,43 +36,46 @@ use tari_dan_engine::{
 };
 use tari_engine_types::{
     commit_result::ExecuteResult,
-    substate::{Substate, SubstateAddress},
-    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
+    substate::{Substate, SubstateId},
+    virtual_substate::{VirtualSubstate, VirtualSubstateId},
 };
-use tari_epoch_manager::EpochManagerReader;
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_lib::{
     substate_cache::SubstateCache,
     substate_scanner::SubstateScanner,
     transaction_autofiller::TransactionAutofiller,
 };
 use tari_transaction::{SubstateRequirement, Transaction};
-use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
+use tari_validator_node_rpc::client::{
+    SubstateResult,
+    TariValidatorNodeRpcClientFactory,
+    ValidatorNodeClientFactory,
+    ValidatorNodeRpcClient,
+};
 use tokio::task;
 
 use crate::dry_run::error::DryRunTransactionProcessorError;
 
 const LOG_TARGET: &str = "tari::indexer::dry_run_transaction_processor";
 
-pub struct DryRunTransactionProcessor<TEpochManager, TClientFactory, TSubstateCache> {
-    epoch_manager: TEpochManager,
-    client_provider: TClientFactory,
-    transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory, TSubstateCache>,
-    template_manager: TemplateManager,
+pub struct DryRunTransactionProcessor<TSubstateCache> {
+    epoch_manager: EpochManagerHandle<PeerAddress>,
+    client_provider: TariValidatorNodeRpcClientFactory,
+    transaction_autofiller:
+        TransactionAutofiller<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache>,
+    template_manager: TemplateManager<PeerAddress>,
 }
 
-impl<TEpochManager, TClientFactory, TSubstateCache>
-    DryRunTransactionProcessor<TEpochManager, TClientFactory, TSubstateCache>
-where
-    TEpochManager: EpochManagerReader<Addr = CommsPublicKey> + 'static,
-    TClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey> + 'static,
-    <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
-    TSubstateCache: SubstateCache + 'static,
+impl<TSubstateCache> DryRunTransactionProcessor<TSubstateCache>
+where TSubstateCache: SubstateCache + 'static
 {
     pub fn new(
-        epoch_manager: TEpochManager,
-        client_provider: TClientFactory,
-        substate_scanner: Arc<SubstateScanner<TEpochManager, TClientFactory, TSubstateCache>>,
-        template_manager: TemplateManager,
+        epoch_manager: EpochManagerHandle<PeerAddress>,
+        client_provider: TariValidatorNodeRpcClientFactory,
+        substate_scanner: Arc<
+            SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache>,
+        >,
+        template_manager: TemplateManager<PeerAddress>,
     ) -> Self {
         let transaction_autofiller = TransactionAutofiller::new(substate_scanner);
 
@@ -115,7 +117,10 @@ where
         Ok(result.into_result())
     }
 
-    fn build_payload_processor(&self, transaction: &Transaction) -> TariDanTransactionProcessor<TemplateManager> {
+    fn build_payload_processor(
+        &self,
+        transaction: &Transaction,
+    ) -> TariDanTransactionProcessor<TemplateManager<PeerAddress>> {
         // simulate fees if the transaction requires it
         let fee_table = if Self::transaction_includes_fees(transaction) {
             // TODO: should match the VN fee table, should the fee table values be a consensus constant?
@@ -140,17 +145,17 @@ where
         &self,
         transaction: &Transaction,
         epoch: Epoch,
-    ) -> Result<HashMap<SubstateAddress, Substate>, DryRunTransactionProcessorError> {
+    ) -> Result<HashMap<SubstateId, Substate>, DryRunTransactionProcessorError> {
         let mut substates = HashMap::new();
 
-        for shard_id in transaction.inputs().iter().chain(transaction.input_refs()) {
+        for address in transaction.inputs().iter().chain(transaction.input_refs()) {
             // If the input has been filled, we've already fetched the substate
-            if transaction.filled_inputs().contains(shard_id) {
+            if transaction.filled_inputs().contains(address) {
                 continue;
             }
 
-            let (address, substate) = self.fetch_substate(*shard_id, epoch).await?;
-            substates.insert(address, substate);
+            let (id, substate) = self.fetch_substate(*address, epoch).await?;
+            substates.insert(id, substate);
         }
 
         Ok(substates)
@@ -158,26 +163,26 @@ where
 
     pub async fn fetch_substate(
         &self,
-        shard_id: ShardId,
+        address: SubstateAddress,
         epoch: Epoch,
-    ) -> Result<(SubstateAddress, Substate), DryRunTransactionProcessorError> {
-        let mut committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
+    ) -> Result<(SubstateId, Substate), DryRunTransactionProcessorError> {
+        let mut committee = self.epoch_manager.get_committee(epoch, address).await?;
         committee.shuffle();
 
         let mut nexist_count = 0;
         let mut err_count = 0;
 
-        for vn_public_key in &committee {
+        for vn_addr in committee.addresses() {
             // build a client with the VN
-            let mut client = self.client_provider.create_client(vn_public_key);
+            let mut client = self.client_provider.create_client(vn_addr);
 
-            match client.get_substate(shard_id).await {
-                Ok(SubstateResult::Up { substate, address, .. }) => {
-                    return Ok((address, substate));
+            match client.get_substate(address).await {
+                Ok(SubstateResult::Up { substate, id, .. }) => {
+                    return Ok((id, substate));
                 },
-                Ok(SubstateResult::Down { address, version, .. }) => {
+                Ok(SubstateResult::Down { id, version, .. }) => {
                     // TODO: we should seek proof of this.
-                    return Err(DryRunTransactionProcessorError::SubstateDowned { address, version });
+                    return Err(DryRunTransactionProcessorError::SubstateDowned { id, version });
                 },
                 Ok(SubstateResult::DoesNotExist) => {
                     // we do not stop when an individual claims DoesNotExist, we try all Vns
@@ -195,11 +200,11 @@ where
 
         // The substate does not exist on any VN or all validator nodes are offline, we return an error
         Err(DryRunTransactionProcessorError::AllValidatorsFailedToReturnSubstate {
-            shard_id,
+            address,
             epoch,
             nexist_count,
             err_count,
-            committee_size: committee.members().len(),
+            committee_size: committee.members().count(),
         })
     }
 
@@ -207,7 +212,7 @@ where
         let mut virtual_substates = VirtualSubstates::new();
 
         virtual_substates.insert(
-            VirtualSubstateAddress::CurrentEpoch,
+            VirtualSubstateId::CurrentEpoch,
             VirtualSubstate::CurrentEpoch(epoch.as_u64()),
         );
 

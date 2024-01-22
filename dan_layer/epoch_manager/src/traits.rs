@@ -26,13 +26,14 @@ use std::{
 };
 
 use async_trait::async_trait;
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::MergedValidatorNodeMerkleProof,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     Epoch,
     NodeAddressable,
-    ShardId,
+    SubstateAddress,
 };
 use tari_dan_storage::global::models::ValidatorNode;
 use tokio::sync::broadcast;
@@ -45,11 +46,15 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn subscribe(&self) -> Result<broadcast::Receiver<EpochManagerEvent>, EpochManagerError>;
 
-    async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<Self::Addr>, EpochManagerError>;
+    async fn get_committee(
+        &self,
+        epoch: Epoch,
+        shard: SubstateAddress,
+    ) -> Result<Committee<Self::Addr>, EpochManagerError>;
     async fn get_committee_within_shard_range(
         &self,
         epoch: Epoch,
-        range: RangeInclusive<ShardId>,
+        range: RangeInclusive<SubstateAddress>,
     ) -> Result<Committee<Self::Addr>, EpochManagerError>;
     async fn get_validator_node(
         &self,
@@ -57,36 +62,49 @@ pub trait EpochManagerReader: Send + Sync {
         addr: &Self::Addr,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError>;
 
+    async fn get_validator_node_by_public_key(
+        &self,
+        epoch: Epoch,
+        public_key: &PublicKey,
+    ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError>;
+
     /// Returns a list of validator nodes with the given epoch and public key. If any validator node is not found, an
     /// error is returned.
     async fn get_many_validator_nodes(
         &self,
-        query: Vec<(Epoch, Self::Addr)>,
-    ) -> Result<HashMap<(Epoch, Self::Addr), ValidatorNode<Self::Addr>>, EpochManagerError> {
+        query: Vec<(Epoch, PublicKey)>,
+    ) -> Result<HashMap<(Epoch, PublicKey), ValidatorNode<Self::Addr>>, EpochManagerError> {
+        #[allow(clippy::mutable_key_type)]
         let mut results = HashMap::with_capacity(query.len());
-        for (epoch, addr) in query {
-            let vn = self.get_validator_node(epoch, &addr).await?;
-            results.insert((epoch, addr.clone()), vn);
+        for (epoch, public_key) in query {
+            let vn = self.get_validator_node_by_public_key(epoch, &public_key).await?;
+            results.insert((epoch, public_key), vn);
         }
         Ok(results)
     }
 
+    async fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError>;
+
     async fn get_validator_set_merged_merkle_proof(
         &self,
         epoch: Epoch,
-        validators: Vec<Self::Addr>,
+        validators: Vec<PublicKey>,
     ) -> Result<MergedValidatorNodeMerkleProof, EpochManagerError>;
 
     async fn get_our_validator_node(&self, epoch: Epoch) -> Result<ValidatorNode<Self::Addr>, EpochManagerError>;
     async fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, EpochManagerError>;
-    async fn get_committee_shard(&self, epoch: Epoch, shard: ShardId) -> Result<CommitteeShard, EpochManagerError>;
-
-    async fn get_committee_shard_by_validator_address(
+    async fn get_committee_shard(
         &self,
         epoch: Epoch,
-        addr: &Self::Addr,
+        shard: SubstateAddress,
+    ) -> Result<CommitteeShard, EpochManagerError>;
+
+    async fn get_committee_shard_by_validator_public_key(
+        &self,
+        epoch: Epoch,
+        public_key: &PublicKey,
     ) -> Result<CommitteeShard, EpochManagerError> {
-        let validator = self.get_validator_node(epoch, addr).await?;
+        let validator = self.get_validator_node_by_public_key(epoch, public_key).await?;
         self.get_committee_shard(epoch, validator.shard_key).await
     }
 
@@ -95,11 +113,11 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn get_num_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError>;
 
-    async fn get_committees_by_buckets(
+    async fn get_committees_by_shards(
         &self,
         epoch: Epoch,
-        buckets: HashSet<ShardBucket>,
-    ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, EpochManagerError>;
+        shards: HashSet<Shard>,
+    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError>;
 
     async fn get_local_committee(&self, epoch: Epoch) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let validator = self.get_our_validator_node(epoch).await?;
@@ -107,12 +125,12 @@ pub trait EpochManagerReader: Send + Sync {
         Ok(committee)
     }
 
-    async fn get_committee_by_validator_address(
+    async fn get_committee_by_validator_public_key(
         &self,
         epoch: Epoch,
-        addr: &Self::Addr,
+        public_key: &PublicKey,
     ) -> Result<Committee<Self::Addr>, EpochManagerError> {
-        let validator = self.get_validator_node(epoch, addr).await?;
+        let validator = self.get_validator_node_by_public_key(epoch, public_key).await?;
         let committee = self.get_committee(epoch, validator.shard_key).await?;
         Ok(committee)
     }
@@ -128,7 +146,10 @@ pub trait EpochManagerReader: Send + Sync {
         Ok(committee.contains(validator_addr))
     }
 
-    async fn get_current_epoch_committee(&self, shard: ShardId) -> Result<Committee<Self::Addr>, EpochManagerError> {
+    async fn get_current_epoch_committee(
+        &self,
+        shard: SubstateAddress,
+    ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let current_epoch = self.current_epoch().await?;
         self.get_committee(current_epoch, shard).await
     }

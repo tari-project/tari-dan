@@ -37,13 +37,13 @@ use tari_engine_types::{
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
     lock::LockFlag,
     logs::LogEntry,
-    substate::{SubstateAddress, SubstateValue},
+    substate::{SubstateId, SubstateValue},
     TemplateAddress,
 };
 use tari_template_lib::{
     auth::{ComponentAccessRules, OwnerRule},
     crypto::RistrettoPublicKeyBytes,
-    models::{Amount, BucketId, ComponentAddress, Metadata, UnclaimedConfidentialOutputAddress},
+    models::{AddressAllocation, Amount, BucketId, ComponentAddress, Metadata, UnclaimedConfidentialOutputAddress},
     Hash,
 };
 use tari_transaction::id_provider::IdProvider;
@@ -161,14 +161,18 @@ impl StateTracker {
         owner_rule: OwnerRule,
         access_rules: ComponentAccessRules,
         component_id: Option<Hash>,
+        address_allocation: Option<AddressAllocation<ComponentAddress>>,
     ) -> Result<ComponentAddress, RuntimeError> {
         self.write_with(|state| {
             let (template_address, module_name) =
                 state.current_template().map(|(addr, name)| (*addr, name.to_string()))?;
 
-            let component_address = self
-                .id_provider()
-                .new_component_address(template_address, component_id)?;
+            let component_address = match address_allocation {
+                Some(address_allocation) => state.take_allocated_address(address_allocation.id())?,
+                None => self
+                    .id_provider()
+                    .new_component_address(template_address, component_id)?,
+            };
 
             let component = ComponentBody { state: component_state };
             let component = ComponentHeader {
@@ -183,7 +187,7 @@ impl StateTracker {
             let tx_hash = self.transaction_hash();
 
             // The template address/component_id combination will not necessarily be unique so we need to check this.
-            if state.substate_exists(&SubstateAddress::Component(component_address))? {
+            if state.substate_exists(&SubstateId::Component(component_address))? {
                 return Err(RuntimeError::ComponentAlreadyExists {
                     address: component_address,
                 });
@@ -193,7 +197,7 @@ impl StateTracker {
             state.validate_component_state(&indexed, true)?;
 
             state.new_substate(
-                SubstateAddress::Component(component_address),
+                SubstateId::Component(component_address),
                 SubstateValue::Component(component),
             )?;
 
@@ -210,11 +214,7 @@ impl StateTracker {
         })
     }
 
-    pub fn lock_substate(
-        &self,
-        address: &SubstateAddress,
-        lock_flag: LockFlag,
-    ) -> Result<LockedSubstate, RuntimeError> {
+    pub fn lock_substate(&self, address: &SubstateId, lock_flag: LockFlag) -> Result<LockedSubstate, RuntimeError> {
         self.write_with(|state| state.lock_substate(address, lock_flag))
     }
 
@@ -283,7 +283,7 @@ impl StateTracker {
 
     pub fn finalize(
         &self,
-        mut substates_to_persist: IndexMap<SubstateAddress, SubstateValue>,
+        mut substates_to_persist: IndexMap<SubstateId, SubstateValue>,
     ) -> Result<FinalizeData, RuntimeError> {
         let transaction_hash = self.transaction_hash();
         // Finalise will always reset the state
@@ -344,7 +344,7 @@ impl StateTracker {
         self.write_with(|current_state| current_state.take_state())
     }
 
-    pub fn take_substates_to_persist(&self) -> IndexMap<SubstateAddress, SubstateValue> {
+    pub fn take_substates_to_persist(&self) -> IndexMap<SubstateId, SubstateValue> {
         self.write_with(|state| state.take_mutated_substates())
     }
 

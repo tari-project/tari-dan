@@ -27,10 +27,10 @@ use jfs::Config;
 use serde::{Deserialize, Serialize};
 use tari_engine_types::{
     serde_with,
-    substate::{SubstateAddress, SubstateDiff},
+    substate::{SubstateDiff, SubstateId},
 };
 
-use crate::versioned_substate_address::VersionedSubstateAddress;
+use crate::versioned_substate_id::VersionedSubstateId;
 
 pub struct ComponentManager {
     store: jfs::Store,
@@ -51,9 +51,9 @@ impl ComponentManager {
 
     pub fn add_root_substate(
         &self,
-        substate_addr: SubstateAddress,
+        substate_addr: SubstateId,
         version: u32,
-        children: Vec<VersionedSubstateAddress>,
+        children: Vec<VersionedSubstateId>,
     ) -> anyhow::Result<()> {
         let substate = match self.get_root_substate(&substate_addr)? {
             Some(mut substate) => {
@@ -72,7 +72,7 @@ impl ComponentManager {
     }
 
     pub fn commit_diff(&self, diff: &SubstateDiff) -> anyhow::Result<()> {
-        let mut component: Option<(&SubstateAddress, u32)> = None;
+        let mut component: Option<(&SubstateId, u32)> = None;
         let mut children = vec![];
         // for (addr, version) in diff.down_iter() {
         // self.remove_substate_version(addr, *version)?;
@@ -80,20 +80,20 @@ impl ComponentManager {
 
         for (addr, substate) in diff.up_iter() {
             match addr {
-                addr @ SubstateAddress::Component(_) => {
+                addr @ SubstateId::Component(_) => {
                     if let Some((addr, version)) = component.take() {
                         self.add_root_substate(addr.clone(), version, std::mem::take(&mut children))?;
                     }
 
                     component = Some((addr, substate.version()));
                 },
-                addr @ SubstateAddress::Resource(_) |
-                addr @ SubstateAddress::TransactionReceipt(_) |
-                addr @ SubstateAddress::Vault(_) |
-                addr @ SubstateAddress::NonFungible(_) |
-                addr @ SubstateAddress::NonFungibleIndex(_) => {
-                    children.push(VersionedSubstateAddress {
-                        address: addr.clone(),
+                addr @ SubstateId::Resource(_) |
+                addr @ SubstateId::TransactionReceipt(_) |
+                addr @ SubstateId::Vault(_) |
+                addr @ SubstateId::NonFungible(_) |
+                addr @ SubstateId::NonFungibleIndex(_) => {
+                    children.push(VersionedSubstateId {
+                        substate_id: addr.clone(),
                         version: substate.version(),
                     });
                 },
@@ -109,7 +109,7 @@ impl ComponentManager {
         Ok(())
     }
 
-    // pub fn remove_substate_version(&self, address: &SubstateAddress, version: u32) -> anyhow::Result<()> {
+    // pub fn remove_substate_version(&self, address: &SubstateId, version: u32) -> anyhow::Result<()> {
     //     let mut substate = self
     //         .get_root_substate(address)?
     //         .ok_or_else(|| anyhow!("No substate found for address {}", address))?;
@@ -127,7 +127,7 @@ impl ComponentManager {
     //     Ok(())
     // }
 
-    pub fn get_root_substate(&self, substate_addr: &SubstateAddress) -> anyhow::Result<Option<SubstateMetadata>> {
+    pub fn get_root_substate(&self, substate_addr: &SubstateId) -> anyhow::Result<Option<SubstateMetadata>> {
         let meta = self.store.get(&substate_addr.to_address_string()).or_else(|e| {
             if e.kind() == io::ErrorKind::NotFound {
                 Ok(None)
@@ -142,8 +142,8 @@ impl ComponentManager {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubstateMetadata {
     #[serde(with = "serde_with::string")]
-    pub address: SubstateAddress,
-    pub versions: Vec<(u32, Vec<VersionedSubstateAddress>)>,
+    pub address: SubstateId,
+    pub versions: Vec<(u32, Vec<VersionedSubstateId>)>,
 }
 
 impl SubstateMetadata {
@@ -151,7 +151,7 @@ impl SubstateMetadata {
         self.versions.last().map(|(v, _)| *v).expect("versions is empty")
     }
 
-    pub fn get_children(&self) -> Vec<VersionedSubstateAddress> {
+    pub fn get_children(&self) -> Vec<VersionedSubstateId> {
         self.versions.last().map(|(_, c)| c.clone()).expect("versions is empty")
     }
 }

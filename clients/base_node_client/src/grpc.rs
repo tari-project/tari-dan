@@ -30,7 +30,7 @@ use minotari_app_grpc::tari_rpc::{self as grpc, GetShardKeyRequest};
 use minotari_node_grpc_client::BaseNodeGrpcClient;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::CodeTemplateRegistration};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_utilities::ByteArray;
 
 use crate::{
@@ -128,8 +128,8 @@ impl BaseNodeClient for GrpcBaseNodeClient {
                         public_key: PublicKey::from_canonical_bytes(&val.public_key).map_err(|_| {
                             BaseNodeClientError::InvalidPeerMessage("public_key was not a valid public key".to_string())
                         })?,
-                        shard_key: ShardId::from_bytes(&val.shard_key).map_err(|_| {
-                            BaseNodeClientError::InvalidPeerMessage("shard_id was not a valid fixed hash".to_string())
+                        shard_key: SubstateAddress::from_bytes(&val.shard_key).map_err(|_| {
+                            BaseNodeClientError::InvalidPeerMessage("shard_key was not a valid fixed hash".to_string())
                         })?,
                     });
                 },
@@ -156,7 +156,7 @@ impl BaseNodeClient for GrpcBaseNodeClient {
         &mut self,
         height: u64,
         public_key: &PublicKey,
-    ) -> Result<Option<ShardId>, BaseNodeClientError> {
+    ) -> Result<Option<SubstateAddress>, BaseNodeClientError> {
         let inner = self.connection().await?;
         let request = GetShardKeyRequest {
             height,
@@ -166,7 +166,7 @@ impl BaseNodeClient for GrpcBaseNodeClient {
         if result.shard_key.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(ShardId::from_bytes(result.shard_key.as_bytes())?))
+            Ok(Some(SubstateAddress::from_bytes(result.shard_key.as_bytes())?))
         }
     }
 

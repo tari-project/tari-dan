@@ -26,6 +26,6 @@ mod signature;
 mod transaction;
 mod transaction_id;
 
-pub use signature::TransactionSignature;
+pub use signature::{TransactionSignature, TransactionSignatureFields};
 pub use transaction::*;
 pub use transaction_id::*;

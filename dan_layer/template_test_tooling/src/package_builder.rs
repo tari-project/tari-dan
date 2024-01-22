@@ -7,9 +7,10 @@ use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_dan_engine::{
     abi::TemplateDef,
     template::{LoadedTemplate, TemplateModuleLoader},
-    wasm::compile::compile_template,
+    wasm::{compile::compile_template, WasmModule},
 };
 use tari_engine_types::hashing::template_hasher32;
+use tari_template_builtin::get_template_builtin;
 use tari_template_lib::models::TemplateAddress;
 
 #[derive(Debug, Clone)]
@@ -68,6 +69,14 @@ impl PackageBuilder {
 
     pub fn add_loaded_template(&mut self, address: TemplateAddress, template: LoadedTemplate) -> &mut Self {
         self.templates.insert(address, template);
+        self
+    }
+
+    pub fn add_builtin_template(&mut self, address: &TemplateAddress) -> &mut Self {
+        let wasm = get_template_builtin(address);
+        let template = WasmModule::from_code(wasm.to_vec()).load_template().unwrap();
+        self.add_loaded_template(*address, template);
+
         self
     }
 

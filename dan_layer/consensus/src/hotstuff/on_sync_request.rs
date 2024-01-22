@@ -22,13 +22,13 @@ pub(super) const MAX_BLOCKS_PER_SYNC: usize = 100;
 #[derive(Debug)]
 pub struct OnSyncRequest<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
-    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
 }
 
 impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
     pub fn new(
         store: TConsensusSpec::StateStore,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
     ) -> Self {
         Self { store, tx_leader }
     }
@@ -48,7 +48,7 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     msg.high_qc,
                     last_voted
                 );
-                let blocks = Block::get_all_blocks_between(tx, msg.high_qc.block_id(), last_voted.block_id())?;
+                let blocks = Block::get_all_blocks_between(tx, msg.high_qc.block_id(), last_voted.block_id(), false)?;
 
                 debug!(
                     target: LOG_TARGET,
@@ -58,25 +58,6 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                 );
 
                 Ok::<_, HotStuffError>(blocks)
-
-                // let mut full_blocks = Vec::with_capacity(blocks.len());
-                // for block in blocks {
-                //     let all_qcs = block
-                //         .commands()
-                //         .iter()
-                //         .flat_map(|cmd| cmd.evidence().qc_ids_iter())
-                //         .collect::<HashSet<_>>();
-                //     let qcs = QuorumCertificate::get_all(tx, all_qcs)?;
-                //     let transactions = block.get_transactions(tx)?;
-                //
-                //     full_blocks.push(FullBlock {
-                //         block,
-                //         qcs,
-                //         transactions: transactions.into_iter().map(|t| t.into_transaction()).collect(),
-                //     });
-                // }
-                //
-                // Ok::<_, HotStuffError>(full_blocks)
             });
 
             let blocks = match result {

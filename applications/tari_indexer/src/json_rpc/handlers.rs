@@ -28,46 +28,47 @@ use axum_jrpc::{
     JsonRpcExtractor,
     JsonRpcResponse,
 };
+use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use log::{error, warn};
-use serde::Serialize;
 use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
-use tari_comms::{
-    multiaddr::Multiaddr,
-    peer_manager::{NodeId, PeerFeatures},
-    types::CommsPublicKey,
-    CommsNode,
-    NodeIdentity,
-};
-use tari_crypto::tari_utilities::hex::Hex;
-use tari_dan_app_utilities::substate_file_cache::SubstateFileCache;
-use tari_dan_common_types::{optional::Optional, Epoch};
+use tari_dan_app_utilities::{keypair::RistrettoKeypair, substate_file_cache::SubstateFileCache};
+use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, Epoch, PeerAddress};
 use tari_dan_storage::consensus_models::Decision;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
-use tari_indexer_client::types::{
-    AddAddressRequest,
-    AddPeerRequest,
-    AddPeerResponse,
-    DeleteAddressRequest,
-    GetEpochManagerStatsResponse,
-    GetIdentityResponse,
-    GetNonFungibleCountRequest,
-    GetNonFungiblesRequest,
-    GetNonFungiblesResponse,
-    GetRelatedTransactionsRequest,
-    GetRelatedTransactionsResponse,
-    GetSubstateRequest,
-    GetSubstateResponse,
-    GetTransactionResultRequest,
-    GetTransactionResultResponse,
-    IndexerTransactionFinalizedResult,
-    InspectSubstateRequest,
-    InspectSubstateResponse,
-    NonFungibleSubstate,
-    SubmitTransactionRequest,
-    SubmitTransactionResponse,
+use tari_indexer_client::{
+    types,
+    types::{
+        AddAddressRequest,
+        AddPeerRequest,
+        AddPeerResponse,
+        ConnectionDirection,
+        DeleteAddressRequest,
+        GetConnectionsResponse,
+        GetEpochManagerStatsResponse,
+        GetIdentityResponse,
+        GetNonFungibleCountRequest,
+        GetNonFungiblesRequest,
+        GetNonFungiblesResponse,
+        GetRelatedTransactionsRequest,
+        GetRelatedTransactionsResponse,
+        GetSubstateRequest,
+        GetSubstateResponse,
+        GetTransactionResultRequest,
+        GetTransactionResultResponse,
+        IndexerTransactionFinalizedResult,
+        InspectSubstateRequest,
+        InspectSubstateResponse,
+        NonFungibleSubstate,
+        SubmitTransactionRequest,
+        SubmitTransactionResponse,
+    },
 };
-use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory, TransactionResultStatus};
+use tari_networking::{is_supported_multiaddr, NetworkingHandle, NetworkingService};
+use tari_validator_node_rpc::{
+    client::{SubstateResult, TariValidatorNodeRpcClientFactory, TransactionResultStatus},
+    proto,
+};
 
 use super::json_encoding::{
     encode_execute_result_into_json,
@@ -77,36 +78,23 @@ use super::json_encoding::{
 use crate::{
     bootstrap::Services,
     dry_run::processor::DryRunTransactionProcessor,
+    json_rpc::error::internal_error,
     substate_manager::SubstateManager,
     transaction_manager::TransactionManager,
 };
 
 const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
 
-#[derive(Serialize, Debug)]
-struct Connection {
-    node_id: NodeId,
-    public_key: CommsPublicKey,
-    address: Multiaddr,
-    direction: bool,
-    age: u64,
-}
-
-#[derive(Serialize, Debug)]
-struct GetConnectionsResponse {
-    connections: Vec<Connection>,
-}
-
 pub struct JsonRpcHandlers {
     consensus_constants: BaseLayerConsensusConstants,
-    node_identity: Arc<NodeIdentity>,
-    comms: CommsNode,
+    keypair: RistrettoKeypair,
+    networking: NetworkingHandle<proto::network::Message>,
     base_node_client: GrpcBaseNodeClient,
     substate_manager: Arc<SubstateManager>,
-    epoch_manager: EpochManagerHandle,
-    transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>,
-    dry_run_transaction_processor:
-        DryRunTransactionProcessor<EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
+    transaction_manager:
+        TransactionManager<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, SubstateFileCache>,
+    dry_run_transaction_processor: DryRunTransactionProcessor<SubstateFileCache>,
 }
 
 impl JsonRpcHandlers {
@@ -116,20 +104,16 @@ impl JsonRpcHandlers {
         base_node_client: GrpcBaseNodeClient,
         substate_manager: Arc<SubstateManager>,
         transaction_manager: TransactionManager<
-            EpochManagerHandle,
-            TariCommsValidatorNodeClientFactory,
+            EpochManagerHandle<PeerAddress>,
+            TariValidatorNodeRpcClientFactory,
             SubstateFileCache,
         >,
-        dry_run_transaction_processor: DryRunTransactionProcessor<
-            EpochManagerHandle,
-            TariCommsValidatorNodeClientFactory,
-            SubstateFileCache,
-        >,
+        dry_run_transaction_processor: DryRunTransactionProcessor<SubstateFileCache>,
     ) -> Self {
         Self {
             consensus_constants,
-            node_identity: services.comms.node_identity(),
-            comms: services.comms.clone(),
+            keypair: services.keypair.clone(),
+            networking: services.networking.clone(),
             base_node_client,
             substate_manager,
             epoch_manager: services.epoch_manager.clone(),
@@ -156,12 +140,17 @@ impl JsonRpcHandlers {
         ))
     }
 
-    pub fn get_identity(&self, value: JsonRpcExtractor) -> JrpcResult {
+    pub async fn get_identity(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
+        let info = self
+            .networking
+            .get_local_peer_info()
+            .await
+            .map_err(internal_error(answer_id))?;
         let response = GetIdentityResponse {
-            node_id: self.node_identity.node_id().to_hex(),
-            public_key: self.node_identity.public_key().clone(),
-            public_addresses: self.node_identity.public_addresses(),
+            peer_id: info.peer_id.to_string(),
+            public_key: self.keypair.public_key().clone(),
+            public_addresses: info.listen_addrs,
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))
@@ -188,32 +177,32 @@ impl JsonRpcHandlers {
             wait_for_dial,
         } = value.parse_params()?;
 
-        let connectivity = self.comms.connectivity();
-        let peer_manager = self.comms.peer_manager();
+        if let Some(unsupported) = addresses.iter().find(|a| !is_supported_multiaddr(a)) {
+            return Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    format!("Unsupported multiaddr {unsupported}"),
+                    json::Value::Null,
+                ),
+            ));
+        }
 
-        let node_id = NodeId::from_public_key(&public_key);
+        let mut networking = self.networking.clone();
+        let peer_id = public_key_to_peer_id(public_key);
 
-        peer_manager
-            .add_or_update_online_peer(
-                &public_key,
-                node_id.clone(),
-                addresses,
-                PeerFeatures::COMMUNICATION_NODE,
-                &tari_comms::net_address::PeerAddressSource::Config,
+        let dial_wait = networking
+            .dial_peer(
+                DialOpts::peer_id(peer_id)
+                    .addresses(addresses)
+                    .condition(PeerCondition::Always)
+                    .build(),
             )
             .await
-            .map_err(|e| Self::internal_error(answer_id, format!("Could not update peer: {}", e)))?;
+            .map_err(internal_error(answer_id))?;
+
         if wait_for_dial {
-            let _conn = connectivity
-                .dial_peer(node_id)
-                .await
-                .map_err(|e| Self::internal_error(answer_id, e.to_string()))?;
-        } else {
-            // Dial without waiting
-            connectivity
-                .request_many_dials(Some(node_id))
-                .await
-                .map_err(|e| Self::internal_error(answer_id, e.to_string()))?;
+            dial_wait.await.map_err(internal_error(answer_id))?;
         }
 
         Ok(JsonRpcResponse::success(answer_id, AddPeerResponse {}))
@@ -221,55 +210,45 @@ impl JsonRpcHandlers {
 
     pub async fn get_comms_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        match self.comms.connectivity().get_connectivity_status().await {
-            Ok(stats) => {
-                let response = json!({ "connection_status": format!("{:?}", stats) });
-                Ok(JsonRpcResponse::success(answer_id, response))
-            },
-            Err(e) => {
-                warn!(target: LOG_TARGET, "Failed to get comms stats: {}", e);
-                Err(Self::internal_error(
-                    answer_id,
-                    format!("Failed to get comms stats: {}", e),
-                ))
-            },
-        }
+        let peers = self
+            .networking
+            .clone()
+            .get_connected_peers()
+            .await
+            .map_err(internal_error(answer_id))?;
+
+        let status = if peers.is_empty() { "Offline" } else { "Online" };
+        let response = json!({ "connection_status": status });
+        Ok(JsonRpcResponse::success(answer_id, response))
     }
 
     pub async fn get_connections(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        match self.comms.connectivity().get_active_connections().await {
-            Ok(active_connections) => {
-                let mut response = GetConnectionsResponse { connections: vec![] };
-                let peer_manager = self.comms.peer_manager();
-                for conn in active_connections {
-                    let peer = peer_manager
-                        .find_by_node_id(conn.peer_node_id())
-                        .await
-                        .expect("Unexpected peer database error")
-                        .expect("Peer not found");
-                    response.connections.push(Connection {
-                        node_id: peer.node_id,
-                        public_key: peer.public_key,
-                        address: conn.address().clone(),
-                        direction: conn.direction().is_inbound(),
-                        age: conn.age().as_secs(),
-                    });
-                }
-                Ok(JsonRpcResponse::success(answer_id, response))
-            },
-            Err(e) => {
-                warn!(target: LOG_TARGET, "Failed to get connections: {}", e);
-                Err(JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::InvalidParams,
-                        "Something went wrong".to_string(),
-                        json::Value::Null,
-                    ),
-                ))
-            },
-        }
+        let active_connections = self
+            .networking
+            .get_active_connections()
+            .await
+            .map_err(internal_error(answer_id))?;
+
+        let connections = active_connections
+            .into_iter()
+            .map(|conn| types::Connection {
+                connection_id: conn.connection_id.to_string(),
+                peer_id: conn.peer_id.to_string(),
+                address: conn.endpoint.get_remote_address().clone(),
+                direction: if conn.endpoint.is_dialer() {
+                    ConnectionDirection::Outbound
+                } else {
+                    ConnectionDirection::Inbound
+                },
+                age: conn.age(),
+                ping_latency: conn.ping_latency,
+            })
+            .collect();
+
+        Ok(JsonRpcResponse::success(answer_id, GetConnectionsResponse {
+            connections,
+        }))
     }
 
     pub async fn get_substate(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -335,11 +314,11 @@ impl JsonRpcHandlers {
                             ),
                         )),
                         SubstateResult::Up {
-                            address,
+                            id,
                             substate,
                             created_by_tx,
                         } => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
-                            address,
+                            address: id,
                             version: substate.version(),
                             substate,
                             created_by_transaction: created_by_tx,

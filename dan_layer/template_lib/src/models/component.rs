@@ -32,6 +32,7 @@ use crate::{hash::HashParseError, newtype_struct_serde_impl, Hash};
 
 const TAG: u64 = BinaryTag::ComponentAddress.as_u64();
 
+/// A component's unique identification in the Tari network
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ComponentAddress(BorTag<Hash, TAG>);
 

@@ -2,19 +2,16 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_bor::BorError;
-use tari_comms::{
-    connectivity::ConnectivityError,
-    protocol::rpc::{RpcError, RpcStatus},
-    types::CommsPublicKey,
-};
-use tari_dan_common_types::optional::IsNotFoundError;
+use tari_dan_common_types::{optional::IsNotFoundError, PeerAddress};
+use tari_networking::NetworkingError;
+use tari_rpc_framework::{RpcError, RpcStatus};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ValidatorNodeRpcClientError {
     #[error("Protocol violations for peer {peer}: {details}")]
-    ProtocolViolation { peer: CommsPublicKey, details: String },
-    #[error("Connectivity error:{0}")]
-    ConnectivityError(#[from] ConnectivityError),
+    ProtocolViolation { peer: PeerAddress, details: String },
+    #[error("NetworkingError: {0}")]
+    NetworkingError(#[from] NetworkingError),
     #[error("RpcError: {0}")]
     RpcError(#[from] RpcError),
     #[error("Remote node returned error: {0}")]

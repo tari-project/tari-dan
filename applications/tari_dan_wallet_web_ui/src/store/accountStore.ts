@@ -20,8 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 interface Store {
   showBalance: boolean;
@@ -30,6 +30,8 @@ interface Store {
   setAccountName: (name: string) => void;
   indexer: string;
   setIndexer: (indexer: string) => void;
+  popup: any;
+  setPopup: (popup: any) => void;
 }
 
 const useAccountStore = create<Store>()(
@@ -37,15 +39,17 @@ const useAccountStore = create<Store>()(
     (set) => ({
       showBalance: true,
       setShowBalance: (show) => set({ showBalance: show }),
-      accountName: '',
+      accountName: "",
       setAccountName: (name) => set({ accountName: name }),
-      indexer: '',
+      indexer: "",
       setIndexer: (indexer) => set({ indexer: indexer }),
+      popup: {},
+      setPopup: (popup) => set({ popup: { visible: true, ...popup } }),
     }),
     {
-      name: 'account-store',
-    }
-  )
+      name: "account-store",
+    },
+  ),
 );
 
 export default useAccountStore;

@@ -24,11 +24,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import TableCell from "@mui/material/TableCell";
 import TableRow from "@mui/material/TableRow";
-import {
-  DataTableCell,
-  CodeBlock,
-  AccordionIconButton,
-} from "../../Components/StyledComponents";
+import { DataTableCell, CodeBlock, AccordionIconButton } from "../../Components/StyledComponents";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import IconButton from "@mui/material/IconButton";
@@ -41,12 +37,12 @@ function Committee({
   begin,
   end,
   members,
-  publicKey,
+  peerId,
 }: {
   begin: string;
   end: string;
   members: CommitteeValidatorInfo[];
-  publicKey: string;
+  peerId: string;
 }) {
   const [openMembers, setOpenMembers] = useState(false);
 
@@ -56,15 +52,8 @@ function Committee({
         <DataTableCell style={{ borderBottom: "none" }}>
           {end < begin ? (
             <>
-              [<span>{begin}</span>,{" "}
-              <span>
-                ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-              </span>
-              ] [
-              <span>
-                0000000000000000000000000000000000000000000000000000000000000000
-              </span>
-              , <span>{end}</span>]
+              [<span>{begin}</span>, <span>ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff</span>] [
+              <span>0000000000000000000000000000000000000000000000000000000000000000</span>, <span>{end}</span>]
             </>
           ) : (
             <div>
@@ -103,7 +92,7 @@ function Committee({
             color="primary"
             component={Link}
             to={`/committees/${begin},${end}`}
-            state={{ begin, end, members, publicKey }}
+            state={{ begin, end, members, peerId }}
           >
             <ManageSearchOutlinedIcon />
           </IconButton>
@@ -121,12 +110,7 @@ function Committee({
             <CodeBlock style={{ marginBottom: "10px", overflowY: "auto" }}>
               <Typography variant="h6">Public Keys</Typography>
               {members.map((member) => (
-                <div
-                  className={`member ${
-                    member.address === publicKey ? "me" : ""
-                  }`}
-                  key={member.address}
-                >
+                <div className={`member ${member.address === peerId ? "me" : ""}`} key={member.address}>
                   {member.address} (Registration Epoch: {member.epoch})
                 </div>
               ))}

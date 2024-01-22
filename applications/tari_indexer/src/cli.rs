@@ -25,7 +25,8 @@ use std::net::SocketAddr;
 use clap::Parser;
 use minotari_app_utilities::common_cli_args::CommonCliArgs;
 use tari_common::configuration::{ConfigOverrideProvider, Network};
-use tari_engine_types::substate::SubstateAddress;
+use tari_dan_app_utilities::p2p_config::ReachabilityMode;
+use tari_engine_types::substate::SubstateId;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -35,7 +36,7 @@ pub struct Cli {
     pub common: CommonCliArgs,
 
     #[clap(long, short = 'a', multiple_values = true)]
-    pub address: Vec<SubstateAddress>,
+    pub address: Vec<SubstateId>,
 
     #[clap(long, short = 'i')]
     pub dan_layer_scanning_internal: Option<u64>,
@@ -44,6 +45,17 @@ pub struct Cli {
     #[clap(long, short = 'r', alias = "rpc-address")]
     pub json_rpc_address: Option<SocketAddr>,
 
+    // Networking
+    #[clap(long, short = 's')]
+    pub peer_seeds: Vec<String>,
+    /// Port to listen on for p2p connections
+    #[clap(long)]
+    pub listener_port: Option<u16>,
+    /// Set the node to unreachable mode, the node will not act as a relay and will attempt relayed connections.
+    #[clap(long)]
+    pub reachability: Option<ReachabilityMode>,
+    #[clap(long)]
+    pub disable_mdns: bool,
     #[clap(long, env = "TARI_INDEXER_UI_CONNECT_ADDRESS")]
     pub ui_connect_address: Option<String>,
 }
@@ -65,11 +77,27 @@ impl ConfigOverrideProvider for Cli {
         if let Some(ref addr) = self.json_rpc_address {
             overrides.push(("indexer.json_rpc_address".to_string(), addr.to_string()));
         }
+
+        if !self.peer_seeds.is_empty() {
+            overrides.push(("p2p.seeds.peer_seeds".to_string(), self.peer_seeds.join(",")));
+        }
+        if let Some(listener_port) = self.listener_port {
+            overrides.push((
+                "validator_node.p2p.listener_port".to_string(),
+                listener_port.to_string(),
+            ));
+        }
         if let Some(seconds) = self.dan_layer_scanning_internal {
             overrides.push(("indexer.dan_layer_scanning_interval".to_string(), seconds.to_string()));
         }
         if let Some(ref ui_connect_address) = self.ui_connect_address {
             overrides.push(("indexer.ui_connect_address".to_string(), ui_connect_address.to_string()));
+        }
+        if let Some(reachability) = self.reachability {
+            overrides.push(("indexer.p2p.reachability_mode".to_string(), reachability.to_string()));
+        }
+        if self.disable_mdns {
+            overrides.push(("indexer.p2p.enable_mdns".to_string(), "false".to_string()));
         }
         overrides
     }

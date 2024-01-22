@@ -20,32 +20,28 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { IIdentity } from '../../../utils/interfaces';
-import './Info.css';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableRow from '@mui/material/TableRow';
-import { DataTableCell } from '../../../Components/StyledComponents';
+import { IIdentity } from "../../../utils/interfaces";
+import "./Info.css";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableRow from "@mui/material/TableRow";
+import { DataTableCell } from "../../../Components/StyledComponents";
 
-function Info({
-  identity,
-}: {
-  identity: IIdentity;
-}) {
+function Info({ identity }: { identity: IIdentity }) {
   return (
     <div>
       <TableContainer>
         <Table>
           <TableBody>
             <TableRow>
-              <TableCell>Node id</TableCell>
-              <DataTableCell>{identity.node_id}</DataTableCell>
+              <TableCell>Peer id</TableCell>
+              <DataTableCell>{identity.peer_id}</DataTableCell>
             </TableRow>
             <TableRow>
-              <TableCell>Public address</TableCell>
-              <DataTableCell>{identity.public_address}</DataTableCell>
+              <TableCell>Listen addresses</TableCell>
+              <DataTableCell>{identity.public_addresses?.join(", ")}</DataTableCell>
             </TableRow>
             <TableRow>
               <TableCell>Public key</TableCell>

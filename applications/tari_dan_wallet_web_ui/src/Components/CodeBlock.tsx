@@ -20,23 +20,23 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import CloseIcon from '@mui/icons-material/Close';
-import { Box, Fade } from '@mui/material';
-import Dialog from '@mui/material/Dialog';
-import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-import { styled, useTheme } from '@mui/material/styles';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import { useState } from 'react';
+import CloseIcon from "@mui/icons-material/Close";
+import { Box, Fade } from "@mui/material";
+import Dialog from "@mui/material/Dialog";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import { styled, useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useState } from "react";
 import {
   IoCopyOutline,
   IoDownloadOutline,
   IoExpandOutline,
   IoContractOutline,
   IoCheckmarkOutline,
-} from 'react-icons/io5';
-import { renderJson } from '../utils/helpers';
+} from "react-icons/io5";
+import { renderJson } from "../utils/helpers";
 
 interface ICodeBlockExpand {
   title: string;
@@ -47,13 +47,13 @@ const CodeBlock = styled(Box)(({ theme }) => ({
   backgroundColor: theme.palette.divider,
   borderRadius: `${theme.spacing(1)} ${theme.spacing(1)} 0 0`,
   padding: theme.spacing(3),
-  maxHeight: '400px',
-  overflowY: 'scroll',
+  maxHeight: "400px",
+  overflowY: "scroll",
 }));
 
 const StyledToolbar = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  flexDirection: 'row',
+  display: "flex",
+  flexDirection: "row",
   gap: theme.spacing(1),
   background: theme.palette.background.paper,
   borderRadius: `0 0 ${theme.spacing(1)} ${theme.spacing(1)}`,
@@ -66,7 +66,7 @@ export default function CodeBlockExpand({ title, content }: ICodeBlockExpand) {
   const [open, setOpen] = useState(false);
 
   const media = useTheme();
-  const matches = useMediaQuery(media.breakpoints.down('md'));
+  const matches = useMediaQuery(media.breakpoints.down("md"));
   const theme = useTheme();
 
   const handleClickOpen = () => {
@@ -79,21 +79,15 @@ export default function CodeBlockExpand({ title, content }: ICodeBlockExpand) {
 
   function CodeDialog() {
     return (
-      <Dialog
-        fullScreen={matches}
-        open={open}
-        onClose={handleClose}
-        maxWidth="xl"
-        fullWidth
-      >
+      <Dialog fullScreen={matches} open={open} onClose={handleClose} maxWidth="xl" fullWidth>
         <Box
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
             background: theme.palette.background.paper,
-            padding: '1rem 1.5rem',
-            position: 'sticky',
+            padding: "1rem 1.5rem",
+            position: "sticky",
             top: 0,
             borderBottom: `1px solid ${theme.palette.divider}`,
           }}
@@ -101,18 +95,13 @@ export default function CodeBlockExpand({ title, content }: ICodeBlockExpand) {
           <Typography variant="h5" component="div">
             {title}
           </Typography>
-          <IconButton
-            edge="end"
-            color="inherit"
-            onClick={handleClose}
-            aria-label="close"
-          >
+          <IconButton edge="end" color="inherit" onClick={handleClose} aria-label="close">
             <CloseIcon />
           </IconButton>
         </Box>
         <Box
           sx={{
-            padding: '2rem',
+            padding: "2rem",
             background: theme.palette.background.paper,
           }}
         >
@@ -120,10 +109,10 @@ export default function CodeBlockExpand({ title, content }: ICodeBlockExpand) {
         </Box>
         <Box
           style={{
-            position: 'sticky',
+            position: "sticky",
             bottom: 0,
             left: 0,
-            width: '100%',
+            width: "100%",
           }}
         >
           <ToolBar content={content} />
@@ -145,8 +134,8 @@ export default function CodeBlockExpand({ title, content }: ICodeBlockExpand) {
     };
 
     const handleDownload = () => {
-      const element = document.createElement('a');
-      const file = new Blob([formattedContent], { type: 'application/json' });
+      const element = document.createElement("a");
+      const file = new Blob([formattedContent], { type: "application/json" });
       element.href = URL.createObjectURL(file);
       element.download = `${title}.json`;
       document.body.appendChild(element);
@@ -155,7 +144,7 @@ export default function CodeBlockExpand({ title, content }: ICodeBlockExpand) {
 
     const menuItems = [
       {
-        tooltip: copied ? 'Copied!' : 'Copy to clipboard',
+        tooltip: copied ? "Copied!" : "Copy to clipboard",
         icon: copied ? (
           <IoCheckmarkOutline style={{ height: 16, width: 16 }} />
         ) : (
@@ -164,18 +153,18 @@ export default function CodeBlockExpand({ title, content }: ICodeBlockExpand) {
         onClick: () => handleCopy(),
       },
       {
-        tooltip: 'Download',
+        tooltip: "Download",
         icon: <IoDownloadOutline style={{ height: 16, width: 16 }} />,
         onClick: () => handleDownload(),
       },
       open
         ? {
-            tooltip: 'Close',
+            tooltip: "Close",
             icon: <IoContractOutline style={{ height: 16, width: 16 }} />,
             onClick: () => setOpen(false),
           }
         : {
-            tooltip: 'Expand',
+            tooltip: "Expand",
             icon: <IoExpandOutline style={{ height: 16, width: 16 }} />,
             onClick: () => handleClickOpen(),
           },

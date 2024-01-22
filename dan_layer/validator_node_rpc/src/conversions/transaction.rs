@@ -31,7 +31,7 @@ use tari_dan_p2p::NewTransactionMessage;
 use tari_engine_types::{
     confidential::{ConfidentialClaim, ConfidentialOutput},
     instruction::Instruction,
-    substate::SubstateAddress,
+    substate::SubstateId,
 };
 use tari_template_lib::{
     args::Arg,
@@ -173,7 +173,7 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
             .map(|a| a.try_into())
             .collect::<Result<_, _>>()?;
         let instruction_type =
-            InstructionType::from_i32(request.instruction_type).ok_or_else(|| anyhow!("invalid instruction_type"))?;
+            InstructionType::try_from(request.instruction_type).map_err(|e| anyhow!("invalid instruction_type {e}"))?;
         let instruction = match instruction_type {
             InstructionType::Function => {
                 let function = request.function;
@@ -347,9 +347,9 @@ impl TryFrom<proto::transaction::SubstateRequirement> for SubstateRequirement {
     type Error = anyhow::Error;
 
     fn try_from(val: proto::transaction::SubstateRequirement) -> Result<Self, Self::Error> {
-        let address = SubstateAddress::from_bytes(&val.address)?;
+        let substate_id = SubstateId::from_bytes(&val.substate_id)?;
         let version = val.version.map(|v| v.version);
-        let substate_specification = SubstateRequirement::new(address, version);
+        let substate_specification = SubstateRequirement::new(substate_id, version);
         Ok(substate_specification)
     }
 }
@@ -357,7 +357,7 @@ impl TryFrom<proto::transaction::SubstateRequirement> for SubstateRequirement {
 impl From<SubstateRequirement> for proto::transaction::SubstateRequirement {
     fn from(val: SubstateRequirement) -> Self {
         Self {
-            address: val.address().to_bytes(),
+            substate_id: val.substate_id().to_bytes(),
             version: val.version().map(|v| OptionalVersion { version: v }),
         }
     }
@@ -366,7 +366,7 @@ impl From<SubstateRequirement> for proto::transaction::SubstateRequirement {
 impl From<&SubstateRequirement> for proto::transaction::SubstateRequirement {
     fn from(val: &SubstateRequirement) -> Self {
         Self {
-            address: val.address().to_bytes(),
+            substate_id: val.substate_id().to_bytes(),
             version: val.version().map(|v| OptionalVersion { version: v }),
         }
     }

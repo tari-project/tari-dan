@@ -24,16 +24,14 @@ use std::convert::{TryFrom, TryInto};
 
 use log::*;
 use tari_bor::{decode_exact, encode};
-use tari_common_types::types::PublicKey;
-use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
-use tari_dan_common_types::{optional::Optional, NodeAddressable, ShardId};
-use tari_dan_p2p::PeerProvider;
+use tari_dan_common_types::{optional::Optional, PeerAddress, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, HighQc, LockedBlock, QuorumCertificate, SubstateRecord, TransactionRecord},
     StateStore,
 };
-use tari_engine_types::virtual_substate::VirtualSubstateAddress;
+use tari_engine_types::virtual_substate::VirtualSubstateId;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
+use tari_rpc_framework::{Request, Response, RpcStatus, Streaming};
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::{
@@ -61,22 +59,22 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::p2p::rpc";
 
-pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
-    peer_provider: TPeerProvider,
-    shard_state_store: SqliteStateStore<PublicKey>,
+pub struct ValidatorNodeRpcServiceImpl {
+    shard_state_store: SqliteStateStore<PeerAddress>,
     mempool: MempoolHandle,
-    virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PublicKey>, EpochManagerHandle>,
+    virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PeerAddress>, EpochManagerHandle<PeerAddress>>,
 }
 
-impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
+impl ValidatorNodeRpcServiceImpl {
     pub fn new(
-        peer_provider: TPeerProvider,
-        shard_state_store: SqliteStateStore<PublicKey>,
+        shard_state_store: SqliteStateStore<PeerAddress>,
         mempool: MempoolHandle,
-        virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PublicKey>, EpochManagerHandle>,
+        virtual_substate_manager: VirtualSubstateManager<
+            SqliteStateStore<PeerAddress>,
+            EpochManagerHandle<PeerAddress>,
+        >,
     ) -> Self {
         Self {
-            peer_provider,
             shard_state_store,
             mempool,
             virtual_substate_manager,
@@ -84,10 +82,8 @@ impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
     }
 }
 
-#[tari_comms::async_trait]
-impl<TPeerProvider> ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl<TPeerProvider>
-where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
-{
+#[async_trait::async_trait]
+impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
     async fn submit_transaction(
         &self,
         request: Request<proto::rpc::SubmitTransactionRequest>,
@@ -113,48 +109,18 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         }))
     }
 
-    async fn get_peers(
-        &self,
-        _request: Request<proto::rpc::GetPeersRequest>,
-    ) -> Result<Streaming<proto::rpc::GetPeersResponse>, RpcStatus> {
-        let (tx, rx) = mpsc::channel(100);
-        let peer_provider = self.peer_provider.clone();
-
-        task::spawn(async move {
-            let mut peer_iter = peer_provider.peers_for_current_epoch_iter().await;
-            while let Some(Ok(peer)) = peer_iter.next() {
-                if tx
-                    .send(Ok(proto::rpc::GetPeersResponse {
-                        identity: peer.identity.as_bytes().to_vec(),
-                        claims: peer.claims.into_iter().map(Into::into).collect(),
-                    }))
-                    .await
-                    .is_err()
-                {
-                    debug!(
-                        target: LOG_TARGET,
-                        "Peer stream closed by client before completing. Aborting"
-                    );
-                    break;
-                }
-            }
-        });
-
-        Ok(Streaming::new(rx))
-    }
-
     async fn get_substate(&self, req: Request<GetSubstateRequest>) -> Result<Response<GetSubstateResponse>, RpcStatus> {
         let req = req.into_message();
 
-        let shard_id = ShardId::from_bytes(&req.shard)
-            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate address: {}", e)))?;
+        let address = SubstateAddress::from_bytes(&req.address)
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate id: {}", e)))?;
 
         let mut tx = self
             .shard_state_store
             .create_read_tx()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
-        let maybe_substate = SubstateRecord::get(&mut tx, &shard_id)
+        let maybe_substate = SubstateRecord::get(&mut tx, &address)
             .optional()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
@@ -175,7 +141,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                 .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
             GetSubstateResponse {
                 status: SubstateStatus::Down as i32,
-                address: substate.substate_address().to_bytes(),
+                address: substate.substate_id().to_bytes(),
                 version: substate.version(),
                 created_transaction_hash: substate.created_by_transaction().into_array().to_vec(),
                 destroyed_transaction_hash: substate
@@ -192,7 +158,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         } else {
             GetSubstateResponse {
                 status: SubstateStatus::Up as i32,
-                address: substate.substate_address().to_bytes(),
+                address: substate.substate_id().to_bytes(),
                 version: substate.version(),
                 substate: substate.substate_value().to_bytes(),
                 created_transaction_hash: substate.created_by_transaction().into_array().to_vec(),
@@ -210,8 +176,8 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
     ) -> Result<Response<proto::rpc::GetVirtualSubstateResponse>, RpcStatus> {
         let req = req.into_message();
 
-        let address = decode_exact::<VirtualSubstateAddress>(&req.address)
-            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate address: {}", e)))?;
+        let address = decode_exact::<VirtualSubstateId>(&req.address)
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate id: {}", e)))?;
 
         let substate = self
             .virtual_substate_manager
@@ -221,7 +187,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
 
         let resp = proto::rpc::GetVirtualSubstateResponse {
             substate: encode(&substate)
-                .map_err(|e| RpcStatus::general(&format!("Unable to encode substate address: {}", e)))?,
+                .map_err(|e| RpcStatus::general(&format!("Unable to encode substate: {}", e)))?,
             // TODO: evidence for the correctness of the substate
             quorum_certificates: vec![],
         };

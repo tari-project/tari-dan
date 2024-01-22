@@ -20,30 +20,34 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, io, ops::DerefMut, sync::Arc};
+use std::{fs, io, ops::DerefMut, str::FromStr};
 
 use anyhow::anyhow;
 use futures::{future, FutureExt};
+use libp2p::identity;
 use log::info;
-use minotari_app_utilities::{identity_management, identity_management::load_from_json};
+use minotari_app_utilities::identity_management;
 use serde::Serialize;
+use sqlite_message_logger::SqliteMessageLogger;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
 use tari_common_types::types::PublicKey;
-use tari_comms::{protocol::rpc::RpcServer, types::CommsPublicKey, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_core::transactions::transaction_components::ValidatorNodeSignature;
+use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_app_utilities::{
     base_layer_scanner,
     consensus_constants::ConsensusConstants,
+    keypair::RistrettoKeypair,
+    seed_peer::SeedPeer,
     substate_file_cache::SubstateFileCache,
     template_manager,
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
 };
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PeerAddress, SubstateAddress};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, ExecutedTransaction, ForeignReceiveCounters, SubstateRecord},
@@ -54,9 +58,11 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
-use tari_engine_types::{resource::Resource, substate::SubstateAddress};
+use tari_engine_types::{resource::Resource, substate::SubstateId};
 use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
 use tari_indexer_lib::substate_scanner::SubstateScanner;
+use tari_networking::{NetworkingHandle, SwarmConfig};
+use tari_rpc_framework::RpcServer;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::{
@@ -68,18 +74,16 @@ use tari_template_lib::{
     resource::TOKEN_SYMBOL,
 };
 use tari_transaction::Transaction;
-use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
+use tari_validator_node_rpc::{client::TariValidatorNodeRpcClientFactory, proto};
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
-    comms,
     consensus,
     consensus::ConsensusHandle,
     dry_run_transaction_processor::DryRunTransactionProcessor,
     p2p::{
         create_tari_validator_node_rpc_service,
         services::{
-            comms_peer_provider::CommsPeerProvider,
             mempool,
             mempool::{
                 ClaimFeeTransactionValidator,
@@ -92,12 +96,10 @@ use crate::{
                 MempoolHandle,
                 OutputsDontExistLocally,
                 TemplateExistsValidator,
+                TransactionSignatureValidator,
                 Validator,
             },
-            messaging,
-            messaging::DanMessageReceivers,
-            networking,
-            networking::NetworkingHandle,
+            message_dispatcher,
         },
     },
     registration,
@@ -113,14 +115,11 @@ const LOG_TARGET: &str = "tari::validator_node::bootstrap";
 pub async fn spawn_services(
     config: &ApplicationConfig,
     shutdown: ShutdownSignal,
-    node_identity: Arc<NodeIdentity>,
-    global_db: GlobalDb<SqliteGlobalDbAdapter>,
+    keypair: RistrettoKeypair,
+    global_db: GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>,
     consensus_constants: ConsensusConstants,
 ) -> Result<Services, anyhow::Error> {
-    let mut handles = Vec::with_capacity(3);
-    let mut p2p_config = config.validator_node.p2p.clone();
-    p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
-        .map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
+    let mut handles = Vec::with_capacity(8);
 
     ensure_directories_exist(config)?;
 
@@ -131,34 +130,58 @@ pub async fn spawn_services(
             format!("127.0.0.1:{port}")
         }));
 
-    // Initialize comms
-    let (comms, message_channels) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
+    // Networking
+    let (message_senders, message_receivers) = message_dispatcher::new_messaging_channel(30);
+    let (tx_messages, rx_messages) = mpsc::channel(100);
+    let identity = identity::Keypair::sr25519_from_bytes(keypair.secret_key().as_bytes().to_vec()).map_err(|e| {
+        ExitError::new(
+            ExitCode::ConfigError,
+            format!("Failed to create libp2p identity from secret bytes: {}", e),
+        )
+    })?;
+    let seed_peers = config
+        .peer_seeds
+        .peer_seeds
+        .iter()
+        .map(|s| SeedPeer::from_str(s))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let seed_peers = seed_peers
+        .into_iter()
+        .flat_map(|p| {
+            let peer_id = p.to_peer_id();
+            p.addresses.into_iter().map(move |a| (peer_id, a))
+        })
+        .collect();
+    let (mut networking, join_handle) = tari_networking::spawn::<proto::network::Message>(
+        identity,
+        tx_messages,
+        tari_networking::Config {
+            listener_port: config.validator_node.p2p.listener_port,
+            swarm: SwarmConfig {
+                protocol_version: format!("/tari/{}/0.0.1", config.network).parse().unwrap(),
+                user_agent: "/tari/validator/0.0.1".to_string(),
+                enable_mdns: config.validator_node.p2p.enable_mdns,
+                ..Default::default()
+            },
+            reachability_mode: config.validator_node.p2p.reachability_mode.into(),
+            announce: true,
+            ..Default::default()
+        },
+        seed_peers,
+        shutdown.clone(),
+    )?;
+    handles.push(join_handle);
 
     // Spawn messaging
-    let (message_senders, message_receivers) = messaging::new_messaging_channel(30);
-    let (outbound_messaging, join_handle) = messaging::spawn(
-        node_identity.public_key().clone(),
-        message_channels,
-        message_senders.clone(),
-    );
+    let message_logger = SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
+    let (outbound_messaging, join_handle) =
+        message_dispatcher::spawn(networking.clone(), rx_messages, message_senders, message_logger);
     handles.push(join_handle);
 
-    let DanMessageReceivers {
+    let message_dispatcher::DanMessageReceivers {
         rx_consensus_message,
         rx_new_transaction_message,
-        rx_network_announce,
     } = message_receivers;
-
-    // Networking
-    let peer_provider = CommsPeerProvider::new(comms.peer_manager());
-    let (networking, join_handle) = networking::spawn(
-        rx_network_announce,
-        node_identity.clone(),
-        outbound_messaging.clone(),
-        peer_provider.clone(),
-        comms.connectivity(),
-    );
-    handles.push(join_handle);
 
     // Connect to shard db
     let state_store =
@@ -175,13 +198,13 @@ pub async fn spawn_services(
         },
         global_db.clone(),
         base_node_client.clone(),
-        node_identity.public_key().clone(),
+        keypair.public_key().clone(),
         shutdown.clone(),
     );
     handles.push(join_handle);
 
     // Create registration file
-    create_registration_file(config, &epoch_manager, &node_identity).await?;
+    create_registration_file(config, &epoch_manager, &keypair).await?;
 
     // Template manager
     let template_manager = TemplateManager::initialize(global_db.clone(), config.validator_node.templates.clone())?;
@@ -202,14 +225,14 @@ pub async fn spawn_services(
     };
     let payload_processor = TariDanTransactionProcessor::new(template_manager.clone(), fee_table);
 
-    let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
+    let validator_node_client_factory = TariValidatorNodeRpcClientFactory::new(networking.clone());
 
     // Consensus
     let (tx_executed_transaction, rx_executed_transaction) = mpsc::channel(10);
     let foreign_receive_counter = state_store.with_read_tx(|tx| ForeignReceiveCounters::get(tx))?;
     let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
         state_store.clone(),
-        node_identity.clone(),
+        keypair.clone(),
         epoch_manager.clone(),
         rx_executed_transaction,
         rx_consensus_message,
@@ -244,7 +267,6 @@ pub async fn spawn_services(
         outbound_messaging,
         tx_executed_transaction,
         epoch_manager.clone(),
-        node_identity.clone(),
         payload_processor.clone(),
         substate_resolver.clone(),
         create_mempool_before_execute_validator(
@@ -273,30 +295,21 @@ pub async fn spawn_services(
     );
     handles.push(join_handle);
 
-    let comms = setup_p2p_rpc(
+    spawn_p2p_rpc(
         config,
-        comms,
-        peer_provider,
+        &mut networking,
         state_store.clone(),
         mempool.clone(),
         virtual_substate_manager,
-    );
-    let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
-        .await
-        .map_err(|e| {
-            ExitError::new(
-                ExitCode::NetworkError,
-                format!("Could not spawn using transport: {}", e),
-            )
-        })?;
-
+    )
+    .await?;
     // Save final node identity after comms has initialized. This is required because the public_address can be
     // changed by comms during initialization when using tor.
-    save_identities(config, &comms)?;
+    save_identities(config, &keypair)?;
 
     // Auto-registration
     if config.validator_node.auto_register {
-        let handle = registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
+        let handle = registration::spawn(config.clone(), keypair.clone(), epoch_manager.clone(), shutdown);
         handles.push(handle);
     } else {
         info!(target: LOG_TARGET, "♽️ Node auto registration is disabled");
@@ -306,7 +319,7 @@ pub async fn spawn_services(
         DryRunTransactionProcessor::new(epoch_manager.clone(), payload_processor, substate_resolver);
 
     Ok(Services {
-        comms,
+        keypair,
         networking,
         mempool,
         epoch_manager,
@@ -322,15 +335,15 @@ pub async fn spawn_services(
 
 async fn create_registration_file(
     config: &ApplicationConfig,
-    epoch_manager: &EpochManagerHandle,
-    node_identity: &NodeIdentity,
+    epoch_manager: &EpochManagerHandle<PeerAddress>,
+    keypair: &RistrettoKeypair,
 ) -> Result<(), anyhow::Error> {
     let fee_claim_public_key = config.validator_node.fee_claim_public_key.clone();
     epoch_manager
         .set_fee_claim_public_key(fee_claim_public_key.clone())
         .await?;
 
-    let signature = ValidatorNodeSignature::sign(node_identity.secret_key(), &fee_claim_public_key, b"");
+    let signature = ValidatorNodeSignature::sign(keypair.secret_key(), &fee_claim_public_key, b"");
     #[derive(Serialize)]
     struct ValidatorRegistrationFile {
         signature: ValidatorNodeSignature,
@@ -339,7 +352,7 @@ async fn create_registration_file(
     }
     let registration = ValidatorRegistrationFile {
         signature,
-        public_key: node_identity.public_key().clone(),
+        public_key: keypair.public_key().clone(),
         claim_public_key: fee_claim_public_key,
     };
     fs::write(
@@ -350,34 +363,29 @@ async fn create_registration_file(
     Ok(())
 }
 
-fn save_identities(config: &ApplicationConfig, comms: &CommsNode) -> Result<(), ExitError> {
-    identity_management::save_as_json(&config.validator_node.identity_file, &*comms.node_identity())
+fn save_identities(config: &ApplicationConfig, keypair: &RistrettoKeypair) -> Result<(), ExitError> {
+    identity_management::save_as_json(&config.validator_node.identity_file, keypair)
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Failed to save node identity: {}", e)))?;
 
-    if let Some(hs) = comms.hidden_service() {
-        identity_management::save_as_json(&config.validator_node.tor_identity_file, hs.tor_identity())
-            .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Failed to save tor identity: {}", e)))?;
-    }
     Ok(())
 }
 
 fn ensure_directories_exist(config: &ApplicationConfig) -> io::Result<()> {
     fs::create_dir_all(&config.validator_node.data_dir)?;
-    fs::create_dir_all(&config.validator_node.p2p.datastore_path)?;
     Ok(())
 }
 
 pub struct Services {
-    pub comms: CommsNode,
-    pub networking: NetworkingHandle,
+    pub keypair: RistrettoKeypair,
+    pub networking: NetworkingHandle<proto::network::Message>,
     pub mempool: MempoolHandle,
-    pub epoch_manager: EpochManagerHandle,
+    pub epoch_manager: EpochManagerHandle<PeerAddress>,
     pub template_manager: TemplateManagerHandle,
     pub consensus_handle: ConsensusHandle,
-    pub global_db: GlobalDb<SqliteGlobalDbAdapter>,
+    pub global_db: GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
-    pub validator_node_client_factory: TariCommsValidatorNodeClientFactory,
-    pub state_store: SqliteStateStore<PublicKey>,
+    pub validator_node_client_factory: TariValidatorNodeRpcClientFactory,
+    pub state_store: SqliteStateStore<PeerAddress>,
 
     pub handles: Vec<JoinHandle<Result<(), anyhow::Error>>>,
 }
@@ -394,25 +402,29 @@ impl Services {
     }
 }
 
-fn setup_p2p_rpc(
+async fn spawn_p2p_rpc(
     config: &ApplicationConfig,
-    comms: UnspawnedCommsNode,
-    peer_provider: CommsPeerProvider,
-    shard_store_store: SqliteStateStore<CommsPublicKey>,
+    networking: &mut NetworkingHandle<proto::network::Message>,
+    shard_store_store: SqliteStateStore<PeerAddress>,
     mempool: MempoolHandle,
-    virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PublicKey>, EpochManagerHandle>,
-) -> UnspawnedCommsNode {
+    virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PeerAddress>, EpochManagerHandle<PeerAddress>>,
+) -> anyhow::Result<()> {
     let rpc_server = RpcServer::builder()
-        .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)
+        .with_maximum_simultaneous_sessions(config.validator_node.rpc.max_simultaneous_sessions)
+        .with_maximum_sessions_per_client(config.validator_node.rpc.max_sessions_per_client)
         .finish()
         .add_service(create_tari_validator_node_rpc_service(
-            peer_provider,
             shard_store_store,
             mempool,
             virtual_substate_manager,
         ));
 
-    comms.add_protocol_extension(rpc_server)
+    let (notify_tx, notify_rx) = mpsc::unbounded_channel();
+    networking
+        .add_protocol_notifier(rpc_server.all_protocols().iter().cloned(), notify_tx)
+        .await?;
+    tokio::spawn(rpc_server.serve(notify_rx));
+    Ok(())
 }
 
 // TODO: Figure out the best way to have the engine shard store mirror these bootstrapped states.
@@ -422,15 +434,15 @@ where
     TTx::Target: StateStoreReadTransaction,
     TTx::Addr: NodeAddressable + Serialize,
 {
-    let genesis_block = Block::<TTx::Addr>::genesis();
-    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
-    let shard_id = ShardId::from_address(&address, 0);
+    let genesis_block = Block::genesis();
+    let substate_id = SubstateId::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
+    let substate_address = SubstateAddress::from_address(&substate_id, 0);
     let mut metadata: Metadata = Default::default();
     metadata.insert(TOKEN_SYMBOL, "ID".to_string());
-    if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
+    if !SubstateRecord::exists(tx.deref_mut(), &substate_address)? {
         // Create the resource for public identity
         SubstateRecord {
-            address,
+            substate_id,
             version: 0,
             substate_value: Resource::new(
                 ResourceType::NonFungible,
@@ -451,13 +463,13 @@ where
         .create(tx)?;
     }
 
-    let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
-    let shard_id = ShardId::from_address(&address, 0);
+    let substate_id = SubstateId::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
+    let substate_address = SubstateAddress::from_address(&substate_id, 0);
     let mut metadata = Metadata::new();
     metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
-    if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
+    if !SubstateRecord::exists(tx.deref_mut(), &substate_address)? {
         SubstateRecord {
-            address,
+            substate_id,
             version: 0,
             substate_value: Resource::new(
                 ResourceType::Confidential,
@@ -483,10 +495,11 @@ where
 
 fn create_mempool_before_execute_validator(
     config: &ValidatorNodeConfig,
-    template_manager: TemplateManager,
-    epoch_manager: EpochManagerHandle,
+    template_manager: TemplateManager<PeerAddress>,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
 ) -> impl Validator<Transaction, Error = MempoolError> {
-    let mut validator = TemplateExistsValidator::new(template_manager)
+    let mut validator = TransactionSignatureValidator
+        .and_then(TemplateExistsValidator::new(template_manager))
         .and_then(EpochRangeValidator::new(epoch_manager.clone()))
         .and_then(ClaimFeeTransactionValidator::new(epoch_manager))
         .boxed();
@@ -500,8 +513,8 @@ fn create_mempool_before_execute_validator(
     validator
 }
 
-fn create_mempool_after_execute_validator(
-    store: SqliteStateStore<CommsPublicKey>,
+fn create_mempool_after_execute_validator<TAddr: NodeAddressable>(
+    store: SqliteStateStore<TAddr>,
 ) -> impl Validator<ExecutedTransaction, Error = MempoolError> {
     HasInvolvedShards::new()
         .and_then(InputRefsValidator::new())

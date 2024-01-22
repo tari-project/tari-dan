@@ -20,24 +20,43 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    borrow::Borrow,
-    convert::{TryFrom, TryInto},
-};
+use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
-use chrono::{DateTime, NaiveDateTime, Utc};
-use tari_comms::{
-    peer_manager::{IdentitySignature, PeerFeatures, PeerIdentityClaim},
-    types::CommsPublicKey,
-};
-use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_p2p::{DanMessage, NetworkAnnounce};
+use tari_dan_p2p::{DanMessage, Message};
 
 use crate::proto;
 
-impl From<&DanMessage<CommsPublicKey>> for proto::network::DanMessage {
-    fn from(msg: &DanMessage<CommsPublicKey>) -> Self {
+// -------------------------------- Message -------------------------------- //
+impl From<&Message> for proto::network::Message {
+    fn from(msg: &Message) -> Self {
+        match msg {
+            Message::Dan(msg) => Self {
+                message: Some(proto::network::message::Message::DanMessage(msg.into())),
+            },
+            Message::Consensus(msg) => Self {
+                message: Some(proto::network::message::Message::Consensus(msg.into())),
+            },
+        }
+    }
+}
+
+impl TryFrom<proto::network::Message> for Message {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::network::Message) -> Result<Self, Self::Error> {
+        let msg_type = value.message.ok_or_else(|| anyhow!("Message type not provided"))?;
+        match msg_type {
+            proto::network::message::Message::DanMessage(msg) => Ok(Message::Dan(msg.try_into()?)),
+            proto::network::message::Message::Consensus(msg) => Ok(Message::Consensus(msg.try_into()?)),
+        }
+    }
+}
+
+// -------------------------------- DanMessage -------------------------------- //
+
+impl From<&DanMessage> for proto::network::DanMessage {
+    fn from(msg: &DanMessage) -> Self {
         let message_tag = msg.get_message_tag();
         match msg {
             DanMessage::NewTransaction(msg) => Self {
@@ -46,17 +65,11 @@ impl From<&DanMessage<CommsPublicKey>> for proto::network::DanMessage {
                 )),
                 message_tag,
             },
-            DanMessage::NetworkAnnounce(announce) => Self {
-                message: Some(proto::network::dan_message::Message::NetworkAnnounce(
-                    (**announce).clone().into(),
-                )),
-                message_tag,
-            },
         }
     }
 }
 
-impl TryFrom<proto::network::DanMessage> for DanMessage<CommsPublicKey> {
+impl TryFrom<proto::network::DanMessage> for DanMessage {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::network::DanMessage) -> Result<Self, Self::Error> {
@@ -65,98 +78,6 @@ impl TryFrom<proto::network::DanMessage> for DanMessage<CommsPublicKey> {
             proto::network::dan_message::Message::NewTransaction(msg) => {
                 Ok(DanMessage::NewTransaction(Box::new(msg.try_into()?)))
             },
-            proto::network::dan_message::Message::NetworkAnnounce(msg) => {
-                Ok(DanMessage::NetworkAnnounce(Box::new(msg.try_into()?)))
-            },
-        }
-    }
-}
-
-// -------------------------------- NetworkAnnounce -------------------------------- //
-
-impl<T: ByteArray> From<NetworkAnnounce<T>> for proto::network::NetworkAnnounce {
-    fn from(msg: NetworkAnnounce<T>) -> Self {
-        Self {
-            identity: msg.identity.to_vec(),
-            claim: Some(msg.claim.into()),
-        }
-    }
-}
-
-impl<T: ByteArray> TryFrom<proto::network::NetworkAnnounce> for NetworkAnnounce<T> {
-    type Error = anyhow::Error;
-
-    fn try_from(value: proto::network::NetworkAnnounce) -> Result<Self, Self::Error> {
-        Ok(NetworkAnnounce {
-            identity: T::from_canonical_bytes(&value.identity).map_err(anyhow::Error::msg)?,
-            claim: value
-                .claim
-                .ok_or_else(|| anyhow!("claim not provided in NetworkAnnounce"))?
-                .try_into()?,
-        })
-    }
-}
-
-// -------------------------------- IdentitySignature -------------------------------- //
-
-impl TryFrom<proto::network::IdentitySignature> for IdentitySignature {
-    type Error = anyhow::Error;
-
-    fn try_from(value: proto::network::IdentitySignature) -> Result<Self, Self::Error> {
-        let version = u8::try_from(value.version).map_err(|_| anyhow!("Invalid identity signature version"))?;
-        let signature = value
-            .signature
-            .map(TryInto::try_into)
-            .ok_or_else(|| anyhow!("Signature not provided"))??;
-        let updated_at = NaiveDateTime::from_timestamp_opt(value.updated_at, 0)
-            .ok_or_else(|| anyhow!("Invalid updated_at timestamp"))?;
-        let updated_at = DateTime::from_naive_utc_and_offset(updated_at, Utc);
-
-        Ok(IdentitySignature::new(version, signature, updated_at))
-    }
-}
-
-impl<T: Borrow<IdentitySignature>> From<T> for proto::network::IdentitySignature {
-    fn from(identity_sig: T) -> Self {
-        let sig = identity_sig.borrow();
-        proto::network::IdentitySignature {
-            version: u32::from(sig.version()),
-            signature: Some(sig.signature().clone().into()),
-            updated_at: sig.updated_at().timestamp(),
-        }
-    }
-}
-
-// -------------------------------- PeerIdentityClaim -------------------------------- //
-
-impl TryFrom<proto::network::PeerIdentityClaim> for PeerIdentityClaim {
-    type Error = anyhow::Error;
-
-    fn try_from(value: proto::network::PeerIdentityClaim) -> Result<Self, Self::Error> {
-        let signature = IdentitySignature::try_from(
-            value
-                .signature
-                .ok_or_else(|| anyhow!("Identity signature not provided"))?,
-        )?;
-        let addresses = value
-            .addresses
-            .into_iter()
-            .map(|u| u.try_into())
-            .collect::<Result<_, _>>()?;
-
-        Ok(Self {
-            signature,
-            features: PeerFeatures::COMMUNICATION_NODE,
-            addresses,
-        })
-    }
-}
-
-impl From<PeerIdentityClaim> for proto::network::PeerIdentityClaim {
-    fn from(value: PeerIdentityClaim) -> Self {
-        Self {
-            signature: Some(value.signature.into()),
-            addresses: value.addresses.into_iter().map(|a| a.to_vec()).collect(),
         }
     }
 }

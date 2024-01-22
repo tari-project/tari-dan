@@ -28,38 +28,8 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
 use tari_common_types::{transaction::TxId, types::PublicKey};
-use tari_comms_logging::LoggedMessage;
 
-use crate::types::{
-    AddPeerRequest,
-    AddPeerResponse,
-    GetEpochManagerStatsResponse,
-    GetIdentityResponse,
-    GetRecentTransactionsRequest,
-    GetRecentTransactionsResponse,
-    GetStateRequest,
-    GetStateResponse,
-    GetSubstateRequest,
-    GetSubstateResponse,
-    GetTemplateRequest,
-    GetTemplateResponse,
-    GetTemplatesRequest,
-    GetTemplatesResponse,
-    GetTransactionRequest,
-    GetTransactionResponse,
-    GetTransactionResultRequest,
-    GetTransactionResultResponse,
-    GetValidatorFeesRequest,
-    GetValidatorFeesResponse,
-    ListBlocksRequest,
-    ListBlocksResponse,
-    RegisterValidatorNodeRequest,
-    RegisterValidatorNodeResponse,
-    SubmitTransactionRequest,
-    SubmitTransactionResponse,
-    TemplateRegistrationRequest,
-    TemplateRegistrationResponse,
-};
+use crate::types::*;
 
 #[derive(Debug, Clone)]
 pub struct ValidatorNodeClient {
@@ -181,25 +151,6 @@ impl ValidatorNodeClient {
 
     pub async fn add_peer(&mut self, request: AddPeerRequest) -> Result<AddPeerResponse, ValidatorNodeClientError> {
         self.send_request("add_peer", request).await
-    }
-
-    pub async fn get_message_logs(
-        &mut self,
-        message_tag: &str,
-    ) -> Result<Vec<LoggedMessage>, ValidatorNodeClientError> {
-        let resp = self
-            .send_request::<_, json::Value>("get_logged_messages", json!({ "message_tag": message_tag }))
-            .await?;
-        let messages = json::from_value(resp.get("messages").cloned().ok_or_else(|| {
-            ValidatorNodeClientError::InvalidResponse {
-                message: "messages was not provided".to_string(),
-            }
-        })?)
-        .map_err(|e| ValidatorNodeClientError::DeserializeResponse {
-            source: e,
-            method: "get_logged_messages".to_string(),
-        })?;
-        Ok(messages)
     }
 
     fn next_request_id(&mut self) -> i64 {

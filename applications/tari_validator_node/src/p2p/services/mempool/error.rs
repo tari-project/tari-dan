@@ -8,12 +8,13 @@ use tari_dan_app_utilities::{
 use tari_dan_common_types::Epoch;
 use tari_dan_storage::{consensus_models::TransactionPoolError, StorageError};
 use tari_epoch_manager::EpochManagerError;
+use tari_networking::NetworkingError;
 use tari_transaction::TransactionId;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessorError,
-    p2p::services::{mempool::MempoolRequest, messaging::MessagingError},
+    p2p::services::{mempool::MempoolRequest, message_dispatcher::MessagingError},
     substate_resolver::SubstateResolverError,
     virtual_substate::VirtualSubstateError,
 };
@@ -63,6 +64,10 @@ pub enum MempoolError {
     NoInputs { transaction_id: TransactionId },
     #[error("Executed transaction {transaction_id} does not involved any shards")]
     NoInvolvedShards { transaction_id: TransactionId },
+    #[error("Invalid transaction signature")]
+    InvalidSignature,
+    #[error("Network error: {0}")]
+    NetworkingError(#[from] NetworkingError),
 }
 
 impl From<mpsc::error::SendError<MempoolRequest>> for MempoolError {

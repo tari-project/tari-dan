@@ -20,39 +20,36 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import { Form, Link, useLocation } from 'react-router-dom';
-import AddIcon from '@mui/icons-material/Add';
-import Alert from '@mui/material/Alert';
-import Button from '@mui/material/Button/Button';
-import Fade from '@mui/material/Fade';
-import MenuItem from '@mui/material/MenuItem';
-import Select, { SelectChangeEvent } from '@mui/material/Select/Select';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import TextField from '@mui/material/TextField/TextField';
-import CopyToClipboard from '../../../Components/CopyToClipboard';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import { ChevronRight } from '@mui/icons-material';
-import IconButton from '@mui/material/IconButton';
-import {
-  BoxHeading2,
-  DataTableCell,
-} from '../../../Components/StyledComponents';
-import { shortenString, toHexString } from '../../../utils/helpers';
+import { useState } from "react";
+import { Form, Link, useLocation } from "react-router-dom";
+import AddIcon from "@mui/icons-material/Add";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button/Button";
+import Fade from "@mui/material/Fade";
+import MenuItem from "@mui/material/MenuItem";
+import Select, { SelectChangeEvent } from "@mui/material/Select/Select";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField/TextField";
+import CopyToClipboard from "../../../Components/CopyToClipboard";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import { ChevronRight } from "@mui/icons-material";
+import IconButton from "@mui/material/IconButton";
+import { BoxHeading2, DataTableCell } from "../../../Components/StyledComponents";
+import { shortenString, toHexString } from "../../../utils/helpers";
 import {
   useAccountsCreate,
   useAccountsCreateFreeTestCoins,
   useAccountsClaimBurn,
   useAccountsList,
-} from '../../../api/hooks/useAccounts';
-import FetchStatusCheck from '../../../Components/FetchStatusCheck';
-import queryClient from '../../../api/queryClient';
+} from "../../../api/hooks/useAccounts";
+import FetchStatusCheck from "../../../Components/FetchStatusCheck";
+import queryClient from "../../../api/queryClient";
 
 function Account(account: any, index: number) {
   const { pathname } = useLocation();
@@ -62,8 +59,8 @@ function Account(account: any, index: number) {
         <Link
           to={`/accounts/${account.account.name}`}
           style={{
-            textDecoration: 'none',
-            color: 'inherit',
+            textDecoration: "none",
+            color: "inherit",
           }}
         >
           {account.account.name}
@@ -92,14 +89,14 @@ function Accounts() {
   const [showAccountDialog, setShowAddAccountDialog] = useState(false);
   const [showClaimDialog, setShowClaimBurnDialog] = useState(false);
   const [accountFormState, setAccountFormState] = useState({
-    accountName: '',
-    signingKeyIndex: '',
-    fee: '',
+    accountName: "",
+    signingKeyIndex: "",
+    fee: "",
   });
   const [claimBurnFormState, setClaimBurnFormState] = useState({
-    account: '',
-    claimProof: '',
-    fee: '',
+    account: "",
+    claimProof: "",
+    fee: "",
   });
   const {
     data: dataAccountsList,
@@ -107,41 +104,36 @@ function Accounts() {
     isError: isErrorAccountsList,
     error: errorAccountsList,
   } = useAccountsList(0, 10);
-  const { mutateAsync: mutateCreateFeeTestCoins } =
-    useAccountsCreateFreeTestCoins();
+  const { mutateAsync: mutateCreateFeeTestCoins } = useAccountsCreateFreeTestCoins();
 
   const { mutateAsync: mutateAddAccount } = useAccountsCreate(
     accountFormState.accountName,
     undefined,
     undefined,
-    false
+    false,
   );
 
   const { mutateAsync: mutateClaimBurn } = useAccountsClaimBurn(
     claimBurnFormState.account,
-    claimBurnFormState.claimProof
-      ? JSON.parse(claimBurnFormState.claimProof)
-      : null,
-    +claimBurnFormState.fee
+    claimBurnFormState.claimProof ? JSON.parse(claimBurnFormState.claimProof) : null,
+    +claimBurnFormState.fee,
   );
 
-  const showAddAccountDialog = (
-    setElseToggle: boolean = !showAccountDialog
-  ) => {
+  const showAddAccountDialog = (setElseToggle: boolean = !showAccountDialog) => {
     setShowAddAccountDialog(setElseToggle);
     setAccountFormState({
-      accountName: '',
-      signingKeyIndex: '',
-      fee: '',
+      accountName: "",
+      signingKeyIndex: "",
+      fee: "",
     });
   };
 
   const showClaimBurnDialog = (setElseToggle: boolean = !showClaimDialog) => {
     setShowClaimBurnDialog(setElseToggle);
     setClaimBurnFormState({
-      account: '',
-      claimProof: '',
-      fee: '',
+      account: "",
+      claimProof: "",
+      fee: "",
     });
   };
 
@@ -149,12 +141,12 @@ function Accounts() {
     mutateAddAccount(undefined, {
       onSettled: () => {
         setAccountFormState({
-          accountName: '',
-          signingKeyIndex: '',
-          fee: '',
+          accountName: "",
+          signingKeyIndex: "",
+          fee: "",
         });
         setShowAddAccountDialog(false);
-        queryClient.invalidateQueries(['accounts']);
+        queryClient.invalidateQueries(["accounts"]);
       },
     });
   };
@@ -169,7 +161,7 @@ function Accounts() {
 
   const onClaimFreeCoins = async () => {
     await mutateCreateFeeTestCoins({
-      accountName: 'TestAccount',
+      accountName: "TestAccount",
       amount: 100000,
       fee: 1000,
     });
@@ -178,7 +170,7 @@ function Accounts() {
   const onClaimBurn = () => {
     mutateClaimBurn(undefined, {
       onSettled: () => {
-        setClaimBurnFormState({ account: '', claimProof: '', fee: '' });
+        setClaimBurnFormState({ account: "", claimProof: "", fee: "" });
         setShowClaimBurnDialog(false);
       },
     });
@@ -203,17 +195,13 @@ function Accounts() {
       {error ? <Alert severity="error">{error}</Alert> : null}
       <BoxHeading2
         style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.5rem',
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.5rem",
         }}
       >
         <div className="flex-container">
-          <Button
-            variant="outlined"
-            startIcon={<AddIcon />}
-            onClick={() => onClaimFreeCoins()}
-          >
+          <Button variant="outlined" startIcon={<AddIcon />} onClick={() => onClaimFreeCoins()}>
             Claim Free Testnet Coins
           </Button>
         </div>
@@ -230,10 +218,7 @@ function Accounts() {
               <Button variant="contained" type="submit">
                 Add Account
               </Button>
-              <Button
-                variant="outlined"
-                onClick={() => showAddAccountDialog(false)}
-              >
+              <Button variant="outlined" onClick={() => showAddAccountDialog(false)}>
                 Cancel
               </Button>
             </Form>
@@ -242,11 +227,7 @@ function Accounts() {
         {!showAccountDialog && (
           <Fade in={!showAccountDialog}>
             <div className="flex-container">
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={() => showAddAccountDialog()}
-              >
+              <Button variant="outlined" startIcon={<AddIcon />} onClick={() => showAddAccountDialog()}>
                 Add Account
               </Button>
             </div>
@@ -263,21 +244,16 @@ function Accounts() {
                   label="Account"
                   value={claimBurnFormState.account}
                   onChange={onClaimBurnAccountChange}
-                  style={{ flexGrow: 1, minWidth: '200px' }}
+                  style={{ flexGrow: 1, minWidth: "200px" }}
                 >
-                  {dataAccountsList?.accounts.map(
-                    (account: any, index: number) => (
-                      <MenuItem
-                        key={toHexString(account.account.address.Component)}
-                        value={
-                          'component_' +
-                          toHexString(account.account.address.Component)
-                        }
-                      >
-                        {account.account.name}
-                      </MenuItem>
-                    )
-                  )}
+                  {dataAccountsList?.accounts.map((account: any, index: number) => (
+                    <MenuItem
+                      key={toHexString(account.account.address.Component)}
+                      value={"component_" + toHexString(account.account.address.Component)}
+                    >
+                      {account.account.name}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
               <TextField
@@ -297,10 +273,7 @@ function Accounts() {
               <Button variant="contained" type="submit">
                 Claim Burn
               </Button>
-              <Button
-                variant="outlined"
-                onClick={() => showClaimBurnDialog(false)}
-              >
+              <Button variant="outlined" onClick={() => showClaimBurnDialog(false)}>
                 Cancel
               </Button>
             </Form>
@@ -309,11 +282,7 @@ function Accounts() {
         {!showClaimDialog && (
           <Fade in={!showClaimDialog}>
             <div className="flex-container">
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={() => showClaimBurnDialog()}
-              >
+              <Button variant="outlined" startIcon={<AddIcon />} onClick={() => showClaimBurnDialog()}>
                 Claim Burn
               </Button>
             </div>
@@ -323,7 +292,7 @@ function Accounts() {
       <FetchStatusCheck
         isLoading={isLoadingAccountsList}
         isError={isErrorAccountsList}
-        errorMessage={errorAccountsList?.message || 'Error fetching data'}
+        errorMessage={errorAccountsList?.message || "Error fetching data"}
       />
       <Fade in={!isLoadingAccountsList && !isErrorAccountsList}>
         <TableContainer>
@@ -339,9 +308,7 @@ function Accounts() {
             </TableHead>
             <TableBody>
               {dataAccountsList &&
-                dataAccountsList.accounts.map((account: any, index: number) =>
-                  Account(account, index)
-                )}
+                dataAccountsList.accounts.map((account: any, index: number) => Account(account, index))}
             </TableBody>
           </Table>
         </TableContainer>

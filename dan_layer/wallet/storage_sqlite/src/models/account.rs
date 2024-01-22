@@ -3,7 +3,7 @@
 
 use chrono::NaiveDateTime;
 use diesel::{Identifiable, Queryable};
-use tari_engine_types::substate::InvalidSubstateAddressFormat;
+use tari_engine_types::substate::InvalidSubstateIdFormat;
 
 use crate::schema::accounts;
 
@@ -20,7 +20,7 @@ pub struct Account {
 }
 
 impl TryFrom<Account> for tari_dan_wallet_sdk::models::Account {
-    type Error = InvalidSubstateAddressFormat;
+    type Error = InvalidSubstateIdFormat;
 
     fn try_from(account: Account) -> Result<Self, Self::Error> {
         Ok(Self {

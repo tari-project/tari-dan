@@ -5,13 +5,14 @@ use std::{borrow::Borrow, cmp};
 
 use rand::{rngs::OsRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::PublicKey;
 
-use crate::{shard_bucket::ShardBucket, ShardId};
+use crate::{shard::Shard, SubstateAddress};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
 pub struct Committee<TAddr> {
     // TODO: not pub
-    pub members: Vec<TAddr>,
+    pub members: Vec<(TAddr, PublicKey)>,
 }
 
 impl<TAddr: PartialEq> Committee<TAddr> {
@@ -23,12 +24,12 @@ impl<TAddr: PartialEq> Committee<TAddr> {
         Self::new(Vec::with_capacity(cap))
     }
 
-    pub fn new(members: Vec<TAddr>) -> Self {
+    pub fn new(members: Vec<(TAddr, PublicKey)>) -> Self {
         Self { members }
     }
 
-    pub fn members(&self) -> &[TAddr] {
-        &self.members
+    pub fn members(&self) -> impl Iterator<Item = &TAddr> + '_ {
+        self.members.iter().map(|(addr, _)| addr)
     }
 
     pub fn max_failures(&self) -> usize {
@@ -48,7 +49,7 @@ impl<TAddr: PartialEq> Committee<TAddr> {
     }
 
     pub fn contains(&self, member: &TAddr) -> bool {
-        self.members.contains(member)
+        self.members.iter().any(|(addr, _)| addr == member)
     }
 
     pub fn shuffle(&mut self) {
@@ -56,15 +57,17 @@ impl<TAddr: PartialEq> Committee<TAddr> {
     }
 
     pub fn shuffled(&self) -> impl Iterator<Item = &TAddr> + '_ {
-        self.members.choose_multiple(&mut OsRng, self.len())
+        self.members
+            .choose_multiple(&mut OsRng, self.len())
+            .map(|(addr, _)| addr)
     }
 
     pub fn select_n_random(&self, n: usize) -> impl Iterator<Item = &TAddr> + '_ {
-        self.members.choose_multiple(&mut OsRng, n)
+        self.members.choose_multiple(&mut OsRng, n).map(|(addr, _)| addr)
     }
 
     pub fn index_of(&self, member: &TAddr) -> Option<usize> {
-        self.members.iter().position(|x| x == member)
+        self.members.iter().position(|(addr, _)| addr == member)
     }
 
     /// Returns the n next members from start_index_inclusive, wrapping around if necessary.
@@ -75,12 +78,17 @@ impl<TAddr: PartialEq> Committee<TAddr> {
         } else {
             start_index_inclusive % self.len()
         };
-        self.members.iter().cycle().skip(start_index_inclusive).take(n)
+        self.members
+            .iter()
+            .map(|(addr, _)| addr)
+            .cycle()
+            .skip(start_index_inclusive)
+            .take(n)
     }
 
     pub fn calculate_steps_between(&self, member_a: &TAddr, member_b: &TAddr) -> Option<usize> {
-        let index_a = self.members.iter().position(|x| x == member_a)? as isize;
-        let index_b = self.members.iter().position(|x| x == member_b)? as isize;
+        let index_a = self.index_of(member_a)? as isize;
+        let index_b = self.index_of(member_b)? as isize;
         let steps = index_a - index_b;
         if steps < 0 {
             Some((self.members.len() as isize + steps) as usize)
@@ -89,14 +97,30 @@ impl<TAddr: PartialEq> Committee<TAddr> {
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &TAddr> {
+    pub fn iter(&self) -> impl Iterator<Item = &(TAddr, PublicKey)> {
         self.members.iter()
+    }
+
+    pub fn addresses(&self) -> impl Iterator<Item = &TAddr> {
+        self.members.iter().map(|(addr, _)| addr)
+    }
+
+    pub fn into_addresses(self) -> impl Iterator<Item = TAddr> {
+        self.members.into_iter().map(|(addr, _)| addr)
+    }
+
+    pub fn public_keys(&self) -> impl Iterator<Item = &PublicKey> {
+        self.members.iter().map(|(_, pk)| pk)
+    }
+
+    pub fn into_public_keys(self) -> impl Iterator<Item = PublicKey> {
+        self.members.into_iter().map(|(_, pk)| pk)
     }
 }
 
 impl<TAddr> IntoIterator for Committee<TAddr> {
     type IntoIter = std::vec::IntoIter<Self::Item>;
-    type Item = TAddr;
+    type Item = (TAddr, PublicKey);
 
     fn into_iter(self) -> Self::IntoIter {
         self.members.into_iter()
@@ -104,16 +128,16 @@ impl<TAddr> IntoIterator for Committee<TAddr> {
 }
 
 impl<'a, TAddr> IntoIterator for &'a Committee<TAddr> {
-    type IntoIter = std::slice::Iter<'a, TAddr>;
-    type Item = &'a TAddr;
+    type IntoIter = std::slice::Iter<'a, (TAddr, PublicKey)>;
+    type Item = &'a (TAddr, PublicKey);
 
     fn into_iter(self) -> Self::IntoIter {
         self.members.iter()
     }
 }
 
-impl<TAddr: PartialEq> FromIterator<TAddr> for Committee<TAddr> {
-    fn from_iter<T: IntoIterator<Item = TAddr>>(iter: T) -> Self {
+impl<TAddr: PartialEq> FromIterator<(TAddr, PublicKey)> for Committee<TAddr> {
+    fn from_iter<T: IntoIterator<Item = (TAddr, PublicKey)>>(iter: T) -> Self {
         Self::new(iter.into_iter().collect())
     }
 }
@@ -135,15 +159,15 @@ impl<TAddr: PartialEq> FromIterator<Committee<TAddr>> for Committee<TAddr> {
 pub struct CommitteeShard {
     num_committees: u32,
     num_members: u32,
-    bucket: ShardBucket,
+    shard: Shard,
 }
 
 impl CommitteeShard {
-    pub fn new(num_committees: u32, num_members: u32, bucket: ShardBucket) -> Self {
+    pub fn new(num_committees: u32, num_members: u32, shard: Shard) -> Self {
         Self {
             num_committees,
             num_members,
-            bucket,
+            shard,
         }
     }
 
@@ -169,39 +193,45 @@ impl CommitteeShard {
         self.num_members
     }
 
-    pub fn bucket(&self) -> ShardBucket {
-        self.bucket
+    pub fn shard(&self) -> Shard {
+        self.shard
     }
 
-    pub fn includes_shard(&self, shard_id: &ShardId) -> bool {
-        let b = shard_id.to_committee_bucket(self.num_committees);
-        self.bucket == b
+    pub fn includes_substate_address(&self, substate_address: &SubstateAddress) -> bool {
+        let s = substate_address.to_committee_shard(self.num_committees);
+        self.shard == s
     }
 
-    pub fn includes_all_shards<I: IntoIterator<Item = B>, B: Borrow<ShardId>>(&self, shard_ids: I) -> bool {
-        shard_ids
+    pub fn includes_all_substate_addresses<I: IntoIterator<Item = B>, B: Borrow<SubstateAddress>>(
+        &self,
+        substate_addresses: I,
+    ) -> bool {
+        substate_addresses
             .into_iter()
-            .all(|shard_id| self.includes_shard(shard_id.borrow()))
+            .all(|substate_address| self.includes_substate_address(substate_address.borrow()))
     }
 
-    pub fn includes_any_shard<I: IntoIterator<Item = B>, B: Borrow<ShardId>>(&self, shard_ids: I) -> bool {
-        shard_ids
+    pub fn includes_any_shard<I: IntoIterator<Item = B>, B: Borrow<SubstateAddress>>(
+        &self,
+        substate_addresses: I,
+    ) -> bool {
+        substate_addresses
             .into_iter()
-            .any(|shard_id| self.includes_shard(shard_id.borrow()))
+            .any(|substate_address| self.includes_substate_address(substate_address.borrow()))
     }
 
-    pub fn filter<'a, I, B: Borrow<ShardId>>(&'a self, items: I) -> impl Iterator<Item = B> + '_
+    pub fn filter<'a, I, B: Borrow<SubstateAddress>>(&'a self, items: I) -> impl Iterator<Item = B> + '_
     where I: IntoIterator<Item = B> + 'a {
         items
             .into_iter()
-            .filter(|shard_id| self.includes_shard(shard_id.borrow()))
+            .filter(|substate_address| self.includes_substate_address(substate_address.borrow()))
     }
 
-    /// Calculates the number of distinct buckets for a given shard set
-    pub fn count_distinct_buckets<'a, I: IntoIterator<Item = &'a ShardId>>(&self, shards: I) -> usize {
+    /// Calculates the number of distinct shards for a given shard set
+    pub fn count_distinct_shards<'a, I: IntoIterator<Item = &'a SubstateAddress>>(&self, shards: I) -> usize {
         shards
             .into_iter()
-            .map(|shard| shard.to_committee_bucket(self.num_committees))
+            .map(|shard| shard.to_committee_shard(self.num_committees))
             .collect::<std::collections::HashSet<_>>()
             .len()
     }
@@ -209,10 +239,12 @@ impl CommitteeShard {
 
 #[cfg(test)]
 mod tests {
+    use tari_crypto::ristretto::RistrettoPublicKey;
+
     use super::*;
 
     fn create_committee(size: usize) -> Committee<u32> {
-        Committee::new((0..size as u32).collect())
+        Committee::new((0..size as u32).map(|c| (c, RistrettoPublicKey::default())).collect())
     }
 
     mod select_n_starting_from {

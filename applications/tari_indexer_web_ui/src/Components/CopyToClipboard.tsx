@@ -20,11 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import Snackbar from '@mui/material/Snackbar';
-import IconButton from '@mui/material/IconButton';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import Tooltip from '@mui/material/Tooltip';
+import { useState } from "react";
+import Snackbar from "@mui/material/Snackbar";
+import IconButton from "@mui/material/IconButton";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import Tooltip from "@mui/material/Tooltip";
 
 interface CopyProps {
   copy: string;
@@ -45,25 +45,20 @@ const CopyToClipboard = ({ copy }: CopyProps) => {
         aria-label="copy to clipboard"
         style={{
           // float: 'right',
-          marginLeft: '10px',
+          marginLeft: "10px",
         }}
       >
         <Tooltip title={copy} arrow>
           <ContentCopyIcon
             color="primary"
             style={{
-              width: '16px',
-              height: '16px',
+              width: "16px",
+              height: "16px",
             }}
           />
         </Tooltip>
       </IconButton>
-      <Snackbar
-        open={open}
-        onClose={() => setOpen(false)}
-        autoHideDuration={2000}
-        message="Copied to clipboard"
-      />
+      <Snackbar open={open} onClose={() => setOpen(false)} autoHideDuration={2000} message="Copied to clipboard" />
     </>
   );
 };

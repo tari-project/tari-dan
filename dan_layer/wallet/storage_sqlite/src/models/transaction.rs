@@ -5,8 +5,7 @@ use std::str::FromStr;
 
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_wallet_sdk::{
     models::{TransactionStatus, WalletTransaction},
     storage::WalletStorageError,
@@ -41,12 +40,12 @@ pub struct Transaction {
 /// Struct used to keep inputs and outputs in a single field as json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionInputs {
-    pub inputs: Vec<ShardId>,
-    pub input_refs: Vec<ShardId>,
+    pub inputs: Vec<SubstateAddress>,
+    pub input_refs: Vec<SubstateAddress>,
 }
 
 impl Transaction {
-    pub fn try_into_wallet_transaction(self) -> Result<WalletTransaction<PublicKey>, WalletStorageError> {
+    pub fn try_into_wallet_transaction(self) -> Result<WalletTransaction, WalletStorageError> {
         let signature = deserialize_json(&self.signature)?;
         let sender_public_key =
             Hex::from_hex(&self.sender_public_key).map_err(|e| WalletStorageError::DecodingError {
@@ -83,6 +82,7 @@ impl Transaction {
                 .map(|r| deserialize_json(&r))
                 .transpose()?
                 .unwrap_or_default(),
+            last_update_time: self.updated_at,
         })
     }
 }

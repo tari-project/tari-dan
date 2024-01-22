@@ -50,6 +50,7 @@ message Block {
   repeated Command commands = 8;
   uint64 total_leader_fee = 9;
   bytes foreign_indexes = 10;
+  tari.dan.common.Signature signature = 11;
 }
 
 message Command {
@@ -57,7 +58,22 @@ message Command {
     TransactionAtom prepare = 1;
     TransactionAtom local_prepared = 2;
     TransactionAtom accept = 3;
+    ForeignProposal foreign_proposal = 4;
   }
+}
+
+enum ForeignProposalState {
+  UNKNOWN_STATE = 0;
+  NEW = 1;
+  MINED = 2;
+  DELETED = 3;
+}
+
+message ForeignProposal {
+  uint32 bucket = 1;
+  bytes block_id = 2;
+  ForeignProposalState state = 3;
+  uint64 mined_at = 4;
 }
 
 message TransactionAtom {
@@ -79,7 +95,7 @@ message Evidence {
 }
 
 message ShardPledge {
-  bytes shard_id = 1;
+  bytes substate_address = 1;
   bytes node_hash = 2;
   ObjectPledge pledge = 3;
 }
@@ -125,7 +141,7 @@ enum QuorumDecision {
 }
 
 message ObjectPledge {
-  bytes shard_id = 1;
+  bytes substate_address = 1;
   SubstateState current_state = 2;
   bytes pledged_to_payload = 3;
 }
@@ -163,7 +179,7 @@ message RequestedTransactionMessage {
 }
 
 message Substate {
-  bytes address = 1;
+  bytes substate_id = 1;
   uint32 version = 2;
   bytes substate = 3;
 

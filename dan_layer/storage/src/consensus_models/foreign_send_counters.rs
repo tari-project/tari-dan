@@ -3,14 +3,14 @@
 
 use std::collections::HashMap;
 
-use tari_dan_common_types::shard_bucket::ShardBucket;
+use tari_dan_common_types::shard::Shard;
 
 use super::BlockId;
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
 #[derive(Debug, Clone)]
 pub struct ForeignSendCounters {
-    pub counters: HashMap<ShardBucket, u64>,
+    pub counters: HashMap<Shard, u64>,
 }
 
 impl Default for ForeignSendCounters {
@@ -26,7 +26,7 @@ impl ForeignSendCounters {
         }
     }
 
-    pub fn increment_counter(&mut self, bucket: ShardBucket) -> u64 {
+    pub fn increment_counter(&mut self, bucket: Shard) -> u64 {
         *self.counters.entry(bucket).and_modify(|v| *v += 1).or_insert(1)
     }
 }

@@ -20,8 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import {
   Fade,
   List,
@@ -33,29 +33,22 @@ import {
   TableHead,
   TablePagination,
   TableRow,
-} from '@mui/material';
-import Button from '@mui/material/Button';
-import Collapse from '@mui/material/Collapse';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import { useState } from 'react';
-import { IoCloseCircleOutline } from 'react-icons/io5';
-import CopyToClipboard from '../../../Components/CopyToClipboard';
-import FetchStatusCheck from '../../../Components/FetchStatusCheck';
-import {
-  AccordionIconButton,
-  CodeBlock,
-  DataTableCell,
-} from '../../../Components/StyledComponents';
-import {
-  useAuthRevokeToken,
-  useGetAllTokens,
-} from '../../../api/hooks/useTokens';
-import { shortenString } from '../../../utils/helpers';
+} from "@mui/material";
+import Button from "@mui/material/Button";
+import Collapse from "@mui/material/Collapse";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogTitle from "@mui/material/DialogTitle";
+import IconButton from "@mui/material/IconButton";
+import { useState } from "react";
+import { IoCloseCircleOutline } from "react-icons/io5";
+import CopyToClipboard from "../../../Components/CopyToClipboard";
+import FetchStatusCheck from "../../../Components/FetchStatusCheck";
+import { AccordionIconButton, CodeBlock, DataTableCell } from "../../../Components/StyledComponents";
+import { useAuthRevokeToken, useGetAllTokens } from "../../../api/hooks/useTokens";
+import { shortenString } from "../../../utils/helpers";
 
 function AlertDialog({ fn, row }: any) {
   const [open, setOpen] = useState(false);
@@ -86,9 +79,7 @@ function AlertDialog({ fn, row }: any) {
       >
         <DialogTitle id="alert-dialog-title">Revoke Token</DialogTitle>
         <DialogContent>
-          <DialogContentText id="alert-dialog-description">
-            Would you like to revoke this token?
-          </DialogContentText>
+          <DialogContentText id="alert-dialog-description">Would you like to revoke this token?</DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button variant="outlined" onClick={handleClose}>
@@ -113,16 +104,13 @@ export default function AccessTokens() {
     mutate(id);
   };
 
-  const emptyRows =
-    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - data?.jwt) : 0;
+  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - data?.jwt) : 0;
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
@@ -135,14 +123,14 @@ export default function AccessTokens() {
         <TableRow key={id}>
           <DataTableCell
             style={{
-              borderBottom: 'none',
+              borderBottom: "none",
             }}
           >
             {id}
           </DataTableCell>
           <DataTableCell
             style={{
-              borderBottom: 'none',
+              borderBottom: "none",
             }}
           >
             {shortenString(name)}
@@ -150,12 +138,12 @@ export default function AccessTokens() {
           </DataTableCell>
           <DataTableCell
             style={{
-              borderBottom: 'none',
+              borderBottom: "none",
             }}
           >
             {formattedDate}
           </DataTableCell>
-          <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+          <DataTableCell sx={{ borderBottom: "none", textAlign: "center" }}>
             <AccordionIconButton
               aria-label="expand row"
               size="small"
@@ -166,7 +154,7 @@ export default function AccessTokens() {
               {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
             </AccordionIconButton>
           </DataTableCell>
-          <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+          <DataTableCell sx={{ borderBottom: "none", textAlign: "center" }}>
             <AlertDialog fn={() => handleRevoke(id)} row={name} />
           </DataTableCell>
         </TableRow>
@@ -179,7 +167,7 @@ export default function AccessTokens() {
             colSpan={5}
           >
             <Collapse in={open} timeout="auto" unmountOnExit>
-              <CodeBlock style={{ marginBottom: '10px' }}>
+              <CodeBlock style={{ marginBottom: "10px" }}>
                 Permissions:
                 <List>
                   {permissions.map((item: string) => (
@@ -199,7 +187,7 @@ export default function AccessTokens() {
       <FetchStatusCheck
         isLoading={isLoading}
         isError={isError}
-        errorMessage={error?.message || 'Error fetching data'}
+        errorMessage={error?.message || "Error fetching data"}
       />
       <Fade in={!isLoading && !isError}>
         <TableContainer>
@@ -220,9 +208,7 @@ export default function AccessTokens() {
                 ?.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                 .map(({ id, name, permissions, exp }: any) => {
                   const date = new Date(exp * 1000);
-                  const formattedDate = `${date
-                    .toISOString()
-                    .slice(0, 10)} ${date.toISOString().slice(11, 16)}`;
+                  const formattedDate = `${date.toISOString().slice(0, 10)} ${date.toISOString().slice(11, 16)}`;
                   return (
                     <RowData
                       key={id}

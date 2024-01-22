@@ -84,9 +84,9 @@ message GetPeersResponse {
 }
 
 message VnStateSyncRequest {
-  tari.dan.common.ShardId start_shard_id = 1;
-  tari.dan.common.ShardId end_shard_id = 2;
-  repeated tari.dan.common.ShardId inventory = 3;
+  tari.dan.common.SubstateAddress start_address = 1;
+  tari.dan.common.SubstateAddress end_address = 2;
+  repeated tari.dan.common.SubstateAddress inventory = 3;
 }
 
 message VnStateSyncResponse {
@@ -107,7 +107,7 @@ message VnStateSyncResponse {
 }
 
 message GetSubstateRequest {
-  bytes shard = 1;
+  bytes address = 1;
 }
 
 message GetSubstateResponse {
@@ -169,14 +169,14 @@ message SubstateCreatedProof {
 
 // Minimal substate data
 message SubstateData {
-  bytes address = 1;
+  bytes substate_id = 1;
   uint32 version = 2;
   bytes substate_value = 3;
   bytes created_transaction = 7;
 }
 
 message SubstateDestroyedProof {
-  bytes shard_id = 1;
+  bytes address = 1;
   tari.dan.consensus.QuorumCertificate destroyed_justify = 2;
   bytes destroyed_by_transaction = 3;
 }

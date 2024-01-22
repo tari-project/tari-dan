@@ -47,16 +47,16 @@ fn with_context<R, F: FnOnce(&mut Option<SystemContext>) -> R>(_f: F) -> R {
     panic!("System context is not available on non-WASM targets");
 }
 
+/// TODO: YAGNI currently, it may come into play for cross-template requests
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AbiContext {
-    // TODO: YAGNI currently, but will leave this in as it may come into play for cross-template requests.
-}
+pub struct AbiContext {}
 
 #[derive(Debug)]
 pub struct SystemContext {
     _abi_context: AbiContext,
 }
 
+/// Sets up a template's current call context
 pub fn init_context(call_info: &CallInfo) {
     let abi_context = decode(&call_info.abi_context).expect("Failed to decode ABI context");
     with_context(|ctx| {
@@ -66,6 +66,7 @@ pub fn init_context(call_info: &CallInfo) {
     });
 }
 
+/// Returns a template's current call context
 pub fn get_context() -> Context {
     Context
 }

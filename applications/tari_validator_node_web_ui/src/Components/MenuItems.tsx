@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { NavLink } from 'react-router-dom';
-import ListItemButton from '@mui/material/ListItemButton';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
+import { NavLink } from "react-router-dom";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
 import {
   IoHomeOutline,
   IoHome,
@@ -42,10 +42,10 @@ import {
   IoCodeDownloadOutline,
   IoCodeDownload,
   IoBarChartSharp,
-} from 'react-icons/io5';
-import Tooltip from '@mui/material/Tooltip';
-import Fade from '@mui/material/Fade';
-import theme from '../theme/theme';
+} from "react-icons/io5";
+import Tooltip from "@mui/material/Tooltip";
+import Fade from "@mui/material/Fade";
+import theme from "../theme/theme";
 
 const iconStyle = {
   height: 22,
@@ -60,63 +60,63 @@ const activeIconStyle = {
 
 const mainItems = [
   {
-    title: 'Home',
+    title: "Home",
     icon: <IoHomeOutline style={iconStyle} />,
     activeIcon: <IoHome style={activeIconStyle} />,
-    link: '/',
+    link: "/",
   },
   {
-    title: 'Blocks',
+    title: "Blocks",
     icon: <IoBarChartSharp style={iconStyle} />,
     activeIcon: <IoBarChart style={activeIconStyle} />,
-    link: 'blocks',
+    link: "blocks",
   },
   {
-    title: 'Committees',
+    title: "Committees",
     icon: <IoPeopleOutline style={iconStyle} />,
     activeIcon: <IoPeople style={activeIconStyle} />,
-    link: 'committees',
+    link: "committees",
   },
   {
-    title: 'Connections',
+    title: "Connections",
     icon: <IoGitNetworkOutline style={iconStyle} />,
     activeIcon: <IoGitNetwork style={activeIconStyle} />,
-    link: 'connections',
+    link: "connections",
   },
   {
-    title: 'Fees',
+    title: "Fees",
     icon: <IoCalculatorOutline style={iconStyle} />,
     activeIcon: <IoCalculator style={activeIconStyle} />,
-    link: 'fees',
+    link: "fees",
   },
   {
-    title: 'Mempool',
+    title: "Mempool",
     icon: <IoLayersOutline style={iconStyle} />,
     activeIcon: <IoLayers style={activeIconStyle} />,
-    link: 'mempool',
+    link: "mempool",
   },
   {
-    title: 'Templates',
+    title: "Templates",
     icon: <IoCodeDownloadOutline style={iconStyle} />,
     activeIcon: <IoCodeDownload style={activeIconStyle} />,
-    link: 'templates',
+    link: "templates",
   },
   {
-    title: 'Validator Nodes',
+    title: "Validator Nodes",
     icon: <IoCheckmarkCircleOutline style={iconStyle} />,
     activeIcon: <IoCheckmarkCircle style={activeIconStyle} />,
-    link: 'vns',
+    link: "vns",
   },
 ];
 
 const MainMenu = mainItems.map(({ title, icon, activeIcon, link }) => {
   return (
-    <NavLink to={link} key={title} style={{ textDecoration: 'none' }}>
+    <NavLink to={link} key={title} style={{ textDecoration: "none" }}>
       {({ isActive }) => (
         <ListItemButton
           sx={{
-            paddingLeft: '22px',
-            paddingRight: '22px',
+            paddingLeft: "22px",
+            paddingRight: "22px",
           }}
           disableRipple
         >

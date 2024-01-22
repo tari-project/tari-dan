@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+//! Hook that implements common behavior when a panic happens during template execution
+
 use tari_template_abi::on_panic;
 
 fn hook(info: &std::panic::PanicInfo<'_>) {
@@ -44,6 +46,7 @@ fn hook(info: &std::panic::PanicInfo<'_>) {
     }
 }
 
+/// Registers a `std::panic` hook that tries to include the error line and column to the error
 pub fn register_panic_hook() {
     use std::sync::Once;
     static SET_HOOK: Once = Once::new();

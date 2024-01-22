@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useTheme } from '@mui/material/styles';
+import { useTheme } from "@mui/material/styles";
 
 interface Props {
   children: string;
@@ -31,10 +31,10 @@ function SecondaryHeading({ children }: Props) {
   return (
     <div
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        width: '100%',
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        width: "100%",
         color: theme.palette.text.primary,
       }}
     >
@@ -42,8 +42,8 @@ function SecondaryHeading({ children }: Props) {
       <div
         style={{
           background: theme.palette.primary.main,
-          width: '100px',
-          height: '3px',
+          width: "100px",
+          height: "3px",
         }}
       ></div>
     </div>

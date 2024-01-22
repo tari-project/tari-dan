@@ -13,7 +13,7 @@ impl serde::Serialize for CborValueJsonSerializeWrapper<'_> {
     where S: serde::Serializer {
         match self.0 {
             Value::Integer(ref __field0) => {
-                let value = i128::try_from(*__field0).map_err(serde::ser::Error::custom)?;
+                let value = i128::from(*__field0);
                 serializer.serialize_newtype_variant("Value", 1u32, "Integer", &value)
             },
             Value::Bytes(ref __field0) => {

@@ -27,6 +27,7 @@ use tari_template_abi::{CallInfo, EngineOp, FunctionDef};
 use tari_template_lib::{
     args::{
         BucketInvokeArg,
+        BuiltinTemplateInvokeArg,
         CallInvokeArg,
         CallerContextInvokeArg,
         ComponentInvokeArg,
@@ -45,6 +46,7 @@ use tari_template_lib::{
 };
 use wasmer::{Function, Instance, Module, Val, WasmerEnv};
 
+use super::version::are_versions_compatible;
 use crate::{
     runtime::Runtime,
     traits::Invokable,
@@ -54,7 +56,10 @@ use crate::{
         LoadedWasmTemplate,
     },
 };
+
 const LOG_TARGET: &str = "tari::dan::engine::wasm::process";
+pub const ENGINE_TARI_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug)]
 pub struct WasmProcess {
     module: LoadedWasmTemplate,
@@ -69,6 +74,7 @@ impl WasmProcess {
         let tari_engine = Function::new_native_with_env(store, env.clone(), Self::tari_engine_entrypoint);
         let resolver = env.create_resolver(store, tari_engine);
         let instance = Instance::new(module.wasm_module(), &resolver)?;
+        Self::validate_template_tari_version(&module)?;
         env.init_with_instance(&instance)?;
         Ok(Self { module, env, instance })
     }
@@ -161,6 +167,9 @@ impl WasmProcess {
                     .interface()
                     .proof_invoke(arg.proof_ref, arg.action, arg.args.into())
             }),
+            EngineOp::BuiltinTemplateInvoke => Self::handle(env, arg, |env, arg: BuiltinTemplateInvokeArg| {
+                env.state().interface().builtin_template_invoke(arg.action)
+            }),
         };
 
         result.unwrap_or_else(|err| {
@@ -203,6 +212,24 @@ impl WasmProcess {
     fn encoded_abi_context(&self) -> Vec<u8> {
         encode(&AbiContext {}).unwrap()
     }
+
+    /// Determine if the version of the template_lib crate in the WASM is valid.
+    /// This is just a placeholder that logs the result, as we don't manage version incompatiblities yet
+    fn validate_template_tari_version(module: &LoadedWasmTemplate) -> Result<(), WasmExecutionError> {
+        let template_tari_version = module.template_def().tari_version();
+
+        if are_versions_compatible(template_tari_version, ENGINE_TARI_VERSION)? {
+            log::info!(target: LOG_TARGET, "The Tari version in the template WASM (\"{}\") is compatible with the one used in the engine", template_tari_version);
+        } else {
+            log::error!(target: LOG_TARGET, "The Tari version in the template WASM (\"{}\") is incompatible with the one used in the engine (\"{}\")", template_tari_version, ENGINE_TARI_VERSION);
+            return Err(WasmExecutionError::TemplateVersionMismatch {
+                engine_version: ENGINE_TARI_VERSION.to_owned(),
+                template_version: template_tari_version.to_owned(),
+            });
+        }
+
+        Ok(())
+    }
 }
 
 impl Invokable for WasmProcess {
@@ -239,7 +266,7 @@ impl Invokable for WasmProcess {
             },
         };
         let ptr = val
-            .get(0)
+            .first()
             .and_then(|v| v.i32())
             .ok_or(WasmExecutionError::ExpectedPointerReturn { function: main_name })?;
 

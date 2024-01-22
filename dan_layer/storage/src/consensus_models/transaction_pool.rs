@@ -9,6 +9,7 @@ use std::{
 };
 
 use log::*;
+use serde::Serialize;
 use tari_dan_common_types::{
     committee::CommitteeShard,
     optional::{IsNotFoundError, Optional},
@@ -25,7 +26,7 @@ use crate::{
 
 const _LOG_TARGET: &str = "tari::dan::storage::transaction_pool";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum TransactionPoolStage {
     /// Transaction has just come in and has never been proposed
     New,
@@ -215,7 +216,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TransactionPoolRecord {
     transaction: TransactionAtom,
     stage: TransactionPoolStage,
@@ -349,9 +350,9 @@ impl TransactionPoolRecord {
 
     pub fn add_evidence(&mut self, committee_shard: &CommitteeShard, qc_id: QcId) -> &mut Self {
         let evidence = &mut self.transaction.evidence;
-        for (shard, qcs_mut) in evidence.iter_mut() {
-            if committee_shard.includes_shard(shard) {
-                qcs_mut.push(qc_id);
+        for (shard, evidence_mut) in evidence.iter_mut() {
+            if committee_shard.includes_substate_address(shard) {
+                evidence_mut.qc_ids.insert(qc_id);
             }
         }
 

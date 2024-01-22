@@ -28,6 +28,7 @@ use tari_template_abi::rust::{
     num::TryFromIntError,
 };
 
+/// Represents an integer quantity of any fungible or non-fungible resource
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[serde(transparent)]
 pub struct Amount(pub i64);

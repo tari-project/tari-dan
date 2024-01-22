@@ -4,13 +4,13 @@
 use std::collections::HashSet;
 
 use log::*;
-use tari_comms::protocol::rpc::RpcStatus;
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, LeafBlock, QuorumCertificate, SubstateUpdate, TransactionRecord},
     StateStore,
     StateStoreReadTransaction,
     StorageError,
 };
+use tari_rpc_framework::RpcStatus;
 use tari_validator_node_rpc::proto::rpc::{
     sync_blocks_response::SyncData,
     QuorumCertificates,
@@ -23,24 +23,24 @@ const LOG_TARGET: &str = "tari::dan::rpc::sync_task";
 
 const BLOCK_BUFFER_SIZE: usize = 15;
 
-type BlockData<TAddr> = (
-    Block<TAddr>,
-    Vec<QuorumCertificate<TAddr>>,
-    Vec<SubstateUpdate<TAddr>>,
+type BlockData = (
+    Block,
+    Vec<QuorumCertificate>,
+    Vec<SubstateUpdate>,
     Vec<TransactionRecord>,
 );
-type BlockBuffer<TAddr> = Vec<BlockData<TAddr>>;
+type BlockBuffer = Vec<BlockData>;
 
 pub struct BlockSyncTask<TStateStore: StateStore> {
     store: TStateStore,
-    start_block: Block<TStateStore::Addr>,
+    start_block: Block,
     sender: mpsc::Sender<Result<SyncBlocksResponse, RpcStatus>>,
 }
 
 impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
     pub fn new(
         store: TStateStore,
-        start_block: Block<TStateStore::Addr>,
+        start_block: Block,
         sender: mpsc::Sender<Result<SyncBlocksResponse, RpcStatus>>,
     ) -> Self {
         Self {
@@ -106,13 +106,10 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         Ok(())
     }
 
-    fn fetch_next_batch(
-        &self,
-        buffer: &mut BlockBuffer<TStateStore::Addr>,
-        current_block_id: &BlockId,
-    ) -> Result<BlockId, StorageError> {
+    fn fetch_next_batch(&self, buffer: &mut BlockBuffer, current_block_id: &BlockId) -> Result<BlockId, StorageError> {
         self.store.with_read_tx(|tx| {
             let mut current_block_id = *current_block_id;
+            let mut last_block_id = current_block_id;
             loop {
                 let children = tx.blocks_get_all_by_parent(&current_block_id)?;
                 let Some(child) = children.into_iter().find(|b| b.is_committed()) else {
@@ -120,10 +117,16 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                 };
 
                 current_block_id = *child.id();
+                if child.is_dummy() {
+                    continue;
+                }
+
+                last_block_id = current_block_id;
                 let all_qcs = child
                     .commands()
                     .iter()
-                    .flat_map(|cmd| cmd.evidence().qc_ids_iter())
+                    .filter_map(|cmd| cmd.transaction())
+                    .flat_map(|transaction| transaction.evidence.qc_ids_iter())
                     .collect::<HashSet<_>>();
                 let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
                 let updates = child.get_substate_updates(tx)?;
@@ -133,19 +136,15 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                     break;
                 }
             }
-            Ok::<_, StorageError>(current_block_id)
+            Ok::<_, StorageError>(last_block_id)
         })
     }
 
-    fn fetch_last_blocks(
-        &self,
-        buffer: &mut BlockBuffer<TStateStore::Addr>,
-        current_block_id: &BlockId,
-    ) -> Result<(), StorageError> {
+    fn fetch_last_blocks(&self, buffer: &mut BlockBuffer, current_block_id: &BlockId) -> Result<(), StorageError> {
         self.store.with_read_tx(|tx| {
             // TODO: if there are any transactions this will break the syncing node.
             let leaf_block = LeafBlock::get(tx)?;
-            let blocks = Block::get_all_blocks_between(tx, current_block_id, leaf_block.block_id())?;
+            let blocks = Block::get_all_blocks_between(tx, current_block_id, leaf_block.block_id(), false)?;
             for block in blocks {
                 debug!(
                     target: LOG_TARGET,
@@ -156,6 +155,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                 let all_qcs = block
                     .commands()
                     .iter()
+                    .filter(|cmd| cmd.transaction().is_some())
                     .flat_map(|cmd| cmd.evidence().qc_ids_iter())
                     .collect::<HashSet<_>>();
                 let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
@@ -179,10 +179,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         Ok(())
     }
 
-    async fn send_block_data(
-        &mut self,
-        (block, qcs, updates, transactions): BlockData<TStateStore::Addr>,
-    ) -> Result<(), ()> {
+    async fn send_block_data(&mut self, (block, qcs, updates, transactions): BlockData) -> Result<(), ()> {
         self.send(Ok(SyncBlocksResponse {
             sync_data: Some(SyncData::Block((&block).into())),
         }))

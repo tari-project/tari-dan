@@ -61,6 +61,7 @@ pub async fn handle_create_transfer_proof(
         &vault.address,
         req.amount + req.reveal_amount,
         proof_id,
+        false,
     )?;
 
     info!(

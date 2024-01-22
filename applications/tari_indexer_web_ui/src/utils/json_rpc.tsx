@@ -23,9 +23,9 @@
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
   id += 1;
-  let address = 'http://localhost:3333';
+  let address = "http://localhost:3333";
   try {
-    address = await (await fetch('/json_rpc_address')).text();
+    address = await (await fetch("/json_rpc_address")).text();
     if (!address.startsWith("http")) {
       address = "http://" + address;
     }
@@ -33,15 +33,15 @@ async function jsonRpc(method: string, params: any = null) {
     console.warn("Failed to fetch address", e);
   }
   let response = await fetch(address, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({
       method: method,
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       id: id,
       params: params,
     }),
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
   });
   let json = await response.json();
@@ -52,65 +52,61 @@ async function jsonRpc(method: string, params: any = null) {
 }
 
 async function getOpenRpcSchema() {
-  return await jsonRpc('rpc.discover');
+  return await jsonRpc("rpc.discover");
 }
 
 async function getIdentity() {
-  return await jsonRpc('get_identity');
+  return await jsonRpc("get_identity");
 }
 async function getCommsStats() {
-  return await jsonRpc('get_comms_stats');
+  return await jsonRpc("get_comms_stats");
 }
 async function getAllVns(epoch: number) {
-  return await jsonRpc('get_network_validators', {epoch});
+  return await jsonRpc("get_network_validators", { epoch });
 }
 async function getConnections() {
-  return await jsonRpc('get_connections');
+  return await jsonRpc("get_connections");
 }
 async function addPeer(public_key: string, addresses: string[]) {
-  return await jsonRpc('add_peer', {
+  return await jsonRpc("add_peer", {
     public_key,
     addresses,
     wait_for_dial: false,
   });
 }
 async function getRecentTransactions() {
-  return await jsonRpc('get_recent_transactions');
+  return await jsonRpc("get_recent_transactions");
 }
 async function getSubstate(address: string, version?: number) {
-  return await jsonRpc('get_substate', { address, version });
+  return await jsonRpc("get_substate", { address, version });
 }
 async function inspectSubstate(address: string, version?: number) {
-  return await jsonRpc('inspect_substate', { address, version });
+  return await jsonRpc("inspect_substate", { address, version });
 }
 async function getAddresses() {
-  return await jsonRpc('get_addresses');
+  return await jsonRpc("get_addresses");
 }
 async function addAddress(address: string) {
-  return await jsonRpc('add_address', [address]);
+  return await jsonRpc("add_address", [address]);
 }
 async function deleteAddress(address: string) {
-  return await jsonRpc('delete_address', [address]);
+  return await jsonRpc("delete_address", [address]);
 }
 async function clearAddresses() {
-  return await jsonRpc('clear_addresses');
+  return await jsonRpc("clear_addresses");
 }
 async function getNonFungibleCollections() {
-  return await jsonRpc('get_non_fungible_collections');
+  return await jsonRpc("get_non_fungible_collections");
 }
-async function getNonFungibles(
-  address: string,
-  start_index: number,
-  end_index: number
-) {
-  return await jsonRpc('get_non_fungibles', {
+async function getNonFungibles(address: string, start_index: number, end_index: number) {
+  return await jsonRpc("get_non_fungibles", {
     address,
     start_index,
     end_index,
   });
 }
 async function getNonFungibleCount(address: string) {
-  return await jsonRpc('get_non_fungible_count', [address]);
+  return await jsonRpc("get_non_fungible_count", [address]);
 }
 
 export {

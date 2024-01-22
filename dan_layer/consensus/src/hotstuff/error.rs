@@ -3,7 +3,7 @@
 
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{BlockId, LeafBlock, LockedBlock, TransactionPoolError},
+    consensus_models::{BlockId, LeafBlock, LockedBlock, QuorumCertificate, TransactionPoolError},
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
@@ -40,6 +40,8 @@ pub enum HotStuffError {
     StateManagerError(anyhow::Error),
     #[error("Invalid vote signature from {signer_public_key} (unauthenticated)")]
     InvalidVoteSignature { signer_public_key: String },
+    #[error("Vote sent from peer {address} did not match the expected signer public key {signer_public_key}")]
+    RejectingVoteNotSentBySigner { address: String, signer_public_key: String },
     #[error("Transaction pool error: {0}")]
     TransactionPoolError(#[from] TransactionPoolError),
     #[error("Transaction {transaction_id} does not exist")]
@@ -146,4 +148,16 @@ pub enum ProposalValidationError {
     },
     #[error("Proposed block {block_id} {height} already has been processed")]
     BlockAlreadyProcessed { block_id: BlockId, height: NodeHeight },
+    #[error("Proposed block {block_id} {height} doesn't have a signature")]
+    MissingSignature { block_id: BlockId, height: NodeHeight },
+    #[error("Proposed block {block_id} {height} has invalid signature")]
+    InvalidSignature { block_id: BlockId, height: NodeHeight },
+    #[error("QC is not valid: {qc}")]
+    QCisNotValid { qc: QuorumCertificate },
+    #[error("QC has invalid signature: {qc}")]
+    QCInvalidSignature { qc: QuorumCertificate },
+    #[error("Quorum was not reached: {qc}")]
+    QuorumWasNotReached { qc: QuorumCertificate },
+    #[error("Merkle proof error: {0}")]
+    BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
 }

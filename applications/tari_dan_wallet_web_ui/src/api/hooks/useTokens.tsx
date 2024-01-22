@@ -20,16 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { jsonRpc } from '../../utils/json_rpc';
-import { apiError } from '../helpers/types';
-import queryClient from '../queryClient';
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { jsonRpc } from "../../utils/json_rpc";
+import { apiError } from "../helpers/types";
+import queryClient from "../queryClient";
 
 export const useGetAllTokens = () => {
   return useQuery({
-    queryKey: ['jwts_list'],
+    queryKey: ["jwts_list"],
     queryFn: () => {
-      return jsonRpc('auth.get_all_jwt', []);
+      return jsonRpc("auth.get_all_jwt", []);
     },
     onError: (error: apiError) => {
       error;
@@ -39,7 +39,7 @@ export const useGetAllTokens = () => {
 
 export const useAuthRevokeToken = () => {
   const revokeToken = async (token: string) => {
-    const result = await jsonRpc('auth.revoke', [token]);
+    const result = await jsonRpc("auth.revoke", [token]);
     console.log(token);
     return result;
   };
@@ -49,7 +49,7 @@ export const useAuthRevokeToken = () => {
       console.log(error);
     },
     onSettled: () => {
-      queryClient.invalidateQueries(['jwts_list']);
+      queryClient.invalidateQueries(["jwts_list"]);
     },
   });
 };

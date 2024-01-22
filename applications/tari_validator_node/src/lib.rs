@@ -22,7 +22,6 @@
 
 mod bootstrap;
 pub mod cli;
-mod comms;
 mod config;
 mod consensus;
 mod dan_node;
@@ -45,15 +44,14 @@ use std::{
 };
 
 use log::*;
-use minotari_app_utilities::identity_management::setup_node_identity;
 use serde::{Deserialize, Serialize};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClientError};
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
-use tari_dan_app_utilities::consensus_constants::ConsensusConstants;
-use tari_dan_common_types::ShardId;
+use tari_dan_app_utilities::{consensus_constants::ConsensusConstants, keypair::setup_keypair_prompt};
+use tari_dan_common_types::SubstateAddress;
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
@@ -66,7 +64,6 @@ use crate::{
     grpc::base_layer_wallet::{GrpcWalletClient, WalletGrpcError},
     http_ui::server::run_http_ui_server,
     json_rpc::{spawn_json_rpc, JsonRpcHandlers},
-    p2p::services::networking::DAN_PEER_FEATURES,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";
@@ -94,15 +91,13 @@ pub enum ShardKeyError {
 #[derive(Serialize, Deserialize)]
 pub struct ShardKey {
     is_registered: bool,
-    shard_id: Option<ShardId>,
+    substate_address: Option<SubstateAddress>,
 }
 
 pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
-    let node_identity = setup_node_identity(
+    let keypair = setup_keypair_prompt(
         &config.validator_node.identity_file,
-        config.validator_node.public_address.iter().cloned().collect::<Vec<_>>(),
         !config.validator_node.dont_create_id,
-        DAN_PEER_FEATURES,
     )?;
 
     let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
@@ -115,34 +110,27 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
 
     info!(
         target: LOG_TARGET,
-        "🚀 Node starting with pub key: {}",
-        node_identity.public_key(),
-        // node_identity
-        //     .public_addresses()
-        //     .first()
-        //     .ok_or_else(|| ExitError::new(ExitCode::UnknownError, "public address not found for validator node"))?
+        "🚀 Node starting with pub key: {} and peer id {}",
+        keypair.public_key(),keypair.to_peer_address(),
     );
 
     let (base_node_client, wallet_client) = create_base_layer_clients(config).await?;
     let services = spawn_services(
         config,
         shutdown_signal.clone(),
-        node_identity.clone(),
+        keypair.clone(),
         global_db,
         ConsensusConstants::devnet(), // TODO: change this eventually
     )
     .await?;
+    let info = services.networking.get_local_peer_info().await.unwrap();
+    info!(target: LOG_TARGET, "🚀 Node started: {}", info);
 
     // Run the JSON-RPC API
     let mut jrpc_address = config.validator_node.json_rpc_address;
     if let Some(jrpc_address) = jrpc_address.as_mut() {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", jrpc_address);
-        let handlers = JsonRpcHandlers::new(
-            wallet_client,
-            base_node_client,
-            &services,
-            config.validator_node.clone(),
-        );
+        let handlers = JsonRpcHandlers::new(wallet_client, base_node_client, &services);
         *jrpc_address = spawn_json_rpc(*jrpc_address, handlers)?;
         // Run the http ui
         if let Some(address) = config.validator_node.http_ui_address {

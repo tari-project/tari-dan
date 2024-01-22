@@ -5,12 +5,12 @@ use std::str::FromStr;
 
 use syn::{parse2, Lit};
 use tari_bor::{BorError, Serialize};
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_template_lib::{models::NonFungibleId, to_value};
 
 #[derive(Debug, Clone)]
 pub enum ManifestValue {
-    SubstateAddress(SubstateAddress),
+    SubstateId(SubstateId),
     Literal(Lit),
     NonFungibleId(NonFungibleId),
     Value(tari_bor::Value),
@@ -21,17 +21,17 @@ impl ManifestValue {
         Ok(Self::Value(to_value(value)?))
     }
 
-    pub fn as_address(&self) -> Option<&SubstateAddress> {
+    pub fn as_address(&self) -> Option<&SubstateId> {
         match self {
-            Self::SubstateAddress(addr) => Some(addr),
+            Self::SubstateId(addr) => Some(addr),
             _ => None,
         }
     }
 }
 
-impl<T: Into<SubstateAddress>> From<T> for ManifestValue {
+impl<T: Into<SubstateId>> From<T> for ManifestValue {
     fn from(addr: T) -> Self {
-        ManifestValue::SubstateAddress(addr.into())
+        ManifestValue::SubstateId(addr.into())
     }
 }
 
@@ -46,9 +46,9 @@ impl FromStr for ManifestValue {
     type Err = ManifestParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        SubstateAddress::from_str(s)
+        SubstateId::from_str(s)
             .ok()
-            .map(ManifestValue::SubstateAddress)
+            .map(ManifestValue::SubstateId)
             .or_else(|| {
                 let id = NonFungibleId::try_from_canonical_string(s).ok()?;
                 Some(ManifestValue::NonFungibleId(id))
@@ -79,7 +79,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             *addr.as_address().unwrap(),
-            SubstateAddress::Component(
+            SubstateId::Component(
                 ComponentAddress::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
             )
         );
@@ -89,7 +89,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             *addr.as_address().unwrap(),
-            SubstateAddress::Resource(
+            SubstateId::Resource(
                 ResourceAddress::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
             )
         );
@@ -99,7 +99,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             *addr.as_address().unwrap(),
-            SubstateAddress::Vault(
+            SubstateId::Vault(
                 VaultId::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
             )
         );

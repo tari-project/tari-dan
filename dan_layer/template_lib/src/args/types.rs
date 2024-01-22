@@ -33,6 +33,7 @@ use crate::{
     auth::{OwnerRule, ResourceAccessRules},
     crypto::PedersonCommitmentBytes,
     models::{
+        AddressAllocation,
         Amount,
         BucketId,
         ComponentAddress,
@@ -47,16 +48,20 @@ use crate::{
     },
     prelude::{ComponentAccessRules, ConfidentialOutputProof, TemplateAddress},
     resource::ResourceType,
+    template::BuiltinTemplate,
     Hash,
 };
 
 // -------------------------------- LOGS -------------------------------- //
+
+/// Data needed for log emission from templates
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmitLogArg {
     pub message: String,
     pub level: LogLevel,
 }
 
+/// All the possible log levels
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub enum LogLevel {
     Error,
@@ -90,6 +95,7 @@ impl FromStr for LogLevel {
     }
 }
 
+/// Error when trying to parse a log level from an `String`
 #[derive(Debug)]
 pub struct LogLevelParseError(String);
 
@@ -102,6 +108,8 @@ impl Display for LogLevelParseError {
 impl std::error::Error for LogLevelParseError {}
 
 // -------------------------------- Component -------------------------------- //
+
+/// An operation over a component
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentInvokeArg {
     pub component_ref: ComponentRef,
@@ -109,6 +117,7 @@ pub struct ComponentInvokeArg {
     pub args: Vec<Vec<u8>>,
 }
 
+/// The possible actions that can be performed on components
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ComponentAction {
     Create,
@@ -118,6 +127,7 @@ pub enum ComponentAction {
     GetTemplateAddress,
 }
 
+/// Encapsulates all the ways that a component can be referenced
 #[derive(Clone, Copy, Hash, Debug, Serialize, Deserialize)]
 pub enum ComponentRef {
     Component,
@@ -142,16 +152,19 @@ impl Display for ComponentRef {
     }
 }
 
+/// A component creation operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateComponentArg {
     pub encoded_state: tari_bor::Value,
     pub owner_rule: OwnerRule,
     pub access_rules: ComponentAccessRules,
     pub component_id: Option<Hash>,
+    pub address_allocation: Option<AddressAllocation<ComponentAddress>>,
 }
 
 // -------------------------------- Events -------------------------------- //
 
+/// An event emission operation
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EmitEventArg {
     pub topic: String,
@@ -159,6 +172,8 @@ pub struct EmitEventArg {
 }
 
 // -------------------------------- Resource -------------------------------- //
+
+/// An operation over a resource
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceInvokeArg {
     pub resource_ref: ResourceRef,
@@ -166,6 +181,7 @@ pub struct ResourceInvokeArg {
     pub args: Vec<Vec<u8>>,
 }
 
+/// Encapsulates all the ways that a resource can be referenced
 #[derive(Clone, Copy, Hash, Debug, Serialize, Deserialize)]
 pub enum ResourceRef {
     Resource,
@@ -196,6 +212,7 @@ impl Display for ResourceRef {
     }
 }
 
+/// The possible actions that can be performed on resources
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ResourceAction {
     Create,
@@ -208,6 +225,7 @@ pub enum ResourceAction {
     UpdateAccessRules,
 }
 
+/// All the possible minting operation types
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum MintArg {
     Fungible {
@@ -221,6 +239,7 @@ pub enum MintArg {
     },
 }
 
+/// A resource creation operation
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateResourceArg {
     pub resource_type: ResourceType,
@@ -230,22 +249,26 @@ pub struct CreateResourceArg {
     pub mint_arg: Option<MintArg>,
 }
 
+/// A resource minting operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MintResourceArg {
     pub mint_arg: MintArg,
 }
 
+/// A resource minting operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceGetNonFungibleArg {
     pub id: NonFungibleId,
 }
 
+/// A non-fungible resource update operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceUpdateNonFungibleDataArg {
     pub id: NonFungibleId,
     pub data: Vec<u8>,
 }
 
+/// A convenience enum that allows to specify resource types
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ResourceDiscriminator {
     Everything,
@@ -261,12 +284,15 @@ pub enum ResourceDiscriminator {
     },
 }
 
+/// A resource recall operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RecallResourceArg {
     pub vault_id: VaultId,
     pub resource: ResourceDiscriminator,
 }
 // -------------------------------- Vault -------------------------------- //
+
+/// A vault operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VaultInvokeArg {
     pub vault_ref: VaultRef,
@@ -274,6 +300,7 @@ pub struct VaultInvokeArg {
     pub args: Vec<Vec<u8>>,
 }
 
+/// The possible actions that can be performed on vaults
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum VaultAction {
     Create,
@@ -289,8 +316,10 @@ pub enum VaultAction {
     CreateProofByFungibleAmount,
     CreateProofByNonFungibles,
     CreateProofByConfidentialResource,
+    GetNonFungibles,
 }
 
+/// A vault withdraw operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum VaultWithdrawArg {
     Fungible { amount: Amount },
@@ -299,12 +328,16 @@ pub enum VaultWithdrawArg {
 }
 
 // -------------------------------- Confidential -------------------------------- //
+
+/// A confidential resource reveal operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConfidentialRevealArg {
     pub proof: ConfidentialWithdrawProof,
 }
 
 // -------------------------------- Fees -------------------------------- //
+
+/// A fee payment operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PayFeeArg {
     pub amount: Amount,
@@ -312,6 +345,8 @@ pub struct PayFeeArg {
 }
 
 // -------------------------------- Bucket -------------------------------- //
+
+/// A bucket operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BucketInvokeArg {
     pub bucket_ref: BucketRef,
@@ -319,6 +354,7 @@ pub struct BucketInvokeArg {
     pub args: Vec<Vec<u8>>,
 }
 
+/// Encapsulates all the ways that a bucket can be referenced
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum BucketRef {
     Bucket(ResourceAddress),
@@ -350,6 +386,7 @@ impl Display for BucketRef {
     }
 }
 
+/// The possible actions that can be performed on buckets
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum BucketAction {
     GetResourceAddress,
@@ -360,14 +397,19 @@ pub enum BucketAction {
     RevealConfidential,
     Burn,
     CreateProof,
+    GetNonFungibleIds,
+    GetNonFungibles,
 }
 
+/// A bucket burn operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BucketBurnArg {
     pub bucket_id: BucketId,
 }
 
 // -------------------------------- Workspace -------------------------------- //
+
+/// The possible actions that can be performed on workspace variables
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum WorkspaceAction {
     PutLastInstructionOutput,
@@ -376,6 +418,7 @@ pub enum WorkspaceAction {
     DropAllProofs,
 }
 
+/// A workspace operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WorkspaceInvokeArg {
     pub action: WorkspaceAction,
@@ -383,6 +426,8 @@ pub struct WorkspaceInvokeArg {
 }
 
 // -------------------------------- NonFungible -------------------------------- //
+
+/// A non-fungible operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NonFungibleInvokeArg {
     pub address: NonFungibleAddress,
@@ -390,6 +435,7 @@ pub struct NonFungibleInvokeArg {
     pub args: Vec<Vec<u8>>,
 }
 
+/// The possible actions that can be performed on non-fungible resources
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum NonFungibleAction {
     GetData,
@@ -397,52 +443,68 @@ pub enum NonFungibleAction {
 }
 
 // -------------------------------- Consensus -------------------------------- //
+
+/// A consensus operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConsensusInvokeArg {
     pub action: ConsensusAction,
 }
 
+/// The possible actions that can be performed related to consensus
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ConsensusAction {
     GetCurrentEpoch,
 }
 
 // -------------------------------- GenerateRandom -------------------------------- //
+
+/// A random generation operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GenerateRandomInvokeArg {
     pub action: GenerateRandomAction,
 }
 
+/// The possible actions that can be performed related to random generation
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum GenerateRandomAction {
     GetRandomBytes { len: u32 },
 }
 
 // -------------------------------- CallerContext -------------------------------- //
+
+/// A caller context operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CallerContextInvokeArg {
     pub action: CallerContextAction,
 }
 
+/// The possible actions that can be performed related to the caller context
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum CallerContextAction {
     GetCallerPublicKey,
     GetComponentAddress,
+    AllocateNewComponentAddress,
 }
 
 // -------------------------------- CallInvoke -------------------------------- //
+
+/// A call operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CallInvokeArg {
     pub action: CallAction,
     pub args: Vec<Vec<u8>>,
 }
 
+/// All the possible call operation types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CallAction {
+    /// Call to a template's function
     CallFunction,
+    /// Call to a component's method
     CallMethod,
 }
 
+/// A template's function call operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CallFunctionArg {
     pub template_address: TemplateAddress,
@@ -450,6 +512,7 @@ pub struct CallFunctionArg {
     pub args: Vec<Arg>,
 }
 
+/// A component's method call operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CallMethodArg {
     pub component_address: ComponentAddress,
@@ -459,6 +522,7 @@ pub struct CallMethodArg {
 
 // -------------------------------- ProofInvoke -------------------------------- //
 
+/// A proof-related operation argument
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProofInvokeArg {
     pub proof_ref: ProofRef,
@@ -466,6 +530,7 @@ pub struct ProofInvokeArg {
     pub args: Vec<Vec<u8>>,
 }
 
+/// All the possible ways to reference a proof
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum ProofRef {
     Proof(ResourceAddress),
@@ -497,6 +562,7 @@ impl Display for ProofRef {
     }
 }
 
+/// All the possible actions that can be performed on proofs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProofAction {
     GetAmount,
@@ -507,18 +573,34 @@ pub enum ProofAction {
     Drop,
 }
 
+/// An argument to represent a proof of a vault's fungible amount
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VaultCreateProofByFungibleAmountArg {
     pub amount: Amount,
 }
 
+/// An argument to represent a proof of a vault's non-fungible presence
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VaultCreateProofByNonFungiblesArg {
     pub ids: BTreeSet<NonFungibleId>,
 }
 
+/// TODO: confidential. Zero knowledge proof of commitment factors
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateProofOfResourceByConfidentialArg {
-    // TODO: confidential. zero knowledge proof of commitment factors
     // pub proof: ConfidentialProofOfKnowledge
+}
+
+// -------------------------------- BuiltinTemplate -------------------------------- //
+
+/// A template builtin operation argument
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BuiltinTemplateInvokeArg {
+    pub action: BuiltinTemplateAction,
+}
+
+/// The possible actions that can be performed related to builtin templates
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum BuiltinTemplateAction {
+    GetTemplateAddress { bultin: BuiltinTemplate },
 }

@@ -1,0 +1,22 @@
+[package]
+name = "libp2p-peersync"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1"
+futures-bounded = "0.2"
+libp2p = "0.53.1"
+quick-protobuf = "0.8"
+quick-protobuf-codec = "0.3.1"
+asynchronous-codec = "0.7.0"
+tracing = "0.1"
+thiserror = "1.0"
+async-semaphore = "1.2.0"
+blake2 = "0.10"
+
+[build-dependencies]
+pb-rs = "0.10.0"
+
+[features]
+default = []

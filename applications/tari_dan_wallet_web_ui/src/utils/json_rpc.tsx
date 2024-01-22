@@ -36,11 +36,11 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
   });
   let address = "http://localhost:9000";
   try {
-    address = await (await fetch('/json_rpc_address')).text();
+    address = await (await fetch("/json_rpc_address")).text();
     if (!address.startsWith("http")) {
       address = "http://" + address;
     }
-  } catch { }
+  } catch {}
   let headers: { [key: string]: string } = {
     "Content-Type": "application/json",
   };
@@ -107,7 +107,7 @@ export const transactionsSubmit = (
   newNonFungibleOutputs: any[],
   newNonFungibleIndexOutputs: any[],
   isDryRun: boolean,
-  proofId: any | undefined
+  proofId: any | undefined,
 ) =>
   jsonRpc("transactions.submit", [
     signingKeyIndex,
@@ -128,24 +128,25 @@ export const transactionsWaitResult = (hash: string, timeoutSecs: number | null)
   jsonRpc("transactions.wait_result", [hash, timeoutSecs]);
 
 // accounts
-export const accountsClaimBurn = (account: string, claimProof: any, fee: number) =>
+export const accountsClaimBurn = (account: string, claimProof: any, fee: number, key_id: number) =>
   // Fees are passed as strings because Amount is tagged
   jsonRpc("accounts.claim_burn", {
     account,
     claim_proof: claimProof,
-    fee: fee,
+    fee,
+    key_id,
   });
 export const accountsCreate = (
   accountName: string | undefined,
   signingKeyIndex: number | undefined,
   customAccessRules: any | undefined,
   fee: number | undefined,
-  is_default: boolean | false
+  is_default: boolean | false,
 ) => jsonRpc("accounts.create", [accountName, signingKeyIndex, customAccessRules, fee, is_default]);
 export const accountsCreateFreeTestCoins = (
   accountName: string | undefined,
   amount: number | undefined,
-  fee: number | undefined
+  fee: number | undefined,
 ) => jsonRpc("accounts.create_free_test_coins", [{ Name: accountName }, amount, fee]);
 export const accountsList = (offset: number, limit: number) => jsonRpc("accounts.list", [offset, limit]);
 export const accountsGetBalances = (accountName: string) => jsonRpc("accounts.get_balances", [accountName]);
@@ -159,7 +160,7 @@ export const confidentialCreateTransferProof = (
   source_accountName: string,
   resourceAddress: string,
   destinationAccount: string,
-  destinationStealthPublicKey: string
+  destinationStealthPublicKey: string,
 ) =>
   jsonRpc("confidential.create_transfer_proof", [
     amount,
@@ -182,5 +183,5 @@ export const webrtc = (signalingServerToken: string, permissions: string, name: 
 export const accountNFTsList = (offset: number, limit: number) => jsonRpc("nfts.list", [offset, limit]);
 
 // settings
-export const getIndexerUrl = () => jsonRpc("settings.get_indexer_url", []);
-export const setIndexerUrl = (indexer_url: string) => jsonRpc("settings.set_indexer_url", [indexer_url]);
+export const getSettings = () => jsonRpc("settings.get", []);
+export const setSettings = (settings: any) => jsonRpc("settings.set", settings);

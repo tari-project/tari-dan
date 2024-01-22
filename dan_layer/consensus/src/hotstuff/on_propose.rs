@@ -4,6 +4,7 @@
 use std::{collections::BTreeSet, num::NonZeroU64, ops::DerefMut};
 
 use log::*;
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
@@ -14,10 +15,12 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         Command,
+        ForeignProposal,
         ForeignSendCounters,
         HighQc,
         LastProposed,
         LeafBlock,
+        LockedBlock,
         QuorumCertificate,
         TransactionPool,
         TransactionPoolStage,
@@ -32,7 +35,7 @@ use super::common::CommitteeAndMessage;
 use crate::{
     hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, proposer},
     messages::{HotstuffMessage, ProposalMessage},
-    traits::ConsensusSpec,
+    traits::{ConsensusSpec, ValidatorSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_locally";
@@ -41,6 +44,7 @@ pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
+    signing_service: TConsensusSpec::SignatureService,
     tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
 }
 
@@ -51,12 +55,14 @@ where TConsensusSpec: ConsensusSpec
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
+        signing_service: TConsensusSpec::SignatureService,
         tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
     ) -> Self {
         Self {
             store,
             epoch_manager,
             transaction_pool,
+            signing_service,
             tx_broadcast,
         }
     }
@@ -116,7 +122,7 @@ where TConsensusSpec: ConsensusSpec
                 epoch,
                 &leaf_block,
                 high_qc,
-                validator.address,
+                validator.public_key,
                 &local_committee_shard,
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
                 //       is a good idea.
@@ -151,7 +157,7 @@ where TConsensusSpec: ConsensusSpec
 
     pub async fn broadcast_proposal_locally(
         &self,
-        next_block: Block<TConsensusSpec::Addr>,
+        next_block: Block,
         local_committee: Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         info!(
@@ -182,12 +188,12 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         epoch: Epoch,
         parent_block: &LeafBlock,
-        high_qc: QuorumCertificate<TConsensusSpec::Addr>,
-        proposed_by: <TConsensusSpec::EpochManager as EpochManagerReader>::Addr,
+        high_qc: QuorumCertificate,
+        proposed_by: PublicKey,
         local_committee_shard: &CommitteeShard,
         empty_block: bool,
         foreign_counters: &mut ForeignSendCounters,
-    ) -> Result<Block<TConsensusSpec::Addr>, HotStuffError> {
+    ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
         let batch = if empty_block {
@@ -197,19 +203,33 @@ where TConsensusSpec: ConsensusSpec
         };
 
         let mut total_leader_fee = 0;
-        let commands = batch
+        let locked_block = LockedBlock::get(tx)?;
+        let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
+        let commands = ForeignProposal::get_all_new(tx)?
             .into_iter()
-            .map(|t| match t.current_stage() {
+            .filter_map(|foreign_proposal| {
+                if pending_proposals.iter().any(|pending_proposal| {
+                    pending_proposal.bucket == foreign_proposal.bucket &&
+                        pending_proposal.block_id == foreign_proposal.block_id
+                }) {
+                    None
+                } else {
+                    Some(Ok(Command::ForeignProposal(
+                        foreign_proposal.set_mined_at(parent_block.height().saturating_add(NodeHeight(1))),
+                    )))
+                }
+            })
+            .chain(batch.into_iter().map(|t| match t.current_stage() {
                 // If the transaction is New, propose to Prepare it
                 TransactionPoolStage::New => Ok(Command::Prepare(t.get_local_transaction_atom())),
                 // The transaction is Prepared, this stage is only _ready_ once we know that all local nodes
                 // accepted Prepared so we propose LocalPrepared
                 TransactionPoolStage::Prepared => Ok(Command::LocalPrepared(t.get_local_transaction_atom())),
                 // The transaction is LocalPrepared, meaning that we know that all foreign and local nodes have
-                // prepared. We can now propose to Accept it. We also propose the decision change which everyone should
-                // agree with if they received the same foreign LocalPrepare.
+                // prepared. We can now propose to Accept it. We also propose the decision change which everyone
+                // should agree with if they received the same foreign LocalPrepare.
                 TransactionPoolStage::LocalPrepared => {
-                    let involved = local_committee_shard.count_distinct_buckets(t.transaction().evidence.shards_iter());
+                    let involved = local_committee_shard.count_distinct_shards(t.transaction().evidence.shards_iter());
                     let involved = NonZeroU64::new(involved as u64).ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
                             "Number of involved shards is zero for transaction {}",
@@ -220,16 +240,16 @@ where TConsensusSpec: ConsensusSpec
                     total_leader_fee += leader_fee;
                     Ok(Command::Accept(t.get_final_transaction_atom(leader_fee)))
                 },
-                // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes agreed
-                // with the Accept, more (possibly empty) blocks with QCs will be proposed and accepted,
-                // otherwise the Accept block will not be committed.
+                // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes
+                // agreed with the Accept, more (possibly empty) blocks with QCs will be
+                // proposed and accepted, otherwise the Accept block will not be committed.
                 TransactionPoolStage::AllPrepared | TransactionPoolStage::SomePrepared => {
                     unreachable!(
                         "It is invalid for TransactionPoolStage::{} to be ready to propose",
                         t.current_stage()
                     )
                 },
-            })
+            }))
             .collect::<Result<BTreeSet<_>, HotStuffError>>()?;
 
         debug!(
@@ -238,21 +258,19 @@ where TConsensusSpec: ConsensusSpec
             commands.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
         );
 
-        let non_local_buckets = proposer::get_non_local_buckets_from_commands(
+        let non_local_buckets = proposer::get_non_local_shards_from_commands(
             tx,
             &commands,
             local_committee_shard.num_committees(),
-            local_committee_shard.bucket(),
+            local_committee_shard.shard(),
         )?;
-
-        // let mut foreign_indexes = HashMap::new();
 
         let foreign_indexes = non_local_buckets
             .iter()
             .map(|bucket| (*bucket, foreign_counters.increment_counter(*bucket)))
             .collect();
 
-        let next_block = Block::new(
+        let mut next_block = Block::new(
             *parent_block.block_id(),
             high_qc,
             parent_block.height() + NodeHeight(1),
@@ -261,7 +279,11 @@ where TConsensusSpec: ConsensusSpec
             commands,
             total_leader_fee,
             foreign_indexes,
+            None,
         );
+
+        let signature = self.signing_service.sign(next_block.id());
+        next_block.set_signature(signature);
 
         Ok(next_block)
     }

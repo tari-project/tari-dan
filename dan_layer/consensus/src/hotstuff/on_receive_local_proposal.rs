@@ -11,11 +11,11 @@ use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     NodeHeight,
 };
 use tari_dan_storage::{
-    consensus_models::{Block, ForeignSendCounters, HighQc, TransactionPool, ValidBlock},
+    consensus_models::{Block, BlockId, ForeignSendCounters, HighQc, TransactionPool, ValidBlock},
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
@@ -36,7 +36,7 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_local_proposal";
 
-pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
+pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -44,15 +44,15 @@ pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
     on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock<TConsensusSpec>,
 }
 
-impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
+impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec> {
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         pacemaker: PaceMakerHandle,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
-        vote_signing_service: TConsensusSpec::VoteSignatureService,
+        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        vote_signing_service: TConsensusSpec::SignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
@@ -78,7 +78,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         }
     }
 
-    pub async fn handle(&self, message: ProposalMessage<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
+    pub async fn handle(&self, message: ProposalMessage) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = message;
 
         debug!(
@@ -93,7 +93,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         Ok(())
     }
 
-    async fn process_block(&self, block: Block<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
+    async fn process_block(&self, block: Block) -> Result<(), HotStuffError> {
         if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
             return Err(HotStuffError::EpochNotActive {
                 epoch: block.epoch(),
@@ -117,7 +117,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         Ok(())
     }
 
-    fn save_block(&self, valid_block: &ValidBlock<TConsensusSpec::Addr>) -> Result<HighQc, HotStuffError> {
+    fn save_block(&self, valid_block: &ValidBlock) -> Result<HighQc, HotStuffError> {
         self.store.with_write_tx(|tx| {
             valid_block.block().justify().save(tx)?;
             valid_block.save_all_dummy_blocks(tx)?;
@@ -127,19 +127,23 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         })
     }
 
-    async fn validate_block(
-        &self,
-        block: Block<TConsensusSpec::Addr>,
-    ) -> Result<Option<ValidBlock<TConsensusSpec::Addr>>, HotStuffError> {
+    async fn validate_block(&self, block: Block) -> Result<Option<ValidBlock>, HotStuffError> {
         let local_committee = self
             .epoch_manager
-            .get_committee_by_validator_address(block.epoch(), block.proposed_by())
+            .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
         // First save the block in one db transaction
         self.store.with_write_tx(|tx| {
             match self.validate_local_proposed_block(tx, block, &local_committee, &local_committee_shard) {
                 Ok(validated) => Ok(Some(validated)),
+                // Propagate this error out as sync is needed in the case where we have a valid QC but do not know the
+                // block
+                Err(
+                    err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound {
+                        ..
+                    }),
+                ) => Err(err),
                 // Validation errors should not cause a FAILURE state transition
                 Err(HotStuffError::ProposalValidationError(err)) => {
                     warn!(target: LOG_TARGET, "❌ Block failed validation: {}", err);
@@ -155,11 +159,12 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         num_committees: u32,
-        local_bucket: ShardBucket,
-        block: &Block<TConsensusSpec::Addr>,
+        local_bucket: Shard,
+        block: &Block,
+        justify_block: &BlockId,
     ) -> Result<bool, HotStuffError> {
-        let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), block.parent())?;
-        let non_local_buckets = proposer::get_non_local_buckets(tx.deref_mut(), block, num_committees, local_bucket)?;
+        let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), justify_block)?;
+        let non_local_buckets = proposer::get_non_local_shards(tx.deref_mut(), block, num_committees, local_bucket)?;
         let mut foreign_indexes = HashMap::new();
         for non_local_bucket in non_local_buckets {
             foreign_indexes
@@ -175,10 +180,10 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
     fn validate_local_proposed_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        candidate_block: Block<TConsensusSpec::Addr>,
+        candidate_block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
-    ) -> Result<ValidBlock<TConsensusSpec::Addr>, HotStuffError> {
+    ) -> Result<ValidBlock, HotStuffError> {
         if Block::has_been_processed(tx.deref_mut(), candidate_block.id())? {
             return Err(ProposalValidationError::BlockAlreadyProcessed {
                 block_id: *candidate_block.id(),
@@ -226,6 +231,20 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
 
         let justify_block_height = justify_block.height();
 
+        if !self.check_foreign_indexes(
+            tx,
+            local_committee_shard.num_committees(),
+            local_committee_shard.shard(),
+            &candidate_block,
+            justify_block.id(),
+        )? {
+            return Err(ProposalValidationError::InvalidForeignCounters {
+                proposed_by: candidate_block.proposed_by().to_string(),
+                hash: *candidate_block.id(),
+            }
+            .into());
+        }
+
         if justify_block.id() != candidate_block.parent() {
             let mut dummy_blocks =
                 Vec::with_capacity((candidate_block.height().as_u64() - justify_block_height.as_u64() - 1) as usize);
@@ -244,7 +263,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
                 }
 
                 let next_height = last_dummy_block.height() + NodeHeight(1);
-                let leader = self.leader_strategy.get_leader(local_committee, next_height);
+                let leader = self.leader_strategy.get_leader_public_key(local_committee, next_height);
 
                 // TODO: replace with actual leader's propose
                 dummy_blocks.push(Block::dummy_block(
@@ -271,18 +290,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         // Specifically, it should extend the locked block via the dummy blocks.
         if !candidate_block.is_safe(tx.deref_mut())? {
             return Err(ProposalValidationError::NotSafeBlock {
-                proposed_by: candidate_block.proposed_by().to_string(),
-                hash: *candidate_block.id(),
-            }
-            .into());
-        }
-        if !self.check_foreign_indexes(
-            tx,
-            local_committee_shard.num_committees(),
-            local_committee_shard.bucket(),
-            &candidate_block,
-        )? {
-            return Err(ProposalValidationError::InvalidForeignCounters {
                 proposed_by: candidate_block.proposed_by().to_string(),
                 hash: *candidate_block.id(),
             }

@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+//! A collection of convenient constant values
+
 use crate::{models::ResourceAddress, Hash};
 
 // TODO: This is set pretty arbitrarily.
@@ -11,5 +13,8 @@ pub const PUBLIC_IDENTITY_RESOURCE_ADDRESS: ResourceAddress = ResourceAddress::n
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ]));
 
+/// The Tari network native resource address, used for paying network fees
 pub const CONFIDENTIAL_TARI_RESOURCE_ADDRESS: ResourceAddress = ResourceAddress::new(Hash::from_array([1u8; 32]));
+
+/// Shorthand version of the `CONFIDENTIAL_TARI_RESOURCE_ADDRESS` constant
 pub const XTR2: ResourceAddress = CONFIDENTIAL_TARI_RESOURCE_ADDRESS;

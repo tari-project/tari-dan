@@ -25,12 +25,16 @@ use diesel::{
 };
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_common_types::types::{FixedHash, PublicKey};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockId,
+        Command,
+        Decision,
+        Evidence,
+        ForeignProposal,
         ForeignReceiveCounters,
         ForeignSendCounters,
         HighQc,
@@ -54,7 +58,9 @@ use tari_dan_storage::{
     StateStoreReadTransaction,
     StorageError,
 };
+use tari_engine_types::lock::LockFlag;
 use tari_transaction::TransactionId;
+use tari_utilities::ByteArray;
 
 use crate::{
     error::SqliteStorageError,
@@ -92,7 +98,7 @@ impl<'a, TAddr> SqliteStateStoreReadTransaction<'a, TAddr> {
 }
 
 impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned> SqliteStateStoreReadTransaction<'a, TAddr> {
-    pub(super) fn get_transaction_atom_state_updates_between_blocks<'i, ITx>(
+    pub fn get_transaction_atom_state_updates_between_blocks<'i, ITx>(
         &mut self,
         from_block_id: &BlockId,
         to_block_id: &BlockId,
@@ -288,7 +294,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         last_voted.try_into()
     }
 
-    fn last_sent_vote_get(&mut self) -> Result<LastSentVote<Self::Addr>, StorageError> {
+    fn last_sent_vote_get(&mut self) -> Result<LastSentVote, StorageError> {
         use crate::schema::last_sent_vote;
 
         let last_voted = last_sent_vote::table
@@ -370,6 +376,66 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             })?;
 
         high_qc.try_into()
+    }
+
+    fn foreign_proposal_exists(&mut self, foreign_proposal: &ForeignProposal) -> Result<bool, StorageError> {
+        use crate::schema::foreign_proposals;
+
+        let foreign_proposals = foreign_proposals::table
+            .filter(foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32))
+            .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
+            .count()
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_exists",
+                source: e,
+            })?;
+
+        Ok(foreign_proposals > 0)
+    }
+
+    fn foreign_proposal_get_all_new(&mut self) -> Result<Vec<ForeignProposal>, StorageError> {
+        use crate::schema::foreign_proposals;
+
+        let foreign_proposals = foreign_proposals::table
+            .filter(foreign_proposals::state.eq("New"))
+            .load::<sql_models::ForeignProposal>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_get_all",
+                source: e,
+            })?;
+
+        foreign_proposals.into_iter().map(|p| p.try_into()).collect()
+    }
+
+    fn foreign_proposal_get_all_pending(
+        &mut self,
+        from_block_id: &BlockId,
+        to_block_id: &BlockId,
+    ) -> Result<Vec<ForeignProposal>, StorageError> {
+        use crate::schema::blocks;
+
+        let blocks = self.get_block_ids_that_change_state_between(from_block_id, to_block_id)?;
+
+        let all_commands: Vec<String> = blocks::table
+            .select(blocks::commands)
+            .filter(blocks::command_count.gt(0)) // if there is no command, then there is definitely no foreign proposal command
+            .filter(blocks::block_id.eq_any(blocks))
+            .load::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_get_all",
+                source: e,
+            })?;
+        let all_commands = all_commands
+            .into_iter()
+            .map(|commands| deserialize_json(commands.as_str()))
+            .collect::<Result<Vec<Vec<Command>>, _>>()?;
+        let all_commands = all_commands.into_iter().flatten().collect::<Vec<_>>();
+        Ok(all_commands
+            .into_iter()
+            .filter_map(|command| command.foreign_proposal().cloned())
+            .collect::<Vec<ForeignProposal>>())
     }
 
     fn foreign_send_counters_get(&mut self, block_id: &BlockId) -> Result<ForeignSendCounters, StorageError> {
@@ -494,7 +560,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .collect()
     }
 
-    fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<TAddr>, StorageError> {
+    fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let (block, qc) = blocks::table
@@ -518,7 +584,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         block.try_convert(qc)
     }
 
-    fn blocks_get_tip(&mut self) -> Result<Block<TAddr>, StorageError> {
+    fn blocks_get_tip(&mut self) -> Result<Block, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let (block, qc) = blocks::table
@@ -546,7 +612,8 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         &mut self,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+        include_dummy_blocks: bool,
+    ) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let mut block_ids = self.get_block_ids_between(start_block_id_exclusive, end_block_id_inclusive)?;
@@ -557,10 +624,17 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         // Exclude start block
         block_ids.pop();
 
-        let results = blocks::table
+        let mut query = blocks::table
             .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
             .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
             .filter(blocks::block_id.eq_any(block_ids))
+            .into_boxed();
+
+        if !include_dummy_blocks {
+            query = query.filter(blocks::is_dummy.eq(false));
+        }
+
+        let results = query
             .order_by(blocks::height.asc())
             .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -584,7 +658,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .collect()
     }
 
-    fn blocks_get_all_by_parent(&mut self, parent_id: &BlockId) -> Result<Vec<Block<TAddr>>, StorageError> {
+    fn blocks_get_all_by_parent(&mut self, parent_id: &BlockId) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let results = blocks::table
@@ -614,11 +688,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .collect()
     }
 
-    fn blocks_get_parent_chain(
-        &mut self,
-        block_id: &BlockId,
-        limit: usize,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+    fn blocks_get_parent_chain(&mut self, block_id: &BlockId, limit: usize) -> Result<Vec<Block>, StorageError> {
         if !self.blocks_exists(block_id)? {
             return Err(StorageError::QueryError {
                 reason: format!("blocks_get_parent_chain: descendant block {} does not exist", block_id),
@@ -735,7 +805,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
     fn blocks_get_total_leader_fee_for_epoch(
         &mut self,
         epoch: Epoch,
-        validator_public_key: &Self::Addr,
+        validator_public_key: &PublicKey,
     ) -> Result<u64, StorageError> {
         use crate::schema::blocks;
 
@@ -756,8 +826,8 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
     fn blocks_get_any_with_epoch_range(
         &mut self,
         epoch_range: RangeInclusive<Epoch>,
-        validator_public_key: Option<&Self::Addr>,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+        validator_public_key: Option<&PublicKey>,
+    ) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let mut query = blocks::table
@@ -798,7 +868,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         limit: u64,
         offset: u64,
         asc_desc_created_at: Option<Ordering>,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+    ) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let mut query = blocks::table
@@ -884,7 +954,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         Ok(count > 0)
     }
 
-    fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError> {
+    fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError> {
         use crate::schema::quorum_certificates;
 
         let qc_json = quorum_certificates::table
@@ -902,7 +972,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
     fn quorum_certificates_get_all<'a, I: IntoIterator<Item = &'a QcId>>(
         &mut self,
         qc_ids: I,
-    ) -> Result<Vec<QuorumCertificate<Self::Addr>>, StorageError> {
+    ) -> Result<Vec<QuorumCertificate>, StorageError> {
         use crate::schema::quorum_certificates;
 
         let qc_ids: Vec<String> = qc_ids.into_iter().map(serialize_hex).collect();
@@ -932,10 +1002,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         qc_json.iter().map(|j| deserialize_json(j)).collect()
     }
 
-    fn quorum_certificates_get_by_block_id(
-        &mut self,
-        block_id: &BlockId,
-    ) -> Result<QuorumCertificate<Self::Addr>, StorageError> {
+    fn quorum_certificates_get_by_block_id(&mut self, block_id: &BlockId) -> Result<QuorumCertificate, StorageError> {
         use crate::schema::quorum_certificates;
 
         let qc_json = quorum_certificates::table
@@ -953,7 +1020,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
     fn transactions_fetch_involved_shards(
         &mut self,
         transaction_ids: HashSet<TransactionId>,
-    ) -> Result<HashSet<ShardId>, StorageError> {
+    ) -> Result<HashSet<SubstateAddress>, StorageError> {
         use crate::schema::transactions;
 
         let tx_ids = transaction_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
@@ -972,8 +1039,8 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .map(|(inputs, input_refs)| {
                 (
                     // a Result is very inconvenient with flat_map
-                    deserialize_json::<HashSet<ShardId>>(&inputs).unwrap(),
-                    deserialize_json::<HashSet<ShardId>>(&input_refs).unwrap(),
+                    deserialize_json::<HashSet<SubstateAddress>>(&inputs).unwrap(),
+                    deserialize_json::<HashSet<SubstateAddress>>(&input_refs).unwrap(),
                 )
             })
             .flat_map(|(inputs, input_refs)| inputs.into_iter().chain(input_refs).collect::<HashSet<_>>())
@@ -997,7 +1064,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         Ok(count as u64)
     }
 
-    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote<Self::Addr>>, StorageError> {
+    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError> {
         use crate::schema::votes;
 
         let votes = votes::table
@@ -1015,7 +1082,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         &mut self,
         block_id: &BlockId,
         sender_leaf_hash: &FixedHash,
-    ) -> Result<Vote<Self::Addr>, StorageError> {
+    ) -> Result<Vote, StorageError> {
         use crate::schema::votes;
 
         let vote = votes::table
@@ -1080,6 +1147,17 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         Ok(count > 0)
     }
 
+    fn transaction_pool_get_all(&mut self) -> Result<Vec<TransactionPoolRecord>, StorageError> {
+        use crate::schema::transaction_pool;
+        let txs = transaction_pool::table
+            .get_results::<sql_models::TransactionPoolRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_get_all",
+                source: e,
+            })?;
+        txs.into_iter().map(|tx| tx.try_convert(None)).collect()
+    }
+
     fn transaction_pool_get_many_ready(&mut self, max_txs: usize) -> Result<Vec<TransactionPoolRecord>, StorageError> {
         use crate::schema::transaction_pool;
 
@@ -1114,15 +1192,78 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             updates.len()
         );
 
+        let mut used_substates = HashMap::<SubstateAddress, LockFlag>::new();
+        let mut processed_substates =
+            HashMap::<TransactionId, HashSet<(SubstateAddress, _)>>::with_capacity(updates.len());
+        for (tx_id, update) in &updates {
+            if update.local_decision.as_deref() == Some(Decision::Abort.as_str()) {
+                // The aborted transaction don't lock any substates
+                continue;
+            }
+            let evidence = deserialize_json::<Evidence>(&update.evidence)?;
+            let evidence = evidence
+                .iter()
+                .map(|(shard, evidence)| (*shard, evidence.lock))
+                .collect::<HashSet<(SubstateAddress, _)>>();
+            processed_substates.insert(deserialize_hex_try_from(tx_id)?, evidence);
+        }
+
         ready_txs
             .into_iter()
             .filter_map(|rec| {
                 let maybe_update = updates.remove(&rec.transaction_id);
                 match rec.try_convert(maybe_update) {
                     Ok(rec) => {
-                        if rec.is_ready() {
+                        if !rec.is_ready() {
+                            return None;
+                        }
+
+                        let tx_substates = rec
+                            .transaction()
+                            .evidence
+                            .iter()
+                            .map(|(shard, evidence)| (*shard, evidence.lock))
+                            .collect::<HashMap<_, _>>();
+
+                        // Are there any conflicts between the currently selected set and this transaction?
+                        if tx_substates.iter().any(|(shard, lock)| {
+                            if lock.is_write() {
+                                // Write lock must have no conflicts
+                                used_substates.contains_key(shard)
+                            } else {
+                                // If there is a Shard conflict, then it must not be a write lock
+                                used_substates
+                                    .get(shard)
+                                    .map(|tx_lock| tx_lock.is_write())
+                                    .unwrap_or(false)
+                            }
+                        }) {
+                            return None;
+                        }
+
+                        // Are there any conflicts between this transaction and other transactions to be included in the
+                        // block?
+                        if processed_substates
+                                .iter()
+                                // Check other transactions
+                                .filter(|(tx_id, _)| *tx_id != rec.transaction_id())
+                                .all(|(_, evidence)| {
+                                    evidence.iter().all(|(shard, lock)| {
+                                        if lock.is_write() {
+                                            // Write lock must have no conflicts
+                                            !tx_substates.contains_key(shard)
+                                        } else {
+                                            // If there is a Shard conflict, then it must be a read lock
+                                            tx_substates.get(shard).map(|tx_lock| tx_lock.is_read()).unwrap_or(true)
+                                        }
+                                    })
+                                })
+                        {
+                            used_substates.extend(tx_substates);
                             Some(Ok(rec))
                         } else {
+                            // TODO: If we don't switch to "no version" transaction, then we can abort these here.
+                            // That also requires changes to the on_ready_to_vote_on_local_block
                             None
                         }
                     },
@@ -1177,11 +1318,11 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         Ok(count as usize)
     }
 
-    fn substates_get(&mut self, substate_id: &ShardId) -> Result<SubstateRecord, StorageError> {
+    fn substates_get(&mut self, address: &SubstateAddress) -> Result<SubstateRecord, StorageError> {
         use crate::schema::substates;
 
         let substate = substates::table
-            .filter(substates::shard_id.eq(serialize_hex(substate_id)))
+            .filter(substates::address.eq(serialize_hex(address)))
             .first::<sql_models::SubstateRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_get",
@@ -1191,11 +1332,11 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         substate.try_into()
     }
 
-    fn substates_get_any(&mut self, substate_ids: &HashSet<ShardId>) -> Result<Vec<SubstateRecord>, StorageError> {
+    fn substates_get_any(&mut self, addresses: &HashSet<SubstateAddress>) -> Result<Vec<SubstateRecord>, StorageError> {
         use crate::schema::substates;
 
         let substates = substates::table
-            .filter(substates::shard_id.eq_any(substate_ids.iter().map(serialize_hex)))
+            .filter(substates::address.eq_any(addresses.iter().map(serialize_hex)))
             .get_results::<sql_models::SubstateRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_get_any",
@@ -1205,15 +1346,15 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         substates.into_iter().map(TryInto::try_into).collect()
     }
 
-    fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<ShardId>>(
+    fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<SubstateAddress>>(
         &mut self,
-        shard_ids: I,
+        addresses: I,
     ) -> Result<bool, StorageError> {
         use crate::schema::substates;
 
         let count = substates::table
             .count()
-            .filter(substates::shard_id.eq_any(shard_ids.into_iter().map(|s| serialize_hex(s.borrow()))))
+            .filter(substates::address.eq_any(addresses.into_iter().map(|s| serialize_hex(s.borrow()))))
             .limit(1)
             .get_result::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -1245,15 +1386,15 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
 
     fn substates_get_many_within_range(
         &mut self,
-        start: &ShardId,
-        end: &ShardId,
-        exclude_shards: &[ShardId],
+        start: &SubstateAddress,
+        end: &SubstateAddress,
+        exclude: &[SubstateAddress],
     ) -> Result<Vec<SubstateRecord>, StorageError> {
         use crate::schema::substates;
 
         let substates = substates::table
-            .filter(substates::shard_id.between(serialize_hex(start), serialize_hex(end)))
-            .filter(substates::shard_id.ne_all(exclude_shards.iter().map(serialize_hex)))
+            .filter(substates::address.between(serialize_hex(start), serialize_hex(end)))
+            .filter(substates::address.ne_all(exclude.iter().map(serialize_hex)))
             .get_results::<sql_models::SubstateRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_get_many_within_range",
@@ -1350,7 +1491,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         Ok(substates)
     }
 
-    fn substates_check_lock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+    fn substates_check_lock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
         &mut self,
         objects: I,
         lock_flag: SubstateLockFlag,
@@ -1362,7 +1503,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
 
         let locked_details = substates::table
             .select((substates::is_locked_w, substates::destroyed_by_transaction))
-            .filter(substates::shard_id.eq_any(&objects))
+            .filter(substates::address.eq_any(&objects))
             .get_results::<(bool, Option<String>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transactions_try_lock_many",
@@ -1393,21 +1534,21 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
     }
 
     // -------------------------------- LockedOutputs -------------------------------- //
-    fn locked_outputs_check_all<I, B>(&mut self, output_shards: I) -> Result<SubstateLockState, StorageError>
+    fn locked_outputs_check_all<I, B>(&mut self, output_addresses: I) -> Result<SubstateLockState, StorageError>
     where
         I: IntoIterator<Item = B>,
-        B: Borrow<ShardId>,
+        B: Borrow<SubstateAddress>,
     {
         use crate::schema::locked_outputs;
 
-        let outputs_hex = output_shards
+        let outputs_hex = output_addresses
             .into_iter()
-            .map(|shard_id| serialize_hex(shard_id.borrow()))
+            .map(|address| serialize_hex(address.borrow()))
             .collect::<Vec<_>>();
 
         let has_conflict = locked_outputs::table
             .count()
-            .filter(locked_outputs::shard_id.eq_any(outputs_hex))
+            .filter(locked_outputs::substate_address.eq_any(outputs_hex))
             .first::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "locked_outputs_check_all",

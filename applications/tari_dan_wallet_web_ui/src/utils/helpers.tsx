@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { ChangeEvent } from 'react';
+import { ChangeEvent } from "react";
 
 const renderJson = (json: any) => {
   if (Array.isArray(json)) {
@@ -38,10 +38,10 @@ const renderJson = (json: any) => {
         ],
       </>
     );
-  } else if (typeof json === 'object') {
+  } else if (typeof json === "object") {
     return (
       <>
-        {'{'}
+        {"{"}
         <ul>
           {Object.keys(json).map((key) => (
             <li>
@@ -49,22 +49,21 @@ const renderJson = (json: any) => {
             </li>
           ))}
         </ul>
-        {'}'}
+        {"}"}
       </>
     );
   } else {
-    if (typeof json === 'string')
-      return <span className="string">"{json}"</span>;
+    if (typeof json === "string") return <span className="string">"{json}"</span>;
     return <span className="other">{json}</span>;
   }
 };
 
 function removeTagged(obj: any) {
   if (obj === undefined) {
-    return 'undefined';
+    return "undefined";
   }
-  if (obj['@@TAGGED@@'] !== undefined) {
-    return obj['@@TAGGED@@'][1];
+  if (obj["@@TAGGED@@"] !== undefined) {
+    return obj["@@TAGGED@@"][1];
   }
   return obj;
 }
@@ -72,47 +71,47 @@ function removeTagged(obj: any) {
 function toHexString(byteArray: any): string {
   if (Array.isArray(byteArray)) {
     return Array.from(byteArray, function (byte) {
-      return ('0' + (byte & 0xff).toString(16)).slice(-2);
-    }).join('');
+      return ("0" + (byte & 0xff).toString(16)).slice(-2);
+    }).join("");
   }
   if (byteArray === undefined) {
-    return 'undefined';
+    return "undefined";
   }
   // object might be a tagged object
-  if (byteArray['@@TAGGED@@'] !== undefined) {
-    return toHexString(byteArray['@@TAGGED@@'][1]);
+  if (byteArray["@@TAGGED@@"] !== undefined) {
+    return toHexString(byteArray["@@TAGGED@@"][1]);
   }
-  return 'Unsupported type';
+  return "Unsupported type";
 }
 
 function fromHexString(hexString: string) {
   let res = [];
   for (let i = 0; i < hexString.length; i += 2) {
-    res.push(Number('0x' + hexString.substring(i, i + 2)));
+    res.push(Number("0x" + hexString.substring(i, i + 2)));
   }
   return res;
 }
 
 function shortenString(string: string, start: number = 8, end: number = 8) {
-  return string.substring(0, start) + '...' + string.slice(-end);
+  // The number 3 is from the characters for ellipsis
+  if (string.length < start + end + 3) {
+    return string;
+  }
+  return string.substring(0, start) + "..." + string.slice(-end);
 }
 
 function emptyRows(page: number, rowsPerPage: number, array: any[]) {
   return page > 0 ? Math.max(0, (1 + page) * rowsPerPage - array.length) : 0;
 }
 
-function handleChangePage(
-  event: unknown,
-  newPage: number,
-  setPage: React.Dispatch<React.SetStateAction<number>>
-) {
+function handleChangePage(event: unknown, newPage: number, setPage: React.Dispatch<React.SetStateAction<number>>) {
   setPage(newPage);
 }
 
 function handleChangeRowsPerPage(
   event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   setRowsPerPage: React.Dispatch<React.SetStateAction<number>>,
-  setPage: React.Dispatch<React.SetStateAction<number>>
+  setPage: React.Dispatch<React.SetStateAction<number>>,
 ) {
   setRowsPerPage(parseInt(event.target.value, 10));
   setPage(0);

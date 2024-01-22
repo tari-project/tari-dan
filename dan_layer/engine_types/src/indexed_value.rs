@@ -14,7 +14,7 @@ use tari_template_lib::{
 use crate::{
     fee_claim::FeeClaimAddress,
     serde_with,
-    substate::SubstateAddress,
+    substate::SubstateId,
     transaction_receipt::TransactionReceiptAddress,
 };
 
@@ -46,7 +46,7 @@ impl IndexedValue {
         Ok(Self { indexed, value })
     }
 
-    pub fn referenced_substates(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+    pub fn referenced_substates(&self) -> impl Iterator<Item = SubstateId> + '_ {
         self.indexed
             .component_addresses
             .iter()
@@ -165,10 +165,7 @@ impl IndexedWellKnownTypes {
     }
 
     /// Checks if a value contains a substate with the given address. This function does not allocate.
-    pub fn value_contains_substate(
-        value: &tari_bor::Value,
-        address: &SubstateAddress,
-    ) -> Result<bool, IndexedValueError> {
+    pub fn value_contains_substate(value: &tari_bor::Value, address: &SubstateId) -> Result<bool, IndexedValueError> {
         let mut found = false;
         tari_bor::walk_all(
             value,
@@ -208,7 +205,7 @@ impl IndexedWellKnownTypes {
         Ok(found)
     }
 
-    pub fn referenced_substates(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+    pub fn referenced_substates(&self) -> impl Iterator<Item = SubstateId> + '_ {
         self.component_addresses
             .iter()
             .map(|a| (*a).into())

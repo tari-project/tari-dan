@@ -20,17 +20,17 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import { Form } from 'react-router-dom';
-import TextField from '@mui/material/TextField/TextField';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Grid from '@mui/material/Grid';
-import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import Loading from '../../Components/Loading';
-import { useAccountsCreateFreeTestCoins } from '../../api/hooks/useAccounts';
-import useAccountStore from '../../store/accountStore';
+import { useState } from "react";
+import { Form } from "react-router-dom";
+import TextField from "@mui/material/TextField/TextField";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Grid from "@mui/material/Grid";
+import Typography from "@mui/material/Typography";
+import { useTheme } from "@mui/material/styles";
+import Loading from "../../Components/Loading";
+import { useAccountsCreateFreeTestCoins } from "../../api/hooks/useAccounts";
+import useAccountStore from "../../store/accountStore";
 
 function Onboarding() {
   const { mutate, status } = useAccountsCreateFreeTestCoins();
@@ -38,7 +38,7 @@ function Onboarding() {
   const theme = useTheme();
 
   const [accountFormState, setAccountFormState] = useState({
-    accountName: '',
+    accountName: "",
   });
 
   const handleCreateAccount = () => {
@@ -52,7 +52,7 @@ function Onboarding() {
         onSuccess: () => {
           setAccountName(accountFormState.accountName);
         },
-      }
+      },
     );
   };
 
@@ -64,7 +64,7 @@ function Onboarding() {
     });
   };
 
-  if (status === 'loading') {
+  if (status === "loading") {
     return <Loading />;
   }
 
@@ -73,22 +73,22 @@ function Onboarding() {
       <Grid item xs={12} md={12} lg={12}>
         <Box
           style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            flexDirection: 'column',
-            width: '100%',
-            height: 'calc(100vh - 200px)',
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            flexDirection: "column",
+            width: "100%",
+            height: "calc(100vh - 200px)",
             minHeight: 400,
             gap: theme.spacing(3),
           }}
         >
           <Box
             style={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              flexDirection: 'column',
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              flexDirection: "column",
               gap: 0,
               maxWidth: 600,
             }}
@@ -96,7 +96,7 @@ function Onboarding() {
             <Typography
               variant="h3"
               style={{
-                textAlign: 'center',
+                textAlign: "center",
               }}
             >
               Welcome to the Tari Asset Vault
@@ -104,7 +104,7 @@ function Onboarding() {
             <Typography
               variant="h5"
               style={{
-                textAlign: 'center',
+                textAlign: "center",
               }}
             >
               Create your test account below to get started
@@ -113,7 +113,7 @@ function Onboarding() {
               onSubmit={handleCreateAccount}
               className="flex-container"
               style={{
-                flexDirection: 'column',
+                flexDirection: "column",
                 marginTop: theme.spacing(3),
               }}
             >

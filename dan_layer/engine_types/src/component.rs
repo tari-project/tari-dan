@@ -33,7 +33,7 @@ use crate::{
     hashing::{hasher32, EngineHashDomainLabel},
     indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     serde_with,
-    substate::SubstateAddress,
+    substate::SubstateId,
 };
 
 pub fn new_component_address_from_parts(template_address: &TemplateAddress, component_id: &Hash) -> ComponentAddress {
@@ -86,7 +86,7 @@ impl ComponentHeader {
         self
     }
 
-    pub fn contains_substate(&self, address: &SubstateAddress) -> Result<bool, IndexedValueError> {
+    pub fn contains_substate(&self, address: &SubstateId) -> Result<bool, IndexedValueError> {
         let found = IndexedWellKnownTypes::value_contains_substate(self.state(), address)?;
         Ok(found)
     }

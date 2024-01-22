@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import { getMempoolStats } from '../../../utils/json_rpc';
-import Error from './Error';
-import Typography from '@mui/material/Typography';
+import { useEffect, useState } from "react";
+import { getMempoolStats } from "../../../utils/json_rpc";
+import Error from "./Error";
+import Typography from "@mui/material/Typography";
 
 function Mempool() {
   const [state, setState] = useState();
@@ -41,9 +41,7 @@ function Mempool() {
   if (error) {
     return <Error component="Mempool" message={error} />;
   }
-  return (
-    <Typography>Size {state === undefined ? 'checking...' : state}</Typography>
-  );
+  return <Typography>Size {state === undefined ? "checking..." : state}</Typography>;
 }
 
 export default Mempool;
