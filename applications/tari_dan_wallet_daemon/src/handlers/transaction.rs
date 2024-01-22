@@ -10,8 +10,8 @@ use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager},
     network::{TransactionFinalizedResult, TransactionQueryResult},
 };
-use tari_engine_types::{instruction::Instruction, substate::SubstateId};
-use tari_template_lib::{args, models::Amount};
+use tari_engine_types::{indexed_value::IndexedValue, instruction::Instruction, substate::SubstateId};
+use tari_template_lib::{args, args::Arg, models::Amount};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
     AccountGetRequest,
@@ -102,9 +102,9 @@ pub async fn handle_submit(
         req.inputs
     } else {
         // If we are not overriding inputs, we will use inputs that we know about in the local substate id db
-        let mut substates = get_referenced_component_addresses(&req.instructions);
-        substates.extend(get_referenced_component_addresses(&req.fee_instructions));
-        let substates = substates.iter().collect::<Vec<_>>();
+        let mut substates = get_referenced_substate_addresses(&req.instructions)?;
+        substates.extend(get_referenced_substate_addresses(&req.fee_instructions)?);
+        let substates = substates.into_iter().collect::<Vec<_>>();
         let loaded_dependent_substates = sdk
             .substate_api()
             .locate_dependent_substates(&substates)
@@ -321,12 +321,33 @@ pub async fn handle_wait_result(
     }
 }
 
-fn get_referenced_component_addresses(instructions: &[Instruction]) -> HashSet<SubstateId> {
-    let mut components = HashSet::new();
+fn get_referenced_substate_addresses(instructions: &[Instruction]) -> anyhow::Result<HashSet<SubstateId>> {
+    let mut substates = HashSet::new();
     for instruction in instructions {
-        if let Instruction::CallMethod { component_address, .. } = instruction {
-            components.insert(SubstateId::Component(*component_address));
+        match instruction {
+            Instruction::CallMethod {
+                component_address,
+                args,
+                ..
+            } => {
+                substates.insert(SubstateId::Component(*component_address));
+                for arg in args {
+                    if let Arg::Literal(bytes) = arg {
+                        let val = IndexedValue::from_raw(bytes)?;
+                        substates.extend(val.referenced_substates());
+                    }
+                }
+            },
+            Instruction::CallFunction { args, .. } => {
+                for arg in args {
+                    if let Arg::Literal(bytes) = arg {
+                        let val = IndexedValue::from_raw(bytes)?;
+                        substates.extend(val.referenced_substates());
+                    }
+                }
+            },
+            _ => {},
         }
     }
-    components
+    Ok(substates)
 }

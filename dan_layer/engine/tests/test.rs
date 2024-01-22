@@ -1377,9 +1377,9 @@ fn test_builtin_templates() {
 
     let account_template_address: TemplateAddress =
         template_test.call_function("BuiltinTest", "get_account_template_address", args![], vec![]);
-    assert_eq!(account_template_address, *ACCOUNT_TEMPLATE_ADDRESS);
+    assert_eq!(account_template_address, ACCOUNT_TEMPLATE_ADDRESS);
 
     let account_nft_template_address: TemplateAddress =
         template_test.call_function("BuiltinTest", "get_account_nft_template_address", args![], vec![]);
-    assert_eq!(account_nft_template_address, *ACCOUNT_NFT_TEMPLATE_ADDRESS);
+    assert_eq!(account_nft_template_address, ACCOUNT_NFT_TEMPLATE_ADDRESS);
 }

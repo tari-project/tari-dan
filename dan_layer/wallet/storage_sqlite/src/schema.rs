@@ -1,7 +1,7 @@
 table! {
     accounts (id) {
         id -> Integer,
-        name -> Text,
+        name -> Nullable<Text>,
         address -> Text,
         owner_key_index -> BigInt,
         created_at -> Timestamp,

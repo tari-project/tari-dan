@@ -96,6 +96,10 @@ impl TransactionRecord {
         self.execution_time
     }
 
+    pub fn is_finalized(&self) -> bool {
+        self.final_decision.is_some()
+    }
+
     pub fn abort_details(&self) -> Option<&String> {
         self.abort_details.as_ref()
     }
@@ -232,6 +236,7 @@ impl From<ExecutedTransaction> for TransactionRecord {
         let abort_details = tx.abort_details().cloned();
         let resulting_outputs = tx.resulting_outputs().to_vec();
         let (transaction, result) = tx.dissolve();
+
         Self {
             transaction,
             result: Some(result),

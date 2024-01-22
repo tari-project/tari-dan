@@ -24,6 +24,7 @@ use syn::{
     Pat,
     PatIdent,
     Path,
+    Signature,
     Stmt,
     UseTree,
 };
@@ -33,14 +34,16 @@ use tari_template_lib::args::LogLevel;
 
 #[derive(Debug, Clone)]
 pub enum ManifestIntent {
-    DefineTemplate {
-        template_address: TemplateAddress,
-        alias: Ident,
-    },
     InvokeTemplate(InvokeIntent),
     InvokeComponent(InvokeIntent),
     AssignInput(AssignInputStmt),
     Log(LogIntent),
+}
+
+#[derive(Debug, Clone)]
+pub struct ManifestImport {
+    pub template_address: Option<TemplateAddress>,
+    pub alias: Ident,
 }
 
 #[derive(Debug, Clone)]
@@ -79,17 +82,27 @@ pub enum SpecialLiteral {
 
 pub struct ManifestParser;
 
+#[derive(Debug, Clone)]
+pub struct ParsedManifest {
+    pub defines: Vec<ManifestImport>,
+    pub instruction_intents: Vec<ManifestIntent>,
+    pub fee_instruction_intents: Vec<ManifestIntent>,
+}
+
 impl ManifestParser {
     pub fn new() -> Self {
         Self
     }
 
-    pub fn parse(&self, input: ParseStream) -> Result<Vec<ManifestIntent>, syn::Error> {
-        let mut statements = vec![];
-        statements.push(ManifestIntent::DefineTemplate {
-            template_address: *ACCOUNT_TEMPLATE_ADDRESS,
+    pub fn parse(&self, input: ParseStream) -> Result<ParsedManifest, syn::Error> {
+        let mut instruction_intents = vec![];
+        let mut fee_instruction_intents = vec![];
+        let mut defines = vec![];
+        defines.push(ManifestImport {
+            template_address: Some(ACCOUNT_TEMPLATE_ADDRESS),
             alias: Ident::new("Account", proc_macro2::Span::call_site()),
         });
+
         for stmt in Block::parse_within(input)? {
             match stmt {
                 // use template_hash as TemplateName;
@@ -103,13 +116,39 @@ impl ManifestParser {
                         .and_then(|(_, s)| TemplateAddress::from_hex(s).ok())
                         .ok_or_else(|| syn::Error::new_spanned(rename.clone(), "Invalid template address"))?;
 
-                    statements.push(ManifestIntent::DefineTemplate {
-                        template_address,
+                    defines.push(ManifestImport {
+                        template_address: Some(template_address),
                         alias: rename.rename,
                     });
                 },
-                Stmt::Item(Item::Fn(ItemFn { block, .. })) => {
-                    statements.extend(self.parse_block(*block)?);
+                // use Name; // (predefined template)
+                Stmt::Item(Item::Use(ItemUse {
+                    tree: UseTree::Name(name),
+                    ..
+                })) => {
+                    defines.push(ManifestImport {
+                        template_address: None,
+                        alias: name.ident,
+                    });
+                },
+                Stmt::Item(Item::Fn(ItemFn {
+                    block,
+                    sig: Signature { ident, .. },
+                    ..
+                })) => {
+                    if ident == "fee_main" {
+                        fee_instruction_intents.extend(self.parse_block(*block)?);
+                    } else if ident == "main" {
+                        instruction_intents.extend(self.parse_block(*block)?);
+                    } else {
+                        return Err(syn::Error::new_spanned(
+                            block,
+                            format!(
+                                "Invalid function declaration {}. Only main or fee_main are allowed.",
+                                ident
+                            ),
+                        ));
+                    }
                 },
                 _ => {
                     return Err(syn::Error::new_spanned(
@@ -120,7 +159,11 @@ impl ManifestParser {
             }
         }
 
-        Ok(statements)
+        Ok(ParsedManifest {
+            defines,
+            instruction_intents,
+            fee_instruction_intents,
+        })
     }
 
     fn parse_block(&self, block: Block) -> Result<Vec<ManifestIntent>, syn::Error> {
@@ -129,23 +172,6 @@ impl ManifestParser {
 
     pub fn parse_stmt(&self, stmt: Stmt) -> Result<ManifestIntent, syn::Error> {
         match stmt {
-            // use template_hash as TemplateName;
-            Stmt::Item(Item::Use(ItemUse {
-                tree: UseTree::Rename(rename),
-                ..
-            })) => {
-                let template_id = rename.ident.to_string();
-                let template_address = template_id
-                    .split_once('_')
-                    .and_then(|(_, s)| TemplateAddress::from_hex(s).ok())
-                    .ok_or_else(|| syn::Error::new_spanned(rename.clone(), "Invalid template address"))?;
-
-                Ok(ManifestIntent::DefineTemplate {
-                    template_address,
-                    alias: rename.rename,
-                })
-            },
-            // let variable_name = TemplateName::function_name(arg1, arg2);
             Stmt::Local(local) => self.handle_local(local),
             // component.function_name(arg1, arg2);
             Stmt::Semi(expr, _) => self.handle_semi_expr(expr),
@@ -295,7 +321,7 @@ impl ManifestParser {
 
 fn assignment_from_macro(var_name: Ident, mac: &Ident, tokens: TokenStream) -> Result<ManifestIntent, syn::Error> {
     match mac.to_string().as_str() {
-        "global" | "var" => Ok(ManifestIntent::AssignInput(AssignInputStmt {
+        "global" | "var" | "arg" => Ok(ManifestIntent::AssignInput(AssignInputStmt {
             variable_name: var_name,
             global_variable_name: parse2(tokens)?,
         })),

@@ -23,8 +23,10 @@
 use std::{fs, panic, process};
 
 use tari_common::initialize_logging;
+use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
 use tari_dan_app_utilities::configuration::load_configuration;
-use tari_dan_wallet_daemon::{cli::Cli, config::ApplicationConfig, run_tari_dan_wallet_daemon};
+use tari_dan_wallet_daemon::{cli::Cli, config::ApplicationConfig, initialize_wallet_sdk, run_tari_dan_wallet_daemon};
+use tari_dan_wallet_sdk::apis::key_manager;
 use tari_shutdown::Shutdown;
 
 #[tokio::main]
@@ -38,9 +40,20 @@ async fn main() -> Result<(), anyhow::Error> {
     }));
 
     let cli = Cli::init();
+
     let config_path = cli.common.config_path();
     let cfg = load_configuration(config_path, true, &cli)?;
     let config = ApplicationConfig::load_from(&cfg)?;
+
+    if let Some(index) = cli.derive_secret {
+        let sdk = initialize_wallet_sdk(&config)?;
+        let secret = sdk
+            .key_manager_api()
+            .derive_key(key_manager::TRANSACTION_BRANCH, index)?;
+        println!("Secret: {}", secret.key.reveal());
+        println!("Public key: {}", RistrettoPublicKey::from_secret_key(&secret.key));
+        return Ok(());
+    }
 
     // Remove the file if it was left behind by a previous run
     let _file = fs::remove_file(config.common.base_path.join("pid"));

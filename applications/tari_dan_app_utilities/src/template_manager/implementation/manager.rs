@@ -94,14 +94,13 @@ impl<TAddr: NodeAddressable> TemplateManager<TAddr> {
 
         // get the builtin WASM code of the account template
         let compiled_code = get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS);
-        let template = Self::load_builtin_template("account", *ACCOUNT_TEMPLATE_ADDRESS, compiled_code.to_vec());
-        builtin_templates.insert(*ACCOUNT_TEMPLATE_ADDRESS, template);
+        let template = Self::load_builtin_template("account", ACCOUNT_TEMPLATE_ADDRESS, compiled_code.to_vec());
+        builtin_templates.insert(ACCOUNT_TEMPLATE_ADDRESS, template);
 
         // get the builtin WASM code of the account nft template
         let compiled_code = get_template_builtin(&ACCOUNT_NFT_TEMPLATE_ADDRESS);
-        let template =
-            Self::load_builtin_template("account_nft", *ACCOUNT_NFT_TEMPLATE_ADDRESS, compiled_code.to_vec());
-        builtin_templates.insert(*ACCOUNT_NFT_TEMPLATE_ADDRESS, template);
+        let template = Self::load_builtin_template("account_nft", ACCOUNT_NFT_TEMPLATE_ADDRESS, compiled_code.to_vec());
+        builtin_templates.insert(ACCOUNT_NFT_TEMPLATE_ADDRESS, template);
 
         builtin_templates
     }

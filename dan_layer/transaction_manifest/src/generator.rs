@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use proc_macro2::Ident;
 use syn::Lit;
 use tari_engine_types::{instruction::Instruction, substate::SubstateId, TemplateAddress};
 use tari_template_lib::{
@@ -15,44 +16,65 @@ use crate::{
     ast::ManifestAst,
     error::ManifestError,
     parser::{InvokeIntent, ManifestIntent, ManifestLiteral, SpecialLiteral},
+    ManifestInstructions,
     ManifestValue,
 };
 
 pub struct ManifestInstructionGenerator {
-    imported_templates: HashMap<String, TemplateAddress>,
+    imported_templates: HashMap<Ident, TemplateAddress>,
     global_aliases: HashMap<String, ManifestValue>,
     globals: HashMap<String, ManifestValue>,
     variables: HashSet<String>,
+    templates: HashMap<String, TemplateAddress>,
 }
 
 impl ManifestInstructionGenerator {
-    pub fn new(globals: HashMap<String, ManifestValue>) -> Self {
+    pub fn new(globals: HashMap<String, ManifestValue>, templates: HashMap<String, TemplateAddress>) -> Self {
         Self {
             imported_templates: HashMap::new(),
             global_aliases: HashMap::new(),
             globals,
             variables: HashSet::new(),
+            templates,
         }
     }
 
-    pub fn generate_instructions(&mut self, ast: ManifestAst) -> Result<Vec<Instruction>, ManifestError> {
-        let mut instructions = Vec::with_capacity(ast.intents.len());
-        for intent in ast.intents {
+    pub fn generate_instructions(&mut self, ast: ManifestAst) -> Result<ManifestInstructions, ManifestError> {
+        self.imported_templates = ast
+            .parsed
+            .defines
+            .into_iter()
+            .map(|import| match import.template_address {
+                Some(addr) => Ok((import.alias, addr)),
+                None => {
+                    let alias_str = import.alias.to_string();
+                    self.templates
+                        .get(&alias_str)
+                        .copied()
+                        .map(|addr| (import.alias, addr))
+                        .ok_or(ManifestError::TemplateAliasNotDefined { alias: alias_str })
+                },
+            })
+            .collect::<Result<_, _>>()?;
+
+        let mut instructions = Vec::with_capacity(ast.parsed.instruction_intents.len());
+        for intent in ast.parsed.instruction_intents {
             instructions.extend(self.translate_intent(intent)?);
         }
 
-        Ok(instructions)
+        let mut fee_instructions = Vec::with_capacity(ast.parsed.fee_instruction_intents.len());
+        for intent in ast.parsed.fee_instruction_intents {
+            fee_instructions.extend(self.translate_intent(intent)?);
+        }
+
+        Ok(ManifestInstructions {
+            instructions,
+            fee_instructions,
+        })
     }
 
     fn translate_intent(&mut self, intent: ManifestIntent) -> Result<Vec<Instruction>, ManifestError> {
         match intent {
-            ManifestIntent::DefineTemplate {
-                template_address,
-                alias,
-            } => {
-                self.imported_templates.insert(alias.to_string(), template_address);
-                Ok(vec![])
-            },
             ManifestIntent::InvokeTemplate(InvokeIntent {
                 output_variable,
                 template_variable,
@@ -64,7 +86,7 @@ impl ManifestInstructionGenerator {
                     .as_ref()
                     .expect("AST parse should have failed: no template ident for TemplateInvoke statement");
                 let mut instructions = vec![Instruction::CallFunction {
-                    template_address: self.get_imported_template(&template_ident.to_string())?,
+                    template_address: self.get_imported_template(template_ident)?,
                     function: function_name.to_string(),
                     args: self.process_args(arguments)?,
                 }];
@@ -173,7 +195,7 @@ impl ManifestInstructionGenerator {
             .collect()
     }
 
-    fn get_imported_template(&self, name: &str) -> Result<TemplateAddress, ManifestError> {
+    fn get_imported_template(&self, name: &Ident) -> Result<TemplateAddress, ManifestError> {
         self.imported_templates
             .get(name)
             .copied()

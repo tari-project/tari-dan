@@ -62,7 +62,7 @@ where
 
     pub async fn locate_dependent_substates(
         &self,
-        parents: &[&SubstateId],
+        parents: &[SubstateId],
     ) -> Result<Vec<VersionedSubstateId>, SubstateApiError> {
         let mut substate_addresses = HashMap::with_capacity(parents.len());
 
