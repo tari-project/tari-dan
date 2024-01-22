@@ -400,7 +400,7 @@ async fn when_transfer_via_wallet_daemon(
         .find(|(name, _)| **name == resource_name)
         .map(|(_, data)| data.clone())
         .unwrap_or_else(|| panic!("No resource named {}", resource_name))
-        .address
+        .substate_id
         .as_resource_address()
         .unwrap_or_else(|| panic!("{} is not a resource", resource_name));
 

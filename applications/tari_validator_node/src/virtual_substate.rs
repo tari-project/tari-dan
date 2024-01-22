@@ -8,7 +8,7 @@ use tari_dan_engine::runtime::VirtualSubstates;
 use tari_dan_storage::{consensus_models::Block, StateStore, StorageError};
 use tari_engine_types::{
     fee_claim::FeeClaim,
-    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
+    virtual_substate::{VirtualSubstate, VirtualSubstateId},
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_template_lib::models::Amount;
@@ -35,11 +35,11 @@ where
 
     pub async fn generate_for_address(
         &self,
-        address: &VirtualSubstateAddress,
+        address: &VirtualSubstateId,
     ) -> Result<VirtualSubstate, VirtualSubstateError> {
         match address {
-            VirtualSubstateAddress::CurrentEpoch => self.generate_current_epoch().await,
-            VirtualSubstateAddress::UnclaimedValidatorFee { epoch, address } => {
+            VirtualSubstateId::CurrentEpoch => self.generate_current_epoch().await,
+            VirtualSubstateId::UnclaimedValidatorFee { epoch, address } => {
                 self.generate_validator_fee_claim(Epoch(*epoch), address)
             },
         }
@@ -57,7 +57,7 @@ where
 
                 info!(target: LOG_TARGET, "Adding permitted fee claim for epoch {}, {} with amount {}", epoch, validator_public_key, fee_claim.amount);
                 virtual_substates.insert(
-                    VirtualSubstateAddress::UnclaimedValidatorFee{epoch: epoch.as_u64(), address: validator_public_key},
+                    VirtualSubstateId::UnclaimedValidatorFee{epoch: epoch.as_u64(), address: validator_public_key},
                     VirtualSubstate::UnclaimedValidatorFee(fee_claim)
                 );
             }

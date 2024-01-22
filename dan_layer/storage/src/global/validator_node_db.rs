@@ -26,7 +26,7 @@ use std::{
 };
 
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch, ShardId};
+use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, SubstateAddress};
 
 use crate::global::{models::ValidatorNode, GlobalDbAdapter};
 
@@ -44,7 +44,7 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         &mut self,
         peer_address: TGlobalDbAdapter::Addr,
         public_key: PublicKey,
-        shard_key: ShardId,
+        shard_key: SubstateAddress,
         epoch: Epoch,
         fee_claim_public_key: PublicKey,
     ) -> Result<(), TGlobalDbAdapter::Error> {
@@ -70,7 +70,7 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         &mut self,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        bucket: ShardBucket,
+        bucket: Shard,
     ) -> Result<u64, TGlobalDbAdapter::Error> {
         self.backend
             .validator_nodes_count_for_bucket(self.tx, start_epoch, end_epoch, bucket)
@@ -113,7 +113,7 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         &mut self,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        shard_range: RangeInclusive<ShardId>,
+        shard_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Vec<ValidatorNode<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
         self.backend
             .validator_nodes_get_by_shard_range(self.tx, start_epoch, end_epoch, shard_range)
@@ -124,8 +124,8 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         &mut self,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        buckets: HashSet<ShardBucket>,
-    ) -> Result<HashMap<ShardBucket, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
+        buckets: HashSet<Shard>,
+    ) -> Result<HashMap<Shard, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
         self.backend
             .validator_nodes_get_by_buckets(self.tx, start_epoch, end_epoch, buckets)
             .map_err(TGlobalDbAdapter::Error::into)
@@ -133,11 +133,11 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
 
     pub fn set_committee_bucket(
         &mut self,
-        shard_id: ShardId,
-        committee_bucket: ShardBucket,
+        substate_address: SubstateAddress,
+        committee_bucket: Shard,
     ) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend
-            .validator_nodes_set_committee_bucket(self.tx, shard_id, committee_bucket)
+            .validator_nodes_set_committee_bucket(self.tx, substate_address, committee_bucket)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 }

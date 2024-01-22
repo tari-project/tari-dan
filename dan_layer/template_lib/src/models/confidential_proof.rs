@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, Bytes};
 
 use crate::{
     crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
@@ -21,9 +22,10 @@ pub struct ConfidentialOutputProof {
 }
 
 /// A zero-knowledge proof that a confidential resource amount is valid
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfidentialStatement {
-    #[serde(with = "serde_byte_array")]
+    #[serde_as(as = "Bytes")]
     pub commitment: [u8; 32],
     /// Public nonce (R) that was used to generate the commitment mask
     // #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
@@ -47,9 +49,10 @@ pub struct ConfidentialWithdrawProof {
 
 /// Used by the receiver to determine the value component of the commitment, in both confidential transfers and Minotari
 /// burns
+#[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct EncryptedData(#[serde(with = "serde_byte_array")] pub [u8; EncryptedData::size()]);
+pub struct EncryptedData(#[serde_as(as = "Bytes")] pub [u8; EncryptedData::size()]);
 
 impl EncryptedData {
     pub const fn size() -> usize {

@@ -24,7 +24,7 @@ use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 
 use crate::{
     error::IndexerClientError,
@@ -78,7 +78,7 @@ impl IndexerJsonRpcClient {
         self.send_request("add_peer", request).await
     }
 
-    pub async fn add_address(&mut self, address: SubstateAddress) -> Result<(), IndexerClientError> {
+    pub async fn add_address(&mut self, address: SubstateId) -> Result<(), IndexerClientError> {
         self.send_request("add_address", AddAddressRequest { address }).await
     }
 

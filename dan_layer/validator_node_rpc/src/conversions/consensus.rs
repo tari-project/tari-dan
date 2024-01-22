@@ -37,7 +37,7 @@ use tari_consensus::messages::{
     VoteMessage,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeHeight, ValidatorMetadata};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight, ValidatorMetadata};
 use tari_dan_storage::consensus_models::{
     BlockId,
     Command,
@@ -53,7 +53,7 @@ use tari_dan_storage::consensus_models::{
     SubstateRecord,
     TransactionAtom,
 };
-use tari_engine_types::substate::{SubstateAddress, SubstateValue};
+use tari_engine_types::substate::{SubstateId, SubstateValue};
 use tari_transaction::TransactionId;
 
 use crate::proto::{self};
@@ -400,7 +400,7 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
 
     fn try_from(value: proto::consensus::ForeignProposal) -> Result<Self, Self::Error> {
         Ok(ForeignProposal {
-            bucket: ShardBucket::from(value.bucket),
+            bucket: Shard::from(value.bucket),
             block_id: BlockId::try_from(value.block_id)?,
             state: proto::consensus::ForeignProposalState::try_from(value.state)
                 .map_err(|_| anyhow!("Invalid foreign proposal state value {}", value.state))?
@@ -535,7 +535,7 @@ impl TryFrom<proto::consensus::Substate> for SubstateRecord {
 
     fn try_from(value: proto::consensus::Substate) -> Result<Self, Self::Error> {
         Ok(Self {
-            address: SubstateAddress::from_bytes(&value.address)?,
+            substate_id: SubstateId::from_bytes(&value.substate_id)?,
             version: value.version,
             substate_value: SubstateValue::from_bytes(&value.substate)?,
             state_hash: Default::default(),
@@ -554,7 +554,7 @@ impl TryFrom<proto::consensus::Substate> for SubstateRecord {
 impl From<SubstateRecord> for proto::consensus::Substate {
     fn from(value: SubstateRecord) -> Self {
         Self {
-            address: value.address.to_bytes(),
+            substate_id: value.substate_id.to_bytes(),
             version: value.version,
             substate: value.substate_value.to_bytes(),
 

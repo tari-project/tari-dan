@@ -161,7 +161,7 @@ impl TariHasher64 {
 #[derive(Debug)]
 pub enum EngineHashDomainLabel {
     Template,
-    ShardId,
+    SubstateAddress,
     ConfidentialProof,
     ConfidentialTransfer,
     ShardPledgeCollection,
@@ -184,7 +184,7 @@ impl EngineHashDomainLabel {
     pub fn as_label(&self) -> &'static str {
         match self {
             Self::Template => "Template",
-            Self::ShardId => "ShardId",
+            Self::SubstateAddress => "SubstateAddress",
             Self::ConfidentialProof => "ConfidentialProof",
             Self::ConfidentialTransfer => "ConfidentialTransfer",
             Self::ShardPledgeCollection => "ShardPledgeCollection",

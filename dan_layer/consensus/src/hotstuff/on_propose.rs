@@ -229,7 +229,7 @@ where TConsensusSpec: ConsensusSpec
                 // prepared. We can now propose to Accept it. We also propose the decision change which everyone
                 // should agree with if they received the same foreign LocalPrepare.
                 TransactionPoolStage::LocalPrepared => {
-                    let involved = local_committee_shard.count_distinct_buckets(t.transaction().evidence.shards_iter());
+                    let involved = local_committee_shard.count_distinct_shards(t.transaction().evidence.shards_iter());
                     let involved = NonZeroU64::new(involved as u64).ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
                             "Number of involved shards is zero for transaction {}",
@@ -258,11 +258,11 @@ where TConsensusSpec: ConsensusSpec
             commands.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
         );
 
-        let non_local_buckets = proposer::get_non_local_buckets_from_commands(
+        let non_local_buckets = proposer::get_non_local_shards_from_commands(
             tx,
             &commands,
             local_committee_shard.num_committees(),
-            local_committee_shard.bucket(),
+            local_committee_shard.shard(),
         )?;
 
         let foreign_indexes = non_local_buckets

@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use log::*;
 use sqlite_message_logger::SqliteMessageLogger;
-use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, PeerAddress, ShardId};
+use tari_dan_common_types::{shard::Shard, Epoch, PeerAddress, SubstateAddress};
 use tari_dan_p2p::{DanMessage, OutboundService};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_networking::NetworkingService;
@@ -18,7 +18,7 @@ const LOG_TARGET: &str = "tari::validator_node::mempool::gossip";
 pub(super) struct Gossip<TAddr> {
     epoch_manager: EpochManagerHandle<TAddr>,
     outbound: OutboundMessaging<TAddr, SqliteMessageLogger>,
-    is_subscribed: Option<ShardBucket>,
+    is_subscribed: Option<Shard>,
 }
 
 impl Gossip<PeerAddress> {
@@ -36,7 +36,7 @@ impl Gossip<PeerAddress> {
     pub async fn subscribe(&mut self, epoch: Epoch) -> Result<(), MempoolError> {
         let committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
         match self.is_subscribed {
-            Some(b) if b == committee_shard.bucket() => {
+            Some(b) if b == committee_shard.shard() => {
                 return Ok(());
             },
             Some(_) => {
@@ -47,9 +47,9 @@ impl Gossip<PeerAddress> {
 
         self.outbound
             .networking_mut()
-            .subscribe_topic(format!("transactions-{}", committee_shard.bucket()))
+            .subscribe_topic(format!("transactions-{}", committee_shard.shard()))
             .await?;
-        self.is_subscribed = Some(committee_shard.bucket());
+        self.is_subscribed = Some(committee_shard.shard());
         Ok(())
     }
 
@@ -67,7 +67,7 @@ impl Gossip<PeerAddress> {
     pub async fn forward_to_local_replicas(&mut self, epoch: Epoch, msg: DanMessage) -> Result<(), MempoolError> {
         let committee = self.epoch_manager.get_local_committee_shard(epoch).await?;
 
-        let topic = format!("transactions-{}", committee.bucket());
+        let topic = format!("transactions-{}", committee.shard());
         debug!(
             target: LOG_TARGET,
             "forward_to_local_replicas: topic: {}", topic,
@@ -81,21 +81,21 @@ impl Gossip<PeerAddress> {
     pub async fn forward_to_foreign_replicas(
         &mut self,
         epoch: Epoch,
-        shards: HashSet<ShardId>,
+        substate_addresses: HashSet<SubstateAddress>,
         msg: DanMessage,
-        exclude_bucket: Option<ShardBucket>,
+        exclude_shard: Option<Shard>,
     ) -> Result<(), MempoolError> {
         let n = self.epoch_manager.get_num_committees(epoch).await?;
-        let local_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
-        let local_bucket = local_shard.bucket();
-        let buckets = shards
+        let committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
+        let local_shard = committee_shard.shard();
+        let shards = substate_addresses
             .into_iter()
-            .map(|s| s.to_committee_bucket(n))
-            .filter(|b| exclude_bucket.as_ref() != Some(b) && b != &local_bucket)
+            .map(|s| s.to_committee_shard(n))
+            .filter(|b| exclude_shard.as_ref() != Some(b) && b != &local_shard)
             .collect::<HashSet<_>>();
 
-        for bucket in buckets {
-            let topic = format!("transactions-{}", bucket);
+        for shard in shards {
+            let topic = format!("transactions-{}", shard);
             debug!(
                 target: LOG_TARGET,
                 "forward_to_foreign_replicas: topic: {}", topic,
@@ -167,7 +167,7 @@ impl Gossip<PeerAddress> {
     pub async fn gossip_to_foreign_replicas(
         &mut self,
         epoch: Epoch,
-        shards: HashSet<ShardId>,
+        shards: HashSet<SubstateAddress>,
         msg: DanMessage,
     ) -> Result<(), MempoolError> {
         // let committees = self.epoch_manager.get_committees_by_shards(epoch, shards).await?;

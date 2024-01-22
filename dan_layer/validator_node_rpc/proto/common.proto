@@ -16,7 +16,7 @@ message SignatureAndPublicKey {
   bytes public_key = 3;
 }
 
-message ShardId {
+message SubstateAddress {
   bytes bytes = 1;
 }
 

@@ -200,7 +200,7 @@ export class VaultId {
   }
 }
 
-export type SubstateAddressType =
+export type SubstateIdType =
   | ResourceAddress
   | ComponentAddress
   | VaultId
@@ -208,8 +208,8 @@ export type SubstateAddressType =
   | NonFungibleAddress
   | NonFungibleIndexAddress;
 
-export class SubstateAddress {
-  private value: SubstateAddressType;
+export class SubstateId {
+  private value: SubstateIdType;
   constructor(value: any) {
     if (value.hasOwnProperty("Component")) {
       this.value = new ComponentAddress(value.ComponentAddress);
@@ -249,9 +249,9 @@ export class SubstateAddress {
 }
 
 export class TariPermissionAccountBalance {
-  private value: SubstateAddress;
+  private value: SubstateId;
   constructor(value: any) {
-    this.value = new SubstateAddress(value);
+    this.value = new SubstateId(value);
   }
   toString() {
     return `AccountBalance(${this.value.toString()})`;
@@ -312,8 +312,8 @@ export class TariPermissionTransactionGet {
   }
 }
 export class TariPermissionTransactionSend {
-  private value?: SubstateAddress;
-  constructor(value?: SubstateAddress) {
+  private value?: SubstateId;
+  constructor(value?: SubstateId) {
     this.value = value;
   }
   toString() {
@@ -334,9 +334,9 @@ export class TariPermissionTransactionSend {
 }
 
 export class TariPermissionGetNft {
-  private value0?: SubstateAddress;
+  private value0?: SubstateId;
   private value1?: ResourceAddress;
-  constructor(value0?: SubstateAddress, value1?: ResourceAddress) {
+  constructor(value0?: SubstateId, value1?: ResourceAddress) {
     this.value0 = value0;
     this.value1 = value1;
   }

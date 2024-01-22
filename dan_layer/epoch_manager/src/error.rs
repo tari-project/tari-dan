@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{optional::IsNotFoundError, Epoch, ShardId};
+use tari_dan_common_types::{optional::IsNotFoundError, Epoch, SubstateAddress};
 
 #[derive(thiserror::Error, Debug)]
 pub enum EpochManagerError {
@@ -15,7 +15,7 @@ pub enum EpochManagerError {
     #[error("No epoch found {0:?}")]
     NoEpochFound(Epoch),
     #[error("No committee found for shard {0:?}")]
-    NoCommitteeFound(ShardId),
+    NoCommitteeFound(SubstateAddress),
     #[error("Unexpected request")]
     UnexpectedRequest,
     #[error("Unexpected response")]
@@ -24,8 +24,11 @@ pub enum EpochManagerError {
     SqlLiteStorageError(anyhow::Error),
     #[error("No validator nodes found for current shard key")]
     ValidatorNodesNotFound,
-    #[error("No committee VNs found for shard {shard_id} and epoch {epoch}")]
-    NoCommitteeVns { shard_id: ShardId, epoch: Epoch },
+    #[error("No committee VNs found for shard {substate_address} and epoch {epoch}")]
+    NoCommitteeVns {
+        substate_address: SubstateAddress,
+        epoch: Epoch,
+    },
     #[error("Validator node {address} is not registered at epoch {epoch}")]
     ValidatorNodeNotRegistered { address: String, epoch: Epoch },
     #[error("Base layer consensus constants not set")]

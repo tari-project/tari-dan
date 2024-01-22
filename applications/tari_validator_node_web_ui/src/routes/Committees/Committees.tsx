@@ -66,9 +66,9 @@ function Committees({ committees, peerId }: { committees: CommitteeShardInfo[] |
           <TableBody>
             {committees.map((committee) => (
               <Committee
-                key={committee.bucket}
-                begin={committee.shard_range.start}
-                end={committee.shard_range.end}
+                key={committee.shard}
+                begin={committee.substate_address_range.start}
+                end={committee.substate_address_range.end}
                 members={committee.validators}
                 peerId={peerId}
               />
