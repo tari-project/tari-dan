@@ -363,7 +363,7 @@ impl From<ForeignProposalState> for proto::consensus::ForeignProposalState {
     fn from(value: ForeignProposalState) -> Self {
         match value {
             ForeignProposalState::New => proto::consensus::ForeignProposalState::New,
-            ForeignProposalState::Mined => proto::consensus::ForeignProposalState::Mined,
+            ForeignProposalState::Proposed => proto::consensus::ForeignProposalState::Mined,
             ForeignProposalState::Deleted => proto::consensus::ForeignProposalState::Deleted,
         }
     }
@@ -375,7 +375,7 @@ impl TryFrom<proto::consensus::ForeignProposalState> for ForeignProposalState {
     fn try_from(value: proto::consensus::ForeignProposalState) -> Result<Self, Self::Error> {
         match value {
             proto::consensus::ForeignProposalState::New => Ok(ForeignProposalState::New),
-            proto::consensus::ForeignProposalState::Mined => Ok(ForeignProposalState::Mined),
+            proto::consensus::ForeignProposalState::Mined => Ok(ForeignProposalState::Proposed),
             proto::consensus::ForeignProposalState::Deleted => Ok(ForeignProposalState::Deleted),
             proto::consensus::ForeignProposalState::UnknownState => Err(anyhow!("Foreign proposal state not provided")),
         }
@@ -390,7 +390,7 @@ impl From<&ForeignProposal> for proto::consensus::ForeignProposal {
             bucket: value.bucket.as_u32(),
             block_id: value.block_id.as_bytes().to_vec(),
             state: proto::consensus::ForeignProposalState::from(value.state).into(),
-            mined_at: value.mined_at.map(|a| a.0).unwrap_or(0),
+            mined_at: value.proposed_height.map(|a| a.0).unwrap_or(0),
         }
     }
 }
@@ -405,7 +405,7 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
             state: proto::consensus::ForeignProposalState::try_from(value.state)
                 .map_err(|_| anyhow!("Invalid foreign proposal state value {}", value.state))?
                 .try_into()?,
-            mined_at: if value.mined_at == 0 {
+            proposed_height: if value.mined_at == 0 {
                 None
             } else {
                 Some(NodeHeight(value.mined_at))

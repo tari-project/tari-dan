@@ -34,6 +34,7 @@ use tari_dan_storage::{
         Decision,
         Evidence,
         ForeignProposal,
+        ForeignProposalState,
         ForeignReceiveCounters,
         ForeignSendCounters,
         HighQc,
@@ -398,7 +399,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         use crate::schema::foreign_proposals;
 
         let foreign_proposals = foreign_proposals::table
-            .filter(foreign_proposals::state.eq("New"))
+            .filter(foreign_proposals::state.eq(ForeignProposalState::New.to_string()))
             .load::<sql_models::ForeignProposal>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "foreign_proposal_get_all",

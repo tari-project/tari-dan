@@ -190,17 +190,16 @@ where TConsensusSpec: ConsensusSpec
         let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
         let commands = ForeignProposal::get_all_new(tx)?
             .into_iter()
-            .filter_map(|foreign_proposal| {
-                if pending_proposals.iter().any(|pending_proposal| {
+            .filter(|foreign_proposal| {
+                // If the foreign proposal is already pending, don't propose it again
+                !pending_proposals.iter().any(|pending_proposal| {
                     pending_proposal.bucket == foreign_proposal.bucket &&
                         pending_proposal.block_id == foreign_proposal.block_id
-                }) {
-                    None
-                } else {
-                    Some(Ok(Command::ForeignProposal(
-                        foreign_proposal.set_mined_at(parent_block.height().saturating_add(NodeHeight(1))),
-                    )))
-                }
+                })
+            })
+            .map(|mut foreign_proposal| {
+                foreign_proposal.set_proposed_height(parent_block.height().saturating_add(NodeHeight(1)));
+                Ok(Command::ForeignProposal(foreign_proposal))
             })
             .chain(batch.into_iter().map(|t| match t.current_stage() {
                 // If the transaction is New, propose to Prepare it
