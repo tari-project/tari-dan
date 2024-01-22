@@ -13,8 +13,11 @@ tari_template_macros = { workspace = true, optional = true }
 tari_bor = { workspace = true, default-features = false }
 
 newtype-ops = { workspace = true }
-serde = { workspace = true, default-features = false, features = ["derive", "alloc"] }
-serde-byte-array = { workspace = true }
+serde = { workspace = true, default-features = false, features = [
+    "derive",
+    "alloc",
+] }
+serde_with = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
@@ -23,9 +26,3 @@ serde_json = { workspace = true }
 default = ["macro", "std"]
 macro = ["tari_template_macros"]
 std = ["serde/std", "tari_bor/std"]
-
-[package.metadata.cargo-machete]
-ignored = [
-    # Used but not detectable by machete
-    "serde-byte-array",
-]
