@@ -96,15 +96,8 @@ async function getRecentTransactions() {
 async function getTransaction(transaction_id: string) {
   return await jsonRpc("get_transaction", { transaction_id });
 }
-async function getFees(
-  start_epoch: number,
-  end_epoch: number,
-  claim_leader_public_key: string,
-) {
-  return await jsonRpc("get_fees", [
-    [start_epoch, end_epoch],
-    claim_leader_public_key,
-  ]);
+async function getFees(start_epoch: number, end_epoch: number, claim_leader_public_key: string) {
+  return await jsonRpc("get_fees", [[start_epoch, end_epoch], claim_leader_public_key]);
 }
 async function getUpSubstates(transaction_id: string) {
   return await jsonRpc("get_substates_created_by_transaction", {

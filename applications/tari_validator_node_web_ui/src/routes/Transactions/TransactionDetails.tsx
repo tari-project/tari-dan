@@ -23,22 +23,8 @@
 import { useState, useEffect } from "react";
 import { useLocation, useParams } from "react-router-dom";
 // import { transactionsGet } from '../../utils/json_rpc';
-import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
-} from "../../Components/Accordion";
-import {
-  Grid,
-  Table,
-  TableContainer,
-  TableBody,
-  TableRow,
-  TableCell,
-  Button,
-  Fade,
-  Alert,
-} from "@mui/material";
+import { Accordion, AccordionDetails, AccordionSummary } from "../../Components/Accordion";
+import { Grid, Table, TableContainer, TableBody, TableRow, TableCell, Button, Fade, Alert } from "@mui/material";
 import Typography from "@mui/material/Typography";
 import { DataTableCell, StyledPaper } from "../../Components/StyledComponents";
 import PageHeading from "../../Components/PageHeading";
@@ -51,11 +37,7 @@ import StatusChip from "../../Components/StatusChip";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Loading from "../../Components/Loading";
-import {
-  getUpSubstates,
-  getTransaction,
-  getDownSubstates,
-} from "../../utils/json_rpc";
+import { getUpSubstates, getTransaction, getDownSubstates } from "../../utils/json_rpc";
 import { displayDuration } from "../../utils/helpers";
 
 export default function TransactionDetails() {
@@ -69,13 +51,7 @@ export default function TransactionDetails() {
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<String>();
-  const {
-    execution_time,
-    result,
-    transaction,
-    finalized_time,
-    final_decision,
-  } = state;
+  const { execution_time, result, transaction, finalized_time, final_decision } = state;
 
   const getTransactionByHash = () => {
     setLoading(true);
@@ -112,19 +88,14 @@ export default function TransactionDetails() {
             (acc: number, cur: any) =>
               acc +
               Number(
-                cur?.substate_value?.TransactionReceipt?.fee_receipt
-                  ?.fee_resource?.Confidential?.revealed_amount || 0,
+                cur?.substate_value?.TransactionReceipt?.fee_receipt?.fee_resource?.Confidential?.revealed_amount || 0,
               ),
             0,
           ),
         );
       })
       .catch((err) => {
-        setError(
-          err && err.message
-            ? err.message
-            : `Unknown error: ${JSON.stringify(err)}`,
-        );
+        setError(err && err.message ? err.message : `Unknown error: ${JSON.stringify(err)}`);
       })
       .finally(() => {
         setLoading(false);
@@ -135,16 +106,15 @@ export default function TransactionDetails() {
     getTransactionByHash();
   }, []);
 
-  const handleChange =
-    (panel: string) => (event: React.SyntheticEvent, isExpanded: boolean) => {
-      setExpandedPanels((prevExpandedPanels) => {
-        if (isExpanded) {
-          return [...prevExpandedPanels, panel];
-        } else {
-          return prevExpandedPanels.filter((p) => p !== panel);
-        }
-      });
-    };
+  const handleChange = (panel: string) => (event: React.SyntheticEvent, isExpanded: boolean) => {
+    setExpandedPanels((prevExpandedPanels) => {
+      if (isExpanded) {
+        return [...prevExpandedPanels, panel];
+      } else {
+        return prevExpandedPanels.filter((p) => p !== panel);
+      }
+    });
+  };
 
   const renderResult = (result: any) => {
     if (result) {
@@ -152,21 +122,14 @@ export default function TransactionDetails() {
         return <span>Accepted</span>;
       }
       if (result.finalize.result.AcceptFeeRejectRest) {
-        return
-          <span>
-            {result.finalize.result.AcceptFeeRejectRest[1].ExecutionFailure}
-          </span>
-        ;
+        return;
+        <span>{result.finalize.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>;
       }
       if (result.finalize.result.Reject) {
         return (
           <span>
             {Object.keys(result.finalize.result.Reject)[0]} -{" "}
-            {
-              result.finalize.result.Reject[
-                Object.keys(result.finalize.result.Reject)[0]
-              ]
-            }
+            {result.finalize.result.Reject[Object.keys(result.finalize.result.Reject)[0]]}
           </span>
         );
       }
@@ -224,14 +187,8 @@ export default function TransactionDetails() {
                             <DataTableCell>
                               {renderResult(result)}
                               <br />
-                              Executed in{" "}
-                              {execution_time
-                                ? displayDuration(execution_time)
-                                : "--"}
-                              , Finalized in{" "}
-                              {finalized_time
-                                ? displayDuration(finalized_time)
-                                : "--"}
+                              Executed in {execution_time ? displayDuration(execution_time) : "--"}, Finalized in{" "}
+                              {finalized_time ? displayDuration(finalized_time) : "--"}
                             </DataTableCell>
                           </TableRow>
                         </TableBody>
