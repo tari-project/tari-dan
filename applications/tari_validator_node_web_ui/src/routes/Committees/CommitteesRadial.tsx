@@ -56,8 +56,8 @@ export default function CommitteesRadial({ committees }: { committees: GetNetwor
     };
 
     dataset.forEach((data: CommitteeShardInfo) => {
-      const start = fromHexString(data.shard_range.start)[0];
-      const end = fromHexString(data.shard_range.end)[0];
+      const start = fromHexString(data.substate_address_range.start)[0];
+      const end = fromHexString(data.substate_address_range.end)[0];
 
       switch (true) {
         case start === end:
@@ -86,7 +86,7 @@ export default function CommitteesRadial({ committees }: { committees: GetNetwor
       }
     });
     setChartData(info);
-    const newTitles = dataset.map((info) => `Committee ${info.bucket}`);
+    const newTitles = dataset.map((info) => `Committee ${info.shard}`);
     setTitles(newTitles);
   }, [committees]);
 
@@ -95,7 +95,7 @@ export default function CommitteesRadial({ committees }: { committees: GetNetwor
     const data = committees.committees[dataIndex];
     const {
       validators,
-      shard_range: { start, end },
+      substate_address_range: { start, end },
     } = data;
 
     const memberList = validators
