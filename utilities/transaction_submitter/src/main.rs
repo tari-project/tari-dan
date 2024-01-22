@@ -182,14 +182,14 @@ async fn fetch_result_summary(
                         .await
                     {
                         Ok(result) => {
-                            if result.is_finalized {
-                                let result = if let Some(diff) = result.result.unwrap().finalize.result.accept() {
+                            if let Some(ref exec_result) = result.result {
+                                let result = if let Some(diff) = exec_result.finalize.result.accept() {
                                     TxFinalized {
                                         is_committed: true,
                                         is_error: false,
                                         num_up_substates: diff.up_len(),
                                         num_down_substates: diff.down_len(),
-                                        execution_time: result.execution_time.unwrap(),
+                                        execution_time: result.execution_time.unwrap_or_default(),
                                     }
                                 } else {
                                     TxFinalized {
@@ -197,7 +197,7 @@ async fn fetch_result_summary(
                                         is_error: false,
                                         num_up_substates: 0,
                                         num_down_substates: 0,
-                                        execution_time: result.execution_time.unwrap(),
+                                        execution_time: result.execution_time.unwrap_or_default(),
                                     }
                                 };
 
