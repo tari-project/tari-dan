@@ -15,15 +15,15 @@ use tari_dan_common_types::{
     hashing,
     optional::Optional,
     serde_with,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     Epoch,
     NodeHeight,
-    ShardId,
+    SubstateAddress,
 };
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
 
-use super::{ForeignProposal, QuorumCertificate};
+use super::{ForeignProposal, QuorumCertificate, ValidatorSchnorrSignature};
 use crate::{
     consensus_models::{
         Command,
@@ -69,9 +69,11 @@ pub struct Block {
     /// Flag that indicates that the block has been committed.
     is_committed: bool,
     /// Counter for each foreign shard for reliable broadcast.
-    foreign_indexes: HashMap<ShardBucket, u64>,
+    foreign_indexes: HashMap<Shard, u64>,
     /// Timestamp when was this stored.
     stored_at: Option<PrimitiveDateTime>,
+    /// Signature of block by the proposer.
+    signature: Option<ValidatorSchnorrSignature>,
 }
 
 impl Block {
@@ -83,7 +85,8 @@ impl Block {
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
         total_leader_fee: u64,
-        foreign_indexes: HashMap<ShardBucket, u64>,
+        foreign_indexes: HashMap<Shard, u64>,
+        signature: Option<ValidatorSchnorrSignature>,
     ) -> Self {
         let mut block = Self {
             id: BlockId::genesis(),
@@ -101,6 +104,7 @@ impl Block {
             is_committed: false,
             foreign_indexes,
             stored_at: None,
+            signature,
         };
         block.id = block.calculate_hash().into();
         block
@@ -118,7 +122,8 @@ impl Block {
         is_dummy: bool,
         is_processed: bool,
         is_committed: bool,
-        foreign_indexes: HashMap<ShardBucket, u64>,
+        foreign_indexes: HashMap<Shard, u64>,
+        signature: Option<ValidatorSchnorrSignature>,
         created_at: PrimitiveDateTime,
     ) -> Self {
         Self {
@@ -137,6 +142,7 @@ impl Block {
             is_committed,
             foreign_indexes,
             stored_at: Some(created_at),
+            signature,
         }
     }
 
@@ -150,6 +156,7 @@ impl Block {
             Default::default(),
             0,
             HashMap::new(),
+            None,
         )
     }
 
@@ -170,6 +177,7 @@ impl Block {
             is_committed: true,
             foreign_indexes: HashMap::new(),
             stored_at: None,
+            signature: None,
         }
     }
 
@@ -189,6 +197,7 @@ impl Block {
             Default::default(),
             0,
             HashMap::new(),
+            None,
         );
         block.is_dummy = true;
         block.is_processed = false;
@@ -204,13 +213,7 @@ impl Block {
             .chain(&self.proposed_by)
             .chain(&self.merkle_root)
             .chain(&self.commands)
-            .chain(
-                &self
-                    .foreign_indexes
-                    .iter()
-                    .collect::<Vec<(&ShardBucket, &u64)>>()
-                    .sort(),
-            )
+            .chain(&self.foreign_indexes.iter().collect::<Vec<(&Shard, &u64)>>().sort())
             .result()
     }
 }
@@ -279,6 +282,10 @@ impl Block {
         &self.justify
     }
 
+    pub fn justifies_parent(&self) -> bool {
+        *self.justify.block_id() == self.parent
+    }
+
     pub fn height(&self) -> NodeHeight {
         self.height
     }
@@ -319,12 +326,20 @@ impl Block {
         self.is_committed
     }
 
-    pub fn get_foreign_index(&self, bucket: &ShardBucket) -> Option<&u64> {
+    pub fn get_foreign_index(&self, bucket: &Shard) -> Option<&u64> {
         self.foreign_indexes.get(bucket)
     }
 
-    pub fn get_foreign_indexes(&self) -> &HashMap<ShardBucket, u64> {
+    pub fn get_foreign_indexes(&self) -> &HashMap<Shard, u64> {
         &self.foreign_indexes
+    }
+
+    pub fn get_signature(&self) -> Option<&ValidatorSchnorrSignature> {
+        self.signature.as_ref()
+    }
+
+    pub fn set_signature(&mut self, signature: ValidatorSchnorrSignature) {
+        self.signature = Some(signature);
     }
 }
 
@@ -341,8 +356,9 @@ impl Block {
         tx: &mut TTx,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
+        include_dummy_blocks: bool,
     ) -> Result<Vec<Self>, StorageError> {
-        tx.blocks_get_all_between(start_block_id_exclusive, end_block_id_inclusive)
+        tx.blocks_get_all_between(start_block_id_exclusive, end_block_id_inclusive, include_dummy_blocks)
     }
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
@@ -415,7 +431,7 @@ impl Block {
     pub fn find_involved_shards<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
-    ) -> Result<HashSet<ShardId>, StorageError> {
+    ) -> Result<HashSet<SubstateAddress>, StorageError> {
         tx.transactions_fetch_involved_shards(self.all_transaction_ids().copied().collect())
     }
 
@@ -532,7 +548,7 @@ impl Block {
                         }));
                     } else {
                         updates.push(SubstateUpdate::Destroy {
-                            shard_id: substate.to_shard_id(),
+                            address: substate.to_substate_address(),
                             proof: QuorumCertificate::get(tx, &destroyed.justify)?,
                             destroyed_by_transaction: destroyed.by_transaction,
                         });

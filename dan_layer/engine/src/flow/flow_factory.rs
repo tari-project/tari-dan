@@ -16,6 +16,8 @@ use crate::{
     template::LoadedTemplate,
 };
 
+pub const TARI_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug, Clone)]
 pub struct FlowFactory {
     name: String,
@@ -29,6 +31,7 @@ impl FlowFactory {
     ) -> Result<Self, FlowEngineError> {
         let template_def = TemplateDef::V1(TemplateDefV1 {
             template_name: flow_definition.name.clone(),
+            tari_version: TARI_VERSION.to_owned(),
             functions: vec![FunctionDef {
                 name: "main".to_string(),
                 arguments: flow_definition

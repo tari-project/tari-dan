@@ -20,27 +20,24 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import { addAddress, getNonFungibleCollections } from '../../../utils/json_rpc';
-import { Form } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import {
-  DataTableCell,
-  BoxHeading2,
-} from '../../../Components/StyledComponents';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import TablePagination from '@mui/material/TablePagination';
-import Typography from '@mui/material/Typography';
-import { Button, TextField } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import Fade from '@mui/material/Fade';
+import { useEffect, useState } from "react";
+import { addAddress, getNonFungibleCollections } from "../../../utils/json_rpc";
+import { Form } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import { DataTableCell, BoxHeading2 } from "../../../Components/StyledComponents";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import TablePagination from "@mui/material/TablePagination";
+import Typography from "@mui/material/Typography";
+import { Button, TextField } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import Fade from "@mui/material/Fade";
 
 interface ITableAddresses {
   id: string;
@@ -50,15 +47,7 @@ interface ITableAddresses {
 
 type ColumnKey = keyof ITableAddresses;
 
-function RowData({
-  id,
-  address,
-  count,
-}: {
-  id: string;
-  address: string;
-  count: number;
-}) {
+function RowData({ id, address, count }: { id: string; address: string; count: number }) {
   const [open1, setOpen1] = useState(false);
   const [data, setData] = useState<string | null>(null);
   let navigate = useNavigate();
@@ -66,7 +55,7 @@ function RowData({
     <>
       <TableRow
         key={id}
-        sx={{ borderBottom: 'none', cursor: 'pointer' }}
+        sx={{ borderBottom: "none", cursor: "pointer" }}
         onClick={() => {
           navigate(`/nfts/${address}/`);
         }}
@@ -75,7 +64,7 @@ function RowData({
           style={{
             paddingBottom: 0,
             paddingTop: 0,
-            borderBottom: 'none',
+            borderBottom: "none",
           }}
           colSpan={1}
         >
@@ -85,7 +74,7 @@ function RowData({
           style={{
             paddingBottom: 0,
             paddingTop: 0,
-            borderBottom: 'none',
+            borderBottom: "none",
           }}
           colSpan={1}
         >
@@ -98,24 +87,22 @@ function RowData({
 
 function MonitoredNftCollections() {
   const [addresses, setAddresses] = useState<ITableAddresses[]>([]);
-  const [lastSort, setLastSort] = useState({ column: '', order: -1 });
+  const [lastSort, setLastSort] = useState({ column: "", order: -1 });
 
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const [showAddressDialog, setShowAddAddressDialog] = useState(false);
-  const [formState, setFormState] = useState({ address: '' });
+  const [formState, setFormState] = useState({ address: "" });
 
-  const showAddAddressDialog = (
-    setElseToggle: boolean = !showAddressDialog
-  ) => {
+  const showAddAddressDialog = (setElseToggle: boolean = !showAddressDialog) => {
     setShowAddAddressDialog(setElseToggle);
   };
   const onSubmitAddAddress = () => {
     addAddress(formState.address).then((resp) => {
       updatedAddresses();
     });
-    setFormState({ address: '' });
+    setFormState({ address: "" });
     setShowAddAddressDialog(false);
   };
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,16 +110,13 @@ function MonitoredNftCollections() {
   };
 
   // Avoid a layout jump when reaching the last page with empty rows.
-  const emptyRows =
-    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - addresses.length) : 0;
+  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - addresses.length) : 0;
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
@@ -144,7 +128,7 @@ function MonitoredNftCollections() {
           id: address,
           address: address,
           count: count,
-        }))
+        })),
       );
     });
   };
@@ -159,18 +143,12 @@ function MonitoredNftCollections() {
       order = -lastSort.order;
     }
     setAddresses(
-      [...addresses].sort((r0, r1) =>
-        r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0
-      )
+      [...addresses].sort((r0, r1) => (r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0)),
     );
     setLastSort({ column, order });
   };
   if (addresses === undefined) {
-    return (
-      <Typography variant="h4">
-        Monitored NFT collections ... loading
-      </Typography>
-    );
+    return <Typography variant="h4">Monitored NFT collections ... loading</Typography>;
   }
 
   return (
@@ -193,10 +171,7 @@ function MonitoredNftCollections() {
               <Button variant="contained" type="submit">
                 Add Address
               </Button>
-              <Button
-                variant="outlined"
-                onClick={() => showAddAddressDialog(false)}
-              >
+              <Button variant="outlined" onClick={() => showAddAddressDialog(false)}>
                 Cancel
               </Button>
             </Form>
@@ -205,11 +180,7 @@ function MonitoredNftCollections() {
         {!showAddressDialog && (
           <Fade in={!showAddressDialog}>
             <div className="flex-container">
-              <Button
-                startIcon={<AddIcon />}
-                onClick={() => showAddAddressDialog()}
-                variant="outlined"
-              >
+              <Button startIcon={<AddIcon />} onClick={() => showAddAddressDialog()} variant="outlined">
                 Add address
               </Button>
             </div>
@@ -220,62 +191,54 @@ function MonitoredNftCollections() {
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell
-              onClick={() => sort('address')}
-              style={{ textAlign: 'center' }}
-            >
+            <TableCell onClick={() => sort("address")} style={{ textAlign: "center" }}>
               <div
                 style={{
-                  display: 'flex',
-                  justifyContent: 'flex-start',
-                  alignItems: 'center',
-                  gap: '5px',
+                  display: "flex",
+                  justifyContent: "flex-start",
+                  alignItems: "center",
+                  gap: "5px",
                 }}
               >
                 Collection Address
-                {lastSort.column === 'address' ? (
+                {lastSort.column === "address" ? (
                   lastSort.order === 1 ? (
                     <KeyboardArrowUpIcon />
                   ) : (
                     <KeyboardArrowDownIcon />
                   )
                 ) : (
-                  ''
+                  ""
                 )}
               </div>
             </TableCell>
-            <TableCell
-              onClick={() => sort('count')}
-              style={{ textAlign: 'center' }}
-            >
+            <TableCell onClick={() => sort("count")} style={{ textAlign: "center" }}>
               <div
                 style={{
-                  display: 'flex',
-                  justifyContent: 'flex-start',
-                  alignItems: 'center',
-                  gap: '5px',
+                  display: "flex",
+                  justifyContent: "flex-start",
+                  alignItems: "center",
+                  gap: "5px",
                 }}
               >
                 Number of items
-                {lastSort.column === 'count' ? (
+                {lastSort.column === "count" ? (
                   lastSort.order === 1 ? (
                     <KeyboardArrowUpIcon />
                   ) : (
                     <KeyboardArrowDownIcon />
                   )
                 ) : (
-                  ''
+                  ""
                 )}
               </div>
             </TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {addresses
-            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-            .map(({ id, address, count }) => (
-              <RowData key={id} id={id} address={address} count={count} />
-            ))}
+          {addresses.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map(({ id, address, count }) => (
+            <RowData key={id} id={id} address={address} count={count} />
+          ))}
           {emptyRows > 0 && (
             <TableRow
               style={{

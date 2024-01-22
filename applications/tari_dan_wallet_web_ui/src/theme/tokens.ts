@@ -20,17 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { ThemeOptions } from '@mui/material/styles';
-import {
-  tariPurple,
-  blue,
-  red,
-  green,
-  orange,
-  grey,
-  teal,
-  gothic,
-} from './colors';
+import { ThemeOptions } from "@mui/material/styles";
+import { tariPurple, blue, red, green, orange, grey, teal, gothic } from "./colors";
 
 export const componentSettings: ThemeOptions = {
   shape: {
@@ -42,31 +33,31 @@ export const componentSettings: ThemeOptions = {
     fontSize: 14,
     body1: {},
     body2: {
-      lineHeight: '1.5rem',
+      lineHeight: "1.5rem",
     },
     h1: {
-      fontSize: '2.2rem',
-      lineHeight: '3.2rem',
+      fontSize: "2.2rem",
+      lineHeight: "3.2rem",
     },
     h2: {
-      fontSize: '1.9rem',
-      lineHeight: '2.9rem',
+      fontSize: "1.9rem",
+      lineHeight: "2.9rem",
     },
     h3: {
-      fontSize: '1.6rem',
-      lineHeight: '2.6rem',
+      fontSize: "1.6rem",
+      lineHeight: "2.6rem",
     },
     h4: {
-      fontSize: '1.3rem',
-      lineHeight: '2.3rem',
+      fontSize: "1.3rem",
+      lineHeight: "2.3rem",
     },
     h5: {
-      fontSize: '1rem',
-      lineHeight: '2em',
+      fontSize: "1rem",
+      lineHeight: "2em",
     },
     h6: {
-      fontSize: '0.875rem',
-      lineHeight: '1.8rem',
+      fontSize: "0.875rem",
+      lineHeight: "1.8rem",
     },
   },
   transitions: {
@@ -78,9 +69,9 @@ export const componentSettings: ThemeOptions = {
   components: {
     MuiButton: {
       defaultProps: {
-        size: 'large',
+        size: "large",
         sx: {
-          textTransform: 'none',
+          textTransform: "none",
         },
       },
     },
@@ -108,9 +99,9 @@ export const componentSettings: ThemeOptions = {
     MuiFormControlLabel: {
       defaultProps: {
         sx: {
-          '& .MuiTypography-root': {
-            fontSize: '0.875rem',
-            lineHeight: '1.8rem',
+          "& .MuiTypography-root": {
+            fontSize: "0.875rem",
+            lineHeight: "1.8rem",
             color: (theme) => theme.palette.text.disabled,
           },
         },
@@ -129,7 +120,7 @@ export const componentSettings: ThemeOptions = {
 
 export const light: ThemeOptions = {
   palette: {
-    mode: 'light',
+    mode: "light",
     primary: {
       main: tariPurple[600],
       dark: tariPurple[700],
@@ -140,7 +131,7 @@ export const light: ThemeOptions = {
       dark: gothic[500],
       light: teal[400],
     },
-    divider: 'rgba(0,0,0,0.08)',
+    divider: "rgba(0,0,0,0.08)",
     text: {
       primary: grey[950],
       secondary: grey[600],
@@ -148,38 +139,38 @@ export const light: ThemeOptions = {
     },
     background: {
       default: grey[50],
-      paper: '#fff',
+      paper: "#fff",
     },
     success: {
       main: green[500],
       dark: green[600],
       light: green[400],
-      contrastText: '#ffffff',
+      contrastText: "#ffffff",
     },
     warning: {
       main: orange[300],
       dark: orange[400],
       light: orange[200],
-      contrastText: '#ffffff',
+      contrastText: "#ffffff",
     },
     error: {
       main: red[500],
       dark: red[600],
       light: red[400],
-      contrastText: '#ffffff',
+      contrastText: "#ffffff",
     },
     info: {
       main: blue[500],
       dark: blue[700],
       light: blue[400],
-      contrastText: '#ffffff',
+      contrastText: "#ffffff",
     },
   },
 };
 
 export const dark: ThemeOptions = {
   palette: {
-    mode: 'dark',
+    mode: "dark",
     primary: {
       main: tariPurple[500],
       dark: tariPurple[400],
@@ -190,11 +181,11 @@ export const dark: ThemeOptions = {
       dark: teal[300],
       light: gothic[400],
     },
-    divider: 'rgba(255,255,255,0.04)',
+    divider: "rgba(255,255,255,0.04)",
     text: {
-      primary: '#FFFFFF',
+      primary: "#FFFFFF",
       secondary: grey[300],
-      disabled: 'rgba(255,255,255,0.4)',
+      disabled: "rgba(255,255,255,0.4)",
     },
     background: {
       default: grey[950],
@@ -204,25 +195,25 @@ export const dark: ThemeOptions = {
       main: green[500],
       dark: green[400],
       light: green[600],
-      contrastText: '#ffffff',
+      contrastText: "#ffffff",
     },
     warning: {
       main: orange[300],
       dark: orange[200],
       light: orange[400],
-      contrastText: '#ffffff',
+      contrastText: "#ffffff",
     },
     error: {
       main: red[500],
       dark: red[600],
       light: red[500],
-      contrastText: '#ffffff',
+      contrastText: "#ffffff",
     },
     info: {
       main: blue[500],
       dark: blue[700],
       light: blue[400],
-      contrastText: '#ffffff',
+      contrastText: "#ffffff",
     },
   },
 };

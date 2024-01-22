@@ -6,7 +6,7 @@ use std::fmt::Display;
 use tari_dan_common_types::optional::Optional;
 use tari_dan_wallet_sdk::{
     apis::accounts::{AccountsApi, AccountsApiError},
-    models::{Account, VersionedSubstateAddress},
+    models::{Account, VersionedSubstateId},
     DanWalletSdk,
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
@@ -46,7 +46,7 @@ pub async fn wait_for_result(
 pub fn get_account_with_inputs(
     account: Option<ComponentAddressOrName>,
     sdk: &DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>,
-) -> Result<(Account, Vec<VersionedSubstateAddress>), anyhow::Error> {
+) -> Result<(Account, Vec<VersionedSubstateId>), anyhow::Error> {
     let account = get_account_or_default(account, &sdk.accounts_api())?;
 
     let mut inputs = vec![];

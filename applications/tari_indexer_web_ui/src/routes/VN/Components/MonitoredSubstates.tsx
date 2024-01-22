@@ -20,36 +20,26 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import {
-  addAddress,
-  deleteAddress,
-  getAddresses,
-  inspectSubstate,
-} from '../../../utils/json_rpc';
-import { Form } from 'react-router-dom';
-import { renderJson } from '../../../utils/helpers';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import {
-  DataTableCell,
-  CodeBlock,
-  AccordionIconButton,
-  BoxHeading2,
-} from '../../../Components/StyledComponents';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import Collapse from '@mui/material/Collapse';
-import TablePagination from '@mui/material/TablePagination';
-import Typography from '@mui/material/Typography';
-import { Button, TextField } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import { ConfirmDialog } from '../../../Components/AlertDialog';
-import Fade from '@mui/material/Fade';
+import { useEffect, useState } from "react";
+import { addAddress, deleteAddress, getAddresses, inspectSubstate } from "../../../utils/json_rpc";
+import { Form } from "react-router-dom";
+import { renderJson } from "../../../utils/helpers";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import { DataTableCell, CodeBlock, AccordionIconButton, BoxHeading2 } from "../../../Components/StyledComponents";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import Collapse from "@mui/material/Collapse";
+import TablePagination from "@mui/material/TablePagination";
+import Typography from "@mui/material/Typography";
+import { Button, TextField } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import { ConfirmDialog } from "../../../Components/AlertDialog";
+import Fade from "@mui/material/Fade";
 
 interface ITableAddresses {
   id: string;
@@ -74,12 +64,12 @@ function RowData({
   const [data, setData] = useState<string | null>(null);
   return (
     <>
-      <TableRow key={id} sx={{ borderBottom: 'none' }}>
+      <TableRow key={id} sx={{ borderBottom: "none" }}>
         <DataTableCell
           style={{
             paddingBottom: 0,
             paddingTop: 0,
-            borderBottom: 'none',
+            borderBottom: "none",
           }}
           colSpan={1}
         >
@@ -89,13 +79,13 @@ function RowData({
           style={{
             paddingBottom: 0,
             paddingTop: 0,
-            borderBottom: 'none',
+            borderBottom: "none",
           }}
           colSpan={1}
         >
           {version}
         </DataTableCell>
-        <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+        <DataTableCell sx={{ borderBottom: "none", textAlign: "center" }}>
           <AccordionIconButton
             open={open1}
             aria-label="expand row"
@@ -107,7 +97,7 @@ function RowData({
                     setData(JSON.stringify(resp));
                   })
                   .catch((error) => {
-                    console.log('Error', error);
+                    console.log("Error", error);
                   });
               }
               setOpen1(!open1);
@@ -130,9 +120,7 @@ function RowData({
       <TableRow key={`${id}-2`}>
         <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={4}>
           <Collapse in={open1} timeout="auto" unmountOnExit>
-            <CodeBlock style={{ marginBottom: '10px' }}>
-              {data ? renderJson(JSON.parse(data)) : null}
-            </CodeBlock>
+            <CodeBlock style={{ marginBottom: "10px" }}>{data ? renderJson(JSON.parse(data)) : null}</CodeBlock>
           </Collapse>
         </DataTableCell>
       </TableRow>
@@ -142,24 +130,22 @@ function RowData({
 
 function MonitoredSubstates() {
   const [addresses, setAddresses] = useState<ITableAddresses[]>([]);
-  const [lastSort, setLastSort] = useState({ column: '', order: -1 });
+  const [lastSort, setLastSort] = useState({ column: "", order: -1 });
 
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const [showAddressDialog, setShowAddAddressDialog] = useState(false);
-  const [formState, setFormState] = useState({ address: '' });
+  const [formState, setFormState] = useState({ address: "" });
 
-  const showAddAddressDialog = (
-    setElseToggle: boolean = !showAddressDialog
-  ) => {
+  const showAddAddressDialog = (setElseToggle: boolean = !showAddressDialog) => {
     setShowAddAddressDialog(setElseToggle);
   };
   const onSubmitAddAddress = () => {
     addAddress(formState.address).then((resp) => {
       updatedAddresses();
     });
-    setFormState({ address: '' });
+    setFormState({ address: "" });
     setShowAddAddressDialog(false);
   };
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,16 +153,13 @@ function MonitoredSubstates() {
   };
 
   // Avoid a layout jump when reaching the last page with empty rows.
-  const emptyRows =
-    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - addresses.length) : 0;
+  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - addresses.length) : 0;
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
@@ -188,7 +171,7 @@ function MonitoredSubstates() {
           id: address,
           address: address,
           version: version,
-        }))
+        })),
       );
     });
   };
@@ -209,21 +192,17 @@ function MonitoredSubstates() {
       order = -lastSort.order;
     }
     setAddresses(
-      [...addresses].sort((r0, r1) =>
-        r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0
-      )
+      [...addresses].sort((r0, r1) => (r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0)),
     );
     setLastSort({ column, order });
   };
   if (addresses === undefined) {
-    return (
-      <Typography variant="h4">Monitored addresses ... loading</Typography>
-    );
+    return <Typography variant="h4">Monitored addresses ... loading</Typography>;
   }
 
   return (
     <TableContainer>
-      <BoxHeading2 style={{ minHeight: '75px' }}>
+      <BoxHeading2 style={{ minHeight: "75px" }}>
         {showAddressDialog && (
           <Fade in={showAddressDialog}>
             <Form onSubmit={onSubmitAddAddress} className="add-confirm-form">
@@ -237,10 +216,7 @@ function MonitoredSubstates() {
               <Button variant="contained" type="submit">
                 Add Address
               </Button>
-              <Button
-                variant="outlined"
-                onClick={() => showAddAddressDialog(false)}
-              >
+              <Button variant="outlined" onClick={() => showAddAddressDialog(false)}>
                 Cancel
               </Button>
             </Form>
@@ -249,11 +225,7 @@ function MonitoredSubstates() {
         {!showAddressDialog && (
           <Fade in={!showAddressDialog}>
             <div className="flex-container">
-              <Button
-                startIcon={<AddIcon />}
-                onClick={() => showAddAddressDialog()}
-                variant="outlined"
-              >
+              <Button startIcon={<AddIcon />} onClick={() => showAddAddressDialog()} variant="outlined">
                 Add address
               </Button>
             </div>
@@ -264,69 +236,55 @@ function MonitoredSubstates() {
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell
-              onClick={() => sort('address')}
-              style={{ textAlign: 'center' }}
-            >
+            <TableCell onClick={() => sort("address")} style={{ textAlign: "center" }}>
               <div
                 style={{
-                  display: 'flex',
-                  justifyContent: 'flex-start',
-                  alignItems: 'center',
-                  gap: '5px',
+                  display: "flex",
+                  justifyContent: "flex-start",
+                  alignItems: "center",
+                  gap: "5px",
                 }}
               >
                 Address
-                {lastSort.column === 'address' ? (
+                {lastSort.column === "address" ? (
                   lastSort.order === 1 ? (
                     <KeyboardArrowUpIcon />
                   ) : (
                     <KeyboardArrowDownIcon />
                   )
                 ) : (
-                  ''
+                  ""
                 )}
               </div>
             </TableCell>
-            <TableCell
-              onClick={() => sort('version')}
-              style={{ textAlign: 'center' }}
-            >
+            <TableCell onClick={() => sort("version")} style={{ textAlign: "center" }}>
               <div
                 style={{
-                  display: 'flex',
-                  justifyContent: 'flex-start',
-                  alignItems: 'center',
-                  gap: '5px',
+                  display: "flex",
+                  justifyContent: "flex-start",
+                  alignItems: "center",
+                  gap: "5px",
                 }}
               >
                 Version
-                {lastSort.column === 'version' ? (
+                {lastSort.column === "version" ? (
                   lastSort.order === 1 ? (
                     <KeyboardArrowUpIcon />
                   ) : (
                     <KeyboardArrowDownIcon />
                   )
                 ) : (
-                  ''
+                  ""
                 )}
               </div>
             </TableCell>
-            <TableCell style={{ textAlign: 'center' }}>Substate</TableCell>
+            <TableCell style={{ textAlign: "center" }}>Substate</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {addresses
-            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-            .map(({ id, address, version }) => (
-              <RowData
-                key={id}
-                id={id}
-                address={address}
-                version={version}
-                onDelete={onDelete}
-              />
-            ))}
+          {addresses.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map(({ id, address, version }) => (
+            <RowData key={id} id={id} address={address} version={version} onDelete={onDelete} />
+          ))}
           {emptyRows > 0 && (
             <TableRow
               style={{

@@ -7,8 +7,8 @@ use tari_template_lib::auth::{
     Ownership,
     RequireRule,
     ResourceAuthAction,
-    ResourceOrNonFungibleAddress,
     RestrictedAccessRule,
+    RuleRequirement,
 };
 
 use crate::runtime::{
@@ -154,19 +154,19 @@ fn check_require_rule(
     rule: &RequireRule,
 ) -> Result<bool, RuntimeError> {
     match rule {
-        RequireRule::Require(resx_or_addr) => check_resource_or_non_fungible(state, scope, resx_or_addr),
-        RequireRule::AnyOf(resx_or_addrs) => {
-            for resx_or_addr in resx_or_addrs {
-                if check_resource_or_non_fungible(state, scope, resx_or_addr)? {
+        RequireRule::Require(requirement) => check_requirement(state, scope, requirement),
+        RequireRule::AnyOf(requirements) => {
+            for requirement in requirements {
+                if check_requirement(state, scope, requirement)? {
                     return Ok(true);
                 }
             }
 
             Ok(false)
         },
-        RequireRule::AllOf(resx_or_addr) => {
-            for resx_or_addr in resx_or_addr {
-                if !check_resource_or_non_fungible(state, scope, resx_or_addr)? {
+        RequireRule::AllOf(requirement) => {
+            for requirement in requirement {
+                if !check_requirement(state, scope, requirement)? {
                     return Ok(false);
                 }
             }
@@ -176,13 +176,13 @@ fn check_require_rule(
     }
 }
 
-fn check_resource_or_non_fungible(
+fn check_requirement(
     state: &WorkingState,
     scope: &AuthorizationScope,
-    resx_or_addr: &ResourceOrNonFungibleAddress,
+    requirement: &RuleRequirement,
 ) -> Result<bool, RuntimeError> {
-    match resx_or_addr {
-        ResourceOrNonFungibleAddress::Resource(resx) => {
+    match requirement {
+        RuleRequirement::Resource(resx) => {
             if scope
                 .virtual_proofs()
                 .iter()
@@ -200,7 +200,7 @@ fn check_resource_or_non_fungible(
             }
             Ok(false)
         },
-        ResourceOrNonFungibleAddress::NonFungibleAddress(addr) => {
+        RuleRequirement::NonFungibleAddress(addr) => {
             if scope.virtual_proofs().contains(addr) {
                 return Ok(true);
             }
@@ -216,6 +216,13 @@ fn check_resource_or_non_fungible(
             }
 
             Ok(false)
+        },
+        RuleRequirement::ScopedToComponent(address) => {
+            Ok(state.current_component()?.map_or(false, |current| current == *address))
+        },
+        RuleRequirement::ScopedToTemplate(address) => {
+            let (current, _) = state.current_template()?;
+            Ok(current == address)
         },
     }
 }

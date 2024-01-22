@@ -11,7 +11,7 @@ use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     NodeHeight,
 };
 use tari_dan_storage::{
@@ -36,7 +36,7 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_local_proposal";
 
-pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
+pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -44,7 +44,7 @@ pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
     on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock<TConsensusSpec>,
 }
 
-impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
+impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec> {
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
         store: TConsensusSpec::StateStore,
@@ -52,7 +52,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         leader_strategy: TConsensusSpec::LeaderStrategy,
         pacemaker: PaceMakerHandle,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
-        vote_signing_service: TConsensusSpec::VoteSignatureService,
+        vote_signing_service: TConsensusSpec::SignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
@@ -137,6 +137,13 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         self.store.with_write_tx(|tx| {
             match self.validate_local_proposed_block(tx, block, &local_committee, &local_committee_shard) {
                 Ok(validated) => Ok(Some(validated)),
+                // Propagate this error out as sync is needed in the case where we have a valid QC but do not know the
+                // block
+                Err(
+                    err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound {
+                        ..
+                    }),
+                ) => Err(err),
                 // Validation errors should not cause a FAILURE state transition
                 Err(HotStuffError::ProposalValidationError(err)) => {
                     warn!(target: LOG_TARGET, "❌ Block failed validation: {}", err);
@@ -152,12 +159,12 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         num_committees: u32,
-        local_bucket: ShardBucket,
+        local_bucket: Shard,
         block: &Block,
         justify_block: &BlockId,
     ) -> Result<bool, HotStuffError> {
         let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), justify_block)?;
-        let non_local_buckets = proposer::get_non_local_buckets(tx.deref_mut(), block, num_committees, local_bucket)?;
+        let non_local_buckets = proposer::get_non_local_shards(tx.deref_mut(), block, num_committees, local_bucket)?;
         let mut foreign_indexes = HashMap::new();
         for non_local_bucket in non_local_buckets {
             foreign_indexes
@@ -227,7 +234,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         if !self.check_foreign_indexes(
             tx,
             local_committee_shard.num_committees(),
-            local_committee_shard.bucket(),
+            local_committee_shard.shard(),
             &candidate_block,
             justify_block.id(),
         )? {

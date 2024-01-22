@@ -6,7 +6,7 @@ use std::{sync::Arc, time::Instant};
 use log::*;
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{services::template_provider::TemplateProvider, ShardId};
+use tari_dan_common_types::{services::template_provider::TemplateProvider, SubstateAddress};
 use tari_dan_engine::{
     fees::{FeeModule, FeeTable},
     runtime::{AuthParams, RuntimeModule, VirtualSubstates},
@@ -90,7 +90,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             .accept()
             .map(|diff| {
                 diff.up_iter()
-                    .map(|(addr, substate)| ShardId::from_address(addr, substate.version()))
+                    .map(|(addr, substate)| SubstateAddress::from_address(addr, substate.version()))
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();

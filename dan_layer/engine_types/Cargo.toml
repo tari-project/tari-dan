@@ -1,31 +1,31 @@
 [package]
 name = "tari_engine_types"
-version = "0.2.0"
-edition = "2021"
-authors = ["The Tari Development Community"]
 description = "Shared Tari engine data types"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_bor = { path = "../tari_bor", features = ["json_encoding"] }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_crypto = { version = "0.19", features = ["borsh"] }
-tari_template_abi = { path = "../template_abi", features = ["std"] }
-tari_template_lib = { path = "../template_lib" }
-tari_utilities = "0.6"
+tari_bor = { workspace = true, features = ["json_encoding"] }
+tari_common_types = { workspace = true }
+tari_crypto = { workspace = true, features = ["borsh"] }
+tari_template_abi = { workspace = true, features = ["std"] }
+tari_template_lib = { workspace = true }
+tari_utilities = { workspace = true }
 
-borsh = "0.10"
+borsh = { workspace = true }
+# if we set this version in the workspace it would break other crates
 base64 = "0.21.0"
-blake2 = "0.10.6"
-rand = "0.8"
-digest = "0.10"
-hex = { version = "0.4", features = ["serde"] }
-lazy_static = "1.4.0"
-serde = "1.0"
-serde_json = "1.0"
-thiserror = "1"
-
+blake2 = { workspace = true }
+rand = { workspace = true }
+digest = { workspace = true }
+hex = { workspace = true, features = ["serde"] }
+lazy_static = { workspace = true }
+serde = { workspace = true, default-features = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
 
 [features]
 default = ["debugging"]

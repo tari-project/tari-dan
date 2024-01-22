@@ -37,7 +37,7 @@ use tari_common::{
 };
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_app_utilities::{
-    config::{P2pConfig, PeerSeedsConfig, RpcConfig},
+    p2p_config::{P2pConfig, PeerSeedsConfig, RpcConfig},
     template_manager::implementation::TemplateConfig,
 };
 

@@ -94,12 +94,14 @@ pub async fn spawn_services(
         tari_networking::Config {
             listener_port: config.indexer.p2p.listener_port,
             swarm: SwarmConfig {
-                protocol_version: "/tari/devnet/0.0.1".try_into().unwrap(),
+                protocol_version: format!("/tari/{}/0.0.1", config.network).parse().unwrap(),
                 user_agent: "/tari/indexer/0.0.1".to_string(),
                 enable_mdns: config.indexer.p2p.enable_mdns,
                 ..Default::default()
             },
             reachability_mode: config.indexer.p2p.reachability_mode.into(),
+            announce: false,
+            ..Default::default()
         },
         seed_peers,
         shutdown.clone(),

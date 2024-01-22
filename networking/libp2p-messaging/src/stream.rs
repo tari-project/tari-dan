@@ -7,8 +7,8 @@ use libp2p::{
 };
 
 pub type StreamId = u64;
-pub fn channel<T>(stream_id: StreamId, peer_id: PeerId, size: usize) -> (MessageSink<T>, MessageStream<T>) {
-    let (sender, receiver) = mpsc::channel(size);
+pub fn channel<T>(stream_id: StreamId, peer_id: PeerId) -> (MessageSink<T>, MessageStream<T>) {
+    let (sender, receiver) = mpsc::unbounded();
     let sink = MessageSink::new(stream_id, peer_id, sender);
     let stream = MessageStream::new(stream_id, peer_id, receiver);
     (sink, stream)
@@ -18,11 +18,11 @@ pub fn channel<T>(stream_id: StreamId, peer_id: PeerId, size: usize) -> (Message
 pub struct MessageStream<TMsg> {
     stream_id: StreamId,
     peer_id: PeerId,
-    receiver: mpsc::Receiver<TMsg>,
+    receiver: mpsc::UnboundedReceiver<TMsg>,
 }
 
 impl<TMsg> MessageStream<TMsg> {
-    pub fn new(stream_id: StreamId, peer_id: PeerId, receiver: mpsc::Receiver<TMsg>) -> Self {
+    pub fn new(stream_id: StreamId, peer_id: PeerId, receiver: mpsc::UnboundedReceiver<TMsg>) -> Self {
         Self {
             stream_id,
             peer_id,
@@ -43,14 +43,15 @@ impl<TMsg> MessageStream<TMsg> {
     }
 }
 
+#[derive(Debug)]
 pub struct MessageSink<TMsg> {
     stream_id: StreamId,
     peer_id: PeerId,
-    sender: mpsc::Sender<TMsg>,
+    sender: mpsc::UnboundedSender<TMsg>,
 }
 
 impl<TMsg> MessageSink<TMsg> {
-    pub fn new(stream_id: StreamId, peer_id: PeerId, sender: mpsc::Sender<TMsg>) -> Self {
+    pub fn new(stream_id: StreamId, peer_id: PeerId, sender: mpsc::UnboundedSender<TMsg>) -> Self {
         Self {
             stream_id,
             peer_id,
@@ -66,8 +67,8 @@ impl<TMsg> MessageSink<TMsg> {
         self.stream_id
     }
 
-    pub async fn send(&mut self, msg: TMsg) -> Result<(), crate::Error> {
-        self.sender.send(msg).await.map_err(|_| crate::Error::ChannelClosed)
+    pub fn send(&mut self, msg: TMsg) -> Result<(), crate::Error> {
+        self.sender.unbounded_send(msg).map_err(|_| crate::Error::ChannelClosed)
     }
 
     pub async fn send_all<TStream>(&mut self, stream: &mut TStream) -> Result<(), crate::Error>
@@ -76,5 +77,15 @@ impl<TMsg> MessageSink<TMsg> {
             .send_all(stream)
             .await
             .map_err(|_| crate::Error::ChannelClosed)
+    }
+}
+
+impl<TMsg> Clone for MessageSink<TMsg> {
+    fn clone(&self) -> Self {
+        Self {
+            stream_id: self.stream_id,
+            peer_id: self.peer_id,
+            sender: self.sender.clone(),
+        }
     }
 }

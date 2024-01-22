@@ -1,7 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashSet;
+use std::{
+    collections::{hash_map::DefaultHasher, HashSet},
+    hash::Hasher,
+};
 
 use libp2p::{
     autonat,
@@ -11,8 +14,6 @@ use libp2p::{
     gossipsub,
     identify,
     identity::Keypair,
-    kad,
-    kad::store::MemoryStore,
     mdns,
     noise,
     ping,
@@ -20,12 +21,13 @@ use libp2p::{
     swarm::{behaviour::toggle::Toggle, NetworkBehaviour},
     tcp,
     yamux,
-    PeerId,
     StreamProtocol,
     Swarm,
     SwarmBuilder,
 };
 use libp2p_messaging as messaging;
+use libp2p_peersync as peer_sync;
+use libp2p_peersync::store::MemoryPeerStore;
 use libp2p_substream as substream;
 
 use crate::{config::Config, error::TariSwarmError};
@@ -43,12 +45,23 @@ where TCodec: messaging::Codec + Send + Clone + 'static
     pub autonat: autonat::Behaviour,
 
     pub identify: identify::Behaviour,
-    pub kad: kad::Behaviour<MemoryStore>,
     pub mdns: Toggle<mdns::tokio::Behaviour>,
+    pub peer_sync: peer_sync::Behaviour<MemoryPeerStore>,
 
     pub substream: substream::Behaviour,
     pub messaging: messaging::Behaviour<TCodec>,
     pub gossipsub: gossipsub::Behaviour,
+}
+
+/// Returns true if the given Multiaddr is supported by the Tari swarm, otherwise false.
+/// NOTE: this function only currently returns false for onion addresses.
+pub fn is_supported_multiaddr(addr: &libp2p::Multiaddr) -> bool {
+    !addr.iter().any(|p| {
+        matches!(
+            p,
+            libp2p::core::multiaddr::Protocol::Onion(_, _) | libp2p::core::multiaddr::Protocol::Onion3(_)
+        )
+    })
 }
 
 pub fn create_swarm<TCodec>(
@@ -74,7 +87,8 @@ where
             // Gossipsub
             let gossipsub_config = gossipsub::ConfigBuilder::default()
                 .validation_mode(gossipsub::ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
-                .message_id_fn(message_id_concat_peer_and_seq_no) // content-address messages. No two messages of the same content will be propagated.
+                .validate_messages()
+                .message_id_fn(get_message_id) // content-address messages. No two messages of the same content will be propagated.
                 .build()
                 .unwrap();
 
@@ -95,9 +109,6 @@ where
                 identify::Config::new(config.protocol_version.to_string(), keypair.public())
                     .with_agent_version(config.user_agent),
             );
-
-            // Kad
-            let kad = kad::Behaviour::new(local_peer_id, MemoryStore::new(local_peer_id));
 
             // Relay
             let maybe_relay = if config.enable_relay {
@@ -130,6 +141,10 @@ where
             // autonat
             let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
 
+            // Peer sync
+            let peer_sync =
+                peer_sync::Behaviour::new(keypair.clone(), MemoryPeerStore::new(), peer_sync::Config::default());
+
             Ok(TariNodeBehaviour {
                 ping,
                 dcutr,
@@ -137,12 +152,12 @@ where
                 relay: Toggle::from(maybe_relay),
                 relay_client,
                 autonat,
-                kad,
                 gossipsub,
                 substream,
                 messaging,
                 connection_limits,
                 mdns: Toggle::from(maybe_mdns),
+                peer_sync,
             })
         })
         .map_err(|e| TariSwarmError::BehaviourError(e.to_string()))?
@@ -152,14 +167,12 @@ where
     Ok(swarm)
 }
 
-fn message_id_concat_peer_and_seq_no(message: &gossipsub::Message) -> gossipsub::MessageId {
-    let mut msg_id = if let Some(peer_id) = message.source.as_ref() {
-        peer_id.to_bytes()
-    } else {
-        PeerId::from_bytes(&[0, 1, 0]).expect("Valid peer id").to_bytes()
-    };
-    msg_id.extend(message.sequence_number.unwrap_or_default().to_be_bytes());
-    gossipsub::MessageId::from(msg_id)
+/// Generates a hash of contents of the message
+fn get_message_id(message: &gossipsub::Message) -> gossipsub::MessageId {
+    let mut hasher = DefaultHasher::new();
+    hasher.write(&message.data);
+    hasher.write(message.topic.as_str().as_bytes());
+    gossipsub::MessageId::from(hasher.finish().to_be_bytes())
 }
 
 fn noise_config(keypair: &Keypair) -> Result<noise::Config, noise::Error> {

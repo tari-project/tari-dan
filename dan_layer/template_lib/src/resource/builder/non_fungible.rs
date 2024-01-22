@@ -5,7 +5,6 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 use tari_bor::encode;
-use tari_template_abi::rust::{fmt, ops::RangeInclusive};
 
 use super::TOKEN_SYMBOL;
 use crate::{
@@ -130,13 +129,12 @@ impl NonFungibleResourceBuilder {
 
     /// Sets up multiple initial non-fungible tokens to be minted on resource creation by applying the provided function
     /// N times
-    pub fn mint_many_with<F, T>(mut self, bounds: RangeInclusive<usize>, mut f: F) -> Self
+    pub fn mint_many_with<F, I, V>(mut self, iter: I, f: F) -> Self
     where
-        F: FnMut(T) -> (NonFungibleId, (Vec<u8>, Vec<u8>)),
-        T: TryFrom<usize>,
-        T::Error: fmt::Debug,
+        F: FnMut(V) -> (NonFungibleId, (Vec<u8>, Vec<u8>)),
+        I: IntoIterator<Item = V>,
     {
-        self.tokens_ids.extend(bounds.map(|n| f(n.try_into().unwrap())));
+        self.tokens_ids.extend(iter.into_iter().map(f));
         self
     }
 

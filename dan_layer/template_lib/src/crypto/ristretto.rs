@@ -2,14 +2,16 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, Bytes};
 use tari_template_abi::rust::fmt::{Display, Formatter};
 
 use crate::{crypto::InvalidByteLengthError, models::NonFungibleAddress, Hash};
 
 /// A Ristretto public key byte contents
+#[serde_as]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct RistrettoPublicKeyBytes(#[serde(with = "serde_byte_array")] [u8; RistrettoPublicKeyBytes::length()]);
+pub struct RistrettoPublicKeyBytes(#[serde_as(as = "Bytes")] [u8; RistrettoPublicKeyBytes::length()]);
 
 impl RistrettoPublicKeyBytes {
     pub const fn length() -> usize {

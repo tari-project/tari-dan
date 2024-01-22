@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use crate::{
     auth::{ComponentAccessRules, OwnerRule},
     engine,
-    models::ComponentAddress,
+    models::{AddressAllocation, ComponentAddress},
     Hash,
 };
 
@@ -16,6 +16,7 @@ pub struct ComponentBuilder<T> {
     owner_rule: OwnerRule,
     access_rules: ComponentAccessRules,
     component_id: Option<Hash>,
+    address_allocation: Option<AddressAllocation<ComponentAddress>>,
 }
 
 impl<T: serde::Serialize> ComponentBuilder<T> {
@@ -26,7 +27,14 @@ impl<T: serde::Serialize> ComponentBuilder<T> {
             owner_rule: OwnerRule::default(),
             access_rules: ComponentAccessRules::new(),
             component_id: None,
+            address_allocation: None,
         }
+    }
+
+    /// Use an allocated address for the component.
+    pub fn with_address_allocation(mut self, allocation: AddressAllocation<ComponentAddress>) -> Self {
+        self.address_allocation = Some(allocation);
+        self
     }
 
     /// Sets up who will be the owner of the component.
@@ -50,7 +58,13 @@ impl<T: serde::Serialize> ComponentBuilder<T> {
 
     /// Creates the new component and returns it
     pub fn create(self) -> Component<T> {
-        let address = engine().create_component(self.component, self.owner_rule, self.access_rules, self.component_id);
+        let address = engine().create_component(
+            self.component,
+            self.owner_rule,
+            self.access_rules,
+            self.component_id,
+            self.address_allocation,
+        );
         Component::from_address(address)
     }
 }

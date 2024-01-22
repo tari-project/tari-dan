@@ -1,11 +1,14 @@
 [package]
 name = "libp2p-substream"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-libp2p = { version = "0.53.1", features = ["identify"]  }
+libp2p = { workspace = true, features = ["identify"]  }
 
 # smallvec 2.0.0 is not Send, so we use 1.11.2
 smallvec = "1.11.2"
-tracing = "0.1.40"
+tracing = { workspace = true }

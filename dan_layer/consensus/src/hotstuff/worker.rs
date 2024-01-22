@@ -29,7 +29,7 @@ use crate::{
         on_next_sync_view::OnNextSyncViewHandler,
         on_propose::OnPropose,
         on_receive_foreign_proposal::OnReceiveForeignProposalHandler,
-        on_receive_local_proposal::OnReceiveProposalHandler,
+        on_receive_local_proposal::OnReceiveLocalProposalHandler,
         on_receive_new_view::OnReceiveNewViewHandler,
         on_receive_request_missing_transactions::OnReceiveRequestMissingTransactions,
         on_receive_vote::OnReceiveVoteHandler,
@@ -49,10 +49,12 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
 
     tx_events: broadcast::Sender<HotstuffEvent>,
     tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
-    inbound_message_worker: OnInboundMessage<TConsensusSpec>,
+    rx_hotstuff_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+    rx_new_transactions: mpsc::Receiver<TransactionId>,
 
+    on_inbound_message: OnInboundMessage<TConsensusSpec>,
     on_next_sync_view: OnNextSyncViewHandler<TConsensusSpec>,
-    on_receive_local_proposal: OnReceiveProposalHandler<TConsensusSpec>,
+    on_receive_local_proposal: OnReceiveLocalProposalHandler<TConsensusSpec>,
     on_receive_foreign_proposal: OnReceiveForeignProposalHandler<TConsensusSpec>,
     on_receive_vote: OnReceiveVoteHandler<TConsensusSpec>,
     on_receive_new_view: OnReceiveNewViewHandler<TConsensusSpec>,
@@ -75,11 +77,11 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
         rx_new_transactions: mpsc::Receiver<TransactionId>,
-        rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+        rx_hotstuff_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
         state_store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
-        signing_service: TConsensusSpec::VoteSignatureService,
+        signing_service: TConsensusSpec::SignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
@@ -103,15 +105,16 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             validator_addr: validator_addr.clone(),
             tx_events: tx_events.clone(),
             tx_leader: tx_leader.clone(),
-            inbound_message_worker: OnInboundMessage::new(
+            rx_hotstuff_message,
+            rx_new_transactions,
+
+            on_inbound_message: OnInboundMessage::new(
                 state_store.clone(),
                 epoch_manager.clone(),
                 leader_strategy.clone(),
                 pacemaker.clone_handle(),
-                rx_hs_message,
+                signing_service.clone(),
                 tx_leader.clone(),
-                rx_new_transactions,
-                shutdown.clone(),
             ),
 
             on_next_sync_view: OnNextSyncViewHandler::new(
@@ -120,14 +123,14 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 leader_strategy.clone(),
                 epoch_manager.clone(),
             ),
-            on_receive_local_proposal: OnReceiveProposalHandler::new(
+            on_receive_local_proposal: OnReceiveLocalProposalHandler::new(
                 validator_addr,
                 state_store.clone(),
                 epoch_manager.clone(),
                 leader_strategy.clone(),
                 pacemaker.clone_handle(),
                 tx_leader.clone(),
-                signing_service,
+                signing_service.clone(),
                 state_manager,
                 transaction_pool.clone(),
                 tx_events,
@@ -157,6 +160,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 state_store.clone(),
                 epoch_manager.clone(),
                 transaction_pool.clone(),
+                signing_service,
                 tx_broadcast,
             ),
 
@@ -220,10 +224,22 @@ where TConsensusSpec: ConsensusSpec
             );
 
             tokio::select! {
-                msg_or_sync = self.inbound_message_worker.next(current_height) => {
-                    if let Err(e) = self.on_new_hs_message(msg_or_sync).await {
+                Some((from, msg)) = self.rx_hotstuff_message.recv() => {
+                    if let Err(err) = self.on_inbound_message.handle(current_height, from, msg).await {
+                        error!(target: LOG_TARGET, "Error handling message: {}", err);
+                    }
+                },
+
+                msg_or_sync = self.on_inbound_message.next_message(current_height) => {
+                    if let Err(e) = self.dispatch_hotstuff_message(msg_or_sync).await {
                         self.on_failure("on_new_hs_message", &e).await;
                         return Err(e);
+                    }
+                },
+
+                Some(tx_id) = self.rx_new_transactions.recv() => {
+                    if let Err(err) = self.on_inbound_message.update_parked_blocks(current_height, &tx_id).await {
+                        error!(target: LOG_TARGET, "Error checking parked blocks: {}", err);
                     }
                 },
 
@@ -260,7 +276,7 @@ where TConsensusSpec: ConsensusSpec
         }
 
         self.on_receive_new_view.clear_new_views();
-        self.inbound_message_worker.clear_buffer();
+        self.on_inbound_message.clear_buffer();
         // This only happens if we're shutting down.
         if let Err(err) = self.pacemaker.stop().await {
             debug!(target: LOG_TARGET, "Pacemaker channel dropped: {}", err);
@@ -327,12 +343,22 @@ where TConsensusSpec: ConsensusSpec
             error!(target: LOG_TARGET, "Error while stopping pacemaker: {}", e);
         }
         self.on_receive_new_view.clear_new_views();
-        self.inbound_message_worker.clear_buffer();
+        self.on_inbound_message.clear_buffer();
     }
 
     /// Read and discard messages. This should be used only when consensus is inactive.
     pub async fn discard_messages(&mut self) {
-        self.inbound_message_worker.discard().await;
+        loop {
+            tokio::select! {
+                biased;
+                _ = self.shutdown.wait() => {
+                    break;
+                },
+                _ = self.on_inbound_message.discard() => {},
+                _ = self.rx_hotstuff_message.recv() => {},
+                _ = self.rx_new_transactions.recv() => {}
+            }
+        }
     }
 
     async fn on_leader_timeout(&mut self, new_height: NodeHeight) -> Result<(), HotStuffError> {
@@ -390,7 +416,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn on_new_hs_message(
+    async fn dispatch_hotstuff_message(
         &mut self,
         result: IncomingMessageResult<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
@@ -479,10 +505,6 @@ where TConsensusSpec: ConsensusSpec
             from,
             self.pacemaker.current_height()
         );
-
-        self.pacemaker
-            .reset_view(high_qc.block_height(), high_qc.block_height())
-            .await?;
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
         // Send the request message

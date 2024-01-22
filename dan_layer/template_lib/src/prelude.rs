@@ -40,6 +40,7 @@ pub use crate::{
     events::emit_event,
     invoke_args,
     models::{
+        AddressAllocation,
         Amount,
         Bucket,
         BucketId,
@@ -59,5 +60,5 @@ pub use crate::{
     },
     rand,
     resource::{ResourceBuilder, ResourceManager, ResourceType},
-    template::TemplateManager,
+    template::{BuiltinTemplate, TemplateManager},
 };

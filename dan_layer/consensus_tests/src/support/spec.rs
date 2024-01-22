@@ -20,8 +20,8 @@ impl ConsensusSpec for TestConsensusSpec {
     type Addr = TestAddress;
     type EpochManager = TestEpochManager;
     type LeaderStrategy = RoundRobinLeaderStrategy;
+    type SignatureService = TestVoteSignatureService;
     type StateManager = NoopStateManager;
     type StateStore = SqliteStateStore<Self::Addr>;
     type SyncManager = AlwaysSyncedSyncManager;
-    type VoteSignatureService = TestVoteSignatureService;
 }

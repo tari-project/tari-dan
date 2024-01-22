@@ -5,7 +5,7 @@ use std::time::SystemTime;
 
 use serde_json::Value;
 use tari_dan_wallet_sdk::models::TransactionStatus;
-use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateAddress};
+use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateId};
 use tari_template_lib::models::Amount;
 use tari_transaction::TransactionId;
 
@@ -73,7 +73,7 @@ pub struct TransactionFinalizedEvent {
 
 #[derive(Debug, Clone)]
 pub struct AccountChangedEvent {
-    pub account_address: SubstateAddress,
+    pub account_address: SubstateId,
 }
 
 #[derive(Debug, Clone)]

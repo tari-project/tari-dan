@@ -28,11 +28,11 @@ use tari_dan_wallet_sdk::{
         SubstateModel,
         TransactionStatus,
         VaultModel,
-        VersionedSubstateAddress,
+        VersionedSubstateId,
     },
     storage::{WalletStorageError, WalletStoreReader, WalletStoreWriter},
 };
-use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateAddress, TemplateAddress};
+use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateId, TemplateAddress};
 use tari_template_lib::models::{Amount, EncryptedData};
 use tari_transaction::{Transaction, TransactionId};
 use tari_utilities::hex::Hex;
@@ -228,16 +228,22 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
 
         if exists {
-            sql_query("UPDATE config SET value = ?, is_encrypted = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?")
-                .bind::<Text, _>(serialize_json(value)?)
-                .bind::<Text, _>(key)
+            diesel::update(config::table)
+                .set((
+                    config::value.eq(serialize_json(value)?),
+                    config::is_encrypted.eq(is_encrypted),
+                    config::updated_at.eq(diesel::dsl::now),
+                ))
+                .filter(config::key.eq(key))
                 .execute(self.connection())
                 .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
         } else {
-            sql_query("INSERT INTO config (key, value, is_encrypted) VALUES (?, ?, ?)")
-                .bind::<Text, _>(key)
-                .bind::<Text, _>(serialize_json(value)?)
-                .bind::<Bool, _>(is_encrypted)
+            diesel::insert_into(config::table)
+                .values((
+                    config::key.eq(key),
+                    config::value.eq(serialize_json(value)?),
+                    config::is_encrypted.eq(is_encrypted),
+                ))
                 .execute(self.connection())
                 .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
         }
@@ -306,7 +312,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     fn substates_insert_root(
         &mut self,
         transaction_id: TransactionId,
-        address: VersionedSubstateAddress,
+        address: VersionedSubstateId,
         module_name: Option<String>,
         template_addr: Option<TemplateAddress>,
     ) -> Result<(), WalletStorageError> {
@@ -314,7 +320,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
         diesel::insert_into(substates::table)
             .values((
-                substates::address.eq(address.address.to_string()),
+                substates::address.eq(address.substate_id.to_string()),
                 substates::transaction_hash.eq(transaction_id.to_string()),
                 substates::module_name.eq(module_name),
                 substates::template_address.eq(template_addr.map(|a| a.to_string())),
@@ -329,14 +335,14 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     fn substates_insert_child(
         &mut self,
         transaction_id: TransactionId,
-        parent: SubstateAddress,
-        child: VersionedSubstateAddress,
+        parent: SubstateId,
+        child: VersionedSubstateId,
     ) -> Result<(), WalletStorageError> {
         use crate::schema::substates;
 
         diesel::insert_into(substates::table)
             .values((
-                substates::address.eq(child.address.to_string()),
+                substates::address.eq(child.substate_id.to_string()),
                 substates::transaction_hash.eq(transaction_id.to_string()),
                 substates::parent_address.eq(Some(parent.to_string())),
                 substates::version.eq(child.version as i32),
@@ -347,7 +353,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn substates_remove(&mut self, substate_addr: &SubstateAddress) -> Result<SubstateModel, WalletStorageError> {
+    fn substates_remove(&mut self, substate_addr: &SubstateId) -> Result<SubstateModel, WalletStorageError> {
         use crate::schema::substates;
 
         let substate = self.transaction.substates_get(substate_addr)?;
@@ -369,7 +375,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     // -------------------------------- Accounts -------------------------------- //
 
-    fn accounts_set_default(&mut self, address: &SubstateAddress) -> Result<(), WalletStorageError> {
+    fn accounts_set_default(&mut self, address: &SubstateId) -> Result<(), WalletStorageError> {
         use crate::schema::accounts;
 
         diesel::update(accounts::table)
@@ -397,7 +403,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     fn accounts_insert(
         &mut self,
         account_name: &str,
-        address: &SubstateAddress,
+        address: &SubstateId,
         owner_key_index: u64,
         is_default: bool,
     ) -> Result<(), WalletStorageError> {
@@ -419,7 +425,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn accounts_update(&mut self, address: &SubstateAddress, new_name: Option<&str>) -> Result<(), WalletStorageError> {
+    fn accounts_update(&mut self, address: &SubstateId, new_name: Option<&str>) -> Result<(), WalletStorageError> {
         use crate::schema::accounts;
 
         let changeset = (new_name.map(|n| accounts::name.eq(n)),);
@@ -466,11 +472,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn vaults_update(
-        &mut self,
-        vault_address: &SubstateAddress,
-        balance: Option<Amount>,
-    ) -> Result<(), WalletStorageError> {
+    fn vaults_update(&mut self, vault_address: &SubstateId, balance: Option<Amount>) -> Result<(), WalletStorageError> {
         use crate::schema::vaults;
 
         let Some(balance) = balance else {
@@ -500,7 +502,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     fn outputs_lock_smallest_amount(
         &mut self,
-        vault_address: &SubstateAddress,
+        vault_address: &SubstateId,
         locked_by_proof: ConfidentialProofId,
     ) -> Result<ConfidentialOutputModel, WalletStorageError> {
         use crate::schema::{accounts, outputs, vaults};
@@ -543,12 +545,10 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             .map_err(|e| WalletStorageError::general("outputs_lock_smallest_amount", e))?;
 
         Ok(ConfidentialOutputModel {
-            account_address: SubstateAddress::from_str(&account_address).map_err(|e| {
-                WalletStorageError::DecodingError {
-                    operation: "outputs_lock_smallest_amount",
-                    item: "account address",
-                    details: e.to_string(),
-                }
+            account_address: SubstateId::from_str(&account_address).map_err(|e| WalletStorageError::DecodingError {
+                operation: "outputs_lock_smallest_amount",
+                item: "account address",
+                details: e.to_string(),
             })?,
             vault_address: vault_address.clone(),
             commitment: Commitment::from_hex(&locked_output.commitment).map_err(|_| {
@@ -665,7 +665,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // Proofs
-    fn proofs_insert(&mut self, vault_address: &SubstateAddress) -> Result<ConfidentialProofId, WalletStorageError> {
+    fn proofs_insert(&mut self, vault_address: &SubstateId) -> Result<ConfidentialProofId, WalletStorageError> {
         use crate::schema::{proofs, vaults};
 
         let (vault_id, account_id) = vaults::table

@@ -20,22 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import {
-  TableContainer,
-  Table,
-  TableRow,
-  TableBody,
-  Collapse,
-} from '@mui/material';
-import {
-  DataTableCell,
-  AccordionIconButton,
-} from '../../Components/StyledComponents';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import CodeBlockExpand from '../../Components/CodeBlock';
-import { useTheme } from '@mui/material/styles';
+import { useState } from "react";
+import { TableContainer, Table, TableRow, TableBody, Collapse } from "@mui/material";
+import { DataTableCell, AccordionIconButton } from "../../Components/StyledComponents";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import CodeBlockExpand from "../../Components/CodeBlock";
+import { useTheme } from "@mui/material/styles";
 
 function RowData({ title, data }: any, index: number) {
   const [open, setOpen] = useState(false);
@@ -43,10 +34,7 @@ function RowData({ title, data }: any, index: number) {
   return (
     <>
       <TableRow key={`${index}-1`}>
-        <DataTableCell
-          width={90}
-          sx={{ borderBottom: 'none', textAlign: 'center' }}
-        >
+        <DataTableCell width={90} sx={{ borderBottom: "none", textAlign: "center" }}>
           <AccordionIconButton
             aria-label="expand row"
             size="small"
@@ -64,7 +52,7 @@ function RowData({ title, data }: any, index: number) {
           style={{
             paddingBottom: theme.spacing(1),
             paddingTop: 0,
-            borderBottom: 'none',
+            borderBottom: "none",
           }}
           colSpan={2}
         >

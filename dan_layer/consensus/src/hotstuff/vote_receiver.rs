@@ -25,7 +25,7 @@ pub struct VoteReceiver<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
-    vote_signature_service: TConsensusSpec::VoteSignatureService,
+    vote_signature_service: TConsensusSpec::SignatureService,
     pacemaker: PaceMakerHandle,
 }
 
@@ -36,7 +36,7 @@ where TConsensusSpec: ConsensusSpec
         store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
-        vote_signature_service: TConsensusSpec::VoteSignatureService,
+        vote_signature_service: TConsensusSpec::SignatureService,
         pacemaker: PaceMakerHandle,
     ) -> Self {
         Self {
@@ -101,7 +101,7 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
-        if !local_committee_shard.includes_shard(&sender_vn.shard_key) {
+        if !local_committee_shard.includes_substate_address(&sender_vn.shard_key) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch: current_epoch,
                 sender: message.signature.public_key.to_string(),
@@ -204,6 +204,10 @@ where TConsensusSpec: ConsensusSpec
             let mut signatures = Vec::with_capacity(votes.len());
             let mut leaf_hashes = Vec::with_capacity(votes.len());
             for vote in votes {
+                if vote.decision != quorum_decision {
+                    // We don't include votes that don't match the quorum decision
+                    continue;
+                }
                 signatures.push(vote.signature);
                 leaf_hashes.push(vote.sender_leaf_hash);
             }

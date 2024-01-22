@@ -26,7 +26,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_wallet_sdk::{
     apis::jwt::Claims,
     models::{Account, ConfidentialProofId, TransactionStatus},
@@ -36,7 +36,7 @@ use tari_engine_types::{
     instruction::Instruction,
     instruction_result::InstructionResult,
     serde_with,
-    substate::SubstateAddress,
+    substate::SubstateId,
 };
 use tari_template_lib::{
     args::Arg,
@@ -152,8 +152,8 @@ pub struct TransactionWaitResultResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionClaimBurnResponse {
     pub transaction_id: TransactionId,
-    pub inputs: Vec<ShardId>,
-    pub outputs: Vec<ShardId>,
+    pub inputs: Vec<SubstateAddress>,
+    pub outputs: Vec<SubstateAddress>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -197,7 +197,7 @@ pub struct AccountsCreateRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateResponse {
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub public_key: PublicKey,
     pub result: FinalizeResult,
 }
@@ -244,13 +244,13 @@ pub struct AccountsGetBalancesRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsGetBalancesResponse {
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub balances: Vec<BalanceEntry>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BalanceEntry {
-    pub vault_address: SubstateAddress,
+    pub vault_address: SubstateId,
     #[serde(with = "serde_with::string")]
     pub resource_address: ResourceAddress,
     pub balance: Amount,
@@ -316,6 +316,7 @@ pub struct TransferRequest {
     pub resource_address: ResourceAddress,
     pub destination_public_key: PublicKey,
     pub max_fee: Option<Amount>,
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -375,6 +376,7 @@ pub struct ConfidentialTransferRequest {
     pub resource_address: ResourceAddress,
     pub destination_public_key: PublicKey,
     pub max_fee: Option<Amount>,
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -390,6 +392,7 @@ pub struct ClaimBurnRequest {
     pub account: Option<ComponentAddressOrName>,
     pub claim_proof: serde_json::Value,
     pub max_fee: Option<Amount>,
+    pub key_id: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -554,6 +557,7 @@ pub struct GetValidatorFeesResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaimValidatorFeesRequest {
+    #[serde(default, deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
     pub max_fee: Option<Amount>,
     pub validator_public_key: PublicKey,

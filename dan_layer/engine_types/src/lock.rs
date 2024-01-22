@@ -3,8 +3,10 @@
 
 use std::fmt::Display;
 
+use tari_bor::{Deserialize, Serialize};
+
 pub type LockId = u32;
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum LockFlag {
     Read,
     Write,

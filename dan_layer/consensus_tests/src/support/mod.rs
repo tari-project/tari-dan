@@ -19,11 +19,9 @@ mod transaction;
 mod validator;
 
 pub use address::*;
-pub use epoch_manager::*;
 pub use harness::*;
 pub use leader_strategy::*;
 pub use network::*;
-pub use signing_service::*;
 pub use spec::*;
 pub use state_manager::*;
 pub use transaction::*;

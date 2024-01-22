@@ -23,9 +23,8 @@
 use std::collections::HashSet;
 
 use async_trait::async_trait;
-use libp2p::{gossipsub::IdentTopic, swarm::dial_opts::DialOpts, Multiaddr, PeerId, StreamProtocol};
+use libp2p::{gossipsub::IdentTopic, swarm::dial_opts::DialOpts, PeerId, StreamProtocol};
 use log::*;
-use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_rpc_framework::{
     framing,
     framing::CanonicalFraming,
@@ -50,11 +49,6 @@ use crate::{
 const LOG_TARGET: &str = "tari::networking::handle";
 
 pub enum NetworkingRequest<TMsg> {
-    AddPeer {
-        public_key: RistrettoPublicKey,
-        addresses: Vec<Multiaddr>,
-        reply_tx: oneshot::Sender<Result<PeerId, NetworkingError>>,
-    },
     DialPeer {
         dial_opts: DialOpts,
         reply_tx: oneshot::Sender<Result<Waiter<()>, NetworkingError>>,
@@ -104,6 +98,7 @@ pub enum NetworkingRequest<TMsg> {
     GetLocalPeerInfo {
         reply_tx: oneshot::Sender<Result<PeerInfo, NetworkingError>>,
     },
+    SetWantPeers(HashSet<PeerId>),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -268,23 +263,6 @@ impl<TMsg> NetworkingHandle<TMsg> {
         rx.await?
     }
 
-    pub async fn add_peer(
-        &mut self,
-        public_key: RistrettoPublicKey,
-        addresses: Vec<Multiaddr>,
-    ) -> Result<PeerId, NetworkingError> {
-        let (tx, rx) = oneshot::channel();
-        self.tx_request
-            .send(NetworkingRequest::AddPeer {
-                public_key,
-                addresses,
-                reply_tx: tx,
-            })
-            .await
-            .map_err(|_| NetworkingHandleError::ServiceHasShutdown)?;
-        rx.await?
-    }
-
     pub async fn get_local_peer_info(&self) -> Result<PeerInfo, NetworkingError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
@@ -394,6 +372,18 @@ impl<TMsg: Send + 'static> NetworkingService<TMsg> for NetworkingHandle<TMsg> {
             .await
             .map_err(|_| NetworkingHandleError::ServiceHasShutdown)?;
         rx.await?
+    }
+
+    async fn set_want_peers<I: IntoIterator<Item = PeerId> + Send>(
+        &self,
+        want_peers: I,
+    ) -> Result<(), NetworkingError> {
+        let want_peers = want_peers.into_iter().collect();
+        self.tx_request
+            .send(NetworkingRequest::SetWantPeers(want_peers))
+            .await
+            .map_err(|_| NetworkingHandleError::ServiceHasShutdown)?;
+        Ok(())
     }
 }
 

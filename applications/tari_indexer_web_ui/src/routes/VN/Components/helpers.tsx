@@ -24,25 +24,25 @@ class U256 {
   n: string;
   constructor(n: string) {
     if (!n) {
-      throw new Error('U256 input is null/empty');
+      throw new Error("U256 input is null/empty");
     }
     if (n.length > 64) {
-      throw new Error('U256 input is larger than 64 characters');
+      throw new Error("U256 input is larger than 64 characters");
     }
-    this.n = n.padStart(64, '0');
+    this.n = n.padStart(64, "0");
   }
 
   inc() {
-    return this.plus(new U256('1'));
+    return this.plus(new U256("1"));
   }
 
   dec() {
-    return this.minus(new U256('1'));
+    return this.minus(new U256("1"));
   }
 
   minus(other: U256) {
     let c = 0;
-    let s = '';
+    let s = "";
     for (let i = 63; i >= 0; --i) {
       let t = this.n[i];
       let o = other.n[i];
@@ -61,7 +61,7 @@ class U256 {
 
   plus(other: U256) {
     let c = 0;
-    let s = '';
+    let s = "";
     for (let i = 63; i >= 0; --i) {
       let t = this.n[i];
       let o = other.n[i];
@@ -81,8 +81,8 @@ class U256 {
   compare(other: U256) {
     let len = Math.max(this.n.length, other.n.length);
     for (let i = len - 1; i >= 0; --i) {
-      let t = this.n?.[this.n.length - 1 - i] || '0';
-      let o = other.n?.[other.n.length - 1 - i] || '0';
+      let t = this.n?.[this.n.length - 1 - i] || "0";
+      let o = other.n?.[other.n.length - 1 - i] || "0";
       if (t > o) return 1;
       if (t < o) return -1;
     }
@@ -104,20 +104,20 @@ function compare(a: any, b: any) {
 
 function toHexString(byteArray: number[]) {
   return Array.from(byteArray, function (byte) {
-    return ('0' + (byte & 0xff).toString(16)).slice(-2);
-  }).join('');
+    return ("0" + (byte & 0xff).toString(16)).slice(-2);
+  }).join("");
 }
 
 function fromHexString(hexString: string) {
   let res = [];
   for (let i = 0; i < hexString.length; i += 2) {
-    res.push(Number('0x' + hexString.substring(i, i + 2)));
+    res.push(Number("0x" + hexString.substring(i, i + 2)));
   }
   return res;
 }
 
 function shortenString(string: string, start: number = 8, end: number = 8) {
-  return string.substring(0, start) + '...' + string.slice(-end);
+  return string.substring(0, start) + "..." + string.slice(-end);
 }
 
 export { U256, compare, toHexString, fromHexString, shortenString };

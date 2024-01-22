@@ -7,7 +7,7 @@ use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
-    ShardId,
+    SubstateAddress,
 };
 use tari_dan_storage::{
     consensus_models::{
@@ -52,7 +52,7 @@ pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
-    vote_signing_service: TConsensusSpec::VoteSignatureService,
+    vote_signing_service: TConsensusSpec::SignatureService,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     state_manager: TConsensusSpec::StateManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
@@ -68,7 +68,7 @@ where TConsensusSpec: ConsensusSpec
         validator_addr: TConsensusSpec::Addr,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
-        vote_signing_service: TConsensusSpec::VoteSignatureService,
+        vote_signing_service: TConsensusSpec::SignatureService,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
@@ -595,7 +595,7 @@ where TConsensusSpec: ConsensusSpec
                         }
 
                         let distinct_shards =
-                            local_committee_shard.count_distinct_buckets(tx_rec.transaction().evidence.shards_iter());
+                            local_committee_shard.count_distinct_shards(tx_rec.transaction().evidence.shards_iter());
                         let distinct_shards = NonZeroU64::new(distinct_shards as u64).ok_or_else(|| {
                             HotStuffError::InvariantError(format!(
                                 "Distinct shards is zero for transaction {} in block {}",
@@ -717,7 +717,7 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
-        locked_inputs: &mut HashSet<ShardId>,
+        locked_inputs: &mut HashSet<SubstateAddress>,
     ) -> Result<bool, HotStuffError> {
         let inputs = local_committee_shard
             .filter(transaction.inputs().iter().chain(transaction.filled_inputs()))
@@ -816,7 +816,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         transaction: &ExecutedTransaction,
-        locked_outputs: &mut HashSet<ShardId>,
+        locked_outputs: &mut HashSet<SubstateAddress>,
     ) -> Result<bool, HotStuffError> {
         let state = LockedOutput::check_locks(tx, transaction.resulting_outputs())?;
 
@@ -938,12 +938,20 @@ where TConsensusSpec: ConsensusSpec
     async fn propose_newly_locked_blocks(&self, blocks: Vec<Block>) -> Result<(), HotStuffError> {
         for block in blocks {
             let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
-            let is_leader = self
-                .leader_strategy
-                .is_leader(&self.validator_addr, &local_committee, block.height());
-            // TODO: This will be changed to different strategy where not only leader is responsible for foreign block
-            // proposal.
-            if is_leader {
+            let our_addr = self.epoch_manager.get_our_validator_node(block.epoch()).await?;
+            let leader_index = self.leader_strategy.calculate_leader(&local_committee, block.height());
+            let my_index = local_committee
+                .addresses()
+                .position(|addr| *addr == our_addr.address)
+                .ok_or_else(|| HotStuffError::InvariantError("Our address not found in local committee".to_string()))?;
+            // There are other ways to approach this. But for simplicty is better just to make sure at least one honest
+            // node will send it to the whole foreign committee. So we select the leader and f other nodes. It has to be
+            // deterministic so we select by index (leader, leader+1, ..., leader+f). FYI: The messages between
+            // committees and within committees are not different in terms of size, speed, etc.
+            let diff_from_leader = (my_index + local_committee.len() - leader_index as usize) % local_committee.len();
+            // f+1 nodes (always including the leader) send the proposal to the foreign committee
+            // if diff_from_leader <= (local_committee.len() - 1) / 3 + 1 {
+            if diff_from_leader <= local_committee.len() / 3 {
                 self.proposer.broadcast_proposal_foreignly(&block).await?;
             }
         }

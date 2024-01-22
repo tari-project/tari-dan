@@ -83,7 +83,7 @@ message Arg {
 }
 
 message SubstateRequirement {
-  bytes address = 1;
+  bytes substate_id = 1;
   OptionalVersion version = 2;
 }
 

@@ -1,23 +1,22 @@
 [package]
 name = "tari_base_node_client"
-version = "0.50.0-pre.0"
-authors = ["The Tari Development Community"]
-edition = "2021"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-minotari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_node_grpc_client = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", default-features = false, features = [
-  "transactions",
-] }
-tari_utilities = "0.6"
+minotari_app_grpc = { workspace = true }
+minotari_node_grpc_client = { workspace = true }
+tari_common_types = { workspace = true }
+tari_core = { workspace = true, default-features = false, features = ["transactions"] }
+tari_utilities = { workspace = true }
 
-tari_dan_common_types = { path = "../../dan_layer/common_types" }
+tari_dan_common_types = { workspace = true }
 
-async-trait = "0.1"
-log = "0.4.8"
-serde = "1.0"
-thiserror = "^1.0.20"
-tonic = "0.6"
+async-trait = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true, default-features = true }
+thiserror = { workspace = true }
+tonic = { workspace = true }

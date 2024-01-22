@@ -31,7 +31,7 @@ use tari_common::{
     exit_codes::ExitError,
 };
 use tari_common_types::types::PublicKey;
-use tari_dan_app_utilities::config::PeerSeedsConfig;
+use tari_dan_app_utilities::p2p_config::PeerSeedsConfig;
 use tari_p2p::Network;
 use tari_shutdown::Shutdown;
 use tari_validator_node::{run_validator_node, ApplicationConfig, ValidatorNodeConfig};

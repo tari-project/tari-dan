@@ -28,8 +28,8 @@ use tari_common::{
     exit_codes::ExitError,
 };
 use tari_crypto::tari_utilities::{hex::Hex, message_format::MessageFormat};
-use tari_dan_app_utilities::config::PeerSeedsConfig;
-use tari_engine_types::substate::SubstateAddress;
+use tari_dan_app_utilities::p2p_config::PeerSeedsConfig;
+use tari_engine_types::substate::SubstateId;
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},
     run_indexer,
@@ -140,7 +140,7 @@ impl IndexerProcess {
     }
 }
 
-fn get_address_from_output(world: &TariWorld, output_ref: String) -> &SubstateAddress {
+fn get_address_from_output(world: &TariWorld, output_ref: String) -> &SubstateId {
     world
         .outputs
         .iter()
@@ -151,7 +151,7 @@ fn get_address_from_output(world: &TariWorld, output_ref: String) -> &SubstateAd
                     let fqn = format!("{}/{}", name, child_name);
                     fqn == output_ref
                 })
-                .map(|(_, addr)| &addr.address)
+                .map(|(_, addr)| &addr.substate_id)
         })
         .unwrap()
 }

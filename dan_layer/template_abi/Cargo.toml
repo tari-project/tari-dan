@@ -1,16 +1,16 @@
 [package]
 name = "tari_template_abi"
-version = "0.2.0"
-edition = "2021"
-authors = ["The Tari Development Community"]
 description = "Defines the low-level Tari engine ABI for WASM targets"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_bor = { path = "../tari_bor", default-features = false }
-serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
-hashbrown = { version = "0.13.2", optional = true }
+tari_bor = { workspace = true, default-features = false }
+serde = { workspace = true, default-features = false, features = ["alloc", "derive"] }
+hashbrown = { workspace = true, optional = true }
 
 [features]
 default = ["std"]

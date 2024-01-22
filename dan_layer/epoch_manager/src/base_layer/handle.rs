@@ -13,10 +13,10 @@ use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::MergedValidatorNodeMerkleProof,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     Epoch,
     NodeAddressable,
-    ShardId,
+    SubstateAddress,
 };
 use tari_dan_storage::global::models::ValidatorNode;
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -159,8 +159,8 @@ impl<TAddr: NodeAddressable> EpochManagerHandle<TAddr> {
     pub async fn get_committees_by_shards(
         &self,
         epoch: Epoch,
-        shards: HashSet<ShardId>,
-    ) -> Result<HashMap<ShardBucket, Committee<TAddr>>, EpochManagerError> {
+        shards: HashSet<SubstateAddress>,
+    ) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommittees {
@@ -188,7 +188,11 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<Self::Addr>, EpochManagerError> {
+    async fn get_committee(
+        &self,
+        epoch: Epoch,
+        shard: SubstateAddress,
+    ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommittee {
@@ -205,7 +209,7 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
     async fn get_committee_within_shard_range(
         &self,
         epoch: Epoch,
-        shard_range: RangeInclusive<ShardId>,
+        shard_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
@@ -269,6 +273,15 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
+    async fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetValidatorNodeMerkleRoot { epoch, reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
     async fn get_validator_set_merged_merkle_proof(
         &self,
         epoch: Epoch,
@@ -307,7 +320,11 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_committee_shard(&self, epoch: Epoch, shard: ShardId) -> Result<CommitteeShard, EpochManagerError> {
+    async fn get_committee_shard(
+        &self,
+        epoch: Epoch,
+        shard: SubstateAddress,
+    ) -> Result<CommitteeShard, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommitteeShard {
@@ -351,11 +368,11 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_committees_by_buckets(
+    async fn get_committees_by_shards(
         &self,
         epoch: Epoch,
-        buckets: HashSet<ShardBucket>,
-    ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, EpochManagerError> {
+        buckets: HashSet<Shard>,
+    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommitteesByBuckets {
