@@ -22,7 +22,6 @@ use tokio::sync::{broadcast, mpsc};
 use super::{on_receive_requested_transactions::OnReceiveRequestedTransactions, proposer::Proposer};
 use crate::{
     hotstuff::{
-        common::CommitteeAndMessage,
         error::HotStuffError,
         event::HotstuffEvent,
         on_inbound_message::{IncomingMessageResult, NeedsSync, OnInboundMessage},
@@ -39,7 +38,7 @@ use crate::{
         vote_receiver::VoteReceiver,
     },
     messages::{HotstuffMessage, SyncRequestMessage},
-    traits::{ConsensusSpec, LeaderStrategy},
+    traits::{ConsensusSpec, InboundMessaging, LeaderStrategy, OutboundMessaging},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
@@ -48,8 +47,8 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
 
     tx_events: broadcast::Sender<HotstuffEvent>,
-    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
-    rx_hotstuff_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
+    inbound_messaging: TConsensusSpec::InboundMessaging,
     rx_new_transactions: mpsc::Receiver<TransactionId>,
 
     on_inbound_message: OnInboundMessage<TConsensusSpec>,
@@ -76,16 +75,15 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
+        inbound_messaging: TConsensusSpec::InboundMessaging,
+        outbound_messaging: TConsensusSpec::OutboundMessaging,
         rx_new_transactions: mpsc::Receiver<TransactionId>,
-        rx_hotstuff_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
         state_store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         signing_service: TConsensusSpec::SignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         tx_mempool: mpsc::UnboundedSender<Transaction>,
         shutdown: ShutdownSignal,
@@ -99,13 +97,12 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             pacemaker.clone_handle(),
         );
         let proposer =
-            Proposer::<TConsensusSpec>::new(state_store.clone(), epoch_manager.clone(), tx_broadcast.clone());
-
+            Proposer::<TConsensusSpec>::new(state_store.clone(), epoch_manager.clone(), outbound_messaging.clone());
         Self {
             validator_addr: validator_addr.clone(),
             tx_events: tx_events.clone(),
-            tx_leader: tx_leader.clone(),
-            rx_hotstuff_message,
+            outbound_messaging: outbound_messaging.clone(),
+            inbound_messaging,
             rx_new_transactions,
 
             on_inbound_message: OnInboundMessage::new(
@@ -114,12 +111,12 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 leader_strategy.clone(),
                 pacemaker.clone_handle(),
                 signing_service.clone(),
-                tx_leader.clone(),
+                outbound_messaging.clone(),
             ),
 
             on_next_sync_view: OnNextSyncViewHandler::new(
                 state_store.clone(),
-                tx_leader.clone(),
+                outbound_messaging.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
             ),
@@ -129,7 +126,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 epoch_manager.clone(),
                 leader_strategy.clone(),
                 pacemaker.clone_handle(),
-                tx_leader.clone(),
+                outbound_messaging.clone(),
                 signing_service.clone(),
                 state_manager,
                 transaction_pool.clone(),
@@ -152,7 +149,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             ),
             on_receive_request_missing_txs: OnReceiveRequestMissingTransactions::new(
                 state_store.clone(),
-                tx_leader.clone(),
+                outbound_messaging.clone(),
             ),
             on_receive_requested_txs: OnReceiveRequestedTransactions::new(tx_mempool),
             on_propose: OnPropose::new(
@@ -160,10 +157,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 epoch_manager.clone(),
                 transaction_pool.clone(),
                 signing_service,
-                tx_broadcast,
+                outbound_messaging.clone(),
             ),
 
-            on_sync_request: OnSyncRequest::new(state_store.clone(), tx_leader),
+            on_sync_request: OnSyncRequest::new(state_store.clone(), outbound_messaging),
 
             state_store,
             leader_strategy,
@@ -223,7 +220,8 @@ where TConsensusSpec: ConsensusSpec
             );
 
             tokio::select! {
-                Some((from, msg)) = self.rx_hotstuff_message.recv() => {
+                Some(result) = self.inbound_messaging.next_message() => {
+                    let (from, msg) = result?;
                     if let Err(err) = self.on_inbound_message.handle(current_height, from, msg).await {
                         error!(target: LOG_TARGET, "Error handling message: {}", err);
                     }
@@ -284,7 +282,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn handle_epoch_manager_event(&self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
+    async fn handle_epoch_manager_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
         match event {
             EpochManagerEvent::EpochChanged(epoch) => {
                 if !self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await? {
@@ -307,12 +305,9 @@ where TConsensusSpec: ConsensusSpec
                     let leader = self
                         .leader_strategy
                         .get_leader_for_next_block(&local_committee, last_voted.block_height);
-                    self.tx_leader
-                        .send((leader.clone(), HotstuffMessage::Vote(last_voted.into())))
-                        .await
-                        .map_err(|_| HotStuffError::InternalChannelClosed {
-                            context: "tx_leader in handle_epoch_manager_event",
-                        })?;
+                    self.outbound_messaging
+                        .send(leader.clone(), HotstuffMessage::Vote(last_voted.into()))
+                        .await?;
                 }
             },
             EpochManagerEvent::ThisValidatorIsRegistered { .. } => {},
@@ -321,7 +316,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn request_initial_catch_up_sync(&self) -> Result<(), HotStuffError> {
+    async fn request_initial_catch_up_sync(&mut self) -> Result<(), HotStuffError> {
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let committee = self.epoch_manager.get_local_committee(current_epoch).await?;
         for member in committee.shuffled() {
@@ -354,7 +349,7 @@ where TConsensusSpec: ConsensusSpec
                     break;
                 },
                 _ = self.on_inbound_message.discard() => {},
-                _ = self.rx_hotstuff_message.recv() => {},
+                _ = self.inbound_messaging.next_message() => {},
                 _ = self.rx_new_transactions.recv() => {}
             }
         }
@@ -404,7 +399,7 @@ where TConsensusSpec: ConsensusSpec
         );
         if is_leader {
             self.on_propose
-                .handle(current_epoch, local_committee, leaf_block, is_newview_propose)
+                .handle(current_epoch, &local_committee, leaf_block, is_newview_propose)
                 .await?;
         } else if is_newview_propose {
             // We can make this a warm/error in future, but for now I want to be sure this never happens
@@ -495,7 +490,7 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    pub async fn on_catch_up_sync(&self, from: &TConsensusSpec::Addr) -> Result<(), HotStuffError> {
+    pub async fn on_catch_up_sync(&mut self, from: &TConsensusSpec::Addr) -> Result<(), HotStuffError> {
         let high_qc = self.state_store.with_read_tx(|tx| HighQc::get(tx))?;
         info!(
             target: LOG_TARGET,
@@ -508,14 +503,14 @@ where TConsensusSpec: ConsensusSpec
         let current_epoch = self.epoch_manager.current_epoch().await?;
         // Send the request message
         if self
-            .tx_leader
-            .send((
+            .outbound_messaging
+            .send(
                 from.clone(),
                 HotstuffMessage::SyncRequest(SyncRequestMessage {
                     epoch: current_epoch,
                     high_qc,
                 }),
-            ))
+            )
             .await
             .is_err()
         {

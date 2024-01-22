@@ -48,4 +48,11 @@ impl Arg {
     pub fn workspace<T: Into<Vec<u8>>>(key: T) -> Self {
         Arg::Workspace(key.into())
     }
+
+    pub fn as_literal_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Arg::Workspace(_) => None,
+            Arg::Literal(bytes) => Some(bytes),
+        }
+    }
 }

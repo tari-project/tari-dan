@@ -5,7 +5,7 @@ use log::*;
 use tari_dan_common_types::{committee::Committee, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::consensus_models::{Block, QuorumCertificate};
 
-use crate::{messages::HotstuffMessage, traits::LeaderStrategy};
+use crate::traits::LeaderStrategy;
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::common";
 
@@ -13,9 +13,6 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::common";
 /// This is a placeholder for the fee exhaust consensus constant so that we know where it's used later.
 /// TODO: exhaust > 0
 pub const EXHAUST_DIVISOR: u64 = 0;
-
-// To avoid clippy::type_complexity
-pub(super) type CommitteeAndMessage<TAddr> = (Committee<TAddr>, HotstuffMessage);
 
 pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
     epoch: Epoch,

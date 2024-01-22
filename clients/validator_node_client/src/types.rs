@@ -173,6 +173,7 @@ pub struct GetTransactionResultRequest {
 pub struct GetTransactionResultResponse {
     pub result: Option<ExecuteResult>,
     pub is_finalized: bool,
+    pub execution_time: Option<Duration>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

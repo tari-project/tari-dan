@@ -75,6 +75,10 @@ where
             let res = handle.await??;
             if let Some((address, substate)) = res {
                 let shard = SubstateAddress::from_address(&address, substate.version());
+                if autofilled_transaction.input_refs().contains(&shard) {
+                    // Shard is already an input as a ref
+                    continue;
+                }
                 input_shards.push(shard);
                 found_substates.insert(address, substate);
             }

@@ -1,7 +1,7 @@
-//   Copyright 2023 The Tari Project
+//   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-pub fn checked_copy_fixed<const SZ: usize>(bytes: &[u8]) -> Option<[u8; SZ]> {
+pub(crate) fn checked_copy_fixed<const SZ: usize>(bytes: &[u8]) -> Option<[u8; SZ]> {
     if bytes.len() != SZ {
         return None;
     }

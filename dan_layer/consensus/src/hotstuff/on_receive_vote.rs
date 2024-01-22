@@ -19,7 +19,6 @@ where TConsensusSpec: ConsensusSpec
         Self { vote_receiver }
     }
 
-    #[allow(clippy::too_many_lines)]
     pub async fn handle(&self, from: TConsensusSpec::Addr, message: VoteMessage) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,

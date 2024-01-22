@@ -53,6 +53,8 @@ pub enum NetworkingError {
     TransportError(#[from] TransportError<io::Error>),
     #[error("Peer sync error: {0}")]
     PeerSyncError(#[from] tari_swarm::peersync::Error),
+    #[error("Messaging is disabled")]
+    MessagingDisabled,
 }
 
 impl From<oneshot::error::RecvError> for NetworkingError {

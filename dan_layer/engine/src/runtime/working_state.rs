@@ -516,7 +516,7 @@ impl WorkingState {
                     let index_address = NonFungibleIndexAddress::new(resource_address, index);
                     index += 1;
                     let nft_index = NonFungibleIndex::new(nft_address);
-                    self.new_substate(index_address.clone(), nft_index)?;
+                    self.new_substate(index_address, nft_index)?;
                 }
 
                 ResourceContainer::non_fungible(resource_address, token_ids)

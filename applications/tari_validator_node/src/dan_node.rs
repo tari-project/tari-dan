@@ -91,27 +91,22 @@ impl DanNode {
             return Ok(());
         };
 
-        let committed_transactions = self.services.state_store.with_read_tx(|tx| {
-            let block = Block::get(tx, &block_id)?;
-            info!(target: LOG_TARGET, "🏁 Block {} committed", block);
-            Ok::<_, anyhow::Error>(
-                block
-                    .commands()
-                    .iter()
-                    .filter_map(|cmd| cmd.accept())
-                    .map(|t| t.id)
-                    .collect::<Vec<_>>(),
-            )
-        })?;
+        let block = self.services.state_store.with_read_tx(|tx| Block::get(tx, &block_id))?;
+        info!(target: LOG_TARGET, "🏁 Block {} committed", block);
+        let committed_transactions = block
+            .commands()
+            .iter()
+            .filter_map(|cmd| cmd.accept())
+            .map(|t| t.id)
+            .collect::<Vec<_>>();
 
         if committed_transactions.is_empty() {
             return Ok(());
         }
+
         info!(target: LOG_TARGET, "🏁 Removing {} finalized transaction(s) from mempool", committed_transactions.len());
-        for tx_id in committed_transactions {
-            if let Err(err) = self.services.mempool.remove_transaction(tx_id).await {
-                error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
-            }
+        if let Err(err) = self.services.mempool.remove_transactions(committed_transactions).await {
+            error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
         }
 
         Ok(())

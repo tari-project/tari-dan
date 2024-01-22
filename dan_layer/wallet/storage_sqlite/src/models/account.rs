@@ -11,7 +11,7 @@ use crate::schema::accounts;
 #[diesel(table_name = accounts)]
 pub struct Account {
     pub id: i32,
-    pub name: String,
+    pub name: Option<String>,
     pub address: String,
     pub owner_key_index: i64,
     pub created_at: NaiveDateTime,
