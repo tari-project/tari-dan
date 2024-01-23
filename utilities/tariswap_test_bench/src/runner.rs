@@ -4,16 +4,12 @@
 use std::{path::Path, time::Duration};
 
 use log::info;
-use tari_dan_common_types::optional::Optional;
 use tari_dan_wallet_daemon::indexer_jrpc_impl::IndexerJsonRpcNetworkInterface;
 use tari_dan_wallet_sdk::{DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::commit_result::FinalizeResult;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
-use tari_validator_node_client::{
-    types::{GetTransactionResultRequest, TemplateMetadata},
-    ValidatorNodeClient,
-};
+use tari_validator_node_client::types::TemplateMetadata;
 use tokio::time;
 use url::Url;
 
@@ -22,7 +18,7 @@ use crate::{cli::CommonArgs, stats::Stats, templates::get_templates};
 type WalletSdk = DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>;
 pub struct Runner {
     pub(crate) sdk: WalletSdk,
-    pub(crate) cli: CommonArgs,
+    pub(crate) _cli: CommonArgs,
     pub(crate) faucet_template: TemplateMetadata,
     pub(crate) tariswap_template: TemplateMetadata,
     pub(crate) stats: Stats,
@@ -34,7 +30,7 @@ impl Runner {
         let (faucet_template, tariswap_template) = get_templates(&cli.validator_node_url).await?;
         Ok(Self {
             sdk,
-            cli,
+            _cli: cli,
             faucet_template,
             tariswap_template,
             stats: Stats::default(),
@@ -54,32 +50,37 @@ impl Runner {
             .map(|s| SubstateRequirement::new(s, None))
             .collect();
 
-        self.stats.inc_transaction();
         let tx_id = self
             .sdk
             .transaction_api()
             .submit_transaction(transaction, inputs)
             .await?;
+
+        self.stats.inc_transaction();
         Ok(tx_id)
     }
 
     pub async fn wait_for_transaction(&mut self, tx_id: TransactionId) -> anyhow::Result<FinalizeResult> {
-        let mut client = ValidatorNodeClient::connect(self.cli.validator_node_url.clone())?;
         loop {
-            let result = client
-                .get_transaction_result(GetTransactionResultRequest { transaction_id: tx_id })
-                .await
-                .optional()?;
-            let Some((result, exec_time)) = result.and_then(|r| Some((r.result?, r.execution_time?))) else {
+            let Some(tx) = self
+                .sdk
+                .transaction_api()
+                .check_and_store_finalized_transaction(tx_id)
+                .await?
+            else {
                 time::sleep(Duration::from_secs(1)).await;
                 continue;
             };
 
-            self.stats.add_execution_time(exec_time);
+            let Some(ref finalize) = tx.finalize else {
+                time::sleep(Duration::from_secs(1)).await;
+                continue;
+            };
+
+            self.stats.add_execution_time(tx.execution_time.unwrap());
             // TODO: record and get timestamp of when the transaction was finalized
             // self.stats.add_time_to_finalize(finalize_time);
 
-            let finalize = result.finalize;
             if !finalize.is_full_accept() {
                 return Err(anyhow::anyhow!(
                     "Transaction failed: {:?}",
@@ -90,7 +91,7 @@ impl Runner {
             self.stats
                 .add_substate_created(finalize.result.accept().unwrap().up_len());
 
-            return Ok(finalize);
+            return Ok(finalize.clone());
         }
     }
 
