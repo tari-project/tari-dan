@@ -3,6 +3,7 @@
 
 use std::{collections::BTreeSet, num::NonZeroU64, ops::DerefMut};
 
+use indexmap::IndexMap;
 use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
@@ -26,7 +27,6 @@ use tari_dan_storage::{
         TransactionPoolStage,
     },
     StateStore,
-    StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
 
@@ -107,16 +107,12 @@ where TConsensusSpec: ConsensusSpec
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
-        // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
-        // the non-Send tx could be used after the await point, which is not possible.
-        let next_block;
-        {
-            let mut tx = self.store.create_write_tx()?;
-            let high_qc = HighQc::get(&mut *tx)?;
-            let high_qc = high_qc.get_quorum_certificate(&mut *tx)?;
-            let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), leaf_block.block_id())?;
-            next_block = self.build_next_block(
-                &mut tx,
+
+        let next_block = self.store.with_write_tx(|tx| {
+            let high_qc = HighQc::get(tx.deref_mut())?;
+            let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
+            let next_block = self.build_next_block(
+                tx,
                 epoch,
                 &leaf_block,
                 high_qc,
@@ -125,13 +121,11 @@ where TConsensusSpec: ConsensusSpec
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
                 //       is a good idea.
                 is_newview_propose,
-                &mut foreign_counters,
             )?;
 
-            next_block.as_last_proposed().set(&mut tx)?;
-
-            tx.commit()?;
-        }
+            next_block.as_last_proposed().set(tx)?;
+            Ok::<_, HotStuffError>(next_block)
+        })?;
 
         info!(
             target: LOG_TARGET,
@@ -182,7 +176,6 @@ where TConsensusSpec: ConsensusSpec
         proposed_by: PublicKey,
         local_committee_shard: &CommitteeShard,
         empty_block: bool,
-        foreign_counters: &mut ForeignSendCounters,
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
@@ -197,17 +190,16 @@ where TConsensusSpec: ConsensusSpec
         let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
         let commands = ForeignProposal::get_all_new(tx)?
             .into_iter()
-            .filter_map(|foreign_proposal| {
-                if pending_proposals.iter().any(|pending_proposal| {
+            .filter(|foreign_proposal| {
+                // If the foreign proposal is already pending, don't propose it again
+                !pending_proposals.iter().any(|pending_proposal| {
                     pending_proposal.bucket == foreign_proposal.bucket &&
                         pending_proposal.block_id == foreign_proposal.block_id
-                }) {
-                    None
-                } else {
-                    Some(Ok(Command::ForeignProposal(
-                        foreign_proposal.set_mined_at(parent_block.height().saturating_add(NodeHeight(1))),
-                    )))
-                }
+                })
+            })
+            .map(|mut foreign_proposal| {
+                foreign_proposal.set_proposed_height(parent_block.height().saturating_add(NodeHeight(1)));
+                Ok(Command::ForeignProposal(foreign_proposal))
             })
             .chain(batch.into_iter().map(|t| match t.current_stage() {
                 // If the transaction is New, propose to Prepare it
@@ -255,10 +247,14 @@ where TConsensusSpec: ConsensusSpec
             local_committee_shard.shard(),
         )?;
 
-        let foreign_indexes = non_local_buckets
+        let foreign_counters = ForeignSendCounters::get_or_default(tx, parent_block.block_id())?;
+        let mut foreign_indexes = non_local_buckets
             .iter()
-            .map(|bucket| (*bucket, foreign_counters.increment_counter(*bucket)))
-            .collect();
+            .map(|bucket| (*bucket, foreign_counters.get_count(*bucket) + 1))
+            .collect::<IndexMap<_, _>>();
+
+        // Ensure that foreign indexes are canonically ordered
+        foreign_indexes.sort_keys();
 
         let mut next_block = Block::new(
             *parent_block.block_id(),

@@ -17,7 +17,6 @@ use diesel::{
     ExpressionMethods,
     JoinOnDsl,
     NullableExpressionMethods,
-    OptionalExtension,
     QueryDsl,
     QueryableByName,
     RunQueryDsl,
@@ -35,6 +34,7 @@ use tari_dan_storage::{
         Decision,
         Evidence,
         ForeignProposal,
+        ForeignProposalState,
         ForeignReceiveCounters,
         ForeignSendCounters,
         HighQc,
@@ -399,7 +399,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         use crate::schema::foreign_proposals;
 
         let foreign_proposals = foreign_proposals::table
-            .filter(foreign_proposals::state.eq("New"))
+            .filter(foreign_proposals::state.eq(ForeignProposalState::New.to_string()))
             .load::<sql_models::ForeignProposal>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "foreign_proposal_get_all",
@@ -444,17 +444,12 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         let counter = foreign_send_counters::table
             .filter(foreign_send_counters::block_id.eq(serialize_hex(block_id)))
             .first::<sql_models::ForeignSendCounters>(self.connection())
-            .optional()
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "foreign_send_counters_get",
                 source: e,
             })?;
 
-        if let Some(counter) = counter {
-            counter.try_into()
-        } else {
-            Ok(ForeignSendCounters::default())
-        }
+        counter.try_into()
     }
 
     fn foreign_receive_counters_get(&mut self) -> Result<ForeignReceiveCounters, StorageError> {
@@ -463,17 +458,12 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         let counter = foreign_receive_counters::table
             .order_by(foreign_receive_counters::id.desc())
             .first::<sql_models::ForeignReceiveCounters>(self.connection())
-            .optional()
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "foreign_receive_counters_get",
                 source: e,
             })?;
 
-        if let Some(counter) = counter {
-            counter.try_into()
-        } else {
-            Ok(ForeignReceiveCounters::default())
-        }
+        counter.try_into()
     }
 
     fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<TransactionRecord, StorageError> {

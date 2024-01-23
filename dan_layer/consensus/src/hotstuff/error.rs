@@ -102,8 +102,12 @@ pub enum ProposalValidationError {
     NotSafeBlock { proposed_by: String, hash: BlockId },
     #[error("Node proposed by {proposed_by} with hash {hash} is missing foreign index")]
     MissingForeignCounters { proposed_by: String, hash: BlockId },
-    #[error("Node proposed by {proposed_by} with hash {hash} has invalid foreign counters")]
-    InvalidForeignCounters { proposed_by: String, hash: BlockId },
+    #[error("Node proposed by {proposed_by} with hash {hash} has invalid foreign counters: {details}")]
+    InvalidForeignCounters {
+        proposed_by: String,
+        hash: BlockId,
+        details: String,
+    },
     #[error("Node proposed by {proposed_by} with hash {hash} is the genesis block")]
     ProposingGenesisBlock { proposed_by: String, hash: BlockId },
     #[error("Justification block {justify_block} for proposed block {block_description} by {proposed_by} not found")]

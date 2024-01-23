@@ -51,7 +51,7 @@ use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PeerAddress, Sub
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, ExecutedTransaction, ForeignReceiveCounters, SubstateRecord},
+    consensus_models::{Block, BlockId, ExecutedTransaction, SubstateRecord},
     global::GlobalDb,
     StateStore,
     StateStoreReadTransaction,
@@ -225,7 +225,6 @@ pub async fn spawn_services(
 
     // Consensus
     let (tx_executed_transaction, rx_executed_transaction) = mpsc::channel(10);
-    let foreign_receive_counter = state_store.with_read_tx(|tx| ForeignReceiveCounters::get(tx))?;
 
     let local_address = PeerAddress::from(keypair.public_key().clone());
     let (loopback_sender, loopback_receiver) = mpsc::unbounded_channel();
@@ -246,7 +245,6 @@ pub async fn spawn_services(
         inbound_messaging,
         outbound_messaging.clone(),
         validator_node_client_factory.clone(),
-        foreign_receive_counter,
         shutdown.clone(),
     )
     .await;

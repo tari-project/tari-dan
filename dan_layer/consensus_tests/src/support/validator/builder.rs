@@ -4,7 +4,7 @@
 use tari_common_types::types::PublicKey;
 use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker};
 use tari_dan_common_types::{shard::Shard, SubstateAddress};
-use tari_dan_storage::consensus_models::{ForeignReceiveCounters, TransactionPool};
+use tari_dan_storage::consensus_models::TransactionPool;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tokio::sync::{broadcast, mpsc, watch};
@@ -110,7 +110,6 @@ impl ValidatorBuilder {
             transaction_pool,
             tx_events.clone(),
             tx_mempool,
-            ForeignReceiveCounters::default(),
             shutdown_signal.clone(),
         );
 
