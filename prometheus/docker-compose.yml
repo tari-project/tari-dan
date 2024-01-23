@@ -1,0 +1,62 @@
+version: '3.8'
+
+volumes:
+  prometheus_data: {}
+  grafana_storage: {}
+
+services:
+  #node-exporter:
+    #image: prom/node-exporter:latest
+    #container_name: node-exporter
+    #restart: unless-stopped
+    #volumes:
+      #- /proc:/host/proc:ro
+      #- /sys:/host/sys:ro
+      #- /:/rootfs:ro
+    #command:
+      #- '--path.procfs=/host/proc'
+      #- '--path.rootfs=/rootfs'
+      #- '--path.sysfs=/host/sys'
+      #- '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    #expose:
+      #- 9100
+    #networks:
+      #- monitoring
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    expose:
+      - 9090
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    restart: unless-stopped
+    volumes:
+      - grafana_storage:/var/lib/grafana
+    command: []
+    ports:
+      - "3000:3000"
+    expose:
+      - 3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+

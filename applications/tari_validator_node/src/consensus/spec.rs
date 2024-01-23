@@ -2,7 +2,7 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use sqlite_message_logger::SqliteMessageLogger;
-use tari_consensus::traits::ConsensusSpec;
+use tari_consensus::traits::{hooks::OptionalHooks, ConsensusSpec};
 use tari_dan_common_types::PeerAddress;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_rpc_state_sync::RpcStateSyncManager;
@@ -11,6 +11,7 @@ use tari_state_store_sqlite::SqliteStateStore;
 use crate::{
     consensus::{
         leader_selection::RoundRobinLeaderStrategy,
+        metrics::PrometheusConsensusMetrics,
         signature_service::TariSignatureService,
         state_manager::TariStateManager,
     },
@@ -23,6 +24,7 @@ pub struct TariConsensusSpec;
 impl ConsensusSpec for TariConsensusSpec {
     type Addr = PeerAddress;
     type EpochManager = EpochManagerHandle<Self::Addr>;
+    type Hooks = OptionalHooks<PrometheusConsensusMetrics>;
     type InboundMessaging = ConsensusInboundMessaging<SqliteMessageLogger>;
     type LeaderStrategy = RoundRobinLeaderStrategy;
     type OutboundMessaging = ConsensusOutboundMessaging<SqliteMessageLogger>;

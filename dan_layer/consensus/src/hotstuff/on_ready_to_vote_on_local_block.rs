@@ -26,6 +26,7 @@ use tari_dan_storage::{
         QuorumDecision,
         SubstateLockFlag,
         SubstateRecord,
+        TransactionAtom,
         TransactionPool,
         TransactionPoolStage,
         ValidBlock,
@@ -40,7 +41,14 @@ use super::proposer::Proposer;
 use crate::{
     hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, event::HotstuffEvent, ProposalValidationError},
     messages::{HotstuffMessage, VoteMessage},
-    traits::{ConsensusSpec, LeaderStrategy, OutboundMessaging, StateManager, VoteSignatureService},
+    traits::{
+        hooks::ConsensusHooks,
+        ConsensusSpec,
+        LeaderStrategy,
+        OutboundMessaging,
+        StateManager,
+        VoteSignatureService,
+    },
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_lock_block_ready";
@@ -56,6 +64,7 @@ pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_events: broadcast::Sender<HotstuffEvent>,
     proposer: Proposer<TConsensusSpec>,
+    hooks: TConsensusSpec::Hooks,
 }
 
 impl<TConsensusSpec> OnReadyToVoteOnLocalBlock<TConsensusSpec>
@@ -72,6 +81,7 @@ where TConsensusSpec: ConsensusSpec
         outbound_messaging: TConsensusSpec::OutboundMessaging,
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
+        hooks: TConsensusSpec::Hooks,
     ) -> Self {
         Self {
             validator_addr,
@@ -84,6 +94,7 @@ where TConsensusSpec: ConsensusSpec
             outbound_messaging,
             tx_events,
             proposer,
+            hooks,
         }
     }
 
@@ -99,6 +110,7 @@ where TConsensusSpec: ConsensusSpec
             .get_committee_shard_by_validator_public_key(valid_block.epoch(), valid_block.proposed_by())
             .await?;
         let mut locked_blocks = Vec::new();
+        let mut finalized_transactions = Vec::new();
 
         let maybe_decision = self.store.with_write_tx(|tx| {
             let maybe_decision = self.decide_on_block(tx, &local_committee_shard, valid_block.block())?;
@@ -107,9 +119,15 @@ where TConsensusSpec: ConsensusSpec
             if maybe_decision.map(|d| d.is_accept()).unwrap_or(false) {
                 let high_qc = valid_block.block().update_nodes(
                     tx,
-                    |tx, locked, block, locked_blocks| self.on_lock_block(tx, locked, block, locked_blocks),
-                    |tx, last_exec, commit_block| self.on_commit(tx, last_exec, commit_block, &local_committee_shard),
-                    &mut locked_blocks,
+                    |tx, locked, block| {
+                        locked_blocks.push(block.clone());
+                        self.on_lock_block(tx, locked, block)
+                    },
+                    |tx, last_exec, commit_block| {
+                        let committed = self.on_commit(tx, last_exec, commit_block, &local_committee_shard)?;
+                        finalized_transactions.push(committed);
+                        Ok(())
+                    },
                 )?;
 
                 // If we have a new high QC, we'll process the block it justifies
@@ -119,8 +137,15 @@ where TConsensusSpec: ConsensusSpec
             if maybe_decision.is_some() {
                 valid_block.block().as_last_voted().set(tx)?;
             }
+
             Ok::<_, HotStuffError>(maybe_decision)
         })?;
+
+        self.hooks.on_local_block_decide(&valid_block, maybe_decision);
+        for t in finalized_transactions.into_iter().flatten() {
+            // TODO: add finalization time PR #891
+            self.hooks.on_transaction_finalized(&t);
+        }
         self.propose_newly_locked_blocks(locked_blocks).await?;
 
         if let Some(decision) = maybe_decision {
@@ -868,24 +893,19 @@ where TConsensusSpec: ConsensusSpec
         last_executed: &LastExecuted,
         block: &Block,
         local_committee_shard: &CommitteeShard,
-    ) -> Result<(), HotStuffError> {
-        if last_executed.height < block.height() {
-            let parent = block.get_parent(tx.deref_mut())?;
-            // Recurse to "catch up" any parent parent blocks we may not have executed
-            self.on_commit(tx, last_executed, &parent, local_committee_shard)?;
-            self.execute(tx, block, local_committee_shard)?;
-            debug!(
-                target: LOG_TARGET,
-                "✅ COMMIT block {}, last executed height = {}",
-                block,
-                last_executed.height
-            );
-            self.publish_event(HotstuffEvent::BlockCommitted {
-                block_id: *block.id(),
-                height: block.height(),
-            });
-        }
-        Ok(())
+    ) -> Result<Vec<TransactionAtom>, HotStuffError> {
+        let committed_transactions = self.execute(tx, block, local_committee_shard)?;
+        debug!(
+            target: LOG_TARGET,
+            "✅ COMMIT block {}, last executed height = {}",
+            block,
+            last_executed.height
+        );
+        self.publish_event(HotstuffEvent::BlockCommitted {
+            block_id: *block.id(),
+            height: block.height(),
+        });
+        Ok(committed_transactions)
     }
 
     // Returns the number processed blocks
@@ -894,33 +914,31 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         locked: &LockedBlock,
         block: &Block,
-        locked_blocks: &mut Vec<Block>,
     ) -> Result<(), HotStuffError> {
-        if locked.height < block.height() {
-            info!(
-                target: LOG_TARGET,
-                "🔒️ LOCKED BLOCK: {} {}",
-                block.height(),
-                block.id()
-            );
+        // if locked.height < block.height() {
+        info!(
+            target: LOG_TARGET,
+            "🔒️ LOCKED BLOCK: {} {}",
+            block.height(),
+            block.id()
+        );
 
-            let parent = block.get_parent(tx.deref_mut())?;
-            locked_blocks.push(block.clone());
-            self.on_lock_block(tx, locked, &parent, locked_blocks)?;
+        // let parent = block.get_parent(tx.deref_mut())?;
+        // self.on_lock_block(tx, locked, &parent)?;
 
-            for foreign_proposal in block.all_foreign_proposals() {
-                foreign_proposal.upsert(tx)?;
-            }
-
-            // self.processed_locked_commands(tx, local_committee_shard, block)?;
-            // This moves the stage update from pending to current for all transactions on on the locked block
-            self.transaction_pool.confirm_all_transitions(
-                tx,
-                locked,
-                &block.as_locked_block(),
-                block.all_transaction_ids(),
-            )?;
+        for foreign_proposal in block.all_foreign_proposals() {
+            foreign_proposal.upsert(tx)?;
         }
+
+        // self.processed_locked_commands(tx, local_committee_shard, block)?;
+        // This moves the stage update from pending to current for all transactions on on the locked block
+        self.transaction_pool.confirm_all_transitions(
+            tx,
+            locked,
+            &block.as_locked_block(),
+            block.all_transaction_ids(),
+        )?;
+        // }
         Ok(())
     }
 
@@ -941,7 +959,7 @@ where TConsensusSpec: ConsensusSpec
             // f+1 nodes (always including the leader) send the proposal to the foreign committee
             // if diff_from_leader <= (local_committee.len() - 1) / 3 + 1 {
             if diff_from_leader <= local_committee.len() / 3 {
-                self.proposer.broadcast_proposal_foreignly(&block).await?;
+                self.proposer.broadcast_proposal_foreignly(block).await?;
             }
         }
         Ok(())
@@ -956,7 +974,14 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
         local_committee_shard: &CommitteeShard,
-    ) -> Result<(), HotStuffError> {
+    ) -> Result<Vec<TransactionAtom>, HotStuffError> {
+        let mut finalized_transactions = Vec::with_capacity(
+            block
+                .commands()
+                .iter()
+                .filter(|cmd| matches!(cmd, Command::Accept(_)))
+                .count(),
+        );
         let mut total_transaction_fee = 0;
         let mut total_fee_due = 0;
         for cmd in block.commands() {
@@ -1012,6 +1037,7 @@ where TConsensusSpec: ConsensusSpec
                         "🗑️ Removing transaction {} from pool", tx_rec.transaction_id());
                     tx_rec.remove(tx)?;
                     executed.set_final_decision(t.decision).update(tx)?;
+                    finalized_transactions.push(t.clone());
                 },
                 Command::ForeignProposal(_) => {},
             }
@@ -1029,6 +1055,6 @@ where TConsensusSpec: ConsensusSpec
             );
         }
 
-        Ok(())
+        Ok(finalized_transactions)
     }
 }

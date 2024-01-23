@@ -42,14 +42,14 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    pub async fn broadcast_proposal_foreignly(&mut self, block: &Block) -> Result<(), HotStuffError> {
+    pub async fn broadcast_proposal_foreignly(&mut self, block: Block) -> Result<(), HotStuffError> {
         let num_committees = self.epoch_manager.get_num_committees(block.epoch()).await?;
 
         let validator = self.epoch_manager.get_our_validator_node(block.epoch()).await?;
         let local_shard = validator.shard_key.to_committee_shard(num_committees);
         let non_local_shards = self
             .store
-            .with_read_tx(|tx| get_non_local_shards(tx, block, num_committees, local_shard))?;
+            .with_read_tx(|tx| get_non_local_shards(tx, &block, num_committees, local_shard))?;
         info!(
             target: LOG_TARGET,
             "🌿 PROPOSING foreignly new locked block {} to {} foreign shards. justify: {} ({}), parent: {}",
@@ -79,7 +79,7 @@ where TConsensusSpec: ConsensusSpec
                 non_local_committees
                     .values()
                     .flat_map(|c| c.iter().map(|(addr, _)| addr)),
-                HotstuffMessage::ForeignProposal(ProposalMessage { block: block.clone() }),
+                HotstuffMessage::ForeignProposal(ProposalMessage { block }),
             )
             .await?;
         Ok(())

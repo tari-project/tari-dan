@@ -38,13 +38,14 @@ use crate::{
         vote_receiver::VoteReceiver,
     },
     messages::{HotstuffMessage, SyncRequestMessage},
-    traits::{ConsensusSpec, InboundMessaging, LeaderStrategy, OutboundMessaging},
+    traits::{hooks::ConsensusHooks, ConsensusSpec, InboundMessaging, LeaderStrategy, OutboundMessaging},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
 
 pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
+    hooks: TConsensusSpec::Hooks,
 
     tx_events: broadcast::Sender<HotstuffEvent>,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
@@ -86,6 +87,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         tx_mempool: mpsc::UnboundedSender<Transaction>,
+        hooks: TConsensusSpec::Hooks,
         shutdown: ShutdownSignal,
     ) -> Self {
         let pacemaker = PaceMaker::new();
@@ -132,6 +134,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 transaction_pool.clone(),
                 tx_events,
                 proposer.clone(),
+                hooks.clone(),
             ),
             on_receive_foreign_proposal: OnReceiveForeignProposalHandler::new(
                 state_store.clone(),
@@ -169,6 +172,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
             pacemaker: pacemaker.clone_handle(),
             pacemaker_worker: Some(pacemaker),
+            hooks,
             shutdown,
         }
     }
@@ -210,8 +214,14 @@ where TConsensusSpec: ConsensusSpec
 
         self.request_initial_catch_up_sync().await?;
 
+        let mut prev_height = self.pacemaker.current_height();
         loop {
             let current_height = self.pacemaker.current_height() + NodeHeight(1);
+
+            if current_height != prev_height {
+                self.hooks.on_pacemaker_height_changed(current_height);
+                prev_height = current_height;
+            }
 
             debug!(
                 target: LOG_TARGET,
@@ -222,7 +232,9 @@ where TConsensusSpec: ConsensusSpec
             tokio::select! {
                 Some(result) = self.inbound_messaging.next_message() => {
                     let (from, msg) = result?;
+                    self.hooks.on_message_received(&msg);
                     if let Err(err) = self.on_inbound_message.handle(current_height, from, msg).await {
+                        self.hooks.on_error(&err);
                         error!(target: LOG_TARGET, "Error handling message: {}", err);
                     }
                 },
@@ -235,7 +247,9 @@ where TConsensusSpec: ConsensusSpec
                 },
 
                 Some(tx_id) = self.rx_new_transactions.recv() => {
+                    self.hooks.on_transaction_ready(&tx_id);
                     if let Err(err) = self.on_inbound_message.update_parked_blocks(current_height, &tx_id).await {
+                        self.hooks.on_error(&err);
                         error!(target: LOG_TARGET, "Error checking parked blocks: {}", err);
                     }
                 },
@@ -329,6 +343,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     async fn on_failure(&mut self, context: &str, err: &HotStuffError) {
+        self.hooks.on_error(err);
         self.publish_event(HotstuffEvent::Failure {
             message: err.to_string(),
         });
@@ -356,6 +371,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     async fn on_leader_timeout(&mut self, new_height: NodeHeight) -> Result<(), HotStuffError> {
+        self.hooks.on_leader_timeout(new_height);
         self.on_next_sync_view.handle(new_height).await?;
         self.publish_event(HotstuffEvent::LeaderTimeout { new_height });
         Ok(())
@@ -422,6 +438,7 @@ where TConsensusSpec: ConsensusSpec
                 local_height,
                 qc_height,
             }) => {
+                self.hooks.on_needs_sync(local_height, qc_height);
                 if qc_height.as_u64() - local_height.as_u64() > MAX_BLOCKS_PER_SYNC as u64 {
                     warn!(
                         target: LOG_TARGET,

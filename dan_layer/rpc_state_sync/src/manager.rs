@@ -306,7 +306,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             }
             block.update_nodes(
                 tx,
-                |_, _, _, _| Ok(()),
+                |_, _, _| Ok(()),
                 |tx, last_executed, block| {
                     let new_last_exec = block.as_last_executed();
                     Self::mark_block_committed(tx, last_executed, block)?;
@@ -319,7 +319,6 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
                     Ok::<_, CommsRpcConsensusSyncError>(())
                 },
-                &mut Vec::new(),
             )?;
             // Ensure we dont vote on a synced block
             block.as_last_voted().set(tx)?;

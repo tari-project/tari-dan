@@ -31,7 +31,7 @@ use crate::{
         ProposalValidationError,
     },
     messages::ProposalMessage,
-    traits::{ConsensusSpec, LeaderStrategy},
+    traits::{hooks::ConsensusHooks, ConsensusSpec, LeaderStrategy},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_local_proposal";
@@ -42,6 +42,7 @@ pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     leader_strategy: TConsensusSpec::LeaderStrategy,
     pacemaker: PaceMakerHandle,
     on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock<TConsensusSpec>,
+    hooks: TConsensusSpec::Hooks,
 }
 
 impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec> {
@@ -57,12 +58,14 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
+        hooks: TConsensusSpec::Hooks,
     ) -> Self {
         Self {
             store: store.clone(),
             epoch_manager: epoch_manager.clone(),
             leader_strategy: leader_strategy.clone(),
             pacemaker,
+            hooks: hooks.clone(),
             on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock::new(
                 validator_addr,
                 store,
@@ -74,6 +77,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 outbound_messaging,
                 tx_events,
                 proposer,
+                hooks,
             ),
         }
     }
@@ -88,9 +92,14 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             block.proposed_by()
         );
 
-        self.process_block(block).await?;
-
-        Ok(())
+        match self.process_block(block).await {
+            Ok(()) => Ok(()),
+            Err(err @ HotStuffError::ProposalValidationError(_)) => {
+                self.hooks.on_block_validation_failed(&err);
+                Err(err)
+            },
+            Err(err) => Err(err),
+        }
     }
 
     async fn process_block(&mut self, block: Block) -> Result<(), HotStuffError> {

@@ -459,7 +459,7 @@ impl Block {
         tx.blocks_is_ancestor(self.parent(), ancestor)
     }
 
-    pub fn get_parent<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+    pub fn get_parent<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
         if self.id.is_genesis() {
             return Err(StorageError::NotFound {
                 item: "Block".to_string(),
@@ -569,15 +569,14 @@ impl Block {
     pub fn update_nodes<TTx, TFnOnLock, TFnOnCommit, E>(
         &self,
         tx: &mut TTx,
-        on_lock_block: TFnOnLock,
-        on_commit: TFnOnCommit,
-        locked_blocks: &mut Vec<Block>,
+        mut on_lock_block: TFnOnLock,
+        mut on_commit: TFnOnCommit,
     ) -> Result<HighQc, E>
     where
         TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
         TTx::Target: StateStoreReadTransaction,
-        TFnOnLock: FnOnce(&mut TTx, &LockedBlock, &Block, &mut Vec<Block>) -> Result<(), E>,
-        TFnOnCommit: FnOnce(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
+        TFnOnLock: FnMut(&mut TTx, &LockedBlock, &Block) -> Result<(), E>,
+        TFnOnCommit: FnMut(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
         E: From<StorageError>,
     {
         let high_qc = self.justify().update_high_qc(tx)?;
@@ -592,9 +591,9 @@ impl Block {
             return Ok(high_qc);
         };
 
-        let locked_block = LockedBlock::get(tx.deref_mut())?;
-        if precommit_node.height() > locked_block.height {
-            on_lock_block(tx, &locked_block, &precommit_node, locked_blocks)?;
+        let locked = LockedBlock::get(tx.deref_mut())?;
+        if precommit_node.height() > locked.height {
+            on_locked_block_recurse(tx, &locked, &precommit_node, &mut on_lock_block)?;
             precommit_node.as_locked_block().set(tx)?;
         }
 
@@ -614,7 +613,7 @@ impl Block {
             // Commit prepare_node (b)
             let prepare_node = Block::get(tx.deref_mut(), prepare_node)?;
             let last_executed = LastExecuted::get(tx.deref_mut())?;
-            on_commit(tx, &last_executed, &prepare_node)?;
+            on_commit_block_recurse(tx, &last_executed, &prepare_node, &mut on_commit)?;
             prepare_node.as_last_executed().set(tx)?;
         } else {
             debug!(
@@ -753,4 +752,45 @@ impl Display for BlockId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
     }
+}
+
+fn on_locked_block_recurse<TTx, F, E>(
+    tx: &mut TTx,
+    locked: &LockedBlock,
+    block: &Block,
+    callback: &mut F,
+) -> Result<(), E>
+where
+    TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+    TTx::Target: StateStoreReadTransaction,
+    E: From<StorageError>,
+    F: FnMut(&mut TTx, &LockedBlock, &Block) -> Result<(), E>,
+{
+    if locked.height < block.height() {
+        let parent = block.get_parent(tx.deref_mut())?;
+        on_locked_block_recurse(tx, locked, &parent, callback)?;
+        callback(tx, locked, block)?;
+    }
+    Ok(())
+}
+
+fn on_commit_block_recurse<TTx, F, E>(
+    tx: &mut TTx,
+    last_executed: &LastExecuted,
+    block: &Block,
+    callback: &mut F,
+) -> Result<(), E>
+where
+    TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+    TTx::Target: StateStoreReadTransaction,
+    E: From<StorageError>,
+    F: FnMut(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
+{
+    if last_executed.height < block.height() {
+        let parent = block.get_parent(tx.deref_mut())?;
+        // Recurse to "catch up" any parent parent blocks we may not have executed
+        on_commit_block_recurse(tx, last_executed, &parent, callback)?;
+        callback(tx, last_executed, block)?;
+    }
+    Ok(())
 }

@@ -80,7 +80,7 @@ use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     consensus,
-    consensus::ConsensusHandle,
+    consensus::{metrics::PrometheusConsensusMetrics, ConsensusHandle},
     dry_run_transaction_processor::DryRunTransactionProcessor,
     p2p::{
         create_tari_validator_node_rpc_service,
@@ -119,6 +119,7 @@ pub async fn spawn_services(
     keypair: RistrettoKeypair,
     global_db: GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>,
     consensus_constants: ConsensusConstants,
+    metrics_registry: &prometheus::Registry,
 ) -> Result<Services, anyhow::Error> {
     let mut handles = Vec::with_capacity(8);
 
@@ -237,6 +238,11 @@ pub async fn spawn_services(
     let outbound_messaging =
         ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
 
+    #[cfg(feature = "metrics")]
+    let metrics = PrometheusConsensusMetrics::new(metrics_registry).into();
+    #[cfg(not(feature = "metrics"))]
+    let metrics = None.into();
+
     let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
         state_store.clone(),
         keypair.clone(),
@@ -245,6 +251,7 @@ pub async fn spawn_services(
         inbound_messaging,
         outbound_messaging.clone(),
         validator_node_client_factory.clone(),
+        metrics,
         shutdown.clone(),
     )
     .await;

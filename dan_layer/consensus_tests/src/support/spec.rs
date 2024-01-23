@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_consensus::traits::ConsensusSpec;
+use tari_consensus::traits::{hooks::NoopHooks, ConsensusSpec};
 use tari_state_store_sqlite::SqliteStateStore;
 
 use crate::support::{
@@ -20,6 +20,7 @@ pub struct TestConsensusSpec;
 impl ConsensusSpec for TestConsensusSpec {
     type Addr = TestAddress;
     type EpochManager = TestEpochManager;
+    type Hooks = NoopHooks;
     type InboundMessaging = TestInboundMessaging;
     type LeaderStrategy = RoundRobinLeaderStrategy;
     type OutboundMessaging = TestOutboundMessaging;

@@ -37,6 +37,7 @@ mod template_registration_signing;
 mod virtual_substate;
 
 use std::{
+    collections::HashMap,
     fs,
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -50,6 +51,7 @@ use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
+use tari_common_types::types::PublicKey;
 use tari_dan_app_utilities::{consensus_constants::ConsensusConstants, keypair::setup_keypair_prompt};
 use tari_dan_common_types::SubstateAddress;
 use tari_dan_storage::global::DbFactory;
@@ -114,6 +116,8 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         keypair.public_key(),keypair.to_peer_address(),
     );
 
+    let metrics_registry = create_metrics_registry(keypair.public_key());
+
     let (base_node_client, wallet_client) = create_base_layer_clients(config).await?;
     let services = spawn_services(
         config,
@@ -121,6 +125,7 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         keypair.clone(),
         global_db,
         ConsensusConstants::devnet(), // TODO: change this eventually
+        &metrics_registry,
     )
     .await?;
     let info = services.networking.get_local_peer_info().await.unwrap();
@@ -131,7 +136,7 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
     if let Some(jrpc_address) = jrpc_address.as_mut() {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", jrpc_address);
         let handlers = JsonRpcHandlers::new(wallet_client, base_node_client, &services);
-        *jrpc_address = spawn_json_rpc(*jrpc_address, handlers)?;
+        *jrpc_address = spawn_json_rpc(*jrpc_address, handlers, metrics_registry)?;
         // Run the http ui
         if let Some(address) = config.validator_node.http_ui_listener_address {
             task::spawn(run_http_ui_server(
@@ -177,4 +182,11 @@ async fn create_base_layer_clients(
     }));
 
     Ok((base_node_client, wallet_client))
+}
+
+fn create_metrics_registry(public_key: &PublicKey) -> prometheus::Registry {
+    let mut labels = HashMap::with_capacity(2);
+    labels.insert("app".to_string(), "ValidatorNode".to_string());
+    labels.insert("public_key".to_string(), public_key.to_string());
+    prometheus::Registry::new_custom(Some("tari".to_string()), Some(labels)).unwrap()
 }
