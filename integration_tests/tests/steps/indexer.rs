@@ -12,7 +12,6 @@ use integration_tests::{
     TariWorld,
 };
 use libp2p::Multiaddr;
-use tari_crypto::tari_utilities::hex::Hex;
 use tari_indexer_client::types::AddPeerRequest;
 
 #[when(expr = "indexer {word} connects to all other validators")]
