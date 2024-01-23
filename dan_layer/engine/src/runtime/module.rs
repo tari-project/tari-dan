@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use indexmap::IndexMap;
-use tari_engine_types::substate::{SubstateAddress, SubstateValue};
+use tari_engine_types::substate::{SubstateId, SubstateValue};
 
 use crate::runtime::StateTracker;
 
@@ -18,7 +18,7 @@ pub trait RuntimeModule: Send + Sync {
     fn on_before_finalize(
         &self,
         _track: &StateTracker,
-        _changes: &IndexMap<SubstateAddress, SubstateValue>,
+        _changes: &IndexMap<SubstateId, SubstateValue>,
     ) -> Result<(), RuntimeModuleError> {
         Ok(())
     }

@@ -1,14 +1,14 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
+mod block_sync;
+mod conversions;
+pub mod proto;
+
 mod message;
-mod outbound_service;
-mod peer_service;
-
 pub use message::*;
-pub use outbound_service::*;
-pub use peer_service::*;
-use tari_comms::protocol::ProtocolId;
 
-pub static TARI_DAN_MSG_PROTOCOL_ID: ProtocolId = ProtocolId::from_static(b"t/msg/1");
-pub static TARI_DAN_CONSENSUS_MSG_ID: ProtocolId = ProtocolId::from_static(b"t/msg-hs/1");
+mod message_spec;
+pub use message_spec::*;
+
+mod utils;

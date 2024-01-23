@@ -5,12 +5,12 @@ use diesel::{Connection, SqliteConnection};
 use rand::rngs::OsRng;
 use tari_common_types::types::PublicKey;
 use tari_crypto::keys::PublicKey as _;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, PeerAddress, SubstateAddress};
 use tari_dan_storage::global::{GlobalDb, ValidatorNodeDb};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_utilities::ByteArray;
 
-fn create_db() -> GlobalDb<SqliteGlobalDbAdapter> {
+fn create_db() -> GlobalDb<SqliteGlobalDbAdapter<PeerAddress>> {
     let conn = SqliteConnection::establish(":memory:").unwrap();
     let db = GlobalDb::new(SqliteGlobalDbAdapter::new(conn));
     db.adapter().migrate().unwrap();
@@ -21,23 +21,33 @@ fn new_public_key() -> PublicKey {
     PublicKey::random_keypair(&mut OsRng).1
 }
 
-fn derived_shard_id(public_key: &PublicKey) -> ShardId {
-    ShardId::from_bytes(public_key.as_bytes()).unwrap()
+fn derived_substate_address(public_key: &PublicKey) -> SubstateAddress {
+    SubstateAddress::from_bytes(public_key.as_bytes()).unwrap()
 }
 
-fn insert_vns(validator_nodes: &mut ValidatorNodeDb<'_, '_, SqliteGlobalDbAdapter>, num: usize, epoch: Epoch) {
+fn insert_vns(
+    validator_nodes: &mut ValidatorNodeDb<'_, '_, SqliteGlobalDbAdapter<PeerAddress>>,
+    num: usize,
+    epoch: Epoch,
+) {
     for _ in 0..num {
         insert_vn_with_public_key(validator_nodes, new_public_key(), epoch)
     }
 }
 
 fn insert_vn_with_public_key(
-    validator_nodes: &mut ValidatorNodeDb<'_, '_, SqliteGlobalDbAdapter>,
+    validator_nodes: &mut ValidatorNodeDb<'_, '_, SqliteGlobalDbAdapter<PeerAddress>>,
     public_key: PublicKey,
     epoch: Epoch,
 ) {
     validator_nodes
-        .insert_validator_node(public_key.clone(), derived_shard_id(&public_key), epoch, public_key)
+        .insert_validator_node(
+            public_key.clone().into(),
+            public_key.clone(),
+            derived_substate_address(&public_key),
+            epoch,
+            public_key,
+        )
         .unwrap()
 }
 
@@ -83,8 +93,8 @@ fn insert_and_get_within_shard_range_duplicate_public_keys() {
     let pk2 = new_public_key();
     insert_vn_with_public_key(&mut validator_nodes, pk2.clone(), Epoch(1));
 
-    let shard_id = derived_shard_id(&pk);
-    let shard_id2 = derived_shard_id(&pk2);
+    let shard_id = derived_substate_address(&pk);
+    let shard_id2 = derived_substate_address(&pk2);
     let (start, end) = if shard_id > shard_id2 {
         (shard_id2, shard_id)
     } else {
@@ -95,11 +105,11 @@ fn insert_and_get_within_shard_range_duplicate_public_keys() {
         .get_by_shard_range(Epoch(0), Epoch(10), start..=end)
         .unwrap();
     if shard_id > shard_id2 {
-        assert_eq!(vns[0].address, pk2);
-        assert_eq!(vns[1].address, pk);
+        assert_eq!(vns[0].public_key, pk2);
+        assert_eq!(vns[1].public_key, pk);
     } else {
-        assert_eq!(vns[0].address, pk);
-        assert_eq!(vns[1].address, pk2);
+        assert_eq!(vns[0].public_key, pk);
+        assert_eq!(vns[1].public_key, pk2);
     }
     assert_eq!(vns.len(), 2);
 }

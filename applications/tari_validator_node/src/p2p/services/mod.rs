@@ -20,8 +20,5 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// pub mod committee_state_sync;
-pub mod comms_peer_provider;
 pub mod mempool;
 pub mod messaging;
-pub mod networking;

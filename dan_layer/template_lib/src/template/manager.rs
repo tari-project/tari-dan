@@ -28,16 +28,20 @@ use crate::{
     prelude::TemplateAddress,
 };
 
+/// Utility to allow template code to call functions from other templates (i.e., composability)
 #[derive(Debug)]
 pub struct TemplateManager {
     template_address: TemplateAddress,
 }
 
 impl TemplateManager {
+    /// Returns a new `TemplateManager` for the template specified as argument
     pub fn get(template_address: TemplateAddress) -> Self {
         Self { template_address }
     }
 
+    /// Executes a function in the template.
+    /// Template functions can be called from another template function or from component methods.
     pub fn call<F: Into<String>, T: DeserializeOwned>(&self, function: F, args: Vec<Arg>) -> T {
         self.call_internal(CallFunctionArg {
             template_address: self.template_address,
@@ -55,5 +59,11 @@ impl TemplateManager {
         result
             .decode()
             .expect("failed to decode template function call result from engine")
+    }
+
+    /// Calls a function in the template. The invoked function must return a unit type or a panic will occur.
+    /// Equivalent to `call::<_, ()>(function, args)`.
+    pub fn invoke<F: Into<String>>(&self, function: F, args: Vec<Arg>) {
+        self.call(function, args)
     }
 }

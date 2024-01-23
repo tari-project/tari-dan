@@ -1,0 +1,112 @@
+// Copyright 2022 The Tari Project
+// SPDX-License-Identifier: BSD-3-Clause
+
+syntax = "proto3";
+
+package tari.dan.transaction;
+
+import "common.proto";
+
+message NewTransactionMessage {
+  Transaction transaction = 1;
+  repeated bytes output_shards = 2;
+}
+
+message CommitmentSignature {
+  bytes public_nonce_commitment = 1;
+  bytes signature_u = 2;
+  bytes signature_v = 3;
+}
+
+message Transaction {
+  repeated Instruction fee_instructions = 1;
+  repeated Instruction instructions = 2;
+  tari.dan.common.SignatureAndPublicKey signature = 3;
+  repeated bytes inputs = 4;
+  repeated bytes input_refs = 5;
+  repeated bytes filled_inputs = 7;
+  tari.dan.common.Epoch min_epoch = 8;
+  tari.dan.common.Epoch max_epoch = 9;
+}
+
+message Instruction {
+  enum InstructionType {
+    FUNCTION = 0;
+    METHOD = 1;
+    PUT_OUTPUT_IN_WORKSPACE = 2;
+    EMIT_LOG = 3;
+    CLAIM_BURN = 4;
+    CLAIM_VALIDATOR_FEES = 5;
+    DROP_ALL_PROOFS_IN_WORKSPACE = 6;
+    CREATE_FREE_TEST_COINS = 101;
+  }
+  InstructionType instruction_type = 1;
+
+  // common fields
+  bytes template_address = 2;
+  repeated Arg args = 3;
+
+  // function only
+  string function = 4;
+
+  // method only
+  bytes component_address = 5;
+  string method = 6;
+
+  // PutLastInstructionOutputOnWorkspace
+  bytes key = 7;
+
+  string log_level = 8;
+  string log_message = 9;
+
+  bytes claim_burn_commitment_address = 10;
+  bytes claim_burn_range_proof = 11;
+  CommitmentSignature claim_burn_proof_of_knowledge = 12;
+  bytes claim_burn_public_key = 13;
+  ConfidentialWithdrawProof claim_burn_withdraw_proof = 14;
+
+  bytes claim_validator_fees_validator_public_key = 15;
+  uint64 claim_validator_fees_epoch = 16;
+
+  // DEBUGGING: Test coins
+  uint64 create_free_test_coins_amount = 101;
+  bytes create_free_test_coins_output_blob = 102;
+}
+
+message Arg {
+  enum ArgType {
+    LITERAL = 0;
+    FROM_WORKSPACE = 1;
+  }
+  ArgType arg_type = 1;
+  bytes data = 2;
+}
+
+message SubstateRequirement {
+  bytes substate_id = 1;
+  OptionalVersion version = 2;
+}
+
+message OptionalVersion {
+  uint32 version = 1;
+}
+
+message ConfidentialWithdrawProof {
+  repeated bytes inputs = 1;
+  ConfidentialOutputProof output_proof = 2;
+  bytes balance_proof = 3;
+}
+
+message ConfidentialOutputProof {
+  ConfidentialStatement output_statement = 1;
+  ConfidentialStatement change_statement = 2;
+  bytes range_proof = 3;
+}
+
+message ConfidentialStatement {
+  bytes commitment = 1;
+  bytes sender_public_nonce = 2;
+  bytes encrypted_value = 3;
+  uint64 minimum_value_promise = 4;
+  uint64 revealed_amount = 5;
+}

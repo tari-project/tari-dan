@@ -39,6 +39,7 @@ pub enum EngineOp {
     EmitEvent = 0x0B,
     CallInvoke = 0x0C,
     ProofInvoke = 0x0D,
+    BuiltinTemplateInvoke = 0x0E,
 }
 
 impl EngineOp {
@@ -58,6 +59,7 @@ impl EngineOp {
             0x0B => Some(EngineOp::EmitEvent),
             0x0C => Some(EngineOp::CallInvoke),
             0x0D => Some(EngineOp::ProofInvoke),
+            0x0E => Some(EngineOp::BuiltinTemplateInvoke),
             _ => None,
         }
     }

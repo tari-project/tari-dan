@@ -1,36 +1,36 @@
 [package]
 name = "tari_dan_wallet_storage_sqlite"
-authors = ["The Tari Development Community"]
-description = "The Tari DAN wallet library"
-repository = "https://github.com/tari-project/tari-dan"
-version = "0.1.1"
-edition = "2021"
-license = "BSD-3-Clause"
+description = "The Tari DAN wallet SQLite storage library"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_dan_common_types = { path = "../../common_types" }
-tari_dan_wallet_sdk = { path = "../sdk" }
-tari_engine_types = { path = "../../engine_types" }
-tari_template_lib = { path = "../../template_lib" }
-tari_transaction = { path = "../../transaction" }
-tari_utilities = "0.6"
+tari_common_types = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_dan_wallet_sdk = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_transaction = { workspace = true }
+tari_utilities = { workspace = true }
 # Just used for QuorumCertificate
-tari_dan_storage = { path = "../../storage" }
+tari_dan_storage = { workspace = true }
 
-serde = "1.0"
-serde_json = "1.0"
-diesel = { version = "2", features = ["sqlite", "chrono"] }
-diesel_migrations = "2"
-log = "0.4.17"
-chrono = "*"
-bigdecimal = "0.4"
+serde = { workspace = true, default-features = true }
+serde_json = { workspace = true }
+diesel = { workspace = true, features = ["default", "sqlite", "chrono"] }
+diesel_migrations = { workspace = true }
+log = { workspace = true }
+chrono = { workspace = true }
+bigdecimal = { workspace = true }
 
 # Bundle libsqlite3
-libsqlite3-sys = { version = "0.25", features = ["bundled"] }
+libsqlite3-sys = { workspace = true, features = ["bundled"] }
 
 [dev-dependencies]
-tari_dan_common_types = { path = "../../common_types" }
+tari_dan_common_types = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = [

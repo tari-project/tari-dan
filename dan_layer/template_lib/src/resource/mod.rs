@@ -19,6 +19,9 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+//! Utilities for building and managing resources inside templates
+
 mod builder;
 
 use std::fmt::Display;
@@ -27,10 +30,16 @@ pub use builder::*;
 mod manager;
 pub use manager::*;
 
+/// Represents every possible type of resource in the Tari network
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ResourceType {
+    /// Fungible tokens do not have individual identity, making them interchangeable. E.g. monetary units, liquidity
+    /// pool tokens, tokenized shares or commodities, etc.
     Fungible,
+    /// A resource (i.e. collection) of non-fungible tokens. Each non-fungible token is uniquely addressable inside its
+    /// parent resource, can hold its own data, and is non-divisible.
     NonFungible,
+    /// A type of fungible resource that has private balance information using cryptography
     Confidential,
 }
 

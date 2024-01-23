@@ -25,7 +25,6 @@ use std::{fs, future, io, panic, str::FromStr, time::Duration};
 
 use cucumber::{gherkin::Step, given, then, when, writer, writer::Verbosity, World, WriterExt};
 use integration_tests::{
-    base_node::spawn_base_node,
     http_server::{spawn_template_http_server, MockHttpServer},
     logging::{create_log_config_file, get_base_dir},
     miner::{mine_blocks, register_miner_process},
@@ -36,8 +35,8 @@ use integration_tests::{
     wallet_daemon_cli,
     TariWorld,
 };
+use libp2p::Multiaddr;
 use tari_common::initialize_logging;
-use tari_comms::multiaddr::Multiaddr;
 use tari_dan_engine::abi::Type;
 use tari_dan_storage::consensus_models::QuorumDecision;
 use tari_shutdown::Shutdown;
@@ -90,11 +89,6 @@ async fn main() {
         .await;
 
     shutdown.trigger();
-}
-
-#[given(expr = "a base node {word}")]
-async fn start_base_node(world: &mut TariWorld, bn_name: String) {
-    spawn_base_node(world, bn_name).await;
 }
 
 #[given(expr = "fees are disabled")]
@@ -207,11 +201,32 @@ async fn call_component_method(
     method_call: String,
     output_name: String,
 ) {
-    let resp = validator_node_cli::call_method(world, vn_name, component_name, output_name, method_call).await;
+    let resp = validator_node_cli::call_method(world, vn_name, component_name, output_name, method_call)
+        .await
+        .unwrap();
     assert_eq!(resp.dry_run_result.unwrap().decision, QuorumDecision::Accept);
 
     // give it some time between transactions
     // tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
+#[when(
+    expr = r#"I invoke on {word} on component {word} the method call "{word}" named "{word}" the result is error {string}"#
+)]
+async fn call_component_method_must_error(
+    world: &mut TariWorld,
+    vn_name: String,
+    component_name: String,
+    method_call: String,
+    output_name: String,
+    error_msg: String,
+) {
+    let res = validator_node_cli::call_method(world, vn_name, component_name, output_name, method_call).await;
+    if let Err(reject) = res {
+        assert!(reject.to_string().contains(&error_msg));
+    } else {
+        panic!("Expected an error but the call was successful");
+    }
 }
 
 #[when(expr = r#"I invoke on all validator nodes on component {word} the method call "{word}" named "{word}""#)]
@@ -230,7 +245,8 @@ async fn call_component_method_on_all_vns(
             output_name.clone(),
             method_call.clone(),
         )
-        .await;
+        .await
+        .unwrap();
         assert_eq!(resp.dry_run_result.unwrap().decision, QuorumDecision::Accept);
     }
     // give it some time between transactions
@@ -246,7 +262,9 @@ async fn call_component_method_and_check_result(
     expected_result: String,
 ) {
     let resp =
-        validator_node_cli::call_method(world, vn_name, component_name, "dummy_outputs".to_string(), method_call).await;
+        validator_node_cli::call_method(world, vn_name, component_name, "dummy_outputs".to_string(), method_call)
+            .await
+            .unwrap();
     let finalize_result = resp.dry_run_result.unwrap();
     assert_eq!(finalize_result.decision, QuorumDecision::Accept);
 
@@ -283,7 +301,8 @@ async fn call_component_method_on_all_vns_and_check_result(
             "dummy_outputs".to_string(),
             method_call.clone(),
         )
-        .await;
+        .await
+        .unwrap();
         let finalize_result = resp.dry_run_result.unwrap();
         assert_eq!(finalize_result.decision, QuorumDecision::Accept);
 

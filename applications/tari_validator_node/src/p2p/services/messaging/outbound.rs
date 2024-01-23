@@ -1,3 +1,6 @@
+//   Copyright 2024 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
+
 //  Copyright 2021. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
@@ -21,117 +24,117 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
-use tari_comms::types::CommsPublicKey;
-use tari_consensus::messages::HotstuffMessage;
-use tari_dan_p2p::{DanMessage, Message, OutboundService};
+use tari_consensus::{messages::HotstuffMessage, traits::OutboundMessagingError};
+use tari_dan_common_types::PeerAddress;
+use tari_dan_p2p::{proto, TariMessagingSpec};
+use tari_networking::{NetworkingHandle, NetworkingService};
 use tokio::sync::mpsc;
 
-use crate::{comms::Destination, p2p::services::messaging::MessagingError};
+use crate::p2p::logging::MessageLogger;
 
 const _LOG_TARGET: &str = "tari::dan::messages::outbound::validator_node";
 
 #[derive(Debug, Clone)]
-pub struct OutboundMessaging {
-    our_node_addr: CommsPublicKey,
-    msg_sender: mpsc::Sender<(Destination<CommsPublicKey>, DanMessage<CommsPublicKey>)>,
-    consensus_sender: mpsc::Sender<(Destination<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
-    loopback_sender: mpsc::Sender<Message<CommsPublicKey>>,
+pub struct ConsensusOutboundMessaging<TMsgLogger> {
+    our_node_addr: PeerAddress,
+    loopback_sender: mpsc::UnboundedSender<HotstuffMessage>,
+    networking: NetworkingHandle<TariMessagingSpec>,
+    msg_logger: TMsgLogger,
 }
 
-impl OutboundMessaging {
+impl<TMsgLogger: MessageLogger> ConsensusOutboundMessaging<TMsgLogger> {
     pub fn new(
-        our_node_addr: CommsPublicKey,
-        msg_sender: mpsc::Sender<(Destination<CommsPublicKey>, DanMessage<CommsPublicKey>)>,
-        consensus_sender: mpsc::Sender<(Destination<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
-        loopback_sender: mpsc::Sender<Message<CommsPublicKey>>,
+        loopback_sender: mpsc::UnboundedSender<HotstuffMessage>,
+        networking: NetworkingHandle<TariMessagingSpec>,
+        msg_logger: TMsgLogger,
     ) -> Self {
         Self {
-            our_node_addr,
-            msg_sender,
-            consensus_sender,
+            our_node_addr: (*networking.local_peer_id()).into(),
             loopback_sender,
+            networking,
+            msg_logger,
         }
-    }
-
-    async fn send_message(
-        &self,
-        dest: Destination<CommsPublicKey>,
-        message: Message<CommsPublicKey>,
-    ) -> Result<(), MessagingError> {
-        match message {
-            Message::Consensus(msg) => {
-                self.consensus_sender
-                    .send((dest, msg))
-                    .await
-                    .map_err(|_| MessagingError::MessageSendFailed)?;
-            },
-            Message::Dan(msg) => {
-                self.msg_sender
-                    .send((dest, msg))
-                    .await
-                    .map_err(|_| MessagingError::MessageSendFailed)?;
-            },
-        }
-
-        Ok(())
     }
 }
 
 #[async_trait]
-impl OutboundService for OutboundMessaging {
-    type Addr = CommsPublicKey;
-    type Error = MessagingError;
+impl<TMsgLogger: MessageLogger + Send> tari_consensus::traits::OutboundMessaging
+    for ConsensusOutboundMessaging<TMsgLogger>
+{
+    type Addr = PeerAddress;
 
-    async fn send_self<T: Into<Message<Self::Addr>> + Send>(&mut self, message: T) -> Result<(), MessagingError> {
+    async fn send_self<T: Into<HotstuffMessage> + Send>(&mut self, message: T) -> Result<(), OutboundMessagingError> {
+        let message = message.into();
+        self.msg_logger.log_outbound_message(
+            "self",
+            &self.our_node_addr.as_peer_id().to_string(),
+            message.as_type_str(),
+            "",
+            &message,
+        );
         self.loopback_sender
-            .send(message.into())
-            .await
-            .map_err(|_| MessagingError::LoopbackSendFailed)?;
+            .send(message)
+            .map_err(|_| OutboundMessagingError::FailedToEnqueueMessage {
+                reason: "loopback sender closed".to_string(),
+            })?;
         return Ok(());
     }
 
-    async fn send<T: Into<Message<Self::Addr>> + Send>(
+    async fn send<T: Into<HotstuffMessage> + Send>(
         &mut self,
         to: Self::Addr,
         message: T,
-    ) -> Result<(), MessagingError> {
+    ) -> Result<(), OutboundMessagingError> {
         if to == self.our_node_addr {
             return self.send_self(message).await;
         }
 
-        self.send_message(Destination::Peer(to), message.into()).await?;
+        let msg = message.into();
+
+        self.msg_logger
+            .log_outbound_message("send", &to.to_string(), msg.as_type_str(), "", &msg);
+        self.networking
+            .send_message(to.as_peer_id(), proto::consensus::HotStuffMessage::from(&msg))
+            .await
+            .map_err(OutboundMessagingError::from_error)?;
 
         Ok(())
     }
 
-    async fn broadcast<'a, I: IntoIterator<Item = &'a Self::Addr> + Send, T: Into<Message<Self::Addr>> + Send>(
-        &mut self,
-        committee: I,
-        message: T,
-    ) -> Result<(), MessagingError> {
+    async fn multicast<'a, I, T>(&mut self, committee: I, message: T) -> Result<(), OutboundMessagingError>
+    where
+        Self::Addr: 'a,
+        I: IntoIterator<Item = &'a Self::Addr> + Send,
+        T: Into<HotstuffMessage> + Send,
+    {
         let message = message.into();
+
         let (ours, theirs) = committee
             .into_iter()
-            .partition::<Vec<_>, _>(|x| **x == self.our_node_addr);
+            .partition::<Vec<&Self::Addr>, _>(|x| **x == self.our_node_addr);
 
         if ours.is_empty() && theirs.is_empty() {
             return Ok(());
         }
 
-        // send it more than once to ourselves??
-        for _ in ours {
-            self.loopback_sender
-                .send(message.clone())
-                .await
-                .map_err(|_| MessagingError::LoopbackSendFailed)?;
+        // send it once to ourselves
+        if !ours.is_empty() {
+            self.send_self(message.clone()).await?;
         }
 
-        self.send_message(Destination::Selected(theirs.into_iter().cloned().collect()), message)
-            .await?;
-        Ok(())
-    }
+        for to in &theirs {
+            self.msg_logger
+                .log_outbound_message("broadcast", &to.to_string(), message.as_type_str(), "", &message);
+        }
 
-    async fn flood<T: Into<Message<Self::Addr>> + Send>(&mut self, message: T) -> Result<(), MessagingError> {
-        self.send_message(Destination::Flood, message.into()).await
+        self.networking
+            .send_multicast(
+                theirs.into_iter().map(|a| a.as_peer_id()).collect::<Vec<_>>(),
+                proto::consensus::HotStuffMessage::from(&message),
+            )
+            .await
+            .map_err(OutboundMessagingError::from_error)?;
+
+        Ok(())
     }
 }

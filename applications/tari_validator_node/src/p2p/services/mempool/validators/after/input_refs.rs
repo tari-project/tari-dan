@@ -2,7 +2,7 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use async_trait::async_trait;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_dan_storage::consensus_models::ExecutedTransaction;
 
 use crate::p2p::services::mempool::{MempoolError, Validator};
@@ -27,7 +27,7 @@ impl Validator<ExecutedTransaction> for InputRefsValidator {
 
         let is_input_refs_downed = diff
             .down_iter()
-            .map(|(s, v)| ShardId::from_address(s, *v))
+            .map(|(s, v)| SubstateAddress::from_address(s, *v))
             .any(|s| executed.transaction().input_refs().contains(&s));
 
         if is_input_refs_downed {

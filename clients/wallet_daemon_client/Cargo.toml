@@ -1,22 +1,23 @@
 [package]
 name = "tari_wallet_daemon_client"
-version = "0.1.1"
-edition = "2021"
-authors = ["The Tari Development Community"]
 description = "Tari wallet daemon client library"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_dan_common_types = { path = "../../dan_layer/common_types" }
-tari_engine_types = { path = "../../dan_layer/engine_types" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_transaction = { path = "../../dan_layer/transaction" }
-tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
+tari_dan_common_types = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_common_types = { workspace = true }
+tari_transaction = { workspace = true }
+tari_dan_wallet_sdk = { workspace = true }
 # TODO: Ideally we should not have to include the WASM template lib, we should perhaps extract the address types into a separate crate (e.g. template_types)
-tari_template_lib = { path = "../../dan_layer/template_lib"}
+tari_template_lib = { workspace = true }
 
-reqwest = { version = "0.11.11", features = ["json"] }
-serde = "1.0"
-serde_json = "1.0"
-thiserror = "1.0.38"
+chrono = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, default-features = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

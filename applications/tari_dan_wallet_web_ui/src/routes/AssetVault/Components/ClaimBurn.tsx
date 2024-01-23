@@ -20,70 +20,154 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import { Form } from 'react-router-dom';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import Select, { SelectChangeEvent } from '@mui/material/Select/Select';
-import MenuItem from '@mui/material/MenuItem';
-import Box from '@mui/material/Box';
-import {
-  useAccountsList,
-  useAccountsClaimBurn,
-} from '../../../api/hooks/useAccounts';
-import { toHexString } from '../../../utils/helpers';
-import { useTheme } from '@mui/material/styles';
+import { useState } from "react";
+import { Form } from "react-router-dom";
+import Button from "@mui/material/Button";
+import TextField from "@mui/material/TextField";
+import Dialog from "@mui/material/Dialog";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import Select, { SelectChangeEvent } from "@mui/material/Select/Select";
+import MenuItem from "@mui/material/MenuItem";
+import Box from "@mui/material/Box";
+import { useAccountsList, useAccountsClaimBurn } from "../../../api/hooks/useAccounts";
+import { useTheme } from "@mui/material/styles";
+import { accountsClaimBurn } from "../../../utils/json_rpc";
+import useAccountStore from "../../../store/accountStore";
+import { useKeysList } from "../../../api/hooks/useKeys";
 
 export default function ClaimBurn() {
   const [open, setOpen] = useState(false);
   const [claimBurnFormState, setClaimBurnFormState] = useState({
-    account: '',
-    claimProof: '',
-    fee: '',
+    account: "",
+    key: "",
+    claimProof: "",
+    fee: "",
+    is_valid_json: false,
+    newAccount: false,
+    filled: false,
+    disabled: false,
   });
-  const { mutateAsync: mutateClaimBurn } = useAccountsClaimBurn(
-    claimBurnFormState.account,
-    claimBurnFormState.claimProof
-      ? JSON.parse(claimBurnFormState.claimProof)
-      : null,
-    +claimBurnFormState.fee
-  );
 
   const { data: dataAccountsList } = useAccountsList(0, 10);
+  const { data: dataKeysList } = useKeysList();
+  const { setPopup } = useAccountStore();
 
-  const onClaimBurnAccountChange = (e: SelectChangeEvent<string>) => {
+  const onClaimBurnKeyChange = (e: SelectChangeEvent<string>) => {
+    let key = e.target.value;
+    let key_index = dataKeysList.keys.indexOf(key);
+    let account = claimBurnFormState.account;
+    let selected_account = dataAccountsList.accounts.find((account: any) => account.account.key_index === key_index);
+    let new_account_name;
+    if (selected_account !== undefined) {
+      account = selected_account.account.name;
+      new_account_name = false;
+    } else {
+      if (claimBurnFormState.newAccount === false) {
+        account = "";
+      }
+      new_account_name = true;
+    }
     setClaimBurnFormState({
       ...claimBurnFormState,
-      [e.target.name]: e.target.value,
+      key: key,
+      account: account,
+      newAccount: new_account_name,
+      filled: claimBurnFormState.is_valid_json && claimBurnFormState.fee !== "" && e.target.value !== "",
     });
   };
 
   const theme = useTheme();
 
-  const onClaimBurnChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onClaimBurnClaimProofChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // We have to check if the claim proof is valid JSON
+    try {
+      JSON.parse(e.target.value);
+      setClaimBurnFormState({
+        ...claimBurnFormState,
+        [e.target.name]: e.target.value,
+        is_valid_json: true,
+        filled: claimBurnFormState.key !== "" && claimBurnFormState.fee !== "" && e.target.value !== "",
+      });
+    } catch {
+      setClaimBurnFormState({
+        ...claimBurnFormState,
+        [e.target.name]: e.target.value,
+        is_valid_json: false,
+        filled: false,
+      });
+    }
+  };
+
+  const onClaimBurnAccountNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setClaimBurnFormState({
       ...claimBurnFormState,
       [e.target.name]: e.target.value,
+      filled: claimBurnFormState.key !== "" && claimBurnFormState.is_valid_json && e.target.value !== "",
+    });
+  };
+
+  const onClaimBurnFeeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setClaimBurnFormState({
+      ...claimBurnFormState,
+      [e.target.name]: e.target.value,
+      filled: claimBurnFormState.key !== "" && claimBurnFormState.is_valid_json && e.target.value !== "",
     });
   };
 
   const onClaimBurn = async () => {
-    await mutateClaimBurn();
-    setClaimBurnFormState({ account: '', claimProof: '', fee: '' });
-    setOpen(false);
+    try {
+      setClaimBurnFormState({ ...claimBurnFormState, disabled: true });
+      await accountsClaimBurn(
+        claimBurnFormState.account,
+        JSON.parse(claimBurnFormState.claimProof),
+        +claimBurnFormState.fee,
+        +claimBurnFormState.key[0],
+      );
+      setOpen(false);
+      setPopup({ title: "Claimed", error: false });
+      setClaimBurnFormState({
+        key: "",
+        account: "",
+        claimProof: "",
+        fee: "",
+        is_valid_json: false,
+        filled: false,
+        disabled: false,
+        newAccount: false,
+      });
+    } catch (e: any) {
+      setClaimBurnFormState({ ...claimBurnFormState, disabled: false });
+      setPopup({ title: "Claim burn failed: " + e.message, error: true });
+    }
   };
 
   const handleClickOpen = () => {
+    setClaimBurnFormState({ ...claimBurnFormState, disabled: false });
     setOpen(true);
   };
 
   const handleClose = () => {
     setOpen(false);
+  };
+
+  const formattedKey = (key: any[]) => {
+    let account = dataAccountsList.accounts.find((account: any) => account.account.key_index === +key[0]);
+    if (account === undefined) {
+      return (
+        <div>
+          <b>{key[0]}</b> {key[1]}
+        </div>
+      );
+    }
+    return (
+      <div>
+        <b>{key[0]}</b> {key[1]}
+        <br></br>Account <i>{account.account.name}</i>
+      </div>
+    );
   };
 
   return (
@@ -94,58 +178,63 @@ export default function ClaimBurn() {
       <Dialog open={open} onClose={handleClose}>
         <DialogTitle>Claim Burn</DialogTitle>
         <DialogContent className="dialog-content">
-          <Form
-            onSubmit={onClaimBurn}
-            className="flex-container-vertical"
-            style={{ paddingTop: theme.spacing(1) }}
-          >
+          <Form onSubmit={onClaimBurn} className="flex-container-vertical" style={{ paddingTop: theme.spacing(1) }}>
             <FormControl>
-              <InputLabel id="account">Account</InputLabel>
+              <InputLabel id="key">Key</InputLabel>
               <Select
-                labelId="account"
-                name="account"
-                label="Account"
-                value={claimBurnFormState.account}
-                onChange={onClaimBurnAccountChange}
-                style={{ flexGrow: 1, minWidth: '200px' }}
+                labelId="key"
+                name="key"
+                label="Key"
+                value={claimBurnFormState.key}
+                onChange={onClaimBurnKeyChange}
+                style={{ flexGrow: 1, minWidth: "200px" }}
+                disabled={claimBurnFormState.disabled}
               >
-                {dataAccountsList?.accounts.map((account: any) => (
-                  <MenuItem
-                    key={toHexString(account.account.address.Component)}
-                    value={
-                      'component_' +
-                      toHexString(account.account.address.Component)
-                    }
-                  >
-                    {account.account.name}{' '}
+                {dataKeysList?.keys?.map((key: any) => (
+                  <MenuItem key={key} value={key}>
+                    {formattedKey(key)}
                   </MenuItem>
                 ))}
               </Select>
             </FormControl>
             <TextField
+              name="account"
+              label="Account Name"
+              value={claimBurnFormState.account}
+              onChange={onClaimBurnAccountNameChange}
+              style={{ flexGrow: 1 }}
+              disabled={claimBurnFormState.disabled || !claimBurnFormState.newAccount}
+            ></TextField>
+            <TextField
               name="claimProof"
               label="Claim Proof"
               value={claimBurnFormState.claimProof}
-              onChange={onClaimBurnChange}
+              onChange={onClaimBurnClaimProofChange}
               style={{ flexGrow: 1 }}
+              disabled={claimBurnFormState.disabled}
             />
             <TextField
               name="fee"
               label="Fee"
               value={claimBurnFormState.fee}
-              onChange={onClaimBurnChange}
+              onChange={onClaimBurnFeeChange}
               style={{ flexGrow: 1 }}
+              disabled={claimBurnFormState.disabled}
             />
             <Box
               className="flex-container"
               style={{
-                justifyContent: 'flex-end',
+                justifyContent: "flex-end",
               }}
             >
-              <Button variant="outlined" onClick={handleClose}>
+              <Button variant="outlined" onClick={handleClose} disabled={claimBurnFormState.disabled}>
                 Cancel
               </Button>
-              <Button variant="contained" type="submit">
+              <Button
+                variant="contained"
+                type="submit"
+                disabled={!claimBurnFormState.filled || claimBurnFormState.disabled}
+              >
                 Claim Burn
               </Button>
             </Box>

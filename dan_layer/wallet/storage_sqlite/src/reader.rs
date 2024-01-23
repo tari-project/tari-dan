@@ -16,7 +16,7 @@ use diesel::{
 };
 use log::error;
 use serde::de::DeserializeOwned;
-use tari_common_types::types::{Commitment, PublicKey};
+use tari_common_types::types::Commitment;
 use tari_dan_wallet_sdk::{
     models::{
         Account,
@@ -32,7 +32,7 @@ use tari_dan_wallet_sdk::{
     },
     storage::{WalletStorageError, WalletStoreReader},
 };
-use tari_engine_types::substate::{InvalidSubstateAddressFormat, SubstateAddress};
+use tari_engine_types::substate::{InvalidSubstateIdFormat, SubstateId};
 use tari_template_lib::{
     models::{ResourceAddress, VaultId},
     prelude::{ComponentAddress, NonFungibleId},
@@ -177,10 +177,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     // -------------------------------- Transactions -------------------------------- //
-    fn transactions_get(
-        &mut self,
-        transaction_id: TransactionId,
-    ) -> Result<WalletTransaction<PublicKey>, WalletStorageError> {
+    fn transactions_get(&mut self, transaction_id: TransactionId) -> Result<WalletTransaction, WalletStorageError> {
         use crate::schema::transactions;
         let row = transactions::table
             .filter(transactions::hash.eq(transaction_id.to_string()))
@@ -201,7 +198,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         &mut self,
         status: Option<TransactionStatus>,
         component: Option<ComponentAddress>,
-    ) -> Result<Vec<WalletTransaction<PublicKey>>, WalletStorageError> {
+    ) -> Result<Vec<WalletTransaction>, WalletStorageError> {
         use crate::schema::transactions;
 
         let mut rows = transactions::table.into_boxed().filter(transactions::dry_run.eq(false));
@@ -216,6 +213,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
             );
         }
         let rows = rows
+            .order(transactions::updated_at.desc())
             .load::<models::Transaction>(self.connection())
             .map_err(|e| WalletStorageError::general("transactions_fetch_all", e))?;
 
@@ -223,7 +221,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     // -------------------------------- Substates -------------------------------- //
-    fn substates_get(&mut self, address: &SubstateAddress) -> Result<SubstateModel, WalletStorageError> {
+    fn substates_get(&mut self, address: &SubstateId) -> Result<SubstateModel, WalletStorageError> {
         use crate::schema::substates;
 
         let rec = substates::table
@@ -241,7 +239,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         Ok(rec)
     }
 
-    fn substates_get_children(&mut self, parent: &SubstateAddress) -> Result<Vec<SubstateModel>, WalletStorageError> {
+    fn substates_get_children(&mut self, parent: &SubstateId) -> Result<Vec<SubstateModel>, WalletStorageError> {
         use crate::schema::substates;
 
         let rows = substates::table
@@ -253,7 +251,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     // -------------------------------- Accounts -------------------------------- //
-    fn accounts_get(&mut self, address: &SubstateAddress) -> Result<Account, WalletStorageError> {
+    fn accounts_get(&mut self, address: &SubstateId) -> Result<Account, WalletStorageError> {
         use crate::schema::accounts;
 
         let row = accounts::table
@@ -346,7 +344,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
 
         let account = row
             .try_into()
-            .map_err(|e: InvalidSubstateAddressFormat| WalletStorageError::DecodingError {
+            .map_err(|e: InvalidSubstateIdFormat| WalletStorageError::DecodingError {
                 operation: "accounts_get_by_name",
                 item: "account",
                 details: e.to_string(),
@@ -354,7 +352,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         Ok(account)
     }
 
-    fn accounts_get_by_vault(&mut self, vault_address: &SubstateAddress) -> Result<Account, WalletStorageError> {
+    fn accounts_get_by_vault(&mut self, vault_address: &SubstateId) -> Result<Account, WalletStorageError> {
         use crate::schema::{accounts, vaults};
 
         let account_id = vaults::table
@@ -382,7 +380,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
 
         let account = row
             .try_into()
-            .map_err(|e: InvalidSubstateAddressFormat| WalletStorageError::DecodingError {
+            .map_err(|e: InvalidSubstateIdFormat| WalletStorageError::DecodingError {
                 operation: "accounts_get_by_vault",
                 item: "account",
                 details: e.to_string(),
@@ -391,7 +389,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     // -------------------------------- Vaults -------------------------------- //
-    fn vaults_get(&mut self, address: &SubstateAddress) -> Result<VaultModel, WalletStorageError> {
+    fn vaults_get(&mut self, address: &SubstateId) -> Result<VaultModel, WalletStorageError> {
         use crate::schema::{accounts, vaults};
 
         let row = vaults::table
@@ -411,7 +409,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .first::<String>(self.connection())
             .map_err(|e| WalletStorageError::general("vaults_get", e))?;
 
-        let vault = row.try_into_vault(SubstateAddress::from_str(&account_address).map_err(|e| {
+        let vault = row.try_into_vault(SubstateId::from_str(&account_address).map_err(|e| {
             WalletStorageError::DecodingError {
                 operation: "vaults_get",
                 item: "vault",
@@ -421,7 +419,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         Ok(vault)
     }
 
-    fn vaults_exists(&mut self, address: &SubstateAddress) -> Result<bool, WalletStorageError> {
+    fn vaults_exists(&mut self, address: &SubstateId) -> Result<bool, WalletStorageError> {
         use crate::schema::vaults;
 
         let count = vaults::table
@@ -435,7 +433,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
 
     fn vaults_get_by_resource(
         &mut self,
-        account_addr: &SubstateAddress,
+        account_addr: &SubstateId,
         resource_address: &ResourceAddress,
     ) -> Result<VaultModel, WalletStorageError> {
         use crate::schema::{accounts, vaults};
@@ -468,7 +466,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         Ok(vault)
     }
 
-    fn vaults_get_by_account(&mut self, account_addr: &SubstateAddress) -> Result<Vec<VaultModel>, WalletStorageError> {
+    fn vaults_get_by_account(&mut self, account_addr: &SubstateId) -> Result<Vec<VaultModel>, WalletStorageError> {
         use crate::schema::{accounts, vaults};
 
         let account_id = accounts::table
@@ -497,7 +495,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     // -------------------------------- Outputs -------------------------------- //
-    fn outputs_get_unspent_balance(&mut self, vault_address: &SubstateAddress) -> Result<u64, WalletStorageError> {
+    fn outputs_get_unspent_balance(&mut self, vault_address: &SubstateId) -> Result<u64, WalletStorageError> {
         use crate::schema::{outputs, vaults};
 
         let vault_id = vaults::table
@@ -608,7 +606,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
 
     fn outputs_get_by_account_and_status(
         &mut self,
-        account_addr: &SubstateAddress,
+        account_addr: &SubstateId,
         status: OutputStatus,
     ) -> Result<Vec<ConfidentialOutputModel>, WalletStorageError> {
         use crate::schema::{accounts, outputs, vaults};

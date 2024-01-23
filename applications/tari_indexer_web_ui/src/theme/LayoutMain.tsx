@@ -20,27 +20,27 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import { styled } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
-import MuiDrawer from '@mui/material/Drawer';
-import Box from '@mui/material/Box';
-import MuiAppBar, { AppBarProps as MuiAppBarProps } from '@mui/material/AppBar';
-import Toolbar from '@mui/material/Toolbar';
-import List from '@mui/material/List';
-import IconButton from '@mui/material/IconButton';
-import MenuOpenOutlinedIcon from '@mui/icons-material/MenuOpenOutlined';
-import MenuOutlinedIcon from '@mui/icons-material/MenuOutlined';
-import { mainListItems } from '../Components/MenuItems';
-import { ThemeProvider } from '@mui/material';
-import theme from './theme';
-import { Outlet, Link } from 'react-router-dom';
-import Logo from '../assets/Logo';
-import Container from '@mui/material/Container';
-import Breadcrumbs from '../Components/Breadcrumbs';
-import { breadcrumbRoutes } from '../App';
-import Grid from '@mui/material/Grid';
-import Switch from '@mui/material/Switch';
+import { useState } from "react";
+import { styled } from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
+import MuiDrawer from "@mui/material/Drawer";
+import Box from "@mui/material/Box";
+import MuiAppBar, { AppBarProps as MuiAppBarProps } from "@mui/material/AppBar";
+import Toolbar from "@mui/material/Toolbar";
+import List from "@mui/material/List";
+import IconButton from "@mui/material/IconButton";
+import MenuOpenOutlinedIcon from "@mui/icons-material/MenuOpenOutlined";
+import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
+import { mainListItems } from "../Components/MenuItems";
+import { ThemeProvider } from "@mui/material";
+import theme from "./theme";
+import { Outlet, Link } from "react-router-dom";
+import Logo from "../assets/Logo";
+import Container from "@mui/material/Container";
+import Breadcrumbs from "../Components/Breadcrumbs";
+import { breadcrumbRoutes } from "../App";
+import Grid from "@mui/material/Grid";
+import Switch from "@mui/material/Switch";
 
 const drawerWidth = 300;
 
@@ -49,17 +49,17 @@ interface AppBarProps extends MuiAppBarProps {
 }
 
 const AppBar = styled(MuiAppBar, {
-  shouldForwardProp: (prop) => prop !== 'open',
+  shouldForwardProp: (prop) => prop !== "open",
 })<AppBarProps>(({ theme, open }) => ({
   zIndex: theme.zIndex.drawer + 1,
-  transition: theme.transitions.create(['width', 'margin'], {
+  transition: theme.transitions.create(["width", "margin"], {
     easing: theme.transitions.easing.easeOut,
     duration: theme.transitions.duration.enteringScreen,
   }),
   ...(open && {
     marginLeft: drawerWidth,
     width: `calc(100% - ${drawerWidth}px)`,
-    transition: theme.transitions.create(['width', 'margin'], {
+    transition: theme.transitions.create(["width", "margin"], {
       easing: theme.transitions.easing.easeOut,
       duration: theme.transitions.duration.enteringScreen,
     }),
@@ -67,27 +67,27 @@ const AppBar = styled(MuiAppBar, {
 }));
 
 const Drawer = styled(MuiDrawer, {
-  shouldForwardProp: (prop) => prop !== 'open',
+  shouldForwardProp: (prop) => prop !== "open",
 })(({ theme, open }) => ({
-  '& .MuiDrawer-paper': {
-    position: 'relative',
-    whiteSpace: 'nowrap',
-    borderRight: '1px solid #F5F5F5',
-    boxShadow: '10px 14px 28px rgb(35 11 73 / 5%)',
+  "& .MuiDrawer-paper": {
+    position: "relative",
+    whiteSpace: "nowrap",
+    borderRight: "1px solid #F5F5F5",
+    boxShadow: "10px 14px 28px rgb(35 11 73 / 5%)",
     width: drawerWidth,
-    transition: theme.transitions.create('width', {
+    transition: theme.transitions.create("width", {
       easing: theme.transitions.easing.easeOut,
       duration: theme.transitions.duration.enteringScreen,
     }),
-    boxSizing: 'border-box',
+    boxSizing: "border-box",
     ...(!open && {
-      overflowX: 'hidden',
-      transition: theme.transitions.create('width', {
+      overflowX: "hidden",
+      transition: theme.transitions.create("width", {
         easing: theme.transitions.easing.easeOut,
         duration: theme.transitions.duration.leavingScreen,
       }),
       width: theme.spacing(7),
-      [theme.breakpoints.up('sm')]: {
+      [theme.breakpoints.up("sm")]: {
         width: theme.spacing(9),
       },
     }),
@@ -101,7 +101,7 @@ export default function Layout() {
   };
   return (
     <ThemeProvider theme={theme}>
-      <Box sx={{ display: 'flex' }}>
+      <Box sx={{ display: "flex" }}>
         <CssBaseline />
         <AppBar
           position="absolute"
@@ -109,13 +109,13 @@ export default function Layout() {
           color="secondary"
           elevation={0}
           sx={{
-            backgroundColor: '#FFF',
-            boxShadow: '10px 14px 28px rgb(35 11 73 / 5%)',
+            backgroundColor: "#FFF",
+            boxShadow: "10px 14px 28px rgb(35 11 73 / 5%)",
           }}
         >
           <Toolbar
             sx={{
-              pr: '24px', // keep right padding when drawer closed
+              pr: "24px", // keep right padding when drawer closed
             }}
           >
             <IconButton
@@ -124,9 +124,9 @@ export default function Layout() {
               aria-label="open drawer"
               onClick={toggleDrawer}
               sx={{
-                marginRight: '36px',
-                color: '#757575',
-                ...(open && { display: 'none' }),
+                marginRight: "36px",
+                color: "#757575",
+                ...(open && { display: "none" }),
               }}
             >
               <MenuOutlinedIcon />
@@ -139,9 +139,9 @@ export default function Layout() {
         <Drawer variant="permanent" open={open}>
           <Toolbar
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
               px: [1],
             }}
           >
@@ -155,12 +155,10 @@ export default function Layout() {
           component="main"
           sx={{
             backgroundColor: (theme) =>
-              theme.palette.mode === 'light'
-                ? theme.palette.grey[100]
-                : theme.palette.grey[900],
+              theme.palette.mode === "light" ? theme.palette.grey[100] : theme.palette.grey[900],
             flexGrow: 1,
-            height: '100vh',
-            overflow: 'auto',
+            height: "100vh",
+            overflow: "auto",
           }}
         >
           <Toolbar />
@@ -175,9 +173,9 @@ export default function Layout() {
               <Grid item sm={12} md={12} lg={12}>
                 <div
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
                     borderBottom: `1px solid #EAEAEA`,
                   }}
                 >

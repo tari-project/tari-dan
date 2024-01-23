@@ -20,17 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::time::Duration;
-
 use log::*;
-use tari_comms::{connection_manager::LivenessStatus, connectivity::ConnectivityEvent, peer_manager::NodeId};
 use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_storage::{consensus_models::Block, StateStore};
-use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
+use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
+use tari_networking::NetworkingService;
 use tari_shutdown::ShutdownSignal;
-use tokio::{time, time::MissedTickBehavior};
 
-use crate::{p2p::services::networking::NetworkingService, Services};
+use crate::Services;
 
 const LOG_TARGET: &str = "tari::validator_node::dan_node";
 
@@ -45,21 +42,11 @@ impl DanNode {
 
     pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), anyhow::Error> {
         let mut hotstuff_events = self.services.consensus_handle.subscribe_to_hotstuff_events();
+        let mut epoch_manager_events = self.services.epoch_manager.subscribe().await?;
 
-        let mut connectivity_events = self.services.comms.connectivity().get_event_subscription();
-
-        if let Err(err) = self.dial_local_shard_peers().await {
-            error!(target: LOG_TARGET, "Failed to dial local shard peers: {}", err);
-        }
-
-        let status = self.services.comms.connectivity().get_connectivity_status().await?;
-        if status.is_online() {
-            self.services.networking.announce().await?;
-        }
-
-        let mut current_inbound_status = self.services.comms.liveness_status();
-        let mut tick = time::interval(Duration::from_secs(10));
-        tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        // if let Err(err) = self.dial_local_shard_peers().await {
+        //     error!(target: LOG_TARGET, "Failed to dial local shard peers: {}", err);
+        // }
 
         loop {
             tokio::select! {
@@ -68,17 +55,12 @@ impl DanNode {
                      break;
                 },
 
-                Ok(event) = connectivity_events.recv() => {
-                    if let ConnectivityEvent::ConnectivityStateOnline(_) = event {
-                        // We're back online, announce
-                        if let Err(err) = self.services.networking.announce().await {
-                            error!(target: LOG_TARGET, "Failed to announce: {}", err);
-                        }
-                    }
-                },
-
                 Ok(event) = hotstuff_events.recv() => if let Err(err) = self.handle_hotstuff_event(event).await{
                     error!(target: LOG_TARGET, "Error handling hotstuff event: {}", err);
+                },
+
+                Ok(event) = epoch_manager_events.recv() => if let Err(err) = self.handle_epoch_manager_event(event).await{
+                    error!(target: LOG_TARGET, "Error handling epoch manager event: {}", err);
                 },
 
                 Err(err) = self.services.on_any_exit() => {
@@ -86,20 +68,19 @@ impl DanNode {
                     return Err(err);
                 }
 
-                _ = tick.tick() => {
-                    let status = self.services.comms.liveness_status() ;
-                    match status {
-                        LivenessStatus::Disabled | LivenessStatus::Checking => {},
-                        LivenessStatus::Unreachable => { warn!(target: LOG_TARGET, "🔌 Node is unreachable"); }
-                        LivenessStatus::Live(t) => {
-                            if !matches!(current_inbound_status, LivenessStatus::Live(_)) {
-                                info!(target: LOG_TARGET, "⚡️ Node is reachable (ping {:.2?})", t);
-                            }
-                        }
-                    }
-                    current_inbound_status = status;
-                }
             }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_epoch_manager_event(&mut self, event: EpochManagerEvent) -> Result<(), anyhow::Error> {
+        if let EpochManagerEvent::EpochChanged(epoch) = event {
+            let all_vns = self.services.epoch_manager.get_all_validator_nodes(epoch).await?;
+            self.services
+                .networking
+                .set_want_peers(all_vns.into_iter().map(|vn| vn.address.as_peer_id()))
+                .await?;
         }
 
         Ok(())
@@ -110,73 +91,65 @@ impl DanNode {
             return Ok(());
         };
 
-        let committed_transactions = self.services.state_store.with_read_tx(|tx| {
-            let block = Block::get(tx, &block_id)?;
-            info!(target: LOG_TARGET, "🏁 Block {} committed", block);
-            Ok::<_, anyhow::Error>(
-                block
-                    .commands()
-                    .iter()
-                    .filter_map(|cmd| cmd.accept())
-                    .map(|t| t.id)
-                    .collect::<Vec<_>>(),
-            )
-        })?;
+        let block = self.services.state_store.with_read_tx(|tx| Block::get(tx, &block_id))?;
+        info!(target: LOG_TARGET, "🏁 Block {} committed", block);
+        let committed_transactions = block
+            .commands()
+            .iter()
+            .filter_map(|cmd| cmd.accept())
+            .map(|t| t.id)
+            .collect::<Vec<_>>();
 
         if committed_transactions.is_empty() {
             return Ok(());
         }
+
         info!(target: LOG_TARGET, "🏁 Removing {} finalized transaction(s) from mempool", committed_transactions.len());
-        for tx_id in committed_transactions {
-            if let Err(err) = self.services.mempool.remove_transaction(tx_id).await {
-                error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
-            }
+        if let Err(err) = self.services.mempool.remove_transactions(committed_transactions).await {
+            error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
         }
 
         Ok(())
     }
 
-    async fn dial_local_shard_peers(&mut self) -> Result<(), anyhow::Error> {
-        let epoch = self.services.epoch_manager.current_epoch().await?;
-        let res = self
-            .services
-            .epoch_manager
-            .get_validator_node(epoch, self.services.comms.node_identity().public_key())
-            .await;
-
-        let shard_id = match res {
-            Ok(vn) => vn.shard_key,
-            Err(EpochManagerError::ValidatorNodeNotRegistered { address, epoch }) => {
-                info!(target: LOG_TARGET, "Validator node {address} not registered for current epoch {epoch}");
-                return Ok(());
-            },
-            Err(EpochManagerError::BaseLayerConsensusConstantsNotSet) => {
-                info!(target: LOG_TARGET, "Epoch manager has not synced with base layer yet");
-                return Ok(());
-            },
-            Err(err) => {
-                return Err(err.into());
-            },
-        };
-
-        let local_shard_peers = self.services.epoch_manager.get_committee(epoch, shard_id).await?;
-        info!(
-            target: LOG_TARGET,
-            "Dialing {} local shard peers",
-            local_shard_peers.members.len()
-        );
-
-        self.services
-            .comms
-            .connectivity()
-            .request_many_dials(
-                local_shard_peers
-                    .members
-                    .into_iter()
-                    .filter(|pk| pk != self.services.comms.node_identity().public_key())
-                    .map(|pk| NodeId::from_public_key(&pk)),
-            )
-            .await?;
-        Ok(())
-    }
+    // async fn dial_local_shard_peers(&mut self) -> Result<(), anyhow::Error> {
+    //     let epoch = self.services.epoch_manager.current_epoch().await?;
+    //     let res = self
+    //         .services
+    //         .epoch_manager
+    //         .get_validator_node(epoch, &self.services.networking.local_peer_id().into())
+    //         .await;
+    //
+    //     let shard_id = match res {
+    //         Ok(vn) => vn.shard_key,
+    //         Err(EpochManagerError::ValidatorNodeNotRegistered { address, epoch }) => {
+    //             info!(target: LOG_TARGET, "Validator node {address} not registered for current epoch {epoch}");
+    //             return Ok(());
+    //         },
+    //         Err(EpochManagerError::BaseLayerConsensusConstantsNotSet) => {
+    //             info!(target: LOG_TARGET, "Epoch manager has not synced with base layer yet");
+    //             return Ok(());
+    //         },
+    //         Err(err) => {
+    //             return Err(err.into());
+    //         },
+    //     };
+    //
+    //     let local_shard_peers = self.services.epoch_manager.get_committee(epoch, shard_id).await?;
+    //     info!(
+    //         target: LOG_TARGET,
+    //         "Dialing {} local shard peers",
+    //         local_shard_peers.members.len()
+    //     );
+    //     let local_peer_id = *self.services.networking.local_peer_id();
+    //     let local_shard_peers = local_shard_peers.addresses().filter(|addr| **addr != local_peer_id);
+    //
+    //     for peer in local_shard_peers {
+    //         if let Err(err) = self.services.networking.dial_peer(peer.to_peer_id()).await {
+    //             debug!(target: LOG_TARGET, "Failed to dial peer: {}", err);
+    //         }
+    //     }
+    //
+    //     Ok(())
+    // }
 }

@@ -28,17 +28,18 @@ use tari_dan_engine::{
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     instruction::Instruction,
-    substate::SubstateAddress,
-    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
+    substate::SubstateId,
+    virtual_substate::{VirtualSubstate, VirtualSubstateId},
     TemplateAddress,
 };
+use tari_template_builtin::{ACCOUNT_NFT_TEMPLATE_ADDRESS, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
     args,
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, ComponentAddress, NonFungibleAddress},
     prelude::{NonFungibleId, ResourceAddress},
 };
-use tari_template_test_tooling::{SubstateType, TemplateTest};
+use tari_template_test_tooling::{support::assert_error::assert_reject_reason, SubstateType, TemplateTest};
 use tari_transaction::Transaction;
 use tari_transaction_manifest::ManifestValue;
 use tari_utilities::hex::to_hex;
@@ -293,6 +294,20 @@ fn test_random() {
     assert_ne!(value, vec![0; 300]);
 }
 
+#[test]
+fn test_errors_on_infinite_loop() {
+    let mut test = TemplateTest::new(vec!["tests/templates/infinity_loop"]);
+    let reason = test.execute_expect_failure(
+        Transaction::builder()
+            .call_function(test.get_template_address("InfinityLoopTest"), "infinity_loop", args![])
+            .sign(test.get_test_secret_key())
+            .build(),
+        vec![],
+    );
+    // Transaction failed: Execution failure: RuntimeError: unreachable\n    at tari_free (<module>[327]:0x2390c)
+    assert_reject_reason(reason, wasmer::RuntimeError::new("unreachable"))
+}
+
 mod errors {
 
     use super::*;
@@ -365,7 +380,7 @@ mod consensus {
 
         // set the value of current epoch to "1" and call the template function again to check that it reads the new
         // value
-        template_test.set_virtual_substate(VirtualSubstateAddress::CurrentEpoch, VirtualSubstate::CurrentEpoch(1));
+        template_test.set_virtual_substate(VirtualSubstateId::CurrentEpoch, VirtualSubstate::CurrentEpoch(1));
         let result: u64 = template_test.call_function("TestConsensus", "current_epoch", args![], vec![]);
         assert_eq!(result, 1);
     }
@@ -463,6 +478,7 @@ mod fungible {
 
 mod basic_nft {
     use serde::{Deserialize, Serialize};
+    use tari_template_lib::models::NonFungible;
 
     use super::*;
 
@@ -470,7 +486,7 @@ mod basic_nft {
         TemplateTest,
         (ComponentAddress, NonFungibleAddress),
         ComponentAddress,
-        SubstateAddress,
+        SubstateId,
     ) {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/basic_nft"]);
 
@@ -711,7 +727,7 @@ mod basic_nft {
         let nfts = diff
             .up_iter()
             .filter_map(|(a, _)| match a {
-                SubstateAddress::NonFungible(address) => Some(address.id()),
+                SubstateId::NonFungible(address) => Some(address.id()),
                 _ => None,
             })
             .collect::<Vec<_>>();
@@ -824,6 +840,46 @@ mod basic_nft {
                 vec![],
             )
             .unwrap_err();
+    }
+
+    #[test]
+    fn get_non_fungibles_from_containers() {
+        let (mut template_test, (account_address, account_owner), nft_component, nft_resx) = setup();
+
+        let vars = vec![
+            ("account", account_address.into()),
+            ("nft", nft_component.into()),
+            ("nft_resx", nft_resx.into()),
+        ];
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        assert_eq!(total_supply, Amount(4));
+
+        let result = template_test
+            .execute_and_commit_manifest(
+                r#"
+            let sparkle_nft = var!["nft"];
+            sparkle_nft.get_non_fungibles_from_bucket();
+            sparkle_nft.get_non_fungibles_from_vault();
+        "#,
+                vars.clone(),
+                vec![account_owner],
+            )
+            .unwrap();
+
+        result.finalize.result.expect("execution failed");
+
+        // sparkle_nft.get_non_fungibles_from_bucket()
+        let nfts_from_bucket = result.finalize.execution_results[0]
+            .decode::<Vec<NonFungible>>()
+            .unwrap();
+        assert_eq!(nfts_from_bucket.len(), 4);
+
+        // sparkle_nft.get_non_fungibles_from_vault()
+        let nfts_from_bucket = result.finalize.execution_results[1]
+            .decode::<Vec<NonFungible>>()
+            .unwrap();
+        assert_eq!(nfts_from_bucket.len(), 4);
     }
 }
 
@@ -1123,7 +1179,7 @@ mod tickets {
             ("account", account_address.into()),
             ("ticket_seller", ticket_seller.into()),
             // TODO: it's weird that the "redeem_ticket" method accepts a NonFungibleId, but we are passing a
-            // SubstateAddress variable
+            // SubstateId variable
             ("ticket_addr", ManifestValue::NonFungibleId(ticket_id.clone())),
         ];
 
@@ -1146,7 +1202,7 @@ mod tickets {
             pub is_redeemed: bool,
         }
 
-        let ticket_substate_addr = SubstateAddress::NonFungible(NonFungibleAddress::new(ticket_resource, ticket_id));
+        let ticket_substate_addr = SubstateId::NonFungible(NonFungibleAddress::new(ticket_resource, ticket_id));
         let ticket_nft = template_test
             .read_only_state_store()
             .get_substate(&ticket_substate_addr)
@@ -1173,7 +1229,7 @@ mod nft_indexes {
         TemplateTest,
         (ComponentAddress, NonFungibleAddress),
         ComponentAddress,
-        SubstateAddress,
+        SubstateId,
     ) {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/nft_list"]);
 
@@ -1313,4 +1369,17 @@ mod free_test_coins {
             vec![owner_token],
         );
     }
+}
+
+#[test]
+fn test_builtin_templates() {
+    let mut template_test = TemplateTest::new(vec!["tests/templates/builtin_templates"]);
+
+    let account_template_address: TemplateAddress =
+        template_test.call_function("BuiltinTest", "get_account_template_address", args![], vec![]);
+    assert_eq!(account_template_address, ACCOUNT_TEMPLATE_ADDRESS);
+
+    let account_nft_template_address: TemplateAddress =
+        template_test.call_function("BuiltinTest", "get_account_nft_template_address", args![], vec![]);
+    assert_eq!(account_nft_template_address, ACCOUNT_NFT_TEMPLATE_ADDRESS);
 }

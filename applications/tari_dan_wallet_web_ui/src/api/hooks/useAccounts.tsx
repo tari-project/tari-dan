@@ -42,7 +42,7 @@ export const useAccountsClaimBurn = (account: string, claimProof: any, fee: numb
       onSettled: () => {
         queryClient.invalidateQueries(["accounts"]);
       },
-    }
+    },
   );
 };
 
@@ -50,7 +50,7 @@ export const useAccountsCreate = (
   accountName: string | undefined,
   customAccessRules: any | undefined,
   fee: number | undefined,
-  is_default: boolean | false
+  is_default: boolean | false,
 ) => {
   return useMutation(
     async () => {
@@ -68,7 +68,7 @@ export const useAccountsCreate = (
       onSettled: () => {
         queryClient.invalidateQueries(["accounts"]);
       },
-    }
+    },
   );
 };
 
@@ -77,8 +77,9 @@ export const useAccountsTransfer = (
   amount: number,
   resource_address: string,
   destination_public_key: string,
-  fee: number | null,
-  confidential: boolean
+  max_fee: number | null,
+  confidential: boolean,
+  dry_run: boolean,
 ) => {
   return useMutation(
     () =>
@@ -87,7 +88,8 @@ export const useAccountsTransfer = (
         amount,
         resource_address,
         destination_public_key,
-        fee,
+        max_fee,
+        dry_run,
       }),
     {
       onError: (error: apiError) => {
@@ -96,7 +98,7 @@ export const useAccountsTransfer = (
       onSettled: () => {
         queryClient.invalidateQueries(["accounts"]);
       },
-    }
+    },
   );
 };
 
@@ -157,6 +159,7 @@ export const useAccountsGetBalances = (accountName: string | null) => {
     onError: (error: apiError) => {
       error;
     },
+    refetchInterval: 5000,
   });
 };
 

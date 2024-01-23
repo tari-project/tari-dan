@@ -20,17 +20,16 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, path::PathBuf, str::FromStr, time::Duration};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use reqwest::Url;
 use tari_common::{
     configuration::{CommonConfig, StringList},
     exit_codes::ExitError,
 };
-use tari_comms::multiaddr::Multiaddr;
-use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_crypto::tari_utilities::{hex::Hex, message_format::MessageFormat};
-use tari_engine_types::substate::SubstateAddress;
+use tari_dan_app_utilities::p2p_config::PeerSeedsConfig;
+use tari_engine_types::substate::SubstateId;
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},
     run_indexer,
@@ -40,7 +39,7 @@ use tari_indexer_client::{
     json_rpc_client::IndexerJsonRpcClient,
     types::{GetNonFungiblesRequest, GetSubstateRequest, GetSubstateResponse, NonFungibleSubstate},
 };
-use tari_p2p::{Network, PeerSeedsConfig, TransportType};
+use tari_p2p::Network;
 use tari_shutdown::Shutdown;
 use tokio::task;
 
@@ -141,7 +140,7 @@ impl IndexerProcess {
     }
 }
 
-fn get_address_from_output(world: &TariWorld, output_ref: String) -> &SubstateAddress {
+fn get_address_from_output(world: &TariWorld, output_ref: String) -> &SubstateId {
     world
         .outputs
         .iter()
@@ -152,7 +151,7 @@ fn get_address_from_output(world: &TariWorld, output_ref: String) -> &SubstateAd
                     let fqn = format!("{}/{}", name, child_name);
                     fqn == output_ref
                 })
-                .map(|(_, addr)| &addr.address)
+                .map(|(_, addr)| &addr.substate_id)
         })
         .unwrap()
 }
@@ -193,17 +192,9 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         config.indexer.tor_identity_file = base_dir.join("indexer_tor_id.json");
         config.indexer.base_node_grpc_address = Some(format!("127.0.0.1:{}", base_node_grpc_port));
         config.indexer.dan_layer_scanning_internal = Duration::from_secs(60);
+        config.indexer.p2p.listener_port = port;
 
-        config.indexer.p2p.transport.transport_type = TransportType::Tcp;
-        config.indexer.p2p.transport.tcp.listener_address =
-            Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
-        config.indexer.p2p.public_addresses = vec![config.indexer.p2p.transport.tcp.listener_address.clone()].into();
-        config.indexer.p2p.datastore_path = base_dir.to_path_buf().join("peer_db/vn");
-        config.indexer.p2p.dht = DhtConfig {
-            // Not all platforms support sqlite memory connection urls
-            database_url: DbConnectionUrl::File(base_dir.join("dht.sqlite")),
-            ..DhtConfig::default_local_test()
-        };
+        config.indexer.p2p.enable_mdns = false;
         config.indexer.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
         config.indexer.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
         config.indexer.graphql_address = Some(format!("127.0.0.1:{}", graphql_port).parse().unwrap());

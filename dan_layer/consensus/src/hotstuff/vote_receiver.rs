@@ -5,12 +5,7 @@ use std::ops::DerefMut;
 
 use log::*;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{
-    committee::CommitteeShard,
-    hashing::MergedValidatorNodeMerkleProof,
-    optional::Optional,
-    NodeAddressable,
-};
+use tari_dan_common_types::{committee::CommitteeShard, hashing::MergedValidatorNodeMerkleProof, optional::Optional};
 use tari_dan_storage::{
     consensus_models::{Block, QuorumCertificate, QuorumDecision, ValidatorSignature, Vote},
     StateStore,
@@ -30,7 +25,7 @@ pub struct VoteReceiver<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
-    vote_signature_service: TConsensusSpec::VoteSignatureService,
+    vote_signature_service: TConsensusSpec::SignatureService,
     pacemaker: PaceMakerHandle,
 }
 
@@ -41,7 +36,7 @@ where TConsensusSpec: ConsensusSpec
         store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
-        vote_signature_service: TConsensusSpec::VoteSignatureService,
+        vote_signature_service: TConsensusSpec::SignatureService,
         pacemaker: PaceMakerHandle,
     ) -> Self {
         Self {
@@ -55,10 +50,11 @@ where TConsensusSpec: ConsensusSpec
 
     pub async fn handle(
         &self,
-        message: VoteMessage<TConsensusSpec::Addr>,
+        from: TConsensusSpec::Addr,
+        message: VoteMessage,
         check_leadership: bool,
     ) -> Result<(), HotStuffError> {
-        match self.handle_vote(message, check_leadership).await {
+        match self.handle_vote(from, message, check_leadership).await {
             Ok(true) => {
                 // If we reached quorum, trigger a check to see if we should propose
                 self.pacemaker.beat();
@@ -76,31 +72,36 @@ where TConsensusSpec: ConsensusSpec
     #[allow(clippy::too_many_lines)]
     pub async fn handle_vote(
         &self,
-        message: VoteMessage<TConsensusSpec::Addr>,
+        from: TConsensusSpec::Addr,
+        message: VoteMessage,
         check_leadership: bool,
     ) -> Result<bool, HotStuffError> {
         let current_epoch = self.epoch_manager.current_epoch().await?;
         // Is a committee member sending us this vote?
         let committee = self.epoch_manager.get_local_committee(current_epoch).await?;
-        if !committee.contains(&message.signature.public_key) {
+        if !committee.contains(&from) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch: current_epoch,
-                sender: message.signature.public_key.to_string(),
+                sender: from.to_string(),
                 context: "OnReceiveVote".to_string(),
             });
         }
 
         // Are we the leader for the block being voted for?
-        let vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
+        let our_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
 
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
 
         // Get the sender shard, and check that they are in the local committee
-        let sender_vn = self
-            .epoch_manager
-            .get_validator_node(current_epoch, &message.signature.public_key)
-            .await?;
-        if !local_committee_shard.includes_shard(&sender_vn.shard_key) {
+        let sender_vn = self.epoch_manager.get_validator_node(current_epoch, &from).await?;
+        if message.signature.public_key != sender_vn.public_key {
+            return Err(HotStuffError::RejectingVoteNotSentBySigner {
+                address: from.to_string(),
+                signer_public_key: message.signature.public_key.to_string(),
+            });
+        }
+
+        if !local_committee_shard.includes_substate_address(&sender_vn.shard_key) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch: current_epoch,
                 sender: message.signature.public_key.to_string(),
@@ -124,7 +125,7 @@ where TConsensusSpec: ConsensusSpec
             }
             .save(tx)?;
 
-            let count = Vote::<TConsensusSpec::Addr>::count_for_block(tx.deref_mut(), &message.block_id)?;
+            let count = Vote::count_for_block(tx.deref_mut(), &message.block_id)?;
             Ok::<_, HotStuffError>(count)
         })?;
 
@@ -158,12 +159,12 @@ where TConsensusSpec: ConsensusSpec
             if check_leadership &&
                 !self
                     .leader_strategy
-                    .is_leader_for_next_block(&vn.address, &committee, block.height())
+                    .is_leader_for_next_block(&our_vn.address, &committee, block.height())
             {
                 return Err(HotStuffError::NotTheLeader {
                     details: format!(
                         "Not this leader for block {}, vote sent by {}",
-                        message.block_id, vn.address
+                        message.block_id, our_vn.address
                     ),
                 });
             }
@@ -195,14 +196,18 @@ where TConsensusSpec: ConsensusSpec
 
             // Wait for our own vote to make sure we've processed all transactions and we also have an up to date
             // database
-            if votes.iter().all(|x| x.signature.public_key != vn.address) {
+            if votes.iter().all(|x| x.signature.public_key != our_vn.public_key) {
                 warn!(target: LOG_TARGET, "❓️ Received enough votes but not our own vote for block {}", message.block_id);
-                return Ok(true);
+                // return Ok(true);
             }
 
             let mut signatures = Vec::with_capacity(votes.len());
             let mut leaf_hashes = Vec::with_capacity(votes.len());
             for vote in votes {
+                if vote.decision != quorum_decision {
+                    // We don't include votes that don't match the quorum decision
+                    continue;
+                }
                 signatures.push(vote.signature);
                 leaf_hashes.push(vote.sender_leaf_hash);
             }
@@ -236,10 +241,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(true)
     }
 
-    fn calculate_threshold_decision(
-        votes: &[Vote<TConsensusSpec::Addr>],
-        local_committee_shard: &CommitteeShard,
-    ) -> Option<QuorumDecision> {
+    fn calculate_threshold_decision(votes: &[Vote], local_committee_shard: &CommitteeShard) -> Option<QuorumDecision> {
         let mut count_accept = 0;
         let mut count_reject = 0;
         for vote in votes {
@@ -260,11 +262,7 @@ where TConsensusSpec: ConsensusSpec
         None
     }
 
-    fn validate_vote_message(
-        &self,
-        message: &VoteMessage<TConsensusSpec::Addr>,
-        sender_leaf_hash: &FixedHash,
-    ) -> Result<(), HotStuffError> {
+    fn validate_vote_message(&self, message: &VoteMessage, sender_leaf_hash: &FixedHash) -> Result<(), HotStuffError> {
         if !self.vote_signature_service.verify(
             &message.signature,
             sender_leaf_hash,
@@ -279,10 +277,7 @@ where TConsensusSpec: ConsensusSpec
     }
 }
 
-fn create_qc<TAddr: NodeAddressable>(
-    vote_data: VoteData<TAddr>,
-    merged_proof: MergedValidatorNodeMerkleProof,
-) -> QuorumCertificate<TAddr> {
+fn create_qc(vote_data: VoteData, merged_proof: MergedValidatorNodeMerkleProof) -> QuorumCertificate {
     let VoteData {
         signatures,
         leaf_hashes,
@@ -300,9 +295,9 @@ fn create_qc<TAddr: NodeAddressable>(
     )
 }
 
-struct VoteData<TAddr> {
-    signatures: Vec<ValidatorSignature<TAddr>>,
+struct VoteData {
+    signatures: Vec<ValidatorSignature>,
     leaf_hashes: Vec<FixedHash>,
     quorum_decision: QuorumDecision,
-    block: Block<TAddr>,
+    block: Block,
 }

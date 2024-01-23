@@ -30,11 +30,12 @@ use crate::{
     component::ComponentManager,
     context::Context,
     get_context,
-    models::ComponentAddress,
+    models::{AddressAllocation, ComponentAddress},
     prelude::ComponentAccessRules,
     Hash,
 };
 
+/// Returns the corresponding `TariEngine` of the current template execution
 pub fn engine() -> TariEngine {
     // TODO: I expect some thread local state to be included here
     TariEngine::new(get_context())
@@ -56,6 +57,7 @@ impl TariEngine {
         owner_rule: OwnerRule,
         access_rules: ComponentAccessRules,
         component_id: Option<Hash>,
+        address_allocation: Option<AddressAllocation<ComponentAddress>>,
     ) -> ComponentAddress {
         let encoded_state = to_value(&initial_state).unwrap();
 
@@ -67,6 +69,7 @@ impl TariEngine {
                 owner_rule,
                 access_rules,
                 component_id,
+                address_allocation
             }],
         });
 

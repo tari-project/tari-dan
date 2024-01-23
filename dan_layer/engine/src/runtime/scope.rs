@@ -4,12 +4,7 @@
 use std::fmt::Display;
 
 use indexmap::IndexSet;
-use tari_engine_types::{
-    indexed_value::IndexedWellKnownTypes,
-    lock::LockId,
-    substate::SubstateAddress,
-    TemplateAddress,
-};
+use tari_engine_types::{indexed_value::IndexedWellKnownTypes, lock::LockId, substate::SubstateId, TemplateAddress};
 use tari_template_lib::{
     constants::XTR2,
     models::{BucketId, ProofId},
@@ -24,9 +19,9 @@ use crate::runtime::{
 
 #[derive(Debug, Clone)]
 pub struct CallScope {
-    orphans: IndexSet<SubstateAddress>,
-    owned: IndexSet<SubstateAddress>,
-    referenced: IndexSet<SubstateAddress>,
+    orphans: IndexSet<SubstateId>,
+    owned: IndexSet<SubstateId>,
+    referenced: IndexSet<SubstateId>,
     component_lock: Option<LockedSubstate>,
     lock_scope: IndexSet<LockId>,
     proof_scope: IndexSet<ProofId>,
@@ -83,7 +78,7 @@ impl CallScope {
         self.bucket_scope.contains(&bucket_id)
     }
 
-    pub fn is_substate_in_scope(&self, address: &SubstateAddress) -> bool {
+    pub fn is_substate_in_scope(&self, address: &SubstateId) -> bool {
         // TODO: Hacky
         // If the address is the XTR2 resource, it is always in scope
         if *address == XTR2 {
@@ -130,15 +125,15 @@ impl CallScope {
         self.component_lock.as_ref()
     }
 
-    pub fn owned_nodes(&self) -> &IndexSet<SubstateAddress> {
+    pub fn owned_nodes(&self) -> &IndexSet<SubstateId> {
         &self.owned
     }
 
-    pub fn orphans(&self) -> &IndexSet<SubstateAddress> {
+    pub fn orphans(&self) -> &IndexSet<SubstateId> {
         &self.orphans
     }
 
-    pub fn move_node_to_owned(&mut self, address: &SubstateAddress) -> Result<(), RuntimeError> {
+    pub fn move_node_to_owned(&mut self, address: &SubstateId) -> Result<(), RuntimeError> {
         if self.orphans.remove(address) && !self.owned.insert(address.clone()) {
             return Err(RuntimeError::DuplicateSubstate {
                 address: address.clone(),
@@ -155,7 +150,7 @@ impl CallScope {
         &mut self.auth_scope
     }
 
-    pub fn add_substate_to_scope(&mut self, address: SubstateAddress) -> Result<(), RuntimeError> {
+    pub fn add_substate_to_scope(&mut self, address: SubstateId) -> Result<(), RuntimeError> {
         if self.is_substate_in_scope(&address) {
             return Err(RuntimeError::DuplicateSubstate { address });
         }
@@ -164,7 +159,7 @@ impl CallScope {
         Ok(())
     }
 
-    fn add_substate_to_scope_unchecked(&mut self, address: SubstateAddress) {
+    fn add_substate_to_scope_unchecked(&mut self, address: SubstateId) {
         if address.is_root() {
             self.owned.insert(address);
         } else {
@@ -174,13 +169,13 @@ impl CallScope {
 
     /// Add a substate to the owned nodes set without checking if it is already in the scope. This is used when
     /// initializing the root scope from the state store.
-    pub fn add_substate_to_owned(&mut self, address: SubstateAddress) {
+    pub fn add_substate_to_owned(&mut self, address: SubstateId) {
         self.referenced.remove(&address);
         self.orphans.remove(&address);
         self.owned.insert(address);
     }
 
-    pub fn add_substate_to_referenced(&mut self, address: SubstateAddress) {
+    pub fn add_substate_to_referenced(&mut self, address: SubstateId) {
         if self.is_substate_in_scope(&address) {
             return;
         }

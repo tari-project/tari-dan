@@ -6,7 +6,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use tari_engine_types::virtual_substate::{VirtualSubstate, VirtualSubstateAddress};
+use tari_engine_types::virtual_substate::{VirtualSubstate, VirtualSubstateId};
 
 // Developer note: this struct has two non-functional purposes:
 // 1. so that we do not have to type out the HashMap type in many places, and
@@ -14,7 +14,7 @@ use tari_engine_types::virtual_substate::{VirtualSubstate, VirtualSubstateAddres
 
 /// Virtual substate collection
 #[derive(Debug, Clone, Default)]
-pub struct VirtualSubstates(HashMap<VirtualSubstateAddress, VirtualSubstate>);
+pub struct VirtualSubstates(HashMap<VirtualSubstateId, VirtualSubstate>);
 
 impl VirtualSubstates {
     pub fn new() -> Self {
@@ -27,7 +27,7 @@ impl VirtualSubstates {
 }
 
 impl Deref for VirtualSubstates {
-    type Target = HashMap<VirtualSubstateAddress, VirtualSubstate>;
+    type Target = HashMap<VirtualSubstateId, VirtualSubstate>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -41,16 +41,16 @@ impl DerefMut for VirtualSubstates {
 }
 
 impl IntoIterator for VirtualSubstates {
-    type IntoIter = <HashMap<VirtualSubstateAddress, VirtualSubstate> as IntoIterator>::IntoIter;
-    type Item = <HashMap<VirtualSubstateAddress, VirtualSubstate> as IntoIterator>::Item;
+    type IntoIter = <HashMap<VirtualSubstateId, VirtualSubstate> as IntoIterator>::IntoIter;
+    type Item = <HashMap<VirtualSubstateId, VirtualSubstate> as IntoIterator>::Item;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl FromIterator<(VirtualSubstateAddress, VirtualSubstate)> for VirtualSubstates {
-    fn from_iter<T: IntoIterator<Item = (VirtualSubstateAddress, VirtualSubstate)>>(iter: T) -> Self {
+impl FromIterator<(VirtualSubstateId, VirtualSubstate)> for VirtualSubstates {
+    fn from_iter<T: IntoIterator<Item = (VirtualSubstateId, VirtualSubstate)>>(iter: T) -> Self {
         Self(iter.into_iter().collect())
     }
 }

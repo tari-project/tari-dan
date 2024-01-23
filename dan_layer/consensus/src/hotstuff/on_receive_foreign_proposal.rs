@@ -3,9 +3,16 @@
 use std::ops::DerefMut;
 
 use log::*;
-use tari_dan_common_types::{committee::CommitteeShard, optional::Optional, shard_bucket::ShardBucket, NodeHeight};
+use tari_dan_common_types::{committee::CommitteeShard, optional::Optional, shard::Shard, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, ForeignReceiveCounters, LeafBlock, TransactionPool, TransactionPoolStage},
+    consensus_models::{
+        Block,
+        ForeignProposal,
+        ForeignReceiveCounters,
+        LeafBlock,
+        TransactionPool,
+        TransactionPoolStage,
+    },
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
@@ -23,7 +30,6 @@ pub struct OnReceiveForeignProposalHandler<TConsensusSpec: ConsensusSpec> {
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     pacemaker: PaceMakerHandle,
-    foreign_receive_counter: ForeignReceiveCounters,
 }
 
 impl<TConsensusSpec> OnReceiveForeignProposalHandler<TConsensusSpec>
@@ -34,22 +40,16 @@ where TConsensusSpec: ConsensusSpec
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         pacemaker: PaceMakerHandle,
-        foreign_receive_counter: ForeignReceiveCounters,
     ) -> Self {
         Self {
             store,
             epoch_manager,
             transaction_pool,
             pacemaker,
-            foreign_receive_counter,
         }
     }
 
-    pub async fn handle(
-        &mut self,
-        from: TConsensusSpec::Addr,
-        message: ProposalMessage<TConsensusSpec::Addr>,
-    ) -> Result<(), HotStuffError> {
+    pub async fn handle(&mut self, from: TConsensusSpec::Addr, message: ProposalMessage) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = message;
 
         debug!(
@@ -61,17 +61,40 @@ where TConsensusSpec: ConsensusSpec
             from,
         );
 
+        let mut foreign_receive_counter = self
+            .store
+            .with_read_tx(|tx| ForeignReceiveCounters::get_or_default(tx))?;
+
         let vn = self.epoch_manager.get_validator_node(block.epoch(), &from).await?;
         let committee_shard = self
             .epoch_manager
             .get_committee_shard(block.epoch(), vn.shard_key)
             .await?;
+        let foreign_proposal = ForeignProposal::new(committee_shard.shard(), *block.id());
+        if self
+            .store
+            .with_read_tx(|tx| ForeignProposal::exists(tx, &foreign_proposal))?
+        {
+            warn!(
+                target: LOG_TARGET,
+                "🔥 FOREIGN PROPOSAL: Already received proposal for block {}",
+                block.id(),
+            );
+            return Ok(());
+        }
+
         let local_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
-        self.validate_proposed_block(&from, &block, committee_shard.bucket(), local_shard.bucket())?;
-        // Is this ok? Can foreign node send invalid block that should still increment the counter?
-        self.foreign_receive_counter.increment(&committee_shard.bucket());
+        self.validate_proposed_block(
+            &from,
+            &block,
+            committee_shard.shard(),
+            local_shard.shard(),
+            &foreign_receive_counter,
+        )?;
+        foreign_receive_counter.increment(&committee_shard.shard());
         self.store.with_write_tx(|tx| {
-            self.foreign_receive_counter.save(tx)?;
+            foreign_receive_counter.save(tx)?;
+            foreign_proposal.upsert(tx)?;
             self.on_receive_foreign_block(tx, &block, &committee_shard)
         })?;
 
@@ -84,7 +107,7 @@ where TConsensusSpec: ConsensusSpec
     fn on_receive_foreign_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block<TConsensusSpec::Addr>,
+        block: &Block,
         foreign_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
         let leaf = LeafBlock::get(tx.deref_mut())?;
@@ -148,27 +171,29 @@ where TConsensusSpec: ConsensusSpec
     fn validate_proposed_block(
         &self,
         from: &TConsensusSpec::Addr,
-        candidate_block: &Block<TConsensusSpec::Addr>,
-        foreign_bucket: ShardBucket,
-        local_bucket: ShardBucket,
+        candidate_block: &Block,
+        foreign_bucket: Shard,
+        local_bucket: Shard,
+        foreign_receive_counter: &ForeignReceiveCounters,
     ) -> Result<(), ProposalValidationError> {
-        let incoming_index = match candidate_block.get_foreign_index(&local_bucket) {
-            Some(i) => *i,
-            None => {
-                debug!(target:LOG_TARGET, "Our bucket {local_bucket:?} is missing reliability index in the proposed block {candidate_block:?}");
-                return Err(ProposalValidationError::MissingForeignCounters {
-                    proposed_by: from.to_string(),
-                    hash: *candidate_block.id(),
-                });
-            },
+        let Some(incoming_count) = candidate_block.get_foreign_counter(&local_bucket) else {
+            debug!(target:LOG_TARGET, "Our bucket {local_bucket:?} is missing reliability index in the proposed block {candidate_block:?}");
+            return Err(ProposalValidationError::MissingForeignCounters {
+                proposed_by: from.to_string(),
+                hash: *candidate_block.id(),
+            });
         };
-        let current_index = self.foreign_receive_counter.get_index(&foreign_bucket);
-        if current_index + 1 != incoming_index {
-            debug!(target:LOG_TARGET, "We were expecting the index to be {expected_index}, but the index was
-        {incoming_index}", expected_index = current_index + 1);
+        let current_count = foreign_receive_counter.get_count(&foreign_bucket);
+        if current_count + 1 != incoming_count {
+            debug!(target:LOG_TARGET, "We were expecting the index to be {expected_count}, but the index was {incoming_count}", expected_count = current_count + 1);
             return Err(ProposalValidationError::InvalidForeignCounters {
                 proposed_by: from.to_string(),
                 hash: *candidate_block.id(),
+                details: format!(
+                    "Expected foreign receive count to be {} but it was {}",
+                    current_count + 1,
+                    incoming_count
+                ),
             });
         }
         if candidate_block.height() == NodeHeight::zero() || candidate_block.id().is_genesis() {

@@ -67,7 +67,7 @@ impl LeafBlock {
         tx.leaf_block_set(self)
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block<TTx::Addr>, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
         tx.blocks_get(&self.block_id)
     }
 }

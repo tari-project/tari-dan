@@ -1,60 +1,73 @@
-//  Copyright 2021. The Tari Project
-//
-//  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
-//  following conditions are met:
-//
-//  1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
-//  disclaimer.
-//
-//  2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
-//  following disclaimer in the documentation and/or other materials provided with the distribution.
-//
-//  3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
-//  products derived from this software without specific prior written permission.
-//
-//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-//  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-//  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-//  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-//  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-//  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
-//  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//   Copyright 2024 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_consensus::messages::HotstuffMessage;
-use tari_dan_p2p::{DanMessage, Message};
+use async_trait::async_trait;
+use libp2p::PeerId;
+use tari_consensus::{messages::HotstuffMessage, traits::InboundMessagingError};
+use tari_dan_common_types::PeerAddress;
+use tari_dan_p2p::proto;
 use tokio::sync::mpsc;
 
-const _LOG_TARGET: &str = "tari::validator_node::p2p::services::messaging::inbound";
+use crate::p2p::logging::MessageLogger;
 
-pub struct InboundMessaging<TAddr> {
-    our_node_addr: TAddr,
-    inbound_messages: mpsc::Receiver<(TAddr, DanMessage<TAddr>)>,
-    inbound_consensus_messages: mpsc::Receiver<(TAddr, HotstuffMessage<TAddr>)>,
-    loopback_receiver: mpsc::Receiver<Message<TAddr>>,
+pub struct ConsensusInboundMessaging<TMsgLogger> {
+    local_address: PeerAddress,
+    rx_inbound_msg: mpsc::UnboundedReceiver<(PeerId, proto::consensus::HotStuffMessage)>,
+    rx_loopback: mpsc::UnboundedReceiver<HotstuffMessage>,
+    msg_logger: TMsgLogger,
 }
 
-impl<TAddr: Clone> InboundMessaging<TAddr> {
+impl<TMsgLogger: MessageLogger> ConsensusInboundMessaging<TMsgLogger> {
     pub fn new(
-        our_node_addr: TAddr,
-        inbound_messages: mpsc::Receiver<(TAddr, DanMessage<TAddr>)>,
-        inbound_consensus_messages: mpsc::Receiver<(TAddr, HotstuffMessage<TAddr>)>,
-        loopback_receiver: mpsc::Receiver<Message<TAddr>>,
+        local_address: PeerAddress,
+        rx_inbound_msg: mpsc::UnboundedReceiver<(PeerId, proto::consensus::HotStuffMessage)>,
+        rx_loopback: mpsc::UnboundedReceiver<HotstuffMessage>,
+        msg_logger: TMsgLogger,
     ) -> Self {
         Self {
-            our_node_addr,
-            inbound_messages,
-            inbound_consensus_messages,
-            loopback_receiver,
+            local_address,
+            rx_inbound_msg,
+            rx_loopback,
+            msg_logger,
         }
     }
+}
 
-    pub async fn next_message(&mut self) -> Option<(TAddr, Message<TAddr>)> {
+#[async_trait]
+impl<TMsgLogger: MessageLogger + Send> tari_consensus::traits::InboundMessaging
+    for ConsensusInboundMessaging<TMsgLogger>
+{
+    type Addr = PeerAddress;
+
+    async fn next_message(&mut self) -> Option<Result<(Self::Addr, HotstuffMessage), InboundMessagingError>> {
         tokio::select! {
-           // BIASED: messaging priority is loopback, consensus, then other
+           // BIASED: messaging priority is loopback, then other
            biased;
-           maybe_msg = self.loopback_receiver.recv() => maybe_msg.map(|msg| (self.our_node_addr.clone(), msg)),
-           maybe_msg = self.inbound_consensus_messages.recv() => maybe_msg.map(|(from, msg)| (from, Message::Consensus(msg))),
-           maybe_msg = self.inbound_messages.recv() => maybe_msg.map(|(from, msg)| (from, Message::Dan(msg))),
+           maybe_msg = self.rx_loopback.recv() => maybe_msg.map(|msg| {
+                self.msg_logger.log_inbound_message(
+                   &self.local_address.to_string(),
+                   msg.as_type_str(),
+                   "",
+                   &msg,
+                );
+                Ok((self.local_address, msg))
+            }),
+           maybe_msg = self.rx_inbound_msg.recv() => {
+                let (from, msg) = maybe_msg?;
+                match HotstuffMessage::try_from(msg) {
+                    Ok(msg) => {
+                        self.msg_logger.log_inbound_message(
+                           &from.to_string(),
+                           msg.as_type_str(),
+                           "",
+                           &msg,
+                        );
+                       Some(Ok((from.into(), msg)))
+                    }
+                    Err(err) => return Some(Err(InboundMessagingError::InvalidMessage{ reason: err.to_string() } )),
+                }
+
+           },
         }
     }
 }

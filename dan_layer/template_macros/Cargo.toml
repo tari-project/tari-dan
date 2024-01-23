@@ -1,22 +1,22 @@
 [package]
 name = "tari_template_macros"
-version = "0.1.1"
-edition = "2021"
-authors = ["The Tari Development Community"]
 description = "Tari template macro"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [lib]
 proc-macro = true
 
 [dependencies]
-tari_template_abi = { path = "../template_abi" }
-tari_bor = { path = "../tari_bor" }
+tari_template_abi = { workspace = true }
+tari_bor = { workspace = true, default-features = true }
 
-proc-macro2 = "1.0.56"
-quote = "1.0"
-syn = { version = "1.0", features = ["full", "extra-traits"] }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true, features = ["full", "extra-traits"] }
 
 [dev-dependencies]
-indoc = "1.0.6"
+indoc = { workspace = true }

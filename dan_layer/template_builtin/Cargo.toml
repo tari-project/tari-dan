@@ -1,9 +1,10 @@
 [package]
 name = "tari_template_builtin"
-version = "0.1.1"
-edition = "2021"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_engine_types = { path = "../engine_types" }
-lazy_static = "1.4.0"
+tari_engine_types = { workspace = true }

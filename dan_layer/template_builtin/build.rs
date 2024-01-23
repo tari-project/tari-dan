@@ -39,6 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for template in TEMPLATE_BUILTINS {
         // we only want to rebuild if a template was added/modified
         println!("cargo:rerun-if-changed={}/src", template);
+        println!("cargo:rerun-if-changed={}/Cargo.toml", template);
 
         let template_path = env::current_dir()?.join(template);
 

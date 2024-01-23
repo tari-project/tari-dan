@@ -30,7 +30,7 @@ use std::{
 use chrono::Utc;
 use log::*;
 use tari_core::transactions::transaction_components::TemplateType;
-use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
+use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider, NodeAddressable};
 use tari_dan_engine::{
     flow::FlowFactory,
     function_definitions::FlowFunctionDefinition,
@@ -53,18 +53,18 @@ const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 const CONCURRENT_ACCESS_LIMIT: isize = 100;
 
-#[derive(Debug, Clone)]
-pub struct TemplateManager {
-    global_db: GlobalDb<SqliteGlobalDbAdapter>,
+#[derive(Debug)]
+pub struct TemplateManager<TAddr> {
+    global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
     config: TemplateConfig,
     builtin_templates: Arc<HashMap<TemplateAddress, Template>>,
     cache: mini_moka::sync::Cache<TemplateAddress, LoadedTemplate>,
     cmap_semaphore: cmap_semaphore::ConcurrentMapSemaphore<TemplateAddress>,
 }
 
-impl TemplateManager {
+impl<TAddr: NodeAddressable> TemplateManager<TAddr> {
     pub fn initialize(
-        global_db: GlobalDb<SqliteGlobalDbAdapter>,
+        global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
         config: TemplateConfig,
     ) -> Result<Self, TemplateManagerError> {
         // load the builtin account templates
@@ -94,14 +94,13 @@ impl TemplateManager {
 
         // get the builtin WASM code of the account template
         let compiled_code = get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS);
-        let template = Self::load_builtin_template("account", *ACCOUNT_TEMPLATE_ADDRESS, compiled_code.to_vec());
-        builtin_templates.insert(*ACCOUNT_TEMPLATE_ADDRESS, template);
+        let template = Self::load_builtin_template("account", ACCOUNT_TEMPLATE_ADDRESS, compiled_code.to_vec());
+        builtin_templates.insert(ACCOUNT_TEMPLATE_ADDRESS, template);
 
         // get the builtin WASM code of the account nft template
         let compiled_code = get_template_builtin(&ACCOUNT_NFT_TEMPLATE_ADDRESS);
-        let template =
-            Self::load_builtin_template("account_nft", *ACCOUNT_NFT_TEMPLATE_ADDRESS, compiled_code.to_vec());
-        builtin_templates.insert(*ACCOUNT_NFT_TEMPLATE_ADDRESS, template);
+        let template = Self::load_builtin_template("account_nft", ACCOUNT_NFT_TEMPLATE_ADDRESS, compiled_code.to_vec());
+        builtin_templates.insert(ACCOUNT_NFT_TEMPLATE_ADDRESS, template);
 
         builtin_templates
     }
@@ -237,7 +236,7 @@ impl TemplateManager {
     }
 }
 
-impl TemplateProvider for TemplateManager {
+impl<TAddr: NodeAddressable + Send + Sync + 'static> TemplateProvider for TemplateManager<TAddr> {
     type Error = TemplateManagerError;
     type Template = LoadedTemplate;
 
@@ -281,5 +280,17 @@ impl TemplateProvider for TemplateManager {
         self.cache.insert(*address, loaded.clone());
 
         Ok(Some(loaded))
+    }
+}
+
+impl<TAddr> Clone for TemplateManager<TAddr> {
+    fn clone(&self) -> Self {
+        Self {
+            global_db: self.global_db.clone(),
+            config: self.config.clone(),
+            builtin_templates: self.builtin_templates.clone(),
+            cache: self.cache.clone(),
+            cmap_semaphore: self.cmap_semaphore.clone(),
+        }
     }
 }

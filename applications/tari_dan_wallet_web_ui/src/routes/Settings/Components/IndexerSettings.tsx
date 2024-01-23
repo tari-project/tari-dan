@@ -20,31 +20,39 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import TextField from '@mui/material/TextField';
-import { useState } from 'react';
-import { Form } from 'react-router-dom';
-import Alert from '@mui/material/Alert';
-import Button from '@mui/material/Button';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Slide from '@mui/material/Slide';
-import useAccountStore from '../../../store/accountStore';
-import { useTheme } from '@mui/material/styles';
+import TextField from "@mui/material/TextField";
+import { useState } from "react";
+import { Form } from "react-router-dom";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import Slide from "@mui/material/Slide";
+import useAccountStore from "../../../store/accountStore";
+import { useTheme } from "@mui/material/styles";
+import { useEffect } from "react";
+import { getSettings, setSettings as uploadSettings } from "../../../utils/json_rpc";
 
 function IndexerSettings() {
+  // Keep the form and settings in the same format as the real settings in the dan wallet.
   const [accountFormState, setAccountFormState] = useState({
-    indexer: '',
+    indexer_url: "",
   });
-  const { indexer, setIndexer } = useAccountStore();
   const theme = useTheme();
   const [showForm, setShowForm] = useState(false);
+  const [settings, setSettings] = useState({ indexer_url: "" });
+
+  useEffect(() => {
+    getSettings().then((res) => {
+      setSettings(res);
+    });
+  }, []);
 
   const onSubmitIndexer = () => {
-    setIndexer(accountFormState.indexer);
+    setSettings(accountFormState);
+    uploadSettings(accountFormState);
     setShowForm(false);
-    setAccountFormState({
-      indexer: '',
-    });
+    setAccountFormState({ ...accountFormState, indexer_url: "" });
   };
 
   const onAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,9 +69,9 @@ function IndexerSettings() {
         {showForm ? (
           <Form onSubmit={onSubmitIndexer} className="flex-container">
             <TextField
-              name="indexer"
-              label="Account Name"
-              value={accountFormState.indexer}
+              name="indexer_url"
+              label="Indexer url"
+              value={accountFormState.indexer_url}
               onChange={onAccountChange}
               style={{ flexGrow: 1 }}
             />
@@ -78,21 +86,24 @@ function IndexerSettings() {
           <Box
             className="flex-container"
             style={{
-              justifyContent: 'space-between',
-              alignItems: 'center',
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
           >
-            {indexer === '' ? (
-              <Alert severity="warning" style={{ width: '100%' }}>
+            {settings.indexer_url === "" ? (
+              <Alert severity="warning" style={{ width: "100%" }}>
                 No Indexer Set
               </Alert>
             ) : (
-              <Typography variant="body2">{indexer}</Typography>
+              <Typography variant="body2">{settings.indexer_url}</Typography>
             )}
             <Button
               variant="outlined"
-              onClick={() => setShowForm(true)}
-              style={{ minWidth: '130px', height: '56px' }}
+              onClick={() => {
+                setAccountFormState(settings);
+                setShowForm(true);
+              }}
+              style={{ minWidth: "130px", height: "56px" }}
             >
               Set new url
             </Button>

@@ -26,7 +26,7 @@ use tari_template_lib::{
 
 use crate::{
     confidential::{validate_confidential_proof, validate_confidential_withdraw, ConfidentialOutput},
-    substate::SubstateAddress,
+    substate::SubstateId,
 };
 
 /// Instances of a single resource kept in Buckets and Vaults
@@ -160,10 +160,10 @@ impl ResourceContainer {
         }
     }
 
-    pub fn child_substates(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+    pub fn child_substates(&self) -> impl Iterator<Item = SubstateId> + '_ {
         self.non_fungible_token_ids()
             .iter()
-            .map(|id| SubstateAddress::NonFungible(NonFungibleAddress::new(*self.resource_address(), id.clone())))
+            .map(|id| SubstateId::NonFungible(NonFungibleAddress::new(*self.resource_address(), id.clone())))
     }
 
     pub fn deposit(&mut self, other: ResourceContainer) -> Result<(), ResourceError> {

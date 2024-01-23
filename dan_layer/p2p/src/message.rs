@@ -4,72 +4,76 @@
 use std::fmt::{Display, Formatter};
 
 use serde::Serialize;
-use tari_comms::peer_manager::PeerIdentityClaim;
 use tari_consensus::messages::HotstuffMessage;
-use tari_dan_common_types::{NodeAddressable, ShardId};
+use tari_dan_common_types::SubstateAddress;
 use tari_transaction::Transaction;
 
-#[derive(Debug, Clone)]
-pub enum Message<TAddr> {
-    Consensus(HotstuffMessage<TAddr>),
-    Dan(DanMessage<TAddr>),
+#[derive(Debug, Clone, serde::Serialize)]
+pub enum Message {
+    Consensus(HotstuffMessage),
+    Dan(DanMessage),
 }
 
-impl<TAddr> From<HotstuffMessage<TAddr>> for Message<TAddr> {
-    fn from(msg: HotstuffMessage<TAddr>) -> Self {
+impl From<HotstuffMessage> for Message {
+    fn from(msg: HotstuffMessage) -> Self {
         Self::Consensus(msg)
     }
 }
 
-impl<TAddr> From<DanMessage<TAddr>> for Message<TAddr> {
-    fn from(msg: DanMessage<TAddr>) -> Self {
+impl From<DanMessage> for Message {
+    fn from(msg: DanMessage) -> Self {
         Self::Dan(msg)
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub enum DanMessage<TAddr> {
-    // Mempool
-    NewTransaction(Box<NewTransactionMessage>),
-    // Network
-    NetworkAnnounce(Box<NetworkAnnounce<TAddr>>),
+impl Message {
+    pub fn to_type_str(&self) -> String {
+        match self {
+            Self::Consensus(msg) => format!("Consensus({})", msg.as_type_str()),
+            Self::Dan(msg) => format!("Dan({})", msg.as_type_str()),
+        }
+    }
+
+    pub fn get_message_tag(&self) -> String {
+        match self {
+            Self::Consensus(msg) => msg.as_type_str().to_string(),
+            Self::Dan(msg) => msg.get_message_tag(),
+        }
+    }
 }
 
-impl<TAddr: NodeAddressable> DanMessage<TAddr> {
+#[derive(Debug, Clone, Serialize)]
+pub enum DanMessage {
+    // Mempool
+    NewTransaction(Box<NewTransactionMessage>),
+}
+
+impl DanMessage {
     pub fn as_type_str(&self) -> &'static str {
         match self {
             Self::NewTransaction(_) => "NewTransaction",
-            Self::NetworkAnnounce(_) => "NetworkAnnounce",
         }
     }
 
     pub fn get_message_tag(&self) -> String {
         match self {
             Self::NewTransaction(msg) => format!("tx_{}", msg.transaction.id()),
-            Self::NetworkAnnounce(msg) => format!("pk_{}", msg.identity),
         }
     }
 }
 
-impl<TAddr> From<NewTransactionMessage> for DanMessage<TAddr> {
+impl From<NewTransactionMessage> for DanMessage {
     fn from(value: NewTransactionMessage) -> Self {
         Self::NewTransaction(Box::new(value))
     }
 }
 
-impl<TAddr: Display> Display for DanMessage<TAddr> {
+impl Display for DanMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NewTransaction(msg) => write!(f, "NewTransaction({})", msg.transaction.id()),
-            Self::NetworkAnnounce(_) => write!(f, "NetworkAnnounce"),
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct NetworkAnnounce<TAddr> {
-    pub identity: TAddr,
-    pub claim: PeerIdentityClaim,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -77,5 +81,5 @@ pub struct NewTransactionMessage {
     pub transaction: Transaction,
     /// Output shards that a validator has determined by executing the transaction
     // TODO: The only way to verify this is to execute the transaction again.
-    pub output_shards: Vec<ShardId>,
+    pub output_shards: Vec<SubstateAddress>,
 }

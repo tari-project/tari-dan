@@ -2,7 +2,7 @@
 ./LICENSE
 ./applications/tari_indexer/src/substate_storage_sqlite/schema.rs
 ./buildtools/vagrant/Vagrantfile
-./comms/tari_comms_logging/src/schema.rs
+./networking/sqlite_message_logger/src/schema.rs
 ./dan_layer/storage_sqlite/src/global/schema.rs
 ./dan_layer/state_store_sqlite/src/schema.rs
 ./dan_layer/wallet/storage_sqlite/src/schema.rs

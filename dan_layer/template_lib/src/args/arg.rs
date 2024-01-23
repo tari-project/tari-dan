@@ -23,9 +23,13 @@
 use serde::{Deserialize, Serialize};
 use tari_bor::encode;
 
+/// The possible ways to represent an instruction's argument
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Arg {
+    /// The argument is in the transaction execution's workspace, which means it is the result of a previous
+    /// instruction
     Workspace(Vec<u8>),
+    /// The argument is a value specified in the transaction
     Literal(Vec<u8>),
     // Literal(tari_bor::Value),
 }
@@ -43,5 +47,12 @@ impl Arg {
 
     pub fn workspace<T: Into<Vec<u8>>>(key: T) -> Self {
         Arg::Workspace(key.into())
+    }
+
+    pub fn as_literal_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Arg::Workspace(_) => None,
+            Arg::Literal(bytes) => Some(bytes),
+        }
     }
 }

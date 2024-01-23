@@ -30,19 +30,25 @@ use crate::resource::builder::{
     non_fungible::NonFungibleResourceBuilder,
 };
 
+/// Metadata key used as convention to represent the symbol (a.k.a. ticker) of a token. Meant as a shorthand,
+/// user-friendly identification of the underlying token
 pub const TOKEN_SYMBOL: &str = "SYMBOL";
 
+/// Utility for building resources inside templates
 pub struct ResourceBuilder;
 
 impl ResourceBuilder {
+    /// Returns a new fungible resource builder
     pub fn fungible() -> FungibleResourceBuilder {
         FungibleResourceBuilder::new()
     }
 
+    /// Returns a new non-fungible resource builder
     pub fn non_fungible() -> NonFungibleResourceBuilder {
         NonFungibleResourceBuilder::new()
     }
 
+    /// Returns a new confidential resource builder
     pub fn confidential() -> ConfidentialResourceBuilder {
         ConfidentialResourceBuilder::new()
     }

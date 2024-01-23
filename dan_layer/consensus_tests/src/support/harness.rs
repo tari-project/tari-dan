@@ -7,8 +7,10 @@ use std::{
 };
 
 use futures::{stream::FuturesUnordered, StreamExt};
+use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_consensus::hotstuff::HotstuffEvent;
-use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch, NodeHeight};
+use tari_crypto::keys::{PublicKey as _, SecretKey};
+use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, Decision, TransactionPoolStage, TransactionRecord},
     StateStore,
@@ -19,6 +21,7 @@ use tari_shutdown::{Shutdown, ShutdownSignal};
 use tari_transaction::TransactionId;
 use tokio::{sync::broadcast, task};
 
+use super::HotstuffFilter;
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
@@ -198,7 +201,7 @@ impl Test {
                 let mut heights = self
                     .validators
                     .values()
-                    .filter(|vn| committee.members.contains(&vn.address))
+                    .filter(|vn| committee.contains(&vn.address))
                     .filter(|vn| !except.contains(&vn.address))
                     .map(|v| {
                         let height = v.state_store.with_read_tx(|tx| Block::get_tip(tx)).unwrap().height();
@@ -276,10 +279,11 @@ impl Test {
 }
 
 pub struct TestBuilder {
-    committees: HashMap<ShardBucket, Committee<TestAddress>>,
+    committees: HashMap<Shard, Committee<TestAddress>>,
     sql_address: String,
     timeout: Option<Duration>,
     debug_sql_file: Option<String>,
+    hotstuff_filter: Option<HotstuffFilter>,
 }
 
 impl TestBuilder {
@@ -289,35 +293,52 @@ impl TestBuilder {
             sql_address: ":memory:".to_string(),
             timeout: Some(Duration::from_secs(10)),
             debug_sql_file: None,
+            hotstuff_filter: None,
         }
     }
 
     #[allow(dead_code)]
-    pub fn disable_timeout(&mut self) -> &mut Self {
+    pub fn disable_timeout(mut self) -> Self {
         self.timeout = None;
         self
     }
 
     #[allow(dead_code)]
-    pub fn debug_sql<P: Into<String>>(&mut self, path: P) -> &mut Self {
+    pub fn debug_sql<P: Into<String>>(mut self, path: P) -> Self {
         self.debug_sql_file = Some(path.into());
         self
     }
 
     #[allow(dead_code)]
-    pub fn with_sql_url<T: Into<String>>(&mut self, sql_address: T) -> &mut Self {
+    pub fn with_sql_url<T: Into<String>>(mut self, sql_address: T) -> Self {
         self.sql_address = sql_address.into();
         self
     }
 
-    pub fn with_test_timeout(&mut self, timeout: Duration) -> &mut Self {
+    pub fn with_test_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
-    pub fn add_committee<T: Into<ShardBucket>>(&mut self, bucket: T, addresses: Vec<&'static str>) -> &mut Self {
-        self.committees
-            .insert(bucket.into(), addresses.into_iter().map(TestAddress::new).collect());
+    pub fn add_committee<T: Into<Shard>>(mut self, bucket: T, addresses: Vec<&'static str>) -> Self {
+        let entry = self
+            .committees
+            .entry(bucket.into())
+            .or_insert_with(|| Committee::new(vec![]));
+
+        for addr in addresses {
+            let mut bytes = [0u8; 64];
+            bytes[0..addr.as_bytes().len()].copy_from_slice(addr.as_bytes());
+            let secret_key = PrivateKey::from_uniform_bytes(&bytes).unwrap();
+            entry
+                .members
+                .push((TestAddress::new(addr), PublicKey::from_secret_key(&secret_key)));
+        }
+        self
+    }
+
+    pub fn with_hotstuff_filter(mut self, hotstuff_filter: HotstuffFilter) -> Self {
+        self.hotstuff_filter = Some(hotstuff_filter);
         self
     }
 
@@ -331,14 +352,14 @@ impl TestBuilder {
             .all_validators()
             .await
             .into_iter()
-            .map(|(address, bucket, shard)| {
+            .map(|(address, bucket, shard, pk)| {
                 let sql_address = self.sql_address.replace("{}", &address.0);
                 let (channels, validator) = Validator::builder()
                     .with_sql_url(sql_address)
-                    .with_address(address.clone())
+                    .with_address_and_public_key(address.clone(), pk.clone())
                     .with_shard(shard)
                     .with_bucket(bucket)
-                    .with_epoch_manager(epoch_manager.clone_for(address.clone(), shard))
+                    .with_epoch_manager(epoch_manager.clone_for(address.clone(), pk, shard))
                     .with_leader_strategy(*leader_strategy)
                     .spawn(shutdown_signal.clone());
                 (channels, (address, validator))
@@ -346,13 +367,13 @@ impl TestBuilder {
             .unzip()
     }
 
-    pub async fn start(&mut self) -> Test {
+    pub async fn start(mut self) -> Test {
         if let Some(ref sql_file) = self.debug_sql_file {
             // Delete any previous database files
             for path in self
                 .committees
                 .values()
-                .flat_map(|committee| committee.iter().map(|addr| sql_file.replace("{}", &addr.0)))
+                .flat_map(|committee| committee.iter().map(|(addr, _)| sql_file.replace("{}", &addr.0)))
             {
                 let _ignore = std::fs::remove_file(&path);
             }
@@ -368,7 +389,7 @@ impl TestBuilder {
         let (channels, validators) = self
             .build_validators(&leader_strategy, &epoch_manager, shutdown.to_signal())
             .await;
-        let network = spawn_network(channels, shutdown.to_signal());
+        let network = spawn_network(channels, shutdown.to_signal(), self.hotstuff_filter);
 
         Test {
             validators,

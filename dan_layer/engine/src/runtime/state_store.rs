@@ -8,7 +8,7 @@ use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     component::ComponentHeader,
     lock::{LockFlag, LockId},
-    substate::{Substate, SubstateAddress, SubstateValue},
+    substate::{Substate, SubstateId, SubstateValue},
     vault::Vault,
 };
 use tari_template_lib::models::{ComponentAddress, VaultId};
@@ -24,9 +24,9 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct WorkingStateStore {
     // This must be ordered deterministically since we use this to create the substate diff
-    new_substates: IndexMap<SubstateAddress, SubstateValue>,
+    new_substates: IndexMap<SubstateId, SubstateValue>,
 
-    loaded_substates: HashMap<SubstateAddress, SubstateValue>,
+    loaded_substates: HashMap<SubstateId, SubstateValue>,
     locked_substates: LockedSubstates,
 
     state_store: MemoryStateStore,
@@ -42,7 +42,7 @@ impl WorkingStateStore {
         }
     }
 
-    pub fn try_lock(&mut self, address: &SubstateAddress, lock_flag: LockFlag) -> Result<LockId, RuntimeError> {
+    pub fn try_lock(&mut self, address: &SubstateId, lock_flag: LockFlag) -> Result<LockId, RuntimeError> {
         if !self.exists(address)? {
             return Err(RuntimeError::SubstateNotFound {
                 address: address.clone(),
@@ -61,19 +61,19 @@ impl WorkingStateStore {
     pub fn get_locked_substate_mut(
         &mut self,
         lock_id: LockId,
-    ) -> Result<(SubstateAddress, &mut SubstateValue), RuntimeError> {
+    ) -> Result<(SubstateId, &mut SubstateValue), RuntimeError> {
         let lock = self.locked_substates.get(lock_id, LockFlag::Write)?;
         let substate = self.get_for_mut(lock.address())?;
         Ok((lock.address().clone(), substate))
     }
 
-    pub fn get_locked_substate(&self, lock_id: LockId) -> Result<(SubstateAddress, &SubstateValue), RuntimeError> {
+    pub fn get_locked_substate(&self, lock_id: LockId) -> Result<(SubstateId, &SubstateValue), RuntimeError> {
         let lock = self.locked_substates.get(lock_id, LockFlag::Read)?;
         let substate = self.get_ref(lock.address())?;
         Ok((lock.address().clone(), substate))
     }
 
-    fn get_ref(&self, address: &SubstateAddress) -> Result<&SubstateValue, LockError> {
+    fn get_ref(&self, address: &SubstateId) -> Result<&SubstateValue, LockError> {
         self.new_substates
             .get(address)
             .or_else(|| self.loaded_substates.get(address))
@@ -82,7 +82,7 @@ impl WorkingStateStore {
             })
     }
 
-    fn get_for_mut(&mut self, address: &SubstateAddress) -> Result<&mut SubstateValue, LockError> {
+    fn get_for_mut(&mut self, address: &SubstateId) -> Result<&mut SubstateValue, LockError> {
         if let Some(substate) = self.loaded_substates.remove(address) {
             self.new_substates.insert(address.clone(), substate);
         }
@@ -96,7 +96,7 @@ impl WorkingStateStore {
         })
     }
 
-    pub fn exists(&self, address: &SubstateAddress) -> Result<bool, RuntimeError> {
+    pub fn exists(&self, address: &SubstateId) -> Result<bool, RuntimeError> {
         let exists = self.new_substates.contains_key(address) || self.loaded_substates.contains_key(address) || {
             let tx = self.state_store.read_access()?;
             tx.exists(address)?
@@ -104,7 +104,7 @@ impl WorkingStateStore {
         Ok(exists)
     }
 
-    pub fn insert(&mut self, address: SubstateAddress, value: SubstateValue) -> Result<(), RuntimeError> {
+    pub fn insert(&mut self, address: SubstateId, value: SubstateValue) -> Result<(), RuntimeError> {
         if self.exists(&address)? {
             return Err(RuntimeError::DuplicateSubstate { address });
         }
@@ -112,7 +112,7 @@ impl WorkingStateStore {
         Ok(())
     }
 
-    fn load(&mut self, address: &SubstateAddress) -> Result<(), RuntimeError> {
+    fn load(&mut self, address: &SubstateId) -> Result<(), RuntimeError> {
         if self.new_substates.contains_key(address) {
             return Ok(());
         }
@@ -131,7 +131,7 @@ impl WorkingStateStore {
         Ok(())
     }
 
-    pub fn take_mutated_substates(&mut self) -> IndexMap<SubstateAddress, SubstateValue> {
+    pub fn take_mutated_substates(&mut self) -> IndexMap<SubstateId, SubstateValue> {
         mem::take(&mut self.new_substates)
     }
 
@@ -148,7 +148,7 @@ impl WorkingStateStore {
 
     /// Load and get the component without a lock
     pub fn load_component(&mut self, address: &ComponentAddress) -> Result<&ComponentHeader, RuntimeError> {
-        let addr = SubstateAddress::Component(*address);
+        let addr = SubstateId::Component(*address);
         self.load(&addr)?;
         let component = self.get_ref(&addr)?;
         component.component().ok_or_else(|| RuntimeError::InvariantError {
@@ -157,7 +157,7 @@ impl WorkingStateStore {
         })
     }
 
-    pub(super) fn get_unmodified_substate(&self, address: &SubstateAddress) -> Result<Substate, RuntimeError> {
+    pub(super) fn get_unmodified_substate(&self, address: &SubstateId) -> Result<Substate, RuntimeError> {
         let tx = self.state_store.read_access()?;
         tx.get_state(address)
             .optional()?

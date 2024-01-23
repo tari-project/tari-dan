@@ -1,34 +1,34 @@
 [package]
 name = "tari_dan_wallet_cli"
-authors = ["The Tari Development Community"]
 description = "The Tari DAN wallet CLI"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
-version = "0.1.1"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_dan_common_types = { path = "../../dan_layer/common_types" }
-tari_dan_engine = { path = "../../dan_layer/engine" }
-tari_engine_types = { path = "../../dan_layer/engine_types" }
-tari_utilities = "0.6"
-tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
-tari_template_lib = { path = "../../dan_layer/template_lib" }
-tari_transaction = { path = "../../dan_layer/transaction" }
-tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
-tari_bor = { path = "../../dan_layer/tari_bor" }
-# Needed for VersionedSubstateAddress
-tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
+tari_common_types = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_dan_engine = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_utilities = { workspace = true }
+tari_wallet_daemon_client = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_transaction = { workspace = true }
+tari_transaction_manifest = { workspace = true }
+tari_bor = { workspace = true, default-features = true }
+# Needed for VersionedSubstateId
+tari_dan_wallet_sdk = { workspace = true }
 
-anyhow = "1.0.65"
-base64 = "0.20.0-alpha.1"
-clap = { version = "3.2.22", features = ["derive", "env"] }
-log = "0.4.17"
-multiaddr = "0.14.0"
-reqwest = { version = "0.11.11", features = ["json"] }
-serde_json = "1.0"
-time = "0.3.15"
-thiserror = "1.0.36"
+anyhow = { workspace = true }
+base64 = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+log = { workspace = true }
+multiaddr = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde_json = { workspace = true }
+time = { workspace = true }
+thiserror = { workspace = true }
 tokio = { version = "1", features = ["macros"] }
-url = "2.3.1"
+url = { workspace = true }

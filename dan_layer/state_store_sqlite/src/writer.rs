@@ -9,13 +9,14 @@ use std::{
 
 use diesel::{AsChangeset, ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::*;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockId,
         Decision,
         Evidence,
+        ForeignProposal,
         ForeignReceiveCounters,
         ForeignSendCounters,
         HighQc,
@@ -42,6 +43,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_transaction::{Transaction, TransactionId};
+use tari_utilities::ByteArray;
 use time::PrimitiveDateTime;
 
 use crate::{
@@ -70,7 +72,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
         self.transaction.as_mut().unwrap().connection()
     }
 
-    fn parked_blocks_remove(&mut self, block_id: &str) -> Result<Block<TAddr>, StorageError> {
+    fn parked_blocks_remove(&mut self, block_id: &str) -> Result<Block, StorageError> {
         use crate::schema::parked_blocks;
 
         let block = parked_blocks::table
@@ -97,7 +99,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
         block.try_into()
     }
 
-    fn parked_blocks_insert(&mut self, block: &Block<TAddr>) -> Result<(), StorageError> {
+    fn parked_blocks_insert(&mut self, block: &Block) -> Result<(), StorageError> {
         use crate::schema::{blocks, parked_blocks};
 
         // check if block exists in blocks table using count query
@@ -144,7 +146,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
             parked_blocks::commands.eq(serialize_json(block.commands())?),
             parked_blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             parked_blocks::justify.eq(serialize_json(block.justify())?),
-            parked_blocks::foreign_indexes.eq(serialize_json(block.get_foreign_indexes())?),
+            parked_blocks::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
         );
 
         diesel::insert_into(parked_blocks::table)
@@ -174,7 +176,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn blocks_insert(&mut self, block: &Block<TAddr>) -> Result<(), StorageError> {
+    fn blocks_insert(&mut self, block: &Block) -> Result<(), StorageError> {
         use crate::schema::blocks;
 
         let insert = (
@@ -189,7 +191,8 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
             blocks::is_dummy.eq(block.is_dummy()),
             blocks::is_processed.eq(block.is_processed()),
-            blocks::foreign_indexes.eq(serialize_json(block.get_foreign_indexes())?),
+            blocks::signature.eq(block.get_signature().map(serialize_json).transpose()?),
+            blocks::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
         );
 
         diesel::insert_into(blocks::table)
@@ -240,7 +243,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         IAwaiting: IntoIterator<Item = &'a TransactionId>,
     >(
         &mut self,
-        block: &Block<Self::Addr>,
+        block: &Block,
         missing_transaction_ids: IMissing,
         awaiting_transaction_ids: IAwaiting,
     ) -> Result<(), StorageError> {
@@ -293,7 +296,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         &mut self,
         current_height: NodeHeight,
         transaction_id: &TransactionId,
-    ) -> Result<Option<Block<TAddr>>, StorageError> {
+    ) -> Result<Option<Block>, StorageError> {
         use crate::schema::{missing_transactions, transactions};
 
         // delete all entries that are for previous heights
@@ -369,7 +372,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(None)
     }
 
-    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate<Self::Addr>) -> Result<(), StorageError> {
+    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate) -> Result<(), StorageError> {
         use crate::schema::quorum_certificates;
 
         let insert = (
@@ -389,7 +392,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn last_sent_vote_set(&mut self, last_sent_vote: &LastSentVote<Self::Addr>) -> Result<(), StorageError> {
+    fn last_sent_vote_set(&mut self, last_sent_vote: &LastSentVote) -> Result<(), StorageError> {
         use crate::schema::last_sent_vote;
 
         let insert = (
@@ -561,6 +564,44 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "high_qc_set",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn foreign_proposal_upsert(&mut self, foreign_proposal: &ForeignProposal) -> Result<(), StorageError> {
+        use crate::schema::foreign_proposals;
+
+        let values = (
+            foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32),
+            foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)),
+            foreign_proposals::state.eq(foreign_proposal.state.to_string()),
+            foreign_proposals::proposed_height.eq(foreign_proposal.proposed_height.map(|h| h.as_u64() as i64)),
+        );
+
+        diesel::insert_into(foreign_proposals::table)
+            .values(&values)
+            .on_conflict((foreign_proposals::bucket, foreign_proposals::block_id))
+            .do_update()
+            .set(values.clone())
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_set",
+                source: e,
+            })?;
+        Ok(())
+    }
+
+    fn foreign_proposal_delete(&mut self, foreign_proposal: &ForeignProposal) -> Result<(), StorageError> {
+        use crate::schema::foreign_proposals;
+
+        diesel::delete(foreign_proposals::table)
+            .filter(foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32))
+            .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_delete",
                 source: e,
             })?;
 
@@ -952,7 +993,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn votes_insert(&mut self, vote: &Vote<Self::Addr>) -> Result<(), StorageError> {
+    fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError> {
         use crate::schema::votes;
 
         let insert = (
@@ -975,7 +1016,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+    fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
         &mut self,
         locked_by_tx: &TransactionId,
         objects: I,
@@ -988,7 +1029,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
 
         let locked_details = substates::table
             .select((substates::is_locked_w, substates::destroyed_by_transaction))
-            .filter(substates::shard_id.eq_any(&objects))
+            .filter(substates::address.eq_any(&objects))
             .get_results::<(bool, Option<String>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transactions_try_lock_many",
@@ -1018,7 +1059,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         match lock_flag {
             SubstateLockFlag::Write => {
                 diesel::update(substates::table)
-                    .filter(substates::shard_id.eq_any(objects))
+                    .filter(substates::address.eq_any(objects))
                     .set((
                         substates::is_locked_w.eq(true),
                         substates::locked_by.eq(serialize_hex(locked_by_tx)),
@@ -1031,7 +1072,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             },
             SubstateLockFlag::Read => {
                 diesel::update(substates::table)
-                    .filter(substates::shard_id.eq_any(objects))
+                    .filter(substates::address.eq_any(objects))
                     .set(substates::read_locks.eq(substates::read_locks + 1))
                     .execute(self.connection())
                     .map_err(|e| SqliteStorageError::DieselError {
@@ -1044,7 +1085,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(SubstateLockState::LockAcquired)
     }
 
-    fn substates_try_unlock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+    fn substates_try_unlock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
         &mut self,
         locked_by_tx: &TransactionId,
         objects: I,
@@ -1087,7 +1128,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                 // }
 
                 diesel::update(substates::table)
-                    .filter(substates::shard_id.eq_any(objects))
+                    .filter(substates::address.eq_any(objects))
                     .filter(substates::locked_by.eq(serialize_hex(locked_by_tx)))
                     .set((
                         substates::is_locked_w.eq(false),
@@ -1127,7 +1168,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                 //     .into());
                 // }
                 diesel::update(substates::table)
-                    .filter(substates::shard_id.eq_any(objects))
+                    .filter(substates::address.eq_any(objects))
                     .set(substates::read_locks.eq(substates::read_locks - 1))
                     .execute(self.connection())
                     .map_err(|e| SqliteStorageError::DieselError {
@@ -1140,9 +1181,9 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn substate_down_many<I: IntoIterator<Item = ShardId>>(
+    fn substate_down_many<I: IntoIterator<Item = SubstateAddress>>(
         &mut self,
-        shard_ids: I,
+        addresses: I,
         epoch: Epoch,
         destroyed_block_id: &BlockId,
         destroyed_transaction_id: &TransactionId,
@@ -1151,23 +1192,23 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
     ) -> Result<(), StorageError> {
         use crate::schema::substates;
 
-        let shard_ids = shard_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
+        let addresses = addresses.into_iter().map(serialize_hex).collect::<Vec<_>>();
 
         let is_writable = substates::table
-            .select((substates::address, substates::is_locked_w))
-            .filter(substates::shard_id.eq_any(&shard_ids))
+            .select((substates::substate_id, substates::is_locked_w))
+            .filter(substates::address.eq_any(&addresses))
             .get_results::<(String, bool)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substate_down",
                 source: e,
             })?;
-        if is_writable.len() != shard_ids.len() {
+        if is_writable.len() != addresses.len() {
             return Err(SqliteStorageError::NotAllSubstatesFound {
                 operation: "substate_down",
                 details: format!(
                     "Found {} substates, but {} were requested",
                     is_writable.len(),
-                    shard_ids.len()
+                    addresses.len()
                 ),
             }
             .into());
@@ -1191,7 +1232,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         );
 
         diesel::update(substates::table)
-            .filter(substates::shard_id.eq_any(shard_ids))
+            .filter(substates::address.eq_any(addresses))
             .set(changes)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -1206,8 +1247,8 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         use crate::schema::substates;
 
         let values = (
-            substates::shard_id.eq(serialize_hex(substate.to_shard_id())),
-            substates::address.eq(substate.address.to_string()),
+            substates::address.eq(serialize_hex(substate.to_substate_address())),
+            substates::substate_id.eq(substate.substate_id.to_string()),
             substates::version.eq(substate.version as i32),
             substates::data.eq(serialize_json(&substate.substate_value)?),
             substates::state_hash.eq(serialize_hex(substate.state_hash)),
@@ -1237,23 +1278,23 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         &mut self,
         block_id: &BlockId,
         transaction_id: &TransactionId,
-        output_shards: I,
+        output_addresses: I,
     ) -> Result<SubstateLockState, StorageError>
     where
         I: IntoIterator<Item = B>,
-        B: Borrow<ShardId>,
+        B: Borrow<SubstateAddress>,
     {
         use crate::schema::locked_outputs;
         let block_id_hex = serialize_hex(block_id);
         let transaction_id_hex = serialize_hex(transaction_id);
 
-        let insert = output_shards
+        let insert = output_addresses
             .into_iter()
-            .map(|shard_id| {
+            .map(|address| {
                 (
                     locked_outputs::block_id.eq(&block_id_hex),
                     locked_outputs::transaction_id.eq(&transaction_id_hex),
-                    locked_outputs::shard_id.eq(serialize_hex(shard_id.borrow())),
+                    locked_outputs::substate_address.eq(serialize_hex(address.borrow())),
                 )
             })
             .collect::<Vec<_>>();
@@ -1276,16 +1317,16 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(lock_state)
     }
 
-    fn locked_outputs_release_all<I, B>(&mut self, output_shards: I) -> Result<Vec<LockedOutput>, StorageError>
+    fn locked_outputs_release_all<I, B>(&mut self, output_addresses: I) -> Result<Vec<LockedOutput>, StorageError>
     where
         I: IntoIterator<Item = B>,
-        B: Borrow<ShardId>,
+        B: Borrow<SubstateAddress>,
     {
         use crate::schema::locked_outputs;
 
-        let output_shards = output_shards
+        let output_addresses = output_addresses
             .into_iter()
-            .map(|shard_id| serialize_hex(shard_id.borrow()))
+            .map(|address| serialize_hex(address.borrow()))
             .collect::<Vec<_>>();
 
         // let locked = locked_outputs::table
@@ -1309,7 +1350,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         // }
 
         diesel::delete(locked_outputs::table)
-            .filter(locked_outputs::shard_id.eq_any(&output_shards))
+            .filter(locked_outputs::substate_address.eq_any(&output_addresses))
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "locked_outputs_release",

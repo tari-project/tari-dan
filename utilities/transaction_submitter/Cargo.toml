@@ -1,14 +1,19 @@
 [package]
 name = "transaction_submitter"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-transaction_generator = { path = "../transaction_generator" }
-tari_validator_node_client = { path = "../../clients/validator_node_client" }
+transaction_generator = { workspace = true }
+tari_validator_node_client = { workspace = true }
+tari_transaction = { workspace = true }
 
-anyhow = "1.0.72"
+anyhow = { workspace = true }
+# if we set clap version 4 in the workspace it would break other crates
 clap = "4.3.21"
-tokio = "1.30.0"
+tokio = { workspace = true, default-features = true }

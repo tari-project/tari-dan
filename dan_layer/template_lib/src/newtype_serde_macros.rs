@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+/// Low-level macro used for generating serde serializers/deserializers for newtype structs. Not intended for general
+/// usage
 #[macro_export]
 macro_rules! newtype_struct_serde_impl {
     ($ty:ident, $inner_ty:ty) => {

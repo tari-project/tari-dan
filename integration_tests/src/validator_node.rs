@@ -23,7 +23,6 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    str::FromStr,
 };
 
 use reqwest::Url;
@@ -32,9 +31,8 @@ use tari_common::{
     exit_codes::ExitError,
 };
 use tari_common_types::types::PublicKey;
-use tari_comms::multiaddr::Multiaddr;
-use tari_comms_dht::{DbConnectionUrl, DhtConfig};
-use tari_p2p::{Network, PeerSeedsConfig, TransportType};
+use tari_dan_app_utilities::p2p_config::PeerSeedsConfig;
+use tari_p2p::Network;
 use tari_shutdown::Shutdown;
 use tari_validator_node::{run_validator_node, ApplicationConfig, ValidatorNodeConfig};
 use tari_validator_node_client::ValidatorNodeClient;
@@ -113,24 +111,15 @@ pub async fn spawn_validator_node(
         config.validator_node.data_dir = temp_dir.to_path_buf();
         config.validator_node.shard_key_file = temp_dir.join("shard_key.json");
         config.validator_node.identity_file = temp_dir.join("validator_node_id.json");
-        config.validator_node.tor_identity_file = temp_dir.join("validator_node_tor_id.json");
         config.validator_node.base_node_grpc_address = Some(format!("127.0.0.1:{}", base_node_grpc_port));
         config.validator_node.wallet_grpc_address = Some(format!("127.0.0.1:{}", wallet_grpc_port).parse().unwrap());
 
-        config.validator_node.p2p.transport.transport_type = TransportType::Tcp;
-        config.validator_node.p2p.transport.tcp.listener_address =
-            Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
-        config.validator_node.p2p.public_addresses =
-            vec![config.validator_node.p2p.transport.tcp.listener_address.clone()].into();
-        config.validator_node.public_address = Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
-        config.validator_node.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/vn");
-        config.validator_node.p2p.dht = DhtConfig {
-            // Not all platforms support sqlite memory connection urls
-            database_url: DbConnectionUrl::File(temp_dir.join("dht.sqlite")),
-            ..DhtConfig::default_local_test()
-        };
+        // config.validator_node.public_address =
+        // Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
+        config.validator_node.p2p.enable_mdns = false;
         config.validator_node.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
         config.validator_node.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
+        config.validator_node.p2p.listener_port = port;
 
         config.validator_node.no_fees = !enable_fees;
 

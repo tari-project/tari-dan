@@ -24,7 +24,7 @@ pub mod cli;
 pub mod config;
 mod handlers;
 mod http_ui;
-mod indexer_jrpc_impl;
+pub mod indexer_jrpc_impl;
 mod jrpc_server;
 mod notify;
 mod services;
@@ -67,24 +67,7 @@ pub async fn run_tari_dan_wallet_daemon(
     // Uncomment to enable tokio tracing via tokio-console
     // console_subscriber::init();
 
-    let store = SqliteWalletStore::try_open(config.common.base_path.join("data/wallet.sqlite"))?;
-    store.run_migrations()?;
-
-    let sdk_config = WalletSdkConfig {
-        // TODO: Configure
-        password: None,
-        indexer_jrpc_endpoint: config.dan_wallet_daemon.indexer_node_json_rpc_url,
-        jwt_expiry: config.dan_wallet_daemon.jwt_expiry.unwrap(),
-        jwt_secret_key: config.dan_wallet_daemon.jwt_secret_key.unwrap(),
-    };
-    let config_api = ConfigApi::new(&store);
-    let indexer_jrpc_endpoint = if let Some(indexer_url) = config_api.get(ConfigKey::IndexerUrl).optional()? {
-        indexer_url
-    } else {
-        sdk_config.indexer_jrpc_endpoint.clone()
-    };
-    let indexer = IndexerJsonRpcNetworkInterface::new(indexer_jrpc_endpoint);
-    let wallet_sdk = DanWalletSdk::initialize(store, indexer, sdk_config)?;
+    let wallet_sdk = initialize_wallet_sdk(&config)?;
     wallet_sdk
         .key_manager_api()
         .get_or_create_initial(key_manager::TRANSACTION_BRANCH)?;
@@ -126,4 +109,27 @@ pub async fn run_tari_dan_wallet_daemon(
         },
     }
     Ok(())
+}
+
+pub fn initialize_wallet_sdk(
+    config: &ApplicationConfig,
+) -> anyhow::Result<DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>> {
+    let store = SqliteWalletStore::try_open(config.common.base_path.join("data/wallet.sqlite"))?;
+    store.run_migrations()?;
+
+    let sdk_config = WalletSdkConfig {
+        // TODO: Configure
+        password: None,
+        jwt_expiry: config.dan_wallet_daemon.jwt_expiry.unwrap(),
+        jwt_secret_key: config.dan_wallet_daemon.jwt_secret_key.clone().unwrap(),
+    };
+    let config_api = ConfigApi::new(&store);
+    let indexer_jrpc_endpoint = if let Some(indexer_url) = config_api.get(ConfigKey::IndexerUrl).optional()? {
+        indexer_url
+    } else {
+        config.dan_wallet_daemon.indexer_node_json_rpc_url.clone()
+    };
+    let indexer = IndexerJsonRpcNetworkInterface::new(indexer_jrpc_endpoint);
+    let wallet_sdk = DanWalletSdk::initialize(store, indexer, sdk_config)?;
+    Ok(wallet_sdk)
 }

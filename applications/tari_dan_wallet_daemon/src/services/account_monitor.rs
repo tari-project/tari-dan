@@ -22,7 +22,7 @@ use tari_engine_types::{
     indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     non_fungible::NonFungibleContainer,
     resource::Resource,
-    substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
+    substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
     vault::Vault,
 };
 use tari_shutdown::ShutdownSignal;
@@ -128,7 +128,7 @@ where
         for account in accounts {
             info!(
                 target: LOG_TARGET,
-                "👁️‍🗨️ Refreshing account '{}' {}", account.name, account.address
+                "👁️‍🗨️ Refreshing account {}", account
             );
             let is_updated = self.refresh_account(&account.address).await?;
 
@@ -139,14 +139,14 @@ where
             } else {
                 info!(
                     target: LOG_TARGET,
-                    "👁️‍🗨️ Account '{}' {} is up to date", account.name, account.address
+                    "👁️‍🗨️ Account {} is up to date", account
                 );
             }
         }
         Ok(())
     }
 
-    async fn refresh_account(&self, account_address: &SubstateAddress) -> Result<bool, AccountMonitorError> {
+    async fn refresh_account(&self, account_address: &SubstateId) -> Result<bool, AccountMonitorError> {
         let substate_api = self.wallet_sdk.substate_api();
         let accounts_api = self.wallet_sdk.accounts_api();
 
@@ -163,7 +163,7 @@ where
             created_by_tx,
         } = substate_api
             .scan_for_substate(
-                &account_substate.address.address,
+                &account_substate.address.substate_id,
                 Some(account_substate.address.version),
             )
             .await?;
@@ -172,13 +172,13 @@ where
 
         let vaults_value = IndexedWellKnownTypes::from_value(account_value.component().unwrap().state())?;
         let known_child_vaults = substate_api
-            .load_dependent_substates(&[&account_substate.address.address])?
+            .load_dependent_substates(&[&account_substate.address.substate_id])?
             .into_iter()
-            .filter(|s| s.address.is_vault())
-            .map(|s| (s.address, s.version))
+            .filter(|s| s.substate_id.is_vault())
+            .map(|s| (s.substate_id, s.version))
             .collect::<HashMap<_, _>>();
         for vault in vaults_value.vault_ids() {
-            let vault_addr = SubstateAddress::Vault(*vault);
+            let vault_addr = SubstateId::Vault(*vault);
             let maybe_vault_version = known_child_vaults.get(&vault_addr).copied();
             let scan_result = substate_api
                 .scan_for_substate(&vault_addr, maybe_vault_version)
@@ -198,7 +198,7 @@ where
                 // The first time a vault is found, know about the vault substate from the tx result but never added
                 // it to the database.
                 if versioned_addr.version == vault_version && accounts_api.has_vault(&vault_addr)? {
-                    info!(target: LOG_TARGET, "Vault {} is up to date", versioned_addr.address);
+                    info!(target: LOG_TARGET, "Vault {} is up to date", versioned_addr.substate_id);
                     continue;
                 }
             }
@@ -210,11 +210,15 @@ where
 
             is_updated = true;
 
-            substate_api.save_child(created_by_tx, versioned_account_address.address.clone(), versioned_addr)?;
+            substate_api.save_child(
+                created_by_tx,
+                versioned_account_address.substate_id.clone(),
+                versioned_addr,
+            )?;
 
-            self.add_vault_to_account_if_not_exist(&versioned_account_address.address, &vault)
+            self.add_vault_to_account_if_not_exist(&versioned_account_address.substate_id, &vault)
                 .await?;
-            self.refresh_vault(&versioned_account_address.address, &vault, &HashMap::new())
+            self.refresh_vault(&versioned_account_address.substate_id, &vault, &HashMap::new())
                 .await?;
         }
 
@@ -223,7 +227,7 @@ where
 
     async fn refresh_vault(
         &self,
-        account_addr: &SubstateAddress,
+        account_addr: &SubstateId,
         vault: &Vault,
         nfts: &HashMap<&NonFungibleId, &NonFungibleContainer>,
     ) -> Result<(), AccountMonitorError> {
@@ -231,7 +235,7 @@ where
         let non_fungibles_api = self.wallet_sdk.non_fungible_api();
 
         let balance = vault.balance();
-        let vault_addr = SubstateAddress::Vault(*vault.vault_id());
+        let vault_addr = SubstateId::Vault(*vault.vault_id());
         if !accounts_api.exists_by_address(account_addr)? {
             // This is not our account
             return Ok(());
@@ -377,7 +381,7 @@ where
 
         // Process all existing vaults that belong to an account
         for (vault_addr, substate) in vaults {
-            let vault_addr = SubstateAddress::Vault(vault_addr);
+            let vault_addr = SubstateId::Vault(vault_addr);
             let SubstateValue::Vault(vault) = substate.substate_value() else {
                 error!(target: LOG_TARGET, "👁️‍🗨️ Substate {} is not a vault. This should be impossible.", vault_addr);
                 continue;
@@ -416,7 +420,7 @@ where
 
     async fn fetch_resource(&self, resx_addr: ResourceAddress) -> Result<Resource, AccountMonitorError> {
         let substate_api = self.wallet_sdk.substate_api();
-        let resx_addr = SubstateAddress::Resource(resx_addr);
+        let resx_addr = SubstateId::Resource(resx_addr);
         let version = substate_api
             .get_substate(&resx_addr)
             .optional()?
@@ -432,10 +436,10 @@ where
 
     async fn add_vault_to_account_if_not_exist(
         &self,
-        account_addr: &SubstateAddress,
+        account_addr: &SubstateId,
         vault: &Vault,
     ) -> Result<(), AccountMonitorError> {
-        let vault_addr = SubstateAddress::Vault(*vault.vault_id());
+        let vault_addr = SubstateId::Vault(*vault.vault_id());
         let accounts_api = self.wallet_sdk.accounts_api();
         if !accounts_api.exists_by_address(account_addr)? {
             // This is not our account
@@ -500,7 +504,7 @@ where
 #[derive(Debug)]
 enum AccountMonitorRequest {
     RefreshAccount {
-        account: SubstateAddress,
+        account: SubstateId,
         reply: Reply<Result<bool, AccountMonitorError>>,
     },
 }
@@ -511,7 +515,7 @@ pub struct AccountMonitorHandle {
 }
 
 impl AccountMonitorHandle {
-    pub async fn refresh_account(&self, account: SubstateAddress) -> Result<bool, AccountMonitorError> {
+    pub async fn refresh_account(&self, account: SubstateId) -> Result<bool, AccountMonitorError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.sender
             .send(AccountMonitorRequest::RefreshAccount {
@@ -547,7 +551,7 @@ pub enum AccountMonitorError {
     ExpectedNewAccount { tx_id: TransactionId, account_name: String },
 }
 
-fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {
+fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateId> {
     // TODO: We assume only one new account is created in a transaction.
     diff.up_iter().find_map(|(a, v)| {
         // Newly created in this transaction
@@ -561,7 +565,7 @@ fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {
                 .component()
                 .expect("Value was not component for component address")
                 .template_address !=
-                *ACCOUNT_TEMPLATE_ADDRESS
+                ACCOUNT_TEMPLATE_ADDRESS
         {
             return None;
         }
@@ -573,6 +577,6 @@ fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {
 fn is_account(s: &Substate) -> bool {
     s.substate_value()
         .component()
-        .filter(|c| c.template_address == *ACCOUNT_TEMPLATE_ADDRESS)
+        .filter(|c| c.template_address == ACCOUNT_TEMPLATE_ADDRESS)
         .is_some()
 }

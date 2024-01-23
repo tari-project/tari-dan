@@ -24,29 +24,29 @@ impl BuildHasher for FixedState {
 #[cfg(test)]
 mod tests {
     use rand::{rngs::OsRng, Rng};
-    use tari_dan_common_types::{uint::U256, ShardId};
+    use tari_dan_common_types::{uint::U256, SubstateAddress};
 
     use super::*;
 
-    pub fn random_shard() -> ShardId {
+    pub fn random_substate_address() -> SubstateAddress {
         let lsb: u128 = OsRng.gen();
         let msb: u128 = OsRng.gen();
         let mut bytes = [0u8; 32];
         bytes[..16].copy_from_slice(&lsb.to_le_bytes());
         bytes[16..].copy_from_slice(&msb.to_le_bytes());
-        ShardId::from_u256(U256::from_le_bytes(bytes))
+        SubstateAddress::from_u256(U256::from_le_bytes(bytes))
     }
 
     #[test]
     fn blah() {
         let mut a = UniqueSet::with_hasher(FixedState);
 
-        a.insert(random_shard());
-        a.insert(random_shard());
-        a.insert(random_shard());
-        a.insert(random_shard());
-        a.insert(random_shard());
-        a.insert(random_shard());
+        a.insert(random_substate_address());
+        a.insert(random_substate_address());
+        a.insert(random_substate_address());
+        a.insert(random_substate_address());
+        a.insert(random_substate_address());
+        a.insert(random_substate_address());
         // a.insert(1);
         // a.insert(2);
         // a.insert(3);
@@ -58,7 +58,7 @@ mod tests {
         println!("-----");
 
         let e = bincode::serialize(&a).unwrap();
-        let d: UniqueSet<ShardId> = bincode::deserialize(&e).unwrap();
+        let d: UniqueSet<SubstateAddress> = bincode::deserialize(&e).unwrap();
 
         for i in &d {
             println!("{}", i);

@@ -11,8 +11,8 @@ use crate::serialization::{deserialize_hex_try_from, deserialize_json, parse_fro
 #[derive(Debug, Clone, Queryable)]
 pub struct SubstateRecord {
     pub id: i32,
-    pub shard_id: String,
     pub address: String,
+    pub substate_id: String,
     pub version: i32,
     pub data: String,
     pub state_hash: String,
@@ -61,7 +61,7 @@ impl TryFrom<SubstateRecord> for consensus_models::SubstateRecord {
             .transpose()?;
 
         Ok(Self {
-            address: parse_from_string(&value.address)?,
+            substate_id: parse_from_string(&value.substate_id)?,
             version: value.version as u32,
             substate_value: deserialize_json(&value.data)?,
             state_hash: deserialize_hex_try_from(&value.state_hash)?,

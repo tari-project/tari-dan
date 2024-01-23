@@ -12,7 +12,7 @@ use tari_dan_wallet_sdk::network::{
     TransactionQueryResult,
     WalletNetworkInterface,
 };
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_indexer_client::{
     error::IndexerClientError,
     json_rpc_client::IndexerJsonRpcClient,
@@ -46,6 +46,15 @@ impl IndexerJsonRpcNetworkInterface {
         let client = IndexerJsonRpcClient::connect((*self.indexer_jrpc_address.lock().unwrap()).clone())?;
         Ok(client)
     }
+
+    pub fn set_endpoint(&mut self, endpoint: &str) -> Result<(), IndexerJrpcError> {
+        *self.indexer_jrpc_address.lock().unwrap() = Url::parse(endpoint)?;
+        Ok(())
+    }
+
+    pub fn get_endpoint(&self) -> Url {
+        (*self.indexer_jrpc_address.lock().unwrap()).clone()
+    }
 }
 
 #[async_trait]
@@ -54,7 +63,7 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
 
     async fn query_substate(
         &self,
-        address: &SubstateAddress,
+        address: &SubstateId,
         version: Option<u32>,
         local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
@@ -123,11 +132,6 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
             transaction_id,
             result: convert_indexer_result_to_wallet_result(resp.result),
         })
-    }
-
-    fn set_endpoint(&mut self, endpoint: &str) -> Result<(), Self::Error> {
-        *self.indexer_jrpc_address.lock().unwrap() = Url::parse(endpoint)?;
-        Ok(())
     }
 }
 

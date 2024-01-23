@@ -29,6 +29,7 @@ use tari_template_abi::rust::{collections::BTreeMap, fmt::Display};
 use super::BinaryTag;
 const TAG: u64 = BinaryTag::Metadata as u64;
 
+/// A collection of user-defined data used to describe other types, for example, non-fungible tokens or events
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Metadata(BorTag<BTreeMap<String, String>, TAG>);
 

@@ -31,8 +31,8 @@ use std::{
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use serde_json as json;
-use tari_dan_common_types::NodeAddressable;
 use tari_template_lib::models::Amount;
+use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
         AccountInfo,
@@ -116,6 +116,8 @@ pub struct ClaimBurnArgs {
     proof_json: Option<serde_json::Value>,
     #[clap(long, short = 'f')]
     fee: Option<u32>,
+    #[clap(long)]
+    key_id: Option<u64>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -262,6 +264,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
         proof_json,
         fee,
         proof_file,
+        key_id,
     } = args;
 
     let claim_proof = if let Some(proof_json) = proof_json {
@@ -285,7 +288,8 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
     let req = ClaimBurnRequest {
         account,
         claim_proof,
-        max_fee: fee.map(|f| f.try_into()).transpose()?,
+        max_fee: fee.map(Into::into),
+        key_id,
     };
 
     let resp = client
@@ -334,7 +338,7 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
     println!("Accounts:");
     for AccountInfo { account, public_key } in resp.accounts {
         table.add_row(table_row!(
-            account.name,
+            account.name.as_deref().unwrap_or("<None>"),
             account.address,
             public_key,
             if account.is_default { "✅" } else { "" }
@@ -350,7 +354,8 @@ async fn handle_get(args: GetArgs, client: &mut WalletDaemonClient) -> Result<()
 
     println!(
         "Account {} substate_address: {}",
-        resp.account.name, resp.account.address
+        resp.account.name.as_deref().unwrap_or("<None>"),
+        resp.account.address
     );
     println!();
 
@@ -370,7 +375,7 @@ pub async fn handle_reveal_funds(args: RevealFundsArgs, client: &mut WalletDaemo
         .accounts_reveal_funds(RevealFundsRequest {
             account,
             amount_to_reveal: Amount::try_from(reveal_amount).expect("Reveal amount too large"),
-            max_fee: max_fee.map(|f| f.try_into()).transpose()?,
+            max_fee: max_fee.map(Into::into),
             pay_fee_from_reveal: pay_from_reveal,
         })
         .await?;

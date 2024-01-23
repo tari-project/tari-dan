@@ -56,6 +56,7 @@ pub fn encode<T: Serialize + ?Sized>(val: &T) -> Result<Vec<u8>, BorError> {
     Ok(buf)
 }
 
+/// Encodes any Rust type using CBOR
 pub fn to_value<T: Serialize + ?Sized>(val: &T) -> Result<Value, BorError> {
     Value::serialized(val).map_err(to_bor_error)
 }

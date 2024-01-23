@@ -5,7 +5,7 @@ use log::*;
 use tari_dan_common_types::{committee::Committee, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::consensus_models::{Block, QuorumCertificate};
 
-use crate::{messages::HotstuffMessage, traits::LeaderStrategy};
+use crate::traits::LeaderStrategy;
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::common";
 
@@ -14,16 +14,13 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::common";
 /// TODO: exhaust > 0
 pub const EXHAUST_DIVISOR: u64 = 0;
 
-// To avoid clippy::type_complexity
-pub(super) type CommitteeAndMessage<TAddr> = (Committee<TAddr>, HotstuffMessage<TAddr>);
-
 pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
     epoch: Epoch,
-    high_qc: &QuorumCertificate<TAddr>,
+    high_qc: &QuorumCertificate,
     new_height: NodeHeight,
     leader_strategy: &TLeaderStrategy,
     local_committee: &Committee<TAddr>,
-) -> Vec<Block<TAddr>> {
+) -> Vec<Block> {
     let mut parent_block = high_qc.as_leaf_block();
     let mut current_height = high_qc.block_height() + NodeHeight(1);
     if current_height > new_height {
@@ -45,7 +42,7 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
     let num_blocks = new_height.saturating_sub(current_height).as_u64() as usize;
     let mut blocks = Vec::with_capacity(num_blocks);
     loop {
-        let leader = leader_strategy.get_leader(local_committee, current_height);
+        let leader = leader_strategy.get_leader_public_key(local_committee, current_height);
         let dummy_block = Block::dummy_block(
             *parent_block.block_id(),
             leader.clone(),

@@ -30,9 +30,10 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     committee::Committee,
     hashing::ValidatorNodeBalancedMerkleTree,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     Epoch,
-    ShardId,
+    NodeAddressable,
+    SubstateAddress,
 };
 
 use super::DbEpoch;
@@ -46,6 +47,8 @@ use crate::{
 };
 
 pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
+    type Addr: NodeAddressable;
+
     fn get_metadata<T: DeserializeOwned>(
         &self,
         tx: &mut Self::DbTransaction<'_>,
@@ -79,8 +82,9 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
     fn insert_validator_node(
         &self,
         tx: &mut Self::DbTransaction<'_>,
+        address: Self::Addr,
         public_key: PublicKey,
-        shard_key: ShardId,
+        shard_key: SubstateAddress,
         epoch: Epoch,
         fee_claim_public_key: PublicKey,
     ) -> Result<(), Self::Error>;
@@ -89,14 +93,21 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-    ) -> Result<Vec<ValidatorNode<PublicKey>>, Self::Error>;
-    fn get_validator_node(
+    ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error>;
+    fn get_validator_node_by_address(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        public_key: &[u8],
-    ) -> Result<ValidatorNode<PublicKey>, Self::Error>;
+        address: &Self::Addr,
+    ) -> Result<ValidatorNode<Self::Addr>, Self::Error>;
+    fn get_validator_node_by_public_key(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+        public_key: &PublicKey,
+    ) -> Result<ValidatorNode<Self::Addr>, Self::Error>;
     fn validator_nodes_count(
         &self,
         tx: &mut Self::DbTransaction<'_>,
@@ -108,14 +119,14 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        bucket: ShardBucket,
+        bucket: Shard,
     ) -> Result<u64, Self::Error>;
 
     fn validator_nodes_set_committee_bucket(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        shard_key: ShardId,
-        bucket: ShardBucket,
+        shard_key: SubstateAddress,
+        bucket: Shard,
     ) -> Result<(), Self::Error>;
 
     fn validator_nodes_get_by_shard_range(
@@ -123,16 +134,16 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        shard_range: RangeInclusive<ShardId>,
-    ) -> Result<Vec<ValidatorNode<PublicKey>>, Self::Error>;
+        shard_range: RangeInclusive<SubstateAddress>,
+    ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error>;
 
     fn validator_nodes_get_by_buckets(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        buckets: HashSet<ShardBucket>,
-    ) -> Result<HashMap<ShardBucket, Committee<PublicKey>>, Self::Error>;
+        buckets: HashSet<Shard>,
+    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error>;
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;

@@ -68,6 +68,7 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "get_substates_created_by_transaction" => handlers.get_substates_created_by_transaction(value).await,
         "get_substates_destroyed_by_transaction" => handlers.get_substates_destroyed_by_transaction(value).await,
         "list_blocks" => handlers.list_blocks(value).await,
+        "get_tx_pool" => handlers.get_tx_pool(value).await,
         // Blocks
         "get_block" => handlers.get_block(value).await,
         "get_blocks_count" => handlers.get_blocks_count(value).await,
@@ -76,7 +77,7 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "get_templates" => handlers.get_templates(value).await,
         "register_template" => handlers.register_template(value).await,
         // Validator Node
-        "get_identity" => handlers.get_identity(value),
+        "get_identity" => handlers.get_identity(value).await,
         "register_validator_node" => handlers.register_validator_node(value).await,
         "get_mempool_stats" => handlers.get_mempool_stats(value).await,
         "get_epoch_manager_stats" => handlers.get_epoch_manager_stats(value).await,
@@ -89,8 +90,6 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "add_peer" => handlers.add_peer(value).await,
         "get_comms_stats" => handlers.get_comms_stats(value).await,
         "get_connections" => handlers.get_connections(value).await,
-        // Debug
-        "get_logged_messages" => handlers.get_logged_messages(value).await,
         method => Ok(value.method_not_found(method)),
     };
 

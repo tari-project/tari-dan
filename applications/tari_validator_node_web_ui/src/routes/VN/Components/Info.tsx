@@ -31,20 +31,12 @@ import TableContainer from "@mui/material/TableContainer";
 import TableRow from "@mui/material/TableRow";
 import Button from "@mui/material/Button";
 import { DataTableCell } from "../../../Components/StyledComponents";
-import {TextField} from "@mui/material";
+import { TextField } from "@mui/material";
 
-function Info({
-  epoch,
-  identity,
-  shardKey,
-}: {
-  epoch: IEpoch;
-  identity: IIdentity;
-  shardKey: string | null;
-}) {
+function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentity; shardKey: string | null }) {
   const [registering, setRegistering] = useState(false);
   const [registerMessage, setRegisterMessage] = useState("");
-  const [feeClaimPublicKey, setRegisterFeeClaimPublicKey] = useState('');
+  const [feeClaimPublicKey, setRegisterFeeClaimPublicKey] = useState("");
   const register = () => {
     setRegistering(true);
     registerValidatorNode(feeClaimPublicKey).then((response) => {
@@ -52,9 +44,7 @@ function Info({
         setRegistering(false);
         setRegisterMessage(response.message);
       } else {
-        setRegisterMessage(
-          `Registration successful, the TxId ${response.transaction_id}`,
-        );
+        setRegisterMessage(`Registration successful, the TxId ${response.transaction_id}`);
       }
     });
   };
@@ -79,21 +69,17 @@ function Info({
             <TableCell>Shard key</TableCell>
             <DataTableCell>
               <TextField
-                  disabled={registering}
-                  name="feeClaimFublicKey"
-                  label="Fee Claim Public Key"
-                  style={{ flexGrow: 1 }}
-                  value={feeClaimPublicKey} onChange={(e) => setRegisterFeeClaimPublicKey(e.target.value)} />
-              <Button
                 disabled={registering}
-                variant="contained"
-                onClick={registering ? () => {} : register}
-              >
+                name="feeClaimFublicKey"
+                label="Fee Claim Public Key"
+                style={{ flexGrow: 1 }}
+                value={feeClaimPublicKey}
+                onChange={(e) => setRegisterFeeClaimPublicKey(e.target.value)}
+              />
+              <Button disabled={registering} variant="contained" onClick={registering ? () => {} : register}>
                 Register
               </Button>
-              {registerMessage ? (
-                <span style={{ marginLeft: "20px" }}>{registerMessage}</span>
-              ) : null}
+              {registerMessage ? <span style={{ marginLeft: "20px" }}>{registerMessage}</span> : null}
             </DataTableCell>
           </TableRow>
         </>
@@ -117,12 +103,12 @@ function Info({
               </DataTableCell>
             </TableRow>
             <TableRow>
-              <TableCell>Node id</TableCell>
-              <DataTableCell>{identity.node_id}</DataTableCell>
+              <TableCell>Peer id</TableCell>
+              <DataTableCell>{identity.peer_id}</DataTableCell>
             </TableRow>
             <TableRow>
-              <TableCell>Public address</TableCell>
-              <DataTableCell>{identity.public_address}</DataTableCell>
+              <TableCell>Listen addresses</TableCell>
+              <DataTableCell>{identity.public_addresses?.join("\n")}</DataTableCell>
             </TableRow>
             <TableRow>
               <TableCell>Public key</TableCell>

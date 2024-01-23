@@ -27,7 +27,10 @@ use crate::{
 pub struct WalletSdkConfig {
     /// Encryption password for the wallet database. NOTE: Not yet implemented, this field is ignored
     pub password: Option<SafePassword>,
-    pub indexer_jrpc_endpoint: String,
+    // TODO: remove JWT stuff from wallet SDK. The SDK should not have anything to do with JWTs, this is a web/jrpc
+    //       handler concern. It appears that the main reason it is done this way is to use the wallet database to
+    //       store JWT state. However this can be achieved by calling the _SQLite_ (non-abstract) store directly
+    // outside       of the SDK in the JWT handler.
     pub jwt_expiry: Duration,
     pub jwt_secret_key: String,
 }
@@ -69,7 +72,11 @@ where
         &self.config
     }
 
-    pub fn get_network_interface(&mut self) -> &mut TNetworkInterface {
+    pub fn get_network_interface(&self) -> &TNetworkInterface {
+        &self.network_interface
+    }
+
+    pub fn get_network_interface_mut(&mut self) -> &mut TNetworkInterface {
         &mut self.network_interface
     }
 

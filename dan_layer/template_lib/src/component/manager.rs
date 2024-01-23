@@ -40,23 +40,31 @@ use crate::{
     models::{ComponentAddress, TemplateAddress},
 };
 
+/// Utility for managing components inside templates
 pub struct ComponentManager {
     address: ComponentAddress,
 }
 
 impl ComponentManager {
+    /// Returns a new `ComponentManager` for the component specified by `address`
     pub(crate) fn new(address: ComponentAddress) -> Self {
         Self { address }
     }
 
+    /// Returns the address of the component that is being managed
     pub fn get(address: ComponentAddress) -> Self {
         Self { address }
     }
 
+    /// Returns the address of the component that is being called in the current instruction.
+    /// Assumes that the instruction is a call method; otherwise, it will panic
     pub fn current() -> Self {
         Self::new(CallerContext::current_component_address())
     }
 
+    /// Calls a method of another component and returns the result.
+    /// This is used to call external component methods and can be used in a component method or template function
+    /// context.
     pub fn call<T: Into<String>, R: DeserializeOwned>(&self, method: T, args: Vec<Arg>) -> R {
         self.call_internal(CallMethodArg {
             component_address: self.address,
@@ -76,6 +84,12 @@ impl ComponentManager {
             .expect("failed to decode component call result from engine")
     }
 
+    /// Calls a method of another component. The called method must return a unit type.
+    /// Equivalent to [`call::<_, ()>(method, args)`](ComponentManager::call).
+    pub fn invoke<T: Into<String>>(&self, method: T, args: Vec<Arg>) {
+        self.call(method, args)
+    }
+
     /// Get the component state
     pub fn get_state<T: DeserializeOwned>(&self) -> T {
         let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
@@ -88,6 +102,7 @@ impl ComponentManager {
         from_value(&component).expect("Failed to decode component state")
     }
 
+    /// Update the component state
     pub fn set_state<T: Serialize>(&self, state: T) {
         let state = to_value(&state).expect("Failed to encode component state");
         let _result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
@@ -97,6 +112,8 @@ impl ComponentManager {
         });
     }
 
+    /// Updates access rules that determine who can invoke methods in the component
+    /// It will panic if the caller doesn't have permissions for updating access rules
     pub fn set_access_rules(&self, access_rules: ComponentAccessRules) {
         call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
             component_ref: ComponentRef::Ref(self.address),
@@ -105,6 +122,7 @@ impl ComponentManager {
         });
     }
 
+    /// Returns the template address of the component that is being managed
     pub fn get_template_address(&self) -> TemplateAddress {
         let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
             component_ref: ComponentRef::Ref(self.address),
@@ -115,5 +133,9 @@ impl ComponentManager {
         result
             .decode()
             .expect("failed to decode component template address from engine")
+    }
+
+    pub fn component_address(&self) -> ComponentAddress {
+        self.address
     }
 }

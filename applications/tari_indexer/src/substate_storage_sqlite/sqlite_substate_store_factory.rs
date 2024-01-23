@@ -38,7 +38,7 @@ use diesel_migrations::EmbeddedMigrations;
 use log::*;
 use tari_dan_storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_template_lib::prelude::ComponentAddress;
 use tari_transaction::TransactionId;
 use thiserror::Error;
@@ -174,8 +174,8 @@ impl<'a> SqliteSubstateStoreReadTransaction<'a> {
 }
 
 pub trait SubstateStoreReadTransaction {
-    fn get_substate(&mut self, address: &SubstateAddress) -> Result<Option<Substate>, StorageError>;
-    fn get_latest_version_for_substate(&mut self, address: &SubstateAddress) -> Result<Option<i64>, StorageError>;
+    fn get_substate(&mut self, address: &SubstateId) -> Result<Option<Substate>, StorageError>;
+    fn get_latest_version_for_substate(&mut self, address: &SubstateId) -> Result<Option<i64>, StorageError>;
     fn get_all_addresses(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
     fn get_all_substates(&mut self) -> Result<Vec<Substate>, StorageError>;
     fn get_non_fungible_collections(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
@@ -202,7 +202,7 @@ pub trait SubstateStoreReadTransaction {
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
-    fn get_substate(&mut self, address: &SubstateAddress) -> Result<Option<Substate>, StorageError> {
+    fn get_substate(&mut self, address: &SubstateId) -> Result<Option<Substate>, StorageError> {
         use crate::substate_storage_sqlite::schema::substates;
 
         let substate = substates::table
@@ -216,7 +216,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         Ok(substate)
     }
 
-    fn get_latest_version_for_substate(&mut self, address: &SubstateAddress) -> Result<Option<i64>, StorageError> {
+    fn get_latest_version_for_substate(&mut self, address: &SubstateId) -> Result<Option<i64>, StorageError> {
         use crate::substate_storage_sqlite::schema::substates;
 
         let version = substates::table

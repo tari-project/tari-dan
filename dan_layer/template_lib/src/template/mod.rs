@@ -20,5 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+//! Utilities related to templates
+
+mod builtin;
+pub use builtin::BuiltinTemplate;
+
 mod manager;
 pub use manager::TemplateManager;

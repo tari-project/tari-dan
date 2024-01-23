@@ -30,8 +30,6 @@ fn create_tx_atom() -> TransactionAtom {
 
 mod confirm_all_transitions {
 
-    use std::collections::HashMap;
-
     use super::*;
 
     #[test]
@@ -57,7 +55,8 @@ mod confirm_all_transitions {
             // cannot cause a state change without any commands
             [Command::Prepare(atom1.clone())].into_iter().collect(),
             Default::default(),
-            HashMap::new(),
+            Default::default(),
+            None,
         );
         block1.insert(&mut tx).unwrap();
 

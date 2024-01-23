@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
     indexed_value::{IndexedValueError, IndexedWellKnownTypes},
@@ -12,7 +11,7 @@ use tari_template_lib::prelude::ComponentAddress;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 use crate::{
-    models::{TransactionStatus, VersionedSubstateAddress, WalletTransaction},
+    models::{TransactionStatus, VersionedSubstateId, WalletTransaction},
     network::{TransactionFinalizedResult, TransactionQueryResult, WalletNetworkInterface},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
@@ -37,7 +36,7 @@ where
         }
     }
 
-    pub fn get(&self, tx_id: TransactionId) -> Result<WalletTransaction<PublicKey>, TransactionApiError> {
+    pub fn get(&self, tx_id: TransactionId) -> Result<WalletTransaction, TransactionApiError> {
         let mut tx = self.store.create_read_tx()?;
         let transaction = tx.transactions_get(tx_id)?;
         Ok(transaction)
@@ -107,7 +106,7 @@ where
         &self,
         status: Option<TransactionStatus>,
         component: Option<ComponentAddress>,
-    ) -> Result<Vec<WalletTransaction<PublicKey>>, TransactionApiError> {
+    ) -> Result<Vec<WalletTransaction>, TransactionApiError> {
         let mut tx = self.store.create_read_tx()?;
         let transactions = tx.transactions_fetch_all(status, component)?;
         Ok(transactions)
@@ -116,7 +115,7 @@ where
     pub async fn check_and_store_finalized_transaction(
         &self,
         transaction_id: TransactionId,
-    ) -> Result<Option<WalletTransaction<PublicKey>>, TransactionApiError> {
+    ) -> Result<Option<WalletTransaction>, TransactionApiError> {
         // Multithreaded considerations: The transaction result could be requested more than once because db
         // transactions cannot be used around await points.
         let transaction = self.store.with_read_tx(|tx| tx.transactions_get(transaction_id))?;
@@ -221,6 +220,8 @@ where
                     qcs: vec![],
                     is_dry_run: transaction.is_dry_run,
                     json_result: Some(json_results),
+                    // This is not precise, we should read it back from DB, but it's not critical
+                    last_update_time: chrono::Utc::now().naive_utc(),
                 }))
             },
         }
@@ -250,8 +251,8 @@ where
 
             tx.substates_insert_root(
                 transaction_id,
-                VersionedSubstateAddress {
-                    address: component_addr.clone(),
+                VersionedSubstateId {
+                    substate_id: component_addr.clone(),
                     version: substate.version(),
                 },
                 Some(header.module_name.clone()),
@@ -263,8 +264,8 @@ where
             for owned_addr in value.referenced_substates() {
                 if let Some(pos) = rest.iter().position(|(addr, _)| addr == &owned_addr) {
                     let (_, s) = rest.swap_remove(pos);
-                    tx.substates_insert_child(transaction_id, component_addr.clone(), VersionedSubstateAddress {
-                        address: owned_addr,
+                    tx.substates_insert_child(transaction_id, component_addr.clone(), VersionedSubstateId {
+                        substate_id: owned_addr,
                         version: s.version(),
                     })?;
                 }
@@ -274,8 +275,8 @@ where
         for (addr, substate) in rest {
             tx.substates_insert_root(
                 transaction_id,
-                VersionedSubstateAddress {
-                    address: addr.clone(),
+                VersionedSubstateId {
+                    substate_id: addr.clone(),
                     version: substate.version(),
                 },
                 None,

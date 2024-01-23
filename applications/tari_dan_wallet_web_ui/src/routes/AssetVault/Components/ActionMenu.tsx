@@ -20,13 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import { useTheme } from '@mui/material/styles';
-import { useAccountsCreateFreeTestCoins } from '../../../api/hooks/useAccounts';
-import ClaimBurn from './ClaimBurn';
-import useAccountStore from '../../../store/accountStore';
-import SendMoney from './SendMoney';
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import { useTheme } from "@mui/material/styles";
+import { useAccountsCreateFreeTestCoins } from "../../../api/hooks/useAccounts";
+import ClaimBurn from "./ClaimBurn";
+import useAccountStore from "../../../store/accountStore";
+import SendMoney from "./SendMoney";
 
 function ActionMenu() {
   const { mutate } = useAccountsCreateFreeTestCoins();
@@ -44,12 +44,12 @@ function ActionMenu() {
   return (
     <Box
       style={{
-        display: 'flex',
+        display: "flex",
         gap: theme.spacing(1),
         marginBottom: theme.spacing(2),
       }}
     >
-      <SendMoney/>
+      <SendMoney />
       <Button variant="outlined" onClick={onClaimFreeCoins}>
         Claim Free Testnet Coins
       </Button>

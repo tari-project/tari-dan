@@ -26,6 +26,7 @@ create table blocks
     is_processed     boolean   not NULL,
     is_dummy         boolean   not NULL,
     foreign_indexes  text      not NULL,
+    signature        text      NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
@@ -46,6 +47,7 @@ create table parked_blocks
     commands         text      not NULL,
     total_leader_fee bigint    not NULL,
     foreign_indexes  text      not NULL,
+    signature        text      NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -243,6 +245,17 @@ CREATE TABLE missing_transactions
     is_awaiting_execution boolean   not NULL,
     created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (block_id) REFERENCES parked_blocks (block_id)
+);
+
+CREATE TABLE foreign_proposals
+(
+    id         integer   not NULL primary key AUTOINCREMENT,
+    bucket     bigint    not NULL,
+    block_id   text      not NULL,
+    state      text      not NULL,
+    mined_at   bigint    NULL,
+    created_at timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (bucket, block_id)
 );
 
 CREATE TABLE foreign_send_counters

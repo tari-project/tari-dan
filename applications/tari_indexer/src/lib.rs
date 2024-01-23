@@ -27,14 +27,12 @@ extern crate diesel_migrations;
 
 mod bootstrap;
 pub mod cli;
-mod comms;
 pub mod config;
 mod dry_run;
 pub mod graphql;
 mod http_ui;
 
 mod json_rpc;
-mod p2p;
 mod substate_manager;
 mod substate_storage_sqlite;
 mod transaction_manager;
@@ -43,18 +41,22 @@ use std::{fs, sync::Arc};
 
 use http_ui::server::run_http_ui_server;
 use log::*;
-use minotari_app_utilities::identity_management::setup_node_identity;
 use substate_manager::SubstateManager;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
-use tari_comms::peer_manager::PeerFeatures;
-use tari_dan_app_utilities::{consensus_constants::ConsensusConstants, substate_file_cache::SubstateFileCache};
+use tari_dan_app_utilities::{
+    consensus_constants::ConsensusConstants,
+    keypair::setup_keypair_prompt,
+    substate_file_cache::SubstateFileCache,
+};
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
+use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
 use tari_indexer_lib::substate_scanner::SubstateScanner;
+use tari_networking::NetworkingService;
 use tari_shutdown::ShutdownSignal;
 use tokio::{task, time};
 
@@ -68,15 +70,10 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::indexer::app";
-pub const DAN_PEER_FEATURES: PeerFeatures = PeerFeatures::COMMUNICATION_NODE;
 
+#[allow(clippy::too_many_lines)]
 pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
-    let node_identity = setup_node_identity(
-        &config.indexer.identity_file,
-        config.indexer.p2p.public_addresses.to_vec(),
-        true,
-        DAN_PEER_FEATURES,
-    )?;
+    let keypair = setup_keypair_prompt(&config.indexer.identity_file, true)?;
 
     let db_factory = SqliteDbFactory::new(config.indexer.data_dir.clone());
     db_factory
@@ -90,11 +87,18 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     let services: Services = spawn_services(
         &config,
         shutdown_signal.clone(),
-        node_identity.clone(),
+        keypair.clone(),
         global_db,
         ConsensusConstants::devnet(), // TODO: change this eventually
     )
     .await?;
+
+    let mut epoch_manager_events = services.epoch_manager.subscribe().await.map_err(|e| {
+        ExitError::new(
+            ExitCode::ConfigError,
+            format!("Epoch manager crashed on startup: {}", e),
+        )
+    })?;
 
     let substate_cache_dir = config.common.base_path.join("substate_cache");
     let substate_cache = SubstateFileCache::new(substate_cache_dir)
@@ -174,6 +178,13 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
                     Err(e) =>  error!(target: LOG_TARGET, "Substate auto-scan failed: {}", e),
                 }
             },
+
+            Ok(event) = epoch_manager_events.recv() => {
+                if let Err(err) = handle_epoch_manager_event(&services, event).await {
+                    error!(target: LOG_TARGET, "Error handling epoch manager event: {}", err);
+                }
+            },
+
             _ = shutdown_signal.wait() => {
                 dbg!("Shutting down run_substate_polling");
                 break;
@@ -182,6 +193,18 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     }
 
     shutdown_signal.wait().await;
+
+    Ok(())
+}
+
+async fn handle_epoch_manager_event(services: &Services, event: EpochManagerEvent) -> Result<(), anyhow::Error> {
+    if let EpochManagerEvent::EpochChanged(epoch) = event {
+        let all_vns = services.epoch_manager.get_all_validator_nodes(epoch).await?;
+        services
+            .networking
+            .set_want_peers(all_vns.into_iter().map(|vn| vn.address.as_peer_id()))
+            .await?;
+    }
 
     Ok(())
 }

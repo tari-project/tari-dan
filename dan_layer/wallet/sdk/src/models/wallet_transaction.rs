@@ -4,6 +4,7 @@
 use std::{fmt::Display, str::FromStr};
 
 use anyhow::anyhow;
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tari_dan_storage::consensus_models::QuorumCertificate;
@@ -12,14 +13,15 @@ use tari_template_lib::models::Amount;
 use tari_transaction::Transaction;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WalletTransaction<TAddr> {
+pub struct WalletTransaction {
     pub transaction: Transaction,
     pub status: TransactionStatus,
     pub finalize: Option<FinalizeResult>,
     pub final_fee: Option<Amount>,
-    pub qcs: Vec<QuorumCertificate<TAddr>>,
+    pub qcs: Vec<QuorumCertificate>,
     pub json_result: Option<Vec<Value>>,
     pub is_dry_run: bool,
+    pub last_update_time: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]

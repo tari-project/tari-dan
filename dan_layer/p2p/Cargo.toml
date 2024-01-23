@@ -1,22 +1,33 @@
 [package]
 name = "tari_dan_p2p"
-authors = ["The Tari Development Community"]
 description = "The Tari DAN message types"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
-version = "0.50.0-pre.0"
-edition = "2021"
-
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_consensus = { path = "../consensus" }
-tari_dan_common_types = { path = "../common_types" }
-tari_transaction = { path = "../transaction" }
+tari_bor = { workspace = true }
+tari_common_types = { workspace = true }
+tari_consensus = { workspace = true }
+tari_crypto = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_dan_storage = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_networking = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_transaction = { workspace = true }
 
-tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_comms" }
+anyhow = { workspace = true }
+serde = { workspace = true, default-features = true }
+prost = { workspace = true }
 
-async-trait = "0.1"
-serde = "1.0"
+[build-dependencies]
+proto_builder = { workspace = true }
 
+[package.metadata.cargo-machete]
+ignored = [
+    # Used via OUT_DIR macro, not detectable
+    "prost",
+]

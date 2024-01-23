@@ -96,7 +96,7 @@ function handleChangePage(event: unknown, newPage: number, setPage: React.Dispat
 function handleChangeRowsPerPage(
   event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   setRowsPerPage: React.Dispatch<React.SetStateAction<number>>,
-  setPage: React.Dispatch<React.SetStateAction<number>>
+  setPage: React.Dispatch<React.SetStateAction<number>>,
 ) {
   setRowsPerPage(parseInt(event.target.value, 10));
   setPage(0);

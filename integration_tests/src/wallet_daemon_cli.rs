@@ -66,7 +66,7 @@ use tari_wallet_daemon_client::{
 };
 use tokio::time::timeout;
 
-use crate::{validator_node_cli::add_substate_addresses, TariWorld};
+use crate::{validator_node_cli::add_substate_ids, TariWorld};
 
 pub async fn claim_burn(
     world: &mut TariWorld,
@@ -93,6 +93,7 @@ pub async fn claim_burn(
             "range_proof": BASE64.encode(range_proof.as_bytes()),
         }),
         max_fee: Some(Amount(max_fee)),
+        key_id: None,
     };
 
     client.claim_burn(claim_burn_request).await
@@ -157,11 +158,11 @@ pub async fn transfer_confidential(
 
     let source_account_addr = world
         .get_account_component_address(&source_account_name)
-        .map(|addr| SubstateRequirement::new(addr.address.clone(), Some(addr.version)))
+        .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version)))
         .unwrap_or_else(|| panic!("Source account {} not found", source_account_name));
     let dest_account_addr = world
         .get_account_component_address(&dest_account_name)
-        .map(|addr| SubstateRequirement::new(addr.address.clone(), Some(addr.version)))
+        .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version)))
         .unwrap_or_else(|| panic!("Destination account {} not found", dest_account_name));
 
     let source_account_name = ComponentAddressOrName::Name(source_account_name);
@@ -240,7 +241,7 @@ pub async fn transfer_confidential(
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
 
-    add_substate_addresses(
+    add_substate_ids(
         world,
         outputs_name,
         &wait_resp
@@ -275,7 +276,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         (RistrettoSecretKey::default(), resp.public_key.clone()),
     );
 
-    add_substate_addresses(
+    add_substate_ids(
         world,
         account_name,
         &resp.result.result.expect("Failed to obtain substate diffs"),
@@ -316,7 +317,7 @@ pub async fn create_account_with_free_coins(
     };
     let _wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
 
-    add_substate_addresses(
+    add_substate_ids(
         world,
         account_name,
         &resp.result.result.expect("Failed to obtain substate diffs"),
@@ -361,7 +362,7 @@ pub async fn mint_new_nft_on_account(
         .await
         .expect("Wait response failed");
 
-    add_substate_addresses(
+    add_substate_ids(
         world,
         account_name,
         &resp.result.result.expect("Failed to obtain substate diffs"),
@@ -424,7 +425,7 @@ pub async fn submit_manifest_with_signing_keys(
         .flat_map(|(name, outputs)| {
             outputs
                 .iter()
-                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone().into()))
+                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.substate_id.clone().into()))
         })
         .collect();
 
@@ -438,7 +439,7 @@ pub async fn submit_manifest_with_signing_keys(
                 .get(s.trim())
                 .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
         })
-        .map(|(_, addr)| SubstateRequirement::new(addr.address.clone(), Some(addr.version)))
+        .map(|(_, addr)| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version)))
         .collect::<Vec<_>>();
 
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
@@ -446,10 +447,10 @@ pub async fn submit_manifest_with_signing_keys(
     let account_name = ComponentAddressOrName::Name(account_signing_key);
     let AccountGetResponse { account, .. } = client.accounts_get(account_name).await.unwrap();
 
-    let instructions = parse_manifest(&manifest_content, globals).unwrap();
+    let instructions = parse_manifest(&manifest_content, globals, HashMap::new()).unwrap();
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: Some(account.key_index),
-        instructions,
+        instructions: instructions.instructions,
         fee_instructions: vec![],
         override_inputs: false,
         is_dry_run: false,
@@ -470,7 +471,7 @@ pub async fn submit_manifest_with_signing_keys(
         panic!("Transaction failed: {}", reason);
     }
 
-    add_substate_addresses(
+    add_substate_ids(
         world,
         outputs_name,
         &wait_resp
@@ -500,7 +501,7 @@ pub async fn submit_manifest(
         .flat_map(|(name, outputs)| {
             outputs
                 .iter()
-                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone().into()))
+                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.substate_id.clone().into()))
         })
         .collect();
 
@@ -514,14 +515,14 @@ pub async fn submit_manifest(
                 .get(s.trim())
                 .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
         })
-        .map(|(_, addr)| SubstateRequirement::new(addr.address.clone(), Some(addr.version)))
+        .map(|(_, addr)| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version)))
         .collect::<Vec<_>>();
 
-    let instructions = parse_manifest(&manifest_content, globals).unwrap();
+    let instructions = parse_manifest(&manifest_content, globals, HashMap::new()).unwrap();
 
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: None,
-        instructions,
+        instructions: instructions.instructions,
         fee_instructions: vec![],
         override_inputs: false,
         is_dry_run: false,
@@ -543,7 +544,7 @@ pub async fn submit_manifest(
     if let Some(reason) = wait_resp.result.clone().and_then(|finalize| finalize.reject().cloned()) {
         panic!("Transaction failed: {:?}", reason);
     }
-    add_substate_addresses(
+    add_substate_ids(
         world,
         outputs_name,
         &wait_resp
@@ -587,7 +588,7 @@ pub async fn submit_transaction(
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
 
     if let Some(diff) = wait_resp.result.as_ref().and_then(|r| r.result.accept()) {
-        add_substate_addresses(world, outputs_name, diff);
+        add_substate_ids(world, outputs_name, diff);
     }
     wait_resp
 }
@@ -640,7 +641,7 @@ pub async fn create_component(
     if let Some(reason) = wait_resp.result.clone().and_then(|finalize| finalize.reject().cloned()) {
         panic!("Transaction failed: {}", reason);
     }
-    add_substate_addresses(
+    add_substate_ids(
         world,
         outputs_name,
         &wait_resp
@@ -671,10 +672,11 @@ pub async fn transfer(
         resource_address,
         destination_public_key,
         max_fee,
+        dry_run: false,
     };
 
     let resp = client.accounts_transfer(request).await.unwrap();
-    add_substate_addresses(world, outputs_name, resp.result.result.accept().unwrap());
+    add_substate_ids(world, outputs_name, resp.result.result.accept().unwrap());
 }
 
 pub async fn confidential_transfer(
@@ -696,10 +698,11 @@ pub async fn confidential_transfer(
         destination_public_key,
         max_fee,
         resource_address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+        dry_run: false,
     };
 
     let resp = client.accounts_confidential_transfer(request).await.unwrap();
-    add_substate_addresses(world, outputs_name, resp.result.result.accept().unwrap());
+    add_substate_ids(world, outputs_name, resp.result.result.accept().unwrap());
 }
 
 pub async fn get_auth_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: &str) -> WalletDaemonClient {

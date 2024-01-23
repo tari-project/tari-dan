@@ -20,32 +20,36 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { addPeer, getConnections } from '../../../utils/json_rpc';
-import { toHexString, shortenString } from './helpers';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import {
-  DataTableCell,
-  BoxHeading2,
-} from '../../../Components/StyledComponents';
-import AddIcon from '@mui/icons-material/Add';
-import Button from '@mui/material/Button';
-import { TextField } from '@mui/material';
-import { Form } from 'react-router-dom';
-import Fade from '@mui/material/Fade';
-import CopyToClipboard from '../../../Components/CopyToClipboard';
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { addPeer, getConnections } from "../../../utils/json_rpc";
+import { toHexString, shortenString } from "./helpers";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import { DataTableCell, BoxHeading2 } from "../../../Components/StyledComponents";
+import AddIcon from "@mui/icons-material/Add";
+import Button from "@mui/material/Button";
+import { TextField } from "@mui/material";
+import { Form } from "react-router-dom";
+import Fade from "@mui/material/Fade";
+import CopyToClipboard from "../../../Components/CopyToClipboard";
 
 interface IConnection {
+  connection_id: number;
   address: string;
-  age: number;
+  age: Duration;
   direction: boolean;
-  node_id: number[];
-  public_key: string;
+  peer_id: string;
+  ping_latency: Duration | null;
+  // public_key: string;
+}
+
+interface Duration {
+  secs: number;
+  nanos: number;
 }
 
 const useInterval = (fn: () => Promise<unknown>, ms: number) => {
@@ -70,15 +74,15 @@ const useInterval = (fn: () => Promise<unknown>, ms: number) => {
 function Connections() {
   const [connections, setConnections] = useState<IConnection[]>([]);
   const [showPeerDialog, setShowAddPeerDialog] = useState(false);
-  const [formState, setFormState] = useState({ publicKey: '', address: '' });
+  const [formState, setFormState] = useState({ publicKey: "", address: "" });
 
   const showAddPeerDialog = (setElseToggle: boolean = !showPeerDialog) => {
     setShowAddPeerDialog(setElseToggle);
   };
 
   const onSubmitAddPeer = async () => {
-    await addPeer(formState.publicKey, [formState.address]);
-    setFormState({ publicKey: '', address: '' });
+    await addPeer(formState.publicKey, formState.address ? [formState.address] : []);
+    setFormState({ publicKey: "", address: "" });
     setShowAddPeerDialog(false);
   };
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -114,10 +118,7 @@ function Connections() {
               <Button variant="contained" type="submit">
                 Add Peer
               </Button>
-              <Button
-                variant="outlined"
-                onClick={() => showAddPeerDialog(false)}
-              >
+              <Button variant="outlined" onClick={() => showAddPeerDialog(false)}>
                 Cancel
               </Button>
             </Form>
@@ -126,11 +127,7 @@ function Connections() {
         {!showPeerDialog && (
           <Fade in={!showPeerDialog}>
             <div className="flex-container">
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={() => showAddPeerDialog()}
-              >
+              <Button variant="outlined" startIcon={<AddIcon />} onClick={() => showAddPeerDialog()}>
                 Add Peer
               </Button>
             </div>
@@ -141,35 +138,51 @@ function Connections() {
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell>Peer id</TableCell>
               <TableCell>Address</TableCell>
               <TableCell>Age</TableCell>
               <TableCell>Direction</TableCell>
-              <TableCell>Node id</TableCell>
-              <TableCell>Public key</TableCell>
+              <TableCell>Latency</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {connections.map(
-              ({ address, age, direction, node_id, public_key }) => (
-                <TableRow key={public_key}>
+            {connections &&
+              connections.map(({ connection_id, address, age, direction, peer_id, ping_latency }) => (
+                <TableRow key={connection_id}>
+                  <DataTableCell>
+                    {peer_id ? shortenString(peer_id) : "--"}
+                    <CopyToClipboard copy={peer_id} />
+                  </DataTableCell>
                   <DataTableCell>{address}</DataTableCell>
-                  <DataTableCell>{age}</DataTableCell>
-                  <DataTableCell>
-                    {direction ? 'Inbound' : 'Outbound'}
-                  </DataTableCell>
-                  <DataTableCell>{toHexString(node_id)}</DataTableCell>
-                  <DataTableCell>
-                    {shortenString(public_key)}
-                    <CopyToClipboard copy={public_key} />
-                  </DataTableCell>
+                  <DataTableCell>{displayDuration(age)}</DataTableCell>
+                  <DataTableCell>{direction}</DataTableCell>
+                  <DataTableCell>{ping_latency ? displayDuration(ping_latency) : "--"}</DataTableCell>
                 </TableRow>
-              )
-            )}
+              ))}
           </TableBody>
         </Table>
       </TableContainer>
     </>
   );
+}
+
+function displayDuration(duration: Duration) {
+  if (duration.secs === 0) {
+    if (duration.nanos > 1000000) {
+      return `${(duration.nanos / 1000000).toFixed(2)}ms`;
+    }
+    if (duration.nanos > 1000) {
+      return `${(duration.nanos / 1000).toFixed(2)}µs`;
+    }
+    return `${duration.nanos / 1000}ns`;
+  }
+  if (duration.secs > 60 * 60) {
+    return `${(duration.secs / 60 / 60).toFixed(0)}h${(duration.secs / 60).toFixed(0)}m`;
+  }
+  if (duration.secs > 60) {
+    return `${(duration.secs / 60).toFixed(0)}m${(duration.secs % 60).toFixed(0)}s`;
+  }
+  return `${duration.secs}.${(duration.nanos / 1000000).toFixed(0)}s`;
 }
 
 export default Connections;

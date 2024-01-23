@@ -25,7 +25,8 @@ use tari_template_abi::rust::{fmt, fmt::Display};
 
 use super::ResourceAddress;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+/// The unique identifier of a non-fungible index in the Tari network
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct NonFungibleIndexAddress {
     resource_address: ResourceAddress,
     index: u64,

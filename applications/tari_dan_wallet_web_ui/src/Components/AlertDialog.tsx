@@ -20,13 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogTitle from '@mui/material/DialogTitle';
+import { useState } from "react";
+import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogTitle from "@mui/material/DialogTitle";
 
 interface AlertDialogProps {
   buttonTitle?: string;
@@ -42,8 +42,8 @@ export function ConfirmDialog({
   dialogTitle,
   dialogDescription,
   confirmFunction,
-  confirmTitle = 'Confirm',
-  cancelTitle = 'Cancel',
+  confirmTitle = "Confirm",
+  cancelTitle = "Cancel",
 }: AlertDialogProps) {
   const [open, setOpen] = useState(false);
 
@@ -69,9 +69,7 @@ export function ConfirmDialog({
       >
         <DialogTitle id="alert-dialog-title">{dialogTitle}</DialogTitle>
         <DialogContent>
-          <DialogContentText id="alert-dialog-description">
-            {dialogDescription}
-          </DialogContentText>
+          <DialogContentText id="alert-dialog-description">{dialogDescription}</DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button variant="outlined" onClick={handleClose}>

@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { render, screen } from '@testing-library/react';
-import ValidatorNode from './ValidatorNode';
+import { render, screen } from "@testing-library/react";
+import ValidatorNode from "./ValidatorNode";
 
-test('renders learn react link', () => {
+test("renders learn react link", () => {
   render(<ValidatorNode />);
   const linkElement = screen.getByText(/learn react/i);
   expect(linkElement).toBeInTheDocument();

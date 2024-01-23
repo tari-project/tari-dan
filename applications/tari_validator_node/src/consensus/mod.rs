@@ -1,23 +1,13 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use std::sync::Arc;
-
-use tari_common_types::types::PublicKey;
-use tari_comms::{types::CommsPublicKey, NodeIdentity};
-use tari_comms_rpc_state_sync::CommsRpcStateSyncManager;
-use tari_consensus::{
-    hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker},
-    messages::HotstuffMessage,
-};
-use tari_dan_common_types::committee::Committee;
-use tari_dan_p2p::{Message, OutboundService};
-use tari_dan_storage::consensus_models::{ForeignReceiveCounters, TransactionPool};
+use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker};
+use tari_dan_storage::consensus_models::TransactionPool;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
-use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
+use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{
     sync::{broadcast, mpsc, watch},
     task::JoinHandle,
@@ -31,7 +21,6 @@ use crate::{
         state_manager::TariStateManager,
     },
     event_subscription::EventSubscription,
-    p2p::services::messaging::OutboundMessaging,
 };
 
 mod handle;
@@ -41,28 +30,31 @@ mod spec;
 mod state_manager;
 
 pub use handle::*;
+use sqlite_message_logger::SqliteMessageLogger;
+use tari_dan_app_utilities::keypair::RistrettoKeypair;
+use tari_dan_common_types::PeerAddress;
+use tari_rpc_state_sync::RpcStateSyncManager;
+
+use crate::p2p::services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging};
 
 pub async fn spawn(
-    store: SqliteStateStore<PublicKey>,
-    node_identity: Arc<NodeIdentity>,
-    epoch_manager: EpochManagerHandle,
+    store: SqliteStateStore<PeerAddress>,
+    keypair: RistrettoKeypair,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
     rx_new_transactions: mpsc::Receiver<TransactionId>,
-    rx_hs_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<PublicKey>)>,
-    outbound_messaging: OutboundMessaging,
-    client_factory: TariCommsValidatorNodeClientFactory,
-    foreign_receive_counter: ForeignReceiveCounters,
+    inbound_messaging: ConsensusInboundMessaging<SqliteMessageLogger>,
+    outbound_messaging: ConsensusOutboundMessaging<SqliteMessageLogger>,
+    client_factory: TariValidatorNodeRpcClientFactory,
     shutdown_signal: ShutdownSignal,
 ) -> (
     JoinHandle<Result<(), anyhow::Error>>,
     ConsensusHandle,
     mpsc::UnboundedReceiver<Transaction>,
 ) {
-    let (tx_broadcast, rx_broadcast) = mpsc::channel(10);
-    let (tx_leader, rx_leader) = mpsc::channel(10);
     let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
 
-    let validator_addr = node_identity.public_key().clone();
-    let signing_service = TariSignatureService::new(node_identity);
+    let validator_addr = PeerAddress::from(keypair.public_key().clone());
+    let signing_service = TariSignatureService::new(keypair);
     let leader_strategy = RoundRobinLeaderStrategy::new();
     let transaction_pool = TransactionPool::new();
     let state_manager = TariStateManager::new();
@@ -70,19 +62,17 @@ pub async fn spawn(
 
     let hotstuff_worker = HotstuffWorker::<TariConsensusSpec>::new(
         validator_addr,
+        inbound_messaging,
+        outbound_messaging,
         rx_new_transactions,
-        rx_hs_message,
         store.clone(),
         epoch_manager.clone(),
         leader_strategy,
         signing_service,
         state_manager,
         transaction_pool,
-        tx_broadcast,
-        tx_leader,
         tx_hotstuff_events.clone(),
         tx_mempool,
-        foreign_receive_counter,
         shutdown_signal.clone(),
     );
 
@@ -90,53 +80,15 @@ pub async fn spawn(
     let context = ConsensusWorkerContext {
         epoch_manager: epoch_manager.clone(),
         hotstuff: hotstuff_worker,
-        state_sync: CommsRpcStateSyncManager::new(epoch_manager, store, client_factory),
+        state_sync: RpcStateSyncManager::new(epoch_manager, store, leader_strategy, client_factory),
         tx_current_state,
     };
 
     let handle = ConsensusWorker::new(shutdown_signal).spawn(context);
-
-    ConsensusMessageWorker {
-        rx_broadcast,
-        rx_leader,
-        outbound_messaging,
-    }
-    .spawn();
 
     (
         handle,
         ConsensusHandle::new(rx_current_state, EventSubscription::new(tx_hotstuff_events)),
         rx_mempool,
     )
-}
-
-struct ConsensusMessageWorker {
-    rx_broadcast: mpsc::Receiver<(Committee<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
-    rx_leader: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
-    outbound_messaging: OutboundMessaging,
-}
-
-impl ConsensusMessageWorker {
-    fn spawn(mut self) {
-        tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    Some((committee, msg)) = self.rx_broadcast.recv() => {
-                        self.outbound_messaging
-                            .broadcast(committee.members(), Message::Consensus(msg))
-                            .await
-                            .ok();
-                    },
-                    Some((dest, msg)) = self.rx_leader.recv() => {
-                        self.outbound_messaging
-                            .send(dest, Message::Consensus(msg))
-                            .await
-                            .ok();
-                    },
-
-                    else => break,
-                }
-            }
-        });
-    }
 }

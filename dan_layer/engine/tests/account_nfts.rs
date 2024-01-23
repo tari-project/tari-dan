@@ -2,12 +2,17 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_engine_types::instruction::Instruction;
-use tari_template_lib::{args, models::ComponentAddress, prelude::Metadata, resource::TOKEN_SYMBOL};
+use tari_template_lib::{
+    args,
+    models::{ComponentAddress, NonFungibleId},
+    prelude::Metadata,
+    resource::TOKEN_SYMBOL,
+};
 use tari_template_test_tooling::TemplateTest;
 
 #[test]
 fn basic_nft_mint() {
-    let mut account_nft_template_test = TemplateTest::new(vec!["../template_builtin/templates/account_nfts/"]);
+    let mut account_nft_template_test = TemplateTest::new::<_, &str>([]);
 
     let account_nft_template = account_nft_template_test.get_template_address("AccountNonFungible");
 
@@ -57,6 +62,11 @@ fn basic_nft_mint() {
                 Instruction::PutLastInstructionOutputOnWorkspace {
                     key: b"my_nft".to_vec(),
                 },
+                Instruction::CallFunction {
+                    template_address: account_nft_template_test.get_template_address("Account"),
+                    function: "get_non_fungible_ids_for_bucket".to_string(),
+                    args: args![Variable("my_nft")],
+                },
                 Instruction::CallMethod {
                     component_address: owner_component_address,
                     method: "deposit".to_string(),
@@ -68,4 +78,9 @@ fn basic_nft_mint() {
         .unwrap();
 
     assert!(result.finalize.result.is_accept());
+
+    let bucket_nfts = result.finalize.execution_results[2]
+        .decode::<Vec<NonFungibleId>>()
+        .unwrap();
+    assert_eq!(bucket_nfts.len(), 1);
 }

@@ -1,25 +1,24 @@
 [package]
 name = "tari_template_test_tooling"
-version = "0.1.1"
-edition = "2021"
-authors = ["The Tari Development Community"]
 description = "Test tooling for Tari template development"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-tari_dan_engine = { path = "../engine" }
-tari_crypto = "0.19"
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_template_lib = { path = "../template_lib" }
-tari_engine_types = { path = "../engine_types" }
-tari_transaction_manifest = { path = "../transaction_manifest" }
-tari_template_builtin = { path = "../template_builtin" }
-tari_transaction = { path = "../transaction" }
-tari_dan_common_types = { path = "../common_types" }
-tari_bor = { path = "../tari_bor" }
+tari_dan_engine = { workspace = true }
+tari_crypto = { workspace = true }
+tari_common_types = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_transaction_manifest = { workspace = true }
+tari_template_builtin = { workspace = true }
+tari_transaction = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_bor = { workspace = true, default-features = true }
 
-anyhow = "1.0.68"
-serde = { version = "1.0", features = ["derive"] }
-rand = "0.8"
+anyhow = { workspace = true }
+serde = { workspace = true, features = ["default", "derive"] }
+rand = { workspace = true }

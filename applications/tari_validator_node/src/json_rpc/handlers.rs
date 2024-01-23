@@ -20,8 +20,6 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
-
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
     JrpcResult,
@@ -29,69 +27,67 @@ use axum_jrpc::{
     JsonRpcResponse,
 };
 use indexmap::IndexMap;
+use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use log::*;
-use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
-use tari_common_types::types::PublicKey;
-use tari_comms::{
-    multiaddr::Multiaddr,
-    peer_manager::{NodeId, PeerFeatures},
-    types::CommsPublicKey,
-    CommsNode,
-    NodeIdentity,
-};
-use tari_comms_logging::SqliteMessageLog;
-use tari_crypto::tari_utilities::hex::Hex;
-use tari_dan_app_utilities::template_manager::interface::TemplateManagerHandle;
-use tari_dan_common_types::{optional::Optional, ShardId};
+use tari_dan_app_utilities::{keypair::RistrettoKeypair, template_manager::interface::TemplateManagerHandle};
+use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, PeerAddress, SubstateAddress};
+use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
     consensus_models::{Block, ExecutedTransaction, LeafBlock, QuorumDecision, SubstateRecord, TransactionRecord},
     Ordering,
     StateStore,
+    StateStoreReadTransaction,
 };
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
+use tari_networking::{is_supported_multiaddr, NetworkingHandle, NetworkingService};
 use tari_state_store_sqlite::SqliteStateStore;
-use tari_validator_node_client::types::{
-    AddPeerRequest,
-    AddPeerResponse,
-    CommitteeShardInfo,
-    DryRunTransactionFinalizeResult,
-    GetBlockRequest,
-    GetBlockResponse,
-    GetBlocksCountResponse,
-    GetCommitteeRequest,
-    GetEpochManagerStatsResponse,
-    GetIdentityResponse,
-    GetNetworkCommitteeResponse,
-    GetRecentTransactionsResponse,
-    GetShardKey,
-    GetStateRequest,
-    GetStateResponse,
-    GetSubstateRequest,
-    GetSubstateResponse,
-    GetSubstatesByTransactionRequest,
-    GetSubstatesByTransactionResponse,
-    GetTemplateRequest,
-    GetTemplateResponse,
-    GetTemplatesRequest,
-    GetTemplatesResponse,
-    GetTransactionRequest,
-    GetTransactionResponse,
-    GetTransactionResultRequest,
-    GetTransactionResultResponse,
-    GetValidatorFeesRequest,
-    GetValidatorFeesResponse,
-    ListBlocksRequest,
-    ListBlocksResponse,
-    RegisterValidatorNodeRequest,
-    RegisterValidatorNodeResponse,
-    SubmitTransactionRequest,
-    SubmitTransactionResponse,
-    SubstateStatus,
-    TemplateMetadata,
-    TemplateRegistrationRequest,
-    TemplateRegistrationResponse,
+use tari_validator_node_client::{
+    types,
+    types::{
+        AddPeerRequest,
+        AddPeerResponse,
+        CommitteeShardInfo,
+        ConnectionDirection,
+        DryRunTransactionFinalizeResult,
+        GetBlockRequest,
+        GetBlockResponse,
+        GetBlocksCountResponse,
+        GetCommitteeRequest,
+        GetConnectionsResponse,
+        GetEpochManagerStatsResponse,
+        GetIdentityResponse,
+        GetNetworkCommitteeResponse,
+        GetRecentTransactionsResponse,
+        GetShardKey,
+        GetStateRequest,
+        GetStateResponse,
+        GetSubstateRequest,
+        GetSubstateResponse,
+        GetSubstatesByTransactionRequest,
+        GetSubstatesByTransactionResponse,
+        GetTemplateRequest,
+        GetTemplateResponse,
+        GetTemplatesRequest,
+        GetTemplatesResponse,
+        GetTransactionRequest,
+        GetTransactionResponse,
+        GetTransactionResultRequest,
+        GetTransactionResultResponse,
+        GetValidatorFeesRequest,
+        GetValidatorFeesResponse,
+        ListBlocksRequest,
+        ListBlocksResponse,
+        RegisterValidatorNodeRequest,
+        RegisterValidatorNodeResponse,
+        SubmitTransactionRequest,
+        SubmitTransactionResponse,
+        SubstateStatus,
+        TemplateMetadata,
+        TemplateRegistrationRequest,
+        TemplateRegistrationResponse,
+    },
 };
 
 use crate::{
@@ -101,22 +97,20 @@ use crate::{
     p2p::services::mempool::MempoolHandle,
     registration,
     Services,
-    ValidatorNodeConfig,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::json_rpc::handlers";
 
 pub struct JsonRpcHandlers {
-    node_identity: Arc<NodeIdentity>,
+    keypair: RistrettoKeypair,
     wallet_grpc_client: GrpcWalletClient,
     mempool: MempoolHandle,
     template_manager: TemplateManagerHandle,
-    epoch_manager: EpochManagerHandle,
-    comms: CommsNode,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
+    networking: NetworkingHandle<TariMessagingSpec>,
     base_node_client: GrpcBaseNodeClient,
-    state_store: SqliteStateStore<PublicKey>,
+    state_store: SqliteStateStore<PeerAddress>,
     dry_run_transaction_processor: DryRunTransactionProcessor,
-    config: ValidatorNodeConfig,
 }
 
 impl JsonRpcHandlers {
@@ -124,16 +118,14 @@ impl JsonRpcHandlers {
         wallet_grpc_client: GrpcWalletClient,
         base_node_client: GrpcBaseNodeClient,
         services: &Services,
-        config: ValidatorNodeConfig,
     ) -> Self {
         Self {
-            config,
-            node_identity: services.comms.node_identity(),
+            keypair: services.keypair.clone(),
             wallet_grpc_client,
             mempool: services.mempool.clone(),
             epoch_manager: services.epoch_manager.clone(),
             template_manager: services.template_manager.clone(),
-            comms: services.comms.clone(),
+            networking: services.networking.clone(),
             base_node_client,
             state_store: services.state_store.clone(),
             dry_run_transaction_processor: services.dry_run_transaction_processor.clone(),
@@ -150,12 +142,20 @@ impl JsonRpcHandlers {
 }
 
 impl JsonRpcHandlers {
-    pub fn get_identity(&self, value: JsonRpcExtractor) -> JrpcResult {
+    pub async fn get_identity(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
+        let info = self
+            .networking
+            .get_local_peer_info()
+            .await
+            .map_err(internal_error(answer_id))?;
         let response = GetIdentityResponse {
-            node_id: self.node_identity.node_id().to_hex(),
-            public_key: self.node_identity.public_key().clone(),
-            public_addresses: self.node_identity.public_addresses(),
+            peer_id: info.peer_id.to_string(),
+            public_key: self.keypair.public_key().clone(),
+            public_addresses: info.listen_addrs,
+            supported_protocols: info.protocols.into_iter().map(|p| p.to_string()).collect(),
+            protocol_version: info.protocol_version,
+            user_agent: info.agent_version,
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))
@@ -225,7 +225,7 @@ impl JsonRpcHandlers {
         let request: GetStateRequest = value.parse_params()?;
 
         let mut tx = self.state_store.create_read_tx().unwrap();
-        match SubstateRecord::get(&mut tx, &request.shard_id).optional() {
+        match SubstateRecord::get(&mut tx, &request.address).optional() {
             Ok(Some(state)) => Ok(JsonRpcResponse::success(answer_id, GetStateResponse {
                 data: state.into_substate().to_bytes(),
             })),
@@ -293,12 +293,22 @@ impl JsonRpcHandlers {
         Ok(JsonRpcResponse::success(answer_id, res))
     }
 
+    pub async fn get_tx_pool(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let tx_pool = self
+            .state_store
+            .with_read_tx(|tx| tx.transaction_pool_get_all())
+            .map_err(internal_error(answer_id))?;
+        let res = json!({ "tx_pool": tx_pool });
+        Ok(JsonRpcResponse::success(answer_id, res))
+    }
+
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: GetTransactionResultRequest = value.parse_params()?;
 
         let mut tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
-        let executed = ExecutedTransaction::get(&mut tx, &request.transaction_id)
+        let transaction = TransactionRecord::get(&mut tx, &request.transaction_id)
             .optional()
             .map_err(internal_error(answer_id))?
             .ok_or_else(|| {
@@ -313,8 +323,9 @@ impl JsonRpcHandlers {
             })?;
 
         let response = GetTransactionResultResponse {
-            is_finalized: executed.is_finalized(),
-            result: executed.into_final_result(),
+            is_finalized: transaction.is_finalized(),
+            execution_time: transaction.execution_time(),
+            result: transaction.into_final_result(),
         };
         Ok(JsonRpcResponse::success(answer_id, response))
     }
@@ -340,8 +351,8 @@ impl JsonRpcHandlers {
         let maybe_substate = self
             .state_store
             .with_read_tx(|tx| {
-                let shard_id = ShardId::from_address(&data.address, data.version);
-                SubstateRecord::get(tx, &shard_id).optional()
+                let address = SubstateAddress::from_address(&data.address, data.version);
+                SubstateRecord::get(tx, &address).optional()
             })
             .map_err(internal_error(answer_id))?;
 
@@ -439,7 +450,7 @@ impl JsonRpcHandlers {
             .await
             .map_err(internal_error(answer_id))?;
 
-        let resp = registration::register(self.wallet_client(), &self.node_identity, &self.epoch_manager)
+        let resp = registration::register(self.wallet_client(), &self.keypair, &self.epoch_manager)
             .await
             .map_err(internal_error(answer_id))?;
 
@@ -465,7 +476,7 @@ impl JsonRpcHandlers {
 
         let resp = self
             .wallet_client()
-            .register_template(&self.node_identity, data)
+            .register_template(&self.keypair, data)
             .await
             .map_err(internal_error(answer_id))?;
 
@@ -529,35 +540,31 @@ impl JsonRpcHandlers {
 
     pub async fn get_connections(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        if let Ok(active_connections) = self.comms.connectivity().get_active_connections().await {
-            let mut response = GetConnectionsResponse { connections: vec![] };
-            let peer_manager = self.comms.peer_manager();
-            for conn in active_connections {
-                let peer = peer_manager
-                    .find_by_node_id(conn.peer_node_id())
-                    .await
-                    .expect("Unexpected peer database error")
-                    .expect("Peer not found");
+        let active_connections = self
+            .networking
+            .get_active_connections()
+            .await
+            .map_err(internal_error(answer_id))?;
 
-                response.connections.push(Connection {
-                    node_id: peer.node_id,
-                    public_key: peer.public_key,
-                    address: conn.address().clone(),
-                    direction: conn.direction().is_inbound(),
-                    age: conn.age().as_secs(),
-                });
-            }
-            Ok(JsonRpcResponse::success(answer_id, response))
-        } else {
-            Err(JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
-                    "Something went wrong".to_string(),
-                    json::Value::Null,
-                ),
-            ))
-        }
+        let connections = active_connections
+            .into_iter()
+            .map(|conn| types::Connection {
+                connection_id: conn.connection_id.to_string(),
+                peer_id: conn.peer_id.to_string(),
+                address: conn.endpoint.get_remote_address().clone(),
+                direction: if conn.endpoint.is_dialer() {
+                    ConnectionDirection::Outbound
+                } else {
+                    ConnectionDirection::Inbound
+                },
+                age: conn.age(),
+                ping_latency: conn.ping_latency,
+            })
+            .collect();
+
+        Ok(JsonRpcResponse::success(answer_id, GetConnectionsResponse {
+            connections,
+        }))
     }
 
     pub async fn get_mempool_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -635,32 +642,32 @@ impl JsonRpcHandlers {
             wait_for_dial,
         } = value.parse_params()?;
 
-        let connectivity = self.comms.connectivity();
-        let peer_manager = self.comms.peer_manager();
+        if let Some(unsupported) = addresses.iter().find(|a| !is_supported_multiaddr(a)) {
+            return Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    format!("Unsupported multiaddr {unsupported}"),
+                    json::Value::Null,
+                ),
+            ));
+        }
 
-        let node_id = NodeId::from_public_key(&public_key);
+        let mut networking = self.networking.clone();
+        let peer_id = public_key_to_peer_id(public_key);
 
-        peer_manager
-            .add_or_update_online_peer(
-                &public_key,
-                node_id.clone(),
-                addresses,
-                PeerFeatures::COMMUNICATION_NODE,
-                &tari_comms::net_address::PeerAddressSource::Config,
+        let dial_wait = networking
+            .dial_peer(
+                DialOpts::peer_id(peer_id)
+                    .addresses(addresses)
+                    .condition(PeerCondition::Always)
+                    .build(),
             )
             .await
             .map_err(internal_error(answer_id))?;
+
         if wait_for_dial {
-            let _conn = connectivity
-                .dial_peer(node_id)
-                .await
-                .map_err(internal_error(answer_id))?;
-        } else {
-            // Dial without waiting
-            connectivity
-                .request_many_dials(Some(node_id))
-                .await
-                .map_err(internal_error(answer_id))?;
+            dial_wait.await.map_err(internal_error(answer_id))?;
         }
 
         Ok(JsonRpcResponse::success(answer_id, AddPeerResponse {}))
@@ -668,19 +675,16 @@ impl JsonRpcHandlers {
 
     pub async fn get_comms_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        if let Ok(stats) = self.comms.connectivity().get_connectivity_status().await {
-            let response = json!({ "connection_status": format!("{:?}", stats) });
-            Ok(JsonRpcResponse::success(answer_id, response))
-        } else {
-            Err(JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
-                    "Something went wrong".to_string(),
-                    json::Value::Null,
-                ),
-            ))
-        }
+        let peers = self
+            .networking
+            .clone()
+            .get_connected_peers()
+            .await
+            .map_err(internal_error(answer_id))?;
+
+        let status = if peers.is_empty() { "Offline" } else { "Online" };
+        let response = json!({ "connection_status": status });
+        Ok(JsonRpcResponse::success(answer_id, response))
     }
 
     pub async fn get_shard_key(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -708,7 +712,11 @@ impl JsonRpcHandlers {
     pub async fn get_committee(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request = value.parse_params::<GetCommitteeRequest>()?;
-        if let Ok(committee) = self.epoch_manager.get_committee(request.epoch, request.shard_id).await {
+        if let Ok(committee) = self
+            .epoch_manager
+            .get_committee(request.epoch, request.substate_address)
+            .await
+        {
             let response = json!({ "committee": committee });
             Ok(JsonRpcResponse::success(answer_id, response))
         } else {
@@ -742,14 +750,14 @@ impl JsonRpcHandlers {
             .await
             .map_err(internal_error(answer_id))?;
 
-        validators.sort_by(|vn_a, vn_b| vn_b.committee_bucket.cmp(&vn_a.committee_bucket));
+        validators.sort_by(|vn_a, vn_b| vn_b.committee_shard.cmp(&vn_a.committee_shard));
         // Group by bucket, IndexMap used to preserve ordering
         let mut validators_per_bucket = IndexMap::with_capacity(validators.len());
         for validator in validators {
             validators_per_bucket
                 .entry(
                     validator
-                        .committee_bucket
+                        .committee_shard
                         .expect("validator committee bucket must have been populated within valid epoch"),
                 )
                 .or_insert_with(Vec::new)
@@ -759,8 +767,8 @@ impl JsonRpcHandlers {
         let committees = validators_per_bucket
             .into_iter()
             .map(|(bucket, validators)| CommitteeShardInfo {
-                bucket,
-                shard_range: bucket.to_shard_range(num_committees),
+                shard: bucket,
+                substate_address_range: bucket.to_substate_address_range(num_committees),
                 validators,
             })
             .collect();
@@ -789,40 +797,16 @@ impl JsonRpcHandlers {
         }
     }
 
-    pub async fn get_logged_messages(&self, value: JsonRpcExtractor) -> JrpcResult {
-        let answer_id = value.get_answer_id();
-        let request = value.parse_params::<json::Value>()?;
-        let logger = SqliteMessageLog::new(&self.config.p2p.datastore_path);
-        let message_tag = request["message_tag"]
-            .as_str()
-            .map(ToString::to_string)
-            .ok_or_else(|| {
-                JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::InvalidParams,
-                        "message_tag is required".to_string(),
-                        json::Value::Null,
-                    ),
-                )
-            })?;
-        let messages = logger.get_messages_by_tag(message_tag);
-        let response = json!({ "messages": messages });
-        Ok(JsonRpcResponse::success(answer_id, response))
-    }
-
     pub async fn get_validator_fees(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request = value.parse_params::<GetValidatorFeesRequest>()?;
 
+        let maybe_validator_addr = request.validator_public_key.as_ref();
+
         let blocks = self
             .state_store
             .with_read_tx(|tx| {
-                Block::get_any_with_epoch_range_for_validator(
-                    tx,
-                    request.epoch_range,
-                    request.validator_public_key.as_ref(),
-                )
+                Block::get_any_with_epoch_range_for_validator(tx, request.epoch_range, maybe_validator_addr)
             })
             .map_err(internal_error(answer_id))?;
 
@@ -834,18 +818,4 @@ impl JsonRpcHandlers {
                 .collect(),
         }))
     }
-}
-
-#[derive(Serialize, Debug)]
-struct Connection {
-    node_id: NodeId,
-    public_key: CommsPublicKey,
-    address: Multiaddr,
-    direction: bool,
-    age: u64,
-}
-
-#[derive(Serialize, Debug)]
-struct GetConnectionsResponse {
-    connections: Vec<Connection>,
 }

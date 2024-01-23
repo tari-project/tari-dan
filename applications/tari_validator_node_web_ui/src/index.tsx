@@ -20,90 +20,88 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './theme/theme.css';
-import reportWebVitals from './reportWebVitals';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import App from './App';
-import Committees from './routes/Committees/CommitteesLayout';
-import Connections from './routes/Connections/Connections';
-import Fees from './routes/Fees/Fees';
-import Mempool from './routes/Mempool/Mempool';
-import Blocks from './routes/Blocks/Blocks';
-import Templates from './routes/Templates/Templates';
-import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
-import ErrorPage from './routes/ErrorPage';
-import TemplateFunctions from './routes/VN/Components/TemplateFunctions';
-import CommitteeMembers from './routes/Committees/CommitteeMembers';
-import TransactionDetails from './routes/Transactions/TransactionDetails';
-import BlockDetails from './routes/Blocks/BlockDetails';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import "./theme/theme.css";
+import reportWebVitals from "./reportWebVitals";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import App from "./App";
+import Committees from "./routes/Committees/CommitteesLayout";
+import Connections from "./routes/Connections/Connections";
+import Fees from "./routes/Fees/Fees";
+import Mempool from "./routes/Mempool/Mempool";
+import Blocks from "./routes/Blocks/Blocks";
+import Templates from "./routes/Templates/Templates";
+import ValidatorNodes from "./routes/ValidatorNodes/ValidatorNodes";
+import ErrorPage from "./routes/ErrorPage";
+import TemplateFunctions from "./routes/VN/Components/TemplateFunctions";
+import CommitteeMembers from "./routes/Committees/CommitteeMembers";
+import TransactionDetails from "./routes/Transactions/TransactionDetails";
+import BlockDetails from "./routes/Blocks/BlockDetails";
 
 const router = createBrowserRouter([
   {
-    path: '*',
+    path: "*",
     element: <App />,
     errorElement: <ErrorPage />,
     children: [
       {
-        path: 'connections',
+        path: "connections",
         element: <Connections />,
       },
       {
-        path: 'fees',
+        path: "fees",
         element: <Fees />,
       },
       {
-        path: 'blocks',
+        path: "blocks",
         element: <Blocks />,
       },
       {
-        path: 'blocks/:blockId',
+        path: "blocks/:blockId",
         element: <BlockDetails />,
       },
       {
-        path: 'templates',
+        path: "templates",
         element: <Templates />,
       },
       {
-        path: 'vns',
+        path: "vns",
         element: <ValidatorNodes />,
       },
       {
-        path: 'app',
+        path: "app",
         element: <App />,
       },
       {
-        path: 'mempool',
+        path: "mempool",
         element: <Mempool />,
       },
       {
-        path: 'committees',
+        path: "committees",
         element: <Committees />,
       },
       {
-        path: 'transactions/:transactionHash',
+        path: "transactions/:transactionHash",
         element: <TransactionDetails />,
       },
       {
-        path: 'templates/:address',
+        path: "templates/:address",
         element: <TemplateFunctions />,
       },
       {
-        path: 'committees/:address',
+        path: "committees/:address",
         element: <CommitteeMembers />,
       },
     ],
   },
 ]);
 
-const root = ReactDOM.createRoot(
-  document.getElementById('root') as HTMLElement
-);
+const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 root.render(
   <React.StrictMode>
     <RouterProvider router={router} />
-  </React.StrictMode>
+  </React.StrictMode>,
 );
 
 // If you want to start measuring performance in your app, pass a function

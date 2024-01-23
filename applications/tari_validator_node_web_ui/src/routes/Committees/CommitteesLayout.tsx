@@ -33,8 +33,7 @@ import { getNetworkCommittees } from "../../utils/json_rpc";
 import { GetNetworkCommitteesResponse } from "../../utils/interfaces";
 
 function CommitteesLayout() {
-  const [committees, setCommittees] =
-    useState<GetNetworkCommitteesResponse | null>(null);
+  const [committees, setCommittees] = useState<GetNetworkCommitteesResponse | null>(null);
 
   const { epoch, identity, error } = useContext(VNContext);
 
@@ -60,23 +59,15 @@ function CommitteesLayout() {
         <StyledPaper>
           Current epoch: {epoch.current_epoch}
           <br />
-          Total number of validators:{" "}
-          {committees.committees.reduce(
-            (acc, info) => acc + info.validators.length,
-            0,
-          )}
+          Total number of validators: {committees.committees.reduce((acc, info) => acc + info.validators.length, 0)}
           <br />
           Total buckets: {committees.committees.length}
           <br />
           Min committee size:{" "}
-          {committees.committees
-            .map((vn) => vn.validators.length)
-            .reduce((acc, curr) => Math.min(acc, curr), 100000)}
+          {committees.committees.map((vn) => vn.validators.length).reduce((acc, curr) => Math.min(acc, curr), 100000)}
           <br />
           Max committee size:{" "}
-          {committees.committees
-            .map((vn) => vn.validators.length)
-            .reduce((acc, curr) => Math.max(acc, curr), 0)}
+          {committees.committees.map((vn) => vn.validators.length).reduce((acc, curr) => Math.max(acc, curr), 0)}
         </StyledPaper>
       </Grid>
       <Grid item xs={12} md={12} lg={8}>
@@ -92,10 +83,7 @@ function CommitteesLayout() {
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Typography>
-            <Committees
-              committees={committees.committees}
-              publicKey={identity.public_key}
-            />
+            <Committees committees={committees.committees} peerId={identity.peer_id} />
           </Typography>
         </StyledPaper>
       </Grid>

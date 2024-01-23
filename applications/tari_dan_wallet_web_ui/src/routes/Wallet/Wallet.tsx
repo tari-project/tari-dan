@@ -20,21 +20,21 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import Accounts from './Components/Accounts';
-import Keys from './Components/Keys';
-import './Wallet.css';
-import { StyledPaper } from '../../Components/StyledComponents';
-import Grid from '@mui/material/Grid';
-import SecondaryHeading from '../../Components/SecondaryHeading';
-import Transactions from '../Transactions/Transactions';
-import AccessTokens from './Components/AccessTokens';
-import useAccountStore from '../../store/accountStore';
+import { useState } from "react";
+import Accounts from "./Components/Accounts";
+import Keys from "./Components/Keys";
+import "./Wallet.css";
+import { StyledPaper } from "../../Components/StyledComponents";
+import Grid from "@mui/material/Grid";
+import SecondaryHeading from "../../Components/SecondaryHeading";
+import Transactions from "../Transactions/Transactions";
+import AccessTokens from "./Components/AccessTokens";
+import useAccountStore from "../../store/accountStore";
 
 function Wallet() {
   const accountName = useAccountStore((state) => state.accountName);
-  const [error, setError] = useState('');
-  if (error !== '') {
+  const [error, setError] = useState("");
+  if (error !== "") {
     return <div className="error">{error}</div>;
   }
   return (

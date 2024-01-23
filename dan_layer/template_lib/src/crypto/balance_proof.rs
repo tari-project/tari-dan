@@ -1,12 +1,15 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, Bytes};
 
 use crate::crypto::InvalidByteLengthError;
 
+/// The signature of a balance proof, used to validate the authorship of confidential transfers
+#[serde_as]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct BalanceProofSignature(#[serde(with = "serde_byte_array")] [u8; BalanceProofSignature::length()]);
+pub struct BalanceProofSignature(#[serde_as(as = "Bytes")] [u8; BalanceProofSignature::length()]);
 
 impl BalanceProofSignature {
     pub const fn length() -> usize {

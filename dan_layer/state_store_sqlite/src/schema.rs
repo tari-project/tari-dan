@@ -16,6 +16,18 @@ diesel::table! {
         is_processed -> Bool,
         is_dummy -> Bool,
         foreign_indexes -> Text,
+        signature -> Nullable<Text>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    foreign_proposals (id) {
+        id -> Integer,
+        bucket -> Integer,
+        block_id -> Text,
+        state -> Text,
+        proposed_height -> Nullable<BigInt>,
         created_at -> Timestamp,
     }
 }
@@ -109,7 +121,7 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         transaction_id -> Text,
-        shard_id -> Text,
+        substate_address -> Text,
         created_at -> Timestamp,
     }
 }
@@ -138,6 +150,7 @@ diesel::table! {
         commands -> Text,
         total_leader_fee -> BigInt,
         foreign_indexes -> Text,
+        signature -> Nullable<Text>,
         created_at -> Timestamp,
     }
 }
@@ -155,8 +168,8 @@ diesel::table! {
 diesel::table! {
     substates (id) {
         id -> Integer,
-        shard_id -> Text,
         address -> Text,
+        substate_id -> Text,
         version -> Integer,
         data -> Text,
         state_hash -> Text,

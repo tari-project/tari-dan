@@ -36,6 +36,12 @@ impl TemplateDef {
         }
     }
 
+    pub fn tari_version(&self) -> &str {
+        match self {
+            TemplateDef::V1(def) => def.tari_version.as_str(),
+        }
+    }
+
     pub fn get_function(&self, name: &str) -> Option<&FunctionDef> {
         match self {
             TemplateDef::V1(def) => def.get_function(name),
@@ -52,6 +58,7 @@ impl TemplateDef {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateDefV1 {
     pub template_name: String,
+    pub tari_version: String,
     pub functions: Vec<FunctionDef>,
 }
 

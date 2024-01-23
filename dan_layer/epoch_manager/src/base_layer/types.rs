@@ -8,14 +8,13 @@ use std::{
 
 use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_comms::types::CommsPublicKey;
 use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::MergedValidatorNodeMerkleProof,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     Epoch,
-    ShardId,
+    SubstateAddress,
 };
 use tari_dan_storage::global::models::ValidatorNode;
 use tokio::sync::{broadcast, oneshot};
@@ -25,7 +24,7 @@ use crate::{error::EpochManagerError, EpochManagerEvent};
 type Reply<T> = oneshot::Sender<Result<T, EpochManagerError>>;
 
 #[derive(Debug)]
-pub enum EpochManagerRequest {
+pub enum EpochManagerRequest<TAddr> {
     CurrentEpoch {
         reply: Reply<Epoch>,
     },
@@ -34,12 +33,17 @@ pub enum EpochManagerRequest {
     },
     GetValidatorNode {
         epoch: Epoch,
-        addr: CommsPublicKey,
-        reply: Reply<ValidatorNode<CommsPublicKey>>,
+        addr: TAddr,
+        reply: Reply<ValidatorNode<TAddr>>,
+    },
+    GetValidatorNodeByPublicKey {
+        epoch: Epoch,
+        public_key: PublicKey,
+        reply: Reply<ValidatorNode<TAddr>>,
     },
     GetManyValidatorNodes {
-        query: Vec<(Epoch, CommsPublicKey)>,
-        reply: Reply<HashMap<(Epoch, CommsPublicKey), ValidatorNode<CommsPublicKey>>>,
+        query: Vec<(Epoch, PublicKey)>,
+        reply: Reply<HashMap<(Epoch, PublicKey), ValidatorNode<TAddr>>>,
     },
     AddValidatorNodeRegistration {
         block_height: u64,
@@ -64,26 +68,26 @@ pub enum EpochManagerRequest {
     },
     GetCommittees {
         epoch: Epoch,
-        shards: HashSet<ShardId>,
-        reply: Reply<HashMap<ShardBucket, Committee<CommsPublicKey>>>,
+        shards: HashSet<SubstateAddress>,
+        reply: Reply<HashMap<Shard, Committee<TAddr>>>,
     },
     GetCommittee {
         epoch: Epoch,
-        shard: ShardId,
-        reply: Reply<Committee<CommsPublicKey>>,
+        shard: SubstateAddress,
+        reply: Reply<Committee<TAddr>>,
     },
     GetCommitteeForShardRange {
         epoch: Epoch,
-        shard_range: RangeInclusive<ShardId>,
-        reply: Reply<Committee<CommsPublicKey>>,
+        shard_range: RangeInclusive<SubstateAddress>,
+        reply: Reply<Committee<TAddr>>,
     },
     GetValidatorNodesPerEpoch {
         epoch: Epoch,
-        reply: Reply<Vec<ValidatorNode<PublicKey>>>,
+        reply: Reply<Vec<ValidatorNode<TAddr>>>,
     },
     GetValidatorSetMergedMerkleProof {
         epoch: Epoch,
-        validator_set: Vec<CommsPublicKey>,
+        validator_set: Vec<PublicKey>,
         reply: Reply<MergedValidatorNodeMerkleProof>,
     },
     GetValidatorNodeMerkleRoot {
@@ -91,8 +95,8 @@ pub enum EpochManagerRequest {
         reply: Reply<Vec<u8>>,
     },
     IsValidatorInCommitteeForCurrentEpoch {
-        shard: ShardId,
-        identity: PublicKey,
+        shard: SubstateAddress,
+        identity: TAddr,
         reply: Reply<bool>,
     },
     Subscribe {
@@ -109,16 +113,16 @@ pub enum EpochManagerRequest {
     },
     GetLocalShardRange {
         epoch: Epoch,
-        for_addr: PublicKey,
-        reply: Reply<RangeInclusive<ShardId>>,
+        for_addr: TAddr,
+        reply: Reply<RangeInclusive<SubstateAddress>>,
     },
     GetOurValidatorNode {
         epoch: Epoch,
-        reply: Reply<ValidatorNode<PublicKey>>,
+        reply: Reply<ValidatorNode<TAddr>>,
     },
     GetCommitteeShard {
         epoch: Epoch,
-        shard: ShardId,
+        shard: SubstateAddress,
         reply: Reply<CommitteeShard>,
     },
     GetLocalCommitteeShard {
@@ -131,8 +135,8 @@ pub enum EpochManagerRequest {
     },
     GetCommitteesByBuckets {
         epoch: Epoch,
-        buckets: HashSet<ShardBucket>,
-        reply: Reply<HashMap<ShardBucket, Committee<PublicKey>>>,
+        buckets: HashSet<Shard>,
+        reply: Reply<HashMap<Shard, Committee<TAddr>>>,
     },
     GetFeeClaimPublicKey {
         reply: Reply<Option<PublicKey>>,

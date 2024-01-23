@@ -1,9 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use tari_common_types::types::PublicKey;
 use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker};
-use tari_dan_common_types::{shard_bucket::ShardBucket, ShardId};
-use tari_dan_storage::consensus_models::{ForeignReceiveCounters, TransactionPool};
+use tari_dan_common_types::{shard::Shard, SubstateAddress};
+use tari_dan_storage::consensus_models::TransactionPool;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tokio::sync::{broadcast, mpsc, watch};
@@ -11,6 +12,7 @@ use tokio::sync::{broadcast, mpsc, watch};
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
+    messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
     signing_service::TestVoteSignatureService,
     sync::AlwaysSyncedSyncManager,
     NoopStateManager,
@@ -22,8 +24,9 @@ use crate::support::{
 
 pub struct ValidatorBuilder {
     pub address: TestAddress,
-    pub shard: ShardId,
-    pub bucket: ShardBucket,
+    pub public_key: PublicKey,
+    pub shard: SubstateAddress,
+    pub bucket: Shard,
     pub sql_url: String,
     pub leader_strategy: RoundRobinLeaderStrategy,
     pub epoch_manager: Option<TestEpochManager>,
@@ -33,25 +36,27 @@ impl ValidatorBuilder {
     pub fn new() -> Self {
         Self {
             address: TestAddress::new("default"),
-            shard: ShardId::zero(),
-            bucket: ShardBucket::from(0),
+            public_key: PublicKey::default(),
+            shard: SubstateAddress::zero(),
+            bucket: Shard::from(0),
             sql_url: ":memory".to_string(),
             leader_strategy: RoundRobinLeaderStrategy::new(),
             epoch_manager: None,
         }
     }
 
-    pub fn with_address(&mut self, address: TestAddress) -> &mut Self {
+    pub fn with_address_and_public_key(&mut self, address: TestAddress, public_key: PublicKey) -> &mut Self {
         self.address = address;
+        self.public_key = public_key;
         self
     }
 
-    pub fn with_bucket(&mut self, bucket: ShardBucket) -> &mut Self {
+    pub fn with_bucket(&mut self, bucket: Shard) -> &mut Self {
         self.bucket = bucket;
         self
     }
 
-    pub fn with_shard(&mut self, shard: ShardId) -> &mut Self {
+    pub fn with_shard(&mut self, shard: SubstateAddress) -> &mut Self {
         self.shard = shard;
         self
     }
@@ -78,32 +83,33 @@ impl ValidatorBuilder {
         let (tx_leader, rx_leader) = mpsc::channel(100);
         let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
 
+        let (outbound_messaging, rx_loopback) = TestOutboundMessaging::create(tx_leader, tx_broadcast);
+        let inbound_messaging = TestInboundMessaging::new(self.address.clone(), rx_hs_message, rx_loopback);
+
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
-        let signing_service = TestVoteSignatureService::new(self.address.clone());
+        let signing_service = TestVoteSignatureService::new(self.public_key.clone(), self.address.clone());
         let transaction_pool = TransactionPool::new();
         let noop_state_manager = NoopStateManager::new();
         let (tx_events, _) = broadcast::channel(100);
 
-        let epoch_manager = self
-            .epoch_manager
-            .as_ref()
-            .unwrap()
-            .clone_for(self.address.clone(), self.shard);
+        let epoch_manager =
+            self.epoch_manager
+                .as_ref()
+                .unwrap()
+                .clone_for(self.address.clone(), self.public_key.clone(), self.shard);
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             self.address.clone(),
+            inbound_messaging,
+            outbound_messaging,
             rx_new_transactions,
-            rx_hs_message,
             store.clone(),
             epoch_manager.clone(),
             self.leader_strategy,
             signing_service,
             noop_state_manager.clone(),
             transaction_pool,
-            tx_broadcast,
-            tx_leader,
             tx_events.clone(),
             tx_mempool,
-            ForeignReceiveCounters::default(),
             shutdown_signal.clone(),
         );
 

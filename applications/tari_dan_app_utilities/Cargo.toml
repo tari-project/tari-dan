@@ -1,54 +1,59 @@
 [package]
 name = "tari_dan_app_utilities"
-version = "0.1.1"
-authors = ["The Tari Development Community"]
-edition = "2021"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", default-features = false, features = [
-  "transactions",
-] }
-tari_crypto = "0.19"
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_common = { workspace = true }
+tari_common_types = { workspace = true }
+tari_core = { workspace = true, default-features = false, features = ["transactions"] }
+tari_crypto = { workspace = true }
+tari_shutdown = { workspace = true }
 
-tari_dan_common_types = { path = "../../dan_layer/common_types" }
-tari_state_store_sqlite = { path = "../../dan_layer/state_store_sqlite" }
-tari_dan_engine = { path = "../../dan_layer/engine" }
-tari_dan_storage = { path = "../../dan_layer/storage" }
-tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
-tari_engine_types = { path = "../../dan_layer/engine_types" }
-tari_epoch_manager = { path = "../../dan_layer/epoch_manager", features = [
-  "base_layer",
-] }
-tari_base_node_client = { path = "../../clients/base_node_client" }
-tari_template_builtin = { path = "../../dan_layer/template_builtin" }
-tari_template_lib = { path = "../../dan_layer/template_lib" }
-tari_transaction = { path = "../../dan_layer/transaction" }
-tari_validator_node_client = { path = "../../clients/validator_node_client" }
-tari_bor = { path = "../../dan_layer/tari_bor" }
-tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
+tari_dan_common_types = { workspace = true }
+tari_state_store_sqlite = { workspace = true }
+tari_dan_engine = { workspace = true }
+tari_dan_storage = { workspace = true }
+tari_dan_storage_sqlite = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_epoch_manager = { workspace = true, features = ["base_layer"] }
+tari_base_node_client = { workspace = true }
+tari_template_builtin = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_transaction = { workspace = true }
+tari_validator_node_client = { workspace = true }
+tari_bor = { workspace = true, default-features = true }
+tari_indexer_lib = { workspace = true }
+tari_networking = { path = "../../networking/core" }
 
-anyhow = "1.0.53"
-async-trait = "0.1.74"
-bytes = "1"
-cacache = "12.0.0"
-chrono = "0.4.22"
-futures = { version = "^0.3.1" }
-log = { version = "0.4.8", features = ["std"] }
-mini-moka = "0.10.0"
-dashmap = "5.5.0"
-std-semaphore = "0.1.0"
-prost = "0.9"
-reqwest = "0.11.11"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "^1.0.20"
-tokio = { version = "1.10", features = [
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+bytes = { workspace = true }
+cacache = { workspace = true }
+chrono = { workspace = true }
+dashmap = { workspace = true }
+futures = { workspace = true }
+json5 = { workspace = true }
+libp2p-identity = { workspace = true }
+log = { workspace = true, features = ["std"] }
+mini-moka = { workspace = true }
+multiaddr = { workspace = true }
+std-semaphore = { workspace = true }
+prost = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true, features = ["default", "derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = [
+  "default",
   "macros",
   "time",
   "sync",
   "rt-multi-thread",
-] }
-tokio-stream = { version = "0.1.7", features = ["sync"] }
+]}
+tokio-stream = { workspace = true, features = ["sync"] }
+config = { workspace = true }

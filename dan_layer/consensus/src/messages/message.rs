@@ -11,18 +11,18 @@ use crate::messages::{RequestMissingTransactionsMessage, SyncRequestMessage, Syn
 
 // Serialize is implemented for the message logger
 #[derive(Debug, Clone, Serialize)]
-pub enum HotstuffMessage<TAddr> {
-    NewView(NewViewMessage<TAddr>),
-    Proposal(ProposalMessage<TAddr>),
-    ForeignProposal(ProposalMessage<TAddr>),
-    Vote(VoteMessage<TAddr>),
+pub enum HotstuffMessage {
+    NewView(NewViewMessage),
+    Proposal(ProposalMessage),
+    ForeignProposal(ProposalMessage),
+    Vote(VoteMessage),
     RequestMissingTransactions(RequestMissingTransactionsMessage),
     RequestedTransaction(RequestedTransactionMessage),
     SyncRequest(SyncRequestMessage),
-    SyncResponse(SyncResponseMessage<TAddr>),
+    SyncResponse(SyncResponseMessage),
 }
 
-impl<TAddr> HotstuffMessage<TAddr> {
+impl HotstuffMessage {
     pub fn as_type_str(&self) -> &'static str {
         match self {
             HotstuffMessage::NewView(_) => "NewView",
@@ -49,7 +49,7 @@ impl<TAddr> HotstuffMessage<TAddr> {
         }
     }
 
-    pub fn proposal(&self) -> Option<&ProposalMessage<TAddr>> {
+    pub fn proposal(&self) -> Option<&ProposalMessage> {
         match self {
             Self::Proposal(msg) => Some(msg),
             _ => None,
@@ -57,7 +57,7 @@ impl<TAddr> HotstuffMessage<TAddr> {
     }
 }
 
-impl<TAddr> Display for HotstuffMessage<TAddr> {
+impl Display for HotstuffMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HotstuffMessage::NewView(msg) => write!(f, "NewView({})", msg.new_height),
