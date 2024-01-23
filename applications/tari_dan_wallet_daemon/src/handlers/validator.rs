@@ -80,6 +80,23 @@ pub async fn handle_claim_validator_fees(
 
     // send the transaction
     let required_inputs = inputs.into_iter().map(Into::into).collect();
+
+    if req.dry_run {
+        let result = sdk
+            .transaction_api()
+            .submit_dry_run_transaction(transaction, required_inputs)
+            .await?;
+        let execute_result = result.result.into_execute_result().unwrap();
+        return Ok(ClaimValidatorFeesResponse {
+            transaction_id: result.transaction_id,
+            fee: execute_result
+                .fee_receipt
+                .clone()
+                .map(|fee_receipt| fee_receipt.total_fees_paid)
+                .unwrap_or_default(),
+            result: execute_result.finalize,
+        });
+    }
     let tx_id = sdk
         .transaction_api()
         .submit_transaction(transaction, required_inputs)
