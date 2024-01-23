@@ -33,7 +33,7 @@ mod faucet_template {
     impl TestFaucet {
         pub fn mint(initial_supply: Amount) -> Component<Self> {
             let coins = ResourceBuilder::fungible()
-                .with_token_symbol("test")
+                .with_token_symbol("FAUCET")
                 .initial_supply(initial_supply)
                 .build_bucket();
 
@@ -45,8 +45,13 @@ mod faucet_template {
         }
 
         pub fn take_free_coins(&mut self) -> Bucket {
-            debug!("Withdrawing 1000 coins from faucet");
-            self.vault.withdraw(Amount(1000))
+            self.take_amount_of_free_coins(Amount(1000))
         }
+
+        pub fn take_amount_of_free_coins(&mut self, amount: Amount) -> Bucket {
+            debug!("Withdrawing {} coins from faucet", amount);
+            self.vault.withdraw(amount)
+        }
+
     }
 }

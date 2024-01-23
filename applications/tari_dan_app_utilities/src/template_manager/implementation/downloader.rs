@@ -80,6 +80,7 @@ impl TemplateDownloadWorker {
 async fn download(req: DownloadRequest) -> DownloadResult {
     async fn inner(req: DownloadRequest) -> Result<Bytes, TemplateDownloadError> {
         let resp = reqwest::get(&req.url).await?;
+        let resp = resp.error_for_status()?;
         let bytes = resp.bytes().await?;
         Ok(bytes)
     }

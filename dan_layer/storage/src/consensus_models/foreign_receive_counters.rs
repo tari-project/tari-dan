@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use tari_dan_common_types::shard::Shard;
+use tari_dan_common_types::{optional::Optional, shard::Shard};
 
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
@@ -29,8 +29,8 @@ impl ForeignReceiveCounters {
         *self.counters.entry(*bucket).or_default() += 1;
     }
 
-    // If we haven't received any messages from this shard yet, return 0
-    pub fn get_index(&self, bucket: &Shard) -> u64 {
+    /// Returns the counter for the provided shard. If the count does not exist, 0 is returned.
+    pub fn get_count(&self, bucket: &Shard) -> u64 {
         self.counters.get(bucket).copied().unwrap_or_default()
     }
 }
@@ -41,7 +41,7 @@ impl ForeignReceiveCounters {
         Ok(())
     }
 
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx) -> Result<Self, StorageError> {
-        tx.foreign_receive_counters_get()
+    pub fn get_or_default<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx) -> Result<Self, StorageError> {
+        Ok(tx.foreign_receive_counters_get().optional()?.unwrap_or_default())
     }
 }

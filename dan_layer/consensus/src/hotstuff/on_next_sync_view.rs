@@ -8,19 +8,18 @@ use tari_dan_storage::{
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tokio::sync::mpsc;
 
 use crate::{
     hotstuff::HotStuffError,
     messages::{HotstuffMessage, NewViewMessage, VoteMessage},
-    traits::{ConsensusSpec, LeaderStrategy},
+    traits::{ConsensusSpec, LeaderStrategy, OutboundMessaging},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_next_sync_view";
 
 pub struct OnNextSyncViewHandler<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
-    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
 }
@@ -28,13 +27,13 @@ pub struct OnNextSyncViewHandler<TConsensusSpec: ConsensusSpec> {
 impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
     pub fn new(
         store: TConsensusSpec::StateStore,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        outbound_messaging: TConsensusSpec::OutboundMessaging,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
     ) -> Self {
         Self {
             store,
-            tx_leader,
+            outbound_messaging,
             leader_strategy,
             epoch_manager,
         }
@@ -73,12 +72,9 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
             last_vote: last_sent_vote.map(VoteMessage::from),
         };
 
-        self.tx_leader
-            .send((next_leader.clone(), HotstuffMessage::NewView(message)))
-            .await
-            .map_err(|_| HotStuffError::InternalChannelClosed {
-                context: "tx_leader in OnNextSyncViewHandler::send_to_leader",
-            })?;
+        self.outbound_messaging
+            .send(next_leader.clone(), HotstuffMessage::NewView(message))
+            .await?;
 
         Ok(())
     }

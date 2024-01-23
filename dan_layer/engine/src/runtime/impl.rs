@@ -1736,8 +1736,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
         let address = match action {
             BuiltinTemplateAction::GetTemplateAddress { bultin } => match bultin {
-                BuiltinTemplate::Account => *ACCOUNT_TEMPLATE_ADDRESS,
-                BuiltinTemplate::AccountNft => *ACCOUNT_NFT_TEMPLATE_ADDRESS,
+                BuiltinTemplate::Account => ACCOUNT_TEMPLATE_ADDRESS,
+                BuiltinTemplate::AccountNft => ACCOUNT_NFT_TEMPLATE_ADDRESS,
             },
         };
 

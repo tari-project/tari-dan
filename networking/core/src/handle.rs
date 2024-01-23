@@ -40,6 +40,7 @@ use crate::{
     connection::Connection,
     error::NetworkingHandleError,
     event::NetworkingEvent,
+    message::MessageSpec,
     peer::PeerInfo,
     NetworkingError,
     NetworkingService,
@@ -48,7 +49,7 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::networking::handle";
 
-pub enum NetworkingRequest<TMsg> {
+pub enum NetworkingRequest<TMsg: MessageSpec> {
     DialPeer {
         dial_opts: DialOpts,
         reply_tx: oneshot::Sender<Result<Waiter<()>, NetworkingError>>,
@@ -58,17 +59,17 @@ pub enum NetworkingRequest<TMsg> {
     },
     SendMessage {
         peer: PeerId,
-        message: TMsg,
+        message: TMsg::Message,
         reply_tx: oneshot::Sender<Result<(), NetworkingError>>,
     },
     SendMulticast {
         destination: MulticastDestination,
-        message: TMsg,
-        reply_tx: oneshot::Sender<Result<(), NetworkingError>>,
+        message: TMsg::Message,
+        reply_tx: oneshot::Sender<Result<usize, NetworkingError>>,
     },
     PublishGossip {
         topic: IdentTopic,
-        message: TMsg,
+        message: TMsg::GossipMessage,
         reply_tx: oneshot::Sender<Result<(), NetworkingError>>,
     },
     SubscribeTopic {
@@ -154,13 +155,13 @@ impl IntoIterator for MulticastDestination {
 }
 
 #[derive(Debug)]
-pub struct NetworkingHandle<TMsg> {
+pub struct NetworkingHandle<TMsg: MessageSpec> {
     tx_request: mpsc::Sender<NetworkingRequest<TMsg>>,
     local_peer_id: PeerId,
     tx_events: broadcast::Sender<NetworkingEvent>,
 }
 
-impl<TMsg> NetworkingHandle<TMsg> {
+impl<TMsg: MessageSpec> NetworkingHandle<TMsg> {
     pub(super) fn new(
         local_peer_id: PeerId,
         tx_request: mpsc::Sender<NetworkingRequest<TMsg>>,
@@ -274,7 +275,7 @@ impl<TMsg> NetworkingHandle<TMsg> {
 }
 
 #[async_trait]
-impl<TMsg: Send + 'static> NetworkingService<TMsg> for NetworkingHandle<TMsg> {
+impl<TMsg: MessageSpec + Send + 'static> NetworkingService<TMsg> for NetworkingHandle<TMsg> {
     fn local_peer_id(&self) -> &PeerId {
         &self.local_peer_id
     }
@@ -303,7 +304,7 @@ impl<TMsg: Send + 'static> NetworkingService<TMsg> for NetworkingHandle<TMsg> {
         rx.await?
     }
 
-    async fn send_message(&mut self, peer: PeerId, message: TMsg) -> Result<(), NetworkingError> {
+    async fn send_message(&mut self, peer: PeerId, message: TMsg::Message) -> Result<(), NetworkingError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(NetworkingRequest::SendMessage {
@@ -319,8 +320,8 @@ impl<TMsg: Send + 'static> NetworkingService<TMsg> for NetworkingHandle<TMsg> {
     async fn send_multicast<D: Into<MulticastDestination> + Send>(
         &mut self,
         dest: D,
-        message: TMsg,
-    ) -> Result<(), NetworkingError> {
+        message: TMsg::Message,
+    ) -> Result<usize, NetworkingError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(NetworkingRequest::SendMulticast {
@@ -333,10 +334,10 @@ impl<TMsg: Send + 'static> NetworkingService<TMsg> for NetworkingHandle<TMsg> {
         rx.await?
     }
 
-    async fn gossip<TTopic: Into<String> + Send>(
+    async fn publish_gossip<TTopic: Into<String> + Send>(
         &mut self,
         topic: TTopic,
-        message: TMsg,
+        message: TMsg::GossipMessage,
     ) -> Result<(), NetworkingError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
@@ -387,7 +388,7 @@ impl<TMsg: Send + 'static> NetworkingService<TMsg> for NetworkingHandle<TMsg> {
     }
 }
 
-impl<TMsg> Clone for NetworkingHandle<TMsg> {
+impl<TMsg: MessageSpec> Clone for NetworkingHandle<TMsg> {
     fn clone(&self) -> Self {
         Self {
             tx_request: self.tx_request.clone(),

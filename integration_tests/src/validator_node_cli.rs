@@ -55,7 +55,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     // create an account component
     let instruction = Instruction::CallFunction {
         // The "account" template is builtin in the validator nodes with a constant address
-        template_address: *ACCOUNT_TEMPLATE_ADDRESS,
+        template_address: ACCOUNT_TEMPLATE_ADDRESS,
         function: "create".to_string(),
         args: args!(owner_token),
     };
@@ -287,7 +287,7 @@ pub async fn submit_manifest(
         .collect();
 
     // parse the manifest
-    let instructions = parse_manifest(&manifest_content, globals).unwrap();
+    let instructions = parse_manifest(&manifest_content, globals, HashMap::new()).unwrap();
 
     // submit the instructions to the vn
     let mut client = world.get_validator_node(&vn_name).get_client();
@@ -339,7 +339,7 @@ pub async fn submit_manifest(
         account_template_address: None,
         dry_run: false,
     };
-    let resp = submit_transaction(instructions, args, data_dir, &mut client)
+    let resp = submit_transaction(instructions.instructions, args, data_dir, &mut client)
         .await
         .unwrap();
 

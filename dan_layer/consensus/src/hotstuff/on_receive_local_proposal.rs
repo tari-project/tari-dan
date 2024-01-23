@@ -5,7 +5,7 @@
 // ----[foreign:LocalPrepared]--->(LocalPrepared, true) ----cmd:AllPrepare ---> (AllPrepared, true) ---cmd:Accept --->
 // Complete
 
-use std::{collections::HashMap, ops::DerefMut};
+use std::ops::DerefMut;
 
 use log::*;
 use tari_dan_common_types::{
@@ -19,7 +19,7 @@ use tari_dan_storage::{
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 
 use super::proposer::{self, Proposer};
 use crate::{
@@ -30,7 +30,7 @@ use crate::{
         HotstuffEvent,
         ProposalValidationError,
     },
-    messages::{HotstuffMessage, ProposalMessage},
+    messages::ProposalMessage,
     traits::{ConsensusSpec, LeaderStrategy},
 };
 
@@ -51,7 +51,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         pacemaker: PaceMakerHandle,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        outbound_messaging: TConsensusSpec::OutboundMessaging,
         vote_signing_service: TConsensusSpec::SignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
@@ -71,14 +71,14 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 leader_strategy,
                 state_manager,
                 transaction_pool,
-                tx_leader,
+                outbound_messaging,
                 tx_events,
                 proposer,
             ),
         }
     }
 
-    pub async fn handle(&self, message: ProposalMessage) -> Result<(), HotStuffError> {
+    pub async fn handle(&mut self, message: ProposalMessage) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = message;
 
         debug!(
@@ -93,7 +93,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         Ok(())
     }
 
-    async fn process_block(&self, block: Block) -> Result<(), HotStuffError> {
+    async fn process_block(&mut self, block: Block) -> Result<(), HotStuffError> {
         if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
             return Err(HotStuffError::EpochNotActive {
                 epoch: block.epoch(),
@@ -101,10 +101,26 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             });
         }
 
-        if let Some(valid_block) = self.validate_block(block).await? {
+        let local_committee = self
+            .epoch_manager
+            .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
+            .await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
+
+        let maybe_high_qc_and_block = self.store.with_write_tx(|tx| {
+            let Some(valid_block) =
+                self.validate_block(tx.deref_mut(), block, &local_committee, &local_committee_shard)?
+            else {
+                return Ok(None);
+            };
+
             // Save the block as soon as it is valid to ensure we have a valid pacemaker height.
-            let high_qc = self.save_block(&valid_block)?;
+            let high_qc = self.save_block(tx, &valid_block)?;
             info!(target: LOG_TARGET, "✅ Block {} is valid and persisted. HighQc({})", valid_block, high_qc);
+            Ok::<_, HotStuffError>(Some((high_qc, valid_block)))
+        })?;
+
+        if let Some((high_qc, valid_block)) = maybe_high_qc_and_block {
             self.pacemaker
                 .update_view(valid_block.height(), high_qc.block_height())
                 .await?;
@@ -117,74 +133,123 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         Ok(())
     }
 
-    fn save_block(&self, valid_block: &ValidBlock) -> Result<HighQc, HotStuffError> {
-        self.store.with_write_tx(|tx| {
-            valid_block.block().justify().save(tx)?;
-            valid_block.save_all_dummy_blocks(tx)?;
-            valid_block.block().save(tx)?;
-            let high_qc = valid_block.block().justify().update_high_qc(tx)?;
-            Ok(high_qc)
-        })
+    fn save_block(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        valid_block: &ValidBlock,
+    ) -> Result<HighQc, HotStuffError> {
+        valid_block.block().save_foreign_send_counters(tx)?;
+        valid_block.block().justify().save(tx)?;
+        valid_block.save_all_dummy_blocks(tx)?;
+        valid_block.block().save(tx)?;
+        let high_qc = valid_block.block().justify().update_high_qc(tx)?;
+        Ok(high_qc)
     }
 
-    async fn validate_block(&self, block: Block) -> Result<Option<ValidBlock>, HotStuffError> {
-        let local_committee = self
-            .epoch_manager
-            .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
-            .await?;
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
-        // First save the block in one db transaction
-        self.store.with_write_tx(|tx| {
-            match self.validate_local_proposed_block(tx, block, &local_committee, &local_committee_shard) {
-                Ok(validated) => Ok(Some(validated)),
-                // Propagate this error out as sync is needed in the case where we have a valid QC but do not know the
-                // block
-                Err(
-                    err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound {
-                        ..
-                    }),
-                ) => Err(err),
-                // Validation errors should not cause a FAILURE state transition
-                Err(HotStuffError::ProposalValidationError(err)) => {
-                    warn!(target: LOG_TARGET, "❌ Block failed validation: {}", err);
-                    // A bad block should not cause a FAILURE state transition
-                    Ok(None)
-                },
-                Err(e) => Err(e),
-            }
-        })
+    fn validate_block(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        block: Block,
+        local_committee: &Committee<TConsensusSpec::Addr>,
+        local_committee_shard: &CommitteeShard,
+    ) -> Result<Option<ValidBlock>, HotStuffError> {
+        match self.validate_local_proposed_block(tx, block, local_committee, local_committee_shard) {
+            Ok(validated) => Ok(Some(validated)),
+            // Propagate this error out as sync is needed in the case where we have a valid QC but do not know the
+            // block
+            Err(err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound { .. })) => {
+                Err(err)
+            },
+            // Validation errors should not cause a FAILURE state transition
+            Err(HotStuffError::ProposalValidationError(err)) => {
+                warn!(target: LOG_TARGET, "❌ Block failed validation: {}", err);
+                // A bad block should not cause a FAILURE state transition
+                Ok(None)
+            },
+            Err(e) => Err(e),
+        }
     }
 
     fn check_foreign_indexes(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         num_committees: u32,
-        local_bucket: Shard,
+        local_shard: Shard,
         block: &Block,
         justify_block: &BlockId,
-    ) -> Result<bool, HotStuffError> {
-        let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), justify_block)?;
-        let non_local_buckets = proposer::get_non_local_shards(tx.deref_mut(), block, num_committees, local_bucket)?;
-        let mut foreign_indexes = HashMap::new();
-        for non_local_bucket in non_local_buckets {
-            foreign_indexes
-                .entry(non_local_bucket)
-                .or_insert(foreign_counters.increment_counter(non_local_bucket));
+    ) -> Result<(), HotStuffError> {
+        let non_local_shards = proposer::get_non_local_shards(tx, block, num_committees, local_shard)?;
+        let block_foreign_indexes = block.foreign_indexes();
+        if block_foreign_indexes.len() != non_local_shards.len() {
+            return Err(ProposalValidationError::InvalidForeignCounters {
+                proposed_by: block.proposed_by().to_string(),
+                hash: *block.id(),
+                details: format!(
+                    "Foreign indexes length ({}) does not match non-local shards length ({})",
+                    block_foreign_indexes.len(),
+                    non_local_shards.len()
+                ),
+            }
+            .into());
         }
-        foreign_counters.set(tx, block.id())?;
-        Ok(foreign_indexes == *block.get_foreign_indexes())
+
+        let mut foreign_counters = ForeignSendCounters::get_or_default(tx, justify_block)?;
+        let mut current_shard = None;
+        for (shard, foreign_count) in block_foreign_indexes {
+            if let Some(current_shard) = current_shard {
+                // Check ordering
+                if current_shard > shard {
+                    return Err(ProposalValidationError::InvalidForeignCounters {
+                        proposed_by: block.proposed_by().to_string(),
+                        hash: *block.id(),
+                        details: format!(
+                            "Foreign indexes are not sorted by shard. Current shard: {}, shard: {}",
+                            current_shard, shard
+                        ),
+                    }
+                    .into());
+                }
+            }
+
+            current_shard = Some(shard);
+            // Check that each shard is correct
+            if !non_local_shards.contains(shard) {
+                return Err(ProposalValidationError::InvalidForeignCounters {
+                    proposed_by: block.proposed_by().to_string(),
+                    hash: *block.id(),
+                    details: format!("Shard {} is not a non-local shard", shard),
+                }
+                .into());
+            }
+
+            // Check that foreign counters are correct
+            let expected_count = foreign_counters.increment_counter(*shard);
+            if *foreign_count != expected_count {
+                return Err(ProposalValidationError::InvalidForeignCounters {
+                    proposed_by: block.proposed_by().to_string(),
+                    hash: *block.id(),
+                    details: format!(
+                        "Foreign counter for shard {} is incorrect. Expected {}, got {}",
+                        shard, expected_count, foreign_count
+                    ),
+                }
+                .into());
+            }
+        }
+
+        Ok(())
     }
 
     /// Perform final block validations (TODO: implement all validations)
     /// We assume at this point that initial stateless validations have been done (in inbound messages)
     fn validate_local_proposed_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         candidate_block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
     ) -> Result<ValidBlock, HotStuffError> {
-        if Block::has_been_processed(tx.deref_mut(), candidate_block.id())? {
+        if Block::has_been_processed(tx, candidate_block.id())? {
             return Err(ProposalValidationError::BlockAlreadyProcessed {
                 block_id: *candidate_block.id(),
                 height: candidate_block.height(),
@@ -193,7 +258,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         }
 
         // Check that details included in the justify match previously added blocks
-        let Some(justify_block) = candidate_block.justify().get_block(tx.deref_mut()).optional()? else {
+        let Some(justify_block) = candidate_block.justify().get_block(tx).optional()? else {
             // This will trigger a sync
             return Err(ProposalValidationError::JustifyBlockNotFound {
                 proposed_by: candidate_block.proposed_by().to_string(),
@@ -229,22 +294,15 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .into());
         }
 
-        let justify_block_height = justify_block.height();
-
-        if !self.check_foreign_indexes(
+        self.check_foreign_indexes(
             tx,
             local_committee_shard.num_committees(),
             local_committee_shard.shard(),
             &candidate_block,
             justify_block.id(),
-        )? {
-            return Err(ProposalValidationError::InvalidForeignCounters {
-                proposed_by: candidate_block.proposed_by().to_string(),
-                hash: *candidate_block.id(),
-            }
-            .into());
-        }
+        )?;
 
+        let justify_block_height = justify_block.height();
         if justify_block.id() != candidate_block.parent() {
             let mut dummy_blocks =
                 Vec::with_capacity((candidate_block.height().as_u64() - justify_block_height.as_u64() - 1) as usize);
@@ -288,7 +346,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         // Now that we have all dummy blocks (if any) in place, we can check if the candidate block is safe.
         // Specifically, it should extend the locked block via the dummy blocks.
-        if !candidate_block.is_safe(tx.deref_mut())? {
+        if !candidate_block.is_safe(tx)? {
             return Err(ProposalValidationError::NotSafeBlock {
                 proposed_by: candidate_block.proposed_by().to_string(),
                 hash: *candidate_block.id(),

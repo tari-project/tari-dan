@@ -38,14 +38,14 @@ use tari_dan_app_utilities::{
     template_manager::{self, implementation::TemplateManager},
 };
 use tari_dan_common_types::PeerAddress;
+use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
-use tari_networking::{NetworkingHandle, SwarmConfig};
+use tari_networking::{MessagingMode, NetworkingHandle, SwarmConfig};
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
-use tari_validator_node_rpc::{client::TariValidatorNodeRpcClientFactory, proto};
-use tokio::sync::mpsc;
+use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 
 use crate::{substate_storage_sqlite::sqlite_substate_store_factory::SqliteSubstateStore, ApplicationConfig};
 
@@ -68,7 +68,6 @@ pub async fn spawn_services(
         }));
 
     // Initialize networking
-    let (tx_messages, mut rx_messages) = mpsc::channel(100);
     let identity = identity::Keypair::sr25519_from_bytes(keypair.secret_key().as_bytes().to_vec()).map_err(|e| {
         ExitError::new(
             ExitCode::ConfigError,
@@ -88,9 +87,9 @@ pub async fn spawn_services(
             p.addresses.into_iter().map(move |a| (peer_id, a))
         })
         .collect();
-    let (networking, _) = tari_networking::spawn::<proto::network::Message>(
+    let (networking, _) = tari_networking::spawn::<TariMessagingSpec>(
         identity,
-        tx_messages,
+        MessagingMode::Disabled,
         tari_networking::Config {
             listener_port: config.indexer.p2p.listener_port,
             swarm: SwarmConfig {
@@ -106,10 +105,6 @@ pub async fn spawn_services(
         seed_peers,
         shutdown.clone(),
     )?;
-
-    // TODO: hack to consume messages if any are sent, we may use messaging later in the indexer or we should be able to
-    //       disable the messaging and gossipsub protocols
-    tokio::spawn(async move { while rx_messages.recv().await.is_some() {} });
 
     // Connect to substate db
     let substate_store = SqliteSubstateStore::try_create(config.indexer.state_db_path())?;
@@ -164,7 +159,7 @@ pub async fn spawn_services(
 
 pub struct Services {
     pub keypair: RistrettoKeypair,
-    pub networking: NetworkingHandle<proto::network::Message>,
+    pub networking: NetworkingHandle<TariMessagingSpec>,
     pub epoch_manager: EpochManagerHandle<PeerAddress>,
     pub validator_node_client_factory: TariValidatorNodeRpcClientFactory,
     pub substate_store: SqliteSubstateStore,

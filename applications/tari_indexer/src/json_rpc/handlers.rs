@@ -34,6 +34,7 @@ use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_dan_app_utilities::{keypair::RistrettoKeypair, substate_file_cache::SubstateFileCache};
 use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, Epoch, PeerAddress};
+use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::consensus_models::Decision;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_client::{
@@ -65,10 +66,7 @@ use tari_indexer_client::{
     },
 };
 use tari_networking::{is_supported_multiaddr, NetworkingHandle, NetworkingService};
-use tari_validator_node_rpc::{
-    client::{SubstateResult, TariValidatorNodeRpcClientFactory, TransactionResultStatus},
-    proto,
-};
+use tari_validator_node_rpc::client::{SubstateResult, TariValidatorNodeRpcClientFactory, TransactionResultStatus};
 
 use super::json_encoding::{
     encode_execute_result_into_json,
@@ -88,7 +86,7 @@ const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
 pub struct JsonRpcHandlers {
     consensus_constants: BaseLayerConsensusConstants,
     keypair: RistrettoKeypair,
-    networking: NetworkingHandle<proto::network::Message>,
+    networking: NetworkingHandle<TariMessagingSpec>,
     base_node_client: GrpcBaseNodeClient,
     substate_manager: Arc<SubstateManager>,
     epoch_manager: EpochManagerHandle<PeerAddress>,

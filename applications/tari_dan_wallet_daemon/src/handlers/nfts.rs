@@ -164,7 +164,7 @@ async fn mint_account_nft(
 
     let inputs = sdk
         .substate_api()
-        .locate_dependent_substates(&[&account.address])
+        .locate_dependent_substates(&[account.address.clone()])
         .await?;
 
     let mut inputs = inputs
@@ -209,16 +209,12 @@ async fn mint_account_nft(
     if let Some(reject) = event.finalize.result.reject() {
         return Err(anyhow!(
             "Mint new NFT using account {} was rejected: {}",
-            account.name,
+            account,
             reject
         ));
     }
     if let Some(reason) = event.finalize.reject() {
-        return Err(anyhow!(
-            "Mint new NFT using account {}, failed: {}",
-            account.name,
-            reason
-        ));
+        return Err(anyhow!("Mint new NFT using account {}, failed: {}", account, reason));
     }
 
     // TODO: is there a more direct way to extract nft_id and resource address ??
@@ -260,7 +256,7 @@ async fn create_account_nft(
 
     let inputs = sdk
         .substate_api()
-        .locate_dependent_substates(&[&account.address])
+        .locate_dependent_substates(&[account.address.clone()])
         .await?;
     let inputs = inputs
         .iter()
@@ -270,7 +266,7 @@ async fn create_account_nft(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_inputs(inputs)
-        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![owner_token,])
+        .call_function(ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![owner_token,])
         .sign(owner_sk)
         .build();
 
@@ -285,14 +281,14 @@ async fn create_account_nft(
     if let Some(reject) = event.finalize.result.reject() {
         return Err(anyhow!(
             "Create NFT resource address from account {} was rejected: {}",
-            account.name,
+            account,
             reject
         ));
     }
     if let Some(reason) = event.finalize.reject() {
         return Err(anyhow!(
             "Create NFT resource address transaction, from account {}, failed: {}",
-            account.name,
+            account,
             reason
         ));
     }

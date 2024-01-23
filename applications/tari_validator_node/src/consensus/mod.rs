@@ -1,13 +1,8 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use tari_consensus::{
-    hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker},
-    messages::HotstuffMessage,
-};
-use tari_dan_common_types::committee::Committee;
-use tari_dan_p2p::{Message, OutboundService};
-use tari_dan_storage::consensus_models::{ForeignReceiveCounters, TransactionPool};
+use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker};
+use tari_dan_storage::consensus_models::TransactionPool;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -40,25 +35,22 @@ use tari_dan_app_utilities::keypair::RistrettoKeypair;
 use tari_dan_common_types::PeerAddress;
 use tari_rpc_state_sync::RpcStateSyncManager;
 
-use crate::p2p::services::message_dispatcher::OutboundMessaging;
+use crate::p2p::services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging};
 
 pub async fn spawn(
     store: SqliteStateStore<PeerAddress>,
     keypair: RistrettoKeypair,
     epoch_manager: EpochManagerHandle<PeerAddress>,
     rx_new_transactions: mpsc::Receiver<TransactionId>,
-    rx_hs_message: mpsc::Receiver<(PeerAddress, HotstuffMessage)>,
-    outbound_messaging: OutboundMessaging<PeerAddress, SqliteMessageLogger>,
+    inbound_messaging: ConsensusInboundMessaging<SqliteMessageLogger>,
+    outbound_messaging: ConsensusOutboundMessaging<SqliteMessageLogger>,
     client_factory: TariValidatorNodeRpcClientFactory,
-    foreign_receive_counter: ForeignReceiveCounters,
     shutdown_signal: ShutdownSignal,
 ) -> (
     JoinHandle<Result<(), anyhow::Error>>,
     ConsensusHandle,
     mpsc::UnboundedReceiver<Transaction>,
 ) {
-    let (tx_broadcast, rx_broadcast) = mpsc::channel(10);
-    let (tx_leader, rx_leader) = mpsc::channel(10);
     let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
 
     let validator_addr = PeerAddress::from(keypair.public_key().clone());
@@ -70,19 +62,17 @@ pub async fn spawn(
 
     let hotstuff_worker = HotstuffWorker::<TariConsensusSpec>::new(
         validator_addr,
+        inbound_messaging,
+        outbound_messaging,
         rx_new_transactions,
-        rx_hs_message,
         store.clone(),
         epoch_manager.clone(),
         leader_strategy,
         signing_service,
         state_manager,
         transaction_pool,
-        tx_broadcast,
-        tx_leader,
         tx_hotstuff_events.clone(),
         tx_mempool,
-        foreign_receive_counter,
         shutdown_signal.clone(),
     );
 
@@ -96,47 +86,9 @@ pub async fn spawn(
 
     let handle = ConsensusWorker::new(shutdown_signal).spawn(context);
 
-    ConsensusMessageWorker {
-        rx_broadcast,
-        rx_leader,
-        outbound_messaging,
-    }
-    .spawn();
-
     (
         handle,
         ConsensusHandle::new(rx_current_state, EventSubscription::new(tx_hotstuff_events)),
         rx_mempool,
     )
-}
-
-struct ConsensusMessageWorker {
-    rx_broadcast: mpsc::Receiver<(Committee<PeerAddress>, HotstuffMessage)>,
-    rx_leader: mpsc::Receiver<(PeerAddress, HotstuffMessage)>,
-    outbound_messaging: OutboundMessaging<PeerAddress, SqliteMessageLogger>,
-}
-
-impl ConsensusMessageWorker {
-    fn spawn(mut self) {
-        tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    Some((committee, msg)) = self.rx_broadcast.recv() => {
-                        self.outbound_messaging
-                            .broadcast(committee.members(), Message::Consensus(msg))
-                            .await
-                            .ok();
-                    },
-                    Some((dest, msg)) = self.rx_leader.recv() => {
-                        self.outbound_messaging
-                            .send(dest, Message::Consensus(msg))
-                            .await
-                            .ok();
-                    },
-
-                    else => break,
-                }
-            }
-        });
-    }
 }

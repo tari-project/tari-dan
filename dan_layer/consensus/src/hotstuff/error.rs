@@ -10,12 +10,18 @@ use tari_epoch_manager::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_transaction::TransactionId;
 
+use crate::traits::{InboundMessagingError, OutboundMessagingError};
+
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
     #[error("Internal channel send error when {context}")]
     InternalChannelClosed { context: &'static str },
+    #[error("Inbound messaging error: {0}")]
+    InboundMessagingError(#[from] InboundMessagingError),
+    #[error("Outbound messaging error: {0}")]
+    OutboundMessagingError(#[from] OutboundMessagingError),
     #[error("Epoch {epoch} is not active. {details}")]
     EpochNotActive { epoch: Epoch, details: String },
     #[error("Not registered for current epoch {epoch}")]
@@ -96,8 +102,12 @@ pub enum ProposalValidationError {
     NotSafeBlock { proposed_by: String, hash: BlockId },
     #[error("Node proposed by {proposed_by} with hash {hash} is missing foreign index")]
     MissingForeignCounters { proposed_by: String, hash: BlockId },
-    #[error("Node proposed by {proposed_by} with hash {hash} has invalid foreign counters")]
-    InvalidForeignCounters { proposed_by: String, hash: BlockId },
+    #[error("Node proposed by {proposed_by} with hash {hash} has invalid foreign counters: {details}")]
+    InvalidForeignCounters {
+        proposed_by: String,
+        hash: BlockId,
+        details: String,
+    },
     #[error("Node proposed by {proposed_by} with hash {hash} is the genesis block")]
     ProposingGenesisBlock { proposed_by: String, hash: BlockId },
     #[error("Justification block {justify_block} for proposed block {block_description} by {proposed_by} not found")]

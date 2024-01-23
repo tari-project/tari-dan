@@ -38,4 +38,6 @@ pub enum ManifestError {
     UndefinedVariable { name: String },
     #[error("Invalid variable type: {0}")]
     InvalidVariableType(String),
+    #[error("Template alias '{alias}' not defined")]
+    TemplateAliasNotDefined { alias: String },
 }

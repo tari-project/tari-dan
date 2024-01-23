@@ -219,7 +219,7 @@ impl WasmProcess {
         let template_tari_version = module.template_def().tari_version();
 
         if are_versions_compatible(template_tari_version, ENGINE_TARI_VERSION)? {
-            log::info!(target: LOG_TARGET, "The Tari version in the template WASM (\"{}\") is compatible with the one used in the engine", template_tari_version);
+            log::debug!(target: LOG_TARGET, "The Tari version in the template WASM (\"{}\") is compatible with the one used in the engine", template_tari_version);
         } else {
             log::error!(target: LOG_TARGET, "The Tari version in the template WASM (\"{}\") is incompatible with the one used in the engine (\"{}\")", template_tari_version, ENGINE_TARI_VERSION);
             return Err(WasmExecutionError::TemplateVersionMismatch {

@@ -27,7 +27,7 @@ use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress, ResourceAddress, TemplateAddress},
 };
-use tari_transaction_manifest::parse_manifest;
+use tari_transaction_manifest::{parse_manifest, ManifestInstructions};
 
 #[test]
 #[allow(clippy::too_many_lines)]
@@ -52,7 +52,10 @@ fn manifest_smoke_test() {
         ),
         ("xtr_resource".to_string(), SubstateId::Resource(xtr_resource).into()),
     ]);
-    let instructions = parse_manifest(&input, globals).unwrap();
+    let ManifestInstructions {
+        instructions,
+        fee_instructions,
+    } = parse_manifest(&input, globals, Default::default()).unwrap();
 
     let expected = vec![
         Instruction::CallFunction {
@@ -98,4 +101,5 @@ fn manifest_smoke_test() {
     ];
 
     assert_eq!(instructions, expected);
+    assert_eq!(fee_instructions, vec![]);
 }

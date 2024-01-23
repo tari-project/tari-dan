@@ -53,7 +53,7 @@ impl TryFrom<ForeignProposal> for consensus_models::ForeignProposal {
             bucket: Shard::from(value.bucket as u32),
             block_id: deserialize_hex_try_from(&value.block_id)?,
             state: parse_from_string(&value.state)?,
-            mined_at: value.mined_at.map(|mined_at| NodeHeight(mined_at as u64)),
+            proposed_height: value.mined_at.map(|mined_at| NodeHeight(mined_at as u64)),
         })
     }
 }

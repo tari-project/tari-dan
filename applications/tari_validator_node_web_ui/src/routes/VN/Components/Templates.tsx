@@ -161,6 +161,7 @@ function Templates() {
                   sortFunction={sort}
                 />
               </TableCell>
+              <TableCell>Name</TableCell>
               <TableCell>Download URL</TableCell>
               <TableCell style={{ textAlign: "center", width: "210px" }}>
                 <HeadingMenu
@@ -189,9 +190,9 @@ function Templates() {
           </TableHead>
           <TableBody>
             {templates
-              .filter(({ show }) => show === true)
+              .filter(({ show }) => show)
               .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-              .map(({ address, binary_sha, height, url, id }) => (
+              .map(({ address, binary_sha, height, url, id, name }) => (
                 <TableRow key={id}>
                   <DataTableCell>
                     <Link to={`/templates/${toHex(address)}`} state={[address]} style={{ textDecoration: "none" }}>
@@ -199,6 +200,7 @@ function Templates() {
                     </Link>
                     <CopyToClipboard copy={toHex(address)} />
                   </DataTableCell>
+                  <DataTableCell>{name}</DataTableCell>
                   <DataTableCell>
                     {url && (
                       <>
@@ -238,10 +240,10 @@ function Templates() {
                   </DataTableCell>
                 </TableRow>
               ))}
-            {templates.filter(({ show }) => show === true).length === 0 && (
+            {templates.filter(({ show }) => show).length === 0 && (
               <TableRow>
                 <TableCell colSpan={4} style={{ textAlign: "center" }}>
-                  <Fade in={templates.filter(({ show }) => show === true).length === 0} timeout={500}>
+                  <Fade in={templates.filter(({ show }) => show).length === 0} timeout={500}>
                     <Typography variant="h5">No results found</Typography>
                   </Fade>
                 </TableCell>
@@ -261,7 +263,7 @@ function Templates() {
         <TablePagination
           rowsPerPageOptions={[10, 25, 50]}
           component="div"
-          count={templates.filter((template) => template.show === true).length}
+          count={templates.filter((template) => template.show).length}
           rowsPerPage={rowsPerPage}
           page={page}
           onPageChange={handleChangePage}

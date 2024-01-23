@@ -21,7 +21,7 @@ use crate::{
     block_validations::{check_hash_and_height, check_proposed_by_leader, check_quorum_certificate, check_signature},
     hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage},
-    traits::ConsensusSpec,
+    traits::{ConsensusSpec, OutboundMessaging},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::inbound_messages";
@@ -34,7 +34,7 @@ pub struct OnInboundMessage<TConsensusSpec: ConsensusSpec> {
     leader_strategy: TConsensusSpec::LeaderStrategy,
     pacemaker: PaceMakerHandle,
     vote_signing_service: TConsensusSpec::SignatureService,
-    tx_outbound_message: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_msg_ready: mpsc::UnboundedSender<(TConsensusSpec::Addr, HotstuffMessage)>,
     message_buffer: MessageBuffer<TConsensusSpec::Addr>,
 }
@@ -48,7 +48,7 @@ where TConsensusSpec: ConsensusSpec
         leader_strategy: TConsensusSpec::LeaderStrategy,
         pacemaker: PaceMakerHandle,
         vote_signing_service: TConsensusSpec::SignatureService,
-        tx_outbound_message: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        outbound_messaging: TConsensusSpec::OutboundMessaging,
     ) -> Self {
         let (tx_msg_ready, rx_msg_ready) = mpsc::unbounded_channel();
         Self {
@@ -57,14 +57,14 @@ where TConsensusSpec: ConsensusSpec
             leader_strategy,
             pacemaker,
             vote_signing_service,
-            tx_outbound_message,
+            outbound_messaging,
             tx_msg_ready,
             message_buffer: MessageBuffer::new(rx_msg_ready),
         }
     }
 
     pub async fn handle(
-        &self,
+        &mut self,
         current_height: NodeHeight,
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage,
@@ -99,7 +99,7 @@ where TConsensusSpec: ConsensusSpec
         self.message_buffer.clear_buffer();
     }
 
-    async fn check_proposal(&self, block: Block) -> Result<Option<Block>, HotStuffError> {
+    async fn check_proposal(&mut self, block: Block) -> Result<Option<Block>, HotStuffError> {
         check_hash_and_height(&block)?;
         let committee_for_block = self
             .epoch_manager
@@ -112,7 +112,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     async fn process_local_proposal(
-        &self,
+        &mut self,
         current_height: NodeHeight,
         proposal: ProposalMessage,
     ) -> Result<(), HotStuffError> {
@@ -188,7 +188,7 @@ where TConsensusSpec: ConsensusSpec
             })
     }
 
-    async fn handle_missing_transactions(&self, block: Block) -> Result<Option<Block>, HotStuffError> {
+    async fn handle_missing_transactions(&mut self, block: Block) -> Result<Option<Block>, HotStuffError> {
         let (missing_tx_ids, awaiting_execution) = self
             .store
             .with_write_tx(|tx| self.check_for_missing_transactions(tx, &block))?;
@@ -209,15 +209,16 @@ where TConsensusSpec: ConsensusSpec
                 .await?;
 
             if !missing_tx_ids.is_empty() {
-                self.send_message(
-                    &vn.address,
-                    HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
-                        block_id,
-                        epoch,
-                        transactions: missing_tx_ids,
-                    }),
-                )
-                .await;
+                self.outbound_messaging
+                    .send(
+                        vn.address,
+                        HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
+                            block_id,
+                            epoch,
+                            transactions: missing_tx_ids,
+                        }),
+                    )
+                    .await?;
             }
 
             return Ok(None);
@@ -257,15 +258,6 @@ where TConsensusSpec: ConsensusSpec
         tx.missing_transactions_insert(block, &missing_tx_ids, &awaiting_execution)?;
 
         Ok((missing_tx_ids, awaiting_execution))
-    }
-
-    async fn send_message(&self, to: &TConsensusSpec::Addr, message: HotstuffMessage) {
-        if self.tx_outbound_message.send((to.clone(), message)).await.is_err() {
-            debug!(
-                target: LOG_TARGET,
-                "tx_leader in InboundMessageWorker::send_message is closed",
-            );
-        }
     }
 }
 
