@@ -78,7 +78,7 @@ use crate::{
     dry_run::processor::DryRunTransactionProcessor,
     json_rpc::error::internal_error,
     substate_manager::SubstateManager,
-    transaction_manager::TransactionManager,
+    transaction_manager::{error::TransactionManagerError, TransactionManager},
 };
 
 const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
@@ -527,7 +527,17 @@ impl JsonRpcHandlers {
                 .transaction_manager
                 .submit_transaction(request.transaction, request.required_substates)
                 .await
-                .map_err(|e| Self::internal_error(answer_id, e))?;
+                .map_err(|e| match e {
+                    TransactionManagerError::AllValidatorsFailed { .. } => JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            JsonRpcErrorReason::ApplicationError(400),
+                            format!("All validators failed: {}", e),
+                            json::Value::Null,
+                        ),
+                    ),
+                    e => Self::internal_error(answer_id, e),
+                })?;
 
             Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
                 result: IndexerTransactionFinalizedResult::Pending,
