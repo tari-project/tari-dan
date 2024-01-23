@@ -187,7 +187,7 @@ impl Transaction {
                 Instruction::CallFunction { args, .. } => {
                     for arg in args.iter().filter_map(|a| a.as_literal_bytes()) {
                         let value = IndexedValue::from_raw(arg)?;
-                        substates.extend(value.referenced_substates());
+                        substates.extend(value.referenced_substates().filter(|id| !id.is_virtual()));
                     }
                 },
                 Instruction::CallMethod {
@@ -198,7 +198,7 @@ impl Transaction {
                     substates.insert(SubstateId::Component(*component_address));
                     for arg in args.iter().filter_map(|a| a.as_literal_bytes()) {
                         let value = IndexedValue::from_raw(arg)?;
-                        substates.extend(value.referenced_substates());
+                        substates.extend(value.referenced_substates().filter(|id| !id.is_virtual()));
                     }
                 },
                 Instruction::ClaimBurn { claim } => {
