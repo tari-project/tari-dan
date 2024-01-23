@@ -27,7 +27,7 @@ diesel::table! {
         bucket -> Integer,
         block_id -> Text,
         state -> Text,
-        mined_at -> Nullable<BigInt>,
+        proposed_height -> Nullable<BigInt>,
         created_at -> Timestamp,
     }
 }

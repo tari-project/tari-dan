@@ -146,7 +146,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
             parked_blocks::commands.eq(serialize_json(block.commands())?),
             parked_blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             parked_blocks::justify.eq(serialize_json(block.justify())?),
-            parked_blocks::foreign_indexes.eq(serialize_json(block.get_foreign_indexes())?),
+            parked_blocks::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
         );
 
         diesel::insert_into(parked_blocks::table)
@@ -192,7 +192,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             blocks::is_dummy.eq(block.is_dummy()),
             blocks::is_processed.eq(block.is_processed()),
             blocks::signature.eq(block.get_signature().map(serialize_json).transpose()?),
-            blocks::foreign_indexes.eq(serialize_json(block.get_foreign_indexes())?),
+            blocks::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
         );
 
         diesel::insert_into(blocks::table)
@@ -577,7 +577,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32),
             foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)),
             foreign_proposals::state.eq(foreign_proposal.state.to_string()),
-            foreign_proposals::mined_at.eq(foreign_proposal.mined_at.map(|h| h.as_u64() as i64)),
+            foreign_proposals::proposed_height.eq(foreign_proposal.proposed_height.map(|h| h.as_u64() as i64)),
         );
 
         diesel::insert_into(foreign_proposals::table)

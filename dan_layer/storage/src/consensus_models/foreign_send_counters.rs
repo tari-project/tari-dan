@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use tari_dan_common_types::shard::Shard;
+use tari_dan_common_types::{optional::Optional, shard::Shard};
 
 use super::BlockId;
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
@@ -26,8 +26,20 @@ impl ForeignSendCounters {
         }
     }
 
-    pub fn increment_counter(&mut self, bucket: Shard) -> u64 {
-        *self.counters.entry(bucket).and_modify(|v| *v += 1).or_insert(1)
+    pub fn increment_counter(&mut self, shard: Shard) -> u64 {
+        *self.counters.entry(shard).and_modify(|v| *v += 1).or_insert(1)
+    }
+
+    pub fn get_count(&self, shard: Shard) -> u64 {
+        self.counters.get(&shard).copied().unwrap_or_default()
+    }
+
+    pub fn len(&self) -> usize {
+        self.counters.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.counters.is_empty()
     }
 }
 
@@ -41,10 +53,10 @@ impl ForeignSendCounters {
         Ok(())
     }
 
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn get_or_default<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &mut TTx,
         block_id: &BlockId,
     ) -> Result<Self, StorageError> {
-        tx.foreign_send_counters_get(block_id)
+        Ok(tx.foreign_send_counters_get(block_id).optional()?.unwrap_or_default())
     }
 }

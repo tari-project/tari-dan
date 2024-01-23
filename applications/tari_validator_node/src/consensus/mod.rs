@@ -2,7 +2,7 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker};
-use tari_dan_storage::consensus_models::{ForeignReceiveCounters, TransactionPool};
+use tari_dan_storage::consensus_models::TransactionPool;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -45,7 +45,6 @@ pub async fn spawn(
     inbound_messaging: ConsensusInboundMessaging<SqliteMessageLogger>,
     outbound_messaging: ConsensusOutboundMessaging<SqliteMessageLogger>,
     client_factory: TariValidatorNodeRpcClientFactory,
-    foreign_receive_counter: ForeignReceiveCounters,
     shutdown_signal: ShutdownSignal,
 ) -> (
     JoinHandle<Result<(), anyhow::Error>>,
@@ -74,7 +73,6 @@ pub async fn spawn(
         transaction_pool,
         tx_hotstuff_events.clone(),
         tx_mempool,
-        foreign_receive_counter,
         shutdown_signal.clone(),
     );
 
