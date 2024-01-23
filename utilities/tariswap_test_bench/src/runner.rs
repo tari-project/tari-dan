@@ -78,8 +78,7 @@ impl Runner {
             };
 
             self.stats.add_execution_time(tx.execution_time.unwrap());
-            // TODO: record and get timestamp of when the transaction was finalized
-            // self.stats.add_time_to_finalize(finalize_time);
+            self.stats.add_time_to_finalize(tx.finalized_time.unwrap());
 
             if !finalize.is_full_accept() {
                 return Err(anyhow::anyhow!(
@@ -99,7 +98,10 @@ impl Runner {
         info!("Stats:");
         info!("  - Num transactions: {}", self.stats.num_transactions());
         info!("  - Total execution time: {:.2?}", self.stats.total_execution_time());
-        // info!("  - Total time to finalize: {:.2?}", self.stats.total_time_to_finalize());
+        info!(
+            "  - Total time to finalize: {:.2?}",
+            self.stats.total_time_to_finalize()
+        );
         info!("  - Num substates created: {}", self.stats.num_substates_created());
     }
 }
