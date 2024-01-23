@@ -119,6 +119,8 @@ impl TransactionRecord {
     }
 
     pub fn into_final_result(self) -> Option<ExecuteResult> {
+        // TODO: This is hacky, result should be broken up into execution result, validation (mempool) result, finality
+        //       result. These results are independent of each other.
         self.final_decision().and_then(|d| {
             if d.is_commit() {
                 self.result

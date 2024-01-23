@@ -138,7 +138,6 @@ pub struct SubmitTransactionResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DryRunTransactionFinalizeResult {
-    // TODO: we should not return the whole state but only the addresses and perhaps a hash of the state
     pub decision: QuorumDecision,
     pub finalize: FinalizeResult,
     pub fee_breakdown: Option<FeeCostBreakdown>,

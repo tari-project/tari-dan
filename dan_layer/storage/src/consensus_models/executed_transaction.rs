@@ -180,7 +180,7 @@ impl ExecutedTransaction {
 
     pub fn set_final_decision(&mut self, decision: Decision) -> &mut Self {
         self.final_decision = Some(decision);
-        if decision.is_abort() {
+        if decision.is_abort() && self.abort_details.is_none() {
             self.abort_details = Some(
                 self.result
                     .finalize

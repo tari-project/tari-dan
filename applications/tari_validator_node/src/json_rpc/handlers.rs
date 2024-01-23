@@ -318,7 +318,7 @@ impl JsonRpcHandlers {
             final_decision: transaction.final_decision(),
             finalized_time: transaction.finalized_time(),
             execution_time: transaction.execution_time(),
-            result: transaction.result,
+            result: transaction.into_final_result(),
         };
         Ok(JsonRpcResponse::success(answer_id, response))
     }
