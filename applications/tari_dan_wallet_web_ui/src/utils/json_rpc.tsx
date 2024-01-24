@@ -185,3 +185,14 @@ export const accountNFTsList = (offset: number, limit: number) => jsonRpc("nfts.
 // settings
 export const getSettings = () => jsonRpc("settings.get", []);
 export const setSettings = (settings: any) => jsonRpc("settings.set", settings);
+
+// validators
+export const getFeeSummary = (validatorPublicKey: string, minEpoch: number, maxEpoch: number) =>
+  jsonRpc("validators.get_fee_summary", [validatorPublicKey, minEpoch, maxEpoch]);
+export const claimFees = (
+  account: string,
+  maxFee: number,
+  validatorPublicKey: string,
+  epoch: number,
+  isDryRun: boolean,
+) => jsonRpc("validators.claim_fees", [account, maxFee, validatorPublicKey, epoch, isDryRun]);

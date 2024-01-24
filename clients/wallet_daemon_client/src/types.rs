@@ -562,6 +562,7 @@ pub struct ClaimValidatorFeesRequest {
     pub max_fee: Option<Amount>,
     pub validator_public_key: PublicKey,
     pub epoch: Epoch,
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

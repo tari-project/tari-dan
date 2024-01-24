@@ -24,7 +24,7 @@ use tari_dan_app_utilities::transaction_executor::TransactionProcessorError;
 use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_engine_types::substate::SubstateId;
 use tari_epoch_manager::EpochManagerError;
-use tari_indexer_lib::transaction_autofiller::TransactionAutofillerError;
+use tari_indexer_lib::{error::IndexerError, transaction_autofiller::TransactionAutofillerError};
 use tari_rpc_framework::RpcStatus;
 use thiserror::Error;
 
@@ -51,4 +51,6 @@ pub enum DryRunTransactionProcessorError {
         err_count: usize,
         committee_size: usize,
     },
+    #[error("Indexer error : {0}")]
+    IndexerError(#[from] IndexerError),
 }

@@ -27,6 +27,7 @@ import { useAccountsCreateFreeTestCoins } from "../../../api/hooks/useAccounts";
 import ClaimBurn from "./ClaimBurn";
 import useAccountStore from "../../../store/accountStore";
 import SendMoney from "./SendMoney";
+import ClaimFees from "./ClaimFees";
 
 function ActionMenu() {
   const { mutate } = useAccountsCreateFreeTestCoins();
@@ -50,6 +51,7 @@ function ActionMenu() {
       }}
     >
       <SendMoney />
+      <ClaimFees />
       <Button variant="outlined" onClick={onClaimFreeCoins}>
         Claim Free Testnet Coins
       </Button>
