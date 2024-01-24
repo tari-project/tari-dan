@@ -105,6 +105,7 @@ pub async fn claim_fees(
     account_name: String,
     validator_name: String,
     epoch: u64,
+    dry_run: bool,
 ) -> Result<ClaimValidatorFeesResponse, WalletDaemonClientError> {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
@@ -115,6 +116,7 @@ pub async fn claim_fees(
         max_fee: None,
         validator_public_key: vn.public_key.clone(),
         epoch: Epoch(epoch),
+        dry_run,
     };
 
     client.claim_validator_fees(request).await
