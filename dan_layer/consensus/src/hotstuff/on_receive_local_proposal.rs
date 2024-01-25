@@ -126,9 +126,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
 
         let maybe_high_qc_and_block = self.store.with_write_tx(|tx| {
-            let Some(valid_block) =
-                self.validate_block(tx.deref_mut(), block, &local_committee, &local_committee_shard)?
-            else {
+            let Some(valid_block) = self.validate_block(tx, block, &local_committee, &local_committee_shard)? else {
                 return Ok(None);
             };
 
@@ -164,7 +162,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
     fn validate_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
@@ -261,12 +259,12 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
     #[allow(clippy::too_many_lines)]
     fn validate_local_proposed_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         candidate_block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
     ) -> Result<ValidBlock, HotStuffError> {
-        if Block::has_been_processed(tx, candidate_block.id())? {
+        if Block::has_been_processed(tx.deref_mut(), candidate_block.id())? {
             return Err(ProposalValidationError::BlockAlreadyProcessed {
                 block_id: *candidate_block.id(),
                 height: candidate_block.height(),
@@ -275,7 +273,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         }
 
         // Check that details included in the justify match previously added blocks
-        let Some(justify_block) = candidate_block.justify().get_block(tx).optional()? else {
+        let Some(justify_block) = candidate_block.justify().get_block(tx.deref_mut()).optional()? else {
             // This will trigger a sync
             return Err(ProposalValidationError::JustifyBlockNotFound {
                 proposed_by: candidate_block.proposed_by().to_string(),
@@ -364,7 +362,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         // Now that we have all dummy blocks (if any) in place, we can check if the candidate block is safe.
         // Specifically, it should extend the locked block via the dummy blocks.
-        if !candidate_block.is_safe(tx)? {
+        if !candidate_block.is_safe(tx.deref_mut())? {
             return Err(ProposalValidationError::NotSafeBlock {
                 proposed_by: candidate_block.proposed_by().to_string(),
                 hash: *candidate_block.id(),
