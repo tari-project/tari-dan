@@ -87,7 +87,7 @@
         "x": 0,
         "y": 0
       },
-      "id": 1,
+      "id": 10,
       "options": {
         "legend": {
           "calcs": [],
@@ -108,7 +108,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(tari_consensus_messages_received{public_key=\"c6886d1ec5302aa5f9bcadffad3f9e1cbbd7c8b5637253fb12f2a7e4cb331372\"}[$__rate_interval])",
+          "expr": "rate(tari_consensus_transaction_ready_for_consensus[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
@@ -118,7 +118,7 @@
           "useBackend": false
         }
       ],
-      "title": "Message rate",
+      "title": "Consensus: Transaction Ready",
       "type": "timeseries"
     },
     {
@@ -192,7 +192,7 @@
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": false
         },
         "tooltip": {
           "mode": "single",
@@ -207,7 +207,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "tari_consensus_num_commands",
+          "expr": "tari_consensus_num_commands>0",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
@@ -285,7 +285,7 @@
         "x": 0,
         "y": 8
       },
-      "id": 6,
+      "id": 9,
       "options": {
         "legend": {
           "calcs": [],
@@ -306,7 +306,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(tari_consensus_errors[$__rate_interval])",
+          "expr": "rate(tari_mempool_transactions_execute_time_bucket[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
@@ -316,7 +316,7 @@
           "useBackend": false
         }
       ],
-      "title": "Error rate",
+      "title": "Mempool: Transactions executed time",
       "type": "timeseries"
     },
     {
@@ -483,7 +483,7 @@
         "x": 0,
         "y": 16
       },
-      "id": 3,
+      "id": 8,
       "options": {
         "legend": {
           "calcs": [],
@@ -504,9 +504,9 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "tari_consensus_leader_failures",
+          "expr": "rate(tari_mempool_transactions_received[$__rate_interval])",
           "fullMetaSearch": false,
-          "includeNullMetadata": true,
+          "includeNullMetadata": false,
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -514,7 +514,7 @@
           "useBackend": false
         }
       ],
-      "title": "Leader failures",
+      "title": "Mempool: Transactions Received",
       "type": "timeseries"
     },
     {
@@ -678,6 +678,105 @@
       "gridPos": {
         "h": 8,
         "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "abcdd9c5-f99a-4dda-a1d9-a4da50ff893a"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "rate(tari_consensus_messages_received{public_key=\"c6886d1ec5302aa5f9bcadffad3f9e1cbbd7c8b5637253fb12f2a7e4cb331372\"}[$__rate_interval])",
+          "fullMetaSearch": false,
+          "includeNullMetadata": false,
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Message rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "abcdd9c5-f99a-4dda-a1d9-a4da50ff893a"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
         "x": 12,
         "y": 24
       },
@@ -714,6 +813,204 @@
       ],
       "title": "Transactions Finalize Rate",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "abcdd9c5-f99a-4dda-a1d9-a4da50ff893a"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "abcdd9c5-f99a-4dda-a1d9-a4da50ff893a"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "rate(tari_consensus_errors[$__rate_interval])",
+          "fullMetaSearch": false,
+          "includeNullMetadata": false,
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Error rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "abcdd9c5-f99a-4dda-a1d9-a4da50ff893a"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "abcdd9c5-f99a-4dda-a1d9-a4da50ff893a"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "tari_consensus_leader_failures",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Leader failures",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -723,13 +1020,13 @@
     "list": []
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "VN1",
   "uid": "c6e9ea63-94c6-4524-863e-3e31b5cd776e",
-  "version": 5,
+  "version": 6,
   "weekStart": ""
 }
