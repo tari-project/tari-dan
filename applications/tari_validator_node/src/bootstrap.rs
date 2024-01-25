@@ -239,7 +239,7 @@ pub async fn spawn_services(
         ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
 
     #[cfg(feature = "metrics")]
-    let metrics = PrometheusConsensusMetrics::new(metrics_registry).into();
+    let metrics = PrometheusConsensusMetrics::new(state_store.clone(), metrics_registry).into();
     #[cfg(not(feature = "metrics"))]
     let metrics = None.into();
 

@@ -1,15 +1,23 @@
+use std::{collections::HashMap, str::FromStr};
+
+use prometheus::core::Collector;
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 use prometheus::{IntCounter, IntGauge, IntGaugeVec, Opts, Registry};
 use tari_consensus::{hotstuff::HotStuffError, messages::HotstuffMessage, traits::hooks::ConsensusHooks};
-use tari_dan_common_types::NodeHeight;
-use tari_dan_storage::consensus_models::{Decision, QuorumDecision, TransactionAtom, ValidBlock};
+use tari_dan_common_types::{NodeHeight, PeerAddress};
+use tari_dan_storage::{
+    consensus_models::{Decision, QuorumDecision, TransactionAtom, TransactionPool, ValidBlock},
+    StateStore,
+};
+use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::TransactionId;
 
-use crate::metrics::CollectorRegister;
+use crate::metrics::{CollectorRegister, LabelledCollector};
 
 #[derive(Debug, Clone)]
-pub struct PrometheusConsensusMetrics {
+pub struct PrometheusConsensusMetrics<S = SqliteStateStore<PeerAddress>> {
+    state_store: S,
     local_blocks_received: IntCounter,
     blocks_accepted: IntCounter,
     blocks_rejected: IntCounter,
@@ -25,14 +33,16 @@ pub struct PrometheusConsensusMetrics {
     pacemaker_leader_failures: IntCounter,
     needs_sync: IntCounter,
 
+    transactions_pool_size: IntGauge,
     transactions_ready_for_consensus: IntCounter,
     transactions_finalized_committed: IntCounter,
     transactions_finalized_aborted: IntCounter,
 }
 
-impl PrometheusConsensusMetrics {
-    pub fn new(registry: &Registry) -> Self {
+impl<S: StateStore> PrometheusConsensusMetrics<S> {
+    pub fn new(state_store: S, registry: &Registry) -> Self {
         Self {
+            state_store,
             local_blocks_received: IntCounter::new("consensus_blocks_received", "Number of blocks added")
                 .unwrap()
                 .register_at(registry),
@@ -40,6 +50,7 @@ impl PrometheusConsensusMetrics {
                 .unwrap()
                 .register_at(registry),
             commands_count: IntGaugeVec::new(Opts::new("consensus_num_commands", "Number of commands added"), &[
+                "block_height",
                 "block_id",
             ])
             .unwrap()
@@ -86,18 +97,49 @@ impl PrometheusConsensusMetrics {
             )
             .unwrap()
             .register_at(registry),
+            transactions_pool_size: IntGauge::new("consensus_transactions_pool_size", "Number of transactions in pool")
+                .unwrap()
+                .register_at(registry),
+        }
+    }
+
+    fn clean_up_commands_count(&self, prune_height: u64) {
+        let metrics = self.commands_count.collect();
+        let mut labels_to_remove = HashMap::new();
+
+        for metric_fam in &metrics {
+            labels_to_remove.clear();
+            for m in metric_fam.get_metric() {
+                let labels = m.get_label();
+                if let Some(l) = labels.iter().find(|l| l.get_name() == "block_height") {
+                    if u64::from_str(l.get_value()).unwrap_or(0) < prune_height {
+                        labels_to_remove.extend(labels.iter().map(|l| (l.get_name(), l.get_value())));
+                    }
+                }
+            }
+
+            if labels_to_remove.is_empty() {
+                continue;
+            }
+            self.commands_count.remove(&labels_to_remove).unwrap();
         }
     }
 }
 
-impl ConsensusHooks for PrometheusConsensusMetrics {
+impl<S: StateStore> ConsensusHooks for PrometheusConsensusMetrics<S> {
     fn on_local_block_decide(&mut self, block: &ValidBlock, decision: Option<QuorumDecision>) {
         self.local_blocks_received.inc();
         match decision {
             Some(QuorumDecision::Accept) => {
-                self.commands_count
-                    .with_label_values(&[&block.block().id().to_string()])
-                    .set(block.block().commands().len() as i64);
+                if !block.block().commands().is_empty() {
+                    // Cleanup command count
+                    let prune_height = block.height().as_u64().saturating_sub(100);
+                    self.clean_up_commands_count(prune_height);
+
+                    self.commands_count
+                        .with_two_labels(&block.height().as_u64(), block.id())
+                        .set(block.block().commands().len() as i64);
+                }
                 self.blocks_accepted.inc();
             },
             Some(QuorumDecision::Reject) | None => {
@@ -124,6 +166,18 @@ impl ConsensusHooks for PrometheusConsensusMetrics {
 
     fn on_leader_timeout(&mut self, _new_height: NodeHeight) {
         self.pacemaker_leader_failures.inc()
+    }
+
+    fn on_beat(&mut self) {
+        let Some(count) = self
+            .state_store
+            .with_read_tx(|tx| TransactionPool::<S>::new().count(tx))
+            .ok()
+        else {
+            return;
+        };
+
+        self.transactions_pool_size.set(count as i64);
     }
 
     fn on_needs_sync(&mut self, _local_height: NodeHeight, _remote_qc_height: NodeHeight) {

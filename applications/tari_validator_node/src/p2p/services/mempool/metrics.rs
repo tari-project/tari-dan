@@ -62,7 +62,7 @@ impl PrometheusMempoolMetrics {
         match execution_result {
             Ok(transaction) => {
                 self.transactions_execute_time
-                    .observe(transaction.execution_time().as_secs_f64());
+                    .observe(transaction.execution_time().as_millis() as f64);
             },
             Err(_) => {
                 self.transaction_execute_error.inc();

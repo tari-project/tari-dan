@@ -15,6 +15,7 @@ pub trait ConsensusHooks {
     fn on_error(&mut self, err: &HotStuffError);
     fn on_pacemaker_height_changed(&mut self, height: NodeHeight);
     fn on_leader_timeout(&mut self, new_height: NodeHeight);
+    fn on_beat(&mut self);
 
     fn on_needs_sync(&mut self, local_height: NodeHeight, remote_qc_height: NodeHeight);
 
@@ -74,6 +75,12 @@ impl<T: ConsensusHooks> ConsensusHooks for OptionalHooks<T> {
         }
     }
 
+    fn on_beat(&mut self) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.on_beat();
+        }
+    }
+
     fn on_needs_sync(&mut self, local_height: NodeHeight, remote_qc_height: NodeHeight) {
         if let Some(inner) = self.inner.as_mut() {
             inner.on_needs_sync(local_height, remote_qc_height);
@@ -114,6 +121,8 @@ impl ConsensusHooks for NoopHooks {
     fn on_pacemaker_height_changed(&mut self, _: NodeHeight) {}
 
     fn on_leader_timeout(&mut self, _new_height: NodeHeight) {}
+
+    fn on_beat(&mut self) {}
 
     fn on_needs_sync(&mut self, _local_height: NodeHeight, _remote_qc_height: NodeHeight) {}
 

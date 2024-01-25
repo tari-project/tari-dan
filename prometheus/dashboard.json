@@ -228,39 +228,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "mode": "thresholds"
           },
           "mappings": [],
           "thresholds": {
@@ -281,23 +249,27 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 4,
         "x": 0,
         "y": 8
       },
-      "id": 9,
+      "id": 12,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "textMode": "auto",
+        "wideLayout": true
       },
+      "pluginVersion": "10.2.3",
       "targets": [
         {
           "datasource": {
@@ -306,7 +278,80 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "rate(tari_mempool_transactions_execute_time_bucket[$__rate_interval])",
+          "expr": "tari_consensus_transactions_pool_size",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Pool size",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "abcdd9c5-f99a-4dda-a1d9-a4da50ff893a"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 4,
+        "y": 8
+      },
+      "id": 11,
+      "options": {
+        "minVizHeight": 200,
+        "minVizWidth": 200,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "pluginVersion": "10.2.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "abcdd9c5-f99a-4dda-a1d9-a4da50ff893a"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "tari_mempool_transactions_execute_time_sum / tari_mempool_transactions_execute_time_count",
+          "format": "time_series",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
@@ -316,8 +361,8 @@
           "useBackend": false
         }
       ],
-      "title": "Mempool: Transactions executed time",
-      "type": "timeseries"
+      "title": "Mempool: Avg Execution time",
+      "type": "gauge"
     },
     {
       "datasource": {
@@ -514,7 +559,7 @@
           "useBackend": false
         }
       ],
-      "title": "Mempool: Transactions Received",
+      "title": "Mempool: Transactions Rx Rate",
       "type": "timeseries"
     },
     {
@@ -999,9 +1044,9 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "tari_consensus_leader_failures",
+          "expr": "rate(tari_consensus_leader_failures[$__rate_interval])",
           "fullMetaSearch": false,
-          "includeNullMetadata": true,
+          "includeNullMetadata": false,
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -1020,13 +1065,13 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "VN1",
   "uid": "c6e9ea63-94c6-4524-863e-3e31b5cd776e",
-  "version": 6,
+  "version": 10,
   "weekStart": ""
 }

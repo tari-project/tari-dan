@@ -266,6 +266,7 @@ where TConsensusSpec: ConsensusSpec
                 },
 
                 maybe_leaf_block = on_force_beat.wait() => {
+                    self.hooks.on_beat();
                     if let Err(e) = self.propose_if_leader(maybe_leaf_block).await {
                         self.on_failure("propose_if_leader", &e).await;
                         return Err(e);
@@ -378,6 +379,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     async fn on_beat(&mut self) -> Result<(), HotStuffError> {
+        self.hooks.on_beat();
         if !self
             .state_store
             .with_read_tx(|tx| self.transaction_pool.has_uncommitted_transactions(tx))?
