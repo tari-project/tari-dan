@@ -6,6 +6,8 @@ use std::{borrow::Borrow, cmp};
 use rand::{rngs::OsRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{shard::Shard, SubstateAddress};
 
@@ -156,6 +158,7 @@ impl<TAddr: PartialEq> FromIterator<Committee<TAddr>> for Committee<TAddr> {
 
 /// Represents a "slice" of the 256-bit shard space
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct CommitteeShard {
     num_committees: u32,
     num_members: u32,

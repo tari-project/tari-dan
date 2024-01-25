@@ -11,6 +11,8 @@ use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::models::Amount;
 use tari_transaction::Transaction;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletTransaction {
@@ -27,6 +29,7 @@ pub struct WalletTransaction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum TransactionStatus {
     #[default]
     New,

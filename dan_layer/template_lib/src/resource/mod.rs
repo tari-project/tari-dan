@@ -29,9 +29,12 @@ use std::fmt::Display;
 pub use builder::*;
 mod manager;
 pub use manager::*;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 /// Represents every possible type of resource in the Tari network
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum ResourceType {
     /// Fungible tokens do not have individual identity, making them interchangeable. E.g. monetary units, liquidity
     /// pool tokens, tokenized shares or commodities, etc.

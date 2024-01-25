@@ -23,6 +23,8 @@ use tari_dan_common_types::{
 };
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use super::{ForeignProposal, ForeignSendCounters, QuorumCertificate, ValidatorSchnorrSignature};
 use crate::{
@@ -48,6 +50,7 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::storage::consensus_models::block";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Block {
     // Header
     id: BlockId,
@@ -55,10 +58,12 @@ pub struct Block {
     justify: QuorumCertificate,
     height: NodeHeight,
     epoch: Epoch,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     proposed_by: PublicKey,
     total_leader_fee: u64,
 
     // Body
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     merkle_root: FixedHash,
     // BTreeSet is used for the deterministic block hash, that is, transactions are always ordered by TransactionId.
     commands: BTreeSet<Command>,
@@ -72,8 +77,10 @@ pub struct Block {
     /// Counter for each foreign shard for reliable broadcast.
     foreign_indexes: IndexMap<Shard, u64>,
     /// Timestamp when was this stored.
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     stored_at: Option<PrimitiveDateTime>,
     /// Signature of block by the proposer.
+    #[cfg_attr(feature = "ts", ts(type = "{public_nonce : string, signature: string} | null"))]
     signature: Option<ValidatorSchnorrSignature>,
 }
 
@@ -693,7 +700,12 @@ impl Display for Block {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct BlockId(#[serde(with = "serde_with::hex")] FixedHash);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct BlockId(
+    #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    FixedHash,
+);
 
 impl BlockId {
     pub const fn genesis() -> Self {

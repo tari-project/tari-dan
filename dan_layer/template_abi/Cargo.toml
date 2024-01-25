@@ -9,11 +9,16 @@ license.workspace = true
 
 [dependencies]
 tari_bor = { workspace = true, default-features = false }
-serde = { workspace = true, default-features = false, features = ["alloc", "derive"] }
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+] }
 hashbrown = { workspace = true, optional = true }
+ts-rs = { workspace = true, optional = true }
 
 [features]
 default = ["std"]
 std = ["tari_bor/std"]
 # TODO: look into how this is done properly
 alloc = ["hashbrown"]
+ts = ["ts-rs"]

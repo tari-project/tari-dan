@@ -4,10 +4,13 @@
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tari_bor::{decode_exact, BorError};
 use tari_template_lib::prelude::Metadata;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::serde_with;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct NonFungibleContainer(Option<NonFungible>);
 
 impl NonFungibleContainer {
@@ -37,10 +40,13 @@ impl NonFungibleContainer {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct NonFungible {
     #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     data: Vec<u8>,
     #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     mutable_data: Vec<u8>,
 }
 

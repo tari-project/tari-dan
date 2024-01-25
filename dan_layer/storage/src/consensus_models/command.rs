@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use tari_dan_common_types::SubstateAddress;
 use tari_engine_types::lock::LockFlag;
 use tari_transaction::TransactionId;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use super::ForeignProposal;
 use crate::{
@@ -20,6 +22,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Evidence {
     evidence: IndexMap<SubstateAddress, ShardEvidence>,
 }
@@ -98,6 +101,7 @@ impl Extend<(SubstateAddress, ShardEvidence)> for Evidence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ShardEvidence {
     pub qc_ids: IndexSet<QcId>,
     pub lock: LockFlag,
@@ -122,6 +126,7 @@ impl ShardEvidence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TransactionAtom {
     pub id: TransactionId,
     pub decision: Decision,
@@ -154,6 +159,7 @@ impl Display for TransactionAtom {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum Command {
     /// Command to prepare a transaction.
     Prepare(TransactionAtom),

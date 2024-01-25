@@ -26,8 +26,10 @@ lazy_static = { workspace = true }
 serde = { workspace = true, default-features = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+ts-rs = { workspace = true, optional = true }
 
 [features]
 default = ["debugging"]
 # Includes the ability to create free test coins
 debugging = []
+ts = ["ts-rs"]

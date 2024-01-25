@@ -13,7 +13,9 @@ minotari_app_utilities = { workspace = true }
 minotari_wallet_grpc_client = { workspace = true }
 tari_common = { workspace = true }
 tari_common_types = { workspace = true }
-tari_core = { workspace = true, default-features = false, features = ["transactions"] }
+tari_core = { workspace = true, default-features = false, features = [
+    "transactions",
+] }
 tari_crypto = { workspace = true }
 tari_validator_node_rpc = { workspace = true }
 tari_dan_app_utilities = { workspace = true }
@@ -86,3 +88,6 @@ ignored = [
     # Want to enable some log4rs features
     "log4rs",
 ]
+
+[features]
+ts = [] # this is just for the build script to skip the build

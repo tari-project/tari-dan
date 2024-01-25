@@ -20,6 +20,8 @@ use tari_dan_common_types::{
     NodeHeight,
 };
 use tari_mmr::MergedBalancedBinaryMerkleProof;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     consensus_models::{Block, BlockId, HighQc, LastVoted, LeafBlock, QuorumDecision, ValidatorSignature},
@@ -31,14 +33,17 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::storage::quorum_certificate";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct QuorumCertificate {
     qc_id: QcId,
     block_id: BlockId,
     block_height: NodeHeight,
     epoch: Epoch,
     signatures: Vec<ValidatorSignature>,
+    #[cfg_attr(feature = "ts", ts(type = "any"))]
     merged_proof: MergedValidatorNodeMerkleProof,
     #[serde(with = "serde_with::hex::vec")]
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     leaf_hashes: Vec<FixedHash>,
     decision: QuorumDecision,
 }
@@ -248,7 +253,12 @@ impl Display for QuorumCertificate {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct QcId(#[serde(with = "serde_with::hex")] FixedHash);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct QcId(
+    #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    FixedHash,
+);
 
 impl QcId {
     pub const fn genesis() -> Self {

@@ -16,6 +16,8 @@ use tari_engine_types::{
     lock::LockFlag,
 };
 use tari_transaction::{Transaction, TransactionId};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     consensus_models::{Decision, Evidence, ShardEvidence, TransactionAtom, TransactionRecord},
@@ -25,12 +27,15 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
     resulting_outputs: Vec<SubstateAddress>,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     execution_time: Duration,
     final_decision: Option<Decision>,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     finalized_time: Option<Duration>,
     abort_details: Option<String>,
 }

@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_transaction::{Transaction, TransactionId};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     consensus_models::{
@@ -370,6 +372,7 @@ pub trait StateStoreWriteTransaction {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum Ordering {
     Ascending,
     Descending,

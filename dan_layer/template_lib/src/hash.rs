@@ -30,11 +30,14 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 /// Representation of a 32-byte hash value
 #[serde_as]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Hash(#[serde_as(as = "Bytes")] [u8; 32]);
 
 impl Hash {

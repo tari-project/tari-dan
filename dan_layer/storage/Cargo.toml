@@ -27,3 +27,7 @@ rand = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true, default-features = true }
 time = { workspace = true, features = ["serde"] }
+ts-rs = { workspace = true, optional = true }
+
+[features]
+ts = ["ts-rs"]

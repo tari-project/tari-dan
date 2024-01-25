@@ -21,6 +21,8 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::rust::{boxed::Box, string::String, vec::Vec};
 
@@ -83,6 +85,7 @@ pub struct ArgDef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum Type {
     #[default]
     Unit,

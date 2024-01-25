@@ -70,3 +70,6 @@ ignored = [
     # Want to enable some log4rs features
     "log4rs",
 ]
+
+[features]
+ts = [] # this is just for the build script to skip the build
