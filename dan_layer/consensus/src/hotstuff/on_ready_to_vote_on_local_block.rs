@@ -915,16 +915,12 @@ where TConsensusSpec: ConsensusSpec
         locked: &LockedBlock,
         block: &Block,
     ) -> Result<(), HotStuffError> {
-        // if locked.height < block.height() {
         info!(
             target: LOG_TARGET,
             "🔒️ LOCKED BLOCK: {} {}",
             block.height(),
             block.id()
         );
-
-        // let parent = block.get_parent(tx.deref_mut())?;
-        // self.on_lock_block(tx, locked, &parent)?;
 
         for foreign_proposal in block.all_foreign_proposals() {
             foreign_proposal.upsert(tx)?;
@@ -938,7 +934,7 @@ where TConsensusSpec: ConsensusSpec
             &block.as_locked_block(),
             block.all_transaction_ids(),
         )?;
-        // }
+
         Ok(())
     }
 
@@ -1000,7 +996,7 @@ where TConsensusSpec: ConsensusSpec
                     total_transaction_fee += tx_rec.transaction().transaction_fee;
                     total_fee_due += t.leader_fee;
 
-                    let mut executed = t.get_transaction(tx.deref_mut())?;
+                    let mut executed = t.get_executed_transaction(tx.deref_mut())?;
                     // Commit the transaction substate changes.
                     if t.decision.is_commit() {
                         if let Some(reject_reason) = executed.result().finalize.reject() {

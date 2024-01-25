@@ -31,7 +31,14 @@ use tokio::{sync::mpsc, task, task::JoinHandle};
 use crate::{
     consensus::ConsensusHandle,
     p2p::services::{
-        mempool::{handle::MempoolHandle, service::MempoolService, MempoolError, SubstateResolver, Validator},
+        mempool::{
+            handle::MempoolHandle,
+            metrics::PrometheusMempoolMetrics,
+            service::MempoolService,
+            MempoolError,
+            SubstateResolver,
+            Validator,
+        },
         messaging::Gossip,
     },
     substate_resolver::SubstateResolverError,
@@ -48,6 +55,7 @@ pub fn spawn<TExecutor, TValidator, TExecutedValidator, TSubstateResolver>(
     state_store: SqliteStateStore<PeerAddress>,
     rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
     consensus_handle: ConsensusHandle,
+    metrics_registry: &prometheus::Registry,
 ) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
 where
     TValidator: Validator<Transaction, Error = MempoolError> + Send + Sync + 'static,
@@ -59,6 +67,7 @@ where
     // running on a single task and so there is no benefit to buffering multiple requests.
     let (tx_mempool_request, rx_mempool_request) = mpsc::channel(1);
 
+    let metrics = PrometheusMempoolMetrics::new(metrics_registry);
     let mempool = MempoolService::new(
         rx_mempool_request,
         gossip,
@@ -71,6 +80,7 @@ where
         state_store,
         rx_consensus_to_mempool,
         consensus_handle,
+        metrics,
     );
     let handle = MempoolHandle::new(tx_mempool_request);
 

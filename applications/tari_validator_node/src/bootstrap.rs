@@ -293,6 +293,7 @@ pub async fn spawn_services(
         state_store.clone(),
         rx_consensus_to_mempool,
         consensus_handle.clone(),
+        metrics_registry,
     );
     handles.push(join_handle);
 

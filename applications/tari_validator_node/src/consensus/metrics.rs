@@ -1,10 +1,12 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-use prometheus::{core::Collector, IntCounter, IntGauge, Registry};
+use prometheus::{IntCounter, IntGauge, IntGaugeVec, Opts, Registry};
 use tari_consensus::{hotstuff::HotStuffError, messages::HotstuffMessage, traits::hooks::ConsensusHooks};
 use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::consensus_models::{Decision, QuorumDecision, TransactionAtom, ValidBlock};
 use tari_transaction::TransactionId;
+
+use crate::metrics::CollectorRegister;
 
 #[derive(Debug, Clone)]
 pub struct PrometheusConsensusMetrics {
@@ -13,7 +15,7 @@ pub struct PrometheusConsensusMetrics {
     blocks_rejected: IntCounter,
     blocks_validation_failed: IntCounter,
 
-    commands_count: IntGauge,
+    commands_count: IntGaugeVec,
 
     messages_received: IntCounter,
 
@@ -37,9 +39,11 @@ impl PrometheusConsensusMetrics {
             blocks_accepted: IntCounter::new("consensus_blocks_accepted", "Number of blocks accepted")
                 .unwrap()
                 .register_at(registry),
-            commands_count: IntGauge::new("consensus_num_commands", "Number of commands added")
-                .unwrap()
-                .register_at(registry),
+            commands_count: IntGaugeVec::new(Opts::new("consensus_num_commands", "Number of commands added"), &[
+                "block_id",
+            ])
+            .unwrap()
+            .register_at(registry),
             messages_received: IntCounter::new("consensus_messages_received", "Number of messages received")
                 .unwrap()
                 .register_at(registry),
@@ -91,7 +95,9 @@ impl ConsensusHooks for PrometheusConsensusMetrics {
         self.local_blocks_received.inc();
         match decision {
             Some(QuorumDecision::Accept) => {
-                self.commands_count.set(block.block().commands().len() as i64);
+                self.commands_count
+                    .with_label_values(&[&block.block().id().to_string()])
+                    .set(block.block().commands().len() as i64);
                 self.blocks_accepted.inc();
             },
             Some(QuorumDecision::Reject) | None => {
@@ -137,16 +143,5 @@ impl ConsensusHooks for PrometheusConsensusMetrics {
                 self.transactions_finalized_aborted.inc();
             },
         }
-    }
-}
-
-pub trait CollectorRegister {
-    fn register_at(self, registry: &Registry) -> Self;
-}
-
-impl<C: Collector + Clone + 'static> CollectorRegister for C {
-    fn register_at(self, registry: &Registry) -> Self {
-        registry.register(Box::new(self.clone())).unwrap();
-        self
     }
 }

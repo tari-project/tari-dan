@@ -125,8 +125,9 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                     .collect::<HashSet<_>>();
                 let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
                 let updates = child.get_substate_updates(tx)?;
+                let transactions = child.get_transactions(tx)?;
 
-                buffer.push((child, certificates, updates, vec![]));
+                buffer.push((child, certificates, updates, transactions));
                 if buffer.len() == buffer.capacity() {
                     break;
                 }

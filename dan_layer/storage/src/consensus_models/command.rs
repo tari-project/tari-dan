@@ -12,9 +12,9 @@ use tari_dan_common_types::SubstateAddress;
 use tari_engine_types::lock::LockFlag;
 use tari_transaction::TransactionId;
 
-use super::ForeignProposal;
+use super::{ExecutedTransaction, ForeignProposal, TransactionRecord};
 use crate::{
-    consensus_models::{Decision, ExecutedTransaction, QcId},
+    consensus_models::{Decision, QcId},
     StateStoreReadTransaction,
     StorageError,
 };
@@ -136,6 +136,13 @@ impl TransactionAtom {
     }
 
     pub fn get_transaction<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<TransactionRecord, StorageError> {
+        TransactionRecord::get(tx, &self.id)
+    }
+
+    pub fn get_executed_transaction<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
     ) -> Result<ExecutedTransaction, StorageError> {

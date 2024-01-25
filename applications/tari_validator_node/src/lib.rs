@@ -30,6 +30,7 @@ mod event_subscription;
 mod grpc;
 mod http_ui;
 mod json_rpc;
+mod metrics;
 mod p2p;
 mod registration;
 mod substate_resolver;

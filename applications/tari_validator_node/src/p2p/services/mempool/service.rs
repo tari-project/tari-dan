@@ -44,6 +44,7 @@ use crate::{
             executor::{execute_transaction, ExecutionResult},
             gossip::MempoolGossip,
             handle::MempoolRequest,
+            metrics::PrometheusMempoolMetrics,
             traits::SubstateResolver,
             Validator,
         },
@@ -77,6 +78,7 @@ pub struct MempoolService<TValidator, TExecutedValidator, TExecutor, TSubstateRe
     gossip: MempoolGossip<PeerAddress>,
     rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
     consensus_handle: ConsensusHandle,
+    metrics: PrometheusMempoolMetrics,
 }
 
 impl<TValidator, TExecutedValidator, TExecutor, TSubstateResolver>
@@ -99,6 +101,7 @@ where
         state_store: SqliteStateStore<PeerAddress>,
         rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
         consensus_handle: ConsensusHandle,
+        metrics: PrometheusMempoolMetrics,
     ) -> Self {
         Self {
             gossip: MempoolGossip::new(epoch_manager.clone(), gossip),
@@ -115,6 +118,7 @@ where
             transaction_pool: TransactionPool::new(),
             rx_consensus_to_mempool,
             consensus_handle,
+            metrics,
         }
     }
 
@@ -289,12 +293,16 @@ where
         let mut transaction = TransactionRecord::new(transaction);
         self.state_store.with_write_tx(|tx| transaction.insert(tx))?;
 
+        self.metrics.on_transaction_received(&transaction);
+
         if let Err(e) = self.before_execute_validator.validate(transaction.transaction()).await {
             self.state_store.with_write_tx(|tx| {
                 transaction
                     .set_abort(format!("Mempool validation failed: {}", e))
                     .update(tx)
             })?;
+
+            self.metrics.on_transaction_validation_error(transaction.id(), &e);
             return Err(e);
         }
 
@@ -450,6 +458,8 @@ where
         // This is due to a bug or possibly db failure only
         let (transaction_id, exec_result) = result?;
 
+        self.metrics.on_transaction_executed(&transaction_id, &exec_result);
+
         // The avoids the case where:
         // 1. A transaction is received and start executing
         // 2. The node switches to sync mode
@@ -519,6 +529,7 @@ where
                             executed.id(),
                             e,
                         );
+                        self.metrics.on_transaction_validation_error(&transaction_id, &e);
                         self.state_store.with_write_tx(|tx| {
                             match executed.result().finalize.result.full_reject() {
                                 Some(reason) => {
