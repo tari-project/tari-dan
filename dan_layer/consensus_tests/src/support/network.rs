@@ -172,7 +172,15 @@ impl TestNetworkDestination {
 
 pub struct TestNetworkWorker {
     rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, ExecutedTransaction)>>,
-    tx_new_transactions: HashMap<TestAddress, (Shard, mpsc::Sender<TransactionId>, SqliteStateStore<TestAddress>)>,
+    #[allow(clippy::type_complexity)]
+    tx_new_transactions: HashMap<
+        TestAddress,
+        (
+            Shard,
+            mpsc::Sender<(TransactionId, usize)>,
+            SqliteStateStore<TestAddress>,
+        ),
+    >,
     tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage)>>,
     #[allow(clippy::type_complexity)]
     rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Vec<TestAddress>, HotstuffMessage)>>>,
@@ -225,7 +233,7 @@ impl TestNetworkWorker {
                             })
                             .unwrap();
                         log::info!("🐞 New transaction {}", executed.id());
-                        tx_new_transaction_to_consensus.send(*executed.id()).await.unwrap();
+                        tx_new_transaction_to_consensus.send((*executed.id(), 0)).await.unwrap();
                     }
                 }
             }
@@ -352,6 +360,6 @@ impl TestNetworkWorker {
             })
             .unwrap();
 
-        sender.send(*existing_executed_tx.id()).await.unwrap();
+        sender.send((*existing_executed_tx.id(), 0)).await.unwrap();
     }
 }

@@ -24,7 +24,7 @@ pub struct ValidatorChannels {
     pub bucket: Shard,
     pub state_store: SqliteStateStore<TestAddress>,
 
-    pub tx_new_transactions: mpsc::Sender<TransactionId>,
+    pub tx_new_transactions: mpsc::Sender<(TransactionId, usize)>,
     pub tx_hs_message: mpsc::Sender<(TestAddress, HotstuffMessage)>,
     pub rx_broadcast: mpsc::Receiver<(Vec<TestAddress>, HotstuffMessage)>,
     pub rx_leader: mpsc::Receiver<(TestAddress, HotstuffMessage)>,
