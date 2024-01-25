@@ -652,7 +652,7 @@ where
         match event {
             mdns::Event::Discovered(peers_and_addrs) => {
                 for (peer, addr) in peers_and_addrs {
-                    info!(target: LOG_TARGET, "📡 mDNS discovered peer {} at {}", peer, addr);
+                    debug!(target: LOG_TARGET, "📡 mDNS discovered peer {} at {}", peer, addr);
                     self.swarm
                         .dial(DialOpts::peer_id(peer).addresses(vec![addr]).build())
                         .or_else(|err| {

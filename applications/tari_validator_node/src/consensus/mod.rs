@@ -41,7 +41,7 @@ pub async fn spawn(
     store: SqliteStateStore<PeerAddress>,
     keypair: RistrettoKeypair,
     epoch_manager: EpochManagerHandle<PeerAddress>,
-    rx_new_transactions: mpsc::Receiver<TransactionId>,
+    rx_new_transactions: mpsc::Receiver<(TransactionId, usize)>,
     inbound_messaging: ConsensusInboundMessaging<SqliteMessageLogger>,
     outbound_messaging: ConsensusOutboundMessaging<SqliteMessageLogger>,
     client_factory: TariValidatorNodeRpcClientFactory,
