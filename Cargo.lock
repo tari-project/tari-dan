@@ -9380,6 +9380,7 @@ dependencies = [
  "tari_bor",
  "tari_common_types",
  "tari_crypto",
+ "tari_hash_domains",
  "tari_template_abi",
  "tari_template_lib",
  "tari_utilities",

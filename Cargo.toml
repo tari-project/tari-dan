@@ -103,6 +103,7 @@ tari_wallet_daemon_client = { path = "clients/wallet_daemon_client" }
 transaction_generator = { path = "utilities/transaction_generator" }
 
 # external minotari/tari dependencies
+tari_hash_domains = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 minotari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 minotari_console_wallet = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
@@ -265,6 +266,7 @@ libp2p-identity = { git = "https://github.com/tari-project/rust-libp2p.git", rev
 #tari_metrics = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 
 [patch."https://github.com/tari-project/tari.git"]
+tari_hash_domains = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
 minotari_app_grpc = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
 minotari_node_grpc_client = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
 tari_common = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
