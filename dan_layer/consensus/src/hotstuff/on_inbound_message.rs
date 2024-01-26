@@ -19,7 +19,7 @@ use tokio::{sync::mpsc, time};
 
 use crate::{
     block_validations::{check_hash_and_height, check_proposed_by_leader, check_quorum_certificate, check_signature},
-    hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle},
+    hotstuff::error::HotStuffError,
     messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage},
     traits::{ConsensusSpec, OutboundMessaging},
 };
@@ -32,7 +32,6 @@ pub struct OnInboundMessage<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
-    pacemaker: PaceMakerHandle,
     vote_signing_service: TConsensusSpec::SignatureService,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_msg_ready: mpsc::UnboundedSender<(TConsensusSpec::Addr, HotstuffMessage)>,
@@ -46,7 +45,6 @@ where TConsensusSpec: ConsensusSpec
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
-        pacemaker: PaceMakerHandle,
         vote_signing_service: TConsensusSpec::SignatureService,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
     ) -> Self {
@@ -55,7 +53,6 @@ where TConsensusSpec: ConsensusSpec
             store,
             epoch_manager,
             leader_strategy,
-            pacemaker,
             vote_signing_service,
             outbound_messaging,
             tx_msg_ready,
@@ -176,7 +173,6 @@ where TConsensusSpec: ConsensusSpec
                 HotstuffMessage::Proposal(ProposalMessage { block: unparked_block }),
             )?;
         }
-        self.pacemaker.beat();
         Ok(())
     }
 

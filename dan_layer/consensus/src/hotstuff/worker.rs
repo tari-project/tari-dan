@@ -50,7 +50,7 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     tx_events: broadcast::Sender<HotstuffEvent>,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     inbound_messaging: TConsensusSpec::InboundMessaging,
-    rx_new_transactions: mpsc::Receiver<TransactionId>,
+    rx_new_transactions: mpsc::Receiver<(TransactionId, usize)>,
 
     on_inbound_message: OnInboundMessage<TConsensusSpec>,
     on_next_sync_view: OnNextSyncViewHandler<TConsensusSpec>,
@@ -78,7 +78,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         validator_addr: TConsensusSpec::Addr,
         inbound_messaging: TConsensusSpec::InboundMessaging,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
-        rx_new_transactions: mpsc::Receiver<TransactionId>,
+        rx_new_transactions: mpsc::Receiver<(TransactionId, usize)>,
         state_store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -111,7 +111,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 state_store.clone(),
                 epoch_manager.clone(),
                 leader_strategy.clone(),
-                pacemaker.clone_handle(),
                 signing_service.clone(),
                 outbound_messaging.clone(),
             ),
@@ -246,11 +245,15 @@ where TConsensusSpec: ConsensusSpec
                     }
                 },
 
-                Some(tx_id) = self.rx_new_transactions.recv() => {
+                Some((tx_id, pending)) = self.rx_new_transactions.recv() => {
                     self.hooks.on_transaction_ready(&tx_id);
                     if let Err(err) = self.on_inbound_message.update_parked_blocks(current_height, &tx_id).await {
                         self.hooks.on_error(&err);
                         error!(target: LOG_TARGET, "Error checking parked blocks: {}", err);
+                    }
+                    // Only propose now if there are no pending transactions
+                    if pending == 0 {
+                        self.pacemaker.beat();
                     }
                 },
 

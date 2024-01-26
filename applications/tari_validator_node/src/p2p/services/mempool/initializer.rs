@@ -46,7 +46,7 @@ use crate::{
 
 pub fn spawn<TExecutor, TValidator, TExecutedValidator, TSubstateResolver>(
     gossip: Gossip,
-    tx_executed_transactions: mpsc::Sender<TransactionId>,
+    tx_executed_transactions: mpsc::Sender<(TransactionId, usize)>,
     epoch_manager: EpochManagerHandle<PeerAddress>,
     transaction_executor: TExecutor,
     substate_resolver: TSubstateResolver,

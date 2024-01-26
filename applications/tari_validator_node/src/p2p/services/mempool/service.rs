@@ -67,7 +67,7 @@ pub struct MempoolService<TValidator, TExecutedValidator, TExecutor, TSubstateRe
     transactions: HashSet<TransactionId>,
     pending_executions: FuturesUnordered<BoxFuture<'static, MempoolTransactionExecution>>,
     mempool_requests: mpsc::Receiver<MempoolRequest>,
-    tx_executed_transactions: mpsc::Sender<TransactionId>,
+    tx_executed_transactions: mpsc::Sender<(TransactionId, usize)>,
     epoch_manager: EpochManagerHandle<PeerAddress>,
     before_execute_validator: TValidator,
     after_execute_validator: TExecutedValidator,
@@ -92,7 +92,7 @@ where
     pub(super) fn new(
         mempool_requests: mpsc::Receiver<MempoolRequest>,
         gossip: Gossip,
-        tx_executed_transactions: mpsc::Sender<TransactionId>,
+        tx_executed_transactions: mpsc::Sender<(TransactionId, usize)>,
         epoch_manager: EpochManagerHandle<PeerAddress>,
         transaction_executor: TExecutor,
         substate_resolver: TSubstateResolver,
@@ -635,7 +635,13 @@ where
         }
 
         // Notify consensus that a transaction is ready to go!
-        if is_consensus_running && self.tx_executed_transactions.send(*executed.id()).await.is_err() {
+        let pending_exec_size = self.pending_executions.len();
+        if is_consensus_running &&
+            self.tx_executed_transactions
+                .send((*executed.id(), pending_exec_size))
+                .await
+                .is_err()
+        {
             debug!(
                 target: LOG_TARGET,
                 "Executed transaction channel closed before executed transaction could be sent"
