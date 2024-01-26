@@ -80,10 +80,12 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "deriv(tari_consensus_transaction_finalized_committed[$__interval]) + deriv(tari_consensus_transaction_finalized_aborted[$__interval])",
+          "exemplar": false,
+          "expr": "rate(tari_consensus_transaction_finalized_committed[$__rate_interval]) + rate(tari_consensus_transaction_finalized_aborted[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
+          "interval": "",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A",
@@ -110,7 +112,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "line",
+            "drawStyle": "bars",
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
@@ -179,7 +181,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "tari_consensus_num_commands>0",
+          "expr": "max by (public_key) (tari_consensus_num_commands)",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
           "instant": false,
@@ -878,8 +880,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -977,8 +978,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1076,8 +1076,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1136,13 +1135,13 @@
     "list": []
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "VN1",
   "uid": "c6e9ea63-94c6-4524-863e-3e31b5cd776e",
-  "version": 11,
+  "version": 14,
   "weekStart": ""
 }
