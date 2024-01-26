@@ -74,7 +74,7 @@ where
         for handle in handles {
             let res = handle.await??;
             if let Some((address, substate)) = res {
-                let shard = SubstateAddress::from_address(&address, substate.version());
+                let shard = SubstateAddress::from_address(&address);
                 if autofilled_transaction.input_refs().contains(&shard) {
                     // Shard is already an input as a ref
                     continue;
@@ -125,12 +125,12 @@ where
                         id,
                         substate.version()
                     );
-                    let substate_address = SubstateAddress::from_address(&id, substate.version());
+                    let substate_address = SubstateAddress::from_address(&id);
                     if autofilled_transaction.all_inputs_iter().any(|s| *s == substate_address) {
                         // Shard is already an input (TODO: what a waste)
                         continue;
                     }
-                    autofilled_inputs.push(SubstateAddress::from_address(&id, substate.version()));
+                    autofilled_inputs.push(SubstateAddress::from_address(&id));
                     found_substates.insert(address, substate);
                 //       found_this_round += 1;
                 } else {
@@ -164,7 +164,7 @@ where
 {
     let scan_res = match req.version() {
         Some(version) => {
-            let shard = SubstateAddress::from_address(req.substate_id(), version);
+            let shard = SubstateAddress::from_address(req.substate_id());
             if transaction.all_inputs_iter().any(|s| *s == shard) {
                 // Shard is already an input
                 return Ok(None);
@@ -188,7 +188,7 @@ where
             id,
             substate.version()
         );
-        let shard = SubstateAddress::from_address(id, substate.version());
+        let shard = SubstateAddress::from_address(id);
         if transaction.all_inputs_iter().any(|s| *s == shard) {
             // Shard is already an input (TODO: what a waste)
             return Ok(None);

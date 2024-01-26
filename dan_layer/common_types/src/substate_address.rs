@@ -25,19 +25,18 @@ use crate::{shard::Shard, uint::U256};
 pub struct SubstateAddress(#[serde(with = "serde_with::hex")] pub [u8; 32]);
 
 impl SubstateAddress {
-    /// Defines the mapping of SubstateId to SubstateAddress
-    pub fn from_address(addr: &SubstateId, version: u32) -> Self {
-        Self::from_hash(&addr.to_canonical_hash(), version)
+    /// Defines the mapping of SubstateId to SubstateAddress.
+    pub fn from_address(addr: &SubstateId) -> Self {
+        Self::from_hash(&addr.to_canonical_hash())
     }
 
     pub fn for_transaction_receipt(tx_receipt: TransactionReceiptAddress) -> Self {
-        Self::from_address(&tx_receipt.into(), 0)
+        Self::from_address(&tx_receipt.into())
     }
 
-    pub fn from_hash(hash: &[u8], version: u32) -> Self {
+    pub fn from_hash(hash: &[u8]) -> Self {
         let new_addr = hasher32(EngineHashDomainLabel::SubstateAddress)
             .chain(&hash)
-            .chain(&version)
             .result();
         Self(new_addr.into_array())
     }

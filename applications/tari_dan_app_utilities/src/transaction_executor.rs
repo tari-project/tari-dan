@@ -90,7 +90,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             .accept()
             .map(|diff| {
                 diff.up_iter()
-                    .map(|(addr, substate)| SubstateAddress::from_address(addr, substate.version()))
+                    .map(|(addr, substate)| SubstateAddress::from_address(addr))
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();

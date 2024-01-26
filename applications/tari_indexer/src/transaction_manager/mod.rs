@@ -131,7 +131,7 @@ where
         substate_address: SubstateId,
         version: u32,
     ) -> Result<SubstateResult, TransactionManagerError> {
-        let shard = SubstateAddress::from_address(&substate_address, version);
+        let shard = SubstateAddress::from_address(&substate_address);
 
         self.try_with_committee(iter::once(shard), |mut client| {
             // This double clone looks strange, but it's needed because this function is called in a loop
@@ -140,7 +140,7 @@ where
             async move {
                 let substate_address = substate_address.clone();
                 client
-                    .get_substate(SubstateAddress::from_address(&substate_address, version))
+                    .get_substate(SubstateAddress::from_address(&substate_address))
                     .await
             }
         })

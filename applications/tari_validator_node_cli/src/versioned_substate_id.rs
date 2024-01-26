@@ -17,7 +17,7 @@ pub struct VersionedSubstateId {
 
 impl VersionedSubstateId {
     pub fn to_substate_address(&self) -> SubstateAddress {
-        SubstateAddress::from_address(&self.substate_id, self.version)
+        SubstateAddress::from_address(&self.substate_id)
     }
 }
 

@@ -178,7 +178,7 @@ impl TransactionBuilder {
         self.with_inputs(
             inputs
                 .into_iter()
-                .map(|(a, v)| SubstateAddress::from_address(a.borrow(), v)),
+                .map(|(a, v)| SubstateAddress::from_address(a.borrow())),
         )
     }
 
@@ -201,7 +201,7 @@ impl TransactionBuilder {
         self.with_input_refs(
             inputs
                 .into_iter()
-                .map(|(a, v)| SubstateAddress::from_address(a.borrow(), v)),
+                .map(|(a, v)| SubstateAddress::from_address(a.borrow())),
         )
     }
 
@@ -221,7 +221,7 @@ impl TransactionBuilder {
         self.with_outputs(
             outputs
                 .into_iter()
-                .map(|(a, v)| SubstateAddress::from_address(a.borrow(), v)),
+                .map(|(a, v)| SubstateAddress::from_address(a.borrow())),
         )
     }
 

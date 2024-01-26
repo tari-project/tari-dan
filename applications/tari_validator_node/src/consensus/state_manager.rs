@@ -34,7 +34,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for TariStateManager {
 
         let down_shards = diff
             .down_iter()
-            .map(|(addr, version)| SubstateAddress::from_address(addr, *version))
+            .map(|(addr, version)| SubstateAddress::from_address(addr))
             .filter(|shard| local_committee_shard.includes_substate_address(shard));
         SubstateRecord::destroy_many(
             tx,
@@ -47,7 +47,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for TariStateManager {
         )?;
 
         let to_up = diff.up_iter().filter_map(|(addr, substate)| {
-            let address = SubstateAddress::from_address(addr, substate.version());
+            let address = SubstateAddress::from_address(addr);
             if local_committee_shard.includes_substate_address(&address) {
                 Some(SubstateRecord::new(
                     addr.clone(),
