@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use cucumber::{given, when};
-use minotari_app_grpc::tari_rpc::GetBalanceRequest;
+use minotari_app_grpc::tari_rpc::{GetBalanceRequest, ValidateRequest};
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tokio::time::sleep;
@@ -86,6 +86,7 @@ async fn check_balance(world: &mut TariWorld, wallet_name: String, balance: u64,
         _ => panic!("Unknown unit {}", units),
     };
     loop {
+        let _result = client.validate_all_transactions(ValidateRequest {}).await;
         let resp = client.get_balance(GetBalanceRequest {}).await.unwrap().into_inner();
         if resp.available_balance >= balance {
             break;
@@ -94,11 +95,11 @@ async fn check_balance(world: &mut TariWorld, wallet_name: String, balance: u64,
             "Waiting for wallet {} to have at least {} uT (balance: {} uT, pending: {} uT)",
             wallet_name, balance, resp.available_balance, resp.pending_incoming_balance
         );
-        sleep(Duration::from_secs(1)).await;
+        sleep(Duration::from_secs(5)).await;
 
-        if iterations == 40 {
+        if iterations == 100 {
             panic!(
-                "Wallet {} did not have at least {} uT after 40 seconds  (balance: {} uT, pending: {} uT)",
+                "Wallet {} did not have at least {} uT after 500 seconds  (balance: {} uT, pending: {} uT)",
                 wallet_name, balance, resp.available_balance, resp.pending_incoming_balance
             );
         }

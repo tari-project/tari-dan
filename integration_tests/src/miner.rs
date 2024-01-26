@@ -22,10 +22,11 @@
 
 use minotari_app_grpc::{
     tari_rpc,
-    tari_rpc::{pow_algo::PowAlgos, NewBlockTemplate, NewBlockTemplateRequest, PowAlgo},
+    tari_rpc::{pow_algo::PowAlgos, GetIdentityRequest, NewBlockTemplate, NewBlockTemplateRequest, PowAlgo},
 };
 use minotari_node_grpc_client::BaseNodeGrpcClient;
-use tari_common_types::tari_address::TariAddress;
+use tari_common::configuration::Network;
+use tari_common_types::{tari_address::TariAddress, types::PublicKey};
 use tari_core::{
     consensus::ConsensusManager,
     transactions::{
@@ -35,6 +36,7 @@ use tari_core::{
         transaction_components::{RangeProofType, WalletOutput},
     },
 };
+use tari_crypto::tari_utilities::ByteArray;
 
 use crate::TariWorld;
 
@@ -57,14 +59,23 @@ pub fn register_miner_process(world: &mut TariWorld, miner_name: String, base_no
 }
 
 pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: u64) {
+    let miner = world.get_miner(&miner_name);
     let mut base_client = create_base_node_client(world, &miner_name).await;
+    let mut wallet_client = world.get_wallet(&miner.wallet_name).create_client().await;
+
+    let wallet_pk = PublicKey::from_canonical_bytes(
+        &wallet_client
+            .identify(GetIdentityRequest {})
+            .await
+            .unwrap()
+            .into_inner()
+            .public_key,
+    )
+    .unwrap();
+    let payment_address = TariAddress::new(wallet_pk, Network::LocalNet);
 
     for _ in 0..num_blocks {
-        mine_block(world, &mut base_client).await;
-        // Makes less likely that base layer will fail with
-        // "Chain storage error: You tried to execute an invalid Database operation: UTXO 248a... was already marked as
-        // deleted."
-        // tokio::time::sleep(Duration::from_millis(100)).await;
+        mine_block(world, &payment_address, &mut base_client).await;
     }
 }
 
@@ -76,13 +87,13 @@ async fn create_base_node_client(world: &TariWorld, miner_name: &String) -> Base
     BaseNodeClient::connect(base_node_grpc_url).await.unwrap()
 }
 
-async fn mine_block(world: &TariWorld, base_client: &mut BaseNodeClient) {
+async fn mine_block(world: &TariWorld, payment_address: &TariAddress, base_client: &mut BaseNodeClient) {
     let (block_template, _) = create_block_template_with_coinbase(
         base_client,
         0,
         &world.key_manager,
         &world.script_key_id().await,
-        &world.default_payment_address,
+        payment_address,
         false,
         &world.consensus_manager,
     )
@@ -96,7 +107,7 @@ async fn mine_block(world: &TariWorld, base_client: &mut BaseNodeClient) {
         .into_inner();
     let block = block_result.block.unwrap();
 
-    // We don't need to mine, as Localnet blocks have difficulty 1s
+    // We don't need to mine, as Localnet blocks have difficulty target of 1s
     let submit_res = base_client.submit_block(block).await.unwrap().into_inner();
     log::info!(
         "Block {} successfully mined at height {:?}",
@@ -104,57 +115,6 @@ async fn mine_block(world: &TariWorld, base_client: &mut BaseNodeClient) {
         block_template.header.unwrap().height
     );
 }
-
-// async fn create_block_template_with_coinbase(
-//     base_client: &mut BaseNodeClient,
-//     wallet_client: &mut WalletGrpcClient,
-// ) -> NewBlockTemplate {
-//     // get the block template from the base node
-//     let template_req = NewBlockTemplateRequest {
-//         algo: Some(PowAlgo {
-//             pow_algo: PowAlgos::Sha3x.into(),
-//         }),
-//         max_weight: 0,
-//     };
-//     let template_res = base_client
-//         .get_new_block_template(template_req)
-//         .await
-//         .unwrap()
-//         .into_inner();
-//
-//     let NewBlockTemplateResponse {
-//         new_block_template: Some(mut template),
-//         miner_data: Some(miner_data),
-//         ..
-//     } = template_res
-//     else {
-//         panic!("Failed to get block template");
-//     };
-//
-//     let height = template.header.as_ref().unwrap().height;
-//     let coinbase_res = wallet_client
-//         .get_coinbase(GetCoinbaseRequest {
-//             reward: miner_data.reward,
-//             fee: miner_data.total_fees,
-//             height,
-//             extra: vec![],
-//         })
-//         .await
-//         .unwrap()
-//         .into_inner();
-//
-//     let mut transaction_body = coinbase_res.transaction.unwrap().body.unwrap();
-//     let tx_out = transaction_body.outputs.remove(0);
-//     let tx_kernel = transaction_body.kernels.remove(0);
-//
-//     // add the coinbase outputs and kernels to the block template
-//     let body = template.body.as_mut().unwrap();
-//     body.outputs.push(tx_out);
-//     body.kernels.push(tx_kernel);
-//
-//     template
-// }
-
 async fn create_block_template_with_coinbase(
     base_client: &mut BaseNodeClient,
     weight: u64,

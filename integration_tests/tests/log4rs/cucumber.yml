@@ -135,21 +135,21 @@ loggers:
 
   # Route log events sent to the "core" logger to the "base_layer" appender
   c:
-    level: info
+    level: debug
     appenders:
       - base_layer
   # Route log events sent to the "wallet" logger to the "base_layer" appender
   wallet:
-    level: info
+    level: debug
     appenders:
       - console_wallet
   # Route log events sent to the "comms" logger to the "network" appender
   comms:
-    level: info
+    level: debug
     appenders:
       - network
   # Route log events sent to the "p2p" logger to the "network" appender
   p2p:
-    level: info
+    level: debug
     appenders:
       - network
