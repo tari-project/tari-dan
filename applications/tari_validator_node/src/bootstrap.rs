@@ -523,5 +523,5 @@ fn create_mempool_after_execute_validator<TAddr: NodeAddressable>(
 ) -> impl Validator<ExecutedTransaction, Error = MempoolError> {
     HasInvolvedShards::new()
         .and_then(InputRefsValidator::new())
-        .and_then(OutputsDontExistLocally::new(store))
+        //.and_then(OutputsDontExistLocally::new(store))
 }
