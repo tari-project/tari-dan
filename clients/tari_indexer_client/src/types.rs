@@ -82,6 +82,8 @@ pub enum IndexerTransactionFinalizedResult {
     Finalized {
         final_decision: Decision,
         execution_result: Option<ExecuteResult>,
+        execution_time: Duration,
+        finalized_time: Duration,
         abort_details: Option<String>,
         json_results: Vec<JsonValue>,
     },

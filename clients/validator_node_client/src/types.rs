@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::{transaction::TxId, types::PublicKey};
 use tari_dan_common_types::{committee::CommitteeShard, shard::Shard, Epoch, SubstateAddress};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, ExecutedTransaction, QuorumDecision, SubstateRecord},
+    consensus_models::{Block, BlockId, Decision, ExecutedTransaction, QuorumDecision, SubstateRecord},
     global::models::ValidatorNode,
     Ordering,
 };
@@ -138,7 +138,6 @@ pub struct SubmitTransactionResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DryRunTransactionFinalizeResult {
-    // TODO: we should not return the whole state but only the addresses and perhaps a hash of the state
     pub decision: QuorumDecision,
     pub finalize: FinalizeResult,
     pub fee_breakdown: Option<FeeCostBreakdown>,
@@ -172,7 +171,8 @@ pub struct GetTransactionResultRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTransactionResultResponse {
     pub result: Option<ExecuteResult>,
-    pub is_finalized: bool,
+    pub final_decision: Option<Decision>,
+    pub finalized_time: Option<Duration>,
     pub execution_time: Option<Duration>,
 }
 

@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::time::Duration;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -60,6 +62,8 @@ pub enum TransactionFinalizedResult {
     Finalized {
         final_decision: Decision,
         execution_result: Option<ExecuteResult>,
+        execution_time: Duration,
+        finalized_time: Duration,
         abort_details: Option<String>,
         json_results: Vec<Value>,
     },

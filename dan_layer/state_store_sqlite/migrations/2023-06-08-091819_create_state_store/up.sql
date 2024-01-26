@@ -166,9 +166,10 @@ create table transactions
     result            text      NULL,
     execution_time_ms bigint    NULL,
     final_decision    text      NULL,
+    finalized_at      timestamp NULL,
     abort_details     text      NULL,
-    min_epoch         BIGINT   NULL,
-    max_epoch         BIGINT   NULL,
+    min_epoch         BIGINT    NULL,
+    max_epoch         BIGINT    NULL,
     created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -250,7 +251,7 @@ CREATE TABLE missing_transactions
 CREATE TABLE foreign_proposals
 (
     id         integer   not NULL primary key AUTOINCREMENT,
-    bucket     bigint    not NULL,
+    bucket     int       not NULL,
     block_id   text      not NULL,
     state      text      not NULL,
     mined_at   bigint    NULL,

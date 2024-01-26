@@ -38,6 +38,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Loading from "../../Components/Loading";
 import { getUpSubstates, getTransaction, getDownSubstates } from "../../utils/json_rpc";
+import { displayDuration } from "../../utils/helpers";
 
 export default function TransactionDetails() {
   const { transactionHash } = useParams();
@@ -50,8 +51,8 @@ export default function TransactionDetails() {
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<String>();
-  const { execution_time, final_decision, result, transaction } = state;
-  const location = useLocation();
+  const { execution_time, result, transaction, finalized_time, final_decision } = state;
+
   const getTransactionByHash = () => {
     setLoading(true);
     Promise.all([
@@ -121,7 +122,8 @@ export default function TransactionDetails() {
         return <span>Accepted</span>;
       }
       if (result.finalize.result.AcceptFeeRejectRest) {
-        return <span>{result.finalize.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>;
+        return;
+        <span>{result.finalize.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>;
       }
       if (result.finalize.result.Reject) {
         return (
@@ -182,7 +184,12 @@ export default function TransactionDetails() {
                           </TableRow>
                           <TableRow>
                             <TableCell>Result</TableCell>
-                            <DataTableCell>{renderResult(result)}</DataTableCell>
+                            <DataTableCell>
+                              {renderResult(result)}
+                              <br />
+                              Executed in {execution_time ? displayDuration(execution_time) : "--"}, Finalized in{" "}
+                              {finalized_time ? displayDuration(finalized_time) : "--"}
+                            </DataTableCell>
                           </TableRow>
                         </TableBody>
                       </Table>
@@ -219,7 +226,7 @@ export default function TransactionDetails() {
                             fontSize: "0.85rem",
                           }}
                           startIcon={<KeyboardArrowUpIcon />}
-                          disabled={expandedPanels.length === 0 ? true : false}
+                          disabled={expandedPanels.length === 0}
                         >
                           Collapse All
                         </Button>

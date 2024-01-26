@@ -136,6 +136,8 @@ message GetTransactionResultResponse {
   bytes execution_result = 2;
   tari.dan.consensus.Decision final_decision = 3;
   string abort_details = 4;
+  uint64 finalized_time_ms = 5;
+  uint64 execution_time_ms = 6;
 }
 
 enum PayloadResultStatus {

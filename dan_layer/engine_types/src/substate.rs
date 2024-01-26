@@ -194,6 +194,10 @@ impl SubstateId {
         matches!(self, Self::NonFungible(addr) if *addr.resource_address() == PUBLIC_IDENTITY_RESOURCE_ADDRESS)
     }
 
+    pub fn is_virtual(&self) -> bool {
+        self.is_public_key_identity()
+    }
+
     pub fn is_vault(&self) -> bool {
         matches!(self, Self::Vault(_))
     }

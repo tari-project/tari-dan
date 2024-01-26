@@ -307,23 +307,16 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: GetTransactionResultRequest = value.parse_params()?;
 
-        let mut tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
-        let transaction = TransactionRecord::get(&mut tx, &request.transaction_id)
+        let transaction = self
+            .state_store
+            .with_read_tx(|tx| TransactionRecord::get(tx, &request.transaction_id))
             .optional()
             .map_err(internal_error(answer_id))?
-            .ok_or_else(|| {
-                JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::ApplicationError(404),
-                        format!("Transaction {} not found", request.transaction_id),
-                        json::Value::Null,
-                    ),
-                )
-            })?;
+            .ok_or_else(|| not_found(answer_id, format!("Transaction {} not found", request.transaction_id)))?;
 
         let response = GetTransactionResultResponse {
-            is_finalized: transaction.is_finalized(),
+            final_decision: transaction.final_decision(),
+            finalized_time: transaction.finalized_time(),
             execution_time: transaction.execution_time(),
             result: transaction.into_final_result(),
         };

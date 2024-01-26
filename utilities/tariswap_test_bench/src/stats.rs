@@ -7,7 +7,7 @@ use std::time::Duration;
 pub struct Stats {
     num_substates_created: usize,
     total_execution_time: Duration,
-    // total_time_to_finalize: Duration,
+    total_time_to_finalize: Duration,
     num_transactions: usize,
 }
 impl Stats {
@@ -35,11 +35,11 @@ impl Stats {
         self.total_execution_time += duration;
     }
 
-    // pub fn total_time_to_finalize(&self) -> Duration {
-    //     self.total_time_to_finalize
-    // }
-    //
-    // pub fn add_time_to_finalize(&mut self, duration: Duration) {
-    //     self.total_time_to_finalize += duration;
-    // }
+    pub fn total_time_to_finalize(&self) -> Duration {
+        self.total_time_to_finalize
+    }
+
+    pub fn add_time_to_finalize(&mut self, duration: Duration) {
+        self.total_time_to_finalize += duration;
+    }
 }
