@@ -51,6 +51,7 @@ use tari_validator_node_client::{
     types::{
         DryRunTransactionFinalizeResult,
         GetTransactionResultRequest,
+        GetTransactionResultResponse,
         SubmitTransactionRequest,
         SubmitTransactionResponse,
     },
@@ -269,21 +270,26 @@ pub async fn submit_transaction(
     if common.wait_for_result {
         println!("⏳️ Waiting for transaction result...");
         println!();
-        let result = wait_for_transaction_result(
+        let GetTransactionResultResponse {
+            result, final_decision, ..
+        } = wait_for_transaction_result(
             resp.transaction_id,
             client,
             common.wait_for_result_timeout.map(Duration::from_secs),
         )
         .await?;
-        if let Some(diff) = result.finalize.result.accept() {
-            component_manager.commit_diff(diff)?;
+        let result = result.unwrap();
+        if final_decision.unwrap().is_commit() {
+            if let Some(diff) = result.finalize.result.accept() {
+                component_manager.commit_diff(diff)?;
+            }
         }
         summarize(&result, timer.elapsed());
         // Hack: submit response never returns a result unless it's a dry run - however cucumbers expect a result so add
-        // it to the response here to satify that We'll eventaully remove these handlers eventually anyway
+        // it to the response here to satisfy that We'll remove these handlers eventually anyway
         use tari_dan_storage::consensus_models::QuorumDecision;
         resp.dry_run_result = Some(DryRunTransactionFinalizeResult {
-            decision: if result.finalize.result.is_accept() {
+            decision: if final_decision.unwrap().is_commit() {
                 QuorumDecision::Accept
             } else {
                 QuorumDecision::Reject
@@ -300,7 +306,7 @@ async fn wait_for_transaction_result(
     transaction_id: TransactionId,
     client: &mut ValidatorNodeClient,
     timeout: Option<Duration>,
-) -> anyhow::Result<ExecuteResult> {
+) -> anyhow::Result<GetTransactionResultResponse> {
     let mut interval = tokio::time::interval(Duration::from_secs(1));
     interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let mut timeout = timeout;
@@ -311,11 +317,8 @@ async fn wait_for_transaction_result(
             .optional()?;
 
         if let Some(resp) = resp {
-            if resp.is_finalized {
-                let result = resp
-                    .result
-                    .ok_or_else(|| anyhow!("Transaction finalized but no result returned"))?;
-                return Ok(result);
+            if resp.final_decision.is_some() {
+                return Ok(resp);
             }
         }
         if let Some(t) = timeout {

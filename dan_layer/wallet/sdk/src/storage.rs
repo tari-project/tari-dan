@@ -1,7 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    time::Duration,
+};
 
 use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::IsNotFoundError;
@@ -213,6 +216,8 @@ pub trait WalletStoreWriter {
         final_fee: Option<Amount>,
         qcs: Option<&[QuorumCertificate]>,
         new_status: TransactionStatus,
+        execution_time: Option<Duration>,
+        finalized_time: Option<Duration>,
     ) -> Result<(), WalletStorageError>;
 
     // Substates

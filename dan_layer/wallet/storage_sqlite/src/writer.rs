@@ -5,6 +5,7 @@ use std::{
     ops::{Deref, DerefMut},
     str::FromStr,
     sync::MutexGuard,
+    time::Duration,
 };
 
 use chrono::NaiveDateTime;
@@ -275,6 +276,8 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         final_fee: Option<Amount>,
         qcs: Option<&[QuorumCertificate]>,
         new_status: TransactionStatus,
+        execution_time: Option<Duration>,
+        finalized_time: Option<Duration>,
     ) -> Result<(), WalletStorageError> {
         use crate::schema::transactions;
 
@@ -284,6 +287,10 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 transactions::status.eq(new_status.as_key_str()),
                 transactions::final_fee.eq(final_fee.map(|v| v.value())),
                 transactions::qcs.eq(qcs.map(serialize_json).transpose()?),
+                transactions::executed_time_ms
+                    .eq(execution_time.map(|v| i64::try_from(v.as_millis()).unwrap_or(i64::MAX))),
+                transactions::finalized_time_ms
+                    .eq(finalized_time.map(|v| i64::try_from(v.as_millis()).unwrap_or(i64::MAX))),
                 transactions::updated_at.eq(diesel::dsl::now),
             ))
             .filter(transactions::hash.eq(transaction_id.to_string()))

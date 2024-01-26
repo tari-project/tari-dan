@@ -177,7 +177,7 @@ export default function App() {
     <>
       <VNContext.Provider value={{ epoch, identity, shardKey, error }}>
         <Routes>
-          <Route path="/" element={<Layout />}>
+          <Route path="/" element={<Layout />} errorElement={<ErrorPage />}>
             <Route index element={<ValidatorNode />} />
             <Route path="committees" element={<Committees />} />
             <Route path="connections" element={<Connections />} />

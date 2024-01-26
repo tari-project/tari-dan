@@ -258,6 +258,7 @@ diesel::table! {
         result -> Nullable<Text>,
         execution_time_ms -> Nullable<BigInt>,
         final_decision -> Nullable<Text>,
+        finalized_at -> Nullable<Timestamp>,
         abort_details -> Nullable<Text>,
         min_epoch -> Nullable<BigInt>,
         max_epoch -> Nullable<BigInt>,
@@ -280,6 +281,9 @@ diesel::table! {
 
 diesel::allow_tables_to_appear_in_same_query!(
     blocks,
+    foreign_proposals,
+    foreign_receive_counters,
+    foreign_send_counters,
     high_qcs,
     last_executed,
     last_proposed,
