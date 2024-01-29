@@ -139,6 +139,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
         let insert = (
             parked_blocks::block_id.eq(&block_id),
             parked_blocks::parent_block_id.eq(serialize_hex(block.parent())),
+            parked_blocks::network.eq(block.network().to_string()),
             parked_blocks::height.eq(block.height().as_u64() as i64),
             parked_blocks::epoch.eq(block.epoch().as_u64() as i64),
             parked_blocks::proposed_by.eq(serialize_hex(block.proposed_by().as_bytes())),
@@ -182,6 +183,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         let insert = (
             blocks::block_id.eq(serialize_hex(block.id())),
             blocks::parent_block_id.eq(serialize_hex(block.parent())),
+            blocks::network.eq(block.network().to_string()),
             blocks::height.eq(block.height().as_u64() as i64),
             blocks::epoch.eq(block.epoch().as_u64() as i64),
             blocks::proposed_by.eq(serialize_hex(block.proposed_by().as_bytes())),

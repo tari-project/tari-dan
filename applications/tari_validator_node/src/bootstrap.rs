@@ -31,7 +31,10 @@ use serde::Serialize;
 use sqlite_message_logger::SqliteMessageLogger;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
-    configuration::bootstrap::{grpc_default_port, ApplicationType},
+    configuration::{
+        bootstrap::{grpc_default_port, ApplicationType},
+        Network,
+    },
     exit_codes::{ExitCode, ExitError},
 };
 use tari_common_types::types::PublicKey;
@@ -182,10 +185,11 @@ pub async fn spawn_services(
     // Connect to shard db
     let state_store =
         SqliteStateStore::connect(&format!("sqlite://{}", config.validator_node.state_db_path().display()))?;
-    state_store.with_write_tx(|tx| bootstrap_state(tx))?;
+    state_store.with_write_tx(|tx| bootstrap_state(tx, config.network))?;
 
     // Epoch manager
     let (epoch_manager, join_handle) = tari_epoch_manager::base_layer::spawn_service(
+        config.network,
         // TODO: We should be able to pass consensus constants here. However, these are currently located in dan_core
         // which depends on epoch_manager, so would be a circular dependency.
         EpochManagerConfig {
@@ -238,6 +242,7 @@ pub async fn spawn_services(
         ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
 
     let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
+        config.network,
         state_store.clone(),
         keypair.clone(),
         epoch_manager.clone(),
@@ -291,6 +296,7 @@ pub async fn spawn_services(
 
     // Base Node scanner
     let join_handle = base_layer_scanner::spawn(
+        config.network,
         global_db.clone(),
         base_node_client.clone(),
         epoch_manager.clone(),
@@ -433,13 +439,13 @@ async fn spawn_p2p_rpc(
 }
 
 // TODO: Figure out the best way to have the engine shard store mirror these bootstrapped states.
-fn bootstrap_state<TTx>(tx: &mut TTx) -> Result<(), StorageError>
+fn bootstrap_state<TTx>(tx: &mut TTx, network: Network) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + DerefMut,
     TTx::Target: StateStoreReadTransaction,
     TTx::Addr: NodeAddressable + Serialize,
 {
-    let genesis_block = Block::genesis();
+    let genesis_block = Block::genesis(network);
     let substate_id = SubstateId::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let substate_address = SubstateAddress::from_address(&substate_id, 0);
     let mut metadata: Metadata = Default::default();

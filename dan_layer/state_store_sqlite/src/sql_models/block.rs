@@ -19,6 +19,7 @@ pub struct Block {
     pub id: i32,
     pub block_id: String,
     pub parent_block_id: String,
+    pub network: String,
     pub height: i64,
     pub epoch: i64,
     pub proposed_by: String,
@@ -36,8 +37,14 @@ pub struct Block {
 
 impl Block {
     pub fn try_convert(self, qc: sql_models::QuorumCertificate) -> Result<consensus_models::Block, StorageError> {
+        let network = self.network.parse().map_err(|_| StorageError::DecodingError {
+            operation: "try_convert",
+            item: "block",
+            details: format!("Block #{} network byte is not a valid Network", self.id),
+        })?;
         Ok(consensus_models::Block::load(
             deserialize_hex_try_from(&self.block_id)?,
+            network,
             deserialize_hex_try_from(&self.parent_block_id)?,
             qc.try_into()?,
             NodeHeight(self.height as u64),
@@ -66,6 +73,7 @@ pub struct ParkedBlock {
     pub id: i32,
     pub block_id: String,
     pub parent_block_id: String,
+    pub network: String,
     pub height: i64,
     pub epoch: i64,
     pub proposed_by: String,
@@ -82,8 +90,14 @@ impl TryFrom<ParkedBlock> for consensus_models::Block {
     type Error = StorageError;
 
     fn try_from(value: ParkedBlock) -> Result<Self, Self::Error> {
+        let network = value.network.parse().map_err(|_| StorageError::DecodingError {
+            operation: "try_convert",
+            item: "block",
+            details: format!("Block #{} network byte is not a valid Network", value.id),
+        })?;
         Ok(consensus_models::Block::load(
             deserialize_hex_try_from(&value.block_id)?,
+            network,
             deserialize_hex_try_from(&value.parent_block_id)?,
             deserialize_json(&value.justify)?,
             NodeHeight(value.height as u64),

@@ -250,6 +250,7 @@ impl TryFrom<proto::consensus::RequestedTransactionMessage> for RequestedTransac
 impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Block {
     fn from(value: &tari_dan_storage::consensus_models::Block) -> Self {
         Self {
+            network: value.network().as_byte().into(),
             height: value.height().as_u64(),
             epoch: value.epoch().as_u64(),
             parent_id: value.parent().as_bytes().to_vec(),
@@ -268,7 +269,12 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::Block) -> Result<Self, Self::Error> {
+        let network = u8::try_from(value.network)
+            .map_err(|_| anyhow!("Block conversion: Invalid network byte {}", value.network))?
+            .try_into()?;
+
         Ok(Self::new(
+            network,
             value.parent_id.try_into()?,
             value
                 .justify

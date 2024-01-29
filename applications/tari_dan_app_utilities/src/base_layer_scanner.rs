@@ -29,6 +29,7 @@ use tari_base_node_client::{
     BaseNodeClient,
     BaseNodeClientError,
 };
+use tari_common::configuration::Network;
 use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
 use tari_core::transactions::transaction_components::{
     CodeTemplateRegistration,
@@ -63,6 +64,7 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::base_layer_scanner";
 
 pub fn spawn<TAddr: NodeAddressable + 'static>(
+    network: Network,
     global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
     base_node_client: GrpcBaseNodeClient,
     epoch_manager: EpochManagerHandle<TAddr>,
@@ -75,6 +77,7 @@ pub fn spawn<TAddr: NodeAddressable + 'static>(
 ) -> JoinHandle<anyhow::Result<()>> {
     task::spawn(async move {
         let base_layer_scanner = BaseLayerScanner::new(
+            network,
             global_db,
             base_node_client,
             epoch_manager,
@@ -92,6 +95,7 @@ pub fn spawn<TAddr: NodeAddressable + 'static>(
 }
 
 pub struct BaseLayerScanner<TAddr> {
+    network: Network,
     global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
     last_scanned_height: u64,
     last_scanned_tip: Option<FixedHash>,
@@ -110,6 +114,7 @@ pub struct BaseLayerScanner<TAddr> {
 
 impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
     pub fn new(
+        network: Network,
         global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
         base_node_client: GrpcBaseNodeClient,
         epoch_manager: EpochManagerHandle<TAddr>,
@@ -121,6 +126,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         base_layer_scanning_interval: Duration,
     ) -> Self {
         Self {
+            network,
             global_db,
             last_scanned_tip: None,
             last_scanned_height: 0,
@@ -374,7 +380,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         });
         self.state_store
             .with_write_tx(|tx| {
-                let genesis = Block::genesis();
+                let genesis = Block::genesis(self.network);
 
                 // TODO: This should be proposed in a block...
                 SubstateRecord {

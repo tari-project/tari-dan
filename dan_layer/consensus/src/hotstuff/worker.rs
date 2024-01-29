@@ -8,6 +8,7 @@ use std::{
 };
 
 use log::*;
+use tari_common::configuration::Network;
 use tari_dan_common_types::{optional::Optional, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, HighQc, LastSentVote, LastVoted, LeafBlock, TransactionPool},
@@ -45,6 +46,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
 
 pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
+    network: Network,
 
     tx_events: broadcast::Sender<HotstuffEvent>,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
@@ -75,6 +77,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
+        network: Network,
         inbound_messaging: TConsensusSpec::InboundMessaging,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
         rx_new_transactions: mpsc::Receiver<(TransactionId, usize)>,
@@ -90,6 +93,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     ) -> Self {
         let pacemaker = PaceMaker::new();
         let vote_receiver = VoteReceiver::new(
+            network,
             state_store.clone(),
             leader_strategy.clone(),
             epoch_manager.clone(),
@@ -100,12 +104,14 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             Proposer::<TConsensusSpec>::new(state_store.clone(), epoch_manager.clone(), outbound_messaging.clone());
         Self {
             validator_addr: validator_addr.clone(),
+            network,
             tx_events: tx_events.clone(),
             outbound_messaging: outbound_messaging.clone(),
             inbound_messaging,
             rx_new_transactions,
 
             on_inbound_message: OnInboundMessage::new(
+                network,
                 state_store.clone(),
                 epoch_manager.clone(),
                 leader_strategy.clone(),
@@ -131,6 +137,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 transaction_pool.clone(),
                 tx_events,
                 proposer.clone(),
+                network,
             ),
             on_receive_foreign_proposal: OnReceiveForeignProposalHandler::new(
                 state_store.clone(),
@@ -140,6 +147,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             ),
             on_receive_vote: OnReceiveVoteHandler::new(vote_receiver.clone()),
             on_receive_new_view: OnReceiveNewViewHandler::new(
+                network,
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
@@ -152,6 +160,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             ),
             on_receive_requested_txs: OnReceiveRequestedTransactions::new(tx_mempool),
             on_propose: OnPropose::new(
+                network,
                 state_store.clone(),
                 epoch_manager.clone(),
                 transaction_pool.clone(),
@@ -528,7 +537,7 @@ where TConsensusSpec: ConsensusSpec
         let mut tx = self.state_store.create_write_tx()?;
 
         // The parent for genesis blocks refer to this zero block
-        let zero_block = Block::zero_block();
+        let zero_block = Block::zero_block(self.network);
         if !zero_block.exists(tx.deref_mut())? {
             debug!(target: LOG_TARGET, "Creating zero block");
             zero_block.justify().insert(&mut tx)?;

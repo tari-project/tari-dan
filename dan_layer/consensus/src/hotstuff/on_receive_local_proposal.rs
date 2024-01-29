@@ -8,6 +8,7 @@
 use std::ops::DerefMut;
 
 use log::*;
+use tari_common::configuration::Network;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
@@ -37,6 +38,7 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_local_proposal";
 
 pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
+    network: Network,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -57,8 +59,10 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
+        network: Network,
     ) -> Self {
         Self {
+            network,
             store: store.clone(),
             epoch_manager: epoch_manager.clone(),
             leader_strategy: leader_strategy.clone(),
@@ -74,6 +78,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 outbound_messaging,
                 tx_events,
                 proposer,
+                network,
             ),
         }
     }
@@ -323,6 +328,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
                 // TODO: replace with actual leader's propose
                 dummy_blocks.push(Block::dummy_block(
+                    self.network,
                     *last_dummy_block.id(),
                     leader.clone(),
                     next_height,

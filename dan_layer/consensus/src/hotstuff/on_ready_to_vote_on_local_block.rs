@@ -4,6 +4,7 @@
 use std::{collections::HashSet, num::NonZeroU64, ops::DerefMut};
 
 use log::*;
+use tari_common::configuration::Network;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
@@ -56,6 +57,7 @@ pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_events: broadcast::Sender<HotstuffEvent>,
     proposer: Proposer<TConsensusSpec>,
+    network: Network,
 }
 
 impl<TConsensusSpec> OnReadyToVoteOnLocalBlock<TConsensusSpec>
@@ -72,6 +74,7 @@ where TConsensusSpec: ConsensusSpec
         outbound_messaging: TConsensusSpec::OutboundMessaging,
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
+        network: Network,
     ) -> Self {
         Self {
             validator_addr,
@@ -84,6 +87,7 @@ where TConsensusSpec: ConsensusSpec
             outbound_messaging,
             tx_events,
             proposer,
+            network,
         }
     }
 
@@ -849,7 +853,7 @@ where TConsensusSpec: ConsensusSpec
             .epoch_manager
             .get_validator_node(block.epoch(), &self.validator_addr)
             .await?;
-        let leaf_hash = vn.node_hash();
+        let leaf_hash = vn.get_node_hash(self.network);
 
         let signature = self.vote_signing_service.sign_vote(&leaf_hash, block.id(), &decision);
 

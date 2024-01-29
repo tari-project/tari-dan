@@ -43,9 +43,11 @@ mod confirm_all_transitions {
         let atom2 = create_tx_atom();
         let atom3 = create_tx_atom();
 
-        let zero_block = Block::zero_block();
+        let network = Default::default();
+        let zero_block = Block::zero_block(network);
         zero_block.insert(&mut tx).unwrap();
         let block1 = Block::new(
+            network,
             *zero_block.id(),
             zero_block.justify().clone(),
             NodeHeight(1),

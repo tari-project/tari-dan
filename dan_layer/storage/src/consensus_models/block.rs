@@ -11,6 +11,7 @@ use std::{
 use indexmap::IndexMap;
 use log::*;
 use serde::{Deserialize, Serialize};
+use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, FixedHashSizeError, PublicKey};
 use tari_dan_common_types::{
     hashing,
@@ -54,6 +55,8 @@ const LOG_TARGET: &str = "tari::dan::storage::consensus_models::block";
 pub struct Block {
     // Header
     id: BlockId,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    network: Network,
     parent: BlockId,
     justify: QuorumCertificate,
     height: NodeHeight,
@@ -86,6 +89,7 @@ pub struct Block {
 
 impl Block {
     pub fn new(
+        network: Network,
         parent: BlockId,
         justify: QuorumCertificate,
         height: NodeHeight,
@@ -98,6 +102,7 @@ impl Block {
     ) -> Self {
         let mut block = Self {
             id: BlockId::genesis(),
+            network,
             parent,
             justify,
             height,
@@ -120,6 +125,7 @@ impl Block {
 
     pub fn load(
         id: BlockId,
+        network: Network,
         parent: BlockId,
         justify: QuorumCertificate,
         height: NodeHeight,
@@ -136,6 +142,7 @@ impl Block {
     ) -> Self {
         Self {
             id,
+            network,
             parent,
             justify,
             height,
@@ -154,8 +161,9 @@ impl Block {
         }
     }
 
-    pub fn genesis() -> Self {
+    pub fn genesis(network: Network) -> Self {
         Self::new(
+            network,
             BlockId::genesis(),
             QuorumCertificate::genesis(),
             NodeHeight(0),
@@ -169,8 +177,9 @@ impl Block {
     }
 
     /// This is the parent block for all genesis blocks. Its block ID is always zero.
-    pub fn zero_block() -> Self {
+    pub fn zero_block(network: Network) -> Self {
         Self {
+            network,
             id: BlockId::genesis(),
             parent: BlockId::genesis(),
             justify: QuorumCertificate::genesis(),
@@ -190,6 +199,7 @@ impl Block {
     }
 
     pub fn dummy_block(
+        network: Network,
         parent: BlockId,
         proposed_by: PublicKey,
         node_height: NodeHeight,
@@ -197,6 +207,7 @@ impl Block {
         epoch: Epoch,
     ) -> Self {
         let mut block = Self::new(
+            network,
             parent,
             high_qc,
             node_height,
@@ -214,6 +225,7 @@ impl Block {
 
     pub fn calculate_hash(&self) -> FixedHash {
         hashing::block_hasher()
+            .chain(&self.network)
             .chain(&self.parent)
             .chain(&self.justify)
             .chain(&self.height)
@@ -280,6 +292,10 @@ impl Block {
 
     pub fn id(&self) -> &BlockId {
         &self.id
+    }
+
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     pub fn parent(&self) -> &BlockId {
