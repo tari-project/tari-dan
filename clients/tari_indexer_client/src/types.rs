@@ -36,6 +36,7 @@ pub struct GetSubstateResponse {
     pub address: SubstateId,
     pub version: u32,
     pub substate: Substate,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_by_transaction: TransactionId,
 }
 
@@ -57,6 +58,7 @@ pub struct InspectSubstateResponse {
     pub version: u32,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub substate_contents: serde_json::Value,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_by_transaction: TransactionId,
 }
 
@@ -71,6 +73,7 @@ pub struct SubmitTransactionRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct SubmitTransactionResponse {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
     pub result: IndexerTransactionFinalizedResult,
 }
@@ -78,6 +81,7 @@ pub struct SubmitTransactionResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTransactionResultRequest {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
 }
 
@@ -144,7 +148,9 @@ pub struct GetNonFungibleCountRequest {
 pub struct GetNonFungiblesRequest {
     #[serde_as(as = "DisplayFromStr")]
     pub address: SubstateId,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub start_index: u64,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub end_index: u64,
 }
 
@@ -158,6 +164,7 @@ pub struct GetNonFungiblesResponse {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct NonFungibleSubstate {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub index: u64,
     #[serde_as(as = "DisplayFromStr")]
     pub address: SubstateId,
@@ -197,6 +204,7 @@ pub struct AddPeerResponse {}
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetEpochManagerStatsResponse {
     pub current_epoch: Epoch,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub current_block_height: u64,
 }
 

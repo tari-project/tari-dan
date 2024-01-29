@@ -17,6 +17,7 @@ pub struct ValidatorNode<TAddr> {
     pub public_key: PublicKey,
     pub shard_key: SubstateAddress,
     pub epoch: Epoch,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub committee_shard: Option<Shard>,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub fee_claim_public_key: PublicKey,

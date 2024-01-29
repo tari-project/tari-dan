@@ -162,6 +162,7 @@ impl<TAddr: PartialEq> FromIterator<Committee<TAddr>> for Committee<TAddr> {
 pub struct CommitteeShard {
     num_committees: u32,
     num_members: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     shard: Shard,
 }
 

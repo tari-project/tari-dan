@@ -14,10 +14,13 @@ use crate::resource_container::ResourceContainer;
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FeeReceipt {
     /// The total amount of the fee payment(s)
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub total_fee_payment: Amount,
     /// Total fees paid after refunds
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub total_fees_paid: Amount,
     /// Breakdown of fee costs
+    #[cfg_attr(feature = "ts", ts(type = "Array<[FeeSource, number]>"))]
     pub cost_breakdown: Vec<(FeeSource, u64)>,
 }
 
@@ -76,7 +79,9 @@ pub enum FeeSource {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FeeCostBreakdown {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub total_fees_charged: Amount,
+    #[cfg_attr(feature = "ts", ts(type = "Array<[FeeSource, number]>"))]
     pub breakdown: Vec<(FeeSource, u64)>,
 }
 

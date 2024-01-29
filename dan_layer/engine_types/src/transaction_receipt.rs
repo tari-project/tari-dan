@@ -50,6 +50,7 @@ impl Display for TransactionReceiptAddress {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TransactionReceipt {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_hash: Hash,
     pub events: Vec<Event>,
     pub logs: Vec<LogEntry>,

@@ -32,7 +32,7 @@ pub enum NonFungibleId {
     U256(#[serde_as(as = "Bytes")] [u8; 32]),
     String(String),
     Uint32(u32),
-    Uint64(u64),
+    Uint64(#[cfg_attr(feature = "ts", ts(type = "number"))] u64),
 }
 
 impl NonFungibleId {

@@ -12,7 +12,7 @@ export interface CallInstructionRequest {
   override_inputs: boolean | null;
   new_outputs: number | null;
   is_dry_run: boolean;
-  proof_ids: Array<bigint>;
+  proof_ids: Array<number>;
   min_epoch: number | null;
   max_epoch: number | null;
 }

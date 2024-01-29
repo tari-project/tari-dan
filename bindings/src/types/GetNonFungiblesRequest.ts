@@ -3,6 +3,6 @@ import type { SubstateId } from "./SubstateId";
 
 export interface GetNonFungiblesRequest {
   address: SubstateId;
-  start_index: bigint;
-  end_index: bigint;
+  start_index: number;
+  end_index: number;
 }

@@ -4,13 +4,13 @@ import type { Instruction } from "./Instruction";
 import type { SubstateRequirement } from "./SubstateRequirement";
 
 export interface TransactionSubmitRequest {
-  signing_key_index: bigint | null;
+  signing_key_index: number | null;
   fee_instructions: Array<Instruction>;
   instructions: Array<Instruction>;
   inputs: Array<SubstateRequirement>;
   override_inputs: boolean;
   is_dry_run: boolean;
-  proof_ids: Array<bigint>;
+  proof_ids: Array<number>;
   min_epoch: Epoch | null;
   max_epoch: Epoch | null;
 }

@@ -2,7 +2,7 @@
 import type { Ordering } from "./Ordering";
 
 export interface GetBlocksRequest {
-  limit: bigint;
-  offset: bigint;
+  limit: number;
+  offset: number;
   ordering: Ordering | null;
 }

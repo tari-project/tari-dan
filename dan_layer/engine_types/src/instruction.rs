@@ -23,6 +23,7 @@ use crate::{
 pub enum Instruction {
     CallFunction {
         #[serde(with = "serde_with::hex")]
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
         template_address: TemplateAddress,
         function: String,
         #[serde(deserialize_with = "crate::argument_parser::json_deserialize")]
@@ -46,6 +47,7 @@ pub enum Instruction {
         claim: Box<ConfidentialClaim>,
     },
     ClaimValidatorFees {
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         epoch: u64,
         #[cfg_attr(feature = "ts", ts(type = "string"))]
         validator_public_key: PublicKey,
@@ -53,6 +55,7 @@ pub enum Instruction {
     DropAllProofsInWorkspace,
     #[cfg(feature = "debugging")]
     CreateFreeTestCoins {
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         revealed_amount: Amount,
         output: Option<ConfidentialOutput>,
     },

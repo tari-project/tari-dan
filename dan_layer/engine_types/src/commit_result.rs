@@ -99,6 +99,7 @@ impl ExecuteResult {
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FinalizeResult {
     #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_hash: Hash,
     pub events: Vec<Event>,
     pub logs: Vec<LogEntry>,

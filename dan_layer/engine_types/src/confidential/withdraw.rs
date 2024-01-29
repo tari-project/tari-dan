@@ -30,7 +30,9 @@ pub struct ConfidentialOutput {
     pub commitment: Commitment,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub stealth_public_nonce: PublicKey,
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub encrypted_data: EncryptedData,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub minimum_value_promise: u64,
 }
 

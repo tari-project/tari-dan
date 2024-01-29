@@ -74,12 +74,14 @@ pub struct TemplateRegistrationRequest {
 pub struct TemplateRegistrationResponse {
     #[serde(with = "serde_with::base64")]
     pub template_address: Vec<u8>,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub transaction_id: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTemplateRequest {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub template_address: TemplateAddress,
 }
 
@@ -116,6 +118,7 @@ pub struct ArgDef {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTemplatesRequest {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub limit: u64,
 }
 
@@ -129,11 +132,13 @@ pub struct GetTemplatesResponse {
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TemplateMetadata {
     pub name: String,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub address: TemplateAddress,
     pub url: String,
     /// SHA hash of binary
     pub binary_sha: Vec<u8>,
     /// Block height in which the template was published
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub height: u64,
 }
 
@@ -148,6 +153,7 @@ pub struct SubmitTransactionRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct SubmitTransactionResponse {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
     /// The result is a _dry run_ transaction.
     pub dry_run_result: Option<DryRunTransactionFinalizeResult>,
@@ -164,6 +170,7 @@ pub struct DryRunTransactionFinalizeResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTransactionRequest {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
 }
 
@@ -176,6 +183,7 @@ pub struct GetTransactionResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetSubstatesByTransactionRequest {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
 }
 
@@ -188,6 +196,7 @@ pub struct GetSubstatesByTransactionResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTransactionResultRequest {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
 }
 
@@ -217,6 +226,7 @@ pub struct GetRecentTransactionsResponse {
 pub struct ListBlocksRequest {
     /// If provided, `limit` blocks from the specified block back will be returned. Otherwise `limit` blocks from the
     /// leaf block will be provided.
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     pub from_id: Option<BlockId>,
     pub limit: usize,
 }
@@ -242,6 +252,7 @@ pub struct GetBlocksResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetBlocksCountResponse {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub count: i64,
 }
 
@@ -279,6 +290,7 @@ pub struct GetNetworkCommitteeResponse<TAddr> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct CommitteeShardInfo<TAddr> {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub shard: Shard,
     pub substate_address_range: RangeInclusive<SubstateAddress>,
     pub validators: Vec<ValidatorNode<TAddr>>,
@@ -287,6 +299,7 @@ pub struct CommitteeShardInfo<TAddr> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetShardKey {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub height: u64,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub public_key: PublicKey,
@@ -315,6 +328,7 @@ pub struct GetSubstateRequest {
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetSubstateResponse {
     pub value: Option<SubstateValue>,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     pub created_by_tx: Option<TransactionId>,
     pub status: SubstateStatus,
 }
@@ -345,6 +359,7 @@ pub struct AddPeerResponse {}
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetEpochManagerStatsResponse {
     pub current_epoch: Epoch,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub current_block_height: u64,
     pub is_valid: bool,
     pub committee_shard: Option<CommitteeShard>,
@@ -384,8 +399,11 @@ pub struct ValidatorFee {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub validator_public_key: PublicKey,
     pub epoch: Epoch,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub block_id: BlockId,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub total_fee_due: u64,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub total_transaction_fee: u64,
 }
 
@@ -409,13 +427,16 @@ impl From<Block> for ValidatorFee {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetBlockRequest {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub block_id: BlockId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetBlocksRequest {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub limit: u64,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub offset: u64,
     pub ordering: Option<Ordering>,
 }
