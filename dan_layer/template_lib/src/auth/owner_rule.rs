@@ -1,6 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+#[cfg(feature = "ts")]
+use ts_rs::TS;
+
 use crate::{auth::AccessRule, crypto::RistrettoPublicKeyBytes};
 
 /// Data that is needed to represent ownership of a value (resource or component method).
@@ -13,6 +16,7 @@ pub struct Ownership<'a> {
 
 /// An enum for all possible ways to specify ownership of values
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum OwnerRule {
     #[default]
     OwnedBySigner,

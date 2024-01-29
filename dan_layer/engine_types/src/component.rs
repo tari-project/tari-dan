@@ -28,6 +28,8 @@ use tari_template_lib::{
     prelude::ComponentAddress,
     Hash,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     hashing::{hasher32, EngineHashDomainLabel},
@@ -45,11 +47,13 @@ pub fn new_component_address_from_parts(template_address: &TemplateAddress, comp
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ComponentHeader {
     #[serde(with = "serde_with::hex")]
     pub template_address: TemplateAddress,
     pub module_name: String,
     #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub owner_key: RistrettoPublicKeyBytes,
     pub owner_rule: OwnerRule,
     pub access_rules: ComponentAccessRules,
@@ -93,8 +97,10 @@ impl ComponentHeader {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ComponentBody {
     #[serde(with = "serde_with::cbor_value")]
+    #[cfg_attr(feature = "ts", ts(type = "any"))]
     pub state: tari_bor::Value,
 }
 

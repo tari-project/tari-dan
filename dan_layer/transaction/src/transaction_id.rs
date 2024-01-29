@@ -10,11 +10,15 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHashSizeError;
 use tari_crypto::tari_utilities::hex::{from_hex, Hex};
 use tari_engine_types::serde_with;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize, Default)]
 #[serde(transparent)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TransactionId {
     #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     id: [u8; 32],
 }
 

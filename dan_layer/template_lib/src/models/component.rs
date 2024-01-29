@@ -26,6 +26,8 @@ use std::{
 };
 
 use tari_bor::BorTag;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use super::BinaryTag;
 use crate::{hash::HashParseError, newtype_struct_serde_impl, Hash};
@@ -34,7 +36,8 @@ const TAG: u64 = BinaryTag::ComponentAddress.as_u64();
 
 /// A component's unique identification in the Tari network
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ComponentAddress(BorTag<Hash, TAG>);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct ComponentAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<Hash, TAG>);
 
 impl ComponentAddress {
     pub const fn new(address: Hash) -> Self {

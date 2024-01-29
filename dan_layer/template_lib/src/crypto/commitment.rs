@@ -4,6 +4,8 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
 use tari_template_abi::rust::fmt::{Display, Formatter};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{crypto::InvalidByteLengthError, Hash};
 
@@ -11,6 +13,7 @@ use crate::{crypto::InvalidByteLengthError, Hash};
 #[serde_as]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct PedersonCommitmentBytes(#[serde_as(as = "Bytes")] [u8; PedersonCommitmentBytes::length()]);
 
 impl PedersonCommitmentBytes {

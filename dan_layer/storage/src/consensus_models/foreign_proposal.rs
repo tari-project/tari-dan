@@ -9,11 +9,14 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{shard::Shard, NodeHeight};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use super::BlockId;
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum ForeignProposalState {
     New,
     Proposed,
@@ -44,6 +47,7 @@ impl FromStr for ForeignProposalState {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ForeignProposal {
     pub bucket: Shard,
     pub block_id: BlockId,

@@ -71,6 +71,10 @@ impl<TMsg> MessageSink<TMsg> {
         self.sender.unbounded_send(msg).map_err(|_| crate::Error::ChannelClosed)
     }
 
+    pub fn is_closed(&self) -> bool {
+        self.sender.is_closed()
+    }
+
     pub async fn send_all<TStream>(&mut self, stream: &mut TStream) -> Result<(), crate::Error>
     where TStream: Stream<Item = Result<TMsg, mpsc::SendError>> + Unpin + ?Sized {
         self.sender

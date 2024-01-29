@@ -4,6 +4,8 @@
 use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{hash::HashParseError, Hash};
 
@@ -11,7 +13,8 @@ use crate::{hash::HashParseError, Hash};
 /// Used when a user wants to claim burned funds from the Minotari network into the Tari network
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct UnclaimedConfidentialOutputAddress(Hash);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct UnclaimedConfidentialOutputAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] Hash);
 
 impl UnclaimedConfidentialOutputAddress {
     pub const fn new(hash: Hash) -> Self {

@@ -27,14 +27,18 @@ use tari_template_lib::{
     models::{Amount, Metadata},
     resource::{ResourceType, TOKEN_SYMBOL},
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Resource {
     resource_type: ResourceType,
     owner_rule: OwnerRule,
     owner_key: RistrettoPublicKeyBytes,
     access_rules: ResourceAccessRules,
     metadata: Metadata,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     total_supply: Amount,
 }
 

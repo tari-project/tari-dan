@@ -85,6 +85,7 @@ where TCodec: Codec + Send + Clone + 'static
     pub fn obtain_message_channel(&mut self, peer_id: PeerId) -> MessageSink<TCodec::Message> {
         let stream_id = self.next_outbound_stream_id;
 
+        self.clear_closed_connections();
         match self.get_connections(&peer_id) {
             Some(connections) => {
                 // Return a currently active stream
@@ -139,6 +140,18 @@ where TCodec: Codec + Send + Clone + 'static
                     sink
                 },
             },
+        }
+    }
+
+    fn clear_closed_connections(&mut self) {
+        for connections in self.connected.values_mut() {
+            connections.clear_closed_connections();
+        }
+        self.connected.retain(|_, connections| !connections.is_empty());
+
+        // Shrink the capacity of empty queues if they exceed the threshold.
+        if self.connected.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
+            self.connected.shrink_to_fit();
         }
     }
 
@@ -361,22 +374,22 @@ struct Connections<TMsg> {
 }
 
 impl<TMsg> Connections<TMsg> {
-    fn new() -> Self {
+    pub(self) fn new() -> Self {
         Self {
             last_selected_index: 0,
             connections: SmallVec::new(),
         }
     }
 
-    pub fn push(&mut self, connection: Connection<TMsg>) {
+    pub(self) fn push(&mut self, connection: Connection<TMsg>) {
         self.connections.push(connection);
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(self) fn is_empty(&self) -> bool {
         self.connections.is_empty()
     }
 
-    pub fn next_active_sink(&mut self) -> Option<&MessageSink<TMsg>> {
+    pub(self) fn next_active_sink(&mut self) -> Option<&MessageSink<TMsg>> {
         let initial_last_selected = cmp::min(self.last_selected_index, self.connections.len() - 1);
         let (last_index, sink) = cycle_once(self.connections.len(), initial_last_selected, |i| {
             let conn = &self.connections[i];
@@ -387,7 +400,7 @@ impl<TMsg> Connections<TMsg> {
         Some(sink)
     }
 
-    pub fn next_pending_sink(&mut self) -> Option<&MessageSink<TMsg>> {
+    pub(self) fn next_pending_sink(&mut self) -> Option<&MessageSink<TMsg>> {
         let initial_last_selected = cmp::min(self.last_selected_index, self.connections.len() - 1);
         let (last_index, sink) = cycle_once(self.connections.len(), initial_last_selected, |i| {
             let conn = &self.connections[i];
@@ -396,6 +409,13 @@ impl<TMsg> Connections<TMsg> {
 
         self.last_selected_index = last_index;
         Some(sink)
+    }
+
+    pub(self) fn clear_closed_connections(&mut self) {
+        self.connections.retain(|c| {
+            c.message_sink.as_ref().map_or(true, |s| !s.is_closed()) &&
+                c.pending_sink.as_ref().map_or(true, |s| !s.is_closed())
+        });
     }
 }
 

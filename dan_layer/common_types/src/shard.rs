@@ -4,6 +4,8 @@
 use std::{fmt::Display, ops::RangeInclusive};
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     uint::{U256, U256_ONE},
@@ -12,6 +14,7 @@ use crate::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Shard(u32);
 
 impl Shard {

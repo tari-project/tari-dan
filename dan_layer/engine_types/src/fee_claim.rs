@@ -7,13 +7,16 @@ use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_common_types::types::PublicKey;
 use tari_template_lib::{models::BinaryTag, prelude::Amount, Hash};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::hashing::{hasher32, EngineHashDomainLabel};
 
 const TAG: u64 = BinaryTag::FeeClaim.as_u64();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct FeeClaimAddress(BorTag<Hash, TAG>);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct FeeClaimAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<Hash, TAG>);
 
 impl FeeClaimAddress {
     pub const fn new(address: Hash) -> Self {
@@ -46,8 +49,10 @@ impl Display for FeeClaimAddress {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FeeClaim {
     pub epoch: u64,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub validator_public_key: PublicKey,
     pub amount: Amount,
 }

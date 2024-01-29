@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
@@ -11,6 +13,7 @@ use crate::{
 
 /// A zero-knowledge proof of a confidential transfer
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialOutputProof {
     /// Proof of the confidential resources that are going to be transferred to the receiver
     pub output_statement: ConfidentialStatement,
@@ -24,6 +27,7 @@ pub struct ConfidentialOutputProof {
 /// A zero-knowledge proof that a confidential resource amount is valid
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialStatement {
     #[serde_as(as = "Bytes")]
     pub commitment: [u8; 32],
@@ -39,6 +43,7 @@ pub struct ConfidentialStatement {
 
 /// A zero-knowledge proof that a withdrawal of confidential resources from a vault is valid
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialWithdrawProof {
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
     pub inputs: Vec<PedersonCommitmentBytes>,
@@ -52,6 +57,7 @@ pub struct ConfidentialWithdrawProof {
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct EncryptedData(#[serde_as(as = "Bytes")] pub [u8; EncryptedData::size()]);
 
 impl EncryptedData {

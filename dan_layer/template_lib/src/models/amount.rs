@@ -27,11 +27,14 @@ use tari_template_abi::rust::{
     iter::Sum,
     num::TryFromIntError,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
-/// Represents an integer quantity of any fungible or non-fungible resource
+/// Represents an integer quantity of any fungible or non-fungible resourcecyni
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[serde(transparent)]
-pub struct Amount(pub i64);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct Amount(#[cfg_attr(feature = "ts", ts(type = "number"))] pub i64);
 
 impl Amount {
     pub const MAX: Amount = Amount(i64::MAX);

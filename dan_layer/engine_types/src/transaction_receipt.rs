@@ -9,13 +9,16 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_lib::{models::BinaryTag, Hash, HashParseError};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{events::Event, fees::FeeReceipt, logs::LogEntry};
 
 const TAG: u64 = BinaryTag::TransactionReceipt.as_u64();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct TransactionReceiptAddress(BorTag<Hash, TAG>);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct TransactionReceiptAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<Hash, TAG>);
 
 impl TransactionReceiptAddress {
     pub const fn new(address: Hash) -> Self {
@@ -45,6 +48,7 @@ impl Display for TransactionReceiptAddress {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TransactionReceipt {
     pub transaction_hash: Hash,
     pub events: Vec<Event>,

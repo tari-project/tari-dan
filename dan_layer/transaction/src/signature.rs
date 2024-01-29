@@ -13,6 +13,8 @@ use tari_engine_types::{
     hashing::{hasher64, EngineHashDomainLabel},
     instruction::Instruction,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionSignatureFields {
@@ -25,8 +27,11 @@ pub struct TransactionSignatureFields {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TransactionSignature {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     public_key: PublicKey,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     signature: Signature,
 }
 

@@ -18,11 +18,18 @@ use tari_engine_types::{
     substate::SubstateId,
     transaction_receipt::TransactionReceiptAddress,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{shard::Shard, uint::U256};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct SubstateAddress(#[serde(with = "serde_with::hex")] pub [u8; 32]);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct SubstateAddress(
+    #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub [u8; 32],
+);
 
 impl SubstateAddress {
     /// Defines the mapping of SubstateId to SubstateAddress

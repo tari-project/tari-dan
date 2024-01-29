@@ -215,6 +215,11 @@ tower = "0.4"
 tower-http = { version = "0.3.5", default-features = false }
 tower-layer = "0.3"
 tracing = "0.1.40"
+ts-rs = { version = "7.1", features = [
+    "chrono-impl",
+    "no-serde-warnings",
+    "indexmap-impl",
+] }
 url = "2.4.1"
 wasmer = "2.3.0"
 wasmer-middlewares = "2.3.0"
