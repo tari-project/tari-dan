@@ -36,7 +36,7 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::Transaction;
 use tokio::sync::broadcast;
 
-use super::proposer::Proposer;
+use super::{block_transaction_executor::BlockTransactionExecutor, proposer::Proposer};
 use crate::{
     hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, event::HotstuffEvent, ProposalValidationError},
     messages::{HotstuffMessage, VoteMessage},
@@ -350,6 +350,9 @@ where TConsensusSpec: ConsensusSpec
         let mut total_leader_fee = 0;
         let mut locked_inputs = HashSet::new();
         let mut locked_outputs = HashSet::new();
+
+        let executor = BlockTransactionExecutor::new();
+
         for cmd in block.commands() {
             if let Some(transaction) = cmd.transaction() {
                 let Some(mut tx_rec) = self
@@ -405,6 +408,11 @@ where TConsensusSpec: ConsensusSpec
                         if tx_rec.current_decision() == t.decision {
                             if tx_rec.current_decision().is_commit() {
                                 let transaction = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
+
+                                // Re-execute the transaction
+                                let mut executed = t.get_transaction(tx.deref_mut())?;
+                                executor.execute(&executed.transaction())?;   
+
                                 // Lock all inputs for the transaction as part of Prepare
                                 let is_inputs_locked = self.check_lock_inputs(
                                     tx,

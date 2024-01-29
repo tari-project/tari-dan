@@ -1,5 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
+mod block_transaction_executor;
 mod common;
 mod current_height;
 mod error;

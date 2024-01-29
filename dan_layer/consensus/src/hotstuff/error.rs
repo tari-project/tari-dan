@@ -12,6 +12,8 @@ use tari_transaction::TransactionId;
 
 use crate::traits::{InboundMessagingError, OutboundMessagingError};
 
+use super::block_transaction_executor::BlockTransactionExecutorError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
     #[error("Storage error: {0}")]
@@ -80,6 +82,8 @@ pub enum HotStuffError {
         local_height: NodeHeight,
         qc_height: NodeHeight,
     },
+    #[error("Block transaction executor error: {0}")]
+    BlockTransactionExecutorError(#[from] BlockTransactionExecutorError),
 }
 
 impl From<EpochManagerError> for HotStuffError {
