@@ -2,5 +2,5 @@
 
 export interface AuthLoginRequest {
   permissions: Array<string>;
-  duration: string | null;
+  duration: { secs: number; nanos: number } | null;
 }

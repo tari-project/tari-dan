@@ -99,7 +99,8 @@ function MonitoredNftCollections() {
     setShowAddAddressDialog(setElseToggle);
   };
   const onSubmitAddAddress = () => {
-    addAddress(formState.address).then((resp) => {
+    // TODO: We always use Component, because it's anyway to be serialized as a string, but maybe we should parse the address and use the correct type?
+    addAddress({ address: { Component: formState.address } }).then((resp) => {
       updatedAddresses();
     });
     setFormState({ address: "" });
@@ -124,7 +125,7 @@ function MonitoredNftCollections() {
   const updatedAddresses = () => {
     getNonFungibleCollections().then((resp) => {
       setAddresses(
-        resp.map(([address, count]: [string, number]) => ({
+        resp.collections.map(([address, count]: [string, number]) => ({
           id: address,
           address: address,
           count: count,

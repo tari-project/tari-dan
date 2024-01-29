@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from "react";
-import { getRecentTransactions } from "../../../utils/json_rpc";
 import { toHexString } from "./helpers";
 import { Link } from "react-router-dom";
 import { renderJson } from "../../../utils/helpers";
@@ -37,13 +36,6 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Collapse from "@mui/material/Collapse";
 import TablePagination from "@mui/material/TablePagination";
 import Typography from "@mui/material/Typography";
-
-interface IRecentTransaction {
-  payload_id: number[];
-  timestamp: string;
-  instructions: string;
-  meta: string;
-}
 
 interface ITableRecentTransaction {
   id: string;
@@ -150,22 +142,23 @@ function RecentTransactions() {
   };
 
   useEffect(() => {
-    getRecentTransactions().then((resp) => {
-      console.log("Response: ", resp);
-      setRecentTransactions(
-        // Display from newest to oldest by reversing
-        resp.transactions
-          .slice()
-          .reverse()
-          .map(({ instructions, meta, payload_id, timestamp }: IRecentTransaction) => ({
-            id: toHexString(payload_id),
-            payload_id: toHexString(payload_id),
-            timestamp: timestamp,
-            meta: meta,
-            instructions: instructions,
-          })),
-      );
-    });
+    // TODO: Was this ever working? We have this on VN but not in indexer
+    // getRecentTransactions().then((resp) => {
+    //   console.log("Response: ", resp);
+    //   setRecentTransactions(
+    //     // Display from newest to oldest by reversing
+    //     resp.transactions
+    //       .slice()
+    //       .reverse()
+    //       .map(({ instructions, meta, payload_id, timestamp }: IRecentTransaction) => ({
+    //         id: toHexString(payload_id),
+    //         payload_id: toHexString(payload_id),
+    //         timestamp: timestamp,
+    //         meta: meta,
+    //         instructions: instructions,
+    //       })),
+    //   );
+    // });
   }, []);
   const sort = (column: ColumnKey) => {
     let order = 1;

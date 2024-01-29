@@ -8734,6 +8734,7 @@ dependencies = [
  "tari_utilities",
  "thiserror",
  "tonic 0.8.3",
+ "ts-rs",
 ]
 
 [[package]]
@@ -9486,6 +9487,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
+ "tari_base_node_client",
  "tari_common_types",
  "tari_dan_common_types",
  "tari_dan_storage",

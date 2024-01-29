@@ -33,7 +33,7 @@ use log::{error, warn};
 use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_dan_app_utilities::{keypair::RistrettoKeypair, substate_file_cache::SubstateFileCache};
-use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, Epoch, PeerAddress};
+use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, PeerAddress};
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::consensus_models::Decision;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
@@ -43,12 +43,19 @@ use tari_indexer_client::{
         AddAddressRequest,
         AddPeerRequest,
         AddPeerResponse,
+        ClearAddressesResponse,
         ConnectionDirection,
         DeleteAddressRequest,
+        GetAddressesResponse,
+        GetAllVnsRequest,
+        GetAllVnsResponse,
+        GetCommsStatsResponse,
         GetConnectionsResponse,
         GetEpochManagerStatsResponse,
         GetIdentityResponse,
+        GetNonFungibleCollectionsResponse,
         GetNonFungibleCountRequest,
+        GetNonFungibleCountResponse,
         GetNonFungiblesRequest,
         GetNonFungiblesResponse,
         GetRelatedTransactionsRequest,
@@ -156,13 +163,10 @@ impl JsonRpcHandlers {
 
     pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let epoch: u64 = value.parse_params()?;
-        let epoch_blocks = self.consensus_constants.epoch_to_height(Epoch(epoch));
+        let GetAllVnsRequest { epoch } = value.parse_params()?;
+        let epoch_blocks = self.consensus_constants.epoch_to_height(epoch);
         match self.base_node_client().get_validator_nodes(epoch_blocks).await {
-            Ok(vns) => {
-                let response = json!({ "vns": vns });
-                Ok(JsonRpcResponse::success(answer_id, response))
-            },
+            Ok(vns) => Ok(JsonRpcResponse::success(answer_id, GetAllVnsResponse { vns })),
             Err(e) => Err(Self::internal_error(answer_id, format!("Failed to get all vns: {}", e))),
         }
     }
@@ -216,8 +220,9 @@ impl JsonRpcHandlers {
             .map_err(internal_error(answer_id))?;
 
         let status = if peers.is_empty() { "Offline" } else { "Online" };
-        let response = json!({ "connection_status": status });
-        Ok(JsonRpcResponse::success(answer_id, response))
+        Ok(JsonRpcResponse::success(answer_id, GetCommsStatsResponse {
+            connection_status: status.to_string(),
+        }))
     }
 
     pub async fn get_connections(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -383,7 +388,7 @@ impl JsonRpcHandlers {
         let res = self.substate_manager.get_all_addresses_from_db().await;
 
         match res {
-            Ok(addresses) => Ok(JsonRpcResponse::success(answer_id, addresses)),
+            Ok(addresses) => Ok(JsonRpcResponse::success(answer_id, GetAddressesResponse { addresses })),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error getting addresses: {}", e);
                 Err(Self::internal_error(
@@ -431,7 +436,7 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
 
         match self.substate_manager.delete_all_substates_from_db().await {
-            Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
+            Ok(_) => Ok(JsonRpcResponse::success(answer_id, ClearAddressesResponse {})),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error clearing addresses: {}", e);
                 Err(Self::internal_error(
@@ -448,7 +453,9 @@ impl JsonRpcHandlers {
         let res = self.substate_manager.get_non_fungible_collections().await;
 
         match res {
-            Ok(collections) => Ok(JsonRpcResponse::success(answer_id, collections)),
+            Ok(collections) => Ok(JsonRpcResponse::success(answer_id, GetNonFungibleCollectionsResponse {
+                collections,
+            })),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error getting non fungible collections: {}", e);
                 Err(Self::internal_error(
@@ -471,7 +478,9 @@ impl JsonRpcHandlers {
                 Self::internal_error(answer_id, format!("Error getting non fungible count: {}", e))
             })?;
 
-        Ok(JsonRpcResponse::success(answer_id, count))
+        Ok(JsonRpcResponse::success(answer_id, GetNonFungibleCountResponse {
+            count,
+        }))
     }
 
     pub async fn get_non_fungibles(&self, value: JsonRpcExtractor) -> JrpcResult {

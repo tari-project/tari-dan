@@ -205,9 +205,9 @@ pub struct GetTransactionResultRequest {
 pub struct GetTransactionResultResponse {
     pub result: Option<ExecuteResult>,
     pub final_decision: Option<Decision>,
-    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number} | null"))]
     pub finalized_time: Option<Duration>,
-    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number} | null"))]
     pub execution_time: Option<Duration>,
 }
 
@@ -449,9 +449,9 @@ pub struct Connection {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub address: Multiaddr,
     pub direction: ConnectionDirection,
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
     pub age: Duration,
-    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number} | null"))]
     pub ping_latency: Option<Duration>,
 }
 

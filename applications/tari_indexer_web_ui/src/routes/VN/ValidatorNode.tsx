@@ -23,7 +23,6 @@
 import { useEffect, useState } from "react";
 import Connections from "./Components/Connections";
 import Info from "./Components/Info";
-import { IIdentity } from "../../utils/interfaces";
 import { getIdentity } from "../../utils/json_rpc";
 import RecentTransactions from "./Components/RecentTransactions";
 import "./ValidatorNode.css";
@@ -32,9 +31,10 @@ import Grid from "@mui/material/Grid";
 import SecondaryHeading from "../../Components/SecondaryHeading";
 import MonitoredSubstates from "./Components/MonitoredSubstates";
 import MonitoredNftCollections from "./Components/MonitoredNftCollections";
+import { GetIdentityResponse } from "tari-bindings";
 
 function ValidatorNode() {
-  const [identity, setIdentity] = useState<IIdentity | undefined>(undefined);
+  const [identity, setIdentity] = useState<GetIdentityResponse>();
   const [error, setError] = useState("");
   // Initial fetch
   useEffect(() => {

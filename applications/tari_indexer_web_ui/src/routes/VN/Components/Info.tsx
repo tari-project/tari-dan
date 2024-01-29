@@ -20,7 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { IIdentity } from "../../../utils/interfaces";
 import "./Info.css";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -28,8 +27,9 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableRow from "@mui/material/TableRow";
 import { DataTableCell } from "../../../Components/StyledComponents";
+import { GetIdentityResponse } from "tari-bindings";
 
-function Info({ identity }: { identity: IIdentity }) {
+function Info({ identity }: { identity: GetIdentityResponse }) {
   return (
     <div>
       <TableContainer>

@@ -92,7 +92,8 @@ function RowData({
             size="small"
             onClick={() => {
               if (data === null) {
-                inspectSubstate(address)
+                // TODO: We always use Component, because it's anyway to be serialized as a string, but maybe we should parse the address and use the correct type?
+                inspectSubstate({ address: { Component: address }, version: null })
                   .then((resp) => {
                     setData(JSON.stringify(resp));
                   })
@@ -142,7 +143,8 @@ function MonitoredSubstates() {
     setShowAddAddressDialog(setElseToggle);
   };
   const onSubmitAddAddress = () => {
-    addAddress(formState.address).then((resp) => {
+    // TODO: We always use Component, because it's anyway to be serialized as a string, but maybe we should parse the address and use the correct type?
+    addAddress({ address: { Component: formState.address } }).then((resp) => {
       updatedAddresses();
     });
     setFormState({ address: "" });
@@ -167,7 +169,7 @@ function MonitoredSubstates() {
   const updatedAddresses = () => {
     getAddresses().then((resp) => {
       setAddresses(
-        resp.map(([address, version]: [string, number]) => ({
+        resp.addresses.map(([address, version]: [string, number]) => ({
           id: address,
           address: address,
           version: version,
@@ -181,8 +183,8 @@ function MonitoredSubstates() {
   }, []);
 
   const onDelete = (address: string) => {
-    deleteAddress(address).then((resp) => {
-      console.log(`Address ${address} deleted`);
+    // TODO: We always use Component, because it's anyway to be serialized as a string, but maybe we should parse the address and use the correct type?
+    deleteAddress({ address: { Component: address } }).then((resp) => {
       updatedAddresses();
     });
   };
