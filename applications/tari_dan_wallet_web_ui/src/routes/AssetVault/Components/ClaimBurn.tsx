@@ -37,12 +37,13 @@ import { useTheme } from "@mui/material/styles";
 import { accountsClaimBurn } from "../../../utils/json_rpc";
 import useAccountStore from "../../../store/accountStore";
 import { useKeysList } from "../../../api/hooks/useKeys";
+import { AccountInfo, AccountsListResponse } from "tari-bindings";
 
 export default function ClaimBurn() {
   const [open, setOpen] = useState(false);
   const [claimBurnFormState, setClaimBurnFormState] = useState({
     account: "",
-    key: "",
+    key_index: -1,
     claimProof: "",
     fee: "",
     is_valid_json: false,
@@ -55,14 +56,21 @@ export default function ClaimBurn() {
   const { data: dataKeysList } = useKeysList();
   const { setPopup } = useAccountStore();
 
-  const onClaimBurnKeyChange = (e: SelectChangeEvent<string>) => {
-    let key = e.target.value;
-    let key_index = dataKeysList.keys.indexOf(key);
+  const onClaimBurnKeyChange = (e: SelectChangeEvent<number>) => {
+    if (dataKeysList === undefined) {
+      return;
+    }
+    let key_index = +e.target.value;
     let account = claimBurnFormState.account;
-    let selected_account = dataAccountsList.accounts.find((account: any) => account.account.key_index === key_index);
+    if (dataAccountsList === undefined) {
+      return;
+    }
+    let selected_account = dataAccountsList.accounts.find(
+      (account: AccountInfo) => account.account.key_index === key_index,
+    );
     let new_account_name;
     if (selected_account !== undefined) {
-      account = selected_account.account.name;
+      account = selected_account.account.name || "";
       new_account_name = false;
     } else {
       if (claimBurnFormState.newAccount === false) {
@@ -72,7 +80,7 @@ export default function ClaimBurn() {
     }
     setClaimBurnFormState({
       ...claimBurnFormState,
-      key: key,
+      key_index: key_index,
       account: account,
       newAccount: new_account_name,
       filled: claimBurnFormState.is_valid_json && claimBurnFormState.fee !== "" && e.target.value !== "",
@@ -89,7 +97,7 @@ export default function ClaimBurn() {
         ...claimBurnFormState,
         [e.target.name]: e.target.value,
         is_valid_json: true,
-        filled: claimBurnFormState.key !== "" && claimBurnFormState.fee !== "" && e.target.value !== "",
+        filled: claimBurnFormState.key_index >= 0 && claimBurnFormState.fee !== "" && e.target.value !== "",
       });
     } catch {
       setClaimBurnFormState({
@@ -105,7 +113,7 @@ export default function ClaimBurn() {
     setClaimBurnFormState({
       ...claimBurnFormState,
       [e.target.name]: e.target.value,
-      filled: claimBurnFormState.key !== "" && claimBurnFormState.is_valid_json && e.target.value !== "",
+      filled: claimBurnFormState.key_index >= 0 && claimBurnFormState.is_valid_json && e.target.value !== "",
     });
   };
 
@@ -113,23 +121,23 @@ export default function ClaimBurn() {
     setClaimBurnFormState({
       ...claimBurnFormState,
       [e.target.name]: e.target.value,
-      filled: claimBurnFormState.key !== "" && claimBurnFormState.is_valid_json && e.target.value !== "",
+      filled: claimBurnFormState.key_index >= 0 && claimBurnFormState.is_valid_json && e.target.value !== "",
     });
   };
 
   const onClaimBurn = async () => {
     try {
       setClaimBurnFormState({ ...claimBurnFormState, disabled: true });
-      await accountsClaimBurn(
-        claimBurnFormState.account,
-        JSON.parse(claimBurnFormState.claimProof),
-        +claimBurnFormState.fee,
-        +claimBurnFormState.key[0],
-      );
+      await accountsClaimBurn({
+        account: { Name: claimBurnFormState.account },
+        claim_proof: JSON.parse(claimBurnFormState.claimProof),
+        max_fee: +claimBurnFormState.fee,
+        key_id: +claimBurnFormState.key_index,
+      });
       setOpen(false);
       setPopup({ title: "Claimed", error: false });
       setClaimBurnFormState({
-        key: "",
+        key_index: -1,
         account: "",
         claimProof: "",
         fee: "",
@@ -153,8 +161,8 @@ export default function ClaimBurn() {
     setOpen(false);
   };
 
-  const formattedKey = (key: any[]) => {
-    let account = dataAccountsList.accounts.find((account: any) => account.account.key_index === +key[0]);
+  const formattedKey = (key: [number, string, boolean]) => {
+    let account = dataAccountsList?.accounts.find((account: AccountInfo) => account.account.key_index === +key[0]);
     if (account === undefined) {
       return (
         <div>
@@ -185,13 +193,13 @@ export default function ClaimBurn() {
                 labelId="key"
                 name="key"
                 label="Key"
-                value={claimBurnFormState.key}
+                value={claimBurnFormState.key_index >= 0 ? claimBurnFormState.key_index : ""}
                 onChange={onClaimBurnKeyChange}
                 style={{ flexGrow: 1, minWidth: "200px" }}
                 disabled={claimBurnFormState.disabled}
               >
-                {dataKeysList?.keys?.map((key: any) => (
-                  <MenuItem key={key} value={key}>
+                {dataKeysList?.keys?.map((key: [number, string, boolean]) => (
+                  <MenuItem key={key[0]} value={key[0]}>
                     {formattedKey(key)}
                   </MenuItem>
                 ))}

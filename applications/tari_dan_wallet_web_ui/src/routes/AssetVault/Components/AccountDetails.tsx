@@ -27,6 +27,7 @@ import { GridHeadCell, GridDataCell } from "../../../Components/StyledComponents
 import { useAccountsGet } from "../../../api/hooks/useAccounts";
 import { shortenString } from "../../../utils/helpers";
 import { styled } from "@mui/material/styles";
+import { substateIdToString } from "tari-bindings";
 
 const GridContainer = styled(Box)(({ theme }) => ({
   display: "grid",
@@ -68,9 +69,8 @@ function AccountDetails({ accountName }: { accountName: string }) {
               <GridHeadCell className="head3">Public Key</GridHeadCell>
               <GridDataCell className="content1">{accountsData.account.name}</GridDataCell>
               <GridDataCell className="content2">
-                {" "}
-                {shortenString(accountsData.account.address.Component)}
-                <CopyToClipboard copy={accountsData.account.address.Component} />
+                {shortenString(substateIdToString(accountsData.account.address))}
+                <CopyToClipboard copy={substateIdToString(accountsData.account.address)} />
               </GridDataCell>
               <GridDataCell className="content3">
                 {shortenString(accountsData.public_key)}

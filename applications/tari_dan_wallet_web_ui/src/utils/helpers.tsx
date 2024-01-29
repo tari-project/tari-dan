@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { ChangeEvent } from "react";
+import { FinalizeResult, SubstateId, Transaction, TransactionStatus } from "tari-bindings";
 
 const renderJson = (json: any) => {
   if (Array.isArray(json)) {
@@ -58,16 +59,6 @@ const renderJson = (json: any) => {
   }
 };
 
-function removeTagged(obj: any) {
-  if (obj === undefined) {
-    return "undefined";
-  }
-  if (obj["@@TAGGED@@"] !== undefined) {
-    return obj["@@TAGGED@@"][1];
-  }
-  return obj;
-}
-
 function toHexString(byteArray: any): string {
   if (Array.isArray(byteArray)) {
     return Array.from(byteArray, function (byte) {
@@ -92,7 +83,10 @@ function fromHexString(hexString: string) {
   return res;
 }
 
-function shortenString(string: string, start: number = 8, end: number = 8) {
+function shortenString(string: string | null | undefined, start: number = 8, end: number = 8) {
+  if (string === null || string === undefined) {
+    return "";
+  }
   // The number 3 is from the characters for ellipsis
   if (string.length < start + end + 3) {
     return string;
@@ -100,7 +94,14 @@ function shortenString(string: string, start: number = 8, end: number = 8) {
   return string.substring(0, start) + "..." + string.slice(-end);
 }
 
-function emptyRows(page: number, rowsPerPage: number, array: any[]) {
+function emptyRows(
+  page: number,
+  rowsPerPage: number,
+  array: Array<[Transaction, FinalizeResult | null, TransactionStatus, string]> | undefined,
+) {
+  if (array === undefined) {
+    return 0;
+  }
   return page > 0 ? Math.max(0, (1 + page) * rowsPerPage - array.length) : 0;
 }
 
@@ -117,13 +118,4 @@ function handleChangeRowsPerPage(
   setPage(0);
 }
 
-export {
-  renderJson,
-  toHexString,
-  fromHexString,
-  shortenString,
-  removeTagged,
-  emptyRows,
-  handleChangePage,
-  handleChangeRowsPerPage,
-};
+export { renderJson, toHexString, fromHexString, shortenString, emptyRows, handleChangePage, handleChangeRowsPerPage };
