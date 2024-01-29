@@ -351,7 +351,7 @@ where TConsensusSpec: ConsensusSpec
         let mut locked_inputs = HashSet::new();
         let mut locked_outputs = HashSet::new();
 
-        let executor = BlockTransactionExecutor::new();
+        let executor: BlockTransactionExecutor<TConsensusSpec> = BlockTransactionExecutor::new(self.store.clone(), self.epoch_manager.clone());
 
         for cmd in block.commands() {
             if let Some(transaction) = cmd.transaction() {
