@@ -25,20 +25,22 @@ use std::{io, io::Write};
 use blake2::Blake2b;
 use borsh::BorshSerialize;
 use digest::{consts::U64, Digest};
+use tari_common::configuration::Network;
 use tari_crypto::hashing::{DomainSeparatedHasher, DomainSeparation};
 use tari_hash_domains::{ConfidentialOutputHashDomain, WalletOutputEncryptionKeysDomain};
 
-fn confidential_hasher64(label: &'static str) -> TariBaseLayerHasher64 {
-    TariBaseLayerHasher64::new_with_label::<ConfidentialOutputHashDomain>(label)
+fn confidential_hasher64(network: Network, label: &'static str) -> TariBaseLayerHasher64 {
+    TariBaseLayerHasher64::new_with_label::<ConfidentialOutputHashDomain>(network, label)
 }
 
 type WalletOutputEncryptionKeysDomainHasher = DomainSeparatedHasher<Blake2b<U64>, WalletOutputEncryptionKeysDomain>;
+
 pub fn encrypted_data_hasher() -> WalletOutputEncryptionKeysDomainHasher {
     WalletOutputEncryptionKeysDomainHasher::new_with_label("")
 }
 
-pub fn ownership_proof_hasher64() -> TariBaseLayerHasher64 {
-    confidential_hasher64("commitment_signature")
+pub fn ownership_proof_hasher64(network: Network) -> TariBaseLayerHasher64 {
+    confidential_hasher64(network, "commitment_signature")
 }
 
 #[derive(Debug, Clone)]
@@ -47,9 +49,9 @@ pub struct TariBaseLayerHasher64 {
 }
 
 impl TariBaseLayerHasher64 {
-    pub fn new_with_label<TDomain: DomainSeparation>(label: &'static str) -> Self {
+    pub fn new_with_label<TDomain: DomainSeparation>(network: Network, label: &'static str) -> Self {
         let mut hasher = Blake2b::<U64>::new();
-        TDomain::add_domain_separation_tag(&mut hasher, label);
+        TDomain::add_domain_separation_tag(&mut hasher, &format!("{}.n{}", label, network.as_byte()));
         Self { hasher }
     }
 

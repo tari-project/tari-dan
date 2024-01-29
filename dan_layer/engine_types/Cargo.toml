@@ -8,6 +8,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+tari_common = { workspace = true }
 tari_bor = { workspace = true, features = ["json_encoding"] }
 tari_common_types = { workspace = true }
 tari_crypto = { workspace = true, features = ["borsh"] }

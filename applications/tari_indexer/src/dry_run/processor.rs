@@ -23,6 +23,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use log::info;
+use tari_common::configuration::Network;
 use tari_dan_app_utilities::{
     template_manager::implementation::TemplateManager,
     transaction_executor::{TariDanTransactionProcessor, TransactionExecutor},
@@ -67,6 +68,7 @@ pub struct DryRunTransactionProcessor<TSubstateCache> {
     template_manager: TemplateManager<PeerAddress>,
     substate_scanner:
         Arc<SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache>>,
+    network: Network,
 }
 
 impl<TSubstateCache> DryRunTransactionProcessor<TSubstateCache>
@@ -79,6 +81,7 @@ where TSubstateCache: SubstateCache + 'static
             SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache>,
         >,
         template_manager: TemplateManager<PeerAddress>,
+        network: Network,
     ) -> Self {
         let transaction_autofiller = TransactionAutofiller::new(substate_scanner.clone());
 
@@ -88,6 +91,7 @@ where TSubstateCache: SubstateCache + 'static
             transaction_autofiller,
             template_manager,
             substate_scanner,
+            network,
         }
     }
 
@@ -138,7 +142,7 @@ where TSubstateCache: SubstateCache + 'static
             FeeTable::zero_rated()
         };
 
-        TariDanTransactionProcessor::new(self.template_manager.clone(), fee_table)
+        TariDanTransactionProcessor::new(self.network, self.template_manager.clone(), fee_table)
     }
 
     fn transaction_includes_fees(transaction: &Transaction) -> bool {

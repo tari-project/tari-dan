@@ -95,11 +95,11 @@ async fn check_balance(world: &mut TariWorld, wallet_name: String, balance: u64,
             "Waiting for wallet {} to have at least {} uT (balance: {} uT, pending: {} uT)",
             wallet_name, balance, resp.available_balance, resp.pending_incoming_balance
         );
-        sleep(Duration::from_secs(5)).await;
+        sleep(Duration::from_secs(1)).await;
 
-        if iterations == 100 {
+        if iterations == 40 {
             panic!(
-                "Wallet {} did not have at least {} uT after 500 seconds  (balance: {} uT, pending: {} uT)",
+                "Wallet {} did not have at least {} uT after 40 seconds  (balance: {} uT, pending: {} uT)",
                 wallet_name, balance, resp.available_balance, resp.pending_incoming_balance
             );
         }

@@ -134,6 +134,11 @@ loggers:
     additive: false
 
   # Route log events sent to the "core" logger to the "base_layer" appender
+  key_manager:
+    level: debug
+    appenders:
+      - base_layer
+  # Route log events sent to the "core" logger to the "base_layer" appender
   c:
     level: debug
     appenders:

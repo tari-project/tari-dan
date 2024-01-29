@@ -219,7 +219,7 @@ pub async fn spawn_services(
             per_log_cost: 1,
         }
     };
-    let payload_processor = TariDanTransactionProcessor::new(template_manager.clone(), fee_table);
+    let payload_processor = TariDanTransactionProcessor::new(config.network, template_manager.clone(), fee_table);
 
     let validator_node_client_factory = TariValidatorNodeRpcClientFactory::new(networking.clone());
 

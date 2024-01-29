@@ -147,17 +147,13 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
 
     fs::write(config.common.base_path.join("pid"), process::id().to_string())
         .map_err(|e| ExitError::new(ExitCode::UnknownError, e))?;
-    run_dan_node(services, shutdown_signal).await?;
-
-    Ok(())
-}
-
-async fn run_dan_node(services: Services, shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node = DanNode::new(services);
     info!(target: LOG_TARGET, "🚀 Validator node started!");
     node.start(shutdown_signal)
         .await
-        .map_err(|e| ExitError::new(ExitCode::UnknownError, e))
+        .map_err(|e| ExitError::new(ExitCode::UnknownError, e))?;
+
+    Ok(())
 }
 
 async fn create_base_layer_clients(
