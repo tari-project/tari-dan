@@ -7,7 +7,7 @@ create table quorum_certificates
     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- fetching by qc_id will be a very common operation
+-- fetching by qc_id is a very common operation
 create unique index quorum_certificates_uniq_idx_id on quorum_certificates (qc_id);
 
 create table blocks
@@ -40,7 +40,7 @@ create table parked_blocks
     id               integer   not null primary key AUTOINCREMENT,
     block_id         text      not NULL,
     parent_block_id  text      not NULL,
-    network          text       not NULL,
+    network          text      not NULL,
     height           bigint    not NULL,
     epoch            bigint    not NULL,
     proposed_by      text      not NULL,
@@ -68,8 +68,8 @@ create table leaf_blocks
 create table substates
 (
     id                       integer   not NULL primary key AUTOINCREMENT,
-    shard_id                 text      not NULL,
     address                  text      not NULL,
+    substate_id              text      not NULL,
     version                  integer   not NULL,
     data                     text      not NULL,
     state_hash               text      not NULL,
@@ -90,7 +90,7 @@ create table substates
 );
 
 -- All shard ids are unique
-create unique index substates_uniq_shard_id on substates (shard_id);
+create unique index substates_uniq_shard_id on substates (address);
 -- querying for transaction ids that either Upd or Downd a substate
 create index substates_idx_created_by_transaction on substates (created_by_transaction);
 create index substates_idx_destroyed_by_transaction on substates (destroyed_by_transaction) where destroyed_by_transaction is not null;
@@ -216,15 +216,15 @@ create unique index transaction_pool_uniq_block_id_transaction_id on transaction
 
 create table locked_outputs
 (
-    id             integer   not null primary key AUTOINCREMENT,
-    block_id       text      not null,
-    transaction_id text      not null,
-    shard_id       text      not null,
-    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id               integer   not null primary key AUTOINCREMENT,
+    block_id         text      not null,
+    transaction_id   text      not null,
+    substate_address text      not null,
+    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
-create unique index locked_outputs_uniq_idx_shard_id on locked_outputs (shard_id);
+create unique index locked_outputs_uniq_idx_shard_id on locked_outputs (substate_address);
 
 create table votes
 (
@@ -252,12 +252,12 @@ CREATE TABLE missing_transactions
 
 CREATE TABLE foreign_proposals
 (
-    id         integer   not NULL primary key AUTOINCREMENT,
-    bucket     int       not NULL,
-    block_id   text      not NULL,
-    state      text      not NULL,
-    mined_at   bigint    NULL,
-    created_at timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    id              integer   not NULL primary key AUTOINCREMENT,
+    bucket          int       not NULL,
+    block_id        text      not NULL,
+    state           text      not NULL,
+    proposed_height bigint    NULL,
+    created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (bucket, block_id)
 );
 
