@@ -8,6 +8,8 @@ use tari_template_lib::{
     crypto::BalanceProofSignature,
     models::{Amount, ConfidentialWithdrawProof, EncryptedData},
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use super::{challenges, get_commitment_factory, validate_confidential_proof};
 use crate::resource_container::ResourceError;
@@ -22,8 +24,11 @@ pub struct ValidatedConfidentialWithdrawProof {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialOutput {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub commitment: Commitment,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub stealth_public_nonce: PublicKey,
     pub encrypted_data: EncryptedData,
     pub minimum_value_promise: u64,

@@ -40,6 +40,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
 use tari_template_lib::models::ComponentAddress;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 use types::{
     AccountsCreateFreeTestCoinsRequest,
     AccountsCreateFreeTestCoinsResponse,
@@ -118,6 +120,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum ComponentAddressOrName {
     ComponentAddress(ComponentAddress),
     Name(String),

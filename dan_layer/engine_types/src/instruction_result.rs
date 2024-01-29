@@ -23,10 +23,13 @@
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tari_bor::BorError;
 use tari_template_abi::Type;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::indexed_value::{IndexedValue, IndexedValueError};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct InstructionResult {
     pub indexed: IndexedValue,
     pub return_type: Type,

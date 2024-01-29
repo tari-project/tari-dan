@@ -5,10 +5,13 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use tari_template_lib::models::{Amount, VaultId};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::resource_container::ResourceContainer;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FeeReceipt {
     /// The total amount of the fee payment(s)
     pub total_fee_payment: Amount,
@@ -61,6 +64,7 @@ impl FeeReceipt {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum FeeSource {
     Initial,
     RuntimeCall,
@@ -70,6 +74,7 @@ pub enum FeeSource {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FeeCostBreakdown {
     pub total_fees_charged: Amount,
     pub breakdown: Vec<(FeeSource, u64)>,

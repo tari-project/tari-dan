@@ -39,11 +39,16 @@ use tari_engine_types::{
     TemplateAddress,
 };
 use tari_transaction::{Transaction, TransactionId};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetIdentityResponse {
     pub peer_id: String,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub public_key: PublicKey,
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub public_addresses: Vec<Multiaddr>,
     pub supported_protocols: Vec<String>,
     pub protocol_version: String,
@@ -51,6 +56,7 @@ pub struct GetIdentityResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TemplateRegistrationRequest {
     pub template_name: String,
     pub template_version: u16,
@@ -64,6 +70,7 @@ pub struct TemplateRegistrationRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TemplateRegistrationResponse {
     #[serde(with = "serde_with::base64")]
     pub template_address: Vec<u8>,
@@ -71,23 +78,27 @@ pub struct TemplateRegistrationResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTemplateRequest {
     pub template_address: TemplateAddress,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTemplateResponse {
     pub registration_metadata: TemplateMetadata,
     pub abi: TemplateAbi,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TemplateAbi {
     pub template_name: String,
     pub functions: Vec<FunctionDef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FunctionDef {
     pub name: String,
     pub arguments: Vec<ArgDef>,
@@ -96,22 +107,26 @@ pub struct FunctionDef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ArgDef {
     pub name: String,
     pub arg_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTemplatesRequest {
     pub limit: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTemplatesResponse {
     pub templates: Vec<TemplateMetadata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TemplateMetadata {
     pub name: String,
     pub address: TemplateAddress,
@@ -124,12 +139,14 @@ pub struct TemplateMetadata {
 
 /// A request to submit a transaction
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct SubmitTransactionRequest {
     pub transaction: Transaction,
     pub is_dry_run: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct SubmitTransactionResponse {
     pub transaction_id: TransactionId,
     /// The result is a _dry run_ transaction.
@@ -137,6 +154,7 @@ pub struct SubmitTransactionResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct DryRunTransactionFinalizeResult {
     pub decision: QuorumDecision,
     pub finalize: FinalizeResult,
@@ -144,47 +162,58 @@ pub struct DryRunTransactionFinalizeResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTransactionRequest {
     pub transaction_id: TransactionId,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTransactionResponse {
     pub transaction: ExecutedTransaction,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetSubstatesByTransactionRequest {
     pub transaction_id: TransactionId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetSubstatesByTransactionResponse {
     pub substates: Vec<SubstateRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTransactionResultRequest {
     pub transaction_id: TransactionId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetTransactionResultResponse {
     pub result: Option<ExecuteResult>,
     pub final_decision: Option<Decision>,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     pub finalized_time: Option<Duration>,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     pub execution_time: Option<Duration>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetRecentTransactionsRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetRecentTransactionsResponse {
     pub transactions: Vec<Transaction>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ListBlocksRequest {
     /// If provided, `limit` blocks from the specified block back will be returned. Otherwise `limit` blocks from the
     /// leaf block will be provided.
@@ -193,33 +222,40 @@ pub struct ListBlocksRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ListBlocksResponse {
     pub blocks: Vec<Block>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetBlockResponse {
     pub block: Block,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetBlocksResponse {
     pub blocks: Vec<Block>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetBlocksCountResponse {
     pub count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct LogEntry {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub timestamp: u64,
     pub message: String,
     pub level: LogLevel,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum LogLevel {
     Error,
     Warn,
@@ -228,17 +264,20 @@ pub enum LogLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetCommitteeRequest {
     pub epoch: Epoch,
     pub substate_address: SubstateAddress,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetNetworkCommitteeResponse<TAddr> {
     pub current_epoch: Epoch,
     pub committees: Vec<CommitteeShardInfo<TAddr>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct CommitteeShardInfo<TAddr> {
     pub shard: Shard,
     pub substate_address_range: RangeInclusive<SubstateAddress>,
@@ -246,28 +285,34 @@ pub struct CommitteeShardInfo<TAddr> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetShardKey {
     pub height: u64,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetStateRequest {
     pub address: SubstateAddress,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetStateResponse {
     pub data: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetSubstateRequest {
     pub address: SubstateId,
     pub version: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetSubstateResponse {
     pub value: Option<SubstateValue>,
     pub created_by_tx: Option<TransactionId>,
@@ -275,6 +320,7 @@ pub struct GetSubstateResponse {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum SubstateStatus {
     Up,
     Down,
@@ -282,16 +328,21 @@ pub enum SubstateStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct AddPeerRequest {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub public_key: PublicKey,
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub addresses: Vec<Multiaddr>,
     pub wait_for_dial: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct AddPeerResponse {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetEpochManagerStatsResponse {
     pub current_epoch: Epoch,
     pub current_block_height: u64,
@@ -300,28 +351,37 @@ pub struct GetEpochManagerStatsResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct RegisterValidatorNodeRequest {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub fee_claim_public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct RegisterValidatorNodeResponse {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TxId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetValidatorFeesRequest {
     pub epoch_range: RangeInclusive<Epoch>,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub validator_public_key: Option<PublicKey>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetValidatorFeesResponse {
     pub fees: Vec<ValidatorFee>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ValidatorFee {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub validator_public_key: PublicKey,
     pub epoch: Epoch,
     pub block_id: BlockId,
@@ -347,11 +407,13 @@ impl From<Block> for ValidatorFee {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetBlockRequest {
     pub block_id: BlockId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetBlocksRequest {
     pub limit: u64,
     pub offset: u64,
@@ -359,22 +421,28 @@ pub struct GetBlocksRequest {
 }
 
 #[derive(Serialize, Debug)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Connection {
     pub connection_id: String,
     pub peer_id: String,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub address: Multiaddr,
     pub direction: ConnectionDirection,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub age: Duration,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     pub ping_latency: Option<Duration>,
 }
 
 #[derive(Serialize, Debug)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum ConnectionDirection {
     Inbound,
     Outbound,
 }
 
 #[derive(Serialize, Debug)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetConnectionsResponse {
     pub connections: Vec<Connection>,
 }

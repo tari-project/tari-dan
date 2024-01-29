@@ -9128,6 +9128,7 @@ dependencies = [
  "tari_crypto",
  "tari_engine_types",
  "tari_mmr",
+ "ts-rs",
 ]
 
 [[package]]
@@ -9202,6 +9203,7 @@ dependencies = [
  "tari_transaction",
  "thiserror",
  "time",
+ "ts-rs",
 ]
 
 [[package]]
@@ -9337,6 +9339,7 @@ dependencies = [
  "tari_utilities",
  "tempfile",
  "thiserror",
+ "ts-rs",
  "zeroize",
 ]
 
@@ -9382,6 +9385,7 @@ dependencies = [
  "tari_template_lib",
  "tari_utilities",
  "thiserror",
+ "ts-rs",
 ]
 
 [[package]]
@@ -9473,6 +9477,7 @@ dependencies = [
  "tari_engine_types",
  "tari_transaction",
  "thiserror",
+ "ts-rs",
 ]
 
 [[package]]
@@ -9796,6 +9801,7 @@ dependencies = [
  "hashbrown 0.13.2",
  "serde",
  "tari_bor",
+ "ts-rs",
 ]
 
 [[package]]
@@ -9816,6 +9822,7 @@ dependencies = [
  "tari_bor",
  "tari_template_abi",
  "tari_template_macros",
+ "ts-rs",
 ]
 
 [[package]]
@@ -9874,6 +9881,7 @@ dependencies = [
  "tari_engine_types",
  "tari_template_lib",
  "thiserror",
+ "ts-rs",
 ]
 
 [[package]]
@@ -10013,6 +10021,7 @@ dependencies = [
  "tari_engine_types",
  "tari_transaction",
  "thiserror",
+ "ts-rs",
 ]
 
 [[package]]
@@ -10051,6 +10060,7 @@ dependencies = [
  "tari_template_lib",
  "tari_transaction",
  "thiserror",
+ "ts-rs",
 ]
 
 [[package]]
@@ -10677,6 +10687,31 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "ts-rs"
+version = "7.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc2cae1fc5d05d47aa24b64f9a4f7cba24cdc9187a2084dd97ac57bef5eccae6"
+dependencies = [
+ "chrono",
+ "indexmap 2.1.0",
+ "thiserror",
+ "ts-rs-macros",
+]
+
+[[package]]
+name = "ts-rs-macros"
+version = "7.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73f7f9b821696963053a89a7bd8b292dc34420aea8294d7b225274d488f3ec92"
+dependencies = [
+ "Inflector",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.48",
+ "termcolor",
+]
 
 [[package]]
 name = "tui"

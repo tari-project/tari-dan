@@ -23,6 +23,8 @@
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::{call_engine, rust::fmt, EngineOp};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use super::{NonFungible, NonFungibleId};
 use crate::{
@@ -35,7 +37,8 @@ const TAG: u64 = BinaryTag::BucketId.as_u64();
 
 /// A bucket's unique identification during the transaction execution
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub struct BucketId(BorTag<u32, TAG>);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct BucketId(#[cfg_attr(feature = "ts", ts(type = "number"))] BorTag<u32, TAG>);
 
 impl From<u32> for BucketId {
     fn from(value: u32) -> Self {

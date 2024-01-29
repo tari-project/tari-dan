@@ -29,6 +29,8 @@ use tari_template_lib::{
     models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress, VaultId},
     prelude::ResourceType,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     bucket::Bucket,
@@ -38,6 +40,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Vault {
     vault_id: VaultId,
     resource_container: ResourceContainer,

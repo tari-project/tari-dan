@@ -25,13 +25,16 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::rust::{collections::BTreeMap, fmt::Display};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use super::BinaryTag;
 const TAG: u64 = BinaryTag::Metadata as u64;
 
 /// A collection of user-defined data used to describe other types, for example, non-fungible tokens or events
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Metadata(BorTag<BTreeMap<String, String>, TAG>);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct Metadata(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<BTreeMap<String, String>, TAG>);
 
 impl Metadata {
     pub const fn new() -> Self {

@@ -11,6 +11,8 @@ use jsonwebtoken::{decode, encode, errors, DecodingKey, EncodingKey, Header, Val
 use serde::{Deserialize, Serialize};
 use tari_engine_types::substate::SubstateId;
 use tari_template_lib::prelude::{ComponentAddress, ResourceAddress};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter};
 
@@ -22,6 +24,7 @@ pub struct JwtApi<'a, TStore> {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum JrpcPermission {
     AccountInfo,
     NftGetOwnershipProof(Option<ResourceAddress>),
@@ -97,6 +100,7 @@ impl Display for JrpcPermission {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct JrpcPermissions(pub Vec<JrpcPermission>);
 
 impl FromStr for JrpcPermissions {
@@ -138,7 +142,9 @@ impl TryFrom<&[String]> for JrpcPermissions {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Claims {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub id: u64,
     pub name: String,
     pub permissions: JrpcPermissions,
