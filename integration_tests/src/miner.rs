@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::time::Duration;
+
 use minotari_app_grpc::{
     tari_rpc,
     tari_rpc::{pow_algo::PowAlgos, GetIdentityRequest, NewBlockTemplate, NewBlockTemplateRequest, PowAlgo},
@@ -76,6 +78,9 @@ pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: 
 
     for _ in 0..num_blocks {
         mine_block(world, &payment_address, &mut base_client).await;
+        // Makes less likely that base layer will fail with
+        // "Sparse Merkle Tree error: A duplicate key was found when trying to insert"
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
 
