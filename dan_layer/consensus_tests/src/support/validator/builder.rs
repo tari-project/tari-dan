@@ -99,6 +99,7 @@ impl ValidatorBuilder {
                 .clone_for(self.address.clone(), self.public_key.clone(), self.shard);
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             self.address.clone(),
+            Default::default(),
             inbound_messaging,
             outbound_messaging,
             rx_new_transactions,

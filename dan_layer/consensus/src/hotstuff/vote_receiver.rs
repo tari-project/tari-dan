@@ -4,6 +4,7 @@
 use std::ops::DerefMut;
 
 use log::*;
+use tari_common::configuration::Network;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{committee::CommitteeShard, hashing::MergedValidatorNodeMerkleProof, optional::Optional};
 use tari_dan_storage::{
@@ -22,6 +23,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_vote";
 
 #[derive(Clone)]
 pub struct VoteReceiver<TConsensusSpec: ConsensusSpec> {
+    network: Network,
     store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
@@ -33,6 +35,7 @@ impl<TConsensusSpec> VoteReceiver<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
+        network: Network,
         store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
@@ -40,6 +43,7 @@ where TConsensusSpec: ConsensusSpec
         pacemaker: PaceMakerHandle,
     ) -> Self {
         Self {
+            network,
             store,
             leader_strategy,
             epoch_manager,
@@ -109,7 +113,7 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
-        let sender_leaf_hash = sender_vn.node_hash();
+        let sender_leaf_hash = sender_vn.get_node_hash(self.network);
 
         self.validate_vote_message(&message, &sender_leaf_hash)?;
 

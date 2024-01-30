@@ -22,6 +22,7 @@
 
 use log::error;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
+use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{DerivableFromPublicKey, NodeAddressable};
 use tari_dan_storage::global::GlobalDb;
@@ -54,6 +55,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
     EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
 {
     pub fn spawn(
+        network: Network,
         config: EpochManagerConfig,
         rx_request: Receiver<EpochManagerRequest<TAddr>>,
         shutdown: ShutdownSignal,
@@ -65,7 +67,14 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             let (tx, _) = broadcast::channel(100);
             EpochManagerService {
                 rx_request,
-                inner: BaseLayerEpochManager::new(config, global_db, base_node_client, tx.clone(), node_public_key),
+                inner: BaseLayerEpochManager::new(
+                    network,
+                    config,
+                    global_db,
+                    base_node_client,
+                    tx.clone(),
+                    node_public_key,
+                ),
                 events: tx,
             }
             .run(shutdown)

@@ -6,6 +6,7 @@ use std::{fmt::Display, ops::DerefMut};
 use async_trait::async_trait;
 use futures::StreamExt;
 use log::*;
+use tari_common::configuration::Network;
 use tari_consensus::{
     hotstuff::ProposalValidationError,
     traits::{ConsensusSpec, LeaderStrategy, SyncManager, SyncStatus},
@@ -42,6 +43,7 @@ const LOG_TARGET: &str = "tari::dan::comms_rpc_state_sync";
 const MAX_SUBSTATE_UPDATES: usize = 10000;
 
 pub struct RpcStateSyncManager<TConsensusSpec: ConsensusSpec> {
+    network: Network,
     epoch_manager: TConsensusSpec::EpochManager,
     state_store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -52,12 +54,14 @@ impl<TConsensusSpec> RpcStateSyncManager<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 {
     pub fn new(
+        network: Network,
         epoch_manager: TConsensusSpec::EpochManager,
         state_store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         client_factory: TariValidatorNodeRpcClientFactory,
     ) -> Self {
         Self {
+            network,
             epoch_manager,
             state_store,
             leader_strategy,
@@ -92,7 +96,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
     fn create_zero_block_if_required(&self) -> Result<(), CommsRpcConsensusSyncError> {
         let mut tx = self.state_store.create_write_tx()?;
 
-        let zero_block = Block::zero_block();
+        let zero_block = Block::zero_block(self.network);
         if !zero_block.exists(tx.deref_mut())? {
             debug!(target: LOG_TARGET, "Creating zero block");
             zero_block.justify().insert(&mut tx)?;
@@ -280,6 +284,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                     let leader = self.leader_strategy.get_leader_public_key(&local_committee, next_height);
 
                     let dummy_block = Block::dummy_block(
+                       self.network,
                         last_dummy_block.id,
                         leader.clone(),
                         next_height,
@@ -456,7 +461,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
             let locked_block = self
                 .state_store
                 .with_read_tx(|tx| LockedBlock::get(tx).optional())?
-                .unwrap_or_else(|| Block::zero_block().as_locked_block());
+                .unwrap_or_else(|| Block::zero_block(self.network).as_locked_block());
 
             match self.sync_with_peer(member, &locked_block).await {
                 Ok(()) => {

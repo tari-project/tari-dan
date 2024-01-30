@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
+use tari_common::configuration::Network;
 use tari_dan_common_types::{committee::Committee, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::consensus_models::{Block, QuorumCertificate};
 
@@ -15,6 +16,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::common";
 pub const EXHAUST_DIVISOR: u64 = 0;
 
 pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
+    network: Network,
     epoch: Epoch,
     high_qc: &QuorumCertificate,
     new_height: NodeHeight,
@@ -44,6 +46,7 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
     loop {
         let leader = leader_strategy.get_leader_public_key(local_committee, current_height);
         let dummy_block = Block::dummy_block(
+            network,
             *parent_block.block_id(),
             leader.clone(),
             current_height,

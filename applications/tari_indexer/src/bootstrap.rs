@@ -112,6 +112,7 @@ pub async fn spawn_services(
     // Epoch manager
     let validator_node_client_factory = TariValidatorNodeRpcClientFactory::new(networking.clone());
     let (epoch_manager, _) = tari_epoch_manager::base_layer::spawn_service(
+        config.network,
         EpochManagerConfig {
             base_layer_confirmations: consensus_constants.base_layer_confirmations,
             committee_size: consensus_constants.committee_size,
@@ -129,6 +130,7 @@ pub async fn spawn_services(
 
     // Base Node scanner
     base_layer_scanner::spawn(
+        config.network,
         global_db,
         base_node_client.clone(),
         epoch_manager.clone(),
