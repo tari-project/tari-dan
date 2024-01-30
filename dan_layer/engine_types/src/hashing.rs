@@ -50,8 +50,6 @@ pub fn template_hasher32() -> TariHasher32 {
     hasher32(EngineHashDomainLabel::Template)
 }
 
-hash_domain!(ConfidentialOutputHashDomain, "com.tari.dan.confidential_output", 1);
-
 #[derive(Debug, Clone)]
 pub struct TariHasher32 {
     hasher: Blake2b<U32>,

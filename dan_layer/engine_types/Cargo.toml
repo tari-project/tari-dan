@@ -8,12 +8,14 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+tari_common = { workspace = true }
 tari_bor = { workspace = true, features = ["json_encoding"] }
 tari_common_types = { workspace = true }
 tari_crypto = { workspace = true, features = ["borsh"] }
 tari_template_abi = { workspace = true, features = ["std"] }
 tari_template_lib = { workspace = true }
 tari_utilities = { workspace = true }
+tari_hash_domains = { workspace = true }
 
 borsh = { workspace = true }
 # if we set this version in the workspace it would break other crates

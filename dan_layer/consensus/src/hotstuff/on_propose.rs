@@ -5,6 +5,7 @@ use std::{collections::BTreeSet, num::NonZeroU64, ops::DerefMut};
 
 use indexmap::IndexMap;
 use log::*;
+use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
@@ -39,6 +40,7 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_locally";
 
 pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
+    network: Network,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
@@ -50,6 +52,7 @@ impl<TConsensusSpec> OnPropose<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
+        network: Network,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
@@ -57,6 +60,7 @@ where TConsensusSpec: ConsensusSpec
         outbound_messaging: TConsensusSpec::OutboundMessaging,
     ) -> Self {
         Self {
+            network,
             store,
             epoch_manager,
             transaction_pool,
@@ -257,6 +261,7 @@ where TConsensusSpec: ConsensusSpec
         foreign_indexes.sort_keys();
 
         let mut next_block = Block::new(
+            self.network,
             *parent_block.block_id(),
             high_qc,
             parent_block.height() + NodeHeight(1),

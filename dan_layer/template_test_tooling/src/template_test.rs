@@ -11,6 +11,7 @@ use std::{
 use anyhow::anyhow;
 use serde::de::DeserializeOwned;
 use tari_bor::{decode_exact, to_value};
+use tari_common::configuration::Network;
 use tari_crypto::{
     keys::PublicKey,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
@@ -433,6 +434,7 @@ impl TemplateTest {
             auth_params,
             self.virtual_substates.clone(),
             modules,
+            Network::LocalNet,
         );
 
         let tx_id = *transaction.id();

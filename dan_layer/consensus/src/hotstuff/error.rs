@@ -172,4 +172,10 @@ pub enum ProposalValidationError {
     QuorumWasNotReached { qc: QuorumCertificate },
     #[error("Merkle proof error: {0}")]
     BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
+    #[error("Invalid network in block {block_id}: expected {expected_network}, given {block_network}")]
+    InvalidNetwork {
+        expected_network: String,
+        block_network: String,
+        block_id: BlockId,
+    },
 }

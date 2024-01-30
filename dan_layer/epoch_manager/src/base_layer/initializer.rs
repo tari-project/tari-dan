@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
+use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{DerivableFromPublicKey, NodeAddressable};
 use tari_dan_storage::global::GlobalDb;
@@ -31,6 +32,7 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use crate::base_layer::{config::EpochManagerConfig, epoch_manager_service::EpochManagerService, EpochManagerHandle};
 
 pub fn spawn_service<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>(
+    network: Network,
     config: EpochManagerConfig,
     global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
     base_node_client: GrpcBaseNodeClient,
@@ -40,6 +42,7 @@ pub fn spawn_service<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>(
     let (tx_request, rx_request) = mpsc::channel(10);
     let epoch_manager = EpochManagerHandle::new(tx_request);
     let handle = EpochManagerService::spawn(
+        network,
         config,
         rx_request,
         shutdown,

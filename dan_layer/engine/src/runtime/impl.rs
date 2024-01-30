@@ -24,6 +24,7 @@ use std::sync::Arc;
 
 use indexmap::IndexMap;
 use log::{warn, *};
+use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_crypto::{range_proof::RangeProofService, ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
 use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
@@ -103,7 +104,6 @@ use crate::{
     template::LoadedTemplate,
     transaction::TransactionProcessor,
 };
-
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 
 #[derive(Clone)]
@@ -113,6 +113,7 @@ pub struct RuntimeInterfaceImpl<TTemplateProvider> {
     transaction_signer_public_key: RistrettoPublicKey,
     modules: Vec<Arc<dyn RuntimeModule>>,
     max_call_depth: usize,
+    network: Network,
 }
 
 pub struct StateFinalize {
@@ -127,6 +128,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         signer_public_key: RistrettoPublicKey,
         modules: Vec<Arc<dyn RuntimeModule>>,
         max_call_depth: usize,
+        network: Network,
     ) -> Result<Self, RuntimeError> {
         let runtime = Self {
             tracker,
@@ -134,6 +136,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             transaction_signer_public_key: signer_public_key,
             modules,
             max_call_depth,
+            network,
         };
         runtime.initialize_initial_scope()?;
         runtime.invoke_modules_on_initialize()?;
@@ -1588,7 +1591,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         // 1. Must exist
         let unclaimed_output = self.tracker.take_unclaimed_confidential_output(output_address)?;
         // 2. owner_sig must be valid
-        let challenge = ownership_proof_hasher64()
+        let challenge = ownership_proof_hasher64(self.network)
             .chain_update(proof_of_knowledge.public_nonce())
             .chain_update(&unclaimed_output.commitment)
             .chain_update(&self.transaction_signer_public_key)

@@ -1,6 +1,7 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
+use tari_common::configuration::Network;
 use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker};
 use tari_dan_storage::consensus_models::TransactionPool;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
@@ -43,6 +44,7 @@ use crate::{
 };
 
 pub async fn spawn(
+    network: Network,
     store: SqliteStateStore<PeerAddress>,
     keypair: RistrettoKeypair,
     epoch_manager: EpochManagerHandle<PeerAddress>,
@@ -68,6 +70,7 @@ pub async fn spawn(
 
     let hotstuff_worker = HotstuffWorker::<TariConsensusSpec>::new(
         validator_addr,
+        network,
         inbound_messaging,
         outbound_messaging,
         rx_new_transactions,
@@ -87,7 +90,7 @@ pub async fn spawn(
     let context = ConsensusWorkerContext {
         epoch_manager: epoch_manager.clone(),
         hotstuff: hotstuff_worker,
-        state_sync: RpcStateSyncManager::new(epoch_manager, store, leader_strategy, client_factory),
+        state_sync: RpcStateSyncManager::new(network, epoch_manager, store, leader_strategy, client_factory),
         tx_current_state,
     };
 

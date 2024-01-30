@@ -28,6 +28,7 @@ use std::{
 
 use log::*;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
+use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
 use tari_dan_common_types::{
@@ -51,6 +52,7 @@ const LOG_TARGET: &str = "tari::dan::epoch_manager::base_layer";
 
 #[derive(Clone)]
 pub struct BaseLayerEpochManager<TGlobalStore, TBaseNodeClient> {
+    network: Network,
     global_db: GlobalDb<TGlobalStore>,
     base_node_client: TBaseNodeClient,
     config: EpochManagerConfig,
@@ -67,6 +69,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
 {
     pub fn new(
+        network: Network,
         config: EpochManagerConfig,
         global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
         base_node_client: GrpcBaseNodeClient,
@@ -74,6 +77,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         node_public_key: PublicKey,
     ) -> Self {
         Self {
+            network,
             global_db,
             base_node_client,
             config,
@@ -496,7 +500,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         }
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
 
-        let vn_bmt_leaves = vns.iter().map(|vn| vn.node_hash().to_vec()).collect();
+        let vn_bmt_leaves = vns.iter().map(|vn| vn.get_node_hash(self.network).to_vec()).collect();
         let vn_bmt = ValidatorNodeBalancedMerkleTree::create(vn_bmt_leaves);
         let mut tx = self.global_db.create_transaction()?;
         self.global_db.bmt(&mut tx).insert_bmt(epoch.as_u64(), vn_bmt.clone())?;
@@ -519,7 +523,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
                     address: TAddr::derive_from_public_key(validator).to_string(),
                     epoch,
                 })?;
-            let leaf_index = bmt.find_leaf_index_for_hash(&vn.node_hash().to_vec())?;
+            let leaf_index = bmt.find_leaf_index_for_hash(&vn.get_node_hash(self.network).to_vec())?;
 
             let proof = ValidatorNodeMerkleProof::generate_proof(&bmt, leaf_index as usize)?;
             proofs.push(proof);

@@ -8,6 +8,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+tari_common = { workspace = true }
 tari_epoch_manager = { workspace = true }
 tari_dan_storage = { workspace = true }
 tari_validator_node_rpc = { workspace = true }
