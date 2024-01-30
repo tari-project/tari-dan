@@ -22,8 +22,8 @@
 
 use log::*;
 use rand::{prelude::*, rngs::OsRng};
-use tari_consensus::{quorum_certificate_validations::validate_quorum_certificate, traits::VoteSignatureService};
 use tari_common::configuration::Network;
+use tari_consensus::{quorum_certificate_validations::validate_quorum_certificate, traits::VoteSignatureService};
 use tari_dan_common_types::{DerivableFromPublicKey, SubstateAddress};
 use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_engine_types::{
@@ -347,7 +347,11 @@ where
     }
 
     /// Validates Quorum Certificates associated with a substate
-    async fn validate_substate_qcs(&self, qcs: &[QuorumCertificate], shard_id: SubstateAddress) -> Result<(), IndexerError> {
+    async fn validate_substate_qcs(
+        &self,
+        qcs: &[QuorumCertificate],
+        shard_id: SubstateAddress,
+    ) -> Result<(), IndexerError> {
         let qc = qcs.last().ok_or(IndexerError::MissingQuorumCertificate)?;
 
         let committee_shard = self
@@ -355,7 +359,14 @@ where
             .get_committee_shard(qc.epoch(), shard_id)
             .await?;
 
-        validate_quorum_certificate(qc, &committee_shard, &self.signing_service, &self.committee_provider, self.network).await?;
+        validate_quorum_certificate(
+            qc,
+            &committee_shard,
+            &self.signing_service,
+            &self.committee_provider,
+            self.network,
+        )
+        .await?;
 
         Ok(())
     }

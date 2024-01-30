@@ -10,10 +10,7 @@ use tari_rpc_state_sync::RpcStateSyncManager;
 use tari_state_store_sqlite::SqliteStateStore;
 
 use crate::{
-    consensus::{
-        leader_selection::RoundRobinLeaderStrategy,
-        state_manager::TariStateManager,
-    },
+    consensus::{leader_selection::RoundRobinLeaderStrategy, state_manager::TariStateManager},
     p2p::services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
 };
 

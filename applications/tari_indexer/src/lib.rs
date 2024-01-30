@@ -111,7 +111,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         services.validator_node_client_factory.clone(),
         substate_cache,
         signing_service,
-        config.network
+        config.network,
     ));
 
     let substate_manager = Arc::new(SubstateManager::new(

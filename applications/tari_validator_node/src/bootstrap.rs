@@ -271,7 +271,7 @@ pub async fn spawn_services(
         validator_node_client_factory.clone(),
         substate_cache,
         signing_service,
-        config.network
+        config.network,
     );
     let substate_resolver = TariSubstateResolver::new(
         state_store.clone(),

@@ -10,9 +10,10 @@ use tari_epoch_manager::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_transaction::TransactionId;
 
-use crate::quorum_certificate_validations::QuorumCertificateValidationError;
-
-use crate::traits::{InboundMessagingError, OutboundMessagingError};
+use crate::{
+    quorum_certificate_validations::QuorumCertificateValidationError,
+    traits::{InboundMessagingError, OutboundMessagingError},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {

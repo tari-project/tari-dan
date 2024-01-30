@@ -71,8 +71,14 @@ pub struct DryRunTransactionProcessor<TSubstateCache> {
         TariSignatureService,
     >,
     template_manager: TemplateManager<PeerAddress>,
-    substate_scanner:
-        Arc<SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache, TariSignatureService>>,
+    substate_scanner: Arc<
+        SubstateScanner<
+            EpochManagerHandle<PeerAddress>,
+            TariValidatorNodeRpcClientFactory,
+            TSubstateCache,
+            TariSignatureService,
+        >,
+    >,
     network: Network,
 }
 

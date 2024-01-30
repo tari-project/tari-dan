@@ -7,7 +7,9 @@ use tari_dan_storage::consensus_models::Block;
 use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
-    hotstuff::{HotStuffError, ProposalValidationError}, quorum_certificate_validations::validate_quorum_certificate, traits::{ConsensusSpec, LeaderStrategy}
+    hotstuff::{HotStuffError, ProposalValidationError},
+    quorum_certificate_validations::validate_quorum_certificate,
+    traits::{ConsensusSpec, LeaderStrategy},
 };
 
 pub fn check_network(candidate_block: &Block, network: Network) -> Result<(), ProposalValidationError> {
@@ -99,9 +101,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     }
 
     let committee_shard = epoch_manager
-        .get_committee_shard_by_validator_public_key(
-            candidate_block.epoch(), candidate_block.proposed_by(),
-        )
+        .get_committee_shard_by_validator_public_key(candidate_block.epoch(), candidate_block.proposed_by())
         .await?;
 
     validate_quorum_certificate(
@@ -109,7 +109,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         &committee_shard,
         vote_signing_service,
         epoch_manager,
-        candidate_block.network()
+        candidate_block.network(),
     )
     .await
     .map_err(ProposalValidationError::QuorumCertificateValidationError)?;
