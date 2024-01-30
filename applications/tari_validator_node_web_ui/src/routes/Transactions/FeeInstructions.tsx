@@ -20,32 +20,20 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import {
-  TableContainer,
-  Table,
-  TableRow,
-  TableBody,
-  Collapse,
-} from '@mui/material';
-import {
-  DataTableCell,
-  AccordionIconButton,
-} from '../../Components/StyledComponents';
-import { renderJson } from '../../utils/helpers';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import CodeBlockExpand from '../../Components/CodeBlock';
+import { useState } from "react";
+import { TableContainer, Table, TableRow, TableBody, Collapse } from "@mui/material";
+import { DataTableCell, AccordionIconButton } from "../../Components/StyledComponents";
+import { renderJson } from "../../utils/helpers";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import CodeBlockExpand from "../../Components/CodeBlock";
 
 function RowData({ title, data, index }: any) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <TableRow key={`${index}-1`}>
-        <DataTableCell
-          width={90}
-          sx={{ borderBottom: 'none', textAlign: 'center' }}
-        >
+        <DataTableCell width={90} sx={{ borderBottom: "none", textAlign: "center" }}>
           <AccordionIconButton
             open={open}
             aria-label="expand row"
@@ -75,7 +63,9 @@ export default function FeeInstructions({ data }: any) {
     <TableContainer>
       <Table>
         <TableBody>
-          {data.map((item: any, index: number) => <RowData key={index} index={index} title={Object.keys(item)[0]} data={item} />)}
+          {data.map((item: any, index: number) => (
+            <RowData key={index} index={index} title={Object.keys(item)[0]} data={item} />
+          ))}
         </TableBody>
       </Table>
     </TableContainer>

@@ -27,6 +27,8 @@ use tari_template_abi::rust::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     args::Arg,
@@ -63,6 +65,7 @@ pub struct EmitLogArg {
 
 /// All the possible log levels
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum LogLevel {
     Error,
     Warn,
@@ -316,6 +319,7 @@ pub enum VaultAction {
     CreateProofByFungibleAmount,
     CreateProofByNonFungibles,
     CreateProofByConfidentialResource,
+    GetNonFungibles,
 }
 
 /// A vault withdraw operation argument
@@ -397,6 +401,7 @@ pub enum BucketAction {
     Burn,
     CreateProof,
     GetNonFungibleIds,
+    GetNonFungibles,
 }
 
 /// A bucket burn operation argument

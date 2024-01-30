@@ -20,18 +20,18 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import { IoAdd } from 'react-icons/io5';
-import Divider from '@mui/material/Divider';
-import Box from '@mui/material/Box';
-import { useTheme } from '@mui/material/styles';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import Select, { SelectChangeEvent } from '@mui/material/Select';
-import Dialog from './AddAccount';
-import useAccountStore from '../../../store/accountStore';
-import { useAccountsList } from '../../../api/hooks/useAccounts';
+import { useState } from "react";
+import { IoAdd } from "react-icons/io5";
+import Divider from "@mui/material/Divider";
+import Box from "@mui/material/Box";
+import { useTheme } from "@mui/material/styles";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import FormControl from "@mui/material/FormControl";
+import Select, { SelectChangeEvent } from "@mui/material/Select";
+import Dialog from "./AddAccount";
+import useAccountStore from "../../../store/accountStore";
+import { useAccountsList } from "../../../api/hooks/useAccounts";
 
 function SelectAccount() {
   const { accountName, setAccountName } = useAccountStore();
@@ -41,7 +41,7 @@ function SelectAccount() {
 
   const handleChange = (event: SelectChangeEvent) => {
     const selectedValue = event.target.value as string;
-    if (selectedValue !== 'addAccount') {
+    if (selectedValue !== "addAccount") {
       setAccountName(event.target.value as string);
     }
   };
@@ -70,7 +70,7 @@ function SelectAccount() {
             );
           })}
           <Divider />
-          <MenuItem value={'addAccount'} onClick={handleAddAccount}>
+          <MenuItem value={"addAccount"} onClick={handleAddAccount}>
             <IoAdd style={{ marginRight: theme.spacing(1) }} />
             Add Account
           </MenuItem>

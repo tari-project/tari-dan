@@ -1,0 +1,26 @@
+[package]
+name = "tariswap_bench"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+tari_crypto = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_dan_wallet_daemon = { workspace = true }
+tari_dan_wallet_sdk = { workspace = true }
+tari_dan_wallet_storage_sqlite = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_template_builtin = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_transaction = { workspace = true }
+tari_validator_node_client = { workspace = true }
+
+clap = { version = "4.3.21", features = ["derive"] }
+url = { version = "2", features = [] }
+anyhow = "1.0.75"
+tokio = { workspace = true, features = ["macros"] }
+log = { workspace = true }
+fern = { version = "0.6.2", features = ["colored"] }

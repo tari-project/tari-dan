@@ -1,28 +1,28 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::convert::TryInto;
+use std::{convert::TryInto, time::Duration};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tari_bor::{decode, decode_exact, encode};
-use tari_dan_common_types::{NodeAddressable, PeerAddress, ShardId};
+use tari_dan_common_types::{NodeAddressable, PeerAddress, SubstateAddress};
+use tari_dan_p2p::{
+    proto,
+    proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SubmitTransactionRequest, SubstateStatus},
+    TariMessagingSpec,
+};
 use tari_dan_storage::consensus_models::{Decision, QuorumCertificate};
 use tari_engine_types::{
     commit_result::ExecuteResult,
-    substate::{Substate, SubstateAddress, SubstateValue},
-    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
+    substate::{Substate, SubstateId, SubstateValue},
+    virtual_substate::{VirtualSubstate, VirtualSubstateId},
 };
-use tari_networking::NetworkingHandle;
+use tari_networking::{MessageSpec, NetworkingHandle};
 use tari_transaction::{Transaction, TransactionId};
 
-use crate::{
-    proto,
-    proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SubmitTransactionRequest, SubstateStatus},
-    rpc_service,
-    ValidatorNodeRpcClientError,
-};
+use crate::{rpc_service, ValidatorNodeRpcClientError};
 
 pub trait ValidatorNodeClientFactory: Send + Sync {
     type Addr: NodeAddressable;
@@ -42,8 +42,8 @@ pub trait ValidatorNodeRpcClient: Send + Sync {
         transaction_id: TransactionId,
     ) -> Result<TransactionResultStatus, Self::Error>;
 
-    async fn get_substate(&mut self, shard: ShardId) -> Result<SubstateResult, Self::Error>;
-    async fn get_virtual_substate(&mut self, address: VirtualSubstateAddress) -> Result<VirtualSubstate, Self::Error>;
+    async fn get_substate(&mut self, shard: SubstateAddress) -> Result<SubstateResult, Self::Error>;
+    async fn get_virtual_substate(&mut self, address: VirtualSubstateId) -> Result<VirtualSubstate, Self::Error>;
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -56,6 +56,8 @@ pub enum TransactionResultStatus {
 pub struct FinalizedResult {
     pub execute_result: Option<ExecuteResult>,
     pub final_decision: Decision,
+    pub execution_time: Duration,
+    pub finalized_time: Duration,
     pub abort_details: Option<String>,
 }
 
@@ -63,13 +65,13 @@ pub struct FinalizedResult {
 pub enum SubstateResult {
     DoesNotExist,
     Up {
-        address: SubstateAddress,
+        id: SubstateId,
         substate: Substate,
         created_by_tx: TransactionId,
         quorum_certificates: Vec<QuorumCertificate>,
     },
     Down {
-        address: SubstateAddress,
+        id: SubstateId,
         version: u32,
         created_by_tx: TransactionId,
         deleted_by_tx: TransactionId,
@@ -77,13 +79,13 @@ pub enum SubstateResult {
     },
 }
 
-pub struct TariValidatorNodeRpcClient {
-    networking: NetworkingHandle<proto::network::Message>,
+pub struct TariValidatorNodeRpcClient<TMsg: MessageSpec> {
+    networking: NetworkingHandle<TMsg>,
     address: PeerAddress,
     connection: Option<rpc_service::ValidatorNodeRpcClient>,
 }
 
-impl TariValidatorNodeRpcClient {
+impl<TMsg: MessageSpec> TariValidatorNodeRpcClient<TMsg> {
     pub async fn client_connection(
         &mut self,
     ) -> Result<rpc_service::ValidatorNodeRpcClient, ValidatorNodeRpcClientError> {
@@ -101,7 +103,7 @@ impl TariValidatorNodeRpcClient {
 }
 
 #[async_trait]
-impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
+impl<TMsg: MessageSpec> ValidatorNodeRpcClient for TariValidatorNodeRpcClient<TMsg> {
     type Addr = PeerAddress;
     type Error = ValidatorNodeRpcClientError;
 
@@ -122,11 +124,11 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
         Ok(id)
     }
 
-    async fn get_substate(&mut self, shard: ShardId) -> Result<SubstateResult, Self::Error> {
+    async fn get_substate(&mut self, address: SubstateAddress) -> Result<SubstateResult, Self::Error> {
         let mut client = self.client_connection().await?;
 
-        let request = crate::proto::rpc::GetSubstateRequest {
-            shard: shard.as_bytes().to_vec(),
+        let request = proto::rpc::GetSubstateRequest {
+            address: address.as_bytes().to_vec(),
         };
 
         let resp = client.get_substate(request).await?;
@@ -158,7 +160,7 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
                     })?;
                 Ok(SubstateResult::Up {
                     substate: Substate::new(resp.version, substate),
-                    address: SubstateAddress::from_bytes(&resp.address)
+                    id: SubstateId::from_bytes(&resp.address)
                         .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?,
                     created_by_tx: tx_hash,
                     quorum_certificates,
@@ -186,7 +188,7 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
                         ))
                     })?;
                 Ok(SubstateResult::Down {
-                    address: SubstateAddress::from_bytes(&resp.address)
+                    id: SubstateId::from_bytes(&resp.address)
                         .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?,
                     version: resp.version,
                     deleted_by_tx,
@@ -198,7 +200,7 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
         }
     }
 
-    async fn get_virtual_substate(&mut self, address: VirtualSubstateAddress) -> Result<VirtualSubstate, Self::Error> {
+    async fn get_virtual_substate(&mut self, address: VirtualSubstateId) -> Result<VirtualSubstate, Self::Error> {
         let mut client = self.client_connection().await?;
 
         let request = proto::rpc::GetVirtualSubstateRequest {
@@ -247,9 +249,14 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
                         ))
                     })?;
 
+                let execution_time = Duration::from_millis(response.execution_time_ms);
+                let finalized_time = Duration::from_millis(response.finalized_time_ms);
+
                 Ok(TransactionResultStatus::Finalized(FinalizedResult {
                     execute_result: execution_result,
                     final_decision,
+                    execution_time,
+                    finalized_time,
                     abort_details: Some(response.abort_details).filter(|s| s.is_empty()),
                 }))
             },
@@ -263,23 +270,23 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
 
 #[derive(Clone, Debug)]
 pub struct TariValidatorNodeRpcClientFactory {
-    networking: NetworkingHandle<proto::network::Message>,
+    networking: NetworkingHandle<TariMessagingSpec>,
 }
 
 impl TariValidatorNodeRpcClientFactory {
-    pub fn new(networking: NetworkingHandle<proto::network::Message>) -> Self {
+    pub fn new(networking: NetworkingHandle<TariMessagingSpec>) -> Self {
         Self { networking }
     }
 }
 
 impl ValidatorNodeClientFactory for TariValidatorNodeRpcClientFactory {
     type Addr = PeerAddress;
-    type Client = TariValidatorNodeRpcClient;
+    type Client = TariValidatorNodeRpcClient<TariMessagingSpec>;
 
     fn create_client(&self, address: &Self::Addr) -> Self::Client {
         TariValidatorNodeRpcClient {
             networking: self.networking.clone(),
-            address: address.clone(),
+            address: *address,
             connection: None,
         }
     }

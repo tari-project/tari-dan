@@ -11,7 +11,7 @@ use tari_template_lib::{
     models::{Amount, Metadata},
 };
 
-use crate::{substate::SubstateAddress, template::parse_template_address, TemplateAddress};
+use crate::{substate::SubstateId, template::parse_template_address, TemplateAddress};
 
 pub fn json_deserialize<'de, D>(d: D) -> Result<Vec<Arg>, D::Error>
 where D: Deserializer<'de> {
@@ -72,8 +72,8 @@ fn try_parse_special_string_arg(s: &str) -> Result<StringArg<'_>, ArgParseError>
         return Ok(StringArg::Workspace(contents.as_bytes().to_vec()));
     }
 
-    if let Ok(address) = SubstateAddress::from_str(s) {
-        return Ok(StringArg::SubstateAddress(address));
+    if let Ok(address) = SubstateId::from_str(s) {
+        return Ok(StringArg::SubstateId(address));
     }
 
     if let Some(address) = parse_template_address(s.to_owned()) {
@@ -105,7 +105,7 @@ pub enum StringArg<'a> {
     Amount(Amount),
     String(&'a str),
     Workspace(Vec<u8>),
-    SubstateAddress(SubstateAddress),
+    SubstateId(SubstateId),
     TemplateAddress(TemplateAddress),
     UnsignedInteger(u64),
     SignedInteger(i64),
@@ -118,15 +118,15 @@ impl From<StringArg<'_>> for Arg {
         match value {
             StringArg::Amount(v) => arg!(v),
             StringArg::String(v) => arg!(v),
-            StringArg::SubstateAddress(v) => match v {
-                SubstateAddress::Component(v) => arg!(v),
-                SubstateAddress::Resource(v) => arg!(v),
-                SubstateAddress::Vault(v) => arg!(v),
-                SubstateAddress::UnclaimedConfidentialOutput(v) => arg!(v),
-                SubstateAddress::NonFungible(v) => arg!(v),
-                SubstateAddress::NonFungibleIndex(v) => arg!(v),
-                SubstateAddress::TransactionReceipt(v) => arg!(v),
-                SubstateAddress::FeeClaim(v) => arg!(v),
+            StringArg::SubstateId(v) => match v {
+                SubstateId::Component(v) => arg!(v),
+                SubstateId::Resource(v) => arg!(v),
+                SubstateId::Vault(v) => arg!(v),
+                SubstateId::UnclaimedConfidentialOutput(v) => arg!(v),
+                SubstateId::NonFungible(v) => arg!(v),
+                SubstateId::NonFungibleIndex(v) => arg!(v),
+                SubstateId::TransactionReceipt(v) => arg!(v),
+                SubstateId::FeeClaim(v) => arg!(v),
             },
             StringArg::TemplateAddress(v) => arg!(v),
             StringArg::UnsignedInteger(v) => arg!(v),
@@ -235,14 +235,14 @@ mod tests {
         for case in cases {
             let a = parse_arg(case).unwrap();
 
-            match SubstateAddress::from_str(case).unwrap() {
-                SubstateAddress::Component(c) => {
+            match SubstateId::from_str(case).unwrap() {
+                SubstateId::Component(c) => {
                     assert_eq!(a, arg!(c), "Unexpected value for case '{}'", case);
                 },
-                SubstateAddress::Resource(r) => {
+                SubstateId::Resource(r) => {
                     assert_eq!(a, arg!(r), "Unexpected value for case '{}'", case);
                 },
-                SubstateAddress::Vault(v) => {
+                SubstateId::Vault(v) => {
                     assert_eq!(a, arg!(v), "Unexpected value for case '{}'", case);
                 },
                 _ => unreachable!(),

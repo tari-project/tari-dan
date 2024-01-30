@@ -9,8 +9,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_transaction::{Transaction, TransactionId};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     consensus_models::{
@@ -121,6 +123,7 @@ pub trait StateStoreReadTransaction {
         &mut self,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
+        include_dummy_blocks: bool,
     ) -> Result<Vec<Block>, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
@@ -177,7 +180,7 @@ pub trait StateStoreReadTransaction {
     fn transactions_fetch_involved_shards(
         &mut self,
         transaction_ids: HashSet<TransactionId>,
-    ) -> Result<HashSet<ShardId>, StorageError>;
+    ) -> Result<HashSet<SubstateAddress>, StorageError>;
 
     // -------------------------------- Votes -------------------------------- //
     fn votes_get_by_block_and_sender(
@@ -188,20 +191,23 @@ pub trait StateStoreReadTransaction {
     fn votes_count_for_block(&mut self, block_id: &BlockId) -> Result<u64, StorageError>;
     fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError>;
     //---------------------------------- Substates --------------------------------------------//
-    fn substates_get(&mut self, substate_id: &ShardId) -> Result<SubstateRecord, StorageError>;
-    fn substates_get_any(&mut self, substate_ids: &HashSet<ShardId>) -> Result<Vec<SubstateRecord>, StorageError>;
+    fn substates_get(&mut self, substate_id: &SubstateAddress) -> Result<SubstateRecord, StorageError>;
+    fn substates_get_any(
+        &mut self,
+        substate_ids: &HashSet<SubstateAddress>,
+    ) -> Result<Vec<SubstateRecord>, StorageError>;
     fn substates_any_exist<I, S>(&mut self, substates: I) -> Result<bool, StorageError>
     where
         I: IntoIterator<Item = S>,
-        S: Borrow<ShardId>;
+        S: Borrow<SubstateAddress>;
 
     fn substates_exists_for_transaction(&mut self, transaction_id: &TransactionId) -> Result<bool, StorageError>;
 
     fn substates_get_many_within_range(
         &mut self,
-        start: &ShardId,
-        end: &ShardId,
-        exclude_shards: &[ShardId],
+        start: &SubstateAddress,
+        end: &SubstateAddress,
+        exclude_shards: &[SubstateAddress],
     ) -> Result<Vec<SubstateRecord>, StorageError>;
     fn substates_get_many_by_created_transaction(
         &mut self,
@@ -217,7 +223,7 @@ pub trait StateStoreReadTransaction {
         &mut self,
         transaction_id: &TransactionId,
     ) -> Result<Vec<SubstateRecord>, StorageError>;
-    fn substates_check_lock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+    fn substates_check_lock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
         &mut self,
         objects: I,
         lock_flag: SubstateLockFlag,
@@ -226,7 +232,7 @@ pub trait StateStoreReadTransaction {
     fn locked_outputs_check_all<I, B>(&mut self, output_shards: I) -> Result<SubstateLockState, StorageError>
     where
         I: IntoIterator<Item = B>,
-        B: Borrow<ShardId>;
+        B: Borrow<SubstateAddress>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -324,23 +330,23 @@ pub trait StateStoreWriteTransaction {
     fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;
 
     //---------------------------------- Substates --------------------------------------------//
-    fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+    fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
         &mut self,
         locked_by_tx: &TransactionId,
         objects: I,
         lock_flag: SubstateLockFlag,
     ) -> Result<SubstateLockState, StorageError>;
 
-    fn substates_try_unlock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+    fn substates_try_unlock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
         &mut self,
         locked_by_tx: &TransactionId,
         objects: I,
         lock_flag: SubstateLockFlag,
     ) -> Result<(), StorageError>;
 
-    fn substate_down_many<I: IntoIterator<Item = ShardId>>(
+    fn substate_down_many<I: IntoIterator<Item = SubstateAddress>>(
         &mut self,
-        shard_ids: I,
+        substate_addresses: I,
         epoch: Epoch,
         destroyed_block_id: &BlockId,
         destroyed_transaction_id: &TransactionId,
@@ -357,15 +363,16 @@ pub trait StateStoreWriteTransaction {
     ) -> Result<SubstateLockState, StorageError>
     where
         I: IntoIterator<Item = B>,
-        B: Borrow<ShardId>;
+        B: Borrow<SubstateAddress>;
 
     fn locked_outputs_release_all<I, B>(&mut self, output_shards: I) -> Result<Vec<LockedOutput>, StorageError>
     where
         I: IntoIterator<Item = B>,
-        B: Borrow<ShardId>;
+        B: Borrow<SubstateAddress>;
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum Ordering {
     Ascending,
     Descending,

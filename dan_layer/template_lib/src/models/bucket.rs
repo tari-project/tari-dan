@@ -23,8 +23,10 @@
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::{call_engine, rust::fmt, EngineOp};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
-use super::NonFungibleId;
+use super::{NonFungible, NonFungibleId};
 use crate::{
     args::{BucketAction, BucketInvokeArg, BucketRef, InvokeResult},
     models::{Amount, BinaryTag, ConfidentialWithdrawProof, Proof, ResourceAddress},
@@ -35,7 +37,8 @@ const TAG: u64 = BinaryTag::BucketId.as_u64();
 
 /// A bucket's unique identification during the transaction execution
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub struct BucketId(BorTag<u32, TAG>);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct BucketId(#[cfg_attr(feature = "ts", ts(type = "number"))] BorTag<u32, TAG>);
 
 impl From<u32> for BucketId {
     fn from(value: u32) -> Self {
@@ -187,5 +190,16 @@ impl Bucket {
 
         resp.decode()
             .expect("get_non_fungible_ids returned invalid non fungible ids")
+    }
+
+    /// Returns all the non-fungibles in this bucket
+    pub fn get_non_fungibles(&self) -> Vec<NonFungible> {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::GetNonFungibles,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("get_non_fungibles returned invalid non fungibles")
     }
 }

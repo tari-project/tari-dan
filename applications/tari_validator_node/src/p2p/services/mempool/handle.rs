@@ -32,8 +32,9 @@ pub enum MempoolRequest {
         should_propagate: bool,
         reply: oneshot::Sender<Result<(), MempoolError>>,
     },
-    RemoveTransaction {
-        transaction_id: TransactionId,
+    RemoveTransactions {
+        transaction_ids: Vec<TransactionId>,
+        reply: oneshot::Sender<Result<usize, MempoolError>>,
     },
     GetMempoolSize {
         reply: oneshot::Sender<usize>,
@@ -70,11 +71,12 @@ impl MempoolHandle {
         rx.await?
     }
 
-    pub async fn remove_transaction(&self, transaction_id: TransactionId) -> Result<(), MempoolError> {
+    pub async fn remove_transactions(&self, transaction_ids: Vec<TransactionId>) -> Result<usize, MempoolError> {
+        let (reply, rx) = oneshot::channel();
         self.tx_mempool_request
-            .send(MempoolRequest::RemoveTransaction { transaction_id })
+            .send(MempoolRequest::RemoveTransactions { transaction_ids, reply })
             .await?;
-        Ok(())
+        rx.await?
     }
 
     pub async fn get_mempool_size(&self) -> Result<usize, MempoolError> {

@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
-use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeHeight};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{self, QuorumDecision},
     StorageError,
@@ -50,10 +50,10 @@ impl TryFrom<ForeignProposal> for consensus_models::ForeignProposal {
 
     fn try_from(value: ForeignProposal) -> Result<Self, Self::Error> {
         Ok(Self {
-            bucket: ShardBucket::from(value.bucket as u32),
+            bucket: Shard::from(value.bucket as u32),
             block_id: deserialize_hex_try_from(&value.block_id)?,
             state: parse_from_string(&value.state)?,
-            mined_at: value.mined_at.map(|mined_at| NodeHeight(mined_at as u64)),
+            proposed_height: value.mined_at.map(|mined_at| NodeHeight(mined_at as u64)),
         })
     }
 }

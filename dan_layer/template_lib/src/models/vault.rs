@@ -32,8 +32,10 @@ use tari_template_abi::{
     },
     EngineOp,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
-use super::{BinaryTag, Proof, ProofAuth};
+use super::{BinaryTag, NonFungible, Proof, ProofAuth};
 use crate::{
     args::{
         ConfidentialRevealArg,
@@ -57,7 +59,8 @@ const TAG: u64 = BinaryTag::VaultId as u64;
 
 /// A vault's unique identification in the Tari network
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct VaultId(BorTag<Hash, TAG>);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct VaultId(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<Hash, TAG>);
 
 impl VaultId {
     pub const fn new(address: Hash) -> Self {
@@ -271,6 +274,17 @@ impl Vault {
 
         resp.decode()
             .expect("get_non_fungible_ids returned invalid non fungible ids")
+    }
+
+    /// Returns all the non-fungibles in this vault
+    pub fn get_non_fungibles(&self) -> Vec<NonFungible> {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::GetNonFungibles,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("get_non_fungibles returned invalid non fungibles")
     }
 
     /// Returns the resource address of the tokens that this vault holds

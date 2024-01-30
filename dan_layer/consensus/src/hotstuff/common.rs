@@ -2,10 +2,11 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
+use tari_common::configuration::Network;
 use tari_dan_common_types::{committee::Committee, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::consensus_models::{Block, QuorumCertificate};
 
-use crate::{messages::HotstuffMessage, traits::LeaderStrategy};
+use crate::traits::LeaderStrategy;
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::common";
 
@@ -14,10 +15,8 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::common";
 /// TODO: exhaust > 0
 pub const EXHAUST_DIVISOR: u64 = 0;
 
-// To avoid clippy::type_complexity
-pub(super) type CommitteeAndMessage<TAddr> = (Committee<TAddr>, HotstuffMessage);
-
 pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
+    network: Network,
     epoch: Epoch,
     high_qc: &QuorumCertificate,
     new_height: NodeHeight,
@@ -47,6 +46,7 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
     loop {
         let leader = leader_strategy.get_leader_public_key(local_committee, current_height);
         let dummy_block = Block::dummy_block(
+            network,
             *parent_block.block_id(),
             leader.clone(),
             current_height,

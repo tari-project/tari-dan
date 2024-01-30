@@ -10,20 +10,24 @@ use tari_template_lib::{
     prelude::{ComponentAddress, Metadata, NonFungibleAddress},
     Hash,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     fee_claim::FeeClaimAddress,
     serde_with,
-    substate::SubstateAddress,
+    substate::SubstateId,
     transaction_receipt::TransactionReceiptAddress,
 };
 
 const MAX_VISITOR_DEPTH: usize = 50;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct IndexedValue {
     indexed: IndexedWellKnownTypes,
     #[serde(with = "serde_with::cbor_value")]
+    #[cfg_attr(feature = "ts", ts(type = "any"))]
     value: tari_bor::Value,
 }
 
@@ -46,7 +50,7 @@ impl IndexedValue {
         Ok(Self { indexed, value })
     }
 
-    pub fn referenced_substates(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+    pub fn referenced_substates(&self) -> impl Iterator<Item = SubstateId> + '_ {
         self.indexed
             .component_addresses
             .iter()
@@ -115,6 +119,7 @@ impl Default for IndexedValue {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct IndexedWellKnownTypes {
     bucket_ids: Vec<BucketId>,
     proof_ids: Vec<ProofId>,
@@ -165,10 +170,7 @@ impl IndexedWellKnownTypes {
     }
 
     /// Checks if a value contains a substate with the given address. This function does not allocate.
-    pub fn value_contains_substate(
-        value: &tari_bor::Value,
-        address: &SubstateAddress,
-    ) -> Result<bool, IndexedValueError> {
+    pub fn value_contains_substate(value: &tari_bor::Value, address: &SubstateId) -> Result<bool, IndexedValueError> {
         let mut found = false;
         tari_bor::walk_all(
             value,
@@ -208,7 +210,7 @@ impl IndexedWellKnownTypes {
         Ok(found)
     }
 
-    pub fn referenced_substates(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+    pub fn referenced_substates(&self) -> impl Iterator<Item = SubstateId> + '_ {
         self.component_addresses
             .iter()
             .map(|a| (*a).into())

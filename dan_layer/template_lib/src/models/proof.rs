@@ -23,6 +23,8 @@
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::{call_engine, rust::fmt, EngineOp};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     args::{InvokeResult, ProofAction, ProofInvokeArg, ProofRef},
@@ -34,7 +36,8 @@ const TAG: u64 = BinaryTag::ProofId.as_u64();
 
 /// The unique identification of a proof during a transaction execution
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub struct ProofId(BorTag<u32, TAG>);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct ProofId(#[cfg_attr(feature = "ts", ts(type = "number"))] BorTag<u32, TAG>);
 
 impl From<u32> for ProofId {
     fn from(value: u32) -> Self {

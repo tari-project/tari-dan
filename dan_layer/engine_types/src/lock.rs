@@ -3,8 +3,13 @@
 
 use std::fmt::Display;
 
+use tari_bor::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
+
 pub type LockId = u32;
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum LockFlag {
     Read,
     Write,

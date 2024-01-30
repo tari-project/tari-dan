@@ -29,11 +29,11 @@ use tari_dan_common_types::{
     ObjectPledgeInfo,
     PayloadId,
     QuorumCertificate,
-    ShardId,
+    SubstateAddress,
     SubstateState,
     TreeNodeHash,
 };
-use tari_engine_types::substate::{Substate, SubstateAddress};
+use tari_engine_types::substate::{Substate, SubstateId};
 
 use crate::{
     models::{
@@ -97,45 +97,45 @@ pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn get_high_qc_for(
         &mut self,
         payload_id: PayloadId,
-        shard: ShardId,
+        address: SubstateAddress,
     ) -> Result<QuorumCertificate<TAddr>, StorageError>;
     fn get_high_qcs(&mut self, payload_id: PayloadId) -> Result<Vec<QuorumCertificate<TAddr>>, StorageError>;
-    /// Returns the current leaf node for the shard
-    fn get_leaf_node(&mut self, payload_id: &PayloadId, shard: &ShardId) -> Result<LeafNode, StorageError>;
+    /// Returns the current leaf node for the substate address
+    fn get_leaf_node(&mut self, payload_id: &PayloadId, address: &SubstateAddress) -> Result<LeafNode, StorageError>;
     fn get_current_leaders_states(&mut self, payload: &PayloadId) -> Result<Vec<CurrentLeaderStates>, StorageError>;
     fn get_payload(&mut self, payload_id: &PayloadId) -> Result<TPayload, StorageError>;
     fn get_node(&mut self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<TAddr, TPayload>, StorageError>;
     fn get_locked_node_hash_and_height(
         &mut self,
         payload_id: PayloadId,
-        shard: ShardId,
+        address: SubstateAddress,
     ) -> Result<(TreeNodeHash, NodeHeight), StorageError>;
-    fn get_last_executed_height(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<NodeHeight, StorageError>;
-    fn get_state_inventory(&mut self) -> Result<Vec<ShardId>, StorageError>;
-    fn get_substate_states(&mut self, shards: &[ShardId]) -> Result<Vec<SubstateShardData>, StorageError>;
+    fn get_last_executed_height(&mut self, address: SubstateAddress, payload_id: PayloadId) -> Result<NodeHeight, StorageError>;
+    fn get_state_inventory(&mut self) -> Result<Vec<SubstateAddress>, StorageError>;
+    fn get_substate_states(&mut self, addresses: &[SubstateAddress]) -> Result<Vec<SubstateShardData>, StorageError>;
     fn get_substate_states_by_range(
         &mut self,
-        start_shard_id: ShardId,
-        end_shard_id: ShardId,
-        excluded_shards: &[ShardId],
+        start_address: SubstateAddress,
+        end_address: SubstateAddress,
+        excluded_addresses: &[SubstateAddress],
     ) -> Result<Vec<SubstateShardData>, StorageError>;
     /// Returns the last voted height. A height of 0 means that no previous vote height has been recorded for the
-    /// <shard, payload> pair.
+    /// <address, payload> pair.
     fn get_last_voted_height(
         &mut self,
-        shard: ShardId,
+        address: SubstateAddress,
         payload_id: PayloadId,
     ) -> Result<(NodeHeight, u32), StorageError>;
     fn get_leader_proposals(
         &mut self,
         payload: PayloadId,
         payload_height: NodeHeight,
-        shards: &[ShardId],
+        addresses: &[SubstateAddress],
     ) -> Result<Vec<HotStuffTreeNode<TAddr, TPayload>>, StorageError>;
     fn get_last_payload_height_for_leader_proposal(
         &mut self,
         payload: PayloadId,
-        shard: ShardId,
+        address: SubstateAddress,
     ) -> Result<NodeHeight, StorageError>;
     fn has_vote_for(&mut self, from: &TAddr, node_hash: TreeNodeHash) -> Result<bool, StorageError>;
     fn get_received_votes_for(&mut self, node_hash: TreeNodeHash) -> Result<Vec<VoteMessage>, StorageError>;
@@ -144,7 +144,7 @@ pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn get_substates_for_payload(
         &mut self,
         payload_id: Vec<u8>,
-        shard_id: Vec<u8>,
+        address: Vec<u8>,
     ) -> Result<Vec<SQLSubstate>, StorageError>;
     fn get_fees_by_epoch(
         &mut self,
@@ -158,21 +158,21 @@ pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
 pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn commit(self) -> Result<(), StorageError>;
     fn rollback(self) -> Result<(), StorageError>;
-    fn insert_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate<TAddr>)
+    fn insert_high_qc(&mut self, from: TAddr, address: SubstateAddress, qc: QuorumCertificate<TAddr>)
         -> Result<(), StorageError>;
     fn save_payload(&mut self, payload: TPayload) -> Result<(), StorageError>;
     fn save_current_leader_state(
         &mut self,
         payload: PayloadId,
-        shard_id: ShardId,
+        address: SubstateAddress,
         leader_round: u32,
         leader: TAddr,
     ) -> Result<(), StorageError>;
-    /// Inserts or updates the leaf node for the shard
+    /// Inserts or updates the leaf node for the substate address
     fn set_leaf_node(
         &mut self,
         payload_id: PayloadId,
-        shard: ShardId,
+        address: SubstateAddress,
         node: TreeNodeHash,
         payload_height: NodeHeight,
         height: NodeHeight,
@@ -181,14 +181,14 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
     fn set_locked(
         &mut self,
         payload_id: PayloadId,
-        shard: ShardId,
+        address: SubstateAddress,
         node_hash: TreeNodeHash,
         node_height: NodeHeight,
     ) -> Result<(), StorageError>;
 
     fn set_last_executed_height(
         &mut self,
-        shard: ShardId,
+        address: SubstateAddress,
         payload_id: PayloadId,
         height: NodeHeight,
     ) -> Result<(), StorageError>;
@@ -200,7 +200,7 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
     fn insert_substates(&mut self, substate_data: SubstateShardData) -> Result<(), StorageError>;
     fn set_last_voted_height(
         &mut self,
-        shard: ShardId,
+        address: SubstateAddress,
         payload_id: PayloadId,
         height: NodeHeight,
         leader_round: u32,
@@ -208,7 +208,7 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
 
     fn save_leader_proposals(
         &mut self,
-        shard: ShardId,
+        address: SubstateAddress,
         payload: PayloadId,
         payload_height: NodeHeight,
         leader_round: u32,
@@ -230,19 +230,19 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
     // -------------------------------- Pledges -------------------------------- //
     fn pledge_object(
         &mut self,
-        shard: ShardId,
+        address: SubstateAddress,
         payload: PayloadId,
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, StorageError>;
     fn complete_pledges(
         &mut self,
-        shard: ShardId,
+        address: SubstateAddress,
         payload_id: PayloadId,
         node_hash: &TreeNodeHash,
     ) -> Result<(), StorageError>;
     fn abandon_pledges(
         &mut self,
-        shard: ShardId,
+        address: SubstateAddress,
         payload_id: PayloadId,
         node_hash: &TreeNodeHash,
     ) -> Result<(), StorageError>;
@@ -250,7 +250,7 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
     fn save_burnt_utxo(
         &mut self,
         substate: &Substate,
-        commitment_address: SubstateAddress,
-        shard_id: ShardId,
+        commitment_address: SubstateId,
+        address: SubstateAddress,
     ) -> Result<(), StorageError>;
 }

@@ -30,9 +30,9 @@ use tari_engine_types::{
     indexed_value::IndexedValueError,
     lock::LockId,
     resource_container::ResourceError,
-    substate::SubstateAddress,
+    substate::SubstateId,
     transaction_receipt::TransactionReceiptAddress,
-    virtual_substate::VirtualSubstateAddress,
+    virtual_substate::VirtualSubstateId,
 };
 use tari_template_lib::models::{
     Amount,
@@ -67,24 +67,24 @@ pub enum RuntimeError {
     #[error("Workspace error: {0}")]
     WorkspaceError(#[from] WorkspaceError),
     #[error("Substate not found with address '{address}'")]
-    SubstateNotFound { address: SubstateAddress },
+    SubstateNotFound { address: SubstateId },
     #[error("Substate not in scope with address '{address}'")]
-    SubstateOutOfScope { address: SubstateAddress },
+    SubstateOutOfScope { address: SubstateId },
     #[error("Substate {address} is not owned by {requested_owner}")]
     SubstateNotOwned {
-        address: SubstateAddress,
-        requested_owner: SubstateAddress,
+        address: SubstateId,
+        requested_owner: SubstateId,
     },
     #[error("Expected lock {lock_id} to lock {expected_type} but it locks {address}")]
     LockSubstateMismatch {
         lock_id: LockId,
         expected_type: &'static str,
-        address: SubstateAddress,
+        address: SubstateId,
     },
     #[error("Component {component} referenced an unknown substate {address}")]
     ComponentReferencedUnknownSubstate {
         component: ComponentAddress,
-        address: SubstateAddress,
+        address: SubstateId,
     },
     #[error("Encountered unknown or out of scope bucket {bucket_id}")]
     ValidationFailedBucketNotInScope { bucket_id: BucketId },
@@ -157,8 +157,8 @@ pub enum RuntimeError {
     TemplateNotFound { template_address: TemplateAddress },
     #[error("Insufficient fees paid: required {required_fee}, paid {fees_paid}")]
     InsufficientFeesPaid { required_fee: Amount, fees_paid: Amount },
-    #[error("No checkpoint")]
-    NoCheckpoint,
+    #[error("No fee checkpoint")]
+    NoFeeCheckpoint,
     #[error("Component address must be sequential. Index before {index} was not found")]
     ComponentAddressMustBeSequential { index: u32 },
     #[error("Failed to load template '{address}': {details}")]
@@ -184,7 +184,7 @@ pub enum RuntimeError {
     #[error("Fee claim not permitted for epoch {epoch} vn address {address:.10}")]
     FeeClaimNotPermitted { epoch: Epoch, address: PublicKey },
     #[error("Virtual substate not found: {address}")]
-    VirtualSubstateNotFound { address: VirtualSubstateAddress },
+    VirtualSubstateNotFound { address: VirtualSubstateId },
     #[error("Double claimed fee for epoch {epoch} vn address {address:.10}")]
     DoubleClaimedFee { address: PublicKey, epoch: Epoch },
     #[error("Invalid return value: {0}")]
@@ -194,15 +194,15 @@ pub enum RuntimeError {
     #[error("Invalid deposit of bucket {bucket_id} has locked value amounting to {locked_amount}")]
     InvalidOpDepositLockedBucket { bucket_id: BucketId, locked_amount: Amount },
     #[error("Duplicate substate {address}")]
-    DuplicateSubstate { address: SubstateAddress },
+    DuplicateSubstate { address: SubstateId },
     #[error("Substate {address} is orphaned")]
-    OrphanedSubstate { address: SubstateAddress },
+    OrphanedSubstate { address: SubstateId },
     #[error("{} orphaned substate(s) detected: {}", .substates.len(), .substates.join(", "))]
     OrphanedSubstates { substates: Vec<String> },
     #[error("Attempted to finalise state but {remaining} call frame(s) remain on the stack")]
     CallFrameRemainingOnStack { remaining: usize },
     #[error("Duplicate reference to substate {address}")]
-    DuplicateReference { address: SubstateAddress },
+    DuplicateReference { address: SubstateId },
 
     #[error("BUG: [{function}] Invariant error {details}")]
     InvariantError { function: &'static str, details: String },
@@ -224,7 +224,7 @@ pub enum RuntimeError {
     #[error("Address allocation not found with id {id}")]
     AddressAllocationNotFound { id: u32 },
     #[error("Address allocation type mismatch: {address}")]
-    AddressAllocationTypeMismatch { address: SubstateAddress },
+    AddressAllocationTypeMismatch { address: SubstateId },
 }
 
 impl RuntimeError {

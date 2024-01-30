@@ -20,11 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import PageHeading from '../../Components/PageHeading';
-import Grid from '@mui/material/Grid';
-import { StyledPaper } from '../../Components/StyledComponents';
-import Transactions from './Transactions';
-import useAccountStore from '../../store/accountStore';
+import PageHeading from "../../Components/PageHeading";
+import Grid from "@mui/material/Grid";
+import { StyledPaper } from "../../Components/StyledComponents";
+import Transactions from "./Transactions";
+import useAccountStore from "../../store/accountStore";
 
 function TransactionsLayout() {
   const accountName = useAccountStore((state) => state.accountName);

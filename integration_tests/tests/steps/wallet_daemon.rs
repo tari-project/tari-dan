@@ -110,7 +110,7 @@ async fn when_i_claim_fees_for_validator_and_epoch(
     account_name: String,
     wallet_daemon_name: String,
 ) {
-    let resp = wallet_daemon_cli::claim_fees(world, wallet_daemon_name, account_name, validator_node, epoch)
+    let resp = wallet_daemon_cli::claim_fees(world, wallet_daemon_name, account_name, validator_node, epoch, false)
         .await
         .unwrap();
     resp.result.result.accept().unwrap_or_else(|| {
@@ -132,7 +132,7 @@ async fn when_i_claim_fees_for_validator_and_epoch_fails(
     account_name: String,
     wallet_daemon_name: String,
 ) {
-    let err = wallet_daemon_cli::claim_fees(world, wallet_daemon_name, account_name, validator_node, epoch)
+    let err = wallet_daemon_cli::claim_fees(world, wallet_daemon_name, account_name, validator_node, epoch, false)
         .await
         .unwrap_err();
 
@@ -400,7 +400,7 @@ async fn when_transfer_via_wallet_daemon(
         .find(|(name, _)| **name == resource_name)
         .map(|(_, data)| data.clone())
         .unwrap_or_else(|| panic!("No resource named {}", resource_name))
-        .address
+        .substate_id
         .as_resource_address()
         .unwrap_or_else(|| panic!("{} is not a resource", resource_name));
 

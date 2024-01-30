@@ -10,6 +10,8 @@ use tari_template_lib::{
     args::{Arg, LogLevel},
     models::{Amount, ComponentAddress, TemplateAddress},
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     confidential::{ConfidentialClaim, ConfidentialOutput},
@@ -17,6 +19,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum Instruction {
     CallFunction {
         #[serde(with = "serde_with::hex")]
@@ -44,6 +47,7 @@ pub enum Instruction {
     },
     ClaimValidatorFees {
         epoch: u64,
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
         validator_public_key: PublicKey,
     },
     DropAllProofsInWorkspace,

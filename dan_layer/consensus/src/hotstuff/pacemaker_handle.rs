@@ -98,18 +98,6 @@ impl PaceMakerHandle {
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
 
-    pub async fn reset_view(
-        &self,
-        last_seen_height: NodeHeight,
-        high_qc_height: NodeHeight,
-    ) -> Result<(), HotStuffError> {
-        self.current_height.set(last_seen_height);
-        self.sender
-            .send(PacemakerRequest::ResetLeaderTimeout { high_qc_height })
-            .await
-            .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
-    }
-
     pub fn current_height(&self) -> NodeHeight {
         self.current_height.get()
     }

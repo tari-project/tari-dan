@@ -31,7 +31,10 @@ use serde::Serialize;
 use sqlite_message_logger::SqliteMessageLogger;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
-    configuration::bootstrap::{grpc_default_port, ApplicationType},
+    configuration::{
+        bootstrap::{grpc_default_port, ApplicationType},
+        Network,
+    },
     exit_codes::{ExitCode, ExitError},
 };
 use tari_common_types::types::PublicKey;
@@ -48,10 +51,11 @@ use tari_dan_app_utilities::{
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
 };
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PeerAddress, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PeerAddress, SubstateAddress};
 use tari_dan_engine::fees::FeeTable;
+use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, ExecutedTransaction, ForeignReceiveCounters, SubstateRecord},
+    consensus_models::{Block, BlockId, ExecutedTransaction, SubstateRecord},
     global::GlobalDb,
     StateStore,
     StateStoreReadTransaction,
@@ -59,10 +63,10 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
-use tari_engine_types::{resource::Resource, substate::SubstateAddress};
+use tari_engine_types::{resource::Resource, substate::SubstateId};
 use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
 use tari_indexer_lib::substate_scanner::SubstateScanner;
-use tari_networking::{NetworkingHandle, SwarmConfig};
+use tari_networking::{MessagingMode, NetworkingHandle, SwarmConfig};
 use tari_rpc_framework::RpcServer;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -75,7 +79,7 @@ use tari_template_lib::{
     resource::TOKEN_SYMBOL,
 };
 use tari_transaction::Transaction;
-use tari_validator_node_rpc::{client::TariValidatorNodeRpcClientFactory, proto};
+use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
@@ -100,7 +104,7 @@ use crate::{
                 TransactionSignatureValidator,
                 Validator,
             },
-            message_dispatcher,
+            messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, Gossip},
         },
     },
     registration,
@@ -132,8 +136,8 @@ pub async fn spawn_services(
         }));
 
     // Networking
-    let (message_senders, message_receivers) = message_dispatcher::new_messaging_channel(30);
-    let (tx_messages, rx_messages) = mpsc::channel(100);
+    let (tx_consensus_messages, rx_consensus_messages) = mpsc::unbounded_channel();
+    let (tx_gossip_messages, rx_gossip_messages) = mpsc::unbounded_channel();
     let identity = identity::Keypair::sr25519_from_bytes(keypair.secret_key().as_bytes().to_vec()).map_err(|e| {
         ExitError::new(
             ExitCode::ConfigError,
@@ -153,9 +157,12 @@ pub async fn spawn_services(
             p.addresses.into_iter().map(move |a| (peer_id, a))
         })
         .collect();
-    let (mut networking, join_handle) = tari_networking::spawn::<proto::network::Message>(
+    let (mut networking, join_handle) = tari_networking::spawn(
         identity,
-        tx_messages,
+        MessagingMode::Enabled {
+            tx_messages: tx_consensus_messages,
+            tx_gossip_messages,
+        },
         tari_networking::Config {
             listener_port: config.validator_node.p2p.listener_port,
             swarm: SwarmConfig {
@@ -175,22 +182,15 @@ pub async fn spawn_services(
 
     // Spawn messaging
     let message_logger = SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
-    let (outbound_messaging, join_handle) =
-        message_dispatcher::spawn(networking.clone(), rx_messages, message_senders, message_logger);
-    handles.push(join_handle);
-
-    let message_dispatcher::DanMessageReceivers {
-        rx_consensus_message,
-        rx_new_transaction_message,
-    } = message_receivers;
 
     // Connect to shard db
     let state_store =
         SqliteStateStore::connect(&format!("sqlite://{}", config.validator_node.state_db_path().display()))?;
-    state_store.with_write_tx(|tx| bootstrap_state(tx))?;
+    state_store.with_write_tx(|tx| bootstrap_state(tx, config.network))?;
 
     // Epoch manager
     let (epoch_manager, join_handle) = tari_epoch_manager::base_layer::spawn_service(
+        config.network,
         // TODO: We should be able to pass consensus constants here. However, these are currently located in dan_core
         // which depends on epoch_manager, so would be a circular dependency.
         EpochManagerConfig {
@@ -224,22 +224,33 @@ pub async fn spawn_services(
             per_log_cost: 1,
         }
     };
-    let payload_processor = TariDanTransactionProcessor::new(template_manager.clone(), fee_table);
+    let payload_processor = TariDanTransactionProcessor::new(config.network, template_manager.clone(), fee_table);
 
     let validator_node_client_factory = TariValidatorNodeRpcClientFactory::new(networking.clone());
 
     // Consensus
     let (tx_executed_transaction, rx_executed_transaction) = mpsc::channel(10);
-    let foreign_receive_counter = state_store.with_read_tx(|tx| ForeignReceiveCounters::get(tx))?;
+
+    let local_address = PeerAddress::from(keypair.public_key().clone());
+    let (loopback_sender, loopback_receiver) = mpsc::unbounded_channel();
+    let inbound_messaging = ConsensusInboundMessaging::new(
+        local_address,
+        rx_consensus_messages,
+        loopback_receiver,
+        message_logger.clone(),
+    );
+    let outbound_messaging =
+        ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
+
     let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
+        config.network,
         state_store.clone(),
         keypair.clone(),
         epoch_manager.clone(),
         rx_executed_transaction,
-        rx_consensus_message,
+        inbound_messaging,
         outbound_messaging.clone(),
         validator_node_client_factory.clone(),
-        foreign_receive_counter,
         shutdown.clone(),
     )
     .await;
@@ -260,6 +271,7 @@ pub async fn spawn_services(
         validator_node_client_factory.clone(),
         substate_cache,
         signing_service,
+        config.network
     );
     let substate_resolver = TariSubstateResolver::new(
         state_store.clone(),
@@ -267,9 +279,11 @@ pub async fn spawn_services(
         epoch_manager.clone(),
         virtual_substate_manager.clone(),
     );
+
+    let gossip = Gossip::new(networking.clone(), rx_gossip_messages);
+
     let (mempool, join_handle) = mempool::spawn(
-        rx_new_transaction_message,
-        outbound_messaging,
+        gossip,
         tx_executed_transaction,
         epoch_manager.clone(),
         payload_processor.clone(),
@@ -288,6 +302,7 @@ pub async fn spawn_services(
 
     // Base Node scanner
     let join_handle = base_layer_scanner::spawn(
+        config.network,
         global_db.clone(),
         base_node_client.clone(),
         epoch_manager.clone(),
@@ -382,7 +397,7 @@ fn ensure_directories_exist(config: &ApplicationConfig) -> io::Result<()> {
 
 pub struct Services {
     pub keypair: RistrettoKeypair,
-    pub networking: NetworkingHandle<proto::network::Message>,
+    pub networking: NetworkingHandle<TariMessagingSpec>,
     pub mempool: MempoolHandle,
     pub epoch_manager: EpochManagerHandle<PeerAddress>,
     pub template_manager: TemplateManagerHandle,
@@ -400,16 +415,13 @@ impl Services {
         // JoinHandler panics if polled again after reading the Result, we fuse the future to prevent this.
         let fused = self.handles.iter_mut().map(|h| h.fuse());
         let (res, _, _) = future::select_all(fused).await;
-        match res {
-            Ok(res) => res,
-            Err(e) => Err(anyhow!("Task panicked: {}", e)),
-        }
+        res.unwrap_or_else(|e| Err(anyhow!("Task panicked: {}", e)))
     }
 }
 
 async fn spawn_p2p_rpc(
     config: &ApplicationConfig,
-    networking: &mut NetworkingHandle<proto::network::Message>,
+    networking: &mut NetworkingHandle<TariMessagingSpec>,
     shard_store_store: SqliteStateStore<PeerAddress>,
     mempool: MempoolHandle,
     virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PeerAddress>, EpochManagerHandle<PeerAddress>>,
@@ -433,21 +445,21 @@ async fn spawn_p2p_rpc(
 }
 
 // TODO: Figure out the best way to have the engine shard store mirror these bootstrapped states.
-fn bootstrap_state<TTx>(tx: &mut TTx) -> Result<(), StorageError>
+fn bootstrap_state<TTx>(tx: &mut TTx, network: Network) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + DerefMut,
     TTx::Target: StateStoreReadTransaction,
     TTx::Addr: NodeAddressable + Serialize,
 {
-    let genesis_block = Block::genesis();
-    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
-    let shard_id = ShardId::from_address(&address, 0);
+    let genesis_block = Block::genesis(network);
+    let substate_id = SubstateId::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
+    let substate_address = SubstateAddress::from_address(&substate_id, 0);
     let mut metadata: Metadata = Default::default();
     metadata.insert(TOKEN_SYMBOL, "ID".to_string());
-    if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
+    if !SubstateRecord::exists(tx.deref_mut(), &substate_address)? {
         // Create the resource for public identity
         SubstateRecord {
-            address,
+            substate_id,
             version: 0,
             substate_value: Resource::new(
                 ResourceType::NonFungible,
@@ -468,13 +480,13 @@ where
         .create(tx)?;
     }
 
-    let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
-    let shard_id = ShardId::from_address(&address, 0);
+    let substate_id = SubstateId::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
+    let substate_address = SubstateAddress::from_address(&substate_id, 0);
     let mut metadata = Metadata::new();
     metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
-    if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
+    if !SubstateRecord::exists(tx.deref_mut(), &substate_address)? {
         SubstateRecord {
-            address,
+            substate_id,
             version: 0,
             substate_value: Resource::new(
                 ResourceType::Confidential,

@@ -22,9 +22,12 @@
 
 use serde::{Deserialize, Serialize};
 use tari_bor::encode;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 /// The possible ways to represent an instruction's argument
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum Arg {
     /// The argument is in the transaction execution's workspace, which means it is the result of a previous
     /// instruction
@@ -47,5 +50,12 @@ impl Arg {
 
     pub fn workspace<T: Into<Vec<u8>>>(key: T) -> Self {
         Arg::Workspace(key.into())
+    }
+
+    pub fn as_literal_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Arg::Workspace(_) => None,
+            Arg::Literal(bytes) => Some(bytes),
+        }
     }
 }

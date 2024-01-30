@@ -9,8 +9,10 @@ use std::{
 
 use jsonwebtoken::{decode, encode, errors, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_template_lib::prelude::{ComponentAddress, ResourceAddress};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter};
 
@@ -22,16 +24,17 @@ pub struct JwtApi<'a, TStore> {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum JrpcPermission {
     AccountInfo,
     NftGetOwnershipProof(Option<ResourceAddress>),
-    AccountBalance(SubstateAddress),
+    AccountBalance(SubstateId),
     AccountList(Option<ComponentAddress>),
     KeyList,
     TransactionGet,
-    TransactionSend(Option<SubstateAddress>),
+    TransactionSend(Option<SubstateId>),
     // This can't be set via cli, after we agree on the permissions I can add the from_str.
-    GetNft(Option<SubstateAddress>, Option<ResourceAddress>),
+    GetNft(Option<SubstateId>, Option<ResourceAddress>),
     // User should never grant this permission, it will be generated only by the UI to start the webrtc session.
     StartWebrtc,
     Admin,
@@ -51,13 +54,13 @@ impl FromStr for JrpcPermission {
                 ResourceAddress::from_str(addr).map_err(|e| InvalidJrpcPermissionsFormat(e.to_string()))?,
             ))),
             Some(("AccountBalance", addr)) => Ok(JrpcPermission::AccountBalance(
-                SubstateAddress::from_str(addr).map_err(|e| InvalidJrpcPermissionsFormat(e.to_string()))?,
+                SubstateId::from_str(addr).map_err(|e| InvalidJrpcPermissionsFormat(e.to_string()))?,
             )),
             Some(("AccountList", addr)) => Ok(JrpcPermission::AccountList(Some(
                 ComponentAddress::from_str(addr).map_err(|e| InvalidJrpcPermissionsFormat(e.to_string()))?,
             ))),
             Some(("TransactionSend", addr)) => Ok(JrpcPermission::TransactionSend(Some(
-                SubstateAddress::from_str(addr).map_err(|e| InvalidJrpcPermissionsFormat(e.to_string()))?,
+                SubstateId::from_str(addr).map_err(|e| InvalidJrpcPermissionsFormat(e.to_string()))?,
             ))),
             Some(_) => Err(InvalidJrpcPermissionsFormat(s.to_string())),
             None => match s {
@@ -97,6 +100,7 @@ impl Display for JrpcPermission {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct JrpcPermissions(pub Vec<JrpcPermission>);
 
 impl FromStr for JrpcPermissions {
@@ -138,7 +142,9 @@ impl TryFrom<&[String]> for JrpcPermissions {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Claims {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub id: u64,
     pub name: String,
     pub permissions: JrpcPermissions,

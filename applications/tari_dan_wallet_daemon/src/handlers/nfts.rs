@@ -7,16 +7,12 @@ use anyhow::anyhow;
 use log::info;
 use tari_common_types::types::PublicKey;
 use tari_crypto::{keys::PublicKey as PK, ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager},
     models::Account,
 };
-use tari_engine_types::{
-    component::new_component_address_from_parts,
-    instruction::Instruction,
-    substate::SubstateAddress,
-};
+use tari_engine_types::{component::new_component_address_from_parts, instruction::Instruction, substate::SubstateId};
 use tari_template_builtin::ACCOUNT_NFT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
@@ -123,7 +119,7 @@ pub async fn handle_mint_account_nft(
     let mut accrued_fee = Amount::new(0);
     if sdk
         .substate_api()
-        .scan_for_substate(&SubstateAddress::Component(component_address), None)
+        .scan_for_substate(&SubstateId::Component(component_address), None)
         .await
         .is_err()
     {
@@ -168,17 +164,14 @@ async fn mint_account_nft(
 
     let inputs = sdk
         .substate_api()
-        .locate_dependent_substates(&[&account.address])
+        .locate_dependent_substates(&[account.address.clone()])
         .await?;
 
     let mut inputs = inputs
         .iter()
-        .map(|v| SubstateRequirement::new(v.address.clone(), Some(v.version)))
+        .map(|v| SubstateRequirement::new(v.substate_id.clone(), Some(v.version)))
         .collect::<Vec<_>>();
-    inputs.extend([SubstateRequirement::new(
-        SubstateAddress::Component(component_address),
-        None,
-    )]);
+    inputs.extend([SubstateRequirement::new(SubstateId::Component(component_address), None)]);
 
     let instructions = vec![
         Instruction::CallMethod {
@@ -216,16 +209,12 @@ async fn mint_account_nft(
     if let Some(reject) = event.finalize.result.reject() {
         return Err(anyhow!(
             "Mint new NFT using account {} was rejected: {}",
-            account.name,
+            account,
             reject
         ));
     }
     if let Some(reason) = event.finalize.reject() {
-        return Err(anyhow!(
-            "Mint new NFT using account {}, failed: {}",
-            account.name,
-            reason
-        ));
+        return Err(anyhow!("Mint new NFT using account {}, failed: {}", account, reason));
     }
 
     // TODO: is there a more direct way to extract nft_id and resource address ??
@@ -267,17 +256,17 @@ async fn create_account_nft(
 
     let inputs = sdk
         .substate_api()
-        .locate_dependent_substates(&[&account.address])
+        .locate_dependent_substates(&[account.address.clone()])
         .await?;
     let inputs = inputs
         .iter()
-        .map(|addr| ShardId::from_address(&addr.address, addr.version))
+        .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version))
         .collect::<Vec<_>>();
 
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_inputs(inputs)
-        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![owner_token,])
+        .call_function(ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![owner_token,])
         .sign(owner_sk)
         .build();
 
@@ -292,14 +281,14 @@ async fn create_account_nft(
     if let Some(reject) = event.finalize.result.reject() {
         return Err(anyhow!(
             "Create NFT resource address from account {} was rejected: {}",
-            account.name,
+            account,
             reject
         ));
     }
     if let Some(reason) = event.finalize.reject() {
         return Err(anyhow!(
             "Create NFT resource address transaction, from account {}, failed: {}",
-            account.name,
+            account,
             reason
         ));
     }

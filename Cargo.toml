@@ -19,12 +19,12 @@ members = [
     "clients/base_node_client",
     "clients/validator_node_client",
     "clients/wallet_daemon_client",
-    "dan_layer/comms_rpc_state_sync",
     "dan_layer/consensus",
     "dan_layer/consensus_tests",
     "dan_layer/epoch_manager",
     "dan_layer/indexer_lib",
     "dan_layer/p2p",
+    "dan_layer/rpc_state_sync",
     "dan_layer/state_store_sqlite",
     "dan_layer/storage_lmdb",
     "dan_layer/storage_sqlite",
@@ -48,7 +48,8 @@ members = [
     "networking/libp2p-peersync",
     "networking/libp2p-substream",
     "networking/sqlite_message_logger",
-    "utilities/transaction_generator",
+    "utilities/tariswap_test_bench",
+    "utilities/transaction_submitter",
     "utilities/transaction_submitter",
 ]
 resolver = "2"
@@ -58,15 +59,15 @@ resolver = "2"
 # specifying them in a single place and having them applied to all crates
 
 # internal dependencies among workspace crates
-libp2p-messaging = { path = "networking/libp2p-messaging"}
-libp2p-peersync = { path = "networking/libp2p-peersync"}
+libp2p-messaging = { path = "networking/libp2p-messaging" }
+libp2p-peersync = { path = "networking/libp2p-peersync" }
 libp2p-substream = { path = "networking/libp2p-substream" }
 proto_builder = { path = "networking/proto_builder" }
 sqlite_message_logger = { path = "networking/sqlite_message_logger" }
 tari_base_node_client = { path = "clients/base_node_client" }
-# avoid including default features so each crate can choose which ones to import
+# avoid including default features so each crate can choose which ones to import
 tari_bor = { version = "0.3.0", path = "dan_layer/tari_bor", default-features = false }
-tari_comms_rpc_state_sync = { path = "dan_layer/comms_rpc_state_sync" }
+tari_rpc_state_sync = { path = "dan_layer/rpc_state_sync" }
 tari_consensus = { path = "dan_layer/consensus" }
 tari_dan_app_utilities = { path = "applications/tari_dan_app_utilities" }
 tari_dan_common_types = { path = "dan_layer/common_types" }
@@ -87,10 +88,10 @@ tari_rpc_framework = { path = "networking/rpc_framework" }
 tari_rpc_macros = { path = "networking/rpc_macros" }
 tari_state_store_sqlite = { path = "dan_layer/state_store_sqlite" }
 tari_swarm = { path = "networking/swarm" }
-tari_template_abi = { version="0.3.0", path = "dan_layer/template_abi" }
+tari_template_abi = { version = "0.3.0", path = "dan_layer/template_abi" }
 tari_template_builtin = { path = "dan_layer/template_builtin" }
 tari_template_lib = { path = "dan_layer/template_lib" }
-tari_template_macros = { version="0.3.0", path = "dan_layer/template_macros" }
+tari_template_macros = { version = "0.3.0", path = "dan_layer/template_macros" }
 tari_template_test_tooling = { path = "dan_layer/template_test_tooling" }
 tari_transaction = { path = "dan_layer/transaction" }
 tari_transaction_manifest = { path = "dan_layer/transaction_manifest" }
@@ -102,6 +103,7 @@ tari_wallet_daemon_client = { path = "clients/wallet_daemon_client" }
 transaction_generator = { path = "utilities/transaction_generator" }
 
 # external minotari/tari dependencies
+tari_hash_domains = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 minotari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 minotari_console_wallet = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
@@ -111,19 +113,17 @@ minotari_wallet = { git = "https://github.com/tari-project/tari.git", branch = "
 minotari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms_dht = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+
 # avoid including default features so each crate can choose which ones to import
 tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", default-features = false }
-tari_crypto = "0.19"
+tari_crypto = "0.20.0"
 tari_key_manager = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_metrics = { git = "https://github.com/tari-project/tari.git" }
+tari_metrics = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_utilities = "0.6"
+tari_utilities = "0.7.0"
 
 # third-party dependencies
 anyhow = "1.0.75"
@@ -137,7 +137,7 @@ bigdecimal = "0.4.1"
 bincode = "2.0.0-rc.3"
 bitflags = "2.4"
 blake2 = "0.10.6"
-borsh = "0.10"
+borsh = "1.3"
 bytes = "1.5"
 cacache = "12.0.0"
 cargo_metadata = "0.15.3"
@@ -175,7 +175,7 @@ itertools = "0.11.0"
 lazy_static = "1.4.0"
 libp2p = "0.53.1"
 # Adds support for Schnorr-Ristretto (sr25519)
-libp2p-identity = { git = "https://github.com/tari-project/rust-libp2p.git", rev = "5459d4d7cc79437d091fe3e390e8609a5ac06ea3" }
+libp2p-identity = "0.2.8"
 libsqlite3-sys = "0.25"
 liquid = "0.26.4"
 lmdb-zero = "0.4.4"
@@ -196,10 +196,10 @@ rand = "0.8.5"
 rayon = "1.7.0"
 reqwest = "0.11.16"
 ruint = "1.8.0"
+semver = "1.0"
 serde = { version = "1.0", default-features = false }
 serde_json = "1.0"
 serde_with = "2.3"
-serde-byte-array = "0.1.2"
 sha2 = "0.10.8"
 smallvec = "2.0.0-alpha.1"
 std-semaphore = "0.1.0"
@@ -210,11 +210,16 @@ time = "0.3.15"
 tokio = { version = "1.34", default-features = false }
 tokio-stream = "0.1.7"
 tokio-util = "0.7.10"
-tonic = "0.6.2"
+tonic = "0.8.3"
 tower = "0.4"
-tower-http = { version = "0.3.5", default-features = false}
+tower-http = { version = "0.3.5", default-features = false }
 tower-layer = "0.3"
 tracing = "0.1.40"
+ts-rs = { version = "7.1", features = [
+    "chrono-impl",
+    "no-serde-warnings",
+    "indexmap-impl",
+] }
 url = "2.4.1"
 wasmer = "2.3.0"
 wasmer-middlewares = "2.3.0"
@@ -232,13 +237,12 @@ overflow-checks = true
 # Temporarily lock pgp to commit (master branch at time of writing) because the currently released crate locks zeroize to =1.3
 liblmdb-sys = { git = "https://github.com/tari-project/lmdb-rs", tag = "0.7.6-tari.1" }
 # Use Tari's libp2p fork that adds support for Schnorr-Ristretto
-multiaddr = { git = "https://github.com/tari-project/rust-libp2p.git", rev = "5459d4d7cc79437d091fe3e390e8609a5ac06ea3" }
+multiaddr = { git = "https://github.com/tari-project/rust-libp2p.git", rev = "9b73988f611a877595de8a4a205aa86fb78cd626" }
 #libp2p = { git = "https://github.com/tari-project/rust-libp2p.git", rev = "ae1c06a9615a0ac020e459904ec984a6ab253678" }
-libp2p-identity = { git = "https://github.com/tari-project/rust-libp2p.git", rev = "5459d4d7cc79437d091fe3e390e8609a5ac06ea3" }
+libp2p-identity = { git = "https://github.com/tari-project/rust-libp2p.git", rev = "9b73988f611a877595de8a4a205aa86fb78cd626" }
 
 # Make a copy of this code, uncomment and replace account and my-branch with the name of your fork and the branch you want to temporarily use
 #[patch."https://github.com/tari-project/tari.git"]
-#minotari_app_grpc = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #minotari_app_grpc = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #minotari_wallet_grpc_client= { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #minotari_node_grpc_client = { git = "https://github.com/account/tari.git", branch = "my-branch" }
@@ -252,9 +256,12 @@ libp2p-identity = { git = "https://github.com/tari-project/rust-libp2p.git", rev
 #tari_p2p = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #tari_shutdown = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #tari_storage = { git = "https://github.com/account/tari.git", branch = "my-branch" }
-#minotari_wallet_grpc_client = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #tari_script = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #minotari_wallet = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #minotari_console_wallet = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #tari_service_framework = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #tari_comms_dht = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_app_utilities = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_node = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_metrics = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+

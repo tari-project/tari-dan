@@ -22,13 +22,17 @@
 
 use serde::{Deserialize, Serialize};
 use tari_template_abi::rust::{fmt, fmt::Display};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use super::ResourceAddress;
 
 /// The unique identifier of a non-fungible index in the Tari network
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct NonFungibleIndexAddress {
     resource_address: ResourceAddress,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     index: u64,
 }
 

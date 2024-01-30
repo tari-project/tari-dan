@@ -31,7 +31,7 @@ use tari_dan_app_utilities::{signature_service::TariSignatureService, substate_f
 use tari_dan_common_types::PeerAddress;
 use tari_engine_types::{
     events::Event,
-    substate::{Substate, SubstateAddress},
+    substate::{Substate, SubstateId},
 };
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_indexer_lib::{
@@ -61,7 +61,7 @@ const LOG_TARGET: &str = "tari::indexer::substate_manager";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SubstateResponse {
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub version: u32,
     pub substate: Substate,
     pub created_by_transaction: TransactionId,
@@ -70,13 +70,13 @@ pub struct SubstateResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NonFungibleResponse {
     pub index: u64,
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub substate: Substate,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EventResponse {
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub created_by_transaction: FixedHash,
 }
 
@@ -110,7 +110,7 @@ impl SubstateManager {
         }
     }
 
-    pub async fn fetch_and_add_substate_to_db(&self, substate_address: &SubstateAddress) -> Result<(), anyhow::Error> {
+    pub async fn fetch_and_add_substate_to_db(&self, substate_address: &SubstateId) -> Result<(), anyhow::Error> {
         // get the last version of the substate from the dan layer
         let latest_stored_substate_version = {
             let mut tx = self.substate_store.create_read_tx()?;
@@ -143,7 +143,7 @@ impl SubstateManager {
         }
 
         // if it's a resource, we need also to retrieve all the individual nfts
-        let non_fungibles = if let SubstateAddress::Resource(addr) = substate_address {
+        let non_fungibles = if let SubstateId::Resource(addr) = substate_address {
             // fetch the last index from database to avoid scaning always from the beginning
             let latest_non_fungible_index = {
                 let mut tx = self.substate_store.create_read_tx()?;
@@ -199,7 +199,7 @@ impl SubstateManager {
         Ok(())
     }
 
-    pub async fn delete_substate_from_db(&self, substate_address: &SubstateAddress) -> Result<(), anyhow::Error> {
+    pub async fn delete_substate_from_db(&self, substate_address: &SubstateId) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
         tx.delete_substate(substate_address.to_address_string())?;
         tx.commit()?;
@@ -224,7 +224,7 @@ impl SubstateManager {
 
     pub async fn get_substate(
         &self,
-        substate_address: &SubstateAddress,
+        substate_address: &SubstateId,
         version: Option<u32>,
     ) -> Result<Option<SubstateResponse>, anyhow::Error> {
         // we store the latest version of the substates in the watchlist,
@@ -237,12 +237,12 @@ impl SubstateManager {
         let substate_result = self.substate_scanner.get_substate(substate_address, version).await?;
         match substate_result {
             SubstateResult::Up {
-                address,
+                id,
                 substate,
                 created_by_tx,
                 quorum_certificates: _,
             } => Ok(Some(SubstateResponse {
-                address,
+                address: id,
                 version: substate.version(),
                 substate,
                 created_by_transaction: created_by_tx,
@@ -253,7 +253,7 @@ impl SubstateManager {
 
     async fn get_substate_from_db(
         &self,
-        substate_address: &SubstateAddress,
+        substate_address: &SubstateId,
         version: Option<u32>,
     ) -> Result<Option<SubstateResponse>, anyhow::Error> {
         let mut tx = self.substate_store.create_read_tx()?;
@@ -276,7 +276,7 @@ impl SubstateManager {
 
     pub async fn get_specific_substate(
         &self,
-        substate_address: &SubstateAddress,
+        substate_address: &SubstateId,
         version: u32,
     ) -> Result<SubstateResult, anyhow::Error> {
         let substate_result = self
@@ -291,7 +291,7 @@ impl SubstateManager {
         tx.get_non_fungible_collections().map_err(|e| e.into())
     }
 
-    pub async fn get_non_fungible_count(&self, substate_address: &SubstateAddress) -> Result<u64, anyhow::Error> {
+    pub async fn get_non_fungible_count(&self, substate_address: &SubstateId) -> Result<u64, anyhow::Error> {
         let address_str = substate_address.to_address_string();
         let mut tx = self.substate_store.create_read_tx()?;
         let count = tx.get_non_fungible_count(address_str)?;
@@ -300,7 +300,7 @@ impl SubstateManager {
 
     pub async fn get_non_fungibles(
         &self,
-        substate_address: &SubstateAddress,
+        substate_address: &SubstateId,
         start_index: u64,
         end_index: u64,
     ) -> Result<Vec<NonFungibleResponse>, anyhow::Error> {
@@ -442,7 +442,7 @@ impl SubstateManager {
 
         let num_scanned = addresses.len();
         for (address, _) in addresses {
-            let address = SubstateAddress::from_str(&address)?;
+            let address = SubstateId::from_str(&address)?;
             self.fetch_and_add_substate_to_db(&address).await?;
         }
 
@@ -452,7 +452,7 @@ impl SubstateManager {
 
 fn store_substate_in_db(
     tx: &mut SqliteSubstateStoreWriteTransaction,
-    address: &SubstateAddress,
+    address: &SubstateId,
     substate: &Substate,
 ) -> Result<(), anyhow::Error> {
     let substate_row = NewSubstate {
@@ -466,7 +466,7 @@ fn store_substate_in_db(
 }
 
 fn map_nft_index_to_db_row(
-    resource_address: &SubstateAddress,
+    resource_address: &SubstateId,
     nft: &NonFungibleSubstate,
 ) -> Result<NewNonFungibleIndex, anyhow::Error> {
     Ok(NewNonFungibleIndex {

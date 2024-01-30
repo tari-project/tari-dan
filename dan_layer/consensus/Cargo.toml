@@ -13,12 +13,14 @@ tari_dan_storage = { workspace = true }
 tari_transaction = { workspace = true }
 tari_epoch_manager = { workspace = true }
 
-# Used for PublicKey and Signature
+# Used for PublicKey and Signature and Network enum
+tari_common = { workspace = true }
 tari_common_types = { workspace = true }
 tari_mmr = { workspace = true }
 tari_shutdown = { workspace = true }
 
 anyhow = { workspace = true }
+indexmap = { workspace = true }
 async-trait = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, default-features = true }

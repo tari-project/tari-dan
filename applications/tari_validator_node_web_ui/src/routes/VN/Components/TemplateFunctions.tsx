@@ -20,30 +20,25 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { ITemplate } from '../../../utils/interfaces';
-import { getTemplate } from '../../../utils/json_rpc';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import {
-  DataTableCell,
-  BoxHeading,
-  BoxHeading2,
-} from '../../../Components/StyledComponents';
-import PageHeading from '../../../Components/PageHeading';
-import Grid from '@mui/material/Grid';
-import { StyledPaper } from '../../../Components/StyledComponents';
-import { fromHexString } from './helpers';
+import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
+import { ITemplate } from "../../../utils/interfaces";
+import { getTemplate } from "../../../utils/json_rpc";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import { DataTableCell, BoxHeading, BoxHeading2 } from "../../../Components/StyledComponents";
+import PageHeading from "../../../Components/PageHeading";
+import Grid from "@mui/material/Grid";
+import { StyledPaper } from "../../../Components/StyledComponents";
+import { fromHexString } from "./helpers";
 
 function TemplateFunctions() {
   const { address } = useParams();
   const [info, setInfo] = useState<ITemplate>();
-
 
   const load = (address: any) => {
     getTemplate(address).then((response) => {
@@ -52,7 +47,7 @@ function TemplateFunctions() {
   };
 
   useEffect(() => {
-    const data = address ? fromHexString(address.replace('0x', '')) : '';
+    const data = address ? fromHexString(address.replace("0x", "")) : "";
     load(data);
   }, []);
 
@@ -71,15 +66,13 @@ function TemplateFunctions() {
           <TableBody>
             {template.abi.functions.map((fn) => (
               <TableRow key={fn.name}>
-                <DataTableCell style={{ textAlign: 'left' }}>
-                  {fn.name}
-                </DataTableCell>
+                <DataTableCell style={{ textAlign: "left" }}>{fn.name}</DataTableCell>
                 <DataTableCell>
                   {fn.arguments
                     .map((a: any) => {
-                      return a.name + ':' + a.arg_type;
+                      return a.name + ":" + a.arg_type;
                     })
-                    .join(', ')}
+                    .join(", ")}
                 </DataTableCell>
                 <DataTableCell>{fn.output}</DataTableCell>
               </TableRow>
@@ -98,7 +91,7 @@ function TemplateFunctions() {
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <BoxHeading>Address: {address}</BoxHeading>
-          {info ? renderFunctions(info) : ''}
+          {info ? renderFunctions(info) : ""}
         </StyledPaper>
       </Grid>
     </>

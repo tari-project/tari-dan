@@ -24,6 +24,8 @@ use std::fmt::{self, Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 use tari_template_lib::Hash;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     events::Event,
@@ -35,6 +37,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ExecuteResult {
     /// The finalized result to commit. If the fee transaction succeeds but the transaction fails, this will be accept.
     pub finalize: FinalizeResult,
@@ -93,6 +96,7 @@ impl ExecuteResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FinalizeResult {
     #[serde(with = "serde_with::hex")]
     pub transaction_hash: Hash,
@@ -148,11 +152,12 @@ impl FinalizeResult {
         }
     }
 
+    pub fn is_full_accept(&self) -> bool {
+        matches!(self.result, TransactionResult::Accept(_))
+    }
+
     pub fn is_accept(&self) -> bool {
-        matches!(
-            self.result,
-            TransactionResult::Accept(_) | TransactionResult::AcceptFeeRejectRest(_, _)
-        )
+        self.is_full_accept() || self.is_fee_only()
     }
 
     pub fn is_fee_only(&self) -> bool {
@@ -165,6 +170,7 @@ impl FinalizeResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum TransactionResult {
     Accept(SubstateDiff),
     AcceptFeeRejectRest(SubstateDiff, RejectReason),
@@ -232,6 +238,7 @@ impl Display for TransactionResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum RejectReason {
     ShardsNotPledged(String),
     ExecutionFailure(String),

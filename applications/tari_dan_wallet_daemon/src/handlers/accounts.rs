@@ -13,11 +13,11 @@ use tari_crypto::{
     ristretto::{RistrettoComSig, RistrettoPublicKey},
     tari_utilities::ByteArray,
 };
-use tari_dan_common_types::{optional::Optional, ShardId};
+use tari_dan_common_types::{optional::Optional, SubstateAddress};
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
     confidential::{get_commitment_factory, ConfidentialProofStatement},
-    models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
+    models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateId},
     storage::WalletStore,
     DanWalletSdk,
 };
@@ -26,7 +26,7 @@ use tari_engine_types::{
     component::new_component_address_from_parts,
     confidential::ConfidentialClaim,
     instruction::Instruction,
-    substate::{Substate, SubstateAddress},
+    substate::{Substate, SubstateId},
 };
 use tari_key_manager::key_manager::DerivedKey;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
@@ -104,8 +104,13 @@ pub async fn handle_create(
     let default_account = sdk.accounts_api().get_default()?;
     let inputs = sdk
         .substate_api()
-        .locate_dependent_substates(&[&default_account.address])
+        .locate_dependent_substates(&[default_account.address.clone()])
         .await?;
+
+    // We aren't mutating the resources
+    let (input_refs, inputs) = inputs
+        .into_iter()
+        .partition::<Vec<_>, _>(|s| s.substate_id.is_resource());
 
     let signing_key_index = req.key_id.unwrap_or(default_account.key_index);
     let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
@@ -119,18 +124,23 @@ pub async fn handle_create(
         target: LOG_TARGET,
         "Creating account with owner token {}. Fees are paid using account '{}' {}",
         owner_pk,
-        default_account.name,
+        default_account.name.as_deref().unwrap_or("<None>"),
         default_account.address
     );
 
     let max_fee = req.max_fee.unwrap_or(DEFAULT_FEE);
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(default_account.address.as_component_address().unwrap(), max_fee)
-        .call_function(*ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
+        .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
+        .with_input_refs(
+            input_refs
+                .iter()
+                .map(|s| SubstateAddress::from_address(&s.substate_id, s.version)),
+        )
         .with_inputs(
             inputs
                 .iter()
-                .map(|addr| ShardId::from_address(&addr.address, addr.version)),
+                .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version)),
         )
         .sign(&signing_key.key)
         .build();
@@ -226,7 +236,9 @@ pub async fn handle_invoke(
 
     let inputs = sdk.substate_api().load_dependent_substates(&[&account.address])?;
 
-    let inputs = inputs.into_iter().map(|s| ShardId::from_address(&s.address, s.version));
+    let inputs = inputs
+        .into_iter()
+        .map(|s| SubstateAddress::from_address(&s.substate_id, s.version));
 
     let account_address = account.address.as_component_address().unwrap();
     let transaction = Transaction::builder()
@@ -440,7 +452,7 @@ pub async fn handle_reveal_funds(
 
         let inputs = inputs
             .into_iter()
-            .map(|addr| ShardId::from_address(&addr.address, addr.version));
+            .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version));
 
         let transaction = builder.with_inputs(inputs).sign(&account_key.key).build();
 
@@ -555,9 +567,9 @@ pub async fn handle_claim_burn(
     );
 
     // Add all versioned account child addresses as inputs
-    // add the commitment substate address as input to the claim burn transaction
-    let commitment_substate_address = VersionedSubstateAddress {
-        address: SubstateAddress::UnclaimedConfidentialOutput(UnclaimedConfidentialOutputAddress::try_from(
+    // add the commitment substate id as input to the claim burn transaction
+    let commitment_substate_address = VersionedSubstateId {
+        substate_id: SubstateId::UnclaimedConfidentialOutput(UnclaimedConfidentialOutputAddress::try_from(
             commitment.as_slice(),
         )?),
         version: 0,
@@ -575,7 +587,7 @@ pub async fn handle_claim_burn(
     let ValidatorScanResult { substate: output, .. } = sdk
         .substate_api()
         .scan_for_substate(
-            &commitment_substate_address.address,
+            &commitment_substate_address.substate_id,
             Some(commitment_substate_address.version),
         )
         .await?;
@@ -624,7 +636,7 @@ pub async fn handle_claim_burn(
         claim: Box::new(ConfidentialClaim {
             public_key: reciprocal_claim_public_key,
             output_address: commitment_substate_address
-                .address
+                .substate_id
                 .as_unclaimed_confidential_output_address()
                 .unwrap(),
             range_proof,
@@ -657,10 +669,10 @@ pub async fn handle_claim_burn(
 
 async fn finish_claiming<T: WalletStore>(
     mut instructions: Vec<Instruction>,
-    account_address: SubstateAddress,
+    account_address: SubstateId,
     new_account_name: Option<String>,
     sdk: &DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>,
-    mut inputs: Vec<VersionedSubstateAddress>,
+    mut inputs: Vec<VersionedSubstateId>,
     account_public_key: &RistrettoPublicKey,
     max_fee: Amount,
     account_secret_key: DerivedKey<RistrettoPublicKey>,
@@ -693,7 +705,7 @@ async fn finish_claiming<T: WalletStore>(
             RistrettoPublicKeyBytes::from_bytes(account_public_key.as_bytes()).unwrap(),
         );
         instructions.push(Instruction::CallFunction {
-            template_address: *ACCOUNT_TEMPLATE_ADDRESS,
+            template_address: ACCOUNT_TEMPLATE_ADDRESS,
             function: "create_with_bucket".to_string(),
             args: args![owner_token, Workspace("bucket")],
         });
@@ -703,7 +715,9 @@ async fn finish_claiming<T: WalletStore>(
         method: "pay_fee".to_string(),
         args: args![max_fee],
     });
-    let inputs = inputs.into_iter().map(|s| ShardId::from_address(&s.address, s.version));
+    let inputs = inputs
+        .into_iter()
+        .map(|s| SubstateAddress::from_address(&s.substate_id, s.version));
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
         .with_inputs(inputs)
@@ -803,8 +817,8 @@ fn get_or_create_account<T: WalletStore>(
     accounts_api: &tari_dan_wallet_sdk::apis::accounts::AccountsApi<'_, T>,
     key_id: Option<u64>,
     sdk: &DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>,
-    inputs: &mut Vec<VersionedSubstateAddress>,
-) -> Result<(SubstateAddress, DerivedKey<RistrettoPublicKey>, Option<String>), anyhow::Error> {
+    inputs: &mut Vec<VersionedSubstateId>,
+) -> Result<(SubstateId, DerivedKey<RistrettoPublicKey>, Option<String>), anyhow::Error> {
     let maybe_account = match account {
         Some(ref addr_or_name) => get_account(addr_or_name, accounts_api).optional()?,
         None => {
@@ -841,7 +855,7 @@ fn get_or_create_account<T: WalletStore>(
             let component_id = Hash::try_from(account_pk.as_bytes())?;
             let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
 
-            // We have no involved shards, so we need to add an output
+            // We have no involved substate addresses, so we need to add an output
             (account_address.into(), account_secret_key, Some(name.to_string()))
         },
     };
@@ -875,10 +889,12 @@ pub async fn handle_transfer(
     // add the input for the resource address to be transfered
     let resource_substate = sdk
         .substate_api()
-        .scan_for_substate(&SubstateAddress::Resource(req.resource_address), None)
+        .scan_for_substate(&SubstateId::Resource(req.resource_address), None)
         .await?;
-    let resource_shard_id =
-        ShardId::from_address(&resource_substate.address.address, resource_substate.address.version);
+    let resource_substate_address = SubstateAddress::from_address(
+        &resource_substate.address.substate_id,
+        resource_substate.address.version,
+    );
     inputs.push(resource_substate.address);
 
     let mut instructions = vec![];
@@ -919,7 +935,7 @@ pub async fn handle_transfer(
     let transaction = Transaction::builder()
         .with_fee_instructions(fee_instructions)
         .with_instructions(instructions)
-        .with_input_refs(vec![resource_shard_id])
+        .with_input_refs(vec![resource_substate_address])
         .sign(&account_secret_key.key)
         .build();
 
@@ -991,7 +1007,7 @@ pub async fn handle_transfer(
 async fn get_or_create_account_address(
     sdk: &DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>,
     public_key: &PublicKey,
-    inputs: &mut Vec<VersionedSubstateAddress>,
+    inputs: &mut Vec<VersionedSubstateId>,
     instructions: &mut Vec<Instruction>,
 ) -> Result<ComponentAddress, anyhow::Error> {
     // calculate the account component address from the public key
@@ -1000,13 +1016,13 @@ async fn get_or_create_account_address(
 
     let account_scan = sdk
         .substate_api()
-        .scan_for_substate(&SubstateAddress::Component(account_address), None)
+        .scan_for_substate(&SubstateId::Component(account_address), None)
         .await
         .optional()?;
 
     match account_scan {
         Some(res) => {
-            // the account already exists in the network, so we must add the substate address to the inputs
+            // the account already exists in the network, so we must add the substate id to the inputs
             debug!(target: LOG_TARGET, "Account {} exists. Adding input.", res.address);
             inputs.push(res.address);
         },
@@ -1017,7 +1033,7 @@ async fn get_or_create_account_address(
                 RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
             );
             instructions.insert(0, Instruction::CallFunction {
-                template_address: *ACCOUNT_TEMPLATE_ADDRESS,
+                template_address: ACCOUNT_TEMPLATE_ADDRESS,
                 function: "create".to_string(),
                 args: args![owner_token],
             });
@@ -1073,7 +1089,7 @@ pub async fn handle_confidential_transfer(
         // add the input for the resource address to be transfered
         let resource_substate = sdk
             .substate_api()
-            .scan_for_substate(&SubstateAddress::Resource(req.resource_address), None)
+            .scan_for_substate(&SubstateId::Resource(req.resource_address), None)
             .await?;
         inputs.push(resource_substate.address);
 
@@ -1226,6 +1242,6 @@ fn is_account_substate(substate: &Substate) -> bool {
     substate
         .substate_value()
         .component()
-        .filter(|c| c.template_address == *ACCOUNT_TEMPLATE_ADDRESS)
+        .filter(|c| c.template_address == ACCOUNT_TEMPLATE_ADDRESS)
         .is_some()
 }

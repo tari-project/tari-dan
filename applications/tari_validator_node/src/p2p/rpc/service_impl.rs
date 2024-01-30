@@ -24,17 +24,8 @@ use std::convert::{TryFrom, TryInto};
 
 use log::*;
 use tari_bor::{decode_exact, encode};
-use tari_dan_common_types::{optional::Optional, PeerAddress, ShardId};
-use tari_dan_storage::{
-    consensus_models::{Block, BlockId, HighQc, LockedBlock, QuorumCertificate, SubstateRecord, TransactionRecord},
-    StateStore,
-};
-use tari_engine_types::virtual_substate::VirtualSubstateAddress;
-use tari_epoch_manager::base_layer::EpochManagerHandle;
-use tari_rpc_framework::{Request, Response, RpcStatus, Streaming};
-use tari_state_store_sqlite::SqliteStateStore;
-use tari_transaction::{Transaction, TransactionId};
-use tari_validator_node_rpc::{
+use tari_dan_common_types::{optional::Optional, PeerAddress, SubstateAddress};
+use tari_dan_p2p::{
     proto,
     proto::rpc::{
         GetHighQcRequest,
@@ -48,8 +39,17 @@ use tari_validator_node_rpc::{
         SyncBlocksRequest,
         SyncBlocksResponse,
     },
-    rpc_service::ValidatorNodeRpcService,
 };
+use tari_dan_storage::{
+    consensus_models::{Block, BlockId, HighQc, LockedBlock, QuorumCertificate, SubstateRecord, TransactionRecord},
+    StateStore,
+};
+use tari_engine_types::virtual_substate::VirtualSubstateId;
+use tari_epoch_manager::base_layer::EpochManagerHandle;
+use tari_rpc_framework::{Request, Response, RpcStatus, Streaming};
+use tari_state_store_sqlite::SqliteStateStore;
+use tari_transaction::{Transaction, TransactionId};
+use tari_validator_node_rpc::rpc_service::ValidatorNodeRpcService;
 use tokio::{sync::mpsc, task};
 
 use crate::{
@@ -112,15 +112,15 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
     async fn get_substate(&self, req: Request<GetSubstateRequest>) -> Result<Response<GetSubstateResponse>, RpcStatus> {
         let req = req.into_message();
 
-        let shard_id = ShardId::from_bytes(&req.shard)
-            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate address: {}", e)))?;
+        let address = SubstateAddress::from_bytes(&req.address)
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate id: {}", e)))?;
 
         let mut tx = self
             .shard_state_store
             .create_read_tx()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
-        let maybe_substate = SubstateRecord::get(&mut tx, &shard_id)
+        let maybe_substate = SubstateRecord::get(&mut tx, &address)
             .optional()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
@@ -141,7 +141,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
                 .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
             GetSubstateResponse {
                 status: SubstateStatus::Down as i32,
-                address: substate.substate_address().to_bytes(),
+                address: substate.substate_id().to_bytes(),
                 version: substate.version(),
                 created_transaction_hash: substate.created_by_transaction().into_array().to_vec(),
                 destroyed_transaction_hash: substate
@@ -158,7 +158,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         } else {
             GetSubstateResponse {
                 status: SubstateStatus::Up as i32,
-                address: substate.substate_address().to_bytes(),
+                address: substate.substate_id().to_bytes(),
                 version: substate.version(),
                 substate: substate.substate_value().to_bytes(),
                 created_transaction_hash: substate.created_by_transaction().into_array().to_vec(),
@@ -176,8 +176,8 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
     ) -> Result<Response<proto::rpc::GetVirtualSubstateResponse>, RpcStatus> {
         let req = req.into_message();
 
-        let address = decode_exact::<VirtualSubstateAddress>(&req.address)
-            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate address: {}", e)))?;
+        let address = decode_exact::<VirtualSubstateId>(&req.address)
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate id: {}", e)))?;
 
         let substate = self
             .virtual_substate_manager
@@ -187,7 +187,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
 
         let resp = proto::rpc::GetVirtualSubstateResponse {
             substate: encode(&substate)
-                .map_err(|e| RpcStatus::general(&format!("Unable to encode substate address: {}", e)))?,
+                .map_err(|e| RpcStatus::general(&format!("Unable to encode substate: {}", e)))?,
             // TODO: evidence for the correctness of the substate
             quorum_certificates: vec![],
         };
@@ -222,6 +222,17 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
 
         Ok(Response::new(GetTransactionResultResponse {
             status: PayloadResultStatus::Finalized.into(),
+
+            final_decision: proto::consensus::Decision::from(final_decision) as i32,
+            execution_time_ms: transaction
+                .execution_time()
+                .map(|t| u64::try_from(t.as_millis()).unwrap_or(u64::MAX))
+                .unwrap_or_default(),
+            finalized_time_ms: transaction
+                .finalized_time()
+                .map(|t| u64::try_from(t.as_millis()).unwrap_or(u64::MAX))
+                .unwrap_or_default(),
+            abort_details,
             // For simplicity, we simply encode the whole result as a CBOR blob.
             execution_result: transaction
                 .into_final_result()
@@ -230,8 +241,6 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
                 .transpose()
                 .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
                 .unwrap_or_default(),
-            final_decision: proto::consensus::Decision::from(final_decision) as i32,
-            abort_details,
         }))
     }
 

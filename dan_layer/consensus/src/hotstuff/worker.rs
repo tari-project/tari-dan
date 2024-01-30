@@ -8,9 +8,10 @@ use std::{
 };
 
 use log::*;
+use tari_common::configuration::Network;
 use tari_dan_common_types::{optional::Optional, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, ForeignReceiveCounters, HighQc, LastSentVote, LastVoted, LeafBlock, TransactionPool},
+    consensus_models::{Block, HighQc, LastSentVote, LastVoted, LeafBlock, TransactionPool},
     StateStore,
     StateStoreWriteTransaction,
 };
@@ -22,14 +23,13 @@ use tokio::sync::{broadcast, mpsc};
 use super::{on_receive_requested_transactions::OnReceiveRequestedTransactions, proposer::Proposer};
 use crate::{
     hotstuff::{
-        common::CommitteeAndMessage,
         error::HotStuffError,
         event::HotstuffEvent,
         on_inbound_message::{IncomingMessageResult, NeedsSync, OnInboundMessage},
         on_next_sync_view::OnNextSyncViewHandler,
         on_propose::OnPropose,
         on_receive_foreign_proposal::OnReceiveForeignProposalHandler,
-        on_receive_local_proposal::OnReceiveProposalHandler,
+        on_receive_local_proposal::OnReceiveLocalProposalHandler,
         on_receive_new_view::OnReceiveNewViewHandler,
         on_receive_request_missing_transactions::OnReceiveRequestMissingTransactions,
         on_receive_vote::OnReceiveVoteHandler,
@@ -39,20 +39,23 @@ use crate::{
         vote_receiver::VoteReceiver,
     },
     messages::{HotstuffMessage, SyncRequestMessage},
-    traits::{ConsensusSpec, LeaderStrategy},
+    traits::{ConsensusSpec, InboundMessaging, LeaderStrategy, OutboundMessaging},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
 
 pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
+    network: Network,
 
     tx_events: broadcast::Sender<HotstuffEvent>,
-    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
-    inbound_message_worker: OnInboundMessage<TConsensusSpec>,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
+    inbound_messaging: TConsensusSpec::InboundMessaging,
+    rx_new_transactions: mpsc::Receiver<(TransactionId, usize)>,
 
+    on_inbound_message: OnInboundMessage<TConsensusSpec>,
     on_next_sync_view: OnNextSyncViewHandler<TConsensusSpec>,
-    on_receive_local_proposal: OnReceiveProposalHandler<TConsensusSpec>,
+    on_receive_local_proposal: OnReceiveLocalProposalHandler<TConsensusSpec>,
     on_receive_foreign_proposal: OnReceiveForeignProposalHandler<TConsensusSpec>,
     on_receive_vote: OnReceiveVoteHandler<TConsensusSpec>,
     on_receive_new_view: OnReceiveNewViewHandler<TConsensusSpec>,
@@ -74,23 +77,23 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
-        rx_new_transactions: mpsc::Receiver<TransactionId>,
-        rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+        network: Network,
+        inbound_messaging: TConsensusSpec::InboundMessaging,
+        outbound_messaging: TConsensusSpec::OutboundMessaging,
+        rx_new_transactions: mpsc::Receiver<(TransactionId, usize)>,
         state_store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         signing_service: TConsensusSpec::SignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         tx_mempool: mpsc::UnboundedSender<Transaction>,
-        foreign_receive_counter: ForeignReceiveCounters,
         shutdown: ShutdownSignal,
     ) -> Self {
         let pacemaker = PaceMaker::new();
         let vote_receiver = VoteReceiver::new(
+            network,
             state_store.clone(),
             leader_strategy.clone(),
             epoch_manager.clone(),
@@ -98,51 +101,53 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             pacemaker.clone_handle(),
         );
         let proposer =
-            Proposer::<TConsensusSpec>::new(state_store.clone(), epoch_manager.clone(), tx_broadcast.clone());
+            Proposer::<TConsensusSpec>::new(state_store.clone(), epoch_manager.clone(), outbound_messaging.clone());
         Self {
             validator_addr: validator_addr.clone(),
+            network,
             tx_events: tx_events.clone(),
-            tx_leader: tx_leader.clone(),
-            inbound_message_worker: OnInboundMessage::new(
+            outbound_messaging: outbound_messaging.clone(),
+            inbound_messaging,
+            rx_new_transactions,
+
+            on_inbound_message: OnInboundMessage::new(
+                network,
                 state_store.clone(),
                 epoch_manager.clone(),
                 leader_strategy.clone(),
-                pacemaker.clone_handle(),
                 signing_service.clone(),
-                rx_hs_message,
-                tx_leader.clone(),
-                rx_new_transactions,
-                shutdown.clone(),
+                outbound_messaging.clone(),
             ),
 
             on_next_sync_view: OnNextSyncViewHandler::new(
                 state_store.clone(),
-                tx_leader.clone(),
+                outbound_messaging.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
             ),
-            on_receive_local_proposal: OnReceiveProposalHandler::new(
+            on_receive_local_proposal: OnReceiveLocalProposalHandler::new(
                 validator_addr,
                 state_store.clone(),
                 epoch_manager.clone(),
                 leader_strategy.clone(),
                 pacemaker.clone_handle(),
-                tx_leader.clone(),
+                outbound_messaging.clone(),
                 signing_service.clone(),
                 state_manager,
                 transaction_pool.clone(),
                 tx_events,
                 proposer.clone(),
+                network,
             ),
             on_receive_foreign_proposal: OnReceiveForeignProposalHandler::new(
                 state_store.clone(),
                 epoch_manager.clone(),
                 transaction_pool.clone(),
                 pacemaker.clone_handle(),
-                foreign_receive_counter,
             ),
             on_receive_vote: OnReceiveVoteHandler::new(vote_receiver.clone()),
             on_receive_new_view: OnReceiveNewViewHandler::new(
+                network,
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
@@ -151,18 +156,19 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             ),
             on_receive_request_missing_txs: OnReceiveRequestMissingTransactions::new(
                 state_store.clone(),
-                tx_leader.clone(),
+                outbound_messaging.clone(),
             ),
             on_receive_requested_txs: OnReceiveRequestedTransactions::new(tx_mempool),
             on_propose: OnPropose::new(
+                network,
                 state_store.clone(),
                 epoch_manager.clone(),
                 transaction_pool.clone(),
                 signing_service,
-                tx_broadcast,
+                outbound_messaging.clone(),
             ),
 
-            on_sync_request: OnSyncRequest::new(state_store.clone(), tx_leader),
+            on_sync_request: OnSyncRequest::new(state_store.clone(), outbound_messaging),
 
             state_store,
             leader_strategy,
@@ -222,22 +228,27 @@ where TConsensusSpec: ConsensusSpec
             );
 
             tokio::select! {
-                msg_or_sync = self.inbound_message_worker.message_buffer.next(current_height) => {
-                    if let Err(e) = self.on_new_hs_message(msg_or_sync).await {
+                Some(result) = self.inbound_messaging.next_message() => {
+                    let (from, msg) = result?;
+                    if let Err(err) = self.on_inbound_message.handle(current_height, from, msg).await {
+                        error!(target: LOG_TARGET, "Error handling message: {}", err);
+                    }
+                },
+
+                msg_or_sync = self.on_inbound_message.next_message(current_height) => {
+                    if let Err(e) = self.dispatch_hotstuff_message(msg_or_sync).await {
                         self.on_failure("on_new_hs_message", &e).await;
                         return Err(e);
                     }
                 },
 
-                Some((from, msg)) = self.inbound_message_worker.rx_hotstuff_message.recv() => {
-                    if let Err(err) = self.inbound_message_worker.handle_hotstuff_message(current_height, from, msg).await {
-                        error!(target: LOG_TARGET, "Error handling message: {}", err);
-                    }
-                },
-
-                Some(tx_id) = self.inbound_message_worker.rx_new_transactions.recv() => {
-                    if let Err(err) = self.inbound_message_worker.check_if_parked_blocks_ready(current_height, &tx_id).await {
+                Some((tx_id, pending)) = self.rx_new_transactions.recv() => {
+                    if let Err(err) = self.on_inbound_message.update_parked_blocks(current_height, &tx_id).await {
                         error!(target: LOG_TARGET, "Error checking parked blocks: {}", err);
+                    }
+                    // Only propose now if there are no pending transactions
+                    if pending == 0 {
+                        self.pacemaker.beat();
                     }
                 },
 
@@ -274,7 +285,7 @@ where TConsensusSpec: ConsensusSpec
         }
 
         self.on_receive_new_view.clear_new_views();
-        self.inbound_message_worker.clear_buffer();
+        self.on_inbound_message.clear_buffer();
         // This only happens if we're shutting down.
         if let Err(err) = self.pacemaker.stop().await {
             debug!(target: LOG_TARGET, "Pacemaker channel dropped: {}", err);
@@ -283,7 +294,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn handle_epoch_manager_event(&self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
+    async fn handle_epoch_manager_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
         match event {
             EpochManagerEvent::EpochChanged(epoch) => {
                 if !self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await? {
@@ -306,12 +317,9 @@ where TConsensusSpec: ConsensusSpec
                     let leader = self
                         .leader_strategy
                         .get_leader_for_next_block(&local_committee, last_voted.block_height);
-                    self.tx_leader
-                        .send((leader.clone(), HotstuffMessage::Vote(last_voted.into())))
-                        .await
-                        .map_err(|_| HotStuffError::InternalChannelClosed {
-                            context: "tx_leader in handle_epoch_manager_event",
-                        })?;
+                    self.outbound_messaging
+                        .send(leader.clone(), HotstuffMessage::Vote(last_voted.into()))
+                        .await?;
                 }
             },
             EpochManagerEvent::ThisValidatorIsRegistered { .. } => {},
@@ -320,7 +328,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn request_initial_catch_up_sync(&self) -> Result<(), HotStuffError> {
+    async fn request_initial_catch_up_sync(&mut self) -> Result<(), HotStuffError> {
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let committee = self.epoch_manager.get_local_committee(current_epoch).await?;
         for member in committee.shuffled() {
@@ -341,12 +349,22 @@ where TConsensusSpec: ConsensusSpec
             error!(target: LOG_TARGET, "Error while stopping pacemaker: {}", e);
         }
         self.on_receive_new_view.clear_new_views();
-        self.inbound_message_worker.clear_buffer();
+        self.on_inbound_message.clear_buffer();
     }
 
     /// Read and discard messages. This should be used only when consensus is inactive.
     pub async fn discard_messages(&mut self) {
-        self.inbound_message_worker.discard().await;
+        loop {
+            tokio::select! {
+                biased;
+                _ = self.shutdown.wait() => {
+                    break;
+                },
+                _ = self.on_inbound_message.discard() => {},
+                _ = self.inbound_messaging.next_message() => {},
+                _ = self.rx_new_transactions.recv() => {}
+            }
+        }
     }
 
     async fn on_leader_timeout(&mut self, new_height: NodeHeight) -> Result<(), HotStuffError> {
@@ -393,7 +411,7 @@ where TConsensusSpec: ConsensusSpec
         );
         if is_leader {
             self.on_propose
-                .handle(current_epoch, local_committee, leaf_block, is_newview_propose)
+                .handle(current_epoch, &local_committee, leaf_block, is_newview_propose)
                 .await?;
         } else if is_newview_propose {
             // We can make this a warm/error in future, but for now I want to be sure this never happens
@@ -404,7 +422,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn on_new_hs_message(
+    async fn dispatch_hotstuff_message(
         &mut self,
         result: IncomingMessageResult<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
@@ -484,7 +502,7 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    pub async fn on_catch_up_sync(&self, from: &TConsensusSpec::Addr) -> Result<(), HotStuffError> {
+    pub async fn on_catch_up_sync(&mut self, from: &TConsensusSpec::Addr) -> Result<(), HotStuffError> {
         let high_qc = self.state_store.with_read_tx(|tx| HighQc::get(tx))?;
         info!(
             target: LOG_TARGET,
@@ -494,21 +512,17 @@ where TConsensusSpec: ConsensusSpec
             self.pacemaker.current_height()
         );
 
-        self.pacemaker
-            .reset_view(high_qc.block_height(), high_qc.block_height())
-            .await?;
-
         let current_epoch = self.epoch_manager.current_epoch().await?;
         // Send the request message
         if self
-            .tx_leader
-            .send((
+            .outbound_messaging
+            .send(
                 from.clone(),
                 HotstuffMessage::SyncRequest(SyncRequestMessage {
                     epoch: current_epoch,
                     high_qc,
                 }),
-            ))
+            )
             .await
             .is_err()
         {
@@ -523,7 +537,7 @@ where TConsensusSpec: ConsensusSpec
         let mut tx = self.state_store.create_write_tx()?;
 
         // The parent for genesis blocks refer to this zero block
-        let zero_block = Block::zero_block();
+        let zero_block = Block::zero_block(self.network);
         if !zero_block.exists(tx.deref_mut())? {
             debug!(target: LOG_TARGET, "Creating zero block");
             zero_block.justify().insert(&mut tx)?;

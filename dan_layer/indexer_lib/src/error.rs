@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::quorum_certificate_validations::QuorumCertificateValidationError;
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_epoch_manager::EpochManagerError;
 
 use crate::substate_cache::SubstateCacheError;
@@ -20,7 +20,7 @@ pub enum IndexerError {
     #[error("Invalid substate value")]
     InvalidSubstateValue,
     #[error("Not found transaction for component address {0} and version {1}")]
-    NotFoundTransaction(SubstateAddress, u32),
+    NotFoundTransaction(SubstateId, u32),
     #[error("Failed to get consensus constants: {0}")]
     FailedToGetCommitteeSize(String),
     #[error("Failed to parse transaction hash: {0}")]

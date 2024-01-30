@@ -3,7 +3,9 @@
 
 use std::{collections::BTreeSet, num::NonZeroU64, ops::DerefMut};
 
+use indexmap::IndexMap;
 use log::*;
+use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
@@ -26,51 +28,51 @@ use tari_dan_storage::{
         TransactionPoolStage,
     },
     StateStore,
-    StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tokio::sync::mpsc;
 
-use super::common::CommitteeAndMessage;
 use crate::{
     hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, proposer},
     messages::{HotstuffMessage, ProposalMessage},
-    traits::{ConsensusSpec, ValidatorSignatureService},
+    traits::{ConsensusSpec, OutboundMessaging, ValidatorSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_locally";
 
 pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
+    network: Network,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     signing_service: TConsensusSpec::SignatureService,
-    tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
 }
 
 impl<TConsensusSpec> OnPropose<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
+        network: Network,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         signing_service: TConsensusSpec::SignatureService,
-        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
+        outbound_messaging: TConsensusSpec::OutboundMessaging,
     ) -> Self {
         Self {
+            network,
             store,
             epoch_manager,
             transaction_pool,
             signing_service,
-            tx_broadcast,
+            outbound_messaging,
         }
     }
 
     pub async fn handle(
-        &self,
+        &mut self,
         epoch: Epoch,
-        local_committee: Committee<TConsensusSpec::Addr>,
+        local_committee: &Committee<TConsensusSpec::Addr>,
         leaf_block: LeafBlock,
         is_newview_propose: bool,
     ) -> Result<(), HotStuffError> {
@@ -109,16 +111,12 @@ where TConsensusSpec: ConsensusSpec
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
-        // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
-        // the non-Send tx could be used after the await point, which is not possible.
-        let next_block;
-        {
-            let mut tx = self.store.create_write_tx()?;
-            let high_qc = HighQc::get(&mut *tx)?;
-            let high_qc = high_qc.get_quorum_certificate(&mut *tx)?;
-            let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), leaf_block.block_id())?;
-            next_block = self.build_next_block(
-                &mut tx,
+
+        let next_block = self.store.with_write_tx(|tx| {
+            let high_qc = HighQc::get(tx.deref_mut())?;
+            let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
+            let next_block = self.build_next_block(
+                tx,
                 epoch,
                 &leaf_block,
                 high_qc,
@@ -127,18 +125,11 @@ where TConsensusSpec: ConsensusSpec
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
                 //       is a good idea.
                 is_newview_propose,
-                &mut foreign_counters,
             )?;
 
-            next_block.as_last_proposed().set(&mut tx)?;
-
-            // Get involved shards for all LocalPrepared commands in the block.
-            // This allows us to broadcast the proposal only to the relevant committees that would be interested in the
-            // LocalPrepared.
-            // TODO: we should never broadcast to foreign shards here. The soonest we can broadcast is once we have
-            //       locked the block
-            tx.commit()?;
-        }
+            next_block.as_last_proposed().set(tx)?;
+            Ok::<_, HotStuffError>(next_block)
+        })?;
 
         info!(
             target: LOG_TARGET,
@@ -156,9 +147,9 @@ where TConsensusSpec: ConsensusSpec
     }
 
     pub async fn broadcast_proposal_locally(
-        &self,
+        &mut self,
         next_block: Block,
-        local_committee: Committee<TConsensusSpec::Addr>,
+        local_committee: &Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         info!(
             target: LOG_TARGET,
@@ -168,17 +159,14 @@ where TConsensusSpec: ConsensusSpec
         );
 
         // Broadcast to local and foreign committees
-        self.tx_broadcast
-            .send((
-                local_committee,
+        self.outbound_messaging
+            .multicast(
+                local_committee.iter().map(|(addr, _)| addr),
                 HotstuffMessage::Proposal(ProposalMessage {
                     block: next_block.clone(),
                 }),
-            ))
-            .await
-            .map_err(|_| HotStuffError::InternalChannelClosed {
-                context: "proposing a new block",
-            })?;
+            )
+            .await?;
 
         Ok(())
     }
@@ -192,7 +180,6 @@ where TConsensusSpec: ConsensusSpec
         proposed_by: PublicKey,
         local_committee_shard: &CommitteeShard,
         empty_block: bool,
-        foreign_counters: &mut ForeignSendCounters,
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
@@ -207,17 +194,16 @@ where TConsensusSpec: ConsensusSpec
         let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
         let commands = ForeignProposal::get_all_new(tx)?
             .into_iter()
-            .filter_map(|foreign_proposal| {
-                if pending_proposals.iter().any(|pending_proposal| {
+            .filter(|foreign_proposal| {
+                // If the foreign proposal is already pending, don't propose it again
+                !pending_proposals.iter().any(|pending_proposal| {
                     pending_proposal.bucket == foreign_proposal.bucket &&
                         pending_proposal.block_id == foreign_proposal.block_id
-                }) {
-                    None
-                } else {
-                    Some(Ok(Command::ForeignProposal(
-                        foreign_proposal.set_mined_at(parent_block.height().saturating_add(NodeHeight(1))),
-                    )))
-                }
+                })
+            })
+            .map(|mut foreign_proposal| {
+                foreign_proposal.set_proposed_height(parent_block.height().saturating_add(NodeHeight(1)));
+                Ok(Command::ForeignProposal(foreign_proposal))
             })
             .chain(batch.into_iter().map(|t| match t.current_stage() {
                 // If the transaction is New, propose to Prepare it
@@ -229,7 +215,7 @@ where TConsensusSpec: ConsensusSpec
                 // prepared. We can now propose to Accept it. We also propose the decision change which everyone
                 // should agree with if they received the same foreign LocalPrepare.
                 TransactionPoolStage::LocalPrepared => {
-                    let involved = local_committee_shard.count_distinct_buckets(t.transaction().evidence.shards_iter());
+                    let involved = local_committee_shard.count_distinct_shards(t.transaction().evidence.shards_iter());
                     let involved = NonZeroU64::new(involved as u64).ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
                             "Number of involved shards is zero for transaction {}",
@@ -258,19 +244,24 @@ where TConsensusSpec: ConsensusSpec
             commands.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
         );
 
-        let non_local_buckets = proposer::get_non_local_buckets_from_commands(
+        let non_local_buckets = proposer::get_non_local_shards_from_commands(
             tx,
             &commands,
             local_committee_shard.num_committees(),
-            local_committee_shard.bucket(),
+            local_committee_shard.shard(),
         )?;
 
-        let foreign_indexes = non_local_buckets
+        let foreign_counters = ForeignSendCounters::get_or_default(tx, parent_block.block_id())?;
+        let mut foreign_indexes = non_local_buckets
             .iter()
-            .map(|bucket| (*bucket, foreign_counters.increment_counter(*bucket)))
-            .collect();
+            .map(|bucket| (*bucket, foreign_counters.get_count(*bucket) + 1))
+            .collect::<IndexMap<_, _>>();
+
+        // Ensure that foreign indexes are canonically ordered
+        foreign_indexes.sort_keys();
 
         let mut next_block = Block::new(
+            self.network,
             *parent_block.block_id(),
             high_qc,
             parent_block.height() + NodeHeight(1),

@@ -8,15 +8,18 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{shard_bucket::ShardBucket, NodeHeight};
+use tari_dan_common_types::{shard::Shard, NodeHeight};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use super::BlockId;
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum ForeignProposalState {
     New,
-    Mined,
+    Proposed,
     Deleted,
 }
 
@@ -24,7 +27,7 @@ impl Display for ForeignProposalState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             ForeignProposalState::New => write!(f, "New"),
-            ForeignProposalState::Mined => write!(f, "Mined"),
+            ForeignProposalState::Proposed => write!(f, "Proposed"),
             ForeignProposalState::Deleted => write!(f, "Deleted"),
         }
     }
@@ -36,7 +39,7 @@ impl FromStr for ForeignProposalState {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "New" => Ok(ForeignProposalState::New),
-            "Mined" => Ok(ForeignProposalState::Mined),
+            "Proposed" => Ok(ForeignProposalState::Proposed),
             "Deleted" => Ok(ForeignProposalState::Deleted),
             _ => Err(anyhow::anyhow!("Invalid foreign proposal state {}", s)),
         }
@@ -44,26 +47,27 @@ impl FromStr for ForeignProposalState {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ForeignProposal {
-    pub bucket: ShardBucket,
+    pub bucket: Shard,
     pub block_id: BlockId,
     pub state: ForeignProposalState,
-    pub mined_at: Option<NodeHeight>,
+    pub proposed_height: Option<NodeHeight>,
 }
 
 impl ForeignProposal {
-    pub fn new(bucket: ShardBucket, block_id: BlockId) -> Self {
+    pub fn new(bucket: Shard, block_id: BlockId) -> Self {
         Self {
             bucket,
             block_id,
             state: ForeignProposalState::New,
-            mined_at: None,
+            proposed_height: None,
         }
     }
 
-    pub fn set_mined_at(mut self, mined_at: NodeHeight) -> Self {
-        self.mined_at = Some(mined_at);
-        self.state = ForeignProposalState::Mined;
+    pub fn set_proposed_height(&mut self, mined_at: NodeHeight) -> &mut Self {
+        self.proposed_height = Some(mined_at);
+        self.state = ForeignProposalState::Proposed;
         self
     }
 }

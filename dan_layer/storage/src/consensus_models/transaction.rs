@@ -8,7 +8,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
 use tari_transaction::{Transaction, TransactionId};
 
@@ -25,8 +25,9 @@ pub struct TransactionRecord {
     pub transaction: Transaction,
     pub result: Option<ExecuteResult>,
     pub execution_time: Option<Duration>,
-    pub resulting_outputs: Vec<ShardId>,
+    pub resulting_outputs: Vec<SubstateAddress>,
     pub final_decision: Option<Decision>,
+    pub finalized_time: Option<Duration>,
     pub abort_details: Option<String>,
 }
 
@@ -37,6 +38,7 @@ impl TransactionRecord {
             result: None,
             execution_time: None,
             final_decision: None,
+            finalized_time: None,
             resulting_outputs: Vec::new(),
             abort_details: None,
         }
@@ -47,7 +49,8 @@ impl TransactionRecord {
         result: Option<ExecuteResult>,
         execution_time: Option<Duration>,
         final_decision: Option<Decision>,
-        resulting_outputs: Vec<ShardId>,
+        finalized_time: Option<Duration>,
+        resulting_outputs: Vec<SubstateAddress>,
         abort_details: Option<String>,
     ) -> Self {
         Self {
@@ -55,6 +58,7 @@ impl TransactionRecord {
             result,
             execution_time,
             final_decision,
+            finalized_time,
             resulting_outputs,
             abort_details,
         }
@@ -80,11 +84,11 @@ impl TransactionRecord {
         self.result.as_ref()
     }
 
-    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
+    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
         self.transaction.involved_shards_iter().chain(&self.resulting_outputs)
     }
 
-    pub fn resulting_outputs(&self) -> &[ShardId] {
+    pub fn resulting_outputs(&self) -> &[SubstateAddress] {
         &self.resulting_outputs
     }
 
@@ -94,6 +98,14 @@ impl TransactionRecord {
 
     pub fn execution_time(&self) -> Option<Duration> {
         self.execution_time
+    }
+
+    pub fn finalized_time(&self) -> Option<Duration> {
+        self.finalized_time
+    }
+
+    pub fn is_finalized(&self) -> bool {
+        self.final_decision.is_some()
     }
 
     pub fn abort_details(&self) -> Option<&String> {
@@ -107,6 +119,8 @@ impl TransactionRecord {
     }
 
     pub fn into_final_result(self) -> Option<ExecuteResult> {
+        // TODO: This is hacky, result should be broken up into execution result, validation (mempool) result, finality
+        //       result. These results are independent of each other.
         self.final_decision().and_then(|d| {
             if d.is_commit() {
                 self.result
@@ -206,7 +220,7 @@ impl TransactionRecord {
     pub fn get_involved_shards<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
         tx: &mut TTx,
         transactions: I,
-    ) -> Result<HashMap<TransactionId, HashSet<ShardId>>, StorageError> {
+    ) -> Result<HashMap<TransactionId, HashSet<SubstateAddress>>, StorageError> {
         let (transactions, missing) = Self::get_any(tx, transactions)?;
         if !missing.is_empty() {
             return Err(StorageError::NotFound {
@@ -229,14 +243,17 @@ impl From<ExecutedTransaction> for TransactionRecord {
     fn from(tx: ExecutedTransaction) -> Self {
         let execution_time = tx.execution_time();
         let final_decision = tx.final_decision();
+        let finalized_time = tx.finalized_time();
         let abort_details = tx.abort_details().cloned();
         let resulting_outputs = tx.resulting_outputs().to_vec();
         let (transaction, result) = tx.dissolve();
+
         Self {
             transaction,
             result: Some(result),
             execution_time: Some(execution_time),
             final_decision,
+            finalized_time,
             resulting_outputs,
             abort_details,
         }

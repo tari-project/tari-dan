@@ -50,8 +50,6 @@ pub fn template_hasher32() -> TariHasher32 {
     hasher32(EngineHashDomainLabel::Template)
 }
 
-hash_domain!(ConfidentialOutputHashDomain, "com.tari.dan.confidential_output", 1);
-
 #[derive(Debug, Clone)]
 pub struct TariHasher32 {
     hasher: Blake2b<U32>,
@@ -161,7 +159,7 @@ impl TariHasher64 {
 #[derive(Debug)]
 pub enum EngineHashDomainLabel {
     Template,
-    ShardId,
+    SubstateAddress,
     ConfidentialProof,
     ConfidentialTransfer,
     ShardPledgeCollection,
@@ -184,7 +182,7 @@ impl EngineHashDomainLabel {
     pub fn as_label(&self) -> &'static str {
         match self {
             Self::Template => "Template",
-            Self::ShardId => "ShardId",
+            Self::SubstateAddress => "SubstateAddress",
             Self::ConfidentialProof => "ConfidentialProof",
             Self::ConfidentialTransfer => "ConfidentialTransfer",
             Self::ShardPledgeCollection => "ShardPledgeCollection",

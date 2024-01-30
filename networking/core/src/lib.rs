@@ -21,6 +21,7 @@ mod connection;
 mod event;
 mod global_ip;
 mod handle;
+mod message;
 mod notify;
 mod peer;
 mod relay_state;
@@ -29,11 +30,12 @@ mod spawn;
 pub use config::*;
 pub use connection::*;
 pub use handle::*;
+pub use message::*;
 pub use spawn::*;
 pub use tari_swarm::{is_supported_multiaddr, Config as SwarmConfig};
 
 #[async_trait]
-pub trait NetworkingService<TMsg> {
+pub trait NetworkingService<TMsg: MessageSpec> {
     fn local_peer_id(&self) -> &PeerId;
 
     async fn dial_peer<T: Into<DialOpts> + Send + 'static>(
@@ -43,18 +45,20 @@ pub trait NetworkingService<TMsg> {
 
     async fn get_connected_peers(&mut self) -> Result<Vec<PeerId>, NetworkingError>;
 
-    async fn send_message(&mut self, peer: PeerId, message: TMsg) -> Result<(), NetworkingError>;
+    async fn send_message(&mut self, peer: PeerId, message: TMsg::Message) -> Result<(), NetworkingError>;
 
+    /// Sends a message to the specified destination.
+    /// Returns the number of messages that were successfully enqueued for sending.
     async fn send_multicast<D: Into<MulticastDestination> + Send + 'static>(
         &mut self,
         destination: D,
-        message: TMsg,
-    ) -> Result<(), NetworkingError>;
+        message: TMsg::Message,
+    ) -> Result<usize, NetworkingError>;
 
-    async fn gossip<TTopic: Into<String> + Send>(
+    async fn publish_gossip<TTopic: Into<String> + Send>(
         &mut self,
         topic: TTopic,
-        message: TMsg,
+        message: TMsg::GossipMessage,
     ) -> Result<(), NetworkingError>;
 
     async fn subscribe_topic<T: Into<String> + Send>(&mut self, topic: T) -> Result<(), NetworkingError>;

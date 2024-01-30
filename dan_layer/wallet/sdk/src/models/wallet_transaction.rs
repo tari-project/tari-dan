@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::Display, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
 use chrono::NaiveDateTime;
@@ -11,6 +11,8 @@ use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::models::Amount;
 use tari_transaction::Transaction;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletTransaction {
@@ -20,11 +22,14 @@ pub struct WalletTransaction {
     pub final_fee: Option<Amount>,
     pub qcs: Vec<QuorumCertificate>,
     pub json_result: Option<Vec<Value>>,
+    pub execution_time: Option<Duration>,
+    pub finalized_time: Option<Duration>,
     pub is_dry_run: bool,
     pub last_update_time: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum TransactionStatus {
     #[default]
     New,

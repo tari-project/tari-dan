@@ -21,4 +21,4 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod mempool;
-pub mod message_dispatcher;
+pub mod messaging;

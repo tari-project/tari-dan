@@ -29,6 +29,7 @@ use tari_base_node_client::{
     BaseNodeClient,
     BaseNodeClientError,
 };
+use tari_common::configuration::Network;
 use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
 use tari_core::transactions::transaction_components::{
     CodeTemplateRegistration,
@@ -47,7 +48,7 @@ use tari_dan_storage::{
 use tari_dan_storage_sqlite::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
 use tari_engine_types::{
     confidential::UnclaimedConfidentialOutput,
-    substate::{SubstateAddress, SubstateValue},
+    substate::{SubstateId, SubstateValue},
 };
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError};
 use tari_shutdown::ShutdownSignal;
@@ -63,6 +64,7 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::base_layer_scanner";
 
 pub fn spawn<TAddr: NodeAddressable + 'static>(
+    network: Network,
     global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
     base_node_client: GrpcBaseNodeClient,
     epoch_manager: EpochManagerHandle<TAddr>,
@@ -75,6 +77,7 @@ pub fn spawn<TAddr: NodeAddressable + 'static>(
 ) -> JoinHandle<anyhow::Result<()>> {
     task::spawn(async move {
         let base_layer_scanner = BaseLayerScanner::new(
+            network,
             global_db,
             base_node_client,
             epoch_manager,
@@ -92,6 +95,7 @@ pub fn spawn<TAddr: NodeAddressable + 'static>(
 }
 
 pub struct BaseLayerScanner<TAddr> {
+    network: Network,
     global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
     last_scanned_height: u64,
     last_scanned_tip: Option<FixedHash>,
@@ -110,6 +114,7 @@ pub struct BaseLayerScanner<TAddr> {
 
 impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
     pub fn new(
+        network: Network,
         global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
         base_node_client: GrpcBaseNodeClient,
         epoch_manager: EpochManagerHandle<TAddr>,
@@ -121,6 +126,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         base_layer_scanning_interval: Duration,
     ) -> Self {
         Self {
+            network,
             global_db,
             last_scanned_tip: None,
             last_scanned_height: 0,
@@ -362,7 +368,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
     }
 
     async fn register_burnt_utxo(&mut self, output: &TransactionOutput) -> Result<(), BaseLayerScannerError> {
-        let address = SubstateAddress::UnclaimedConfidentialOutput(
+        let substate_id = SubstateId::UnclaimedConfidentialOutput(
             UnclaimedConfidentialOutputAddress::try_from_commitment(output.commitment.as_bytes()).map_err(|e|
                 // Technically impossible, but anyway
                 BaseLayerScannerError::InvalidSideChainUtxoResponse(format!("Invalid commitment: {}", e)))?,
@@ -374,11 +380,11 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         });
         self.state_store
             .with_write_tx(|tx| {
-                let genesis = Block::genesis();
+                let genesis = Block::genesis(self.network);
 
                 // TODO: This should be proposed in a block...
                 SubstateRecord {
-                    address,
+                    substate_id,
                     version: 0,
                     substate_value: substate,
                     state_hash: Default::default(),

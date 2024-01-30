@@ -20,27 +20,24 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import Box from '@mui/material/Box';
-import CopyToClipboard from '../../../Components/CopyToClipboard';
-import FetchStatusCheck from '../../../Components/FetchStatusCheck';
-import {
-  GridHeadCell,
-  GridDataCell,
-} from '../../../Components/StyledComponents';
-import { useAccountsGet } from '../../../api/hooks/useAccounts';
-import { shortenString } from '../../../utils/helpers';
-import { styled } from '@mui/material/styles';
+import Box from "@mui/material/Box";
+import CopyToClipboard from "../../../Components/CopyToClipboard";
+import FetchStatusCheck from "../../../Components/FetchStatusCheck";
+import { GridHeadCell, GridDataCell } from "../../../Components/StyledComponents";
+import { useAccountsGet } from "../../../api/hooks/useAccounts";
+import { shortenString } from "../../../utils/helpers";
+import { styled } from "@mui/material/styles";
 
 const GridContainer = styled(Box)(({ theme }) => ({
-  display: 'grid',
-  gridTemplateColumns: '1fr 2fr',
+  display: "grid",
+  gridTemplateColumns: "1fr 2fr",
   gridTemplateAreas: `'head1 content1'
     'head2 content2'
     'head3 content3'`,
 
-  [theme.breakpoints.up('md')]: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr',
+  [theme.breakpoints.up("md")]: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
     gridTemplateAreas: `'head1 head2 head3'
       'content1 content2 content3'`,
   },
@@ -59,7 +56,7 @@ function AccountDetails({ accountName }: { accountName: string }) {
       {accountsIsError || accountsIsFetching ? (
         <FetchStatusCheck
           isError={accountsIsError}
-          errorMessage={accountsError?.message || 'Error fetching data'}
+          errorMessage={accountsError?.message || "Error fetching data"}
           isLoading={accountsIsFetching}
         />
       ) : (
@@ -69,15 +66,11 @@ function AccountDetails({ accountName }: { accountName: string }) {
               <GridHeadCell className="head1">Name</GridHeadCell>
               <GridHeadCell className="head2">Address</GridHeadCell>
               <GridHeadCell className="head3">Public Key</GridHeadCell>
-              <GridDataCell className="content1">
-                {accountsData.account.name}
-              </GridDataCell>
+              <GridDataCell className="content1">{accountsData.account.name}</GridDataCell>
               <GridDataCell className="content2">
-                {' '}
+                {" "}
                 {shortenString(accountsData.account.address.Component)}
-                <CopyToClipboard
-                  copy={accountsData.account.address.Component}
-                />
+                <CopyToClipboard copy={accountsData.account.address.Component} />
               </GridDataCell>
               <GridDataCell className="content3">
                 {shortenString(accountsData.public_key)}

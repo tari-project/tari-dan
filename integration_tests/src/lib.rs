@@ -31,10 +31,21 @@ use http_server::MockHttpServer;
 use indexer::IndexerProcess;
 use indexmap::IndexMap;
 use miner::MinerProcess;
-use tari_common_types::types::PublicKey;
-use tari_core::transactions::test_helpers::{create_test_core_key_manager_with_memory_db, TestKeyManager};
-use tari_crypto::ristretto::{RistrettoComSig, RistrettoSecretKey};
-use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
+use rand::rngs::OsRng;
+use tari_common::configuration::Network;
+use tari_common_types::{
+    tari_address::TariAddress,
+    types::{PrivateKey, PublicKey},
+};
+use tari_core::{
+    consensus::ConsensusManager,
+    transactions::key_manager::{create_memory_db_key_manager, MemoryDbKeyManager, TariKeyId},
+};
+use tari_crypto::{
+    keys::{PublicKey as _, SecretKey},
+    ristretto::{RistrettoComSig, RistrettoSecretKey},
+};
+use tari_validator_node_cli::versioned_substate_id::VersionedSubstateId;
 use template::RegisteredTemplate;
 use validator_node::ValidatorNodeProcess;
 use wallet::WalletProcess;
@@ -62,7 +73,7 @@ pub struct TariWorld {
     pub vn_seeds: IndexMap<String, ValidatorNodeProcess>,
     pub miners: IndexMap<String, MinerProcess>,
     pub templates: IndexMap<String, RegisteredTemplate>,
-    pub outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
+    pub outputs: IndexMap<String, IndexMap<String, VersionedSubstateId>>,
     pub http_server: Option<MockHttpServer>,
     pub template_mock_server_port: Option<u16>,
     pub current_scenario_name: Option<String>,
@@ -72,11 +83,16 @@ pub struct TariWorld {
     pub addresses: IndexMap<String, String>,
     pub num_databases_saved: usize,
     pub account_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
-    pub key_manager: TestKeyManager,
+    pub key_manager: MemoryDbKeyManager,
     /// Key name -> key index
     pub wallet_keys: IndexMap<String, u64>,
     pub claim_public_keys: IndexMap<String, PublicKey>,
     pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
+    /// Used for all one-sided coinbase payments
+    pub wallet_private_key: PrivateKey,
+    /// A receiver wallet address that is used for default one-sided coinbase payments
+    pub default_payment_address: TariAddress,
+    pub consensus_manager: ConsensusManager,
     pub fees_enabled: bool,
 }
 
@@ -126,7 +142,7 @@ impl TariWorld {
             .unwrap_or_else(|| panic!("Base node {} not found", name))
     }
 
-    pub fn get_account_component_address(&self, name: &str) -> Option<VersionedSubstateAddress> {
+    pub fn get_account_component_address(&self, name: &str) -> Option<VersionedSubstateId> {
         let all_components = self
             .outputs
             .get(name)
@@ -198,10 +214,23 @@ impl TariWorld {
             break;
         }
     }
+
+    pub async fn script_key_id(&self) -> TariKeyId {
+        use tari_key_manager::key_manager_service::KeyManagerInterface;
+        match self.key_manager.import_key(self.wallet_private_key.clone()).await {
+            Ok(key_id) => key_id,
+            Err(_) => tari_core::transactions::transaction_protocol::sender::KeyId::Imported {
+                key: PublicKey::from_secret_key(&self.wallet_private_key),
+            },
+        }
+    }
 }
 
 impl Default for TariWorld {
     fn default() -> Self {
+        let wallet_private_key = PrivateKey::random(&mut OsRng);
+        let default_payment_address =
+            TariAddress::new(PublicKey::from_secret_key(&wallet_private_key), Network::LocalNet);
         Self {
             base_nodes: IndexMap::new(),
             wallets: IndexMap::new(),
@@ -220,10 +249,13 @@ impl Default for TariWorld {
             addresses: IndexMap::new(),
             num_databases_saved: 0,
             account_keys: IndexMap::new(),
-            key_manager: create_test_core_key_manager_with_memory_db(),
+            key_manager: create_memory_db_key_manager(),
             wallet_keys: IndexMap::new(),
             claim_public_keys: IndexMap::new(),
             wallet_daemons: IndexMap::new(),
+            wallet_private_key,
+            default_payment_address,
+            consensus_manager: ConsensusManager::builder(Network::LocalNet).build().unwrap(),
             fees_enabled: true,
         }
     }

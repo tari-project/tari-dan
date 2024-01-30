@@ -8,8 +8,11 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum Decision {
     /// Decision to COMMIT the transaction
     Commit,
@@ -32,14 +35,18 @@ impl Decision {
             Decision::Abort => Decision::Abort,
         }
     }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Decision::Commit => "Commit",
+            Decision::Abort => "Abort",
+        }
+    }
 }
 
 impl Display for Decision {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Decision::Commit => write!(f, "Commit"),
-            Decision::Abort => write!(f, "Abort"),
-        }
+        f.write_str(self.as_str())
     }
 }
 

@@ -24,7 +24,7 @@ use std::{collections::HashMap, str::FromStr};
 
 use proc_macro2::TokenStream;
 use syn::parse2;
-use tari_engine_types::instruction::Instruction;
+use tari_engine_types::{instruction::Instruction, TemplateAddress};
 
 use self::ast::ManifestAst;
 pub use crate::value::ManifestValue;
@@ -36,9 +36,18 @@ mod generator;
 mod parser;
 mod value;
 
-pub fn parse_manifest(input: &str, globals: HashMap<String, ManifestValue>) -> Result<Vec<Instruction>, ManifestError> {
+pub fn parse_manifest(
+    input: &str,
+    globals: HashMap<String, ManifestValue>,
+    templates: HashMap<String, TemplateAddress>,
+) -> Result<ManifestInstructions, ManifestError> {
     let tokens = TokenStream::from_str(input).map_err(|e| ManifestError::LexError(e.to_string()))?;
     let ast = parse2::<ManifestAst>(tokens)?;
 
-    ManifestInstructionGenerator::new(globals).generate_instructions(ast)
+    ManifestInstructionGenerator::new(globals, templates).generate_instructions(ast)
+}
+
+pub struct ManifestInstructions {
+    pub instructions: Vec<Instruction>,
+    pub fee_instructions: Vec<Instruction>,
 }

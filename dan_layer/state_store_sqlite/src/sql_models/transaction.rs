@@ -24,6 +24,7 @@ pub struct Transaction {
     pub result: Option<String>,
     pub execution_time_ms: Option<i64>,
     pub final_decision: Option<String>,
+    pub finalized_at: Option<PrimitiveDateTime>,
     pub abort_details: Option<String>,
     pub min_epoch: Option<i64>,
     pub max_epoch: Option<i64>,
@@ -84,11 +85,17 @@ impl TryFrom<Transaction> for consensus_models::TransactionRecord {
             .unwrap_or_default();
         let abort_details = value.abort_details.clone();
 
+        let finalized_time = value
+            .finalized_at
+            .map(|t| t.assume_offset(time::UtcOffset::UTC) - value.created_at.assume_offset(time::UtcOffset::UTC))
+            .map(|d| d.try_into().unwrap_or_default());
+
         Ok(Self::load(
             value.try_into()?,
             result,
             execution_time,
             final_decision,
+            finalized_time,
             resulting_outputs,
             abort_details,
         ))

@@ -20,6 +20,7 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_common::configuration::Network;
 use tari_dan_common_types::{committee::CommitteeShard, DerivableFromPublicKey, NodeHeight};
 use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
@@ -55,6 +56,7 @@ pub async fn validate_quorum_certificate<
     committee_shard: &CommitteeShard,
     vote_signing_service: &TSignatureService,
     epoch_manager: &TEpochManager,
+    network: Network,
 ) -> Result<(), QuorumCertificateValidationError> {
     // ignore genesis block.
     if qc.epoch().as_u64() == 0 {
@@ -67,7 +69,7 @@ pub async fn validate_quorum_certificate<
         let vn = epoch_manager
             .get_validator_node_by_public_key(qc.epoch(), signature.public_key())
             .await?;
-        vns.push(vn.node_hash());
+        vns.push(vn.get_node_hash(network));
     }
 
     // validate the QC's merkle proof

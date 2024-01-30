@@ -4,10 +4,11 @@
 use std::{collections::HashSet, num::NonZeroU64, ops::DerefMut};
 
 use log::*;
+use tari_common::configuration::Network;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
-    ShardId,
+    SubstateAddress,
 };
 use tari_dan_storage::{
     consensus_models::{
@@ -34,16 +35,13 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::Transaction;
-use tokio::sync::{
-    broadcast,
-    mpsc::{self},
-};
+use tokio::sync::broadcast;
 
 use super::proposer::Proposer;
 use crate::{
     hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, event::HotstuffEvent, ProposalValidationError},
     messages::{HotstuffMessage, VoteMessage},
-    traits::{ConsensusSpec, LeaderStrategy, StateManager, VoteSignatureService},
+    traits::{ConsensusSpec, LeaderStrategy, OutboundMessaging, StateManager, VoteSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_lock_block_ready";
@@ -56,9 +54,10 @@ pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     leader_strategy: TConsensusSpec::LeaderStrategy,
     state_manager: TConsensusSpec::StateManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_events: broadcast::Sender<HotstuffEvent>,
     proposer: Proposer<TConsensusSpec>,
+    network: Network,
 }
 
 impl<TConsensusSpec> OnReadyToVoteOnLocalBlock<TConsensusSpec>
@@ -72,9 +71,10 @@ where TConsensusSpec: ConsensusSpec
         leader_strategy: TConsensusSpec::LeaderStrategy,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        outbound_messaging: TConsensusSpec::OutboundMessaging,
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
+        network: Network,
     ) -> Self {
         Self {
             validator_addr,
@@ -84,13 +84,14 @@ where TConsensusSpec: ConsensusSpec
             leader_strategy,
             state_manager,
             transaction_pool,
-            tx_leader,
+            outbound_messaging,
             tx_events,
             proposer,
+            network,
         }
     }
 
-    pub async fn handle(&self, valid_block: ValidBlock) -> Result<(), HotStuffError> {
+    pub async fn handle(&mut self, valid_block: ValidBlock) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
             "🔥 LOCAL PROPOSAL READY: {}",
@@ -311,7 +312,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     async fn send_vote_to_leader(
-        &self,
+        &mut self,
         local_committee: &Committee<TConsensusSpec::Addr>,
         vote: VoteMessage,
         block: &Block,
@@ -327,17 +328,9 @@ where TConsensusSpec: ConsensusSpec
             block.proposed_by(),
             leader,
         );
-        if self
-            .tx_leader
-            .send((leader.clone(), HotstuffMessage::Vote(vote.clone())))
-            .await
-            .is_err()
-        {
-            debug!(
-                target: LOG_TARGET,
-                "tx_leader in OnLocalProposalReady::send_vote_to_leader is closed",
-            );
-        }
+        self.outbound_messaging
+            .send(leader.clone(), HotstuffMessage::Vote(vote.clone()))
+            .await?;
         self.store.with_write_tx(|tx| {
             let last_sent_vote = LastSentVote {
                 epoch: vote.epoch,
@@ -595,7 +588,7 @@ where TConsensusSpec: ConsensusSpec
                         }
 
                         let distinct_shards =
-                            local_committee_shard.count_distinct_buckets(tx_rec.transaction().evidence.shards_iter());
+                            local_committee_shard.count_distinct_shards(tx_rec.transaction().evidence.shards_iter());
                         let distinct_shards = NonZeroU64::new(distinct_shards as u64).ok_or_else(|| {
                             HotStuffError::InvariantError(format!(
                                 "Distinct shards is zero for transaction {} in block {}",
@@ -717,7 +710,7 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
-        locked_inputs: &mut HashSet<ShardId>,
+        locked_inputs: &mut HashSet<SubstateAddress>,
     ) -> Result<bool, HotStuffError> {
         let inputs = local_committee_shard
             .filter(transaction.inputs().iter().chain(transaction.filled_inputs()))
@@ -816,7 +809,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         transaction: &ExecutedTransaction,
-        locked_outputs: &mut HashSet<ShardId>,
+        locked_outputs: &mut HashSet<SubstateAddress>,
     ) -> Result<bool, HotStuffError> {
         let state = LockedOutput::check_locks(tx, transaction.resulting_outputs())?;
 
@@ -860,7 +853,7 @@ where TConsensusSpec: ConsensusSpec
             .epoch_manager
             .get_validator_node(block.epoch(), &self.validator_addr)
             .await?;
-        let leaf_hash = vn.node_hash();
+        let leaf_hash = vn.get_node_hash(self.network);
 
         let signature = self.vote_signing_service.sign_vote(&leaf_hash, block.id(), &decision);
 
@@ -935,7 +928,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn propose_newly_locked_blocks(&self, blocks: Vec<Block>) -> Result<(), HotStuffError> {
+    async fn propose_newly_locked_blocks(&mut self, blocks: Vec<Block>) -> Result<(), HotStuffError> {
         for block in blocks {
             let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
             let our_addr = self.epoch_manager.get_our_validator_node(block.epoch()).await?;

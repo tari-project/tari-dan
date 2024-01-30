@@ -12,12 +12,18 @@ use tari_transaction::TransactionId;
 
 use crate::quorum_certificate_validations::QuorumCertificateValidationError;
 
+use crate::traits::{InboundMessagingError, OutboundMessagingError};
+
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
     #[error("Internal channel send error when {context}")]
     InternalChannelClosed { context: &'static str },
+    #[error("Inbound messaging error: {0}")]
+    InboundMessagingError(#[from] InboundMessagingError),
+    #[error("Outbound messaging error: {0}")]
+    OutboundMessagingError(#[from] OutboundMessagingError),
     #[error("Epoch {epoch} is not active. {details}")]
     EpochNotActive { epoch: Epoch, details: String },
     #[error("Not registered for current epoch {epoch}")]
@@ -98,8 +104,12 @@ pub enum ProposalValidationError {
     NotSafeBlock { proposed_by: String, hash: BlockId },
     #[error("Node proposed by {proposed_by} with hash {hash} is missing foreign index")]
     MissingForeignCounters { proposed_by: String, hash: BlockId },
-    #[error("Node proposed by {proposed_by} with hash {hash} has invalid foreign counters")]
-    InvalidForeignCounters { proposed_by: String, hash: BlockId },
+    #[error("Node proposed by {proposed_by} with hash {hash} has invalid foreign counters: {details}")]
+    InvalidForeignCounters {
+        proposed_by: String,
+        hash: BlockId,
+        details: String,
+    },
     #[error("Node proposed by {proposed_by} with hash {hash} is the genesis block")]
     ProposingGenesisBlock { proposed_by: String, hash: BlockId },
     #[error("Justification block {justify_block} for proposed block {block_description} by {proposed_by} not found")]
@@ -150,7 +160,7 @@ pub enum ProposalValidationError {
     },
     #[error("Proposed block {block_id} {height} already has been processed")]
     BlockAlreadyProcessed { block_id: BlockId, height: NodeHeight },
-    #[error("Proposed block {block_id} {height} doesn't have signature")]
+    #[error("Proposed block {block_id} {height} doesn't have a signature")]
     MissingSignature { block_id: BlockId, height: NodeHeight },
     #[error("Proposed block {block_id} {height} has invalid signature")]
     InvalidSignature { block_id: BlockId, height: NodeHeight },
@@ -158,4 +168,10 @@ pub enum ProposalValidationError {
     BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
     #[error("Quorum certificate validation error: {0}")]
     QuorumCertificateValidationError(#[from] QuorumCertificateValidationError),
+    #[error("Invalid network in block {block_id}: expected {expected_network}, given {block_network}")]
+    InvalidNetwork {
+        expected_network: String,
+        block_network: String,
+        block_id: BlockId,
+    },
 }

@@ -7,12 +7,12 @@ use tari_dan_storage::{
     consensus_models::{Block, LastSentVote, LastVoted},
     StateStore,
 };
-use tokio::{sync::mpsc, task};
+use tokio::task;
 
 use crate::{
     hotstuff::HotStuffError,
     messages::{HotstuffMessage, ProposalMessage, SyncRequestMessage},
-    traits::ConsensusSpec,
+    traits::{ConsensusSpec, OutboundMessaging},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_sync_request";
@@ -22,19 +22,19 @@ pub(super) const MAX_BLOCKS_PER_SYNC: usize = 100;
 #[derive(Debug)]
 pub struct OnSyncRequest<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
-    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
 }
 
 impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
-    pub fn new(
-        store: TConsensusSpec::StateStore,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
-    ) -> Self {
-        Self { store, tx_leader }
+    pub fn new(store: TConsensusSpec::StateStore, outbound_messaging: TConsensusSpec::OutboundMessaging) -> Self {
+        Self {
+            store,
+            outbound_messaging,
+        }
     }
 
     pub fn handle(&self, from: TConsensusSpec::Addr, msg: SyncRequestMessage) {
-        let tx_leader = self.tx_leader.clone();
+        let mut outbound_messaging = self.outbound_messaging.clone();
         let store = self.store.clone();
 
         task::spawn(async move {
@@ -48,7 +48,7 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     msg.high_qc,
                     last_voted
                 );
-                let blocks = Block::get_all_blocks_between(tx, msg.high_qc.block_id(), last_voted.block_id())?;
+                let blocks = Block::get_all_blocks_between(tx, msg.high_qc.block_id(), last_voted.block_id(), false)?;
 
                 debug!(
                     target: LOG_TARGET,
@@ -58,25 +58,6 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                 );
 
                 Ok::<_, HotStuffError>(blocks)
-
-                // let mut full_blocks = Vec::with_capacity(blocks.len());
-                // for block in blocks {
-                //     let all_qcs = block
-                //         .commands()
-                //         .iter()
-                //         .flat_map(|cmd| cmd.evidence().qc_ids_iter())
-                //         .collect::<HashSet<_>>();
-                //     let qcs = QuorumCertificate::get_all(tx, all_qcs)?;
-                //     let transactions = block.get_transactions(tx)?;
-                //
-                //     full_blocks.push(FullBlock {
-                //         block,
-                //         qcs,
-                //         transactions: transactions.into_iter().map(|t| t.into_transaction()).collect(),
-                //     });
-                // }
-                //
-                // Ok::<_, HotStuffError>(full_blocks)
             });
 
             let blocks = match result {
@@ -94,12 +75,11 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     block,
                     from
                 );
-                if tx_leader
-                    .send((from.clone(), HotstuffMessage::Proposal(ProposalMessage { block })))
+                if let Err(err) = outbound_messaging
+                    .send(from.clone(), HotstuffMessage::Proposal(ProposalMessage { block }))
                     .await
-                    .is_err()
                 {
-                    warn!(target: LOG_TARGET, "Leader channel closed while sending SyncResponse");
+                    warn!(target: LOG_TARGET, "Error sending SyncResponse: {err}");
                     return;
                 }
             }
@@ -113,16 +93,15 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                 },
             };
             if let Some(last_vote) = maybe_last_vote {
-                if tx_leader
-                    .send((from.clone(), HotstuffMessage::Vote(last_vote.into())))
+                if let Err(err) = outbound_messaging
+                    .send(from.clone(), HotstuffMessage::Vote(last_vote.into()))
                     .await
-                    .is_err()
                 {
-                    warn!(target: LOG_TARGET, "Leader channel closed while sending LastVote");
+                    warn!(target: LOG_TARGET, "Leader channel closed while sending LastVote {err}");
                 }
             }
 
-            // let _ignore = tx_leader
+            // let _ignore = outbound_messaging
             //     .send((
             //         from,
             //         HotstuffMessage::SyncResponse(SyncResponseMessage {

@@ -3,14 +3,14 @@
 
 use std::iter;
 
-use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{instruction::Instruction, substate::SubstateId};
 use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress},
 };
 use tari_template_test_tooling::{SubstateType, TemplateTest};
 
-fn setup() -> (TemplateTest, ComponentAddress, SubstateAddress) {
+fn setup() -> (TemplateTest, ComponentAddress, SubstateId) {
     let mut template_test = TemplateTest::new(vec!["tests/templates/nft/airdrop"]);
 
     let airdrop: ComponentAddress = template_test.call_function("Airdrop", "new", args![], vec![]);

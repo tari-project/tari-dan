@@ -29,14 +29,14 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use tari_dan_common_types::{optional::Optional, ShardId};
+use tari_dan_common_types::{optional::Optional, SubstateAddress};
 use tari_dan_engine::abi::Type;
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     instruction::Instruction,
     instruction_result::InstructionResult,
     parse_template_address,
-    substate::{SubstateAddress, SubstateDiff, SubstateValue},
+    substate::{SubstateDiff, SubstateId, SubstateValue},
     TemplateAddress,
 };
 use tari_template_lib::{
@@ -51,6 +51,7 @@ use tari_validator_node_client::{
     types::{
         DryRunTransactionFinalizeResult,
         GetTransactionResultRequest,
+        GetTransactionResultResponse,
         SubmitTransactionRequest,
         SubmitTransactionResponse,
     },
@@ -63,7 +64,7 @@ use crate::{
     component_manager::ComponentManager,
     from_hex::FromHex,
     key_manager::KeyManager,
-    versioned_substate_address::VersionedSubstateAddress,
+    versioned_substate_id::VersionedSubstateId,
 };
 
 #[derive(Debug, Subcommand, Clone)]
@@ -94,9 +95,9 @@ pub struct CommonSubmitArgs {
     #[clap(long, short = 't')]
     pub wait_for_result_timeout: Option<u64>,
     #[clap(long, short = 'i')]
-    pub inputs: Vec<VersionedSubstateAddress>,
+    pub inputs: Vec<VersionedSubstateId>,
     #[clap(long, alias = "ref")]
-    pub input_refs: Vec<VersionedSubstateAddress>,
+    pub input_refs: Vec<VersionedSubstateId>,
     #[clap(long, short = 'v')]
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -126,7 +127,7 @@ pub enum CliInstruction {
         args: Vec<CliArg>,
     },
     CallMethod {
-        component_address: SubstateAddress,
+        component_address: SubstateId,
         method_name: String,
         #[clap(long, short = 'a')]
         args: Vec<CliArg>,
@@ -207,8 +208,12 @@ async fn handle_submit_manifest(
     client: &mut ValidatorNodeClient,
 ) -> Result<SubmitTransactionResponse, anyhow::Error> {
     let contents = std::fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
-    let instructions = parse_manifest(&contents, manifest::parse_globals(args.input_variables)?)?;
-    submit_transaction(instructions, args.common, base_dir, client).await
+    let instructions = parse_manifest(
+        &contents,
+        manifest::parse_globals(args.input_variables)?,
+        Default::default(),
+    )?;
+    submit_transaction(instructions.instructions, args.common, base_dir, client).await
 }
 
 pub async fn submit_transaction(
@@ -232,13 +237,13 @@ pub async fn submit_transaction(
     // Convert to shard id
     let inputs = inputs
         .into_iter()
-        .map(|versioned_addr| versioned_addr.to_shard_id())
+        .map(|versioned_addr| versioned_addr.to_substate_address())
         .collect::<Vec<_>>();
 
     let input_refs = common
         .input_refs
         .into_iter()
-        .map(|versioned_addr| versioned_addr.to_shard_id())
+        .map(|versioned_addr| versioned_addr.to_substate_address())
         .collect::<Vec<_>>();
 
     summarize_request(&instructions, &inputs, 1, common.dry_run);
@@ -265,21 +270,26 @@ pub async fn submit_transaction(
     if common.wait_for_result {
         println!("⏳️ Waiting for transaction result...");
         println!();
-        let result = wait_for_transaction_result(
+        let GetTransactionResultResponse {
+            result, final_decision, ..
+        } = wait_for_transaction_result(
             resp.transaction_id,
             client,
             common.wait_for_result_timeout.map(Duration::from_secs),
         )
         .await?;
-        if let Some(diff) = result.finalize.result.accept() {
-            component_manager.commit_diff(diff)?;
+        let result = result.unwrap();
+        if final_decision.unwrap().is_commit() {
+            if let Some(diff) = result.finalize.result.accept() {
+                component_manager.commit_diff(diff)?;
+            }
         }
         summarize(&result, timer.elapsed());
         // Hack: submit response never returns a result unless it's a dry run - however cucumbers expect a result so add
-        // it to the response here to satify that We'll eventaully remove these handlers eventually anyway
+        // it to the response here to satisfy that We'll remove these handlers eventually anyway
         use tari_dan_storage::consensus_models::QuorumDecision;
         resp.dry_run_result = Some(DryRunTransactionFinalizeResult {
-            decision: if result.finalize.result.is_accept() {
+            decision: if final_decision.unwrap().is_commit() {
                 QuorumDecision::Accept
             } else {
                 QuorumDecision::Reject
@@ -296,7 +306,7 @@ async fn wait_for_transaction_result(
     transaction_id: TransactionId,
     client: &mut ValidatorNodeClient,
     timeout: Option<Duration>,
-) -> anyhow::Result<ExecuteResult> {
+) -> anyhow::Result<GetTransactionResultResponse> {
     let mut interval = tokio::time::interval(Duration::from_secs(1));
     interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let mut timeout = timeout;
@@ -307,11 +317,8 @@ async fn wait_for_transaction_result(
             .optional()?;
 
         if let Some(resp) = resp {
-            if resp.is_finalized {
-                let result = resp
-                    .result
-                    .ok_or_else(|| anyhow!("Transaction finalized but no result returned"))?;
-                return Ok(result);
+            if resp.final_decision.is_some() {
+                return Ok(resp);
             }
         }
         if let Some(t) = timeout {
@@ -324,7 +331,7 @@ async fn wait_for_transaction_result(
     }
 }
 
-fn summarize_request(instructions: &[Instruction], inputs: &[ShardId], fee: u64, is_dry_run: bool) {
+fn summarize_request(instructions: &[Instruction], inputs: &[SubstateAddress], fee: u64, is_dry_run: bool) {
     if is_dry_run {
         println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
         println!();
@@ -334,8 +341,8 @@ fn summarize_request(instructions: &[Instruction], inputs: &[ShardId], fee: u64,
     if inputs.is_empty() {
         println!("  None");
     } else {
-        for shard_id in inputs {
-            println!("- {}", shard_id);
+        for substate_address in inputs {
+            println!("- {}", substate_address);
         }
     }
     println!();
@@ -365,7 +372,10 @@ fn summarize(result: &ExecuteResult, time_taken: Duration) {
 fn print_substate_diff(diff: &SubstateDiff) {
     for (address, substate) in diff.up_iter() {
         println!("️🌲 UP substate {} (v{})", address, substate.version(),);
-        println!("      🧩 Shard: {}", ShardId::from_address(address, substate.version()));
+        println!(
+            "      🧩 Shard: {}",
+            SubstateAddress::from_address(address, substate.version())
+        );
         match substate.substate_value() {
             SubstateValue::Component(component) => {
                 println!("      ▶ component ({}): {}", component.module_name, address,);
@@ -386,7 +396,7 @@ fn print_substate_diff(diff: &SubstateDiff) {
                 println!("     ! layer one commitment: Should never happen");
             },
             SubstateValue::NonFungibleIndex(index) => {
-                let referenced_address = SubstateAddress::from(index.referenced_address().clone());
+                let referenced_address = SubstateId::from(index.referenced_address().clone());
                 println!("      ▶ NFT index {} referencing {}", address, referenced_address);
             },
             SubstateValue::FeeClaim(fee_claim) => {
@@ -399,7 +409,7 @@ fn print_substate_diff(diff: &SubstateDiff) {
     }
     for (address, version) in diff.down_iter() {
         println!("🗑️ DOWN substate {} v{}", address, version,);
-        println!("      🧩 Shard: {}", ShardId::from_address(address, *version));
+        println!("      🧩 Shard: {}", SubstateAddress::from_address(address, *version));
         println!();
     }
 }
@@ -580,12 +590,12 @@ fn format_tuple(subtypes: &[Type], result: &InstructionResult) -> String {
 fn load_inputs(
     instructions: &[Instruction],
     component_manager: &ComponentManager,
-) -> Result<Vec<VersionedSubstateAddress>, anyhow::Error> {
+) -> Result<Vec<VersionedSubstateId>, anyhow::Error> {
     let mut inputs = Vec::new();
     for instruction in instructions {
         if let Instruction::CallMethod { component_address, .. } = instruction {
-            let addr = SubstateAddress::Component(*component_address);
-            if inputs.iter().any(|a: &VersionedSubstateAddress| a.address == addr) {
+            let addr = SubstateId::Component(*component_address);
+            if inputs.iter().any(|a: &VersionedSubstateId| a.substate_id == addr) {
                 continue;
             }
             let component = component_manager
@@ -593,12 +603,12 @@ fn load_inputs(
                 .ok_or_else(|| anyhow!("Component {} not found", component_address))?;
             println!("Loaded inputs");
             println!("- {} v{}", addr, component.latest_version());
-            inputs.push(VersionedSubstateAddress {
-                address: addr,
+            inputs.push(VersionedSubstateId {
+                substate_id: addr,
                 version: component.latest_version(),
             });
             for child in component.get_children() {
-                println!("  - {} v{}", child.address, child.version);
+                println!("  - {} v{}", child.substate_id, child.version);
             }
             inputs.extend(component.get_children());
         }
@@ -620,7 +630,7 @@ pub enum CliArg {
     Bool(bool),
     Amount(i64),
     NonFungibleId(NonFungibleId),
-    SubstateAddress(SubstateAddress),
+    SubstateId(SubstateId),
     TemplateAddress(TemplateAddress),
 }
 
@@ -656,8 +666,8 @@ impl FromStr for CliArg {
             return Ok(CliArg::Bool(v));
         }
 
-        if let Ok(v) = s.parse::<SubstateAddress>() {
-            return Ok(CliArg::SubstateAddress(v));
+        if let Ok(v) = s.parse::<SubstateId>() {
+            return Ok(CliArg::SubstateId(v));
         }
 
         if let Some(v) = parse_template_address(s.to_owned()) {
@@ -709,15 +719,15 @@ impl CliArg {
             CliArg::I16(v) => arg!(v),
             CliArg::I8(v) => arg!(v),
             CliArg::Bool(v) => arg!(v),
-            CliArg::SubstateAddress(v) => match v {
-                SubstateAddress::Component(v) => arg!(v),
-                SubstateAddress::Resource(v) => arg!(v),
-                SubstateAddress::Vault(v) => arg!(v),
-                SubstateAddress::UnclaimedConfidentialOutput(v) => arg!(v),
-                SubstateAddress::NonFungible(v) => arg!(v),
-                SubstateAddress::NonFungibleIndex(v) => arg!(v),
-                SubstateAddress::TransactionReceipt(v) => arg!(v),
-                SubstateAddress::FeeClaim(v) => arg!(v),
+            CliArg::SubstateId(v) => match v {
+                SubstateId::Component(v) => arg!(v),
+                SubstateId::Resource(v) => arg!(v),
+                SubstateId::Vault(v) => arg!(v),
+                SubstateId::UnclaimedConfidentialOutput(v) => arg!(v),
+                SubstateId::NonFungible(v) => arg!(v),
+                SubstateId::NonFungibleIndex(v) => arg!(v),
+                SubstateId::TransactionReceipt(v) => arg!(v),
+                SubstateId::FeeClaim(v) => arg!(v),
             },
             CliArg::TemplateAddress(v) => arg!(v),
             CliArg::NonFungibleId(v) => arg!(v),
@@ -754,8 +764,8 @@ pub struct SpecificNonFungibleMintOutput {
 }
 
 impl SpecificNonFungibleMintOutput {
-    pub fn to_substate_address(&self) -> SubstateAddress {
-        SubstateAddress::NonFungible(NonFungibleAddress::new(
+    pub fn to_substate_address(&self) -> SubstateId {
+        SubstateId::NonFungible(NonFungibleAddress::new(
             self.resource_address,
             self.non_fungible_id.clone(),
         ))
@@ -769,7 +779,7 @@ impl FromStr for SpecificNonFungibleMintOutput {
         let (resource_address, non_fungible_id) = s
             .split_once(',')
             .ok_or_else(|| anyhow!("Expected resource address and non-fungible id"))?;
-        let resource_address = SubstateAddress::from_str(resource_address)?;
+        let resource_address = SubstateId::from_str(resource_address)?;
         let resource_address = resource_address
             .as_resource_address()
             .ok_or_else(|| anyhow!("Expected resource address but got {}", resource_address))?;
@@ -797,7 +807,7 @@ impl FromStr for NewNonFungibleMintOutput {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (resource_address, count_str) = s.split_once(',').unwrap_or((s, "1"));
-        let resource_address = SubstateAddress::from_str(resource_address)?;
+        let resource_address = SubstateId::from_str(resource_address)?;
         let resource_address = resource_address
             .as_resource_address()
             .ok_or_else(|| anyhow!("Expected resource address but got {}", resource_address))?;
@@ -819,7 +829,7 @@ impl FromStr for NewNonFungibleIndexOutput {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (parent_address, index_str) = s.split_once(',').unwrap_or((s, "0"));
-        let parent_address = SubstateAddress::from_str(parent_address)?;
+        let parent_address = SubstateId::from_str(parent_address)?;
         let parent_address = parent_address
             .as_resource_address()
             .ok_or_else(|| anyhow!("Expected resource address but got {}", parent_address))?;

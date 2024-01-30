@@ -38,7 +38,7 @@ use tari_dan_app_utilities::{
     p2p_config::{P2pConfig, PeerSeedsConfig},
     template_manager::implementation::TemplateConfig,
 };
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {
@@ -88,8 +88,8 @@ pub struct IndexerConfig {
     /// The jrpc address where the UI should connect (it can be the same as the json_rpc_address, but doesn't have to
     /// be), if this will be None, then the listen_addr will be used.
     pub ui_connect_address: Option<String>,
-    /// Substate addresses to keep watching
-    pub address_watchlist: Vec<SubstateAddress>,
+    /// Substate ids to keep watching
+    pub address_watchlist: Vec<SubstateId>,
     /// How often do we want to scan the second layer for new versions
     #[serde(with = "serializers::seconds")]
     pub dan_layer_scanning_internal: Duration,

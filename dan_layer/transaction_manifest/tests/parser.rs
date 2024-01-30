@@ -22,12 +22,12 @@
 
 use std::{collections::HashMap, fs};
 
-use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{instruction::Instruction, substate::SubstateId};
 use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress, ResourceAddress, TemplateAddress},
 };
-use tari_transaction_manifest::parse_manifest;
+use tari_transaction_manifest::{parse_manifest, ManifestInstructions};
 
 #[test]
 #[allow(clippy::too_many_lines)]
@@ -41,24 +41,21 @@ fn manifest_smoke_test() {
         TemplateAddress::from_hex("c2b621869ec2929d3b9503ea41054f01b468ce99e50254b58e460f608ae377f7").unwrap();
 
     let globals = HashMap::from([
-        (
-            "account".to_string(),
-            SubstateAddress::Component(account_component).into(),
-        ),
+        ("account".to_string(), SubstateId::Component(account_component).into()),
         (
             "picture_seller_addr".to_string(),
-            SubstateAddress::Component(picture_seller_component).into(),
+            SubstateId::Component(picture_seller_component).into(),
         ),
         (
             "test_faucet".to_string(),
-            SubstateAddress::Component(test_faucet_component).into(),
+            SubstateId::Component(test_faucet_component).into(),
         ),
-        (
-            "xtr_resource".to_string(),
-            SubstateAddress::Resource(xtr_resource).into(),
-        ),
+        ("xtr_resource".to_string(), SubstateId::Resource(xtr_resource).into()),
     ]);
-    let instructions = parse_manifest(&input, globals).unwrap();
+    let ManifestInstructions {
+        instructions,
+        fee_instructions,
+    } = parse_manifest(&input, globals, Default::default()).unwrap();
 
     let expected = vec![
         Instruction::CallFunction {
@@ -104,4 +101,5 @@ fn manifest_smoke_test() {
     ];
 
     assert_eq!(instructions, expected);
+    assert_eq!(fee_instructions, vec![]);
 }

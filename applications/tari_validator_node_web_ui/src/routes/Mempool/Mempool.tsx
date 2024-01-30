@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import PageHeading from '../../Components/PageHeading';
-import Grid from '@mui/material/Grid';
-import { StyledPaper } from '../../Components/StyledComponents';
-import Mempool from '../VN/Components/Mempool';
+import PageHeading from "../../Components/PageHeading";
+import Grid from "@mui/material/Grid";
+import { StyledPaper } from "../../Components/StyledComponents";
+import Mempool from "../VN/Components/Mempool";
 
 function MempoolLayout() {
   return (

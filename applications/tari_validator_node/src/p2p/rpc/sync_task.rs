@@ -4,6 +4,7 @@
 use std::collections::HashSet;
 
 use log::*;
+use tari_dan_p2p::proto::rpc::{sync_blocks_response::SyncData, QuorumCertificates, SyncBlocksResponse, Transactions};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, LeafBlock, QuorumCertificate, SubstateUpdate, TransactionRecord},
     StateStore,
@@ -11,12 +12,6 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_rpc_framework::RpcStatus;
-use tari_validator_node_rpc::proto::rpc::{
-    sync_blocks_response::SyncData,
-    QuorumCertificates,
-    SyncBlocksResponse,
-    Transactions,
-};
 use tokio::sync::mpsc;
 
 const LOG_TARGET: &str = "tari::dan::rpc::sync_task";
@@ -109,6 +104,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
     fn fetch_next_batch(&self, buffer: &mut BlockBuffer, current_block_id: &BlockId) -> Result<BlockId, StorageError> {
         self.store.with_read_tx(|tx| {
             let mut current_block_id = *current_block_id;
+            let mut last_block_id = current_block_id;
             loop {
                 let children = tx.blocks_get_all_by_parent(&current_block_id)?;
                 let Some(child) = children.into_iter().find(|b| b.is_committed()) else {
@@ -116,6 +112,11 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                 };
 
                 current_block_id = *child.id();
+                if child.is_dummy() {
+                    continue;
+                }
+
+                last_block_id = current_block_id;
                 let all_qcs = child
                     .commands()
                     .iter()
@@ -130,7 +131,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                     break;
                 }
             }
-            Ok::<_, StorageError>(current_block_id)
+            Ok::<_, StorageError>(last_block_id)
         })
     }
 
@@ -138,7 +139,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         self.store.with_read_tx(|tx| {
             // TODO: if there are any transactions this will break the syncing node.
             let leaf_block = LeafBlock::get(tx)?;
-            let blocks = Block::get_all_blocks_between(tx, current_block_id, leaf_block.block_id())?;
+            let blocks = Block::get_all_blocks_between(tx, current_block_id, leaf_block.block_id(), false)?;
             for block in blocks {
                 debug!(
                     target: LOG_TARGET,

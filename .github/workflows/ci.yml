@@ -1,7 +1,7 @@
 ---
 name: CI
 
-'on':
+"on":
   workflow_dispatch:
   push:
     branches:
@@ -26,7 +26,7 @@ env:
 jobs:
   fmt:
     name: fmt
-    runs-on: [ self-hosted, ubuntu-high-cpu ]
+    runs-on: [self-hosted, ubuntu-high-cpu]
 
     steps:
       - name: checkout
@@ -48,10 +48,25 @@ jobs:
 
       - name: cargo format
         run: cargo +${{ env.nightly_toolchain }} fmt --all -- --check
+  prettier:
+    name: prettier
+    runs-on: [self-hosted, ubuntu-high-cpu]
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install
+        run: |
+          npm install prettier@3.2.4
+
+      - name: prettier
+        run: |
+          npx prettier --check "./**/*.{ts,tsx,css,json}"
 
   clippy:
     name: clippy
-    runs-on: [ self-hosted, ubuntu-high-cpu ]
+    runs-on: [self-hosted, ubuntu-high-cpu]
 
     steps:
       - name: checkout
@@ -106,7 +121,7 @@ jobs:
 
   build:
     name: check nightly
-    runs-on: [ self-hosted, ubuntu-high-cpu ]
+    runs-on: [self-hosted, ubuntu-high-cpu]
 
     steps:
       - name: checkout
@@ -132,7 +147,7 @@ jobs:
 
   build-stable:
     name: check stable
-    runs-on: [ self-hosted, ubuntu-high-cpu ]
+    runs-on: [self-hosted, ubuntu-high-cpu]
 
     steps:
       - name: checkout
@@ -181,7 +196,7 @@ jobs:
 
   test:
     name: test
-    runs-on: [ self-hosted, ubuntu-high-cpu ]
+    runs-on: [self-hosted, ubuntu-high-cpu]
 
     steps:
       - name: checkout
@@ -212,7 +227,7 @@ jobs:
         run: cargo nextest run --all-features --release -E "not package(integration_tests)" --profile ci
 
       - name: upload artifact
-        uses: actions/upload-artifact@v4  # upload test results as artifact
+        uses: actions/upload-artifact@v4 # upload test results as artifact
         if: success() || failure()
         with:
           name: test-results
@@ -222,11 +237,11 @@ jobs:
         run: cargo test --all-features --release --package integration_tests
 
       - name: upload test result artifact
-        uses: actions/upload-artifact@v4  # upload test results as artifact
+        uses: actions/upload-artifact@v4 # upload test results as artifact
         if: success() || failure()
         with:
-            name: cucumber-test-results
-            path: ${{ github.workspace }}/integration_tests/cucumber-output-junit.xml
+          name: cucumber-test-results
+          path: ${{ github.workspace }}/integration_tests/cucumber-output-junit.xml
 
       - name: Upload cucumber log artifacts
         uses: actions/upload-artifact@v4

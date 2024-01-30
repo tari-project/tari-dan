@@ -25,13 +25,13 @@ use std::collections::HashSet;
 use log::*;
 use tari_engine_types::{
     indexed_value::{IndexedValue, IndexedValueError, IndexedWellKnownTypes},
-    substate::{Substate, SubstateAddress, SubstateValue},
+    substate::{Substate, SubstateId, SubstateValue},
 };
 
 const LOG_TARGET: &str = "tari::dan::initializer::substate_decoder";
 
 /// Recursively scan a substate for references to other substates
-pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress>, IndexedValueError> {
+pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateId>, IndexedValueError> {
     match substate.substate_value() {
         SubstateValue::Component(header) => {
             // Look inside the component state for substate references
@@ -65,10 +65,10 @@ pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress
         },
         SubstateValue::NonFungibleIndex(index) => {
             // by definition a non fungible index always holds a reference to a non fungible substate
-            let substate_address = SubstateAddress::NonFungible(index.referenced_address().clone());
+            let substate_address = SubstateId::NonFungible(index.referenced_address().clone());
             Ok(vec![substate_address])
         },
-        SubstateValue::Vault(vault) => Ok(vec![SubstateAddress::Resource(*vault.resource_address())]),
+        SubstateValue::Vault(vault) => Ok(vec![SubstateId::Resource(*vault.resource_address())]),
         // Other types of substates cannot hold references to other substates
         _ => Ok(vec![]),
     }

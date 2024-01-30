@@ -6,7 +6,7 @@ use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tari_engine_types::{
     commit_result::RejectReason,
     instruction::Instruction,
-    substate::{SubstateAddress, SubstateDiff},
+    substate::{SubstateDiff, SubstateId},
 };
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::args;
@@ -15,7 +15,7 @@ use tari_validator_node_cli::{
     command::transaction::{handle_submit, submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
     from_hex::FromHex,
     key_manager::KeyManager,
-    versioned_substate_address::VersionedSubstateAddress,
+    versioned_substate_id::VersionedSubstateId,
 };
 use tari_validator_node_client::types::SubmitTransactionResponse;
 
@@ -55,7 +55,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     // create an account component
     let instruction = Instruction::CallFunction {
         // The "account" template is builtin in the validator nodes with a constant address
-        template_address: *ACCOUNT_TEMPLATE_ADDRESS,
+        template_address: ACCOUNT_TEMPLATE_ADDRESS,
         function: "create".to_string(),
         args: args!(owner_token),
     };
@@ -78,8 +78,8 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         panic!("Transaction failed: {:?}", failure);
     }
 
-    // store the account component address and other substate addresses for later reference
-    add_substate_addresses(
+    // store the account component address and other substate id for later reference
+    add_substate_ids(
         world,
         account_name,
         resp.dry_run_result.unwrap().finalize.result.accept().unwrap(),
@@ -127,81 +127,72 @@ pub async fn create_component(
     if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().finalize.reject() {
         panic!("Transaction failed: {:?}", failure);
     }
-    // store the account component address and other substate addresses for later reference
-    add_substate_addresses(
+    // store the account component address and other substate ids for later reference
+    add_substate_ids(
         world,
         outputs_name,
         resp.dry_run_result.unwrap().finalize.result.accept().unwrap(),
     );
 }
 
-pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
+pub(crate) fn add_substate_ids(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
     let outputs = world.outputs.entry(outputs_name).or_default();
     let mut counters = [0usize, 0, 0, 0, 0, 0, 0, 0, 0];
     for (addr, data) in diff.up_iter() {
         match addr {
-            SubstateAddress::Component(_) => {
+            SubstateId::Component(_) => {
                 let component = data.substate_value().component().unwrap();
-                outputs.insert(
-                    format!("components/{}", component.module_name),
-                    VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: data.version(),
-                    },
-                );
+                outputs.insert(format!("components/{}", component.module_name), VersionedSubstateId {
+                    substate_id: addr.clone(),
+                    version: data.version(),
+                });
                 counters[0] += 1;
             },
-            SubstateAddress::Resource(_) => {
-                outputs.insert(format!("resources/{}", counters[1]), VersionedSubstateAddress {
-                    address: addr.clone(),
+            SubstateId::Resource(_) => {
+                outputs.insert(format!("resources/{}", counters[1]), VersionedSubstateId {
+                    substate_id: addr.clone(),
                     version: data.version(),
                 });
                 counters[1] += 1;
             },
-            SubstateAddress::Vault(_) => {
-                outputs.insert(format!("vaults/{}", counters[2]), VersionedSubstateAddress {
-                    address: addr.clone(),
+            SubstateId::Vault(_) => {
+                outputs.insert(format!("vaults/{}", counters[2]), VersionedSubstateId {
+                    substate_id: addr.clone(),
                     version: data.version(),
                 });
                 counters[2] += 1;
             },
-            SubstateAddress::NonFungible(_) => {
-                outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateAddress {
-                    address: addr.clone(),
+            SubstateId::NonFungible(_) => {
+                outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateId {
+                    substate_id: addr.clone(),
                     version: data.version(),
                 });
                 counters[3] += 1;
             },
-            SubstateAddress::UnclaimedConfidentialOutput(_) => {
-                outputs.insert(
-                    format!("layer_one_commitments/{}", counters[4]),
-                    VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: data.version(),
-                    },
-                );
+            SubstateId::UnclaimedConfidentialOutput(_) => {
+                outputs.insert(format!("layer_one_commitments/{}", counters[4]), VersionedSubstateId {
+                    substate_id: addr.clone(),
+                    version: data.version(),
+                });
                 counters[4] += 1;
             },
-            SubstateAddress::NonFungibleIndex(_) => {
-                outputs.insert(format!("nft_indexes/{}", counters[5]), VersionedSubstateAddress {
-                    address: addr.clone(),
+            SubstateId::NonFungibleIndex(_) => {
+                outputs.insert(format!("nft_indexes/{}", counters[5]), VersionedSubstateId {
+                    substate_id: addr.clone(),
                     version: data.version(),
                 });
                 counters[5] += 1;
             },
-            SubstateAddress::TransactionReceipt(_) => {
-                outputs.insert(
-                    format!("transaction_receipt/{}", counters[6]),
-                    VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: data.version(),
-                    },
-                );
+            SubstateId::TransactionReceipt(_) => {
+                outputs.insert(format!("transaction_receipt/{}", counters[6]), VersionedSubstateId {
+                    substate_id: addr.clone(),
+                    version: data.version(),
+                });
                 counters[6] += 1;
             },
-            SubstateAddress::FeeClaim(_) => {
-                outputs.insert(format!("fee_claim/{}", counters[7]), VersionedSubstateAddress {
-                    address: addr.clone(),
+            SubstateId::FeeClaim(_) => {
+                outputs.insert(format!("fee_claim/{}", counters[7]), VersionedSubstateId {
+                    substate_id: addr.clone(),
                     version: data.version(),
                 });
                 counters[7] += 1;
@@ -234,7 +225,7 @@ pub async fn call_method(
         .unwrap_or_else(|| panic!("No component named {}", component_name));
 
     let instruction = CliInstruction::CallMethod {
-        component_address: component.address.clone(),
+        component_address: component.substate_id.clone(),
         // TODO: actually parse the method call for arguments
         method_name: method_call,
         args: vec![],
@@ -257,11 +248,12 @@ pub async fn call_method(
     let mut client = world.get_validator_node(&vn_name).get_client();
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
-    if let Some(failure) = resp.dry_run_result.as_ref().unwrap().finalize.reject() {
+    if let Some(failure) = resp.dry_run_result.as_ref().unwrap().finalize.full_reject() {
         return Err(failure.clone());
     }
-    // store the account component address and other substate addresses for later reference
-    add_substate_addresses(
+
+    // store the account component address and other substate ids for later reference
+    add_substate_ids(
         world,
         outputs_name,
         resp.dry_run_result.as_ref().unwrap().finalize.result.accept().unwrap(),
@@ -291,12 +283,12 @@ pub async fn submit_manifest(
         .flat_map(|(name, outputs)| {
             outputs
                 .iter()
-                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone().into()))
+                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.substate_id.clone().into()))
         })
         .collect();
 
     // parse the manifest
-    let instructions = parse_manifest(&manifest_content, globals).unwrap();
+    let instructions = parse_manifest(&manifest_content, globals, HashMap::new()).unwrap();
 
     // submit the instructions to the vn
     let mut client = world.get_validator_node(&vn_name).get_client();
@@ -314,7 +306,7 @@ pub async fn submit_manifest(
                 .get(s)
                 .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
         })
-        .filter(|(_, addr)| !addr.address.is_transaction_receipt())
+        .filter(|(_, addr)| !addr.substate_id.is_transaction_receipt())
         .map(|(_, addr)| addr.clone())
         .collect::<Vec<_>>();
 
@@ -331,7 +323,7 @@ pub async fn submit_manifest(
                 .get(s)
                 .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
         })
-        .filter(|(_, addr)| !addr.address.is_transaction_receipt())
+        .filter(|(_, addr)| !addr.substate_id.is_transaction_receipt())
         .map(|(_, addr)| addr.clone())
         .collect::<Vec<_>>();
 
@@ -348,7 +340,7 @@ pub async fn submit_manifest(
         account_template_address: None,
         dry_run: false,
     };
-    let resp = submit_transaction(instructions, args, data_dir, &mut client)
+    let resp = submit_transaction(instructions.instructions, args, data_dir, &mut client)
         .await
         .unwrap();
 
@@ -356,7 +348,7 @@ pub async fn submit_manifest(
         panic!("Transaction failed: {:?}", failure);
     }
 
-    add_substate_addresses(
+    add_substate_ids(
         world,
         outputs_name,
         resp.dry_run_result.unwrap().finalize.result.accept().unwrap(),
@@ -368,8 +360,8 @@ pub(crate) fn get_cli_data_dir(world: &mut TariWorld) -> PathBuf {
 }
 
 // Remove inputs that have been downed
-fn select_latest_version(mut inputs: Vec<VersionedSubstateAddress>) -> Vec<VersionedSubstateAddress> {
-    inputs.sort_by(|a, b| b.address.cmp(&a.address).then(b.version.cmp(&a.version)));
-    inputs.dedup_by(|a, b| a.address == b.address);
+fn select_latest_version(mut inputs: Vec<VersionedSubstateId>) -> Vec<VersionedSubstateId> {
+    inputs.sort_by(|a, b| b.substate_id.cmp(&a.substate_id).then(b.version.cmp(&a.version)));
+    inputs.dedup_by(|a, b| a.substate_id == b.substate_id);
     inputs
 }

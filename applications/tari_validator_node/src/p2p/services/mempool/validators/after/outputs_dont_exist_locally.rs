@@ -31,7 +31,7 @@ where TStateStore: StateStore + Send + Sync
 
     async fn validate(&self, executed: &ExecutedTransaction) -> Result<(), Self::Error> {
         if executed.resulting_outputs().is_empty() {
-            info!(target: LOG_TARGET, "OutputsDontExistLocally - OK");
+            debug!(target: LOG_TARGET, "OutputsDontExistLocally - OK");
             return Ok(());
         }
 
@@ -39,13 +39,13 @@ where TStateStore: StateStore + Send + Sync
             .store
             .with_read_tx(|tx| SubstateRecord::any_exist(tx, executed.resulting_outputs()))?
         {
-            info!(target: LOG_TARGET, "OutputsDontExistLocally - FAIL");
+            warn!(target: LOG_TARGET, "OutputsDontExistLocally - FAIL");
             return Err(MempoolError::OutputSubstateExists {
                 transaction_id: *executed.id(),
             });
         }
 
-        info!(target: LOG_TARGET, "OutputsDontExistLocally - OK");
+        debug!(target: LOG_TARGET, "OutputsDontExistLocally - OK");
         Ok(())
     }
 }

@@ -2,14 +2,19 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, Bytes};
 use tari_template_abi::rust::fmt::{Display, Formatter};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{crypto::InvalidByteLengthError, Hash};
 
 /// A Pederson Commitment byte contents
+#[serde_as]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct PedersonCommitmentBytes(#[serde(with = "serde_byte_array")] [u8; PedersonCommitmentBytes::length()]);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct PedersonCommitmentBytes(#[serde_as(as = "Bytes")] [u8; PedersonCommitmentBytes::length()]);
 
 impl PedersonCommitmentBytes {
     pub const fn length() -> usize {

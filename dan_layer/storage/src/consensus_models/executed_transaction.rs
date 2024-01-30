@@ -8,25 +8,35 @@ use std::{
     time::Duration,
 };
 
+use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{optional::Optional, ShardId};
-use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
+use tari_dan_common_types::{optional::Optional, SubstateAddress};
+use tari_engine_types::{
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
+    lock::LockFlag,
+};
 use tari_transaction::{Transaction, TransactionId};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
-    consensus_models::{Decision, Evidence, TransactionAtom, TransactionRecord},
+    consensus_models::{Decision, Evidence, ShardEvidence, TransactionAtom, TransactionRecord},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
-    resulting_outputs: Vec<ShardId>,
+    resulting_outputs: Vec<SubstateAddress>,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     execution_time: Duration,
     final_decision: Option<Decision>,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    finalized_time: Option<Duration>,
     abort_details: Option<String>,
 }
 
@@ -34,7 +44,7 @@ impl ExecutedTransaction {
     pub fn new(
         transaction: Transaction,
         result: ExecuteResult,
-        resulting_outputs: Vec<ShardId>,
+        resulting_outputs: Vec<SubstateAddress>,
         execution_time: Duration,
     ) -> Self {
         Self {
@@ -43,6 +53,7 @@ impl ExecutedTransaction {
             execution_time,
             resulting_outputs,
             final_decision: None,
+            finalized_time: None,
             abort_details: None,
         }
     }
@@ -83,7 +94,7 @@ impl ExecutedTransaction {
         &self.result
     }
 
-    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
+    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
         self.transaction.all_inputs_iter().chain(&self.resulting_outputs)
     }
 
@@ -122,7 +133,7 @@ impl ExecutedTransaction {
     }
 
     /// Returns the outputs that resulted from execution.
-    pub fn resulting_outputs(&self) -> &[ShardId] {
+    pub fn resulting_outputs(&self) -> &[SubstateAddress] {
         &self.resulting_outputs
     }
 
@@ -131,11 +142,29 @@ impl ExecutedTransaction {
     }
 
     pub fn to_initial_evidence(&self) -> Evidence {
-        self.transaction
-            .all_inputs_iter()
-            .chain(self.resulting_outputs())
-            .map(|shard| (*shard, vec![]))
-            .collect()
+        let mut evidence = Evidence::empty();
+        evidence.extend(self.transaction.inputs().iter().map(|input| {
+            (*input, ShardEvidence {
+                qc_ids: IndexSet::new(),
+                lock: LockFlag::Write,
+            })
+        }));
+
+        evidence.extend(self.transaction.input_refs().iter().map(|input_ref| {
+            (*input_ref, ShardEvidence {
+                qc_ids: IndexSet::new(),
+                lock: LockFlag::Read,
+            })
+        }));
+
+        evidence.extend(self.resulting_outputs.iter().map(|output| {
+            (*output, ShardEvidence {
+                qc_ids: IndexSet::new(),
+                lock: LockFlag::Write,
+            })
+        }));
+
+        evidence
     }
 
     pub fn is_finalized(&self) -> bool {
@@ -146,13 +175,17 @@ impl ExecutedTransaction {
         self.final_decision
     }
 
+    pub fn finalized_time(&self) -> Option<Duration> {
+        self.finalized_time
+    }
+
     pub fn abort_details(&self) -> Option<&String> {
         self.abort_details.as_ref()
     }
 
     pub fn set_final_decision(&mut self, decision: Decision) -> &mut Self {
         self.final_decision = Some(decision);
-        if decision.is_abort() {
+        if decision.is_abort() && self.abort_details.is_none() {
             self.abort_details = Some(
                 self.result
                     .finalize
@@ -268,7 +301,7 @@ impl ExecutedTransaction {
     pub fn get_involved_shards<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
         tx: &mut TTx,
         transactions: I,
-    ) -> Result<HashMap<TransactionId, HashSet<ShardId>>, StorageError> {
+    ) -> Result<HashMap<TransactionId, HashSet<SubstateAddress>>, StorageError> {
         let transactions = Self::get_all(tx, transactions)?;
         Ok(transactions
             .into_iter()
@@ -292,6 +325,7 @@ impl TryFrom<TransactionRecord> for ExecutedTransaction {
             result: value.result.unwrap(),
             execution_time: value.execution_time.unwrap_or_default(),
             final_decision: value.final_decision,
+            finalized_time: value.finalized_time,
             resulting_outputs: value.resulting_outputs,
             abort_details: value.abort_details,
         })

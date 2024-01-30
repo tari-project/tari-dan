@@ -20,23 +20,23 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import Button from '@mui/material/Button';
-import { styled } from '@mui/material/styles';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import IconButton from '@mui/material/IconButton';
-import CloseIcon from '@mui/icons-material/Close';
-import Typography from '@mui/material/Typography';
-import { Alert, Divider } from '@mui/material';
-import Box from '@mui/material/Box';
-import TariLogo from '../assets/TariLogo';
-import { DialogContainer } from './StyledComponents';
-import FailureIcon from '../assets/images/FailureIcon';
-import SuccessIcon from '../assets/images/SuccessIcon';
-import { useTheme } from '@mui/material/styles';
+import { useState } from "react";
+import Button from "@mui/material/Button";
+import { styled } from "@mui/material/styles";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
+import IconButton from "@mui/material/IconButton";
+import CloseIcon from "@mui/icons-material/Close";
+import Typography from "@mui/material/Typography";
+import { Alert, Divider } from "@mui/material";
+import Box from "@mui/material/Box";
+import TariLogo from "../assets/TariLogo";
+import { DialogContainer } from "./StyledComponents";
+import FailureIcon from "../assets/images/FailureIcon";
+import SuccessIcon from "../assets/images/SuccessIcon";
+import { useTheme } from "@mui/material/styles";
 
 interface DialogTitleProps {
   id: string;
@@ -47,23 +47,23 @@ interface DialogTitleProps {
 export const TransactionMessage = ({ transactionStatus }: any) => {
   const message = () => {
     switch (transactionStatus) {
-      case 'Approved':
-        return 'Transaction approved';
-      case 'Rejected':
-        return 'Transaction rejected';
+      case "Approved":
+        return "Transaction approved";
+      case "Rejected":
+        return "Transaction rejected";
       default:
-        return 'Transaction approval request';
+        return "Transaction approval request";
     }
   };
 
   const alertSeverity = () => {
     switch (transactionStatus) {
-      case 'Approved':
-        return 'success';
-      case 'Rejected':
-        return 'error';
+      case "Approved":
+        return "success";
+      case "Rejected":
+        return "error";
       default:
-        return 'warning';
+        return "warning";
     }
   };
 
@@ -75,22 +75,22 @@ export const TransactionMessage = ({ transactionStatus }: any) => {
 };
 
 const BootstrapDialog = styled(Dialog)(({ theme }) => ({
-  '& .MuiDialogContent-root': {
+  "& .MuiDialogContent-root": {
     padding: theme.spacing(2),
   },
-  '& .MuiDialogActions-root': {
+  "& .MuiDialogActions-root": {
     padding: theme.spacing(1),
   },
 }));
 
 const BoxRow = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  padding: '0px',
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
+  display: "flex",
+  padding: "0px",
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
   gap: theme.spacing(1),
-  width: '100%',
+  width: "100%",
 }));
 
 function TariDialogTitle(props: DialogTitleProps) {
@@ -100,10 +100,10 @@ function TariDialogTitle(props: DialogTitleProps) {
     <DialogTitle sx={{ m: 0, p: 2 }} {...other}>
       <Box
         sx={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         {children}
@@ -113,7 +113,7 @@ function TariDialogTitle(props: DialogTitleProps) {
           aria-label="close"
           onClick={onClose}
           sx={{
-            position: 'absolute',
+            position: "absolute",
             right: 8,
             top: 8,
             color: (theme) => theme.palette.grey[600],
@@ -130,52 +130,42 @@ export default function TransactionRequest() {
   const [open, setOpen] = useState(false);
   const [requestDetails, setRequestDetails] = useState([
     {
-      title: 'Amount',
-      value: '29.99',
+      title: "Amount",
+      value: "29.99",
     },
     {
-      title: 'Estimated Fee',
-      value: '0.05',
+      title: "Estimated Fee",
+      value: "0.05",
     },
     {
-      title: 'Date',
-      value: '9 August 2023, 12:15',
+      title: "Date",
+      value: "9 August 2023, 12:15",
     },
     {
-      title: 'Transaction ID',
-      value: '0x1234567890',
+      title: "Transaction ID",
+      value: "0x1234567890",
     },
   ]);
-  const [transactionStatus, setTransactionStatus] = useState<
-    'Pending' | 'Approved' | 'Rejected'
-  >('Pending');
+  const [transactionStatus, setTransactionStatus] = useState<"Pending" | "Approved" | "Rejected">("Pending");
   const theme = useTheme();
 
   const renderPage = () => {
     switch (transactionStatus) {
-      case 'Pending':
+      case "Pending":
         return (
           <Box
             style={{
-              display: 'flex',
-              flexDirection: 'column',
+              display: "flex",
+              flexDirection: "column",
               gap: theme.spacing(3),
               padding: theme.spacing(3),
             }}
           >
             <Box>
-              <Typography
-                gutterBottom
-                style={{ textAlign: 'center' }}
-                variant="h4"
-              >
+              <Typography gutterBottom style={{ textAlign: "center" }} variant="h4">
                 Transaction approval request
               </Typography>
-              <Typography
-                gutterBottom
-                style={{ textAlign: 'center' }}
-                variant="body1"
-              >
+              <Typography gutterBottom style={{ textAlign: "center" }} variant="body1">
                 Website is requesting approval for Transaction Details. <br />
                 Would you like to approve this request?
               </Typography>
@@ -183,27 +173,19 @@ export default function TransactionRequest() {
             <Divider />
             <Box
               style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
                 gap: 0,
-                width: '100%',
+                width: "100%",
               }}
             >
               {requestDetails.map(({ title, value }, index) => (
                 <BoxRow key={index}>
-                  <Typography
-                    gutterBottom
-                    style={{ textAlign: 'center' }}
-                    variant="h5"
-                  >
+                  <Typography gutterBottom style={{ textAlign: "center" }} variant="h5">
                     {title}
                   </Typography>
-                  <Typography
-                    gutterBottom
-                    style={{ textAlign: 'center' }}
-                    variant="body1"
-                  >
+                  <Typography gutterBottom style={{ textAlign: "center" }} variant="body1">
                     {value}
                   </Typography>
                 </BoxRow>
@@ -212,58 +194,40 @@ export default function TransactionRequest() {
             <Divider />
             <Box
               style={{
-                display: 'flex',
-                padding: '0px',
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                width: '100%',
+                display: "flex",
+                padding: "0px",
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                width: "100%",
               }}
             >
-              <Typography
-                gutterBottom
-                style={{ textAlign: 'center' }}
-                variant="h5"
-              >
+              <Typography gutterBottom style={{ textAlign: "center" }} variant="h5">
                 Estimated Total
               </Typography>
-              <Typography
-                gutterBottom
-                style={{ textAlign: 'center' }}
-                variant="h5"
-              >
-                {parseFloat(requestDetails[0].value) +
-                  parseFloat(requestDetails[1].value)}{' '}
-                TXR
+              <Typography gutterBottom style={{ textAlign: "center" }} variant="h5">
+                {parseFloat(requestDetails[0].value) + parseFloat(requestDetails[1].value)} TXR
               </Typography>
             </Box>
             <Box
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '100%',
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
                 gap: theme.spacing(2),
               }}
             >
-              <Button
-                variant="outlined"
-                onClick={handleReject}
-                style={{ width: '175px' }}
-              >
+              <Button variant="outlined" onClick={handleReject} style={{ width: "175px" }}>
                 Reject
               </Button>
-              <Button
-                variant="contained"
-                onClick={handleApprove}
-                style={{ width: '175px' }}
-              >
+              <Button variant="contained" onClick={handleApprove} style={{ width: "175px" }}>
                 Approve
               </Button>
             </Box>
           </Box>
         );
-      case 'Approved':
+      case "Approved":
         return (
           <DialogContainer
             style={{
@@ -272,12 +236,10 @@ export default function TransactionRequest() {
           >
             <SuccessIcon />
             <Typography variant="h4">Transaction Approved!</Typography>
-            <Typography variant="body1">
-              Go back to website to view your purchase
-            </Typography>
+            <Typography variant="body1">Go back to website to view your purchase</Typography>
           </DialogContainer>
         );
-      case 'Rejected':
+      case "Rejected":
         return (
           <DialogContainer
             style={{
@@ -287,10 +249,10 @@ export default function TransactionRequest() {
             <FailureIcon />
             <Box
               style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                width: '100%',
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                width: "100%",
                 gap: 0,
               }}
             >
@@ -308,19 +270,19 @@ export default function TransactionRequest() {
   const handleClose = () => {
     setOpen(false);
     setTimeout(() => {
-      setTransactionStatus('Pending');
+      setTransactionStatus("Pending");
     }, 2000);
   };
 
   const handleReject = () => {
-    setTransactionStatus('Rejected');
+    setTransactionStatus("Rejected");
     setTimeout(() => {
       handleClose();
     }, 1000);
   };
 
   const handleApprove = () => {
-    setTransactionStatus('Approved');
+    setTransactionStatus("Approved");
     setTimeout(() => {
       handleClose();
     }, 1000);
@@ -329,8 +291,8 @@ export default function TransactionRequest() {
   return (
     <Box
       style={{
-        display: 'flex',
-        flexDirection: 'column',
+        display: "flex",
+        flexDirection: "column",
         gap: theme.spacing(2),
         padding: theme.spacing(4),
         background: theme.palette.background.paper,
@@ -341,11 +303,7 @@ export default function TransactionRequest() {
         Transaction Request
       </Button>
       <TransactionMessage transactionStatus={transactionStatus} />
-      <BootstrapDialog
-        onClose={handleClose}
-        aria-labelledby="customized-dialog-title"
-        open={open}
-      >
+      <BootstrapDialog onClose={handleClose} aria-labelledby="customized-dialog-title" open={open}>
         <TariDialogTitle id="customized-dialog-title" onClose={handleClose}>
           <TariLogo fill={theme.palette.text.primary} />
         </TariDialogTitle>

@@ -38,6 +38,7 @@ use tari_dan_app_utilities::{
     substate_file_cache::SubstateFileCache,
 };
 use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, Epoch, PeerAddress};
+use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::consensus_models::Decision;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_client::{
@@ -69,10 +70,7 @@ use tari_indexer_client::{
     },
 };
 use tari_networking::{is_supported_multiaddr, NetworkingHandle, NetworkingService};
-use tari_validator_node_rpc::{
-    client::{SubstateResult, TariValidatorNodeRpcClientFactory, TransactionResultStatus},
-    proto,
-};
+use tari_validator_node_rpc::client::{SubstateResult, TariValidatorNodeRpcClientFactory, TransactionResultStatus};
 
 use super::json_encoding::{
     encode_execute_result_into_json,
@@ -84,7 +82,7 @@ use crate::{
     dry_run::processor::DryRunTransactionProcessor,
     json_rpc::error::internal_error,
     substate_manager::SubstateManager,
-    transaction_manager::TransactionManager,
+    transaction_manager::{error::TransactionManagerError, TransactionManager},
 };
 
 const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
@@ -92,7 +90,7 @@ const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
 pub struct JsonRpcHandlers {
     consensus_constants: BaseLayerConsensusConstants,
     keypair: RistrettoKeypair,
-    networking: NetworkingHandle<proto::network::Message>,
+    networking: NetworkingHandle<TariMessagingSpec>,
     base_node_client: GrpcBaseNodeClient,
     substate_manager: Arc<SubstateManager>,
     epoch_manager: EpochManagerHandle<PeerAddress>,
@@ -323,12 +321,12 @@ impl JsonRpcHandlers {
                             ),
                         )),
                         SubstateResult::Up {
-                            address,
+                            id,
                             substate,
                             created_by_tx,
                             quorum_certificates: _,
                         } => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
-                            address,
+                            address: id,
                             version: substate.version(),
                             substate,
                             created_by_transaction: created_by_tx,
@@ -528,6 +526,8 @@ impl JsonRpcHandlers {
                     execution_result: Some(exec_result),
                     final_decision: Decision::Commit,
                     abort_details: None,
+                    finalized_time: Default::default(),
+                    execution_time: Default::default(),
                     json_results,
                 },
                 transaction_id,
@@ -537,7 +537,17 @@ impl JsonRpcHandlers {
                 .transaction_manager
                 .submit_transaction(request.transaction, request.required_substates)
                 .await
-                .map_err(|e| Self::internal_error(answer_id, e))?;
+                .map_err(|e| match e {
+                    TransactionManagerError::AllValidatorsFailed { .. } => JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            JsonRpcErrorReason::ApplicationError(400),
+                            format!("All validators failed: {}", e),
+                            json::Value::Null,
+                        ),
+                    ),
+                    e => Self::internal_error(answer_id, e),
+                })?;
 
             Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
                 result: IndexerTransactionFinalizedResult::Pending,
@@ -580,14 +590,13 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: GetTransactionResultRequest = value.parse_params()?;
 
-        let maybe_result = self
+        let result = self
             .transaction_manager
             .get_transaction_result(request.transaction_id)
             .await
             .optional()
-            .map_err(|e| Self::internal_error(answer_id, e))?;
-
-        let result = maybe_result.ok_or_else(|| Self::not_found(answer_id, "Transaction not found"))?;
+            .map_err(|e| Self::internal_error(answer_id, e))?
+            .ok_or_else(|| Self::not_found(answer_id, "Transaction not found"))?;
 
         let resp = match result {
             TransactionResultStatus::Pending => GetTransactionResultResponse {
@@ -600,6 +609,8 @@ impl JsonRpcHandlers {
                     result: IndexerTransactionFinalizedResult::Finalized {
                         final_decision: finalized.final_decision,
                         execution_result: finalized.execute_result,
+                        execution_time: finalized.execution_time,
+                        finalized_time: finalized.finalized_time,
                         abort_details: finalized.abort_details,
                         json_results,
                     },
@@ -655,6 +666,8 @@ impl JsonRpcHandlers {
                     IndexerTransactionFinalizedResult::Finalized {
                         final_decision: finalized.final_decision,
                         execution_result: finalized.execute_result,
+                        execution_time: finalized.execution_time,
+                        finalized_time: finalized.finalized_time,
                         abort_details: finalized.abort_details,
                         json_results,
                     }

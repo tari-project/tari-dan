@@ -5,10 +5,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use log::*;
 use tari_consensus::traits::VoteSignatureService;
-use tari_dan_common_types::{DerivableFromPublicKey, ShardId};
+use tari_dan_common_types::{DerivableFromPublicKey, SubstateAddress};
 use tari_engine_types::{
     indexed_value::IndexedValueError,
-    substate::{Substate, SubstateAddress},
+    substate::{Substate, SubstateId},
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::{SubstateRequirement, Transaction};
@@ -57,7 +57,7 @@ where
         &self,
         original_transaction: Transaction,
         substate_requirements: Vec<SubstateRequirement>,
-    ) -> Result<(Transaction, HashMap<SubstateAddress, Substate>), TransactionAutofillerError> {
+    ) -> Result<(Transaction, HashMap<SubstateId, Substate>), TransactionAutofillerError> {
         // we will include the inputs and outputs into the "involved_objects" field
         // note that the transaction hash will not change as the "involved_objects" is not part of the hash
         let mut autofilled_transaction = original_transaction;
@@ -79,7 +79,11 @@ where
         for handle in handles {
             let res = handle.await??;
             if let Some((address, substate)) = res {
-                let shard = ShardId::from_address(&address, substate.version());
+                let shard = SubstateAddress::from_address(&address, substate.version());
+                if autofilled_transaction.input_refs().contains(&shard) {
+                    // Shard is already an input as a ref
+                    continue;
+                }
                 input_shards.push(shard);
                 found_substates.insert(address, substate);
             }
@@ -96,7 +100,7 @@ where
             // TODO: we are going to only check the first level of recursion, for composability we may want to do it
             // recursively (with a recursion limit)
             let mut autofilled_inputs = vec![];
-            let related_addresses: Vec<Vec<SubstateAddress>> = found_substates
+            let related_addresses: Vec<Vec<SubstateId>> = found_substates
                 .values()
                 .map(find_related_substates)
                 .collect::<Result<_, _>>()?;
@@ -106,7 +110,7 @@ where
             let related_addresses = related_addresses
                 .into_iter()
                 .flatten()
-                .filter(|s| !substate_requirements.iter().any(|r| r.address() == s));
+                .filter(|s| !substate_requirements.iter().any(|r| r.substate_id() == s));
 
             // we need to fetch (in parallel) the latest version of all the related substates
             let mut handles = HashMap::new();
@@ -119,19 +123,19 @@ where
             for (address, handle) in handles {
                 let scan_res = handle.await??;
 
-                if let SubstateResult::Up { substate, address, .. } = scan_res {
+                if let SubstateResult::Up { substate, id, .. } = scan_res {
                     info!(
                         target: LOG_TARGET,
                         "✏️ Filling related substate {}:v{}",
-                        address,
+                        id,
                         substate.version()
                     );
-                    let shard = ShardId::from_address(&address, substate.version());
-                    if autofilled_transaction.all_inputs_iter().any(|s| *s == shard) {
+                    let substate_address = SubstateAddress::from_address(&id, substate.version());
+                    if autofilled_transaction.all_inputs_iter().any(|s| *s == substate_address) {
                         // Shard is already an input (TODO: what a waste)
                         continue;
                     }
-                    autofilled_inputs.push(ShardId::from_address(&address, substate.version()));
+                    autofilled_inputs.push(SubstateAddress::from_address(&id, substate.version()));
                     found_substates.insert(address, substate);
                 //       found_this_round += 1;
                 } else {
@@ -156,7 +160,7 @@ pub async fn get_substate_requirement<TEpochManager, TVnClient, TAddr, TSubstate
     substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>>,
     transaction: Arc<Transaction>,
     req: SubstateRequirement,
-) -> Result<Option<(SubstateAddress, Substate)>, IndexerError>
+) -> Result<Option<(SubstateId, Substate)>, IndexerError>
 where
     TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
@@ -164,51 +168,49 @@ where
     TSubstateCache: SubstateCache,
     TSignatureService: VoteSignatureService,
 {
-    let scan_res = match req.version() {
-        Some(version) => {
-            let shard = ShardId::from_address(req.address(), version);
-            if transaction.all_inputs_iter().any(|s| *s == shard) {
-                // Shard is already an input
-                return Ok(None);
-            }
-
-            // if the client specified a version, we need to retrieve it
-            substate_scanner
-                .get_specific_substate_from_committee(req.address(), version)
-                .await?
-        },
-        None => {
-            // if the client didn't specify a version, we fetch the latest one
-            substate_scanner.get_substate(req.address(), None).await?
-        },
-    };
-
-    if let SubstateResult::Up { substate, address, .. } = &scan_res {
-        info!(
-            target: LOG_TARGET,
-            "Filling input substate {}:v{}",
-            address,
-            substate.version()
-        );
-        let shard = ShardId::from_address(address, substate.version());
+    let mut version = req.version().unwrap_or(0);
+    loop {
+        let shard = SubstateAddress::from_address(req.substate_id(), version);
         if transaction.all_inputs_iter().any(|s| *s == shard) {
-            // Shard is already an input (TODO: what a waste)
+            // Shard is already an input
             return Ok(None);
         }
 
-        Ok(Some((address.clone(), substate.clone())))
-    } else {
-        warn!(
-            target: LOG_TARGET,
-            "🖋️ The substate for input requirement {} is not in UP status, skipping", req
-        );
-        Ok(None)
+        let scan_res = substate_scanner.get_substate(req.substate_id(), Some(version)).await?;
+
+        match scan_res {
+            SubstateResult::DoesNotExist => {
+                warn!( target: LOG_TARGET, "🖋️ The substate for input requirement {}:v{} does not exist, skipping", req.substate_id() , version);
+                return Ok(None);
+            },
+            SubstateResult::Up { substate, id, .. } => {
+                info!(
+                    target: LOG_TARGET,
+                    "Filling input substate {}:v{}",
+                    id,
+                    substate.version()
+                );
+                let shard = SubstateAddress::from_address(&id, substate.version());
+                if transaction.all_inputs_iter().any(|s| *s == shard) {
+                    // Shard is already an input (TODO: what a waste)
+                    return Ok(None);
+                }
+
+                return Ok(Some((id, substate)));
+            },
+            SubstateResult::Down { id, .. } => {
+                warn!(target: LOG_TARGET, "🖋️ The substate for input requirement {id}v{version} is DOWN, continuing to search");
+                // Down in this shard, try the next version
+                version += 1;
+                continue;
+            },
+        }
     }
 }
 
 pub async fn get_substate<TEpochManager, TVnClient, TAddr, TSubstateCache, TSignatureService>(
     substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>>,
-    substate_address: SubstateAddress,
+    substate_address: SubstateId,
     version_hint: Option<u32>,
 ) -> Result<SubstateResult, IndexerError>
 where

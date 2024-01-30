@@ -23,24 +23,26 @@
 use std::time::Duration;
 
 use minotari_app_grpc::{
-    authentication::ClientAuthenticationInterceptor,
-    tari_rpc::{
-        pow_algo::PowAlgos,
-        wallet_client::WalletClient,
-        GetCoinbaseRequest,
-        NewBlockTemplate,
-        NewBlockTemplateRequest,
-        NewBlockTemplateResponse,
-        PowAlgo,
-    },
+    tari_rpc,
+    tari_rpc::{pow_algo::PowAlgos, GetIdentityRequest, NewBlockTemplate, NewBlockTemplateRequest, PowAlgo},
 };
 use minotari_node_grpc_client::BaseNodeGrpcClient;
-use tonic::codegen::InterceptedService;
+use tari_common::configuration::Network;
+use tari_common_types::{tari_address::TariAddress, types::PublicKey};
+use tari_core::{
+    consensus::ConsensusManager,
+    transactions::{
+        generate_coinbase_with_wallet_output,
+        key_manager::{MemoryDbKeyManager, TariKeyId},
+        tari_amount::MicroMinotari,
+        transaction_components::{RangeProofType, WalletOutput},
+    },
+};
+use tari_crypto::tari_utilities::ByteArray;
 
 use crate::TariWorld;
 
 type BaseNodeClient = BaseNodeGrpcClient<tonic::transport::Channel>;
-type WalletGrpcClient = WalletClient<InterceptedService<tonic::transport::Channel, ClientAuthenticationInterceptor>>;
 
 #[derive(Debug)]
 pub struct MinerProcess {
@@ -63,11 +65,21 @@ pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: 
     let mut base_client = create_base_node_client(world, &miner_name).await;
     let mut wallet_client = world.get_wallet(&miner.wallet_name).create_client().await;
 
+    let wallet_pk = PublicKey::from_canonical_bytes(
+        &wallet_client
+            .identify(GetIdentityRequest {})
+            .await
+            .unwrap()
+            .into_inner()
+            .public_key,
+    )
+    .unwrap();
+    let payment_address = TariAddress::new(wallet_pk, Network::LocalNet);
+
     for _ in 0..num_blocks {
-        mine_block(&mut base_client, &mut wallet_client).await;
+        mine_block(world, &payment_address, &mut base_client).await;
         // Makes less likely that base layer will fail with
-        // "Chain storage error: You tried to execute an invalid Database operation: UTXO 248a... was already marked as
-        // deleted."
+        // "Sparse Merkle Tree error: A duplicate key was found when trying to insert"
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
@@ -80,8 +92,17 @@ async fn create_base_node_client(world: &TariWorld, miner_name: &String) -> Base
     BaseNodeClient::connect(base_node_grpc_url).await.unwrap()
 }
 
-async fn mine_block(base_client: &mut BaseNodeClient, wallet_client: &mut WalletGrpcClient) {
-    let block_template = create_block_template_with_coinbase(base_client, wallet_client).await;
+async fn mine_block(world: &TariWorld, payment_address: &TariAddress, base_client: &mut BaseNodeClient) {
+    let (block_template, _) = create_block_template_with_coinbase(
+        base_client,
+        0,
+        &world.key_manager,
+        &world.script_key_id().await,
+        payment_address,
+        false,
+        &world.consensus_manager,
+    )
+    .await;
 
     // Ask the base node for a valid block using the template
     let block_result = base_client
@@ -91,7 +112,7 @@ async fn mine_block(base_client: &mut BaseNodeClient, wallet_client: &mut Wallet
         .into_inner();
     let block = block_result.block.unwrap();
 
-    // We don't need to mine, as Localnet blocks have difficulty 1s
+    // We don't need to mine, as Localnet blocks have difficulty target of 1s
     let submit_res = base_client.submit_block(block).await.unwrap().into_inner();
     log::info!(
         "Block {} successfully mined at height {:?}",
@@ -99,53 +120,57 @@ async fn mine_block(base_client: &mut BaseNodeClient, wallet_client: &mut Wallet
         block_template.header.unwrap().height
     );
 }
-
 async fn create_block_template_with_coinbase(
     base_client: &mut BaseNodeClient,
-    wallet_client: &mut WalletGrpcClient,
-) -> NewBlockTemplate {
+    weight: u64,
+    key_manager: &MemoryDbKeyManager,
+    script_key_id: &TariKeyId,
+    wallet_payment_address: &TariAddress,
+    stealth_payment: bool,
+    consensus_manager: &ConsensusManager,
+) -> (NewBlockTemplate, WalletOutput) {
     // get the block template from the base node
     let template_req = NewBlockTemplateRequest {
         algo: Some(PowAlgo {
             pow_algo: PowAlgos::Sha3x.into(),
         }),
-        max_weight: 0,
+        max_weight: weight,
     };
-    let template_res = base_client
+
+    let template_response = base_client
         .get_new_block_template(template_req)
         .await
         .unwrap()
         .into_inner();
 
-    let NewBlockTemplateResponse {
-        new_block_template: Some(mut template),
-        miner_data: Some(miner_data),
-        ..
-    } = template_res
-    else {
-        panic!("Failed to get block template");
-    };
+    let mut block_template = template_response.new_block_template.clone().unwrap();
 
+    let template = template_response.new_block_template.as_ref().unwrap();
+    let miner_data = template_response.miner_data.as_ref().unwrap();
+    let fee = miner_data.total_fees;
+    let reward = miner_data.reward;
     let height = template.header.as_ref().unwrap().height;
-    let coinbase_res = wallet_client
-        .get_coinbase(GetCoinbaseRequest {
-            reward: miner_data.reward,
-            fee: miner_data.total_fees,
-            height,
-            extra: vec![],
-        })
-        .await
-        .unwrap()
-        .into_inner();
-
-    let mut transaction_body = coinbase_res.transaction.unwrap().body.unwrap();
-    let tx_out = transaction_body.outputs.remove(0);
-    let tx_kernel = transaction_body.kernels.remove(0);
 
     // add the coinbase outputs and kernels to the block template
-    let body = template.body.as_mut().unwrap();
-    body.outputs.push(tx_out);
-    body.kernels.push(tx_kernel);
+    let (_, coinbase_output, coinbase_kernel, coinbase_wallet_output) = generate_coinbase_with_wallet_output(
+        MicroMinotari::from(fee),
+        MicroMinotari::from(reward),
+        height,
+        &[],
+        key_manager,
+        script_key_id,
+        wallet_payment_address,
+        stealth_payment,
+        consensus_manager.consensus_constants(height),
+        RangeProofType::BulletProofPlus,
+    )
+    .await
+    .unwrap();
+    let body = block_template.body.as_mut().unwrap();
 
-    template
+    let grpc_output = tari_rpc::TransactionOutput::try_from(coinbase_output).unwrap();
+    body.outputs.push(grpc_output);
+    body.kernels.push(coinbase_kernel.into());
+
+    (block_template, coinbase_wallet_output)
 }

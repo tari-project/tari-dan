@@ -9,7 +9,7 @@ use std::{
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
 use tari_consensus::messages::HotstuffMessage;
-use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket};
+use tari_dan_common_types::shard::Shard;
 use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, TransactionPool},
     StateStore,
@@ -157,7 +157,7 @@ pub enum TestNetworkDestination {
 }
 
 impl TestNetworkDestination {
-    pub fn is_for(&self, addr: &TestAddress, bucket: ShardBucket) -> bool {
+    pub fn is_for(&self, addr: &TestAddress, bucket: Shard) -> bool {
         match self {
             TestNetworkDestination::All => true,
             TestNetworkDestination::Address(a) => a == addr,
@@ -172,11 +172,18 @@ impl TestNetworkDestination {
 
 pub struct TestNetworkWorker {
     rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, ExecutedTransaction)>>,
-    tx_new_transactions:
-        HashMap<TestAddress, (ShardBucket, mpsc::Sender<TransactionId>, SqliteStateStore<TestAddress>)>,
+    #[allow(clippy::type_complexity)]
+    tx_new_transactions: HashMap<
+        TestAddress,
+        (
+            Shard,
+            mpsc::Sender<(TransactionId, usize)>,
+            SqliteStateStore<TestAddress>,
+        ),
+    >,
     tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage)>>,
     #[allow(clippy::type_complexity)]
-    rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage)>>>,
+    rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Vec<TestAddress>, HotstuffMessage)>>>,
     #[allow(clippy::type_complexity)]
     rx_leader: Option<HashMap<TestAddress, mpsc::Receiver<(TestAddress, HotstuffMessage)>>>,
     rx_mempool: Option<HashMap<TestAddress, mpsc::UnboundedReceiver<Transaction>>>,
@@ -226,7 +233,7 @@ impl TestNetworkWorker {
                             })
                             .unwrap();
                         log::info!("🐞 New transaction {}", executed.id());
-                        tx_new_transaction_to_consensus.send(*executed.id()).await.unwrap();
+                        tx_new_transaction_to_consensus.send((*executed.id(), 0)).await.unwrap();
                     }
                 }
             }
@@ -282,23 +289,23 @@ impl TestNetworkWorker {
         }
     }
 
-    pub async fn handle_broadcast(&mut self, from: TestAddress, to: Committee<TestAddress>, msg: HotstuffMessage) {
-        log::debug!("🌎️ Broadcast {} from {} to {}", msg, from, to.addresses().join(", "));
-        for vn in to.addresses() {
+    pub async fn handle_broadcast(&mut self, from: TestAddress, to: Vec<TestAddress>, msg: HotstuffMessage) {
+        log::debug!("🌎️ Broadcast {} from {} to {}", msg, from, to.iter().join(", "));
+        for vn in to {
             if let Some(hotstuff_filter) = &self.hotstuff_filter {
-                if !hotstuff_filter(&from, vn, &msg) {
+                if !hotstuff_filter(&from, &vn, &msg) {
                     self.num_filtered_messages
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     continue;
                 }
             }
             // TODO: support for taking a whole committee bucket offline
-            if *vn != from && self.is_offline_destination(vn, u32::MAX.into()).await {
+            if vn != from && self.is_offline_destination(&vn, u32::MAX.into()).await {
                 continue;
             }
 
             self.tx_hs_message
-                .get(vn)
+                .get(&vn)
                 .unwrap()
                 .send((from.clone(), msg.clone()))
                 .await
@@ -327,7 +334,7 @@ impl TestNetworkWorker {
         self.tx_hs_message.get(&to).unwrap().send((from, msg)).await.unwrap();
     }
 
-    async fn is_offline_destination(&self, addr: &TestAddress, bucket: ShardBucket) -> bool {
+    async fn is_offline_destination(&self, addr: &TestAddress, bucket: Shard) -> bool {
         let lock = self.offline_destinations.read().await;
         lock.iter().any(|d| d.is_for(addr, bucket))
     }
@@ -353,6 +360,6 @@ impl TestNetworkWorker {
             })
             .unwrap();
 
-        sender.send(*existing_executed_tx.id()).await.unwrap();
+        sender.send((*existing_executed_tx.id(), 0)).await.unwrap();
     }
 }

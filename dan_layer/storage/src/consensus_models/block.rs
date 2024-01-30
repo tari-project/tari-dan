@@ -2,28 +2,32 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashSet},
     fmt::{Debug, Display, Formatter},
     hash::Hash,
     ops::{DerefMut, RangeInclusive},
 };
 
+use indexmap::IndexMap;
 use log::*;
 use serde::{Deserialize, Serialize};
+use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, FixedHashSizeError, PublicKey};
 use tari_dan_common_types::{
     hashing,
     optional::Optional,
     serde_with,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     Epoch,
     NodeHeight,
-    ShardId,
+    SubstateAddress,
 };
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
-use super::{ForeignProposal, QuorumCertificate, ValidatorSchnorrSignature};
+use super::{ForeignProposal, ForeignSendCounters, QuorumCertificate, ValidatorSchnorrSignature};
 use crate::{
     consensus_models::{
         Command,
@@ -47,17 +51,22 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::storage::consensus_models::block";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Block {
     // Header
     id: BlockId,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    network: Network,
     parent: BlockId,
     justify: QuorumCertificate,
     height: NodeHeight,
     epoch: Epoch,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     proposed_by: PublicKey,
     total_leader_fee: u64,
 
     // Body
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     merkle_root: FixedHash,
     // BTreeSet is used for the deterministic block hash, that is, transactions are always ordered by TransactionId.
     commands: BTreeSet<Command>,
@@ -69,15 +78,18 @@ pub struct Block {
     /// Flag that indicates that the block has been committed.
     is_committed: bool,
     /// Counter for each foreign shard for reliable broadcast.
-    foreign_indexes: HashMap<ShardBucket, u64>,
+    foreign_indexes: IndexMap<Shard, u64>,
     /// Timestamp when was this stored.
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     stored_at: Option<PrimitiveDateTime>,
     /// Signature of block by the proposer.
+    #[cfg_attr(feature = "ts", ts(type = "{public_nonce : string, signature: string} | null"))]
     signature: Option<ValidatorSchnorrSignature>,
 }
 
 impl Block {
     pub fn new(
+        network: Network,
         parent: BlockId,
         justify: QuorumCertificate,
         height: NodeHeight,
@@ -85,11 +97,12 @@ impl Block {
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
         total_leader_fee: u64,
-        foreign_indexes: HashMap<ShardBucket, u64>,
+        sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
     ) -> Self {
         let mut block = Self {
             id: BlockId::genesis(),
+            network,
             parent,
             justify,
             height,
@@ -102,7 +115,7 @@ impl Block {
             is_dummy: false,
             is_processed: false,
             is_committed: false,
-            foreign_indexes,
+            foreign_indexes: sorted_foreign_indexes,
             stored_at: None,
             signature,
         };
@@ -112,6 +125,7 @@ impl Block {
 
     pub fn load(
         id: BlockId,
+        network: Network,
         parent: BlockId,
         justify: QuorumCertificate,
         height: NodeHeight,
@@ -122,12 +136,13 @@ impl Block {
         is_dummy: bool,
         is_processed: bool,
         is_committed: bool,
-        foreign_indexes: HashMap<ShardBucket, u64>,
+        sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
         created_at: PrimitiveDateTime,
     ) -> Self {
         Self {
             id,
+            network,
             parent,
             justify,
             height,
@@ -140,14 +155,15 @@ impl Block {
             is_dummy,
             is_processed,
             is_committed,
-            foreign_indexes,
+            foreign_indexes: sorted_foreign_indexes,
             stored_at: Some(created_at),
             signature,
         }
     }
 
-    pub fn genesis() -> Self {
+    pub fn genesis(network: Network) -> Self {
         Self::new(
+            network,
             BlockId::genesis(),
             QuorumCertificate::genesis(),
             NodeHeight(0),
@@ -155,14 +171,15 @@ impl Block {
             PublicKey::default(),
             Default::default(),
             0,
-            HashMap::new(),
+            IndexMap::new(),
             None,
         )
     }
 
     /// This is the parent block for all genesis blocks. Its block ID is always zero.
-    pub fn zero_block() -> Self {
+    pub fn zero_block(network: Network) -> Self {
         Self {
+            network,
             id: BlockId::genesis(),
             parent: BlockId::genesis(),
             justify: QuorumCertificate::genesis(),
@@ -175,13 +192,14 @@ impl Block {
             is_dummy: false,
             is_processed: false,
             is_committed: true,
-            foreign_indexes: HashMap::new(),
+            foreign_indexes: IndexMap::new(),
             stored_at: None,
             signature: None,
         }
     }
 
     pub fn dummy_block(
+        network: Network,
         parent: BlockId,
         proposed_by: PublicKey,
         node_height: NodeHeight,
@@ -189,6 +207,7 @@ impl Block {
         epoch: Epoch,
     ) -> Self {
         let mut block = Self::new(
+            network,
             parent,
             high_qc,
             node_height,
@@ -196,7 +215,7 @@ impl Block {
             proposed_by,
             Default::default(),
             0,
-            HashMap::new(),
+            IndexMap::new(),
             None,
         );
         block.is_dummy = true;
@@ -206,6 +225,7 @@ impl Block {
 
     pub fn calculate_hash(&self) -> FixedHash {
         hashing::block_hasher()
+            .chain(&self.network)
             .chain(&self.parent)
             .chain(&self.justify)
             .chain(&self.height)
@@ -213,13 +233,7 @@ impl Block {
             .chain(&self.proposed_by)
             .chain(&self.merkle_root)
             .chain(&self.commands)
-            .chain(
-                &self
-                    .foreign_indexes
-                    .iter()
-                    .collect::<Vec<(&ShardBucket, &u64)>>()
-                    .sort(),
-            )
+            .chain(&self.foreign_indexes)
             .result()
     }
 }
@@ -280,12 +294,20 @@ impl Block {
         &self.id
     }
 
+    pub fn network(&self) -> Network {
+        self.network
+    }
+
     pub fn parent(&self) -> &BlockId {
         &self.parent
     }
 
     pub fn justify(&self) -> &QuorumCertificate {
         &self.justify
+    }
+
+    pub fn justifies_parent(&self) -> bool {
+        *self.justify.block_id() == self.parent
     }
 
     pub fn height(&self) -> NodeHeight {
@@ -328,11 +350,11 @@ impl Block {
         self.is_committed
     }
 
-    pub fn get_foreign_index(&self, bucket: &ShardBucket) -> Option<&u64> {
-        self.foreign_indexes.get(bucket)
+    pub fn get_foreign_counter(&self, bucket: &Shard) -> Option<u64> {
+        self.foreign_indexes.get(bucket).copied()
     }
 
-    pub fn get_foreign_indexes(&self) -> &HashMap<ShardBucket, u64> {
+    pub fn foreign_indexes(&self) -> &IndexMap<Shard, u64> {
         &self.foreign_indexes
     }
 
@@ -358,8 +380,9 @@ impl Block {
         tx: &mut TTx,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
+        include_dummy_blocks: bool,
     ) -> Result<Vec<Self>, StorageError> {
-        tx.blocks_get_all_between(start_block_id_exclusive, end_block_id_inclusive)
+        tx.blocks_get_all_between(start_block_id_exclusive, end_block_id_inclusive, include_dummy_blocks)
     }
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
@@ -432,7 +455,7 @@ impl Block {
     pub fn find_involved_shards<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
-    ) -> Result<HashSet<ShardId>, StorageError> {
+    ) -> Result<HashSet<SubstateAddress>, StorageError> {
         tx.transactions_fetch_involved_shards(self.all_transaction_ids().copied().collect())
     }
 
@@ -549,7 +572,7 @@ impl Block {
                         }));
                     } else {
                         updates.push(SubstateUpdate::Destroy {
-                            shard_id: substate.to_shard_id(),
+                            address: substate.to_substate_address(),
                             proof: QuorumCertificate::get(tx, &destroyed.justify)?,
                             destroyed_by_transaction: destroyed.by_transaction,
                         });
@@ -661,6 +684,22 @@ impl Block {
         );
         Ok(false)
     }
+
+    pub fn save_foreign_send_counters<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
+    where
+        TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+        TTx::Target: StateStoreReadTransaction,
+    {
+        let mut counters = ForeignSendCounters::get_or_default(tx.deref_mut(), self.justify().block_id())?;
+        // Add counters for this block and carry over the counters from the justify block, if any
+        for shard in self.foreign_indexes.keys() {
+            counters.increment_counter(*shard);
+        }
+        if !counters.is_empty() {
+            counters.set(tx, self.id())?;
+        }
+        Ok(())
+    }
 }
 
 impl Display for Block {
@@ -677,7 +716,12 @@ impl Display for Block {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct BlockId(#[serde(with = "serde_with::hex")] FixedHash);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct BlockId(
+    #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    FixedHash,
+);
 
 impl BlockId {
     pub const fn genesis() -> Self {

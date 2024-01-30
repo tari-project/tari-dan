@@ -8,25 +8,30 @@ use tari_crypto::{
     keys::PublicKey as PublicKeyT,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_engine_types::{
     hashing::{hasher64, EngineHashDomainLabel},
     instruction::Instruction,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionSignatureFields {
     pub fee_instructions: Vec<Instruction>,
     pub instructions: Vec<Instruction>,
-    pub inputs: Vec<ShardId>,
-    pub input_refs: Vec<ShardId>,
+    pub inputs: Vec<SubstateAddress>,
+    pub input_refs: Vec<SubstateAddress>,
     pub min_epoch: Option<Epoch>,
     pub max_epoch: Option<Epoch>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TransactionSignature {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     public_key: PublicKey,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     signature: Signature,
 }
 

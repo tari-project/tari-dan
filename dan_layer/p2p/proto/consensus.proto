@@ -1,0 +1,223 @@
+// Copyright 2022 The Tari Project
+// SPDX-License-Identifier: BSD-3-Clause
+
+syntax = "proto3";
+
+package tari.dan.consensus;
+
+import "common.proto";
+import "transaction.proto";
+
+message HotStuffMessage {
+  oneof message {
+    NewViewMessage new_view = 1;
+    ProposalMessage proposal = 2;
+    ProposalMessage foreign_proposal = 3;
+    VoteMessage vote = 4;
+    RequestMissingTransactionsMessage request_missing_transactions = 5;
+    RequestedTransactionMessage requested_transaction = 6;
+    SyncRequest sync_request = 7;
+    SyncResponse sync_response = 8;
+  }
+}
+
+message NewViewMessage {
+  QuorumCertificate high_qc = 1;
+  uint64 new_height = 2;
+  uint64 epoch = 3;
+  VoteMessage last_vote = 4;
+}
+
+message ProposalMessage {
+  Block block = 1;
+}
+
+message VoteMessage {
+  uint64 epoch = 1;
+  bytes block_id = 2;
+  uint64 block_height = 3;
+  QuorumDecision decision = 4;
+  tari.dan.common.SignatureAndPublicKey signature = 5;
+}
+
+message Block {
+  bytes parent_id = 1;
+  int32 network = 2;
+  QuorumCertificate justify = 3;
+  uint64 height = 4;
+  uint64 epoch = 5;
+  bytes proposed_by = 7;
+  bytes merkle_root = 8;
+  repeated Command commands = 9;
+  uint64 total_leader_fee = 10;
+  bytes foreign_indexes = 11;
+  tari.dan.common.Signature signature = 12;
+}
+
+message Command {
+  oneof command {
+    TransactionAtom prepare = 1;
+    TransactionAtom local_prepared = 2;
+    TransactionAtom accept = 3;
+    ForeignProposal foreign_proposal = 4;
+  }
+}
+
+enum ForeignProposalState {
+  UNKNOWN_STATE = 0;
+  NEW = 1;
+  MINED = 2;
+  DELETED = 3;
+}
+
+message ForeignProposal {
+  uint32 bucket = 1;
+  bytes block_id = 2;
+  ForeignProposalState state = 3;
+  uint64 mined_at = 4;
+}
+
+message TransactionAtom {
+  bytes id = 1;
+  Decision decision = 3;
+  Evidence evidence = 4;
+  uint64 fee = 5;
+  uint64 leader_fee = 6;
+}
+
+enum Decision {
+  UNKNOWN = 0;
+  COMMIT = 1;
+  ABORT = 2;
+}
+
+message Evidence {
+  bytes encoded_evidence = 1;
+}
+
+message ShardPledge {
+  bytes substate_address = 1;
+  bytes node_hash = 2;
+  ObjectPledge pledge = 3;
+}
+
+message QuorumCertificate {
+  bytes block_id = 1;
+  uint64 block_height = 2;
+  uint64 epoch = 3;
+  repeated tari.dan.common.SignatureAndPublicKey signatures = 4;
+  bytes merged_proof = 5;
+  repeated bytes leaf_hashes = 6;
+  QuorumDecision decision = 7;
+}
+
+message HotStuffTreeNode {
+  bytes parent = 1;
+  bytes payload_id = 2;
+  uint64 height = 3;
+  bytes shard = 4;
+  uint64 payload_height = 5;
+  ObjectPledge local_pledge = 6;
+  uint64 epoch = 7;
+  bytes proposed_by = 8;
+  QuorumCertificate justify = 9;
+  TariDanPayload payload = 10;
+  uint64 leader_round = 11;
+}
+
+message ValidatorMetadata {
+  bytes public_key = 1;
+  bytes vn_shard_key = 2;
+  tari.dan.common.Signature signature = 3;
+}
+
+message TariDanPayload {
+  tari.dan.transaction.Transaction transaction = 1;
+}
+
+enum QuorumDecision {
+  QUORUM_DECISION_UNKNOWN = 0;
+  QUORUM_DECISION_ACCEPT = 1;
+  QUORUM_DECISION_REJECT = 2;
+}
+
+message ObjectPledge {
+  bytes substate_address = 1;
+  SubstateState current_state = 2;
+  bytes pledged_to_payload = 3;
+}
+
+message SubstateState {
+  oneof state {
+    bool does_not_exist = 1;
+    UpState up = 2;
+    DownState down = 3;
+  }
+}
+
+message UpState {
+  bytes created_by = 1;
+  bytes address = 2;
+  bytes data = 3;
+  uint64 fees_accrued = 4;
+}
+
+message DownState {
+  bytes deleted_by = 1;
+  uint64 fees_accrued = 2;
+}
+
+message RequestMissingTransactionsMessage {
+  uint64 epoch = 1;
+  bytes block_id = 2;
+  repeated bytes transaction_ids = 3;
+}
+
+message RequestedTransactionMessage {
+  uint64 epoch = 1;
+  bytes block_id = 2;
+  repeated tari.dan.transaction.Transaction transactions = 3;
+}
+
+message Substate {
+  bytes substate_id = 1;
+  uint32 version = 2;
+  bytes substate = 3;
+
+  uint64 created_epoch = 4;
+  uint64 created_height = 5;
+  bytes created_block = 6;
+  bytes created_transaction = 7;
+  bytes created_justify = 8;
+
+  SubstateDestroyed destroyed = 10;
+}
+
+message SubstateDestroyed {
+  tari.dan.common.Epoch epoch = 9;
+  bytes block = 10;
+  bytes transaction = 11;
+  bytes justify = 12;
+}
+
+message SyncRequest {
+  uint64 epoch = 1;
+  HighQc high_qc = 2;
+}
+
+message HighQc {
+  bytes block_id = 1;
+  uint64 block_height = 2;
+  bytes qc_id = 3;
+}
+
+message SyncResponse {
+  repeated FullBlock blocks = 1;
+  uint64 epoch = 2;
+}
+
+message FullBlock {
+  Block block = 1;
+  repeated QuorumCertificate qcs = 2;
+  repeated tari.dan.transaction.Transaction transactions = 3;
+}

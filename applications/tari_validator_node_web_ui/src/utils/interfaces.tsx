@@ -72,8 +72,8 @@ interface GetNetworkCommitteesResponse {
 }
 
 interface CommitteeShardInfo {
-  bucket: number;
-  shard_range: {
+  shard: number;
+  substate_address_range: {
     end: string;
     start: string;
   };

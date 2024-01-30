@@ -20,10 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use sqlite_message_logger::SqliteMessageLogger;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
 use tari_dan_common_types::PeerAddress;
-use tari_dan_p2p::NewTransactionMessage;
 use tari_dan_storage::consensus_models::ExecutedTransaction;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -34,15 +32,14 @@ use crate::{
     consensus::ConsensusHandle,
     p2p::services::{
         mempool::{handle::MempoolHandle, service::MempoolService, MempoolError, SubstateResolver, Validator},
-        message_dispatcher::OutboundMessaging,
+        messaging::Gossip,
     },
     substate_resolver::SubstateResolverError,
 };
 
 pub fn spawn<TExecutor, TValidator, TExecutedValidator, TSubstateResolver>(
-    new_transactions: mpsc::Receiver<(PeerAddress, NewTransactionMessage)>,
-    outbound: OutboundMessaging<PeerAddress, SqliteMessageLogger>,
-    tx_executed_transactions: mpsc::Sender<TransactionId>,
+    gossip: Gossip,
+    tx_executed_transactions: mpsc::Sender<(TransactionId, usize)>,
     epoch_manager: EpochManagerHandle<PeerAddress>,
     transaction_executor: TExecutor,
     substate_resolver: TSubstateResolver,
@@ -58,12 +55,13 @@ where
     TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Clone + Send + Sync + 'static,
     TSubstateResolver: SubstateResolver<Error = SubstateResolverError> + Clone + Send + Sync + 'static,
 {
-    let (tx_mempool_request, rx_mempool_request) = mpsc::channel(100000);
+    // This channel only needs to be size 1, because each mempool request must wait for a reply and the mempool is
+    // running on a single task and so there is no benefit to buffering multiple requests.
+    let (tx_mempool_request, rx_mempool_request) = mpsc::channel(1);
 
     let mempool = MempoolService::new(
-        new_transactions,
         rx_mempool_request,
-        outbound,
+        gossip,
         tx_executed_transactions,
         epoch_manager,
         transaction_executor,

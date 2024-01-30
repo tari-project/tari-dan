@@ -25,17 +25,17 @@ use syn::{
     Result,
 };
 
-use crate::parser::{ManifestIntent, ManifestParser};
+use crate::parser::{ManifestParser, ParsedManifest};
 
 #[derive(Debug, Clone)]
 pub struct ManifestAst {
-    pub intents: Vec<ManifestIntent>,
+    pub parsed: ParsedManifest,
 }
 
 impl Parse for ManifestAst {
     fn parse(input: ParseStream) -> Result<Self> {
         let parser = ManifestParser::new();
-        let intents = parser.parse(input)?;
-        Ok(Self { intents })
+        let parsed = parser.parse(input)?;
+        Ok(Self { parsed })
     }
 }
