@@ -265,26 +265,3 @@ libp2p-identity = { git = "https://github.com/tari-project/rust-libp2p.git", rev
 #minotari_node = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #tari_metrics = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 
-[patch."https://github.com/tari-project/tari.git"]
-tari_hash_domains = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-minotari_app_grpc = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-minotari_node_grpc_client = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_common = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_common_types = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_comms = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_comms_rpc_macros = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_core = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_key_manager = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_mmr = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_p2p = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_shutdown = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_storage = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-minotari_wallet_grpc_client = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_script = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-minotari_wallet = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-minotari_console_wallet = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_service_framework = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_comms_dht = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-minotari_app_utilities = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-minotari_node = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
-tari_metrics = { git = "https://github.com/sdbondi/tari.git", branch = "feature-dan2-merge" }
