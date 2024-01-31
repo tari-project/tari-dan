@@ -26,11 +26,7 @@ use log::*;
 use tari_bor::to_value;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
-    indexed_value::{IndexedValue, IndexedWellKnownTypes},
-    instruction::Instruction,
-    instruction_result::InstructionResult,
-    lock::LockFlag,
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult}, indexed_value::{IndexedValue, IndexedWellKnownTypes}, instruction::Instruction, instruction_result::InstructionResult, lock::LockFlag, virtual_substate::VirtualSubstates
 };
 use tari_template_abi::{FunctionDef, Type};
 use tari_template_lib::{
@@ -51,7 +47,6 @@ use crate::{
         RuntimeModule,
         StateFinalize,
         StateTracker,
-        VirtualSubstates,
     },
     state_store::memory::MemoryStateStore,
     template::LoadedTemplate,

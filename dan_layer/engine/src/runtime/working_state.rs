@@ -29,7 +29,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
     transaction_receipt::TransactionReceipt,
     vault::Vault,
-    virtual_substate::{VirtualSubstate, VirtualSubstateId},
+    virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates},
     TemplateAddress,
 };
 use tari_template_lib::{
@@ -62,7 +62,6 @@ use crate::{
         AuthorizationScope,
         RuntimeError,
         TransactionCommitError,
-        VirtualSubstates,
     },
     state_store::memory::MemoryStateStore,
 };

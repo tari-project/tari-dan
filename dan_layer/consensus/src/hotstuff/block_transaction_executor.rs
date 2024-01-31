@@ -1,39 +1,43 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use log::{info, warn};
+use log::info;
+use tari_dan_engine::{bootstrap_state, state_store::{memory::MemoryStateStore, AtomicDb, StateWriter}};
+use tari_engine_types::virtual_substate::VirtualSubstates;
 use tari_transaction::Transaction;
 use tokio::task;
 
-use crate::traits::ConsensusSpec;
+use crate::traits::{ConsensusSpec, TransactionExecutor};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::block_transaction_executor";
 
+// TODO: more refined errors
 #[derive(thiserror::Error, Debug)]
 pub enum BlockTransactionExecutorError {
     #[error("Placeholder error")]
     PlaceHolderError,
+    #[error("Execution thread failure: {0}")]
+    ExecutionThreadFailure(String),
 }
 
 // TODO: we should keep a "proxy" hashmap (or memory storage) of updated states from previous transactions in the same block,
 //       so each consecutive transaction gets the most updated version for their inputs.
 //       If no previous tx wrote on a input, just get it from the regular state store
 #[derive(Debug, Clone)]
-pub struct BlockTransactionExecutor<TConsensusSpec: ConsensusSpec, TExecutor> {
+pub struct BlockTransactionExecutor<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
-    executor: TExecutor,
+    executor: TConsensusSpec::TransactionExecutor,
 }
 
-impl<TConsensusSpec, TExecutor> BlockTransactionExecutor<TConsensusSpec, TExecutor>
+impl<TConsensusSpec> BlockTransactionExecutor<TConsensusSpec>
 where
-    TConsensusSpec: ConsensusSpec,
-    TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Send + Sync + 'static
+    TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
-        executor: TExecutor,
+        executor: TConsensusSpec::TransactionExecutor,
     ) -> Self {
         Self {
            store,
@@ -42,53 +46,41 @@ where
         }
     }
 
-    pub async fn execute(
+    pub fn execute(
         &self,
-        transaction: &Transaction,
+        transaction: Transaction,
     ) -> Result<(), BlockTransactionExecutorError> {
-        let id = *transaction.id();
+        let id: tari_transaction::TransactionId = *transaction.id();
 
         info!(
             target: LOG_TARGET,
             "Executing transaction: {}",
             id,
-        );     
+        );
 
         let state_db = self.new_state_db();
         let virtual_substates = match self
             .resolve_virtual_substates(&transaction)
-            .await
         {
             Ok(virtual_substates) => virtual_substates,
-            Err(err @ SubstateResolverError::UnauthorizedFeeClaim { .. }) => {
-                warn!(target: LOG_TARGET, "One or more invalid fee claims for transaction {}: {}", transaction.id(), err);
-                return Ok((*transaction.id(), Err(err.into())));
-            },
             Err(err) => return Err(err.into()),
         };
 
         info!(target: LOG_TARGET, "Transaction {} executing. virtual_substates = [{}]", transaction.id(), virtual_substates.keys().map(|addr| addr.to_string()).collect::<Vec<_>>().join(", "));
-
-        match self.resolve_substates(&transaction, &state_db).await {
+        let executor = self.executor.clone();
+        let _result = match self.resolve_substates(&transaction, &state_db) {
             Ok(()) => {
-                let res = task::spawn_blocking(move || {
-                    let result = self.executor.execute(transaction, state_db, virtual_substates);
-                    (id, result.map_err(MempoolError::from))
-                })
-                .await;
+                // TODO: proper error variant
+                let result = executor.execute(transaction, state_db, virtual_substates)
+                    .map_err(|_| BlockTransactionExecutorError::PlaceHolderError);
 
                 // If this errors, the thread panicked due to a bug
-                res.map_err(|err| MempoolError::ExecutionThreadFailure(err.to_string()))
+                result.map_err(|err| BlockTransactionExecutorError::ExecutionThreadFailure(err.to_string()))
             },
-            // Substates are downed/dont exist
-            Err(err @ SubstateResolverError::InputSubstateDowned { .. }) |
-            Err(err @ SubstateResolverError::InputSubstateDoesNotExist { .. }) => {
-                warn!(target: LOG_TARGET, "One or more invalid input shards for transaction {}: {}", transaction.id(), err);
-                Ok((*transaction.id(), Err(err.into())))
-            },
-            // Some other issue - network, db, etc
             Err(err) => Err(err.into()),
-        }
+        };
+
+        Ok(())
     }
 
     fn new_state_db(&self) -> MemoryStateStore {
@@ -101,12 +93,14 @@ where
         state_db
     }
 
-    async fn resolve_substates(&self, transaction: &Transaction, out: &MemoryStateStore) {
-        todo!()
+    fn resolve_substates(&self, _transaction: &Transaction, _out: &MemoryStateStore) -> Result<(), BlockTransactionExecutorError> {
+        // TODO
+        Ok(())
     }
 
-    async fn resolve_virtual_substates(&self, transaction: &Transaction) {
-        todo!()
+    fn resolve_virtual_substates(&self, _transaction: &Transaction) -> Result<VirtualSubstates, BlockTransactionExecutorError> {
+        // TODO
+        Ok(VirtualSubstates::new())
     }
 }
 

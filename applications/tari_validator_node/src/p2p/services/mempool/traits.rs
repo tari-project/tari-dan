@@ -3,7 +3,8 @@
 
 use async_trait::async_trait;
 use tari_dan_common_types::Epoch;
-use tari_dan_engine::{runtime::VirtualSubstates, state_store::memory::MemoryStateStore};
+use tari_dan_engine::state_store::memory::MemoryStateStore;
+use tari_engine_types::virtual_substate::VirtualSubstates;
 use tari_transaction::Transaction;
 
 #[async_trait]

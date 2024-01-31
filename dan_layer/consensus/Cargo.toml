@@ -12,7 +12,8 @@ tari_dan_common_types = { workspace = true }
 tari_dan_storage = { workspace = true }
 tari_transaction = { workspace = true }
 tari_epoch_manager = { workspace = true }
-
+tari_dan_engine = { workspace = true }
+tari_engine_types = { workspace = true }
 # Used for PublicKey and Signature
 tari_common_types = { workspace = true }
 tari_mmr = { workspace = true }

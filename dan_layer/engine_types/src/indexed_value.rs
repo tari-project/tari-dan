@@ -12,10 +12,7 @@ use tari_template_lib::{
 };
 
 use crate::{
-    fee_claim::FeeClaimAddress,
-    serde_with,
-    substate::SubstateId,
-    transaction_receipt::TransactionReceiptAddress,
+    fee_claim::FeeClaimAddress, serde_with, substate::SubstateId, transaction_receipt::TransactionReceiptAddress
 };
 
 const MAX_VISITOR_DEPTH: usize = 50;

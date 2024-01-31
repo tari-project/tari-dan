@@ -22,7 +22,8 @@ const LOG_TARGET: &str = "tari::dan::consensus::sm::idle";
 pub struct Idle<TSpec>(PhantomData<TSpec>);
 
 impl<TSpec> Idle<TSpec>
-where TSpec: ConsensusSpec
+where
+    TSpec: ConsensusSpec
 {
     pub fn new() -> Self {
         Self(PhantomData)

@@ -31,7 +31,7 @@ mod state_manager;
 
 pub use handle::*;
 use sqlite_message_logger::SqliteMessageLogger;
-use tari_dan_app_utilities::keypair::RistrettoKeypair;
+use tari_dan_app_utilities::{keypair::RistrettoKeypair, template_manager::implementation::TemplateManager, transaction_executor::TariDanTransactionProcessor};
 use tari_dan_common_types::PeerAddress;
 use tari_rpc_state_sync::RpcStateSyncManager;
 
@@ -46,6 +46,7 @@ pub async fn spawn(
     outbound_messaging: ConsensusOutboundMessaging<SqliteMessageLogger>,
     client_factory: TariValidatorNodeRpcClientFactory,
     shutdown_signal: ShutdownSignal,
+    transaction_executor: TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
 ) -> (
     JoinHandle<Result<(), anyhow::Error>>,
     ConsensusHandle,
@@ -71,6 +72,7 @@ pub async fn spawn(
         signing_service,
         state_manager,
         transaction_pool,
+        transaction_executor.clone(),
         tx_hotstuff_events.clone(),
         tx_mempool,
         shutdown_signal.clone(),

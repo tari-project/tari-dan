@@ -95,7 +95,6 @@ use crate::{
                 InputRefsValidator,
                 MempoolError,
                 MempoolHandle,
-                OutputsDontExistLocally,
                 TemplateExistsValidator,
                 TransactionSignatureValidator,
                 Validator,
@@ -246,6 +245,7 @@ pub async fn spawn_services(
         outbound_messaging.clone(),
         validator_node_client_factory.clone(),
         shutdown.clone(),
+        payload_processor.clone(),
     )
     .await;
     handles.push(consensus_join_handle);

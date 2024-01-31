@@ -29,16 +29,7 @@ use indexmap::IndexMap;
 use log::*;
 use tari_dan_common_types::Epoch;
 use tari_engine_types::{
-    commit_result::{RejectReason, TransactionResult},
-    component::{ComponentBody, ComponentHeader},
-    confidential::UnclaimedConfidentialOutput,
-    events::Event,
-    fees::{FeeReceipt, FeeSource},
-    indexed_value::{IndexedValue, IndexedWellKnownTypes},
-    lock::LockFlag,
-    logs::LogEntry,
-    substate::{SubstateId, SubstateValue},
-    TemplateAddress,
+    commit_result::{RejectReason, TransactionResult}, component::{ComponentBody, ComponentHeader}, confidential::UnclaimedConfidentialOutput, events::Event, fees::{FeeReceipt, FeeSource}, indexed_value::{IndexedValue, IndexedWellKnownTypes}, lock::LockFlag, logs::LogEntry, substate::{SubstateId, SubstateValue}, virtual_substate::VirtualSubstates, TemplateAddress
 };
 use tari_template_lib::{
     auth::{ComponentAccessRules, OwnerRule},
@@ -56,7 +47,6 @@ use crate::{
         workspace::Workspace,
         AuthorizationScope,
         RuntimeError,
-        VirtualSubstates,
     },
     state_store::memory::MemoryStateStore,
 };

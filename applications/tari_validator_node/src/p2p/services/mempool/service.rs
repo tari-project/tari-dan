@@ -24,7 +24,8 @@ use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut};
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::*;
-use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
+use tari_consensus::traits::TransactionExecutor;
+use tari_dan_app_utilities::transaction_executor::TransactionProcessorError;
 use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, PeerAddress, SubstateAddress};
 use tari_dan_p2p::{DanMessage, NewTransactionMessage};
 use tari_dan_storage::{

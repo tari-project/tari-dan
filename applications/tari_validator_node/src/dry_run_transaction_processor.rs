@@ -21,10 +21,11 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::info;
+use tari_consensus::traits::TransactionExecutor;
 use tari_dan_app_utilities::{
     substate_file_cache::SubstateFileCache,
     template_manager::implementation::TemplateManager,
-    transaction_executor::{TariDanTransactionProcessor, TransactionExecutor, TransactionProcessorError},
+    transaction_executor::{TariDanTransactionProcessor, TransactionProcessorError},
 };
 use tari_dan_common_types::PeerAddress;
 use tari_dan_engine::{

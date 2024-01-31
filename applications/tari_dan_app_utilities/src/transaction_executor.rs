@@ -5,32 +5,22 @@ use std::{sync::Arc, time::Instant};
 
 use log::*;
 use tari_common_types::types::PublicKey;
+use tari_consensus::traits::TransactionExecutor;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, SubstateAddress};
 use tari_dan_engine::{
     fees::{FeeModule, FeeTable},
-    runtime::{AuthParams, RuntimeModule, VirtualSubstates},
+    runtime::{AuthParams, RuntimeModule},
     state_store::{memory::MemoryStateStore, StateStoreError},
     template::LoadedTemplate,
     transaction::{TransactionError, TransactionProcessor},
 };
 use tari_dan_storage::consensus_models::ExecutedTransaction;
-use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
+use tari_engine_types::{commit_result::{ExecuteResult, FinalizeResult, RejectReason}, virtual_substate::VirtualSubstates};
 use tari_template_lib::{crypto::RistrettoPublicKeyBytes, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 
 const _LOG_TARGET: &str = "tari::dan::transaction_executor";
-
-pub trait TransactionExecutor {
-    type Error: Send + Sync + 'static;
-
-    fn execute(
-        &self,
-        transaction: Transaction,
-        state_store: MemoryStateStore,
-        virtual_substates: VirtualSubstates,
-    ) -> Result<ExecutedTransaction, Self::Error>;
-}
 
 #[derive(Debug, Clone)]
 pub struct TariDanTransactionProcessor<TTemplateProvider> {
