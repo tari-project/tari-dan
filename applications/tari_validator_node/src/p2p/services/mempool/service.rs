@@ -36,6 +36,8 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{mpsc, oneshot};
 
+#[cfg(feature = "metrics")]
+use super::metrics::PrometheusMempoolMetrics;
 use super::MempoolError;
 use crate::{
     consensus::ConsensusHandle,
@@ -44,7 +46,6 @@ use crate::{
             executor::{execute_transaction, ExecutionResult},
             gossip::MempoolGossip,
             handle::MempoolRequest,
-            metrics::PrometheusMempoolMetrics,
             traits::SubstateResolver,
             Validator,
         },
@@ -78,6 +79,7 @@ pub struct MempoolService<TValidator, TExecutedValidator, TExecutor, TSubstateRe
     gossip: MempoolGossip<PeerAddress>,
     rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
     consensus_handle: ConsensusHandle,
+    #[cfg(feature = "metrics")]
     metrics: PrometheusMempoolMetrics,
 }
 
@@ -101,7 +103,7 @@ where
         state_store: SqliteStateStore<PeerAddress>,
         rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
         consensus_handle: ConsensusHandle,
-        metrics: PrometheusMempoolMetrics,
+        #[cfg(feature = "metrics")] metrics: PrometheusMempoolMetrics,
     ) -> Self {
         Self {
             gossip: MempoolGossip::new(epoch_manager.clone(), gossip),
@@ -118,6 +120,7 @@ where
             transaction_pool: TransactionPool::new(),
             rx_consensus_to_mempool,
             consensus_handle,
+            #[cfg(feature = "metrics")]
             metrics,
         }
     }
@@ -293,6 +296,7 @@ where
         let mut transaction = TransactionRecord::new(transaction);
         self.state_store.with_write_tx(|tx| transaction.insert(tx))?;
 
+        #[cfg(feature = "metrics")]
         self.metrics.on_transaction_received(&transaction);
 
         if let Err(e) = self.before_execute_validator.validate(transaction.transaction()).await {
@@ -302,6 +306,7 @@ where
                     .update(tx)
             })?;
 
+            #[cfg(feature = "metrics")]
             self.metrics.on_transaction_validation_error(transaction.id(), &e);
             return Err(e);
         }
@@ -458,6 +463,7 @@ where
         // This is due to a bug or possibly db failure only
         let (transaction_id, exec_result) = result?;
 
+        #[cfg(feature = "metrics")]
         self.metrics.on_transaction_executed(&transaction_id, &exec_result);
 
         // The avoids the case where:
@@ -529,6 +535,7 @@ where
                             executed.id(),
                             e,
                         );
+                        #[cfg(feature = "metrics")]
                         self.metrics.on_transaction_validation_error(&transaction_id, &e);
                         self.state_store.with_write_tx(|tx| {
                             match executed.result().finalize.result.full_reject() {

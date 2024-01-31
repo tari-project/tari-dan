@@ -38,6 +38,8 @@ use tari_common::{
     exit_codes::{ExitCode, ExitError},
 };
 use tari_common_types::types::PublicKey;
+#[cfg(not(feature = "metrics"))]
+use tari_consensus::traits::hooks::NoopHooks;
 use tari_core::transactions::transaction_components::ValidatorNodeSignature;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_app_utilities::{
@@ -81,9 +83,11 @@ use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{sync::mpsc, task::JoinHandle};
 
+#[cfg(feature = "metrics")]
+use crate::consensus::metrics::PrometheusConsensusMetrics;
 use crate::{
     consensus,
-    consensus::{metrics::PrometheusConsensusMetrics, ConsensusHandle},
+    consensus::ConsensusHandle,
     dry_run_transaction_processor::DryRunTransactionProcessor,
     p2p::{
         create_tari_validator_node_rpc_service,
@@ -122,7 +126,7 @@ pub async fn spawn_services(
     keypair: RistrettoKeypair,
     global_db: GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>,
     consensus_constants: ConsensusConstants,
-    metrics_registry: &prometheus::Registry,
+    #[cfg(feature = "metrics")] metrics_registry: &prometheus::Registry,
 ) -> Result<Services, anyhow::Error> {
     let mut handles = Vec::with_capacity(8);
 
@@ -243,9 +247,9 @@ pub async fn spawn_services(
         ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
 
     #[cfg(feature = "metrics")]
-    let metrics = PrometheusConsensusMetrics::new(state_store.clone(), metrics_registry).into();
+    let metrics = PrometheusConsensusMetrics::new(state_store.clone(), metrics_registry);
     #[cfg(not(feature = "metrics"))]
-    let metrics = None.into();
+    let metrics = NoopHooks;
 
     let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
         config.network,
@@ -298,6 +302,7 @@ pub async fn spawn_services(
         state_store.clone(),
         rx_consensus_to_mempool,
         consensus_handle.clone(),
+        #[cfg(feature = "metrics")]
         metrics_registry,
     );
     handles.push(join_handle);

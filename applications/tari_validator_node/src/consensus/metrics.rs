@@ -1,9 +1,9 @@
-use std::{collections::HashMap, str::FromStr};
-
-use prometheus::core::Collector;
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-use prometheus::{IntCounter, IntGauge, IntGaugeVec, Opts, Registry};
+
+use std::{collections::HashMap, str::FromStr};
+
+use prometheus::{core::Collector, IntCounter, IntGauge, IntGaugeVec, Opts, Registry};
 use tari_consensus::{hotstuff::HotStuffError, messages::HotstuffMessage, traits::hooks::ConsensusHooks};
 use tari_dan_common_types::{NodeHeight, PeerAddress};
 use tari_dan_storage::{

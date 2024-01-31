@@ -29,6 +29,7 @@ pub use initializer::spawn;
 mod error;
 mod executor;
 mod gossip;
+#[cfg(feature = "metrics")]
 mod metrics;
 mod service;
 mod traits;

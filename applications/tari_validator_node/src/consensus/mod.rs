@@ -26,6 +26,7 @@ use crate::{
 
 mod handle;
 mod leader_selection;
+#[cfg(feature = "metrics")]
 pub mod metrics;
 mod signature_service;
 mod spec;
@@ -33,15 +34,12 @@ mod state_manager;
 
 pub use handle::*;
 use sqlite_message_logger::SqliteMessageLogger;
-use tari_consensus::traits::hooks::OptionalHooks;
+use tari_consensus::traits::ConsensusSpec;
 use tari_dan_app_utilities::keypair::RistrettoKeypair;
 use tari_dan_common_types::PeerAddress;
 use tari_rpc_state_sync::RpcStateSyncManager;
 
-use crate::{
-    consensus::metrics::PrometheusConsensusMetrics,
-    p2p::services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
-};
+use crate::p2p::services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging};
 
 pub async fn spawn(
     network: Network,
@@ -52,7 +50,7 @@ pub async fn spawn(
     inbound_messaging: ConsensusInboundMessaging<SqliteMessageLogger>,
     outbound_messaging: ConsensusOutboundMessaging<SqliteMessageLogger>,
     client_factory: TariValidatorNodeRpcClientFactory,
-    hooks: OptionalHooks<PrometheusConsensusMetrics>,
+    hooks: <TariConsensusSpec as ConsensusSpec>::Hooks,
     shutdown_signal: ShutdownSignal,
 ) -> (
     JoinHandle<Result<(), anyhow::Error>>,
