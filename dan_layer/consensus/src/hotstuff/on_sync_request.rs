@@ -44,7 +44,8 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                 if leaf_block.height() < msg.high_qc.block_height() {
                     return Err(HotStuffError::InvalidSyncRequest {
                         details: format!(
-                            "Received catch up request from {} for block {} but last voted is {}. Ignoring request.",
+                            "Received catch up request from {} for block {} but our leaf block is {}. Ignoring \
+                             request.",
                             from, msg.high_qc, leaf_block
                         ),
                     });
