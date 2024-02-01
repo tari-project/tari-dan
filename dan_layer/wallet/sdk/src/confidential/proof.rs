@@ -28,6 +28,7 @@ use tari_crypto::{
     ristretto::bulletproofs_plus::{BulletproofsPlusService, RistrettoExtendedMask, RistrettoExtendedWitness},
     tari_utilities::ByteArray,
 };
+use tari_hash_domains::TransactionSecureNonceKdfDomain;
 use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, ConfidentialOutputProof, ConfidentialStatement, EncryptedData},
@@ -119,12 +120,6 @@ pub fn generate_confidential_proof(
 
 fn inner_encrypted_data_kdf_aead(encryption_key: &PrivateKey, commitment: &Commitment) -> EncryptedDataKey32 {
     let mut aead_key = EncryptedDataKey32::from(SafeArray::default());
-    // This has to be the same as the base layer so that burn claims are spendable
-    hash_domain!(
-        TransactionSecureNonceKdfDomain,
-        "com.tari.base_layer.core.transactions.secure_nonce_kdf",
-        0
-    );
     DomainSeparatedHasher::<Blake2b<U32>, TransactionSecureNonceKdfDomain>::new_with_label("encrypted_value_and_mask")
         .chain(encryption_key.as_bytes())
         .chain(commitment.as_bytes())
