@@ -22,7 +22,6 @@ use tari_crypto::{
     commitment::{ExtensionDegree, HomomorphicCommitmentFactory},
     errors::RangeProofError,
     extended_range_proof::ExtendedRangeProofService,
-    hash_domain,
     hashing::DomainSeparatedHasher,
     keys::SecretKey,
     ristretto::bulletproofs_plus::{BulletproofsPlusService, RistrettoExtendedMask, RistrettoExtendedWitness},
