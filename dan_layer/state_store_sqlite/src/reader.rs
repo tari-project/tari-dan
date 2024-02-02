@@ -443,7 +443,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         use crate::schema::foreign_proposals;
 
         let foreign_proposals = foreign_proposals::table
-            .filter(foreign_proposals::state.eq("Mined"))
+            .filter(foreign_proposals::state.eq(ForeignProposalState::Proposed.to_string()))
             .filter(foreign_proposals::proposed_height.le(to_height.0 as i64))
             .load::<sql_models::ForeignProposal>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
