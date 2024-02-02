@@ -372,11 +372,11 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         // TODO: Move this to consensus constants
         const TIMEOUT: u64 = 1000;
-        let all_mined_proposals = ForeignProposal::get_all_mined(
+        let all_proposed = ForeignProposal::get_all_proposed(
             tx.deref_mut(),
             candidate_block.height().saturating_sub(NodeHeight(TIMEOUT)),
         )?;
-        for proposal in all_mined_proposals {
+        for proposal in all_proposed {
             let mut has_unresolved_transactions = false;
             for tx_id in proposal.transactions.clone() {
                 let transaction = tx.transactions_get(&tx_id).optional()?;

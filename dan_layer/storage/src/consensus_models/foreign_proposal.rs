@@ -106,10 +106,10 @@ impl ForeignProposal {
         tx.foreign_proposal_get_all_pending(from_block_id, to_block_id)
     }
 
-    pub fn get_all_mined<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn get_all_proposed<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &mut TTx,
         to_height: NodeHeight,
     ) -> Result<Vec<Self>, StorageError> {
-        tx.foreign_proposal_get_all_mined(to_height)
+        tx.foreign_proposal_get_all_proposed(to_height)
     }
 }

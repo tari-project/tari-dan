@@ -439,7 +439,10 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .collect::<Vec<ForeignProposal>>())
     }
 
-    fn foreign_proposal_get_all_mined(&mut self, to_height: NodeHeight) -> Result<Vec<ForeignProposal>, StorageError> {
+    fn foreign_proposal_get_all_proposed(
+        &mut self,
+        to_height: NodeHeight,
+    ) -> Result<Vec<ForeignProposal>, StorageError> {
         use crate::schema::foreign_proposals;
 
         let foreign_proposals = foreign_proposals::table
