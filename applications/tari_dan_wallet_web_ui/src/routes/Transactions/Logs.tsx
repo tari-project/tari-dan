@@ -26,7 +26,6 @@ import { DataTableCell } from "../../Components/StyledComponents";
 interface Log {
   level: string;
   message: string;
-  timestamp: string;
 }
 
 export default function Logs({ data }: { data: Log[] }) {
@@ -37,16 +36,14 @@ export default function Logs({ data }: { data: Log[] }) {
           <TableRow>
             <TableCell>Level</TableCell>
             <TableCell>Message</TableCell>
-            <TableCell>Timestamp</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {data.map(({ level, message, timestamp }: any, index: number) => {
+          {data.map(({ level, message }, index: number) => {
             return (
               <TableRow key={index}>
                 <DataTableCell>{level}</DataTableCell>
                 <DataTableCell>{message}</DataTableCell>
-                <DataTableCell>{timestamp}</DataTableCell>
               </TableRow>
             );
           })}
