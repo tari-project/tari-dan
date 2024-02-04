@@ -14,6 +14,8 @@ use crate::support::{
     RoundRobinLeaderStrategy,
 };
 
+use super::TestTransactionProcessor;
+
 #[derive(Clone)]
 pub struct TestConsensusSpec;
 
@@ -27,4 +29,5 @@ impl ConsensusSpec for TestConsensusSpec {
     type StateManager = NoopStateManager;
     type StateStore = SqliteStateStore<Self::Addr>;
     type SyncManager = AlwaysSyncedSyncManager;
+    type TransactionExecutor = TestTransactionProcessor;
 }
