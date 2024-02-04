@@ -25,8 +25,7 @@ pub(super) struct Running<TSpec> {
 }
 
 impl<TSpec> Running<TSpec>
-where
-    TSpec: ConsensusSpec
+where TSpec: ConsensusSpec
 {
     pub(super) async fn on_enter(
         &self,

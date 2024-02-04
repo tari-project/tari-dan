@@ -4,6 +4,7 @@
 use tari_consensus::traits::ConsensusSpec;
 use tari_state_store_sqlite::SqliteStateStore;
 
+use super::TestTransactionProcessor;
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
@@ -13,8 +14,6 @@ use crate::support::{
     NoopStateManager,
     RoundRobinLeaderStrategy,
 };
-
-use super::TestTransactionProcessor;
 
 #[derive(Clone)]
 pub struct TestConsensusSpec;

@@ -10,9 +10,8 @@ use tari_epoch_manager::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_transaction::TransactionId;
 
-use crate::traits::{InboundMessagingError, OutboundMessagingError};
-
 use super::block_transaction_executor::BlockTransactionExecutorError;
+use crate::traits::{InboundMessagingError, OutboundMessagingError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {

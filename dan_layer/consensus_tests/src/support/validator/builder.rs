@@ -10,7 +10,17 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tokio::sync::{broadcast, mpsc, watch};
 
 use crate::support::{
-    address::TestAddress, epoch_manager::TestEpochManager, messaging_impls::{TestInboundMessaging, TestOutboundMessaging}, signing_service::TestVoteSignatureService, sync::AlwaysSyncedSyncManager, NoopStateManager, RoundRobinLeaderStrategy, TestConsensusSpec, TestTransactionProcessor, Validator, ValidatorChannels
+    address::TestAddress,
+    epoch_manager::TestEpochManager,
+    messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
+    signing_service::TestVoteSignatureService,
+    sync::AlwaysSyncedSyncManager,
+    NoopStateManager,
+    RoundRobinLeaderStrategy,
+    TestConsensusSpec,
+    TestTransactionProcessor,
+    Validator,
+    ValidatorChannels,
 };
 
 pub struct ValidatorBuilder {

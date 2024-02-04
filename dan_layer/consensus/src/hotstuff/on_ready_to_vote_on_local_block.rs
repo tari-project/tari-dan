@@ -56,12 +56,11 @@ pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_events: broadcast::Sender<HotstuffEvent>,
     proposer: Proposer<TConsensusSpec>,
-    transaction_executor: TConsensusSpec::TransactionExecutor
+    transaction_executor: TConsensusSpec::TransactionExecutor,
 }
 
 impl<TConsensusSpec> OnReadyToVoteOnLocalBlock<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec,
+where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
@@ -74,7 +73,7 @@ where
         outbound_messaging: TConsensusSpec::OutboundMessaging,
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
-        transaction_executor: TConsensusSpec::TransactionExecutor
+        transaction_executor: TConsensusSpec::TransactionExecutor,
     ) -> Self {
         Self {
             validator_addr,
@@ -355,7 +354,10 @@ where
         let mut locked_outputs = HashSet::new();
 
         let executor: BlockTransactionExecutor<TConsensusSpec> = BlockTransactionExecutor::new(
-            self.store.clone(), self.epoch_manager.clone(), self.transaction_executor.clone());
+            self.store.clone(),
+            self.epoch_manager.clone(),
+            self.transaction_executor.clone(),
+        );
 
         for cmd in block.commands() {
             if let Some(transaction) = cmd.transaction() {
@@ -415,7 +417,7 @@ where
 
                                 // Re-execute the transaction
                                 let executed = t.get_transaction(tx.deref_mut())?;
-                                executor.execute(executed.transaction().clone())?;   
+                                executor.execute(executed.transaction().clone())?;
 
                                 // Lock all inputs for the transaction as part of Prepare
                                 let is_inputs_locked = self.check_lock_inputs(

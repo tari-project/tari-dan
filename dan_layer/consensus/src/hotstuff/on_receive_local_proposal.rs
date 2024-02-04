@@ -75,7 +75,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 outbound_messaging,
                 tx_events,
                 proposer,
-                transaction_executor
+                transaction_executor,
             ),
         }
     }

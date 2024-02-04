@@ -176,8 +176,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     }
 }
 impl<TConsensusSpec> HotstuffWorker<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec
+where TConsensusSpec: ConsensusSpec
 {
     pub async fn start(&mut self) -> Result<(), HotStuffError> {
         self.create_genesis_block_if_required()?;

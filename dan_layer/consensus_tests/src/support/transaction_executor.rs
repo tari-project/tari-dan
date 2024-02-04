@@ -7,7 +7,10 @@ use tari_consensus::traits::TransactionExecutor;
 use tari_dan_app_utilities::transaction_executor::TransactionProcessorError;
 use tari_dan_engine::state_store::memory::MemoryStateStore;
 use tari_dan_storage::consensus_models::ExecutedTransaction;
-use tari_engine_types::{commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult}, virtual_substate::VirtualSubstates};
+use tari_engine_types::{
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
+    virtual_substate::VirtualSubstates,
+};
 use tari_template_lib::Hash;
 use tari_transaction::Transaction;
 
@@ -16,12 +19,11 @@ pub struct TestTransactionProcessor {}
 
 impl TestTransactionProcessor {
     pub fn new() -> Self {
-        Self { }
+        Self {}
     }
 }
 
-impl TransactionExecutor for TestTransactionProcessor
-{
+impl TransactionExecutor for TestTransactionProcessor {
     type Error = TransactionProcessorError;
 
     fn execute(
@@ -37,7 +39,9 @@ impl TransactionExecutor for TestTransactionProcessor
                 events: vec![],
                 logs: vec![],
                 execution_results: vec![],
-                result: TransactionResult::Reject(RejectReason::ExecutionFailure("TestTransactionProcessor is just a mock".to_owned())),
+                result: TransactionResult::Reject(RejectReason::ExecutionFailure(
+                    "TestTransactionProcessor is just a mock".to_owned(),
+                )),
                 cost_breakdown: None,
             },
             fee_receipt: None,

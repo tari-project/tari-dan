@@ -31,7 +31,11 @@ mod state_manager;
 
 pub use handle::*;
 use sqlite_message_logger::SqliteMessageLogger;
-use tari_dan_app_utilities::{keypair::RistrettoKeypair, template_manager::implementation::TemplateManager, transaction_executor::TariDanTransactionProcessor};
+use tari_dan_app_utilities::{
+    keypair::RistrettoKeypair,
+    template_manager::implementation::TemplateManager,
+    transaction_executor::TariDanTransactionProcessor,
+};
 use tari_dan_common_types::PeerAddress;
 use tari_rpc_state_sync::RpcStateSyncManager;
 

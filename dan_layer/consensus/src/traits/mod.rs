@@ -12,10 +12,10 @@ pub use leader_strategy::*;
 pub use messaging::*;
 pub use state_manager::*;
 pub use sync::*;
-pub use transaction_executor::*;
 use tari_dan_common_types::DerivableFromPublicKey;
 use tari_dan_storage::StateStore;
 use tari_epoch_manager::EpochManagerReader;
+pub use transaction_executor::*;
 
 pub use crate::traits::signing_service::*;
 

@@ -1,7 +1,11 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, fmt::{Display, Formatter}, ops::{Deref, DerefMut}};
+use std::{
+    collections::HashMap,
+    fmt::{Display, Formatter},
+    ops::{Deref, DerefMut},
+};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
@@ -34,7 +38,6 @@ pub enum VirtualSubstate {
     CurrentEpoch(u64),
     UnclaimedValidatorFee(FeeClaim),
 }
-
 
 // Developer note: this struct has two non-functional purposes:
 // 1. so that we do not have to type out the HashMap type in many places, and

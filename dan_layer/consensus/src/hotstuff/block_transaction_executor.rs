@@ -2,7 +2,10 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::info;
-use tari_dan_engine::{bootstrap_state, state_store::{memory::MemoryStateStore, AtomicDb, StateWriter}};
+use tari_dan_engine::{
+    bootstrap_state,
+    state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
+};
 use tari_engine_types::virtual_substate::VirtualSubstates;
 use tari_transaction::Transaction;
 use tokio::task;
@@ -20,8 +23,8 @@ pub enum BlockTransactionExecutorError {
     ExecutionThreadFailure(String),
 }
 
-// TODO: we should keep a "proxy" hashmap (or memory storage) of updated states from previous transactions in the same block,
-//       so each consecutive transaction gets the most updated version for their inputs.
+// TODO: we should keep a "proxy" hashmap (or memory storage) of updated states from previous transactions in the same
+// block,       so each consecutive transaction gets the most updated version for their inputs.
 //       If no previous tx wrote on a input, just get it from the regular state store
 #[derive(Debug, Clone)]
 pub struct BlockTransactionExecutor<TConsensusSpec: ConsensusSpec> {
@@ -31,8 +34,7 @@ pub struct BlockTransactionExecutor<TConsensusSpec: ConsensusSpec> {
 }
 
 impl<TConsensusSpec> BlockTransactionExecutor<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec
+where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         store: TConsensusSpec::StateStore,
@@ -40,16 +42,13 @@ where
         executor: TConsensusSpec::TransactionExecutor,
     ) -> Self {
         Self {
-           store,
-           epoch_manager,
-           executor
+            store,
+            epoch_manager,
+            executor,
         }
     }
 
-    pub fn execute(
-        &self,
-        transaction: Transaction,
-    ) -> Result<(), BlockTransactionExecutorError> {
+    pub fn execute(&self, transaction: Transaction) -> Result<(), BlockTransactionExecutorError> {
         let id: tari_transaction::TransactionId = *transaction.id();
 
         info!(
@@ -59,9 +58,7 @@ where
         );
 
         let state_db = self.new_state_db();
-        let virtual_substates = match self
-            .resolve_virtual_substates(&transaction)
-        {
+        let virtual_substates = match self.resolve_virtual_substates(&transaction) {
             Ok(virtual_substates) => virtual_substates,
             Err(err) => return Err(err.into()),
         };
@@ -71,7 +68,8 @@ where
         let _result = match self.resolve_substates(&transaction, &state_db) {
             Ok(()) => {
                 // TODO: proper error variant
-                let result = executor.execute(transaction, state_db, virtual_substates)
+                let result = executor
+                    .execute(transaction, state_db, virtual_substates)
                     .map_err(|_| BlockTransactionExecutorError::PlaceHolderError);
 
                 // If this errors, the thread panicked due to a bug
@@ -93,14 +91,20 @@ where
         state_db
     }
 
-    fn resolve_substates(&self, _transaction: &Transaction, _out: &MemoryStateStore) -> Result<(), BlockTransactionExecutorError> {
+    fn resolve_substates(
+        &self,
+        _transaction: &Transaction,
+        _out: &MemoryStateStore,
+    ) -> Result<(), BlockTransactionExecutorError> {
         // TODO
         Ok(())
     }
 
-    fn resolve_virtual_substates(&self, _transaction: &Transaction) -> Result<VirtualSubstates, BlockTransactionExecutorError> {
+    fn resolve_virtual_substates(
+        &self,
+        _transaction: &Transaction,
+    ) -> Result<VirtualSubstates, BlockTransactionExecutorError> {
         // TODO
         Ok(VirtualSubstates::new())
     }
 }
-

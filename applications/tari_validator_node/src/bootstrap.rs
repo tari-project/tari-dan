@@ -521,7 +521,6 @@ fn create_mempool_before_execute_validator(
 fn create_mempool_after_execute_validator<TAddr: NodeAddressable>(
     store: SqliteStateStore<TAddr>,
 ) -> impl Validator<ExecutedTransaction, Error = MempoolError> {
-    HasInvolvedShards::new()
-        .and_then(InputRefsValidator::new())
-        //.and_then(OutputsDontExistLocally::new(store))
+    HasInvolvedShards::new().and_then(InputRefsValidator::new())
+    //.and_then(OutputsDontExistLocally::new(store))
 }

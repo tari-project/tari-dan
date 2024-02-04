@@ -16,7 +16,10 @@ use tari_dan_engine::{
     transaction::{TransactionError, TransactionProcessor},
 };
 use tari_dan_storage::consensus_models::ExecutedTransaction;
-use tari_engine_types::{commit_result::{ExecuteResult, FinalizeResult, RejectReason}, virtual_substate::VirtualSubstates};
+use tari_engine_types::{
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
+    virtual_substate::VirtualSubstates,
+};
 use tari_template_lib::{crypto::RistrettoPublicKeyBytes, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 

@@ -132,11 +132,7 @@ pub async fn handle_create(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(default_account.address.as_component_address().unwrap(), max_fee)
         .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
-        .with_input_refs(
-            input_refs
-                .iter()
-                .map(|s| SubstateAddress::from_address(&s.substate_id)),
-        )
+        .with_input_refs(input_refs.iter().map(|s| SubstateAddress::from_address(&s.substate_id)))
         .with_inputs(
             inputs
                 .iter()
@@ -891,9 +887,7 @@ pub async fn handle_transfer(
         .substate_api()
         .scan_for_substate(&SubstateId::Resource(req.resource_address), None)
         .await?;
-    let resource_substate_address = SubstateAddress::from_address(
-        &resource_substate.address.substate_id,
-    );
+    let resource_substate_address = SubstateAddress::from_address(&resource_substate.address.substate_id);
     inputs.push(resource_substate.address);
 
     let mut instructions = vec![];

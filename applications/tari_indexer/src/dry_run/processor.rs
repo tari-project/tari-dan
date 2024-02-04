@@ -23,8 +23,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use log::info;
+use tari_consensus::traits::TransactionExecutor;
 use tari_dan_app_utilities::{
-    template_manager::implementation::TemplateManager, transaction_executor::TariDanTransactionProcessor
+    template_manager::implementation::TemplateManager,
+    transaction_executor::TariDanTransactionProcessor,
 };
 use tari_dan_common_types::{Epoch, PeerAddress, SubstateAddress};
 use tari_dan_engine::{
@@ -51,7 +53,6 @@ use tari_validator_node_rpc::client::{
     ValidatorNodeClientFactory,
     ValidatorNodeRpcClient,
 };
-use tari_consensus::traits::TransactionExecutor;
 use tokio::task;
 
 use crate::dry_run::error::DryRunTransactionProcessorError;

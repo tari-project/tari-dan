@@ -35,9 +35,7 @@ impl SubstateAddress {
     }
 
     pub fn from_hash(hash: &[u8]) -> Self {
-        let new_addr = hasher32(EngineHashDomainLabel::SubstateAddress)
-            .chain(&hash)
-            .result();
+        let new_addr = hasher32(EngineHashDomainLabel::SubstateAddress).chain(&hash).result();
         Self(new_addr.into_array())
     }
 
