@@ -132,11 +132,15 @@ pub async fn handle_create(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(default_account.address.as_component_address().unwrap(), max_fee)
         .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
-        .with_input_refs(input_refs.iter().map(|s| SubstateAddress::from_address(&s.substate_id)))
+        .with_input_refs(
+            input_refs
+                .iter()
+                .map(|s| SubstateAddress::from_address(&s.substate_id, s.version)),
+        )
         .with_inputs(
             inputs
                 .iter()
-                .map(|addr| SubstateAddress::from_address(&addr.substate_id)),
+                .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version)),
         )
         .sign(&signing_key.key)
         .build();
@@ -234,7 +238,7 @@ pub async fn handle_invoke(
 
     let inputs = inputs
         .into_iter()
-        .map(|s| SubstateAddress::from_address(&s.substate_id));
+        .map(|s| SubstateAddress::from_address(&s.substate_id, s.version));
 
     let account_address = account.address.as_component_address().unwrap();
     let transaction = Transaction::builder()
@@ -448,7 +452,7 @@ pub async fn handle_reveal_funds(
 
         let inputs = inputs
             .into_iter()
-            .map(|addr| SubstateAddress::from_address(&addr.substate_id));
+            .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version));
 
         let transaction = builder.with_inputs(inputs).sign(&account_key.key).build();
 
@@ -713,7 +717,7 @@ async fn finish_claiming<T: WalletStore>(
     });
     let inputs = inputs
         .into_iter()
-        .map(|s| SubstateAddress::from_address(&s.substate_id));
+        .map(|s| SubstateAddress::from_address(&s.substate_id, s.version));
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
         .with_inputs(inputs)
@@ -887,7 +891,10 @@ pub async fn handle_transfer(
         .substate_api()
         .scan_for_substate(&SubstateId::Resource(req.resource_address), None)
         .await?;
-    let resource_substate_address = SubstateAddress::from_address(&resource_substate.address.substate_id);
+    let resource_substate_address = SubstateAddress::from_address(
+        &resource_substate.address.substate_id,
+        resource_substate.address.version,
+    );
     inputs.push(resource_substate.address);
 
     let mut instructions = vec![];

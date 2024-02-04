@@ -213,7 +213,7 @@ where
         substate_address: &SubstateId,
         version: u32,
     ) -> Result<SubstateResult, IndexerError> {
-        let shard = SubstateAddress::from_address(substate_address);
+        let shard = SubstateAddress::from_address(substate_address, version);
         self.get_specific_substate_from_committee_by_shard(shard).await
     }
 
@@ -342,7 +342,7 @@ where
         substate_id: &SubstateId,
         version: u32,
     ) -> Result<TransactionId, IndexerError> {
-        let substate_address = SubstateAddress::from_address(substate_id);
+        let substate_address = SubstateAddress::from_address(substate_id, version);
 
         let epoch = self.committee_provider.current_epoch().await?;
         let mut committee = self.committee_provider.get_committee(epoch, substate_address).await?;

@@ -8,7 +8,6 @@ use tari_dan_engine::{
 };
 use tari_engine_types::virtual_substate::VirtualSubstates;
 use tari_transaction::Transaction;
-use tokio::task;
 
 use crate::traits::{ConsensusSpec, TransactionExecutor};
 

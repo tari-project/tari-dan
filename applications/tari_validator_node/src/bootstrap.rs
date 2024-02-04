@@ -441,7 +441,7 @@ where
 {
     let genesis_block = Block::genesis();
     let substate_id = SubstateId::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
-    let substate_address = SubstateAddress::from_address(&substate_id);
+    let substate_address = SubstateAddress::from_address(&substate_id, 0);
     let mut metadata: Metadata = Default::default();
     metadata.insert(TOKEN_SYMBOL, "ID".to_string());
     if !SubstateRecord::exists(tx.deref_mut(), &substate_address)? {
@@ -469,7 +469,7 @@ where
     }
 
     let substate_id = SubstateId::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
-    let substate_address = SubstateAddress::from_address(&substate_id);
+    let substate_address = SubstateAddress::from_address(&substate_id, 0);
     let mut metadata = Metadata::new();
     metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
     if !SubstateRecord::exists(tx.deref_mut(), &substate_address)? {

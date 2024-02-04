@@ -27,7 +27,7 @@ impl Validator<ExecutedTransaction> for InputRefsValidator {
 
         let is_input_refs_downed = diff
             .down_iter()
-            .map(|(s, v)| SubstateAddress::from_address(s))
+            .map(|(s, v)| SubstateAddress::from_address(s, *v))
             .any(|s| executed.transaction().input_refs().contains(&s));
 
         if is_input_refs_downed {

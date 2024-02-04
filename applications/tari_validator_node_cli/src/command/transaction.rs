@@ -369,7 +369,10 @@ fn summarize(result: &ExecuteResult, time_taken: Duration) {
 fn print_substate_diff(diff: &SubstateDiff) {
     for (address, substate) in diff.up_iter() {
         println!("️🌲 UP substate {} (v{})", address, substate.version(),);
-        println!("      🧩 Shard: {}", SubstateAddress::from_address(address));
+        println!(
+            "      🧩 Shard: {}",
+            SubstateAddress::from_address(address, substate.version())
+        );
         match substate.substate_value() {
             SubstateValue::Component(component) => {
                 println!("      ▶ component ({}): {}", component.module_name, address,);
@@ -403,7 +406,7 @@ fn print_substate_diff(diff: &SubstateDiff) {
     }
     for (address, version) in diff.down_iter() {
         println!("🗑️ DOWN substate {} v{}", address, version,);
-        println!("      🧩 Shard: {}", SubstateAddress::from_address(address));
+        println!("      🧩 Shard: {}", SubstateAddress::from_address(address, *version));
         println!();
     }
 }

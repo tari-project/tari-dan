@@ -351,7 +351,7 @@ impl JsonRpcHandlers {
         let maybe_substate = self
             .state_store
             .with_read_tx(|tx| {
-                let address = SubstateAddress::from_address(&data.address);
+                let address = SubstateAddress::from_address(&data.address, data.version);
                 SubstateRecord::get(tx, &address).optional()
             })
             .map_err(internal_error(answer_id))?;

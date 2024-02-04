@@ -72,7 +72,7 @@ impl SubstateRecord {
     }
 
     pub fn to_substate_address(&self) -> SubstateAddress {
-        SubstateAddress::from_address(&self.substate_id)
+        SubstateAddress::from_address(&self.substate_id, self.version)
     }
 
     pub fn substate_id(&self) -> &SubstateId {

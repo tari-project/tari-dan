@@ -298,7 +298,7 @@ async fn then_validator_node_has_state_at(world: &mut TariWorld, vn_name: String
     let vn = world.get_validator_node(&vn_name);
     let mut client = vn.create_client();
     let substate_address =
-        SubstateAddress::from_address(&SubstateId::from_str(state_address).expect("Invalid state address"));
+        SubstateAddress::from_address(&SubstateId::from_str(state_address).expect("Invalid state address"), 0);
     if let Err(e) = client
         .get_state(GetStateRequest {
             address: substate_address,
