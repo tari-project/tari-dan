@@ -18,7 +18,6 @@ use tari_dan_storage::{
         Block,
         BlockId,
         HighQc,
-        LastExecuted,
         LockedBlock,
         QuorumCertificate,
         SubstateUpdate,
@@ -306,17 +305,39 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 // block that we already have
                 return Ok(());
             }
+
             for qc in qcs {
                 qc.save(tx)?;
             }
+            block.set_as_processed(tx)?;
+
             block.update_nodes(
                 tx,
-                |_, _, _, _| Ok(()),
-                |tx, last_executed, block| {
-                    let new_last_exec = block.as_last_executed();
-                    Self::mark_block_committed(tx, last_executed, block)?;
-                    new_last_exec.set(tx)?;
+                |_, _, _| Ok(()),
+                |tx, _, block| {
+                    let last_exec = block.as_last_executed();
+                    block.commit(tx)?;
+                    debug!(
+                        target: LOG_TARGET,
+                        "✅ COMMIT block {}, last executed height = {}",
+                        block,
+                        last_exec.height
+                    );
+                    last_exec.set(tx)?;
 
+                    // Finalize any ACCEPTED transactions
+                    for tx_atom in block.commands().iter().filter_map(|cmd| cmd.accept()) {
+                        if let Some(mut transaction) = tx_atom.get_transaction(tx.deref_mut()).optional()? {
+                            transaction.final_decision = Some(tx_atom.decision);
+                            if tx_atom.decision.is_abort() {
+                                transaction.abort_details = Some("Abort decision via sync".to_string());
+                            }
+                            // TODO: execution result - we should execute or we should get the execution result via sync
+                            transaction.update(tx)?;
+                        }
+                    }
+
+                    // Remove from pool including any pending updates
                     TransactionPoolRecord::remove_any(
                         tx,
                         block.commands().iter().filter_map(|cmd| cmd.accept()).map(|t| &t.id),
@@ -324,7 +345,6 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
                     Ok::<_, CommsRpcConsensusSyncError>(())
                 },
-                &mut Vec::new(),
             )?;
             // Ensure we dont vote on a synced block
             block.as_last_voted().set(tx)?;
@@ -339,26 +359,6 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             }
             Ok(())
         })
-    }
-
-    fn mark_block_committed(
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        last_executed: &LastExecuted,
-        block: &Block,
-    ) -> Result<(), CommsRpcConsensusSyncError> {
-        if last_executed.height < block.height() {
-            let parent = block.get_parent(tx.deref_mut())?;
-            // Recurse to "catch up" any parent parent blocks we may not have executed
-            block.commit(tx)?;
-            Self::mark_block_committed(tx, last_executed, &parent)?;
-            debug!(
-                target: LOG_TARGET,
-                "✅ COMMIT block {}, last executed height = {}",
-                block,
-                last_executed.height
-            );
-        }
-        Ok(())
     }
 }
 

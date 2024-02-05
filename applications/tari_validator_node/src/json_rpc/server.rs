@@ -31,10 +31,17 @@ use super::handlers::JsonRpcHandlers;
 
 const LOG_TARGET: &str = "tari::validator_node::json_rpc";
 
-pub fn spawn_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandlers) -> Result<SocketAddr, anyhow::Error> {
+pub fn spawn_json_rpc(
+    mut preferred_address: SocketAddr,
+    handlers: JsonRpcHandlers,
+    #[cfg(feature = "metrics")] registry: prometheus::Registry,
+) -> Result<SocketAddr, anyhow::Error> {
     let router = Router::new()
         .route("/", post(handler))
-        .route("/json_rpc", post(handler))
+        .route("/json_rpc", post(handler));
+    #[cfg(feature = "metrics")]
+    let router = router.route("/_metrics", axum::routing::get(metrics::MetricsHandler(registry)));
+    let router = router
         .layer(Extension(Arc::new(handlers)))
         .layer(CorsLayer::permissive());
 
@@ -43,7 +50,8 @@ pub fn spawn_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandlers) 
             target: LOG_TARGET,
             "🌐 Failed to bind on preferred address {}. Trying OS-assigned", preferred_address
         );
-        axum::Server::try_bind(&"127.0.0.1:0".parse().unwrap())
+        preferred_address.set_port(0);
+        axum::Server::try_bind(&preferred_address)
     })?;
     let server = server.serve(router.into_make_service());
     let addr = server.local_addr();
@@ -108,4 +116,43 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         }
     }
     result
+}
+
+#[cfg(feature = "metrics")]
+mod metrics {
+    use std::future;
+
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+        response::{IntoResponse, Response},
+    };
+    use prometheus::{Registry, TextEncoder};
+
+    use super::*;
+
+    #[derive(Debug, Clone)]
+    pub struct MetricsHandler(pub Registry);
+
+    impl<S> axum::handler::Handler<(), S> for MetricsHandler {
+        type Future = future::Ready<Response>;
+
+        fn call(self, req: Request<Body>, _state: S) -> Self::Future {
+            if req.method() != axum::http::Method::GET {
+                let mut resp = "Method not allowed. Only GET requests are supported for metrics.".into_response();
+                *resp.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
+                return future::ready(resp);
+            }
+            let text_encoder = TextEncoder::new();
+            match text_encoder.encode_to_string(&self.0.gather()) {
+                Ok(s) => future::ready(s.into_response()),
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Failed to encode metrics: {e}");
+                    let mut resp = format!("Failed to encode metrics: {e}").into_response();
+                    *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                    future::ready(resp)
+                },
+            }
+        }
+    }
 }

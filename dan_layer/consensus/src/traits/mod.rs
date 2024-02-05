@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+pub mod hooks;
 mod leader_strategy;
 mod messaging;
 mod signing_service;
@@ -15,6 +16,7 @@ use tari_dan_common_types::DerivableFromPublicKey;
 use tari_dan_storage::StateStore;
 use tari_epoch_manager::EpochManagerReader;
 
+use crate::traits::hooks::ConsensusHooks;
 pub use crate::traits::signing_service::*;
 
 pub trait ConsensusSpec: Send + Sync + Clone + 'static {
@@ -28,4 +30,5 @@ pub trait ConsensusSpec: Send + Sync + Clone + 'static {
     type SyncManager: SyncManager + Send + Sync + 'static;
     type InboundMessaging: InboundMessaging<Addr = Self::Addr> + Send + Sync + 'static;
     type OutboundMessaging: OutboundMessaging<Addr = Self::Addr> + Clone + Send + Sync + 'static;
+    type Hooks: ConsensusHooks + Clone + Send + Sync + 'static;
 }
