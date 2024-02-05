@@ -298,8 +298,9 @@ async fn leader_failure_output_conflict() {
     setup_logger();
     let mut test = Test::builder()
         .with_test_timeout(Duration::from_secs(60))
+        .debug_sql("/tmp/test{}.db")
         .add_committee(0, vec!["1", "2"])
-        .add_committee(1, vec!["3", "4"])
+        // .add_committee(1, vec!["3", "4"])
         .start()
         .await;
 

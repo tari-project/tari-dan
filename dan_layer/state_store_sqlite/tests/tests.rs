@@ -58,6 +58,7 @@ mod confirm_all_transitions {
             [Command::Prepare(atom1.clone())].into_iter().collect(),
             Default::default(),
             Default::default(),
+            Default::default(),
             None,
         );
         block1.insert(&mut tx).unwrap();

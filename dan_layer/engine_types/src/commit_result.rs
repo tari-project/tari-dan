@@ -136,6 +136,22 @@ impl FinalizeResult {
         }
     }
 
+    pub fn accept(&self) -> Option<&SubstateDiff> {
+        match self.result {
+            TransactionResult::Accept(ref diff) => Some(diff),
+            TransactionResult::AcceptFeeRejectRest(ref diff, _) => Some(diff),
+            TransactionResult::Reject(_) => None,
+        }
+    }
+
+    pub fn into_accept(self) -> Option<SubstateDiff> {
+        match self.result {
+            TransactionResult::Accept(diff) => Some(diff),
+            TransactionResult::AcceptFeeRejectRest(diff, _) => Some(diff),
+            TransactionResult::Reject(_) => None,
+        }
+    }
+
     pub fn reject(&self) -> Option<&RejectReason> {
         match self.result {
             TransactionResult::Accept(_) => None,

@@ -24,6 +24,7 @@ use tari_dan_storage::{
         LastVoted,
         LockedBlock,
         LockedOutput,
+        PendingStateTreeDiff,
         QuorumDecision,
         SubstateLockFlag,
         SubstateRecord,
@@ -47,7 +48,7 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_lock_block_ready";
 
 pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
-    validator_addr: TConsensusSpec::Addr,
+    local_validator_addr: TConsensusSpec::Addr,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     vote_signing_service: TConsensusSpec::SignatureService,
@@ -77,7 +78,7 @@ where TConsensusSpec: ConsensusSpec
         network: Network,
     ) -> Self {
         Self {
-            validator_addr,
+            local_validator_addr: validator_addr,
             store,
             epoch_manager,
             vote_signing_service,
@@ -107,8 +108,9 @@ where TConsensusSpec: ConsensusSpec
         let maybe_decision = self.store.with_write_tx(|tx| {
             let maybe_decision = self.decide_on_block(tx, &local_committee_shard, valid_block.block())?;
 
+            let is_accept_decision = maybe_decision.map(|d| d.is_accept()).unwrap_or(false);
             // Update nodes
-            if maybe_decision.map(|d| d.is_accept()).unwrap_or(false) {
+            if is_accept_decision {
                 let high_qc = valid_block.block().update_nodes(
                     tx,
                     |tx, locked, block, locked_blocks| self.on_lock_block(tx, locked, block, locked_blocks),
@@ -125,6 +127,7 @@ where TConsensusSpec: ConsensusSpec
             }
             Ok::<_, HotStuffError>(maybe_decision)
         })?;
+
         self.propose_newly_locked_blocks(locked_blocks).await?;
 
         if let Some(decision) = maybe_decision {
@@ -279,6 +282,7 @@ where TConsensusSpec: ConsensusSpec
                 Command::ForeignProposal(_) => {},
             }
         }
+
         leaf.set_as_processed(tx)?;
         Ok(())
     }
@@ -481,7 +485,7 @@ where TConsensusSpec: ConsensusSpec
                             warn!(
                                 target: LOG_TARGET,
                                 "{} ❌ Stage disagreement in block {} for transaction {}. Leader proposed LocalPrepared, but local stage is {}",
-                                self.validator_addr,
+                                self.local_validator_addr,
                                 block.id(),
                                 tx_rec.transaction_id(),
                                 tx_rec.current_stage()
@@ -851,7 +855,7 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<VoteMessage, HotStuffError> {
         let vn = self
             .epoch_manager
-            .get_validator_node(block.epoch(), &self.validator_addr)
+            .get_validator_node(block.epoch(), &self.local_validator_addr)
             .await?;
         let leaf_hash = vn.get_node_hash(self.network);
 
@@ -1013,7 +1017,8 @@ where TConsensusSpec: ConsensusSpec
                     // We are accepting the transaction so can remove the transaction from the pool
                     debug!(
                         target: LOG_TARGET,
-                        "🗑️ Removing transaction {} from pool", tx_rec.transaction_id());
+                        "🗑️ Removing transaction {} from pool", tx_rec.transaction_id()
+                    );
                     tx_rec.remove(tx)?;
                     executed.set_final_decision(t.decision).update(tx)?;
                 },
@@ -1022,6 +1027,13 @@ where TConsensusSpec: ConsensusSpec
         }
 
         block.commit(tx)?;
+
+        // We don't store (empty) pending state diffs for dummy blocks
+        if !block.is_dummy() {
+            let pending = PendingStateTreeDiff::remove_by_block(tx, block.id())?;
+            let mut state_tree = tari_state_tree::SpreadPrefixStateTree::new(tx);
+            state_tree.commit_diff(pending.diff)?;
+        }
 
         if total_transaction_fee > 0 {
             info!(

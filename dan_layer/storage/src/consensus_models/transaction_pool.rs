@@ -17,7 +17,15 @@ use tari_dan_common_types::{
 use tari_transaction::TransactionId;
 
 use crate::{
-    consensus_models::{Decision, LeafBlock, LockedBlock, QcId, TransactionAtom, TransactionPoolStatusUpdate},
+    consensus_models::{
+        Decision,
+        LeafBlock,
+        LockedBlock,
+        QcId,
+        TransactionAtom,
+        TransactionPoolStatusUpdate,
+        TransactionRecord,
+    },
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
@@ -447,6 +455,14 @@ impl TransactionPoolRecord {
             let _ = tx.transaction_pool_remove(id).optional()?;
         }
         Ok(())
+    }
+
+    pub fn get_transaction<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<TransactionRecord, TransactionPoolError> {
+        let transaction = TransactionRecord::get(tx, self.transaction_id())?;
+        Ok(transaction)
     }
 }
 

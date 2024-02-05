@@ -1,0 +1,23 @@
+[package]
+name = "tari_state_tree"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+tari_dan_common_types = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_common_types = { workspace = true }
+tari_crypto = { workspace = true }
+
+hex = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+log = { workspace = true }
+
+[dev-dependencies]
+indexmap = { workspace = true }
+itertools = { workspace = true }

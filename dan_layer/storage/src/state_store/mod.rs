@@ -4,12 +4,13 @@
 use std::{
     borrow::Borrow,
     collections::HashSet,
-    ops::{Deref, DerefMut, RangeInclusive},
+    ops::{DerefMut, RangeInclusive},
 };
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, SubstateAddress};
+use tari_state_tree::{TreeStore, TreeStoreReader, Version};
 use tari_transaction::{Transaction, TransactionId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
@@ -31,6 +32,7 @@ use crate::{
         LeafBlock,
         LockedBlock,
         LockedOutput,
+        PendingStateTreeDiff,
         QcId,
         QuorumCertificate,
         SubstateLockFlag,
@@ -50,11 +52,11 @@ const LOG_TARGET: &str = "tari::dan::storage";
 
 pub trait StateStore {
     type Addr: NodeAddressable;
-    type ReadTransaction<'a>: StateStoreReadTransaction<Addr = Self::Addr>
+    type ReadTransaction<'a>: StateStoreReadTransaction<Addr = Self::Addr> + TreeStoreReader<Version>
     where Self: 'a;
     type WriteTransaction<'a>: StateStoreWriteTransaction<Addr = Self::Addr>
-        + Deref<Target = Self::ReadTransaction<'a>>
-        + DerefMut
+        + TreeStore<Version>
+        + DerefMut<Target = Self::ReadTransaction<'a>>
     where Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError>;
@@ -87,7 +89,6 @@ pub trait StateStore {
 
 pub trait StateStoreReadTransaction {
     type Addr: NodeAddressable;
-
     fn last_sent_vote_get(&mut self) -> Result<LastSentVote, StorageError>;
     fn last_voted_get(&mut self) -> Result<LastVoted, StorageError>;
     fn last_executed_get(&mut self) -> Result<LastExecuted, StorageError>;
@@ -123,6 +124,7 @@ pub trait StateStoreReadTransaction {
     ) -> Result<Vec<TransactionRecord>, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError>;
     fn blocks_get_tip(&mut self) -> Result<Block, StorageError>;
+    /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
     fn blocks_get_all_between(
         &mut self,
         start_block_id_exclusive: &BlockId,
@@ -237,6 +239,12 @@ pub trait StateStoreReadTransaction {
     where
         I: IntoIterator<Item = B>,
         B: Borrow<SubstateAddress>;
+
+    fn pending_state_tree_diffs_exists_for_block(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
+    fn pending_state_tree_diffs_get_all_up_to_commit_block(
+        &mut self,
+        block_id: &BlockId,
+    ) -> Result<Vec<PendingStateTreeDiff>, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -373,6 +381,12 @@ pub trait StateStoreWriteTransaction {
     where
         I: IntoIterator<Item = B>,
         B: Borrow<SubstateAddress>;
+    // -------------------------------- Pending State Tree Diffs -------------------------------- //
+    fn pending_state_tree_diffs_insert(&mut self, diff: &PendingStateTreeDiff) -> Result<(), StorageError>;
+    fn pending_state_tree_diffs_remove_by_block(
+        &mut self,
+        block_id: &BlockId,
+    ) -> Result<PendingStateTreeDiff, StorageError>;
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

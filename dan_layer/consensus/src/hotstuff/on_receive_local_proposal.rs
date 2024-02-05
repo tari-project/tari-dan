@@ -5,7 +5,7 @@
 // ----[foreign:LocalPrepared]--->(LocalPrepared, true) ----cmd:AllPrepare ---> (AllPrepared, true) ---cmd:Accept --->
 // Complete
 
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 
 use log::*;
 use tari_common::configuration::Network;
@@ -23,6 +23,7 @@ use tari_dan_storage::{
         ForeignProposal,
         ForeignSendCounters,
         HighQc,
+        PendingStateTreeDiff,
         TransactionPool,
         TransactionPoolStage,
         ValidBlock,
@@ -31,11 +32,14 @@ use tari_dan_storage::{
     StateStoreReadTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
+use tari_state_tree::StateHashTreeDiff;
 use tokio::sync::broadcast;
 
 use super::proposer::{self, Proposer};
 use crate::{
     hotstuff::{
+        calculate_state_merkle_diff,
+        diff_to_substate_changes,
         error::HotStuffError,
         on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
         pacemaker_handle::PaceMakerHandle,
@@ -126,12 +130,14 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
 
         let maybe_high_qc_and_block = self.store.with_write_tx(|tx| {
-            let Some(valid_block) = self.validate_block(tx, block, &local_committee, &local_committee_shard)? else {
+            let Some((valid_block, tree_diff)) =
+                self.validate_block(tx, block, &local_committee, &local_committee_shard)?
+            else {
                 return Ok(None);
             };
 
             // Save the block as soon as it is valid to ensure we have a valid pacemaker height.
-            let high_qc = self.save_block(tx, &valid_block)?;
+            let high_qc = self.save_block(tx, &valid_block, tree_diff)?;
             info!(target: LOG_TARGET, "✅ Block {} is valid and persisted. HighQc({})", valid_block, high_qc);
             Ok::<_, HotStuffError>(Some((high_qc, valid_block)))
         })?;
@@ -151,11 +157,16 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         valid_block: &ValidBlock,
+        tree_diff: StateHashTreeDiff,
     ) -> Result<HighQc, HotStuffError> {
         valid_block.block().save_foreign_send_counters(tx)?;
         valid_block.block().justify().save(tx)?;
         valid_block.save_all_dummy_blocks(tx)?;
         valid_block.block().save(tx)?;
+
+        // Store the tree diff for the block
+        PendingStateTreeDiff::new(*valid_block.id(), valid_block.height(), tree_diff).save(tx)?;
+
         let high_qc = valid_block.block().justify().update_high_qc(tx)?;
         Ok(high_qc)
     }
@@ -166,9 +177,14 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
-    ) -> Result<Option<ValidBlock>, HotStuffError> {
-        match self.validate_local_proposed_block(tx, block, local_committee, local_committee_shard) {
-            Ok(validated) => Ok(Some(validated)),
+    ) -> Result<Option<(ValidBlock, StateHashTreeDiff)>, HotStuffError> {
+        match self
+            .validate_local_proposed_block(tx, block, local_committee, local_committee_shard)
+            .and_then(|valid_block| {
+                let diff = self.check_state_merkle_root(tx, valid_block.block())?;
+                Ok((valid_block, diff))
+            }) {
+            Ok((validated, diff)) => Ok(Some((validated, diff))),
             // Propagate this error out as sync is needed in the case where we have a valid QC but do not know the
             // block
             Err(err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound { .. })) => {
@@ -182,6 +198,37 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             },
             Err(e) => Err(e),
         }
+    }
+
+    fn check_state_merkle_root(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        block: &Block,
+    ) -> Result<StateHashTreeDiff, HotStuffError> {
+        let current_version = block.justify().block_height().as_u64();
+        let next_version = block.height().as_u64();
+        let commit_substate_diffs = block.get_all_substate_diffs(tx)?;
+
+        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(tx, block.justify().block_id())?;
+
+        let (state_root, state_tree_diff) = calculate_state_merkle_diff(
+            tx.deref(),
+            current_version,
+            next_version,
+            pending,
+            commit_substate_diffs.iter().flat_map(diff_to_substate_changes),
+        )?;
+
+        if state_root != *block.merkle_root() {
+            return Err(ProposalValidationError::InvalidStateMerkleRoot {
+                block_id: *block.id(),
+                from_block: *block.merkle_root(),
+                calculated: state_root,
+            }
+            .into());
+        }
+
+        Ok(state_tree_diff)
     }
 
     fn check_foreign_indexes(
@@ -346,6 +393,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     next_height,
                     candidate_block.justify().clone(),
                     candidate_block.epoch(),
+                    *candidate_block.merkle_root(),
                 ));
                 last_dummy_block = dummy_blocks.last().unwrap();
                 debug!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", last_dummy_block, leader);

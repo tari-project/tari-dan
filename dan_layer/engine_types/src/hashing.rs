@@ -41,6 +41,10 @@ pub fn template_hasher64() -> TariHasher64 {
     hasher64(EngineHashDomainLabel::Template)
 }
 
+pub fn substate_value_hasher32() -> TariHasher32 {
+    hasher32(EngineHashDomainLabel::SubstateValue)
+}
+
 pub fn hasher32(label: EngineHashDomainLabel) -> TariHasher32 {
     TariHasher32::new_with_label::<TariEngineHashDomain>(label.as_label())
 }
@@ -175,6 +179,7 @@ pub enum EngineHashDomainLabel {
     TransactionReceipt,
     FeeClaimAddress,
     QuorumCertificate,
+    SubstateValue,
 }
 
 impl EngineHashDomainLabel {
@@ -198,6 +203,7 @@ impl EngineHashDomainLabel {
             Self::TransactionReceipt => "TransactionReceipt",
             Self::FeeClaimAddress => "FeeClaimAddress",
             Self::QuorumCertificate => "QuorumCertificate",
+            Self::SubstateValue => "SubstateValue",
         }
     }
 }

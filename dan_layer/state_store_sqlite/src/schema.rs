@@ -5,6 +5,7 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         parent_block_id -> Text,
+        merkle_root -> Text,
         network -> Text,
         height -> BigInt,
         epoch -> BigInt,
@@ -144,6 +145,7 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         parent_block_id -> Text,
+        merkle_root -> Text,
         network -> Text,
         height -> BigInt,
         epoch -> BigInt,
@@ -159,12 +161,31 @@ diesel::table! {
 }
 
 diesel::table! {
+    pending_state_tree_diffs (id) {
+        id -> Integer,
+        block_id -> Text,
+        block_height -> BigInt,
+        diff_json -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     quorum_certificates (id) {
         id -> Integer,
         qc_id -> Text,
         block_id -> Text,
         json -> Text,
         created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    state_tree (id) {
+        id -> Integer,
+        key -> Text,
+        node -> Text,
+        is_stale -> Bool,
     }
 }
 
@@ -297,7 +318,9 @@ diesel::allow_tables_to_appear_in_same_query!(
     locked_outputs,
     missing_transactions,
     parked_blocks,
+    pending_state_tree_diffs,
     quorum_certificates,
+    state_tree,
     substates,
     transaction_pool,
     transaction_pool_history,

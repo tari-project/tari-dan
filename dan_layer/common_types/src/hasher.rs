@@ -45,8 +45,11 @@ impl TariHasher {
     }
 
     pub fn result(self) -> FixedHash {
-        let hash: [u8; 32] = self.hasher.finalize().into();
-        hash.into()
+        self.finalize_into_array().into()
+    }
+
+    pub fn finalize_into_array(self) -> [u8; 32] {
+        self.hasher.finalize().into()
     }
 
     fn hash_writer(&mut self) -> impl Write + '_ {

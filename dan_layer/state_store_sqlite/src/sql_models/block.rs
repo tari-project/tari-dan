@@ -19,6 +19,7 @@ pub struct Block {
     pub id: i32,
     pub block_id: String,
     pub parent_block_id: String,
+    pub merkle_root: String,
     pub network: String,
     pub height: i64,
     pub epoch: i64,
@@ -57,6 +58,7 @@ impl Block {
                 }
             })?,
             deserialize_json(&self.commands)?,
+            deserialize_hex_try_from(&self.merkle_root)?,
             self.total_leader_fee as u64,
             self.is_dummy,
             self.is_processed,
@@ -73,6 +75,7 @@ pub struct ParkedBlock {
     pub id: i32,
     pub block_id: String,
     pub parent_block_id: String,
+    pub merkle_root: String,
     pub network: String,
     pub height: i64,
     pub epoch: i64,
@@ -110,6 +113,7 @@ impl TryFrom<ParkedBlock> for consensus_models::Block {
                 }
             })?,
             deserialize_json(&value.commands)?,
+            deserialize_hex_try_from(&value.merkle_root)?,
             value.total_leader_fee as u64,
             false,
             false,
