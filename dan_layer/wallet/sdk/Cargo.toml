@@ -14,6 +14,7 @@ tari_engine_types = { workspace = true }
 tari_dan_common_types = { workspace = true }
 # Just used for QuorumCertificate
 tari_dan_storage = { workspace = true }
+tari_hash_domains = { workspace = true }
 tari_key_manager = { workspace = true }
 tari_transaction = { workspace = true }
 tari_template_lib = { workspace = true }

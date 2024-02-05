@@ -397,6 +397,7 @@ impl From<&ForeignProposal> for proto::consensus::ForeignProposal {
             block_id: value.block_id.as_bytes().to_vec(),
             state: proto::consensus::ForeignProposalState::from(value.state).into(),
             mined_at: value.proposed_height.map(|a| a.0).unwrap_or(0),
+            transactions: value.transactions.iter().map(|tx| tx.as_bytes().to_vec()).collect(),
         }
     }
 }
@@ -416,6 +417,11 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
             } else {
                 Some(NodeHeight(value.mined_at))
             },
+            transactions: value
+                .transactions
+                .into_iter()
+                .map(|tx| tx.try_into())
+                .collect::<Result<_, _>>()?,
         })
     }
 }

@@ -29,10 +29,9 @@ use blake2::{
 use digest::Digest;
 use serde::Serialize;
 use tari_bor::encode_into;
-use tari_crypto::{hash_domain, hashing::DomainSeparation};
+use tari_crypto::hashing::DomainSeparation;
+use tari_hash_domains::TariEngineHashDomain;
 use tari_template_lib::Hash;
-
-hash_domain!(TariEngineHashDomain, "com.tari.dan.engine", 0);
 
 pub fn hasher64(label: EngineHashDomainLabel) -> TariHasher64 {
     TariHasher64::new_with_label::<TariEngineHashDomain>(label.as_label())

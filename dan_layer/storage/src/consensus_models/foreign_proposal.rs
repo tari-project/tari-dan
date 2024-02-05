@@ -9,6 +9,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{shard::Shard, NodeHeight};
+use tari_transaction::TransactionId;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -53,15 +54,18 @@ pub struct ForeignProposal {
     pub block_id: BlockId,
     pub state: ForeignProposalState,
     pub proposed_height: Option<NodeHeight>,
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
+    pub transactions: Vec<TransactionId>,
 }
 
 impl ForeignProposal {
-    pub fn new(bucket: Shard, block_id: BlockId) -> Self {
+    pub fn new(bucket: Shard, block_id: BlockId, transactions: Vec<TransactionId>) -> Self {
         Self {
             bucket,
             block_id,
             state: ForeignProposalState::New,
             proposed_height: None,
+            transactions,
         }
     }
 
@@ -100,5 +104,12 @@ impl ForeignProposal {
         to_block_id: &BlockId,
     ) -> Result<Vec<Self>, StorageError> {
         tx.foreign_proposal_get_all_pending(from_block_id, to_block_id)
+    }
+
+    pub fn get_all_proposed<TTx: StateStoreReadTransaction + ?Sized>(
+        tx: &mut TTx,
+        to_height: NodeHeight,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.foreign_proposal_get_all_proposed(to_height)
     }
 }
