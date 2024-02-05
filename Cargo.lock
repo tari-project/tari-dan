@@ -4565,7 +4565,7 @@ dependencies = [
 [[package]]
 name = "libp2p-identity"
 version = "0.2.8"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=9b73988f611a877595de8a4a205aa86fb78cd626#9b73988f611a877595de8a4a205aa86fb78cd626"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
 dependencies = [
  "bs58 0.5.0",
  "ed25519-dalek",
@@ -5663,7 +5663,7 @@ dependencies = [
 [[package]]
 name = "multiaddr"
 version = "0.18.1"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=9b73988f611a877595de8a4a205aa86fb78cd626#9b73988f611a877595de8a4a205aa86fb78cd626"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
 dependencies = [
  "arrayref",
  "byteorder",
