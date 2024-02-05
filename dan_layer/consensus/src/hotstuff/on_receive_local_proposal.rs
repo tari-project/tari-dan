@@ -119,7 +119,10 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .epoch_manager
             .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
+        let local_committee_shard = self
+            .epoch_manager
+            .get_committee_shard_by_validator_public_key(block.epoch(), block.proposed_by())
+            .await?;
 
         let maybe_high_qc_and_block = self.store.with_write_tx(|tx| {
             let Some(valid_block) =

@@ -944,8 +944,23 @@ where TConsensusSpec: ConsensusSpec
 
     async fn propose_newly_locked_blocks(&mut self, blocks: Vec<Block>) -> Result<(), HotStuffError> {
         for block in blocks {
-            let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
-            let our_addr = self.epoch_manager.get_our_validator_node(block.epoch()).await?;
+            let local_committee = self
+                .epoch_manager
+                .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
+                .await?;
+            let Some(our_addr) = self
+                .epoch_manager
+                .get_our_validator_node(block.epoch())
+                .await
+                .optional()?
+            else {
+                info!(
+                    target: LOG_TARGET,
+                    "❌ Our validator node is not registered for epoch {}. Not proposing {block} to foreign committee",
+                    block.epoch(),
+                );
+                continue;
+            };
             let leader_index = self.leader_strategy.calculate_leader(&local_committee, block.height());
             let my_index = local_committee
                 .addresses()
