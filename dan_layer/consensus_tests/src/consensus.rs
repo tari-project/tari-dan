@@ -405,12 +405,12 @@ async fn leader_failure_node_goes_down() {
     test.assert_clean_shutdown().await;
 }
 
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn foreign_block_distribution() {
     setup_logger();
     let mut test = Test::builder()
         .with_test_timeout(Duration::from_secs(60))
-        .with_hotstuff_filter(Box::new(|from: &TestAddress, to: &TestAddress, _| {
+        .with_message_filter(Box::new(move |from: &TestAddress, to: &TestAddress, _| {
             match from.0.as_str() {
                 // We filter our message from each leader to the foreign committees. So we will rely on other members of
                 // the local committees to send the message to the foreign committee members. And then on
