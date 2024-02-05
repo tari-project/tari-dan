@@ -321,8 +321,6 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             for qc in qcs {
                 qc.save(tx)?;
             }
-            // Ensure we dont vote on a synced block
-            block.as_last_voted().set(tx)?;
 
             self.check_and_update_state_merkle_tree(tx, &block, &updates)?;
 
@@ -332,17 +330,17 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
             block.update_nodes(
                 tx,
-                |_, _, _, _| Ok(()),
-                |tx, last_executed, block| {
+                |_, _, _| Ok(()),
+                |tx, _last_executed, block| {
                     debug!(target: LOG_TARGET, "Sync is committing block {}", block);
-                    let new_last_exec = block.as_last_executed();
-                    Self::commit_block(tx, last_executed, block, pending_state_updates)?;
-                    new_last_exec.set(tx)?;
-
+                    Self::commit_block(tx,  block, pending_state_updates)?;
+                    block.as_last_executed().set(tx)?;
                     Ok::<_, CommsRpcConsensusSyncError>(())
                 },
             )?;
 
+            // Ensure we don't vote on or re-process a synced block
+            block.as_last_voted().set(tx)?;
             block.set_as_processed(tx)?;
 
             Ok(())
@@ -390,48 +388,51 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
     fn commit_block(
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        last_executed: &LastExecuted,
         block: &Block,
         pending_state_updates: &mut HashMap<BlockId, Vec<SubstateUpdate>>,
     ) -> Result<(), CommsRpcConsensusSyncError> {
-        if last_executed.height < block.height() {
-            let parent = block.get_parent(tx.deref_mut())?;
-            // Recurse to "catch up" any parent blocks we may not have executed
-            block.commit(tx)?;
-            Self::commit_block(tx, last_executed, &parent, pending_state_updates)?;
-            debug!(
-                target: LOG_TARGET,
-                "✅ COMMIT block {}, last executed height = {}",
-                block,
-                last_executed.height
-            );
+        block.commit(tx)?;
 
-            if block.is_dummy() {
-                return Ok(());
-            }
+        if block.is_dummy() {
+            return Ok(());
+        }
 
-            TransactionPoolRecord::remove_any(
-                tx,
-                block.commands().iter().filter_map(|cmd| cmd.accept()).map(|t| &t.id),
-            )?;
-
-            let diff = PendingStateTreeDiff::remove_by_block(tx, block.id())?;
-            let mut tree = tari_state_tree::SpreadPrefixStateTree::new(tx);
-            tree.commit_diff(diff.diff)?;
-
-            // Commit the state if any
-            if let Some(updates) = pending_state_updates.remove(block.id()) {
-                debug!(target: LOG_TARGET, "Committed block {} has {} state update(s)", block, updates.len());
-                let (ups, downs) = updates.into_iter().partition::<Vec<_>, _>(|u| u.is_create());
-                // First do UPs then do DOWNs
-                for update in ups {
-                    update.apply(tx, block)?;
+        // Finalize any ACCEPTED transactions
+        for tx_atom in block.commands().iter().filter_map(|cmd| cmd.accept()) {
+            if let Some(mut transaction) = tx_atom.get_transaction(tx.deref_mut()).optional()? {
+                transaction.final_decision = Some(tx_atom.decision);
+                if tx_atom.decision.is_abort() {
+                    transaction.abort_details = Some("Abort decision via sync".to_string());
                 }
-                for update in downs {
-                    update.apply(tx, block)?;
-                }
+                // TODO: execution result - we should execute or we should get the execution result via sync
+                transaction.update(tx)?;
             }
         }
+
+        // Remove from pool including any pending updates
+        TransactionPoolRecord::remove_any(
+            tx,
+            block.commands().iter().filter_map(|cmd| cmd.accept()).map(|t| &t.id),
+        )?;
+
+        let diff = PendingStateTreeDiff::remove_by_block(tx, block.id())?;
+        let mut tree = tari_state_tree::SpreadPrefixStateTree::new(tx);
+        tree.commit_diff(diff.diff)?;
+
+        // Commit the state if any
+        if let Some(updates) = pending_state_updates.remove(block.id()) {
+            debug!(target: LOG_TARGET, "Committed block {} has {} state update(s)", block, updates.len());
+            let (ups, downs) = updates.into_iter().partition::<Vec<_>, _>(|u| u.is_create());
+            // First do UPs then do DOWNs
+            for update in ups {
+                update.apply(tx, block)?;
+            }
+            for update in downs {
+                update.apply(tx, block)?;
+            }
+        }
+
+        debug!(target: LOG_TARGET, "✅ COMMIT block {}", block);
         Ok(())
     }
 }
