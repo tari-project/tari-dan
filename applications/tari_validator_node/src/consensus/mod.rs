@@ -15,24 +15,19 @@ use tokio::{
 };
 
 use crate::{
-    consensus::{
-        leader_selection::RoundRobinLeaderStrategy,
-        signature_service::TariSignatureService,
-        spec::TariConsensusSpec,
-        state_manager::TariStateManager,
-    },
+    consensus::{leader_selection::RoundRobinLeaderStrategy, state_manager::TariStateManager},
     event_subscription::EventSubscription,
 };
 
 mod handle;
 mod leader_selection;
-mod signature_service;
 mod spec;
+pub use spec::TariConsensusSpec;
 mod state_manager;
 
 pub use handle::*;
 use sqlite_message_logger::SqliteMessageLogger;
-use tari_dan_app_utilities::keypair::RistrettoKeypair;
+use tari_dan_app_utilities::{keypair::RistrettoKeypair, signature_service::TariSignatureService};
 use tari_dan_common_types::PeerAddress;
 use tari_rpc_state_sync::RpcStateSyncManager;
 

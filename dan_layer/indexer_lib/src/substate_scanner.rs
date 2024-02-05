@@ -22,7 +22,10 @@
 
 use log::*;
 use rand::{prelude::*, rngs::OsRng};
-use tari_dan_common_types::{NodeAddressable, SubstateAddress};
+use tari_common::configuration::Network;
+use tari_consensus::{quorum_certificate_validations::validate_quorum_certificate, traits::VoteSignatureService};
+use tari_dan_common_types::{DerivableFromPublicKey, SubstateAddress};
+use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_engine_types::{
     events::Event,
     substate::{SubstateId, SubstateValue},
@@ -45,28 +48,36 @@ use crate::{
 const LOG_TARGET: &str = "tari::indexer::dan_layer_scanner";
 
 #[derive(Debug, Clone)]
-pub struct SubstateScanner<TEpochManager, TVnClient, TSubstateCache> {
+pub struct SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService> {
     committee_provider: TEpochManager,
     validator_node_client_factory: TVnClient,
     substate_cache: TSubstateCache,
+    signing_service: TSignatureService,
+    network: Network,
 }
 
-impl<TEpochManager, TVnClient, TAddr, TSubstateCache> SubstateScanner<TEpochManager, TVnClient, TSubstateCache>
+impl<TEpochManager, TVnClient, TAddr, TSubstateCache, TSignatureService>
+    SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>
 where
-    TAddr: NodeAddressable,
+    TAddr: DerivableFromPublicKey,
     TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
     TSubstateCache: SubstateCache,
+    TSignatureService: VoteSignatureService,
 {
     pub fn new(
         committee_provider: TEpochManager,
         validator_node_client_factory: TVnClient,
         substate_cache: TSubstateCache,
+        signing_service: TSignatureService,
+        network: Network,
     ) -> Self {
         Self {
             committee_provider,
             validator_node_client_factory,
             substate_cache,
+            signing_service,
+            network,
         }
     }
 
@@ -318,7 +329,46 @@ where
             .get_substate(shard)
             .await
             .map_err(|e| IndexerError::ValidatorNodeClientError(e.to_string()))?;
+
+        // validate the qc
+        // TODO: currently there is no way to check that the QC validates the substate value we receive
+        //       we are only checking that the QC is valid in isolation
+        match &result {
+            SubstateResult::DoesNotExist => (),
+            SubstateResult::Up {
+                quorum_certificates, ..
+            } => self.validate_substate_qcs(quorum_certificates, shard).await?,
+            SubstateResult::Down {
+                quorum_certificates, ..
+            } => self.validate_substate_qcs(quorum_certificates, shard).await?,
+        }
+
         Ok(result)
+    }
+
+    /// Validates Quorum Certificates associated with a substate
+    async fn validate_substate_qcs(
+        &self,
+        qcs: &[QuorumCertificate],
+        shard_id: SubstateAddress,
+    ) -> Result<(), IndexerError> {
+        let qc = qcs.last().ok_or(IndexerError::MissingQuorumCertificate)?;
+
+        let committee_shard = self
+            .committee_provider
+            .get_committee_shard(qc.epoch(), shard_id)
+            .await?;
+
+        validate_quorum_certificate(
+            qc,
+            &committee_shard,
+            &self.signing_service,
+            &self.committee_provider,
+            self.network,
+        )
+        .await?;
+
+        Ok(())
     }
 
     /// Queries the network to obtain events emitted in a single transaction

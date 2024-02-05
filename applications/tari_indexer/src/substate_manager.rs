@@ -27,7 +27,7 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
-use tari_dan_app_utilities::substate_file_cache::SubstateFileCache;
+use tari_dan_app_utilities::{signature_service::TariSignatureService, substate_file_cache::SubstateFileCache};
 use tari_dan_common_types::PeerAddress;
 use tari_engine_types::{
     events::Event,
@@ -81,15 +81,26 @@ pub struct EventResponse {
 }
 
 pub struct SubstateManager {
-    substate_scanner:
-        Arc<SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, SubstateFileCache>>,
+    substate_scanner: Arc<
+        SubstateScanner<
+            EpochManagerHandle<PeerAddress>,
+            TariValidatorNodeRpcClientFactory,
+            SubstateFileCache,
+            TariSignatureService,
+        >,
+    >,
     substate_store: SqliteSubstateStore,
 }
 
 impl SubstateManager {
     pub fn new(
         dan_layer_scanner: Arc<
-            SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, SubstateFileCache>,
+            SubstateScanner<
+                EpochManagerHandle<PeerAddress>,
+                TariValidatorNodeRpcClientFactory,
+                SubstateFileCache,
+                TariSignatureService,
+            >,
         >,
         substate_store: SqliteSubstateStore,
     ) -> Self {
@@ -229,6 +240,7 @@ impl SubstateManager {
                 id,
                 substate,
                 created_by_tx,
+                quorum_certificates: _,
             } => Ok(Some(SubstateResponse {
                 address: id,
                 version: substate.version(),

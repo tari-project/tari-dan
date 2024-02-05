@@ -3,17 +3,14 @@
 
 use sqlite_message_logger::SqliteMessageLogger;
 use tari_consensus::traits::ConsensusSpec;
+use tari_dan_app_utilities::signature_service::TariSignatureService;
 use tari_dan_common_types::PeerAddress;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_rpc_state_sync::RpcStateSyncManager;
 use tari_state_store_sqlite::SqliteStateStore;
 
 use crate::{
-    consensus::{
-        leader_selection::RoundRobinLeaderStrategy,
-        signature_service::TariSignatureService,
-        state_manager::TariStateManager,
-    },
+    consensus::{leader_selection::RoundRobinLeaderStrategy, state_manager::TariStateManager},
     p2p::services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
 };
 

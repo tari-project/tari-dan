@@ -22,6 +22,7 @@
 
 use log::info;
 use tari_dan_app_utilities::{
+    signature_service::TariSignatureService,
     substate_file_cache::SubstateFileCache,
     template_manager::implementation::TemplateManager,
     transaction_executor::{TariDanTransactionProcessor, TransactionExecutor, TransactionProcessorError},
@@ -70,13 +71,14 @@ pub enum DryRunTransactionProcessorError {
     VirtualSubstateError(#[from] VirtualSubstateError),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct DryRunTransactionProcessor {
     substate_resolver: TariSubstateResolver<
         SqliteStateStore<PeerAddress>,
         EpochManagerHandle<PeerAddress>,
         TariValidatorNodeRpcClientFactory,
         SubstateFileCache,
+        TariSignatureService,
     >,
     epoch_manager: EpochManagerHandle<PeerAddress>,
     payload_processor: TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
@@ -91,6 +93,7 @@ impl DryRunTransactionProcessor {
             EpochManagerHandle<PeerAddress>,
             TariValidatorNodeRpcClientFactory,
             SubstateFileCache,
+            TariSignatureService,
         >,
     ) -> Self {
         Self {

@@ -25,9 +25,10 @@ pub(crate) mod error;
 use std::{collections::HashSet, fmt::Display, future::Future, iter, sync::Arc};
 
 use log::*;
+use tari_consensus::traits::VoteSignatureService;
 use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
-    NodeAddressable,
+    DerivableFromPublicKey,
     SubstateAddress,
 };
 use tari_engine_types::substate::SubstateId;
@@ -49,25 +50,26 @@ use crate::transaction_manager::error::TransactionManagerError;
 
 const LOG_TARGET: &str = "tari::indexer::transaction_manager";
 
-pub struct TransactionManager<TEpochManager, TClientFactory, TSubstateCache> {
+pub struct TransactionManager<TEpochManager, TClientFactory, TSubstateCache, TSignatureService> {
     epoch_manager: TEpochManager,
     client_provider: TClientFactory,
-    transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory, TSubstateCache>,
+    transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory, TSubstateCache, TSignatureService>,
 }
 
-impl<TEpochManager, TClientFactory, TAddr, TSubstateCache>
-    TransactionManager<TEpochManager, TClientFactory, TSubstateCache>
+impl<TEpochManager, TClientFactory, TAddr, TSubstateCache, TSignatureService>
+    TransactionManager<TEpochManager, TClientFactory, TSubstateCache, TSignatureService>
 where
-    TAddr: NodeAddressable + 'static,
+    TAddr: DerivableFromPublicKey + 'static,
     TEpochManager: EpochManagerReader<Addr = TAddr> + 'static,
     TClientFactory: ValidatorNodeClientFactory<Addr = TAddr> + 'static,
     <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError + 'static,
     TSubstateCache: SubstateCache + 'static,
+    TSignatureService: VoteSignatureService + Send + Sync + Clone + 'static,
 {
     pub fn new(
         epoch_manager: TEpochManager,
         client_provider: TClientFactory,
-        substate_scanner: Arc<SubstateScanner<TEpochManager, TClientFactory, TSubstateCache>>,
+        substate_scanner: Arc<SubstateScanner<TEpochManager, TClientFactory, TSubstateCache, TSignatureService>>,
     ) -> Self {
         Self {
             epoch_manager,

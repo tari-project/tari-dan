@@ -3,14 +3,17 @@
 
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{BlockId, LeafBlock, LockedBlock, QuorumCertificate, TransactionPoolError},
+    consensus_models::{BlockId, LeafBlock, LockedBlock, TransactionPoolError},
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_transaction::TransactionId;
 
-use crate::traits::{InboundMessagingError, OutboundMessagingError};
+use crate::{
+    quorum_certificate_validations::QuorumCertificateValidationError,
+    traits::{InboundMessagingError, OutboundMessagingError},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
@@ -162,14 +165,10 @@ pub enum ProposalValidationError {
     MissingSignature { block_id: BlockId, height: NodeHeight },
     #[error("Proposed block {block_id} {height} has invalid signature")]
     InvalidSignature { block_id: BlockId, height: NodeHeight },
-    #[error("QC is not valid: {qc}")]
-    QCisNotValid { qc: QuorumCertificate },
-    #[error("QC has invalid signature: {qc}")]
-    QCInvalidSignature { qc: QuorumCertificate },
-    #[error("Quorum was not reached: {qc}")]
-    QuorumWasNotReached { qc: QuorumCertificate },
     #[error("Merkle proof error: {0}")]
     BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
+    #[error("Quorum certificate validation error: {0}")]
+    QuorumCertificateValidationError(#[from] QuorumCertificateValidationError),
     #[error("Invalid network in block {block_id}: expected {expected_network}, given {block_network}")]
     InvalidNetwork {
         expected_network: String,

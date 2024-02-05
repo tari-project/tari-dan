@@ -32,7 +32,11 @@ use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use log::{error, warn};
 use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
-use tari_dan_app_utilities::{keypair::RistrettoKeypair, substate_file_cache::SubstateFileCache};
+use tari_dan_app_utilities::{
+    keypair::RistrettoKeypair,
+    signature_service::TariSignatureService,
+    substate_file_cache::SubstateFileCache,
+};
 use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, Epoch, PeerAddress};
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::consensus_models::Decision;
@@ -90,8 +94,12 @@ pub struct JsonRpcHandlers {
     base_node_client: GrpcBaseNodeClient,
     substate_manager: Arc<SubstateManager>,
     epoch_manager: EpochManagerHandle<PeerAddress>,
-    transaction_manager:
-        TransactionManager<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, SubstateFileCache>,
+    transaction_manager: TransactionManager<
+        EpochManagerHandle<PeerAddress>,
+        TariValidatorNodeRpcClientFactory,
+        SubstateFileCache,
+        TariSignatureService,
+    >,
     dry_run_transaction_processor: DryRunTransactionProcessor<SubstateFileCache>,
 }
 
@@ -105,6 +113,7 @@ impl JsonRpcHandlers {
             EpochManagerHandle<PeerAddress>,
             TariValidatorNodeRpcClientFactory,
             SubstateFileCache,
+            TariSignatureService,
         >,
         dry_run_transaction_processor: DryRunTransactionProcessor<SubstateFileCache>,
     ) -> Self {
@@ -315,6 +324,7 @@ impl JsonRpcHandlers {
                             id,
                             substate,
                             created_by_tx,
+                            quorum_certificates: _,
                         } => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
                             address: id,
                             version: substate.version(),
