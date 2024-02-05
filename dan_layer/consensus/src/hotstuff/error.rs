@@ -84,6 +84,8 @@ pub enum HotStuffError {
         local_height: NodeHeight,
         qc_height: NodeHeight,
     },
+    #[error("Invalid sync request: {details}")]
+    InvalidSyncRequest { details: String },
 }
 
 impl From<EpochManagerError> for HotStuffError {

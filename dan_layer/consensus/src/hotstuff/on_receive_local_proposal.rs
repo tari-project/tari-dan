@@ -47,7 +47,7 @@ use crate::{
         ProposalValidationError,
     },
     messages::ProposalMessage,
-    traits::{ConsensusSpec, LeaderStrategy},
+    traits::{hooks::ConsensusHooks, ConsensusSpec, LeaderStrategy},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_local_proposal";
@@ -60,6 +60,7 @@ pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     pacemaker: PaceMakerHandle,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock<TConsensusSpec>,
+    hooks: TConsensusSpec::Hooks,
 }
 
 impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec> {
@@ -76,6 +77,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
         network: Network,
+        hooks: TConsensusSpec::Hooks,
     ) -> Self {
         Self {
             network,
@@ -84,6 +86,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             leader_strategy: leader_strategy.clone(),
             pacemaker,
             transaction_pool: transaction_pool.clone(),
+            hooks: hooks.clone(),
             on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock::new(
                 validator_addr,
                 store,
@@ -96,6 +99,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 tx_events,
                 proposer,
                 network,
+                hooks,
             ),
         }
     }
@@ -110,9 +114,14 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             block.proposed_by()
         );
 
-        self.process_block(block).await?;
-
-        Ok(())
+        match self.process_block(block).await {
+            Ok(()) => Ok(()),
+            Err(err @ HotStuffError::ProposalValidationError(_)) => {
+                self.hooks.on_block_validation_failed(&err);
+                Err(err)
+            },
+            Err(err) => Err(err),
+        }
     }
 
     async fn process_block(&mut self, block: Block) -> Result<(), HotStuffError> {
@@ -127,7 +136,10 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .epoch_manager
             .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
+        let local_committee_shard = self
+            .epoch_manager
+            .get_committee_shard_by_validator_public_key(block.epoch(), block.proposed_by())
+            .await?;
 
         let maybe_high_qc_and_block = self.store.with_write_tx(|tx| {
             let Some((valid_block, tree_diff)) =

@@ -4,7 +4,7 @@
 use log::*;
 use tari_dan_common_types::optional::Optional;
 use tari_dan_storage::{
-    consensus_models::{Block, LastSentVote, LastVoted},
+    consensus_models::{Block, LastSentVote, LeafBlock},
     StateStore,
 };
 use tokio::task;
@@ -39,16 +39,26 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
 
         task::spawn(async move {
             let result = store.with_read_tx(|tx| {
-                let last_voted = LastVoted::get(tx)?;
+                let leaf_block = LeafBlock::get(tx)?;
+
+                if leaf_block.height() < msg.high_qc.block_height() {
+                    return Err(HotStuffError::InvalidSyncRequest {
+                        details: format!(
+                            "Received catch up request from {} for block {} but our leaf block is {}. Ignoring \
+                             request.",
+                            from, msg.high_qc, leaf_block
+                        ),
+                    });
+                }
 
                 info!(
                     target: LOG_TARGET,
                     "🌐 Received catch up request from {} from block {} to {}",
                     from,
                     msg.high_qc,
-                    last_voted
+                    leaf_block
                 );
-                let blocks = Block::get_all_blocks_between(tx, msg.high_qc.block_id(), last_voted.block_id(), false)?;
+                let blocks = Block::get_all_blocks_between(tx, msg.high_qc.block_id(), leaf_block.block_id(), false)?;
 
                 debug!(
                     target: LOG_TARGET,

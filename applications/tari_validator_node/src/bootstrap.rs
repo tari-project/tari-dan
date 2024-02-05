@@ -38,6 +38,8 @@ use tari_common::{
     exit_codes::{ExitCode, ExitError},
 };
 use tari_common_types::types::PublicKey;
+#[cfg(not(feature = "metrics"))]
+use tari_consensus::traits::hooks::NoopHooks;
 use tari_core::transactions::transaction_components::ValidatorNodeSignature;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_app_utilities::{
@@ -81,6 +83,8 @@ use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{sync::mpsc, task::JoinHandle};
 
+#[cfg(feature = "metrics")]
+use crate::consensus::metrics::PrometheusConsensusMetrics;
 use crate::{
     consensus,
     consensus::ConsensusHandle,
@@ -122,6 +126,7 @@ pub async fn spawn_services(
     keypair: RistrettoKeypair,
     global_db: GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>,
     consensus_constants: ConsensusConstants,
+    #[cfg(feature = "metrics")] metrics_registry: &prometheus::Registry,
 ) -> Result<Services, anyhow::Error> {
     let mut handles = Vec::with_capacity(8);
 
@@ -241,6 +246,11 @@ pub async fn spawn_services(
     let outbound_messaging =
         ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
 
+    #[cfg(feature = "metrics")]
+    let metrics = PrometheusConsensusMetrics::new(state_store.clone(), metrics_registry);
+    #[cfg(not(feature = "metrics"))]
+    let metrics = NoopHooks;
+
     let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
         config.network,
         state_store.clone(),
@@ -250,6 +260,7 @@ pub async fn spawn_services(
         inbound_messaging,
         outbound_messaging.clone(),
         validator_node_client_factory.clone(),
+        metrics,
         shutdown.clone(),
     )
     .await;
@@ -291,6 +302,8 @@ pub async fn spawn_services(
         state_store.clone(),
         rx_consensus_to_mempool,
         consensus_handle.clone(),
+        #[cfg(feature = "metrics")]
+        metrics_registry,
     );
     handles.push(join_handle);
 

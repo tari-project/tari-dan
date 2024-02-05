@@ -9986,6 +9986,7 @@ dependencies = [
  "minotari_app_grpc",
  "minotari_app_utilities",
  "minotari_wallet_grpc_client",
+ "prometheus",
  "prost 0.12.3",
  "rand",
  "reqwest",

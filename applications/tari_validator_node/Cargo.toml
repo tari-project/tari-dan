@@ -7,6 +7,10 @@ authors.workspace = true
 repository.workspace = true
 license.workspace = true
 
+[features]
+default = ["metrics"]
+metrics = ["prometheus"]
+
 [dependencies]
 minotari_app_grpc = { workspace = true }
 minotari_app_utilities = { workspace = true }
@@ -61,6 +65,7 @@ log4rs = { workspace = true, features = [
     "fixed_window_roller",
 ] }
 mime_guess = { workspace = true }
+prometheus = { workspace = true, optional = true }
 prost = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
@@ -89,5 +94,3 @@ ignored = [
     "log4rs",
 ]
 
-[features]
-ts = [] # this is just for the build script to skip the build

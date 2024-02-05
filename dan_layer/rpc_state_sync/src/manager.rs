@@ -22,7 +22,6 @@ use tari_dan_storage::{
         Block,
         BlockId,
         HighQc,
-        LastExecuted,
         LockedBlock,
         PendingStateTreeDiff,
         QuorumCertificate,
@@ -318,6 +317,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 // block that we already have
                 return Ok(());
             }
+
             for qc in qcs {
                 qc.save(tx)?;
             }
@@ -341,7 +341,6 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
                     Ok::<_, CommsRpcConsensusSyncError>(())
                 },
-                &mut Vec::new(),
             )?;
 
             block.set_as_processed(tx)?;
