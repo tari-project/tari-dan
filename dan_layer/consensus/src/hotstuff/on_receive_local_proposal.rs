@@ -16,8 +16,19 @@ use tari_dan_common_types::{
     NodeHeight,
 };
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, ForeignSendCounters, HighQc, TransactionPool, ValidBlock},
+    consensus_models::{
+        Block,
+        BlockId,
+        Decision,
+        ForeignProposal,
+        ForeignSendCounters,
+        HighQc,
+        TransactionPool,
+        TransactionPoolStage,
+        ValidBlock,
+    },
     StateStore,
+    StateStoreReadTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::broadcast;
@@ -43,6 +54,7 @@ pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     pacemaker: PaceMakerHandle,
+    transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock<TConsensusSpec>,
 }
 
@@ -67,6 +79,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             epoch_manager: epoch_manager.clone(),
             leader_strategy: leader_strategy.clone(),
             pacemaker,
+            transaction_pool: transaction_pool.clone(),
             on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock::new(
                 validator_addr,
                 store,
@@ -113,9 +126,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
 
         let maybe_high_qc_and_block = self.store.with_write_tx(|tx| {
-            let Some(valid_block) =
-                self.validate_block(tx.deref_mut(), block, &local_committee, &local_committee_shard)?
-            else {
+            let Some(valid_block) = self.validate_block(tx, block, &local_committee, &local_committee_shard)? else {
                 return Ok(None);
             };
 
@@ -151,7 +162,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
     fn validate_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
@@ -245,14 +256,15 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
     /// Perform final block validations (TODO: implement all validations)
     /// We assume at this point that initial stateless validations have been done (in inbound messages)
+    #[allow(clippy::too_many_lines)]
     fn validate_local_proposed_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         candidate_block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
     ) -> Result<ValidBlock, HotStuffError> {
-        if Block::has_been_processed(tx, candidate_block.id())? {
+        if Block::has_been_processed(tx.deref_mut(), candidate_block.id())? {
             return Err(ProposalValidationError::BlockAlreadyProcessed {
                 block_id: *candidate_block.id(),
                 height: candidate_block.height(),
@@ -261,7 +273,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         }
 
         // Check that details included in the justify match previously added blocks
-        let Some(justify_block) = candidate_block.justify().get_block(tx).optional()? else {
+        let Some(justify_block) = candidate_block.justify().get_block(tx.deref_mut()).optional()? else {
             // This will trigger a sync
             return Err(ProposalValidationError::JustifyBlockNotFound {
                 proposed_by: candidate_block.proposed_by().to_string(),
@@ -350,12 +362,38 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         // Now that we have all dummy blocks (if any) in place, we can check if the candidate block is safe.
         // Specifically, it should extend the locked block via the dummy blocks.
-        if !candidate_block.is_safe(tx)? {
+        if !candidate_block.is_safe(tx.deref_mut())? {
             return Err(ProposalValidationError::NotSafeBlock {
                 proposed_by: candidate_block.proposed_by().to_string(),
                 hash: *candidate_block.id(),
             }
             .into());
+        }
+
+        // TODO: Move this to consensus constants
+        const TIMEOUT: u64 = 1000;
+        let all_proposed = ForeignProposal::get_all_proposed(
+            tx.deref_mut(),
+            candidate_block.height().saturating_sub(NodeHeight(TIMEOUT)),
+        )?;
+        for proposal in all_proposed {
+            let mut has_unresolved_transactions = false;
+            for tx_id in proposal.transactions.clone() {
+                let transaction = tx.transactions_get(&tx_id).optional()?;
+                if transaction.map_or(false, |t| t.final_decision().is_some()) {
+                    // We don't know the transaction at all, or we know it but it's not finalised.
+                    let mut tx_rec = self.transaction_pool.get(tx, candidate_block.as_leaf_block(), &tx_id)?;
+                    // If the transaction is still in the pool we have to check if it was at least localy prepared,
+                    // otherwise abort it.
+                    if tx_rec.stage() == TransactionPoolStage::New || tx_rec.stage() == TransactionPoolStage::Prepared {
+                        tx_rec.update_local_decision(tx, Decision::Abort)?;
+                        has_unresolved_transactions = true;
+                    }
+                }
+            }
+            if !has_unresolved_transactions {
+                proposal.delete(tx)?;
+            }
         }
 
         Ok(ValidBlock::new(candidate_block))

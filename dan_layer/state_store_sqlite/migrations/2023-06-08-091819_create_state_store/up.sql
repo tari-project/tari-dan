@@ -257,6 +257,7 @@ CREATE TABLE foreign_proposals
     block_id        text      not NULL,
     state           text      not NULL,
     proposed_height bigint    NULL,
+    transactions    text      not NULL,
     created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (bucket, block_id)
 );

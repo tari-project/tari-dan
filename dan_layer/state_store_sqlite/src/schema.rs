@@ -29,6 +29,7 @@ diesel::table! {
         block_id -> Text,
         state -> Text,
         proposed_height -> Nullable<BigInt>,
+        transactions -> Text,
         created_at -> Timestamp,
     }
 }
