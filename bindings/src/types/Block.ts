@@ -6,6 +6,7 @@ import type { QuorumCertificate } from "./QuorumCertificate";
 
 export interface Block {
   id: string;
+  network: string;
   parent: string;
   justify: QuorumCertificate;
   height: NodeHeight;
