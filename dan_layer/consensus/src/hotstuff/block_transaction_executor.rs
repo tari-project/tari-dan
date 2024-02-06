@@ -50,6 +50,17 @@ where TConsensusSpec: ConsensusSpec
     pub fn execute(&self, transaction: Transaction) -> Result<(), BlockTransactionExecutorError> {
         let id: tari_transaction::TransactionId = *transaction.id();
 
+        // We only need to re-execute a transaction if any of its input versions is "None"
+        let must_reexecute = Self::has_inputs_without_version(&transaction);
+        if !must_reexecute {
+            info!(
+                target: LOG_TARGET,
+                "Skipping transaction {} execution as all inputs specify the version",
+                id,
+            );
+            return Ok(())
+        }
+
         info!(
             target: LOG_TARGET,
             "Executing transaction: {}",
@@ -78,6 +89,10 @@ where TConsensusSpec: ConsensusSpec
         };
 
         Ok(())
+    }
+
+    fn has_inputs_without_version(transaction: &Transaction) -> bool {
+        transaction.all_inputs_iter().any(|i| i.version().is_none())
     }
 
     fn new_state_db(&self) -> MemoryStateStore {
