@@ -61,9 +61,10 @@ where
         transaction: &Transaction,
         out: &MemoryStateStore,
     ) -> Result<HashSet<SubstateAddress>, SubstateResolverError> {
+        let inputs = transaction.all_input_addresses_iter();
         let (local_substates, missing_shards) = self
             .store
-            .with_read_tx(|tx| SubstateRecord::get_any(tx, transaction.all_inputs_iter()))?;
+            .with_read_tx(|tx| SubstateRecord::get_any(tx, inputs))?;
 
         info!(
             target: LOG_TARGET,

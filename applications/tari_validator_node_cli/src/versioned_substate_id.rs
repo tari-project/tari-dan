@@ -7,6 +7,7 @@ use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::SubstateAddress;
 use tari_engine_types::{serde_with, substate::SubstateId};
+use tari_transaction::SubstateRequirement;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VersionedSubstateId {
@@ -18,6 +19,10 @@ pub struct VersionedSubstateId {
 impl VersionedSubstateId {
     pub fn to_substate_address(&self) -> SubstateAddress {
         SubstateAddress::from_address(&self.substate_id, self.version)
+    }
+
+    pub fn to_substate_requirement(&self) -> SubstateRequirement {
+        SubstateRequirement::new(self.substate_id.clone(), Some(self.version))
     }
 }
 

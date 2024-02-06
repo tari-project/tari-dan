@@ -196,11 +196,11 @@ impl SubstateRecord {
         tx.substates_get(shard)
     }
 
-    pub fn get_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a SubstateAddress>>(
+    pub fn get_any<TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = SubstateAddress>>(
         tx: &mut TTx,
         shards: I,
     ) -> Result<(Vec<SubstateRecord>, HashSet<SubstateAddress>), StorageError> {
-        let mut shards = shards.into_iter().copied().collect::<HashSet<_>>();
+        let mut shards = shards.into_iter().collect::<HashSet<_>>();
         let found = tx.substates_get_any(&shards)?;
         for f in &found {
             shards.remove(&f.to_substate_address());

@@ -103,7 +103,7 @@ where
             })
             .await
         } else {
-            self.try_with_committee(autofilled_transaction.involved_shards_iter().copied(), |mut client| {
+            self.try_with_committee(autofilled_transaction.involved_shards_iter(), |mut client| {
                 let transaction = autofilled_transaction.clone();
                 async move { client.submit_transaction(transaction).await }
             })

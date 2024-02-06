@@ -4,7 +4,7 @@
 use std::borrow::Borrow;
 
 use tari_common_types::types::PrivateKey;
-use tari_dan_common_types::{Epoch, SubstateAddress};
+use tari_dan_common_types::Epoch;
 use tari_engine_types::{
     confidential::ConfidentialClaim,
     instruction::Instruction,
@@ -17,16 +17,16 @@ use tari_template_lib::{
     models::{Amount, ComponentAddress, ConfidentialWithdrawProof, ResourceAddress},
 };
 
-use crate::{signature::TransactionSignatureFields, Transaction, TransactionSignature};
+use crate::{signature::TransactionSignatureFields, SubstateRequirement, Transaction, TransactionSignature};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
     instructions: Vec<Instruction>,
     fee_instructions: Vec<Instruction>,
     signature: Option<TransactionSignature>,
-    inputs: Vec<SubstateAddress>,
-    input_refs: Vec<SubstateAddress>,
-    outputs: Vec<SubstateAddress>,
+    inputs: Vec<SubstateRequirement>,
+    input_refs: Vec<SubstateRequirement>,
+    outputs: Vec<SubstateRequirement>,
     min_epoch: Option<Epoch>,
     max_epoch: Option<Epoch>,
 }
@@ -167,22 +167,22 @@ impl TransactionBuilder {
     }
 
     /// Add an input to be consumed
-    pub fn add_input(mut self, input_object: SubstateAddress) -> Self {
+    pub fn add_input(mut self, input_object: SubstateRequirement) -> Self {
         self.inputs.push(input_object);
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
     }
 
-    pub fn with_substate_inputs<I: IntoIterator<Item = (B, u32)>, B: Borrow<SubstateId>>(self, inputs: I) -> Self {
+    pub fn with_substate_inputs<I: IntoIterator<Item = (B, Option<u32>)>, B: Borrow<SubstateId>>(self, inputs: I) -> Self {
         self.with_inputs(
             inputs
                 .into_iter()
-                .map(|(a, v)| SubstateAddress::from_address(a.borrow(), v)),
+                .map(|(a, v)| SubstateRequirement::new(a.borrow().clone(), v)),
         )
     }
 
-    pub fn with_inputs<I: IntoIterator<Item = SubstateAddress>>(mut self, inputs: I) -> Self {
+    pub fn with_inputs<I: IntoIterator<Item = SubstateRequirement>>(mut self, inputs: I) -> Self {
         self.inputs.extend(inputs);
         // Reset the signature as it is no longer valid
         self.signature = None;
@@ -190,47 +190,47 @@ impl TransactionBuilder {
     }
 
     /// Add an input to be used without mutation
-    pub fn add_input_ref(mut self, input_object: SubstateAddress) -> Self {
+    pub fn add_input_ref(mut self, input_object: SubstateRequirement) -> Self {
         self.input_refs.push(input_object);
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
     }
 
-    pub fn with_substate_input_refs<I: IntoIterator<Item = (B, u32)>, B: Borrow<SubstateId>>(self, inputs: I) -> Self {
+    pub fn with_substate_input_refs<I: IntoIterator<Item = (B, Option<u32>)>, B: Borrow<SubstateId>>(self, inputs: I) -> Self {
         self.with_input_refs(
             inputs
                 .into_iter()
-                .map(|(a, v)| SubstateAddress::from_address(a.borrow(), v)),
+                .map(|(a, v)| SubstateRequirement::new(a.borrow().clone(), v)),
         )
     }
 
-    pub fn with_input_refs<I: IntoIterator<Item = SubstateAddress>>(mut self, inputs: I) -> Self {
+    pub fn with_input_refs<I: IntoIterator<Item = SubstateRequirement>>(mut self, inputs: I) -> Self {
         self.input_refs.extend(inputs);
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
     }
 
-    pub fn add_output(mut self, output_object: SubstateAddress) -> Self {
+    pub fn add_output(mut self, output_object: SubstateRequirement) -> Self {
         self.outputs.push(output_object);
         self
     }
 
-    pub fn with_substate_outputs<I: IntoIterator<Item = (B, u32)>, B: Borrow<SubstateId>>(self, outputs: I) -> Self {
+    pub fn with_substate_outputs<I: IntoIterator<Item = (B, Option<u32>)>, B: Borrow<SubstateId>>(self, outputs: I) -> Self {
         self.with_outputs(
             outputs
                 .into_iter()
-                .map(|(a, v)| SubstateAddress::from_address(a.borrow(), v)),
+                .map(|(a, v)| SubstateRequirement::new(a.borrow().clone(), v)),
         )
     }
 
-    pub fn with_outputs<I: IntoIterator<Item = SubstateAddress>>(mut self, outputs: I) -> Self {
+    pub fn with_outputs<I: IntoIterator<Item = SubstateRequirement>>(mut self, outputs: I) -> Self {
         self.outputs.extend(outputs);
         self
     }
 
-    pub fn add_output_ref(mut self, output_object: SubstateAddress) -> Self {
+    pub fn add_output_ref(mut self, output_object: SubstateRequirement) -> Self {
         self.outputs.push(output_object);
         self
     }

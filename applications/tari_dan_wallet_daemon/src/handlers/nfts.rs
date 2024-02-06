@@ -260,7 +260,7 @@ async fn create_account_nft(
         .await?;
     let inputs = inputs
         .iter()
-        .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version))
+        .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version)))
         .collect::<Vec<_>>();
 
     let transaction = Transaction::builder()

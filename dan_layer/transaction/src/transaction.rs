@@ -5,7 +5,7 @@ use std::{collections::HashSet, fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, SubstateAddress};
 use tari_engine_types::{
     hashing::{hasher32, EngineHashDomainLabel},
     indexed_value::{IndexedValue, IndexedValueError},
@@ -26,11 +26,11 @@ pub struct Transaction {
 
     // TODO: Ideally we should ensure uniqueness and ordering invariants for each set.
     /// Input objects that may be downed by this transaction
-    inputs: Vec<SubstateAddress>,
+    inputs: Vec<SubstateRequirement>,
     /// Input objects that must exist but cannot be downed by this transaction
-    input_refs: Vec<SubstateAddress>,
+    input_refs: Vec<SubstateRequirement>,
     /// Inputs filled by some authority. These are not part of the transaction hash nor the signature
-    filled_inputs: Vec<SubstateAddress>,
+    filled_inputs: Vec<SubstateRequirement>,
     min_epoch: Option<Epoch>,
     max_epoch: Option<Epoch>,
 }
@@ -44,9 +44,9 @@ impl Transaction {
         fee_instructions: Vec<Instruction>,
         instructions: Vec<Instruction>,
         signature: TransactionSignature,
-        inputs: Vec<SubstateAddress>,
-        input_refs: Vec<SubstateAddress>,
-        filled_inputs: Vec<SubstateAddress>,
+        inputs: Vec<SubstateRequirement>,
+        input_refs: Vec<SubstateRequirement>,
+        filled_inputs: Vec<SubstateRequirement>,
         min_epoch: Option<Epoch>,
         max_epoch: Option<Epoch>,
     ) -> Self {
@@ -103,20 +103,28 @@ impl Transaction {
         self.signature.public_key()
     }
 
-    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
-        self.all_inputs_iter()
+    pub fn involved_shards_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+        self.all_input_addresses_iter()
     }
 
     pub fn num_involved_shards(&self) -> usize {
         self.inputs().len() + self.input_refs().len() + self.filled_inputs().len()
     }
 
-    pub fn input_refs(&self) -> &[SubstateAddress] {
+    pub fn input_refs(&self) -> &[SubstateRequirement] {
         &self.input_refs
     }
 
-    pub fn inputs(&self) -> &[SubstateAddress] {
+    pub fn input_address_refs(&self) -> Vec<SubstateAddress> {
+        self.input_refs.iter().map(|i: &SubstateRequirement| i.to_substate_address()).collect()
+    }
+
+    pub fn inputs(&self) -> &[SubstateRequirement] {
         &self.inputs
+    }
+
+    pub fn input_addresses(&self) -> Vec<SubstateAddress> {
+        self.inputs.iter().map(|i: &SubstateRequirement| i.to_substate_address()).collect()
     }
 
     /// Returns (fee instructions, instructions)
@@ -124,18 +132,29 @@ impl Transaction {
         (self.fee_instructions, self.instructions)
     }
 
-    pub fn all_inputs_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
+    pub fn all_inputs_iter(&self) -> impl Iterator<Item = &SubstateRequirement> + '_ {
         self.inputs()
             .iter()
             .chain(self.input_refs())
             .chain(self.filled_inputs())
     }
 
-    pub fn filled_inputs(&self) -> &[SubstateAddress] {
+    pub fn all_input_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+        self.input_addresses()
+            .into_iter()
+            .chain(self.input_address_refs().into_iter())
+            .chain(self.filled_input_addresses().into_iter())
+    }
+
+    pub fn filled_inputs(&self) -> &[SubstateRequirement] {
         &self.filled_inputs
     }
 
-    pub fn filled_inputs_mut(&mut self) -> &mut Vec<SubstateAddress> {
+    pub fn filled_input_addresses(&self) -> Vec<SubstateAddress> {
+        self.filled_inputs.iter().map(|i: &SubstateRequirement| i.to_substate_address()).collect()
+    }
+
+    pub fn filled_inputs_mut(&mut self) -> &mut Vec<SubstateRequirement> {
         &mut self.filled_inputs
     }
 
@@ -211,7 +230,7 @@ impl Transaction {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq, Hash)]
 pub struct SubstateRequirement {
     #[serde(with = "serde_with::string")]
     substate_id: SubstateId,
@@ -232,6 +251,17 @@ impl SubstateRequirement {
 
     pub fn version(&self) -> Option<u32> {
         self.version
+    }
+
+    pub fn to_substate_address(&self) -> SubstateAddress {
+        // TODO: properly handle the the no-version case
+        SubstateAddress::from_address(self.substate_id(), self.version().unwrap_or_default())
+    }
+
+    /// Calculates and returns the shard number that this SubstateAddress belongs.
+    /// A shard is an equal division of the 256-bit shard space.
+    pub fn to_committee_shard(&self, num_committees: u32) -> Shard {
+        self.to_substate_address().to_committee_shard(num_committees)
     }
 }
 

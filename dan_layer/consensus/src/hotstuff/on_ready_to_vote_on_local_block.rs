@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, num::NonZeroU64, ops::DerefMut};
+use std::{borrow::Borrow, collections::HashSet, num::NonZeroU64, ops::DerefMut};
 
 use log::*;
 use tari_dan_common_types::{
@@ -674,10 +674,11 @@ where TConsensusSpec: ConsensusSpec
         transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
     ) -> Result<bool, HotStuffError> {
+        let inputs: Vec<SubstateAddress> = transaction.inputs().iter().chain(transaction.filled_inputs()).map(|i| i.to_substate_address()).collect();
         let state = SubstateRecord::try_lock_all(
             tx,
             transaction.id(),
-            local_committee_shard.filter(transaction.inputs().iter().chain(transaction.filled_inputs())),
+            local_committee_shard.filter(inputs.iter()),
             SubstateLockFlag::Write,
         )?;
         if !state.is_acquired() {
@@ -689,10 +690,11 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(false);
         }
+        let inputs: Vec<SubstateAddress> = transaction.input_refs().iter().map(|i| i.to_substate_address()).collect();
         let state = SubstateRecord::try_lock_all(
             tx,
             transaction.id(),
-            local_committee_shard.filter(transaction.input_refs()),
+            local_committee_shard.filter(inputs.iter()),
             SubstateLockFlag::Read,
         )?;
 
@@ -723,8 +725,7 @@ where TConsensusSpec: ConsensusSpec
         locked_inputs: &mut HashSet<SubstateAddress>,
     ) -> Result<bool, HotStuffError> {
         let inputs = local_committee_shard
-            .filter(transaction.inputs().iter().chain(transaction.filled_inputs()))
-            .copied()
+            .filter(transaction.inputs().iter().chain(transaction.filled_inputs()).map(|i| i.to_substate_address()))
             .collect::<HashSet<_>>();
         let state = SubstateRecord::check_lock_all(tx, inputs.iter(), SubstateLockFlag::Write)?;
         if !state.is_acquired() {
@@ -745,10 +746,11 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
         locked_inputs.extend(inputs);
-
+        let inputs = local_committee_shard.filter(transaction.input_refs().iter().map(|i| i.to_substate_address()))
+            .collect::<HashSet<_>>();
         let state = SubstateRecord::check_lock_all(
             tx,
-            local_committee_shard.filter(transaction.input_refs()),
+            inputs.iter(),
             SubstateLockFlag::Read,
         )?;
 
@@ -777,16 +779,20 @@ where TConsensusSpec: ConsensusSpec
         transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
+        let write_inputs: Vec<SubstateAddress> = transaction.inputs().iter().chain(transaction.filled_inputs()).map(|i| i.to_substate_address())
+            .collect();
         SubstateRecord::try_unlock_many(
             tx,
             transaction.id(),
-            local_committee_shard.filter(transaction.inputs().iter().chain(transaction.filled_inputs())),
+            local_committee_shard.filter(write_inputs.iter()),
             SubstateLockFlag::Write,
         )?;
+        let read_inputs: Vec<SubstateAddress> = transaction.input_refs().iter().map(|i| i.to_substate_address())
+            .collect();
         SubstateRecord::try_unlock_many(
             tx,
             transaction.id(),
-            local_committee_shard.filter(transaction.input_refs()),
+            local_committee_shard.filter(read_inputs.iter()),
             SubstateLockFlag::Read,
         )?;
         Ok(())

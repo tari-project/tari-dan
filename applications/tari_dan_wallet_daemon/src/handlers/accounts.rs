@@ -37,7 +37,7 @@ use tari_template_lib::{
     prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateRequirement, Transaction};
 use tari_wallet_daemon_client::{
     types::{
         AccountGetDefaultRequest,
@@ -135,12 +135,12 @@ pub async fn handle_create(
         .with_input_refs(
             input_refs
                 .iter()
-                .map(|s| SubstateAddress::from_address(&s.substate_id, s.version)),
+                .map(|s| SubstateRequirement::new(s.substate_id.clone(), Some(s.version))),
         )
         .with_inputs(
             inputs
                 .iter()
-                .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version)),
+                .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version))),
         )
         .sign(&signing_key.key)
         .build();
@@ -238,7 +238,7 @@ pub async fn handle_invoke(
 
     let inputs = inputs
         .into_iter()
-        .map(|s| SubstateAddress::from_address(&s.substate_id, s.version));
+        .map(|s| SubstateRequirement::new(s.substate_id.clone(), Some(s.version)));
 
     let account_address = account.address.as_component_address().unwrap();
     let transaction = Transaction::builder()
@@ -452,7 +452,7 @@ pub async fn handle_reveal_funds(
 
         let inputs = inputs
             .into_iter()
-            .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version));
+            .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version)));
 
         let transaction = builder.with_inputs(inputs).sign(&account_key.key).build();
 
@@ -717,7 +717,7 @@ async fn finish_claiming<T: WalletStore>(
     });
     let inputs = inputs
         .into_iter()
-        .map(|s| SubstateAddress::from_address(&s.substate_id, s.version));
+        .map(|s| SubstateRequirement::new(s.substate_id.clone(), Some(s.version)));
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
         .with_inputs(inputs)
@@ -891,9 +891,9 @@ pub async fn handle_transfer(
         .substate_api()
         .scan_for_substate(&SubstateId::Resource(req.resource_address), None)
         .await?;
-    let resource_substate_address = SubstateAddress::from_address(
-        &resource_substate.address.substate_id,
-        resource_substate.address.version,
+    let resource_substate_address = SubstateRequirement::new(
+        resource_substate.address.substate_id.clone(),
+        Some(resource_substate.address.version),
     );
     inputs.push(resource_substate.address);
 

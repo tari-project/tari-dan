@@ -87,8 +87,10 @@ impl ExecutedTransaction {
         &self.result
     }
 
-    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
-        self.transaction.all_inputs_iter().chain(&self.resulting_outputs)
+    pub fn involved_shards_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+        self.transaction.all_inputs_iter()
+            .map(|input| input.to_substate_address())
+            .chain(self.resulting_outputs.clone())
     }
 
     pub fn num_involved_shards(&self) -> usize {
@@ -137,21 +139,21 @@ impl ExecutedTransaction {
     pub fn to_initial_evidence(&self) -> Evidence {
         let mut evidence = Evidence::empty();
         evidence.extend(self.transaction.inputs().iter().map(|input| {
-            (*input, ShardEvidence {
+            (input.to_substate_address(), ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Write,
             })
         }));
 
         evidence.extend(self.transaction.input_refs().iter().map(|input_ref| {
-            (*input_ref, ShardEvidence {
+            (input_ref.to_substate_address(), ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Read,
             })
         }));
 
         evidence.extend(self.resulting_outputs.iter().map(|output| {
-            (*output, ShardEvidence {
+            (output.clone(), ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Write,
             })
@@ -294,7 +296,7 @@ impl ExecutedTransaction {
         let transactions = Self::get_all(tx, transactions)?;
         Ok(transactions
             .into_iter()
-            .map(|t| (*t.transaction.id(), t.involved_shards_iter().copied().collect()))
+            .map(|t| (*t.transaction.id(), t.involved_shards_iter().collect()))
             .collect())
     }
 }

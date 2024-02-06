@@ -320,8 +320,8 @@ where
         let tx_substate_address = SubstateAddress::for_transaction_receipt(transaction.id().into_array().into());
 
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
-
-        let mut is_input_shard = local_committee_shard.includes_any_shard(transaction.all_inputs_iter());
+        let transaction_inputs = transaction.all_inputs_iter().map(|i| i.to_substate_address());
+        let mut is_input_shard = local_committee_shard.includes_any_shard(transaction_inputs);
         // Special temporary case: if there are no input shards an output shard will also propagate. No inputs is
         // invalid, however we must support them for now because of CreateFreeTestCoin transactions.
         is_input_shard |= transaction.inputs().len() + transaction.input_refs().len() == 0;
@@ -365,11 +365,12 @@ where
                     // Forward to foreign replicas.
                     // We assume that at least f other local replicas receive this transaction and also forward to their
                     // matching replica(s)
+                    let substate_addresses = transaction.involved_shards_iter().collect();
                     if let Err(e) = self
                         .gossip
                         .forward_to_foreign_replicas(
                             current_epoch,
-                            transaction.involved_shards_iter().copied().collect(),
+                            substate_addresses,
                             NewTransactionMessage {
                                 transaction,
                                 output_shards: vec![],
@@ -396,11 +397,12 @@ where
             if should_propagate {
                 // This validator is not involved, so we forward the transaction to f + 1 replicas per distinct shard
                 // per input shard ID because we may be the only validator that has received this transaction.
+                let substate_addresses = transaction.involved_shards_iter().collect();
                 if let Err(e) = self
                     .gossip
                     .gossip_to_foreign_replicas(
                         current_epoch,
-                        transaction.involved_shards_iter().copied().collect(),
+                        substate_addresses,
                         NewTransactionMessage {
                             transaction,
                             output_shards: vec![],
@@ -585,7 +587,8 @@ where
 
         self.epoch_manager.get_local_committee_shard(current_epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
-        let is_input_shard = local_committee_shard.includes_any_shard(executed.transaction().all_inputs_iter()) |
+        let all_inputs_iter = executed.transaction().all_inputs_iter().map(|i| i.to_substate_address());
+        let is_input_shard = local_committee_shard.includes_any_shard(all_inputs_iter) |
             (executed.transaction().inputs().len() + executed.transaction().input_refs().len() == 0);
 
         if should_propagate && is_input_shard {

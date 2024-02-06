@@ -158,7 +158,7 @@ where TSubstateCache: SubstateCache + 'static
                 continue;
             }
 
-            let (id, substate) = self.fetch_substate(*address, epoch).await?;
+            let (id, substate) = self.fetch_substate(address.to_substate_address(), epoch).await?;
             substates.insert(id, substate);
         }
 

@@ -5,12 +5,12 @@ use std::str::FromStr;
 
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{Epoch, SubstateAddress};
+use tari_dan_common_types::Epoch;
 use tari_dan_wallet_sdk::{
     models::{TransactionStatus, WalletTransaction},
     storage::WalletStorageError,
 };
-use tari_transaction::TransactionSignature;
+use tari_transaction::{SubstateRequirement, TransactionSignature};
 use tari_utilities::hex::Hex;
 
 use crate::{schema::transactions, serialization::deserialize_json};
@@ -40,8 +40,8 @@ pub struct Transaction {
 /// Struct used to keep inputs and outputs in a single field as json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionInputs {
-    pub inputs: Vec<SubstateAddress>,
-    pub input_refs: Vec<SubstateAddress>,
+    pub inputs: Vec<SubstateRequirement>,
+    pub input_refs: Vec<SubstateRequirement>,
 }
 
 impl Transaction {

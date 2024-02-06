@@ -45,7 +45,7 @@ use tari_template_lib::{
     models::{Amount, BucketId, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use tari_transaction_manifest::parse_manifest;
 use tari_validator_node_client::{
     types::{
@@ -236,13 +236,13 @@ pub async fn submit_transaction(
     // Convert to shard id
     let inputs = inputs
         .into_iter()
-        .map(|versioned_addr| versioned_addr.to_substate_address())
+        .map(|versioned_addr| versioned_addr.to_substate_requirement())
         .collect::<Vec<_>>();
 
     let input_refs = common
         .input_refs
         .into_iter()
-        .map(|versioned_addr| versioned_addr.to_substate_address())
+        .map(|versioned_addr| versioned_addr.to_substate_requirement())
         .collect::<Vec<_>>();
 
     summarize_request(&instructions, &inputs, 1, common.dry_run);
@@ -328,7 +328,7 @@ async fn wait_for_transaction_result(
     }
 }
 
-fn summarize_request(instructions: &[Instruction], inputs: &[SubstateAddress], fee: u64, is_dry_run: bool) {
+fn summarize_request(instructions: &[Instruction], inputs: &[SubstateRequirement], fee: u64, is_dry_run: bool) {
     if is_dry_run {
         println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
         println!();
