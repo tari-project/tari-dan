@@ -3,6 +3,7 @@
 
 mod cli;
 mod command;
+mod snake_case;
 
 use std::{fs, path::Path};
 
@@ -81,6 +82,7 @@ fn generate(template: &LoadedTemplate, output_path: &Path, cli: &Cli) {
 
 fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) -> String {
     let template = liquid::ParserBuilder::with_stdlib()
+        .filter(snake_case::SnakeCase)
         .build()
         .unwrap()
         .parse(in_file)

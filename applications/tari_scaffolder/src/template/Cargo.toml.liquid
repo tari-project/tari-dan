@@ -1,5 +1,5 @@
 [package]
-name = "{{template_name}}"
+name = "{{template_name | snake_case | append: '_cli'}}"
 version = "0.0.1"
 edition = "2021"
 
