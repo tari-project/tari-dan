@@ -79,26 +79,12 @@ use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
-    consensus,
-    consensus::ConsensusHandle,
+    consensus::{self, ConsensusHandle},
     dry_run_transaction_processor::DryRunTransactionProcessor,
     p2p::{
         create_tari_validator_node_rpc_service,
         services::{
-            mempool,
-            mempool::{
-                ClaimFeeTransactionValidator,
-                EpochRangeValidator,
-                FeeTransactionValidator,
-                HasInputs,
-                HasInvolvedShards,
-                InputRefsValidator,
-                MempoolError,
-                MempoolHandle,
-                TemplateExistsValidator,
-                TransactionSignatureValidator,
-                Validator,
-            },
+            mempool::{self, ClaimFeeTransactionValidator, EpochRangeValidator, FeeTransactionValidator, HasInputs, HasInvolvedShards, InputRefsValidator, MempoolError, MempoolHandle, OutputsDontExistLocally, TemplateExistsValidator, TransactionSignatureValidator, Validator},
             messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, Gossip},
         },
     },
@@ -522,5 +508,5 @@ fn create_mempool_after_execute_validator<TAddr: NodeAddressable>(
     store: SqliteStateStore<TAddr>,
 ) -> impl Validator<ExecutedTransaction, Error = MempoolError> {
     HasInvolvedShards::new().and_then(InputRefsValidator::new())
-    //.and_then(OutputsDontExistLocally::new(store))
+    .and_then(OutputsDontExistLocally::new(store))
 }
