@@ -103,6 +103,7 @@ impl Extend<(SubstateAddress, ShardEvidence)> for Evidence {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ShardEvidence {
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub qc_ids: IndexSet<QcId>,
     pub lock: LockFlag,
 }
@@ -128,10 +129,13 @@ impl ShardEvidence {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TransactionAtom {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub id: TransactionId,
     pub decision: Decision,
     pub evidence: Evidence,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub transaction_fee: u64,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub leader_fee: u64,
 }
 

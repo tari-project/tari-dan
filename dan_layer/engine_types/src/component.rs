@@ -50,6 +50,7 @@ pub fn new_component_address_from_parts(template_address: &TemplateAddress, comp
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ComponentHeader {
     #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub template_address: TemplateAddress,
     pub module_name: String,
     #[serde(with = "serde_with::hex")]

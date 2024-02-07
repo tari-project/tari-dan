@@ -69,7 +69,7 @@ pub enum RuleRequirement {
     /// Requires execution within a specific component
     ScopedToComponent(ComponentAddress),
     /// Requires execution within a specific template
-    ScopedToTemplate(TemplateAddress),
+    ScopedToTemplate(#[cfg_attr(feature = "ts", ts(type = "Array<number>"))] TemplateAddress),
 }
 
 impl From<ResourceAddress> for RuleRequirement {
@@ -109,7 +109,7 @@ pub enum RequireRule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ComponentAccessRules {
-    #[cfg_attr(feature = "ts", ts(skip))]
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, AccessRule>"))]
     method_access: BTreeMap<String, AccessRule>,
     default: AccessRule,
 }

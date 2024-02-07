@@ -51,8 +51,10 @@ impl Display for FeeClaimAddress {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FeeClaim {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub epoch: u64,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub validator_public_key: PublicKey,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub amount: Amount,
 }

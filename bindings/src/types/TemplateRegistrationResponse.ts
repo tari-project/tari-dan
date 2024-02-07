@@ -2,5 +2,5 @@
 
 export interface TemplateRegistrationResponse {
   template_address: Array<number>;
-  transaction_id: bigint;
+  transaction_id: number;
 }

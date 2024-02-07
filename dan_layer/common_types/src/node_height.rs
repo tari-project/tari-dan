@@ -12,7 +12,7 @@ use ts_rs::TS;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
-pub struct NodeHeight(pub u64);
+pub struct NodeHeight(#[cfg_attr(feature = "ts", ts(type = "number"))] pub u64);
 
 impl NodeHeight {
     pub const fn as_u64(self) -> u64 {

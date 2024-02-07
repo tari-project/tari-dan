@@ -2,8 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
 use crate::crypto::InvalidByteLengthError;
 
@@ -11,7 +9,6 @@ use crate::crypto::InvalidByteLengthError;
 #[serde_as]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct BalanceProofSignature(#[serde_as(as = "Bytes")] [u8; BalanceProofSignature::length()]);
 
 impl BalanceProofSignature {

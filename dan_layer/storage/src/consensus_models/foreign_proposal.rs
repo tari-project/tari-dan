@@ -50,7 +50,9 @@ impl FromStr for ForeignProposalState {
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ForeignProposal {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub bucket: Shard,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub block_id: BlockId,
     pub state: ForeignProposalState,
     pub proposed_height: Option<NodeHeight>,

@@ -2,15 +2,15 @@
 #   SPDX-License-Identifier: BSD-3-Clause
 
 cargo test --workspace --exclude integration_tests export_bindings --features ts
-shx mv ../dan_layer/bindings/src/types/* ./src/types/
-shx rm -rf ../dan_layer/bindings/
+npx shx mv ../dan_layer/bindings/src/types/* ./src/types/
+npx shx rm -rf ../dan_layer/bindings/
 DIRECTORY_PATH="./src/types" # replace with your directory path
 HELPERS_PATH="./src/helpers" # replace with your directory path
 INDEX_FILE="./index.ts"
 
 # Remove the index file if it exists
 if [ -f "$INDEX_FILE" ]; then
-  rm "$INDEX_FILE"
+  npx shx rm "$INDEX_FILE"
 fi
 
 # Add the license header

@@ -62,15 +62,18 @@ const LOG_TARGET: &str = "tari::dan::storage::consensus_models::block";
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Block {
     // Header
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     id: BlockId,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     network: Network,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     parent: BlockId,
     justify: QuorumCertificate,
     height: NodeHeight,
     epoch: Epoch,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     proposed_by: PublicKey,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     total_leader_fee: u64,
 
     // Body
@@ -86,6 +89,7 @@ pub struct Block {
     /// Flag that indicates that the block has been committed.
     is_committed: bool,
     /// Counter for each foreign shard for reliable broadcast.
+    #[cfg_attr(feature = "ts", ts(type = "Array<{shard: string, counter: number}>"))]
     foreign_indexes: IndexMap<Shard, u64>,
     /// Timestamp when was this stored.
     #[cfg_attr(feature = "ts", ts(type = "string | null"))]
@@ -756,12 +760,7 @@ impl Display for Block {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
-pub struct BlockId(
-    #[serde(with = "serde_with::hex")]
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    FixedHash,
-);
+pub struct BlockId(#[serde(with = "serde_with::hex")] FixedHash);
 
 impl BlockId {
     pub const fn genesis() -> Self {
