@@ -13,6 +13,7 @@ use ts_rs::TS;
 pub struct ConfidentialClaim {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub public_key: PublicKey,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub output_address: UnclaimedConfidentialOutputAddress,
     pub range_proof: Vec<u8>,
     #[cfg_attr(feature = "ts", ts(type = "string"))]

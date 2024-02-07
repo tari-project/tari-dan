@@ -35,7 +35,9 @@ const LOG_TARGET: &str = "tari::dan::storage::quorum_certificate";
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct QuorumCertificate {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     qc_id: QcId,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     block_id: BlockId,
     block_height: NodeHeight,
     epoch: Epoch,
@@ -253,12 +255,7 @@ impl Display for QuorumCertificate {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
-pub struct QcId(
-    #[serde(with = "serde_with::hex")]
-    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
-    FixedHash,
-);
+pub struct QcId(#[serde(with = "serde_with::hex")] FixedHash);
 
 impl QcId {
     pub const fn genesis() -> Self {

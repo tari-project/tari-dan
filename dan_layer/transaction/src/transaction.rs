@@ -22,7 +22,7 @@ use crate::{builder::TransactionBuilder, transaction_id::TransactionId, Transact
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Transaction {
-    #[cfg_attr(feature = "ts", ts(flatten))]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     id: TransactionId,
     fee_instructions: Vec<Instruction>,
     instructions: Vec<Instruction>,

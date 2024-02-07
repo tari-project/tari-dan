@@ -35,6 +35,7 @@ use ts_rs::TS;
 pub struct Resource {
     resource_type: ResourceType,
     owner_rule: OwnerRule,
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     owner_key: RistrettoPublicKeyBytes,
     access_rules: ResourceAccessRules,
     metadata: Metadata,

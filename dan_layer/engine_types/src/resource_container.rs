@@ -37,7 +37,9 @@ use crate::{
 pub enum ResourceContainer {
     Fungible {
         address: ResourceAddress,
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         amount: Amount,
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         locked_amount: Amount,
     },
     NonFungible {
@@ -47,11 +49,13 @@ pub enum ResourceContainer {
     },
     Confidential {
         address: ResourceAddress,
-        #[cfg_attr(feature = "ts", ts(skip))]
+        #[cfg_attr(feature = "ts", ts(type = "Record<string, ConfidentialOutput>"))]
         commitments: BTreeMap<Commitment, ConfidentialOutput>,
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         revealed_amount: Amount,
-        #[cfg_attr(feature = "ts", ts(skip))]
+        #[cfg_attr(feature = "ts", ts(type = "Record<string, ConfidentialOutput>"))]
         locked_commitments: BTreeMap<Commitment, ConfidentialOutput>,
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         locked_revealed_amount: Amount,
     },
 }

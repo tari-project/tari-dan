@@ -34,8 +34,11 @@ pub struct SubstateRecord {
     pub substate_value: SubstateValue,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub state_hash: FixedHash,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_by_transaction: TransactionId,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_justify: QcId,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_block: BlockId,
     pub created_height: NodeHeight,
     pub created_at_epoch: Epoch,
@@ -45,8 +48,11 @@ pub struct SubstateRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct SubstateDestroyed {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub by_transaction: TransactionId,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub justify: QcId,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub by_block: BlockId,
     pub at_epoch: Epoch,
 }

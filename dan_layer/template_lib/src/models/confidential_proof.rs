@@ -33,11 +33,15 @@ pub struct ConfidentialStatement {
     pub commitment: [u8; 32],
     /// Public nonce (R) that was used to generate the commitment mask
     // #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub sender_public_nonce: RistrettoPublicKeyBytes,
     /// Commitment value encrypted for the receiver. Without this it would be difficult (not impossible) for the
     /// receiver to determine the value component of the commitment.
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub encrypted_data: EncryptedData,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub minimum_value_promise: u64,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub revealed_amount: Amount,
 }
 
@@ -46,9 +50,11 @@ pub struct ConfidentialStatement {
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialWithdrawProof {
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub inputs: Vec<PedersonCommitmentBytes>,
     pub output_proof: ConfidentialOutputProof,
     /// Balance proof
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub balance_proof: BalanceProofSignature,
 }
 
@@ -57,7 +63,6 @@ pub struct ConfidentialWithdrawProof {
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct EncryptedData(#[serde_as(as = "Bytes")] pub [u8; EncryptedData::size()]);
 
 impl EncryptedData {

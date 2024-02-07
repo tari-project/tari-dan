@@ -32,5 +32,6 @@ use ts_rs::TS;
 pub struct UnclaimedConfidentialOutput {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub commitment: Commitment,
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub encrypted_data: EncryptedData,
 }
