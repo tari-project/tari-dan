@@ -25,12 +25,12 @@ use tokio::sync::{
 
 use crate::support::{address::TestAddress, ValidatorChannels};
 
-pub type HotstuffFilter = Box<dyn Fn(&TestAddress, &TestAddress, &HotstuffMessage) -> bool + Sync + Send + 'static>;
+pub type MessageFilter = Box<dyn Fn(&TestAddress, &TestAddress, &HotstuffMessage) -> bool + Sync + Send + 'static>;
 
 pub fn spawn_network(
     channels: Vec<ValidatorChannels>,
     shutdown_signal: ShutdownSignal,
-    hotstuff_filter: Option<HotstuffFilter>,
+    message_filter: Option<MessageFilter>,
 ) -> TestNetwork {
     let tx_new_transactions = channels
         .iter()
@@ -77,7 +77,7 @@ pub fn spawn_network(
         transaction_store: Arc::new(Default::default()),
         offline_destinations: offline_destinations.clone(),
         shutdown_signal,
-        hotstuff_filter,
+        message_filter,
     }
     .spawn();
 
@@ -195,7 +195,7 @@ pub struct TestNetworkWorker {
 
     offline_destinations: Arc<RwLock<Vec<TestNetworkDestination>>>,
     shutdown_signal: ShutdownSignal,
-    hotstuff_filter: Option<HotstuffFilter>,
+    message_filter: Option<MessageFilter>,
 }
 
 impl TestNetworkWorker {
@@ -292,8 +292,8 @@ impl TestNetworkWorker {
     pub async fn handle_broadcast(&mut self, from: TestAddress, to: Vec<TestAddress>, msg: HotstuffMessage) {
         log::debug!("🌎️ Broadcast {} from {} to {}", msg, from, to.iter().join(", "));
         for vn in to {
-            if let Some(hotstuff_filter) = &self.hotstuff_filter {
-                if !hotstuff_filter(&from, &vn, &msg) {
+            if let Some(message_filter) = &self.message_filter {
+                if !message_filter(&from, &vn, &msg) {
                     self.num_filtered_messages
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     continue;
@@ -317,8 +317,8 @@ impl TestNetworkWorker {
     }
 
     async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage) {
-        if let Some(hotstuff_filter) = &self.hotstuff_filter {
-            if !hotstuff_filter(&from, &to, &msg) {
+        if let Some(message_filter) = &self.message_filter {
+            if !message_filter(&from, &to, &msg) {
                 self.num_filtered_messages
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 return;

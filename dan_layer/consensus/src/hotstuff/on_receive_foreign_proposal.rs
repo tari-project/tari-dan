@@ -73,14 +73,23 @@ where TConsensusSpec: ConsensusSpec
             .await?;
 
         let local_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
-        self.validate_proposed_block(
+        if let Err(err) = self.validate_proposed_block(
             &from,
             &block,
             committee_shard.shard(),
             local_shard.shard(),
             &foreign_receive_counter,
-        )?;
-        // Is this ok? Can foreign node send invalid block that should still increment the counter?
+        ) {
+            warn!(
+                target: LOG_TARGET,
+                "🔥 FOREIGN PROPOSAL: Invalid proposal from {}: {}. Ignoring.",
+                from,
+                err
+            );
+            // Invalid blocks should not cause the state machine to transition to Error
+            return Ok(());
+        }
+
         foreign_receive_counter.increment(&committee_shard.shard());
 
         let tx_ids = block
