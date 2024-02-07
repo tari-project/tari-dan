@@ -9,7 +9,7 @@ use tari_dan_engine::{
     bootstrap_state,
     state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
 };
-use tari_dan_storage::{consensus_models::SubstateRecord, StateStore, StorageError};
+use tari_dan_storage::{consensus_models::{ExecutedTransaction, SubstateRecord}, StateStore, StorageError};
 use tari_engine_types::virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates};
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::{Instruction, Transaction};
@@ -59,7 +59,7 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    pub fn execute(&self, transaction: Transaction) -> Result<(), BlockTransactionExecutorError> {
+    pub fn execute(&self, transaction: Transaction) -> Result<Option<ExecutedTransaction>, BlockTransactionExecutorError> {
         let id: tari_transaction::TransactionId = *transaction.id();
 
         // We only need to re-execute a transaction if any of its input versions is "None"
@@ -70,7 +70,7 @@ where TConsensusSpec: ConsensusSpec
                 "Skipping transaction {} execution as all inputs specify the version",
                 id,
             );
-            return Ok(())
+            return Ok(None)
         }
 
         info!(
@@ -86,20 +86,16 @@ where TConsensusSpec: ConsensusSpec
 
         info!(target: LOG_TARGET, "Transaction {} executing. virtual_substates = [{}]", transaction.id(), virtual_substates.keys().map(|addr| addr.to_string()).collect::<Vec<_>>().join(", "));
         let executor = self.executor.clone();
-        let _result = match self.resolve_substates(&transaction, &state_db) {
+        let result = match self.resolve_substates(&transaction, &state_db) {
             Ok(()) => {
-                // TODO: proper error variant
-                let result = executor
+                executor
                     .execute(transaction, state_db, virtual_substates)
-                    .map_err(|_| BlockTransactionExecutorError::PlaceHolderError);
-
-                // If this errors, the thread panicked due to a bug
-                result.map_err(|err| BlockTransactionExecutorError::ExecutionThreadFailure(err.to_string()))
+                    .map_err(|_| BlockTransactionExecutorError::PlaceHolderError)?
             },
-            Err(err) => Err(err.into()),
+            Err(err) => return Err(err.into()),
         };
 
-        Ok(())
+        Ok(Some(result))
     }
 
     fn has_inputs_without_version(transaction: &Transaction) -> bool {

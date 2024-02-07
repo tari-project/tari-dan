@@ -415,9 +415,18 @@ where TConsensusSpec: ConsensusSpec
                             if tx_rec.current_decision().is_commit() {
                                 let transaction = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
 
-                                // Re-execute the transaction
+                                // Re-execute the transaction if one or more input versions are None
                                 let executed = t.get_transaction(tx.deref_mut())?;
-                                executor.execute(executed.transaction().clone())?;
+                                let execution_result = executor.execute(executed.transaction().clone())?;
+                                if let Some(res) = execution_result {
+                                    info!(
+                                        target: LOG_TARGET,
+                                        "Transaction {} reexecuted sucessfully for block {}. Resulting outputs: {:?}",
+                                        transaction.id(),
+                                        block.id(),
+                                        res.resulting_outputs()
+                                    );
+                                }
 
                                 // Lock all inputs for the transaction as part of Prepare
                                 let is_inputs_locked = self.check_lock_inputs(
