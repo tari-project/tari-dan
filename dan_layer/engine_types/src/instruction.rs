@@ -55,7 +55,6 @@ pub enum Instruction {
     DropAllProofsInWorkspace,
     #[cfg(feature = "debugging")]
     CreateFreeTestCoins {
-        #[cfg_attr(feature = "ts", ts(type = "number"))]
         revealed_amount: Amount,
         output: Option<ConfidentialOutput>,
     },
