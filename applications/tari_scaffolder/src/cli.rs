@@ -29,7 +29,7 @@ pub(crate) struct Cli {
     pub output_path: PathBuf,
 
     #[clap(long, short = 't', alias = "template")]
-    pub template_address: String,
+    pub template_address: Option<String>,
 }
 
 impl Cli {

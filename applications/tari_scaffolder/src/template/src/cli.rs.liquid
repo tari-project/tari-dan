@@ -13,7 +13,7 @@ use tari_engine_types::parse_arg;
 pub(crate) struct Cli {
     #[clap(long, short = 'e', alias = "endpoint", env = "JRPC_ENDPOINT")]
     pub daemon_jrpc_endpoint: Option<String>,
-    #[clap(long, short='t', alias= "token")]
+    #[clap(long, short='t', alias= "token", env = "AUTH_TOKEN")]
     pub auth_token: Option<String>,
     #[clap(long, alias="template_address", default_value ="{{template_address}}")]
     pub template: String,
@@ -55,10 +55,11 @@ pub mod login {
     }
 
     impl Command {
-    pub async fn run(self, mut client: DaemonClient) {
-       let token = client.login().await;
-       fs::write("token.data", token).unwrap();
-    }
+        pub async fn run(self, mut client: DaemonClient) {
+           let token = client.login().await;
+           let token = client.grant(token, "scaffold".to_string()).await;
+           fs::write("token.data", token).unwrap();
+        }
     }
 }
 
@@ -141,10 +142,10 @@ use tari_template_lib::args;
                    }
     );
 
-                client.submit_instructions(instructions, dump_buckets, is_dry_run, fees, vec![format!("component_{}", self.component_address).parse().unwrap()]
-
-            ).await;
-            println!("done");
+            let transaction_id = client.submit_instructions(instructions, dump_buckets, is_dry_run, fees, vec![format!("component_{}", self.component_address).parse().unwrap()]).await;
+     println!("submitted");
+     let result = client.wait_for_transaction_result(transaction_id).await;
+     println!("result: {:?}", result);
 
        }
 
@@ -157,7 +158,7 @@ use tari_template_lib::args;
 
 
 
-                client.submit_instruction(Instruction::CallFunction {
+            let transaction_id = client.submit_instruction(Instruction::CallFunction {
                     template_address,
                     function,
                     args: vec![
@@ -170,7 +171,9 @@ use tari_template_lib::args;
            }, dump_buckets, false, fees, vec![]
 
             ).await;
-            println!("done");
+           println!("submitted");
+           let result = client.wait_for_transaction_result(transaction_id).await;
+           println!("result: {:?}", result);
 
        }
 

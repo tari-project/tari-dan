@@ -10,7 +10,7 @@ use convert_case::{Case, Casing};
 use liquid::model::Value;
 use tari_dan_engine::{
     template::{LoadedTemplate, TemplateModuleLoader},
-    wasm::compile::compile_template,
+    wasm::{compile::compile_template, WasmModule},
 };
 
 use crate::{cli::Cli, LoadedTemplate::Wasm};
@@ -25,8 +25,11 @@ fn main() {
     match &cli.command {
         command::Command::Scaffold(scaffold) => {
             println!("Scaffolding wasm at {:?}", scaffold.wasm_path);
-
-            let wasm = compile_template(&scaffold.wasm_path, &[]).unwrap();
+            let wasm = if scaffold.wasm_path.extension() == Some("wasm".as_ref()) {
+                WasmModule::from_code(fs::read(&scaffold.wasm_path).unwrap())
+            } else {
+                compile_template(&scaffold.wasm_path, &[]).unwrap()
+            };
 
             let loaded_template = wasm.load_template().unwrap();
             // dbg!(&loaded_template);
