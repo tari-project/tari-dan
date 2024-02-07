@@ -47,10 +47,12 @@ pub enum ResourceContainer {
     },
     Confidential {
         address: ResourceAddress,
-        #[cfg_attr(feature = "ts", ts(type = "Record<string, ConfidentialOutput>"))]
+        #[cfg_attr(feature = "ts", ts(type = "Record<string2, ConfidentialOutput>"))]
+        #[cfg_attr(feature = "temp", ts(skip))]
         commitments: BTreeMap<Commitment, ConfidentialOutput>,
         revealed_amount: Amount,
         #[cfg_attr(feature = "ts", ts(type = "Record<string, ConfidentialOutput>"))]
+        #[cfg_attr(feature = "temp", ts(skip))]
         locked_commitments: BTreeMap<Commitment, ConfidentialOutput>,
         locked_revealed_amount: Amount,
     },

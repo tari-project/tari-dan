@@ -35,3 +35,4 @@ default = ["debugging"]
 # Includes the ability to create free test coins
 debugging = []
 ts = ["ts-rs"]
+temp = []
