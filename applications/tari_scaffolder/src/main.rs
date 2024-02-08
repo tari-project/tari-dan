@@ -10,6 +10,7 @@ use std::{fs, path::Path};
 use convert_case::{Case, Casing};
 use liquid::model::Value;
 use tari_dan_engine::{
+    abi,
     template::{LoadedTemplate, TemplateModuleLoader},
     wasm::{compile::compile_template, WasmModule},
 };
@@ -103,6 +104,7 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) ->
                 let mut args = vec![];
                 let mut is_method = false;
                 let mut requires_buckets = false;
+                let mut bucket_output = false;
                 for a in &f.arguments {
                     dbg!(a);
                     args.push(liquid::object!({
@@ -117,6 +119,12 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) ->
                     }
                 }
 
+                if let abi::Type::Other { name } = &f.output {
+                    if name == "Bucket" {
+                        bucket_output = true;
+                    }
+                }
+
                 arr.push(Value::Object(liquid::object!({
                     "name": f.name,
                     "title": f.name.to_case(Case::UpperCamel),
@@ -125,6 +133,7 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) ->
                     "is_mut": f.is_mut,
                     "output": f.output.to_string(),
                     "requires_buckets": requires_buckets,
+                    "bucket_output": bucket_output,
                 })));
             }
         },
