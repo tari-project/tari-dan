@@ -68,7 +68,11 @@ impl NonFungible {
     }
 
     pub fn decode_data(&self) -> Result<Metadata, BorError> {
-        decode_exact(&self.data)
+        let value = decode_exact::<tari_bor::Value>(&self.data)?;
+        if value.is_null() {
+            return Ok(Metadata::default());
+        }
+        tari_bor::from_value(&value)
     }
 
     pub fn set_mutable_data(&mut self, mutable_data: Vec<u8>) {
