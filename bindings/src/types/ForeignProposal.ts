@@ -7,4 +7,5 @@ export interface ForeignProposal {
   block_id: string;
   state: ForeignProposalState;
   proposed_height: NodeHeight | null;
+  transactions: Array<string>;
 }

@@ -13,7 +13,7 @@ use tari_engine_types::parse_arg;
 pub(crate) struct Cli {
     #[clap(long, short = 'e', alias = "endpoint", env = "JRPC_ENDPOINT")]
     pub daemon_jrpc_endpoint: Option<String>,
-    #[clap(long, short='t', alias= "token")]
+    #[clap(long, short='t', alias= "token", env = "AUTH_TOKEN")]
     pub auth_token: Option<String>,
     #[clap(long, alias="template_address", default_value ="{{template_address}}")]
     pub template: String,
@@ -55,10 +55,11 @@ pub mod login {
     }
 
     impl Command {
-    pub async fn run(self, mut client: DaemonClient) {
-       let token = client.login().await;
-       fs::write("token.data", token).unwrap();
-    }
+        pub async fn run(self, mut client: DaemonClient) {
+           let token = client.login().await;
+           let token = client.grant(token, "scaffold".to_string()).await;
+           fs::write("token.data", token).unwrap();
+        }
     }
 }
 
@@ -78,9 +79,6 @@ use tari_template_lib::args;
  use tari_template_lib::prelude::Amount;
  use tari_template_lib::prelude::ResourceAddress;
   use std::str::FromStr;
-
-
-
 
    #[derive(Debug, Args, Clone)]
    pub struct Command {
@@ -103,74 +101,96 @@ use tari_template_lib::args;
 
     {% if c.is_method %}
 
- pub async fn run(self, mut client: DaemonClient, dump_buckets: bool, is_dry_run: bool, fees: u64) {
-
-       // let template_address= ;
+     pub async fn run(self, mut client: DaemonClient, dump_buckets: bool, is_dry_run: bool, fees: u64) {
         let method = "{{c.name}}".to_string();
 
-    let mut instructions = vec![];
-    {% if c.requires_buckets %}
-    {% for bucket_arg in c.args %}
-    {% if bucket_arg.arg_type == "Bucket" %}
-       instructions.push(Instruction::CallMethod {
-                component_address: ComponentAddress::from_hex(&self.{{bucket_arg.name}}_withdraw_from_component).unwrap(),
-                method: "withdraw".to_string(),
-                args: args![ResourceAddress::from_str(&self.{{ bucket_arg.name}}_resource).unwrap(), self.{{ bucket_arg.name}}_amount],
+        let mut instructions = vec![];
+        {% if c.requires_buckets %}
+            {% for bucket_arg in c.args %}
+                {% if bucket_arg.arg_type == "Bucket" %}
+                   instructions.push(Instruction::CallMethod {
+                        component_address: ComponentAddress::from_hex(&self.{{bucket_arg.name}}_withdraw_from_component).unwrap(),
+                        method: "withdraw".to_string(),
+                        args: args![ResourceAddress::from_str(&self.{{ bucket_arg.name}}_resource).unwrap(), self.{{ bucket_arg.name}}_amount],
+                   });
+                  instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
+                    key: b"bucket_{{bucket_arg.name}}".to_vec(),
+                  });
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+
+        instructions.push(
+            Instruction::CallMethod {
+                component_address: ComponentAddress::from_hex(&self.component_address).unwrap(),
+                method,
+                args: args![
+                {%  for  arg in c.args %}
+                    {% if arg.name != "self" %}
+                        {% if arg.arg_type != "Bucket" %}
+                        parse_arg(&self.{{ arg.name}}).unwrap(),
+                        {% else %}
+                        Variable("bucket_{{arg.name}}"),
+                        {% endif %}
+                    {% endif %}
+                {% endfor %}
+                ]
+            }
+        );
+
+         {%  if c.bucket_output %}
+            instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
+                key: b"out_bucket".to_vec(),
             });
-  instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
-            key: b"bucket_{{bucket_arg.name}}".to_vec(),
-        });
-     {% endif %}
-     {% endfor %}
-    {% endif %}
-    instructions.push(
-    Instruction::CallMethod {
-                        component_address: ComponentAddress::from_hex(&self.component_address).unwrap(),
-                        method,
-                        args: args![
-                            {%  for  arg in c.args %}
-          {% if arg.name != "self" %}
-            {% if arg.arg_type != "Bucket" %}
-           parse_arg(&self.{{ arg.name}}).unwrap(),
-           {% else %}
-              Variable("bucket_{{arg.name}}"),
-          {% endif %}
-          {% endif %}
-          {% endfor %}
-                        ]
-                   }
-    );
+            instructions.push(Instruction::CallMethod {
+                component_address: ComponentAddress::from_hex(&self.component_address).unwrap(),
+                method: "deposit".to_string(),
+                args: args![Variable("out_bucket")],
+            });
+         {% endif %}
 
-                client.submit_instructions(instructions, dump_buckets, is_dry_run, fees, vec![format!("component_{}", self.component_address).parse().unwrap()]
-
-            ).await;
-            println!("done");
-
-       }
+        let transaction_id = client.submit_instructions(instructions, dump_buckets, is_dry_run, fees, vec![format!("component_{}", self.component_address).parse().unwrap()]).await;
+        println!("submitted");
+        let result = client.wait_for_transaction_result(transaction_id).await;
+        println!("result: {:?}", result);
+    }
 
 
     {% else %}
        pub async fn run(self, mut client: DaemonClient, template_address: TemplateAddress, dump_buckets: bool, fees: u64) {
+           let function = "{{c.name}}".to_string();
 
-       // let template_address= ;
-        let  function = "{{c.name}}".to_string();
+           let mut instructions = vec![];
+           instructions.push(
+               Instruction::CallFunction {
+                   template_address,
+                   function,
+                   args: vec![
+                       {%  for  arg in c.args %}
+                       {% if arg.name != "self" %}
+                       parse_arg(&self.{{ arg.name}}).unwrap(),
+                       {% endif %}
+                       {% endfor %}
+                   ]
+               }
+           );
 
+           {%  if c.bucket_output %}
+           instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
+               key: b"out_bucket".to_vec(),
+           });
+           instructions.push(Instruction::CallMethod {
+               component_address: ComponentAddress::from_hex(&self.component_address).unwrap(),
+               method: "deposit".to_string(),
+               args: args![Variable("out_bucket")],
+           });
+           {% endif %}
 
+           let transaction_id = client.submit_instructions(instructions, dump_buckets, false, fees, vec![]).await;
 
-                client.submit_instruction(Instruction::CallFunction {
-                    template_address,
-                    function,
-                    args: vec![
-                        {%  for  arg in c.args %}
-      {% if arg.name != "self" %}
-       parse_arg(&self.{{ arg.name}}).unwrap(),
-      {% endif %}
-      {% endfor %}
-                    ]
-           }, dump_buckets, false, fees, vec![]
-
-            ).await;
-            println!("done");
+           println!("submitted");
+           let result = client.wait_for_transaction_result(transaction_id).await;
+           println!("result: {:?}", result);
 
        }
 

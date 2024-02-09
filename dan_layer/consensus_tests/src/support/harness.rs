@@ -338,7 +338,7 @@ impl TestBuilder {
     }
 
     pub fn with_message_filter(mut self, message_filter: MessageFilter) -> Self {
-        self.message_filter = Some(message_filter.into());
+        self.message_filter = Some(message_filter);
         self
     }
 

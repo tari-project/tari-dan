@@ -11,4 +11,5 @@ tari_dan_engine = { workspace = true }
 
 clap = { workspace = true }
 liquid = { workspace = true }
+liquid-core = "0.26.4"
 convert_case = { workspace = true }

@@ -33,7 +33,7 @@ use tari_engine_types::{
     component::{ComponentBody, ComponentHeader},
     confidential::UnclaimedConfidentialOutput,
     events::Event,
-    fees::{FeeReceipt, FeeSource},
+    fees::{FeeBreakdown, FeeReceipt, FeeSource},
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
     lock::LockFlag,
     logs::LogEntry,
@@ -273,7 +273,7 @@ impl StateTracker {
 
         self.write_with(|state| {
             debug!(target: LOG_TARGET, "Add fee: source: {:?}, amount: {}", source, amount);
-            state.fee_state_mut().fee_charges.push((source, amount));
+            state.fee_state_mut().fee_charges.push(FeeBreakdown { source, amount });
         })
     }
 
