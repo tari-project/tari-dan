@@ -190,12 +190,13 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
     ) -> Result<Option<(ValidBlock, StateHashTreeDiff)>, HotStuffError> {
-        match self
+        let result = self
             .validate_local_proposed_block(tx, block, local_committee, local_committee_shard)
             .and_then(|valid_block| {
                 let diff = self.check_state_merkle_root(tx, valid_block.block())?;
                 Ok((valid_block, diff))
-            }) {
+            });
+        match result {
             Ok((validated, diff)) => Ok(Some((validated, diff))),
             // Propagate this error out as sync is needed in the case where we have a valid QC but do not know the
             // block
