@@ -36,7 +36,7 @@ import Button from "@mui/material/Button/Button";
 import { DataTableCell } from "../../../Components/StyledComponents";
 import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 
-function Key(key: any, setActive: any) {
+function Key(key: [number, string, boolean], setActive: any) {
   return (
     <TableRow key={key[0]}>
       <DataTableCell>{key[0]}</DataTableCell>
@@ -106,7 +106,7 @@ function Keys() {
                   <TableCell>Active</TableCell>
                 </TableRow>
               </TableHead>
-              <TableBody>{data && data.keys.map((key: any) => Key(key, setActive))}</TableBody>
+              <TableBody>{data && data.keys.map((key: [number, string, boolean]) => Key(key, setActive))}</TableBody>
             </Table>
           </TableContainer>
         </div>

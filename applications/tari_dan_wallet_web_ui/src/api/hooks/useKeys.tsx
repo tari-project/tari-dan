@@ -21,15 +21,15 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { jsonRpc } from "../../utils/json_rpc";
 import { apiError } from "../helpers/types";
 import queryClient from "../queryClient";
+import { keysCreate, keysList, keysSetActive } from "../../utils/json_rpc";
 
 export const useKeysList = () => {
   return useQuery({
     queryKey: ["keys_list"],
     queryFn: () => {
-      return jsonRpc("keys.list", []);
+      return keysList({});
     },
     onError: (error: apiError) => {
       error;
@@ -38,7 +38,7 @@ export const useKeysList = () => {
 };
 
 export const useKeysCreate = () => {
-  return useMutation(() => jsonRpc("keys.create", {}), {
+  return useMutation(() => keysCreate({ specific_index: null }), {
     onError: (error: apiError) => {
       error;
     },
@@ -50,7 +50,7 @@ export const useKeysCreate = () => {
 
 export const useKeysSetActive = () => {
   const setActive = async (index: number) => {
-    const result = await jsonRpc("keys.set_active", [index]);
+    const result = await keysSetActive({ index });
     return result;
   };
 

@@ -22,13 +22,9 @@
 
 import { TableContainer, Table, TableHead, TableRow, TableCell, TableBody } from "@mui/material";
 import { DataTableCell } from "../../Components/StyledComponents";
+import { LogEntry } from "tari-bindings";
 
-interface Log {
-  level: string;
-  message: string;
-}
-
-export default function Logs({ data }: { data: Log[] }) {
+export default function Logs({ data }: { data: Array<LogEntry> }) {
   return (
     <TableContainer>
       <Table>
@@ -39,7 +35,7 @@ export default function Logs({ data }: { data: Log[] }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {data.map(({ level, message }, index: number) => {
+          {data.map(({ level, message, timestamp }: LogEntry, index: number) => {
             return (
               <TableRow key={index}>
                 <DataTableCell>{level}</DataTableCell>

@@ -39,7 +39,6 @@ pub struct Resource {
     owner_key: RistrettoPublicKeyBytes,
     access_rules: ResourceAccessRules,
     metadata: Metadata,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     total_supply: Amount,
 }
 

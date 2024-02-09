@@ -28,7 +28,7 @@ import Container from "@mui/material/Container";
 
 export default function ErrorPage() {
   let error: any = useRouteError();
-  console.log("Error", error);
+  console.error("Error", error);
 
   return (
     <Grid item xs={12} md={12} lg={12}>

@@ -21,18 +21,31 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { jsonRpc } from "../../utils/json_rpc";
+import {
+  accountsClaimBurn,
+  accountsConfidentialTransfer,
+  accountsCreate,
+  accountsCreateFreeTestCoins,
+  accountsGet,
+  accountsGetBalances,
+  accountsInvoke,
+  accountsList,
+  accountsTransfer,
+  nftList,
+} from "../../utils/json_rpc";
 import { apiError } from "../helpers/types";
 import queryClient from "../queryClient";
+import { AccountsListResponse, Arg, ComponentAccessRules } from "tari-bindings";
 
 //   Fees are passed as strings because Amount is tagged
-export const useAccountsClaimBurn = (account: string, claimProof: any, fee: number) => {
+export const useAccountsClaimBurn = (account: string, claimProof: string, fee: number) => {
   return useMutation(
     async () => {
-      return await jsonRpc("accounts.claim_burn", {
-        account,
+      return await accountsClaimBurn({
+        account: { Name: account },
         claim_proof: claimProof,
-        fee: fee,
+        max_fee: fee,
+        key_id: null,
       });
     },
     {
@@ -47,18 +60,19 @@ export const useAccountsClaimBurn = (account: string, claimProof: any, fee: numb
 };
 
 export const useAccountsCreate = (
-  accountName: string | undefined,
-  customAccessRules: any | undefined,
-  fee: number | undefined,
-  is_default: boolean | false,
+  accountName: string | null,
+  customAccessRules: ComponentAccessRules | null,
+  fee: number | null,
+  is_default: boolean,
 ) => {
   return useMutation(
     async () => {
-      return await jsonRpc("accounts.create", {
+      return await accountsCreate({
         account_name: accountName,
         custom_access_rules: customAccessRules,
-        fee,
+        max_fee: fee,
         is_default,
+        key_id: null,
       });
     },
     {
@@ -82,15 +96,21 @@ export const useAccountsTransfer = (
   dry_run: boolean,
 ) => {
   return useMutation(
-    () =>
-      jsonRpc(confidential ? "accounts.confidential_transfer" : "accounts.transfer", {
-        account,
+    () => {
+      let transferRequest = {
+        account: (account && { Name: account }) || null,
         amount,
         resource_address,
         destination_public_key,
         max_fee,
         dry_run,
-      }),
+      };
+      if (confidential) {
+        return accountsConfidentialTransfer(transferRequest);
+      } else {
+        return accountsTransfer(transferRequest);
+      }
+    },
     {
       onError: (error: apiError) => {
         error;
@@ -108,14 +128,14 @@ export const useAccountsCreateFreeTestCoins = () => {
     amount,
     fee,
   }: {
-    accountName: string | undefined;
-    amount: number | undefined;
-    fee: number | undefined;
+    accountName: string | null;
+    amount: number;
+    fee: number | null;
   }) => {
-    const result = await jsonRpc("accounts.create_free_test_coins", {
-      account: { Name: accountName },
+    const result = await accountsCreateFreeTestCoins({
+      account: (accountName && { Name: accountName }) || null,
       amount,
-      fee,
+      max_fee: fee,
       key_id: null,
     });
     return result;
@@ -135,27 +155,27 @@ export const useAccountsCreateFreeTestCoins = () => {
 export const useAccountsList = (offset: number, limit: number) => {
   return useQuery({
     queryKey: ["accounts"],
-    queryFn: () => jsonRpc("accounts.list", { offset, limit }),
+    queryFn: () => accountsList({ offset, limit }),
     onError: (error: apiError) => {
       error;
     },
   });
 };
 
-export const useAccountsInvoke = (accountName: string, method: string, args: any[]) => {
+export const useAccountsInvoke = (accountName: string, method: string, args: Array<Arg>) => {
   return useQuery({
     queryKey: ["accounts_invoke"],
-    queryFn: () => jsonRpc("accounts.invoke", [accountName, method, args]),
+    queryFn: () => accountsInvoke({ account: { Name: accountName }, method, args, max_fee: null }),
     onError: (error: apiError) => {
       error;
     },
   });
 };
 
-export const useAccountsGetBalances = (accountName: string | null) => {
+export const useAccountsGetBalances = (accountName: string) => {
   return useQuery({
     queryKey: ["accounts_balances"],
-    queryFn: () => jsonRpc("accounts.get_balances", { account: { Name: accountName } }),
+    queryFn: () => accountsGetBalances({ account: { Name: accountName }, refresh: true }),
     onError: (error: apiError) => {
       error;
     },
@@ -163,10 +183,10 @@ export const useAccountsGetBalances = (accountName: string | null) => {
   });
 };
 
-export const useAccountsGet = (name: string | null) => {
+export const useAccountsGet = (name: string) => {
   return useQuery({
     queryKey: ["accounts_get"],
-    queryFn: () => jsonRpc("accounts.get", { name_or_address: { Name: name } }),
+    queryFn: () => accountsGet({ name_or_address: { Name: name } }),
     onError: (error: apiError) => {
       error;
     },
@@ -176,17 +196,7 @@ export const useAccountsGet = (name: string | null) => {
 export const useAccountNFTsList = (offset: number, limit: number) => {
   return useQuery({
     queryKey: ["nfts_list"],
-    queryFn: () => jsonRpc("nfts.list", { offset, limit }),
-    onError: (error: apiError) => {
-      error;
-    },
-  });
-};
-
-export const useAccountsConfidentialTransfer = () => {
-  return useQuery({
-    queryKey: ["accounts_confidential_transfer"],
-    queryFn: () => jsonRpc("accounts.confidential_transfer", []),
+    queryFn: () => nftList({ offset, limit }),
     onError: (error: apiError) => {
       error;
     },

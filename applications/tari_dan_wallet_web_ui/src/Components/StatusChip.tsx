@@ -23,9 +23,10 @@
 import { Chip, Avatar } from "@mui/material";
 import { IoCheckmarkOutline, IoDiamondOutline, IoReload, IoHourglassOutline, IoCloseOutline } from "react-icons/io5";
 import { useTheme } from "@mui/material/styles";
+import { TransactionStatus } from "tari-bindings";
 
 interface StatusChipProps {
-  status: "Accepted" | "Pending" | "DryRun" | "New" | "Rejected" | "InvalidTransaction";
+  status: TransactionStatus;
   showTitle?: boolean;
 }
 
@@ -36,6 +37,7 @@ const colorList: Record<string, string> = {
   New: "#9D5CF9",
   Rejected: "#DB7E7E",
   InvalidTransaction: "#DB7E7E",
+  OnlyFeeAccepted: "#FFA500",
 };
 
 export default function StatusChip({ status, showTitle = true }: StatusChipProps) {
@@ -48,14 +50,32 @@ export default function StatusChip({ status, showTitle = true }: StatusChipProps
     New: <IoDiamondOutline style={{ height: 14, width: 14 }} color={theme.palette.background.paper} />,
     Rejected: <IoCloseOutline style={{ height: 14, width: 14 }} color={theme.palette.background.paper} />,
     InvalidTransaction: <IoCloseOutline style={{ height: 14, width: 14 }} color={theme.palette.background.paper} />,
+    OnlyFeeAccepted: (
+      <>
+        <IoCheckmarkOutline style={{ height: 14, width: 14 }} color={theme.palette.background.paper} />
+        <IoCloseOutline style={{ height: 14, width: 14 }} color={theme.palette.background.paper} />
+      </>
+    ),
   };
 
+  let bgColor = colorList[status];
+  let background = null;
+
+  if (status === "OnlyFeeAccepted") {
+    const leftColor = colorList["Accepted"];
+    const rightColor = colorList["Rejected"];
+    background = `linear-gradient(to right, ${leftColor} 50%, ${colorList["Rejected"]} 50%)`;
+  }
+
   if (!showTitle) {
-    return <Avatar sx={{ bgcolor: colorList[status], height: 22, width: 22 }}>{iconList[status]}</Avatar>;
+    let leftColor = colorList["Accepted"];
+    let rightColor = colorList["Rejected"];
+
+    return <Avatar sx={{ bgcolor: bgColor, height: 22, width: 22 }}>{iconList[status]}</Avatar>;
   } else {
     return (
       <Chip
-        avatar={<Avatar sx={{ bgcolor: colorList[status] }}>{iconList[status]}</Avatar>}
+        avatar={<Avatar sx={{ bgcolor: bgColor, background: background }}>{iconList[status]}</Avatar>}
         label={status}
         style={{ color: colorList[status], borderColor: colorList[status] }}
         variant="outlined"
