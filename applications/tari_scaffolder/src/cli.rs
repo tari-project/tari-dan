@@ -1,11 +1,11 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use clap::Parser;
 
-use crate::command::Command;
+use crate::{command::Command, generators::GeneratorType};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -19,21 +19,35 @@ pub(crate) struct Cli {
     #[clap(subcommand)]
     pub command: Command,
 
-    #[clap(long)]
-    pub crates_root: Option<PathBuf>,
-
-    #[clap(long, short = 'c', alias = "clean")]
+    #[clap(long, alias = "clean")]
     pub clean: bool,
 
-    #[clap(long, short = 'o', alias = "output", default_value = "./output")]
-    pub output_path: PathBuf,
+    #[clap(long, short = 'o', alias = "output")]
+    pub output_path: Option<PathBuf>,
 
-    #[clap(long, short = 't', alias = "template")]
-    pub template_address: Option<String>,
+    #[clap(long, short = 'g', alias = "generator")]
+    pub generator: GeneratorType,
+
+    #[clap(long, short = 'd', alias = "data", value_parser = parse_hashmap)]
+    pub data: Option<HashMap<String, String>>,
+
+    #[clap(long, short = 'c', alias = "config")]
+    pub generator_config_file: Option<PathBuf>,
 }
 
 impl Cli {
     pub fn init() -> Self {
         Self::parse()
     }
+}
+
+fn parse_hashmap(input: &str) -> anyhow::Result<HashMap<String, String>> {
+    let mut map = HashMap::new();
+    for pair in input.split(',') {
+        let mut parts = pair.splitn(2, ':');
+        let key = parts.next().unwrap().to_string();
+        let value = parts.next().unwrap_or("").to_string();
+        map.insert(key, value);
+    }
+    Ok(map)
 }
