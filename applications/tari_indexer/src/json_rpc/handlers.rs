@@ -253,14 +253,16 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: GetSubstateRequest = value.parse_params()?;
 
-        match self
+        let maybe_substate = self
             .substate_manager
             .get_substate(&request.address, request.version)
             .await
             .map_err(|e| {
                 warn!(target: LOG_TARGET, "Error getting substate: {}", e);
                 Self::internal_error(answer_id, format!("Error getting substate: {}", e))
-            })? {
+            })?;
+
+        match maybe_substate {
             Some(substate_resp) => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
                 address: substate_resp.address,
                 version: substate_resp.version,
