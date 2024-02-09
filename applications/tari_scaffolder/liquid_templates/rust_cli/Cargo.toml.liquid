@@ -5,16 +5,16 @@ edition = "2021"
 
 
 [dependencies]
-{% if crates_root == "[crates]" %}
-tari_wallet_daemon_client = { git = "https://github.com/tari-project/tari-dan", branch = "development" }
-tari_engine_types = { git = "https://github.com/tari-project/tari-dan", branch = "development" }
-tari_template_lib = { git = "https://github.com/tari-project/tari-dan", branch = "development" }
-tari_transaction = { git = "https://github.com/tari-project/tari-dan", branch = "development" }
-{% else %}
+{% if crates_root %}
 tari_wallet_daemon_client={path="{{crates_root}}/clients/wallet_daemon_client"}
 tari_engine_types={path="{{crates_root}}/dan_layer/engine_types"}
 tari_template_lib={path="{{crates_root}}/dan_layer/template_lib"}
 tari_transaction ={path="{{crates_root}}/dan_layer/transaction"}
+{% else %}
+tari_wallet_daemon_client = { git = "https://github.com/tari-project/tari-dan", branch = "development" }
+tari_engine_types = { git = "https://github.com/tari-project/tari-dan", branch = "development" }
+tari_template_lib = { git = "https://github.com/tari-project/tari-dan", branch = "development" }
+tari_transaction = { git = "https://github.com/tari-project/tari-dan", branch = "development" }
 {% endif %}
 tari_utilities ="*"
 
