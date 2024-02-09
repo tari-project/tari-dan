@@ -55,6 +55,5 @@ pub struct FeeClaim {
     pub epoch: u64,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub validator_public_key: PublicKey,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub amount: Amount,
 }

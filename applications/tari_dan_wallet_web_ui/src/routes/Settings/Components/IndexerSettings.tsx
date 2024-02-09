@@ -31,7 +31,7 @@ import Slide from "@mui/material/Slide";
 import useAccountStore from "../../../store/accountStore";
 import { useTheme } from "@mui/material/styles";
 import { useEffect } from "react";
-import { getSettings, setSettings as uploadSettings } from "../../../utils/json_rpc";
+import { settingsGet, settingsSet } from "../../../utils/json_rpc";
 
 function IndexerSettings() {
   // Keep the form and settings in the same format as the real settings in the dan wallet.
@@ -43,14 +43,14 @@ function IndexerSettings() {
   const [settings, setSettings] = useState({ indexer_url: "" });
 
   useEffect(() => {
-    getSettings().then((res) => {
+    settingsGet().then((res) => {
       setSettings(res);
     });
   }, []);
 
   const onSubmitIndexer = () => {
     setSettings(accountFormState);
-    uploadSettings(accountFormState);
+    settingsSet(accountFormState);
     setShowForm(false);
     setAccountFormState({ ...accountFormState, indexer_url: "" });
   };

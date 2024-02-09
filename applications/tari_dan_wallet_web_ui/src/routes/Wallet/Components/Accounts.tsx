@@ -50,9 +50,13 @@ import {
 } from "../../../api/hooks/useAccounts";
 import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import queryClient from "../../../api/queryClient";
+import { AccountInfo } from "tari-bindings";
 
-function Account(account: any, index: number) {
+function Account(account: AccountInfo, index: number) {
   const { pathname } = useLocation();
+  if (!("Component" in account.account.address)) {
+    return null;
+  }
   return (
     <TableRow key={index}>
       <DataTableCell>
@@ -106,12 +110,7 @@ function Accounts() {
   } = useAccountsList(0, 10);
   const { mutateAsync: mutateCreateFeeTestCoins } = useAccountsCreateFreeTestCoins();
 
-  const { mutateAsync: mutateAddAccount } = useAccountsCreate(
-    accountFormState.accountName,
-    undefined,
-    undefined,
-    false,
-  );
+  const { mutateAsync: mutateAddAccount } = useAccountsCreate(accountFormState.accountName, null, null, false);
 
   const { mutateAsync: mutateClaimBurn } = useAccountsClaimBurn(
     claimBurnFormState.account,
@@ -246,14 +245,19 @@ function Accounts() {
                   onChange={onClaimBurnAccountChange}
                   style={{ flexGrow: 1, minWidth: "200px" }}
                 >
-                  {dataAccountsList?.accounts.map((account: any, index: number) => (
-                    <MenuItem
-                      key={toHexString(account.account.address.Component)}
-                      value={"component_" + toHexString(account.account.address.Component)}
-                    >
-                      {account.account.name}
-                    </MenuItem>
-                  ))}
+                  {dataAccountsList?.accounts.map((account: AccountInfo, index: number) => {
+                    if (!("Component" in account.account.address)) {
+                      return null;
+                    }
+                    return (
+                      <MenuItem
+                        key={toHexString(account.account.address.Component)}
+                        value={"component_" + toHexString(account.account.address.Component)}
+                      >
+                        {account.account.name}
+                      </MenuItem>
+                    );
+                  })}
                 </Select>
               </FormControl>
               <TextField
@@ -308,7 +312,7 @@ function Accounts() {
             </TableHead>
             <TableBody>
               {dataAccountsList &&
-                dataAccountsList.accounts.map((account: any, index: number) => Account(account, index))}
+                dataAccountsList.accounts.map((account: AccountInfo, index: number) => Account(account, index))}
             </TableBody>
           </Table>
         </TableContainer>

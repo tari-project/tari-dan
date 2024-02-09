@@ -34,6 +34,7 @@ use tari_dan_engine::{
 use tari_engine_types::{
     commit_result::{ExecuteResult, RejectReason},
     component::{ComponentBody, ComponentHeader},
+    fees::FeeBreakdown,
     instruction::Instruction,
     resource_container::ResourceContainer,
     substate::{Substate, SubstateDiff, SubstateId},
@@ -449,8 +450,8 @@ impl TemplateTest {
                 eprintln!("Paid: {}", fee.total_fees_paid());
                 eprintln!("Refund: {}", fee.total_refunded());
                 eprintln!("Unpaid: {}", fee.unpaid_debt());
-                for (source, amt) in &fee.cost_breakdown {
-                    eprintln!("- {:?} {}", source, amt);
+                for FeeBreakdown { source, amount } in &fee.cost_breakdown {
+                    eprintln!("- {:?} {}", source, amount);
                 }
             }
         }

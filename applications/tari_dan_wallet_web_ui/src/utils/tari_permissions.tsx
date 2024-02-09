@@ -324,7 +324,6 @@ export class TariPermissionTransactionSend {
     }
   }
   toJSON() {
-    console.log("JSON TariPermissionTransactionSend", this.value);
     if (this.value === undefined) {
       return { TransactionSend: null };
     } else {

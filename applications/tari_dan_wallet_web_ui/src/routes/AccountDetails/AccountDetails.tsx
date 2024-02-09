@@ -31,31 +31,31 @@ import TableCell from "@mui/material/TableCell";
 import TableBody from "@mui/material/TableBody";
 import { useParams } from "react-router-dom";
 import { useAccountsGetBalances, useAccountsGet, useAccountNFTsList } from "../../api/hooks/useAccounts";
-import { removeTagged, shortenString } from "../../utils/helpers";
+import { shortenString } from "../../utils/helpers";
 import { DataTableCell } from "../../Components/StyledComponents";
 import CopyToClipboard from "../../Components/CopyToClipboard";
 import FetchStatusCheck from "../../Components/FetchStatusCheck";
+import { Account, AccountNftInfo, BalanceEntry, substateIdToString } from "tari-bindings";
 
-function BalanceRow(props: any) {
+function BalanceRow(props: BalanceEntry) {
   return (
-    <TableRow key={props.index}>
+    <TableRow key={props.resource_address}>
       <DataTableCell>
         {shortenString(props.token_symbol || props.resource_address)}
         <CopyToClipboard copy={props.token_symbol || props.resource_address} />
       </DataTableCell>
       <DataTableCell>{props.resource_type}</DataTableCell>
-      <DataTableCell>{removeTagged(props.balance)}</DataTableCell>
-      <DataTableCell>{removeTagged(props.confidential_balance)}</DataTableCell>
+      <DataTableCell>{props.balance}</DataTableCell>
+      <DataTableCell>{props.confidential_balance}</DataTableCell>
     </TableRow>
   );
 }
 
-function NftsList(props: any) {
+function NftsList({ nft }: { nft: AccountNftInfo }) {
   return (
-    <TableRow key={props.index}>
-      <DataTableCell>{props.token_symbol}</DataTableCell>
-      <DataTableCell>{props.metadata}</DataTableCell>
-      <DataTableCell>{props.is_burned}</DataTableCell>
+    <TableRow>
+      <DataTableCell>{nft.metadata}</DataTableCell>
+      <DataTableCell>{nft.is_burned}</DataTableCell>
     </TableRow>
   );
 }
@@ -109,8 +109,8 @@ function AccountDetailsLayout() {
                   <TableRow>
                     <DataTableCell>{accountsData.account.name}</DataTableCell>
                     <DataTableCell>
-                      {shortenString(accountsData.account.address.Component)}
-                      <CopyToClipboard copy={accountsData.account.address.Component} />
+                      {shortenString(substateIdToString(accountsData.account.address))}
+                      <CopyToClipboard copy={substateIdToString(accountsData.account.address)} />
                     </DataTableCell>
                     <DataTableCell>
                       {shortenString(accountsData.public_key)}
@@ -141,9 +141,7 @@ function AccountDetailsLayout() {
                   <TableCell>Confidential Balance</TableCell>
                 </TableRow>
               </TableHead>
-              <TableBody>
-                {balancesData?.balances.map((balance: number, index: number) => BalanceRow(balance))}
-              </TableBody>
+              <TableBody>{balancesData?.balances.map((balance: BalanceEntry) => BalanceRow(balance))}</TableBody>
             </Table>
           </TableContainer>
         </StyledPaper>
@@ -165,7 +163,9 @@ function AccountDetailsLayout() {
                   <TableCell>Is Burned</TableCell>
                 </TableRow>
               </TableHead>
-              <TableBody>{nftsListData?.nfts.map((nft: any, index: number) => NftsList(nft))}</TableBody>
+              <TableBody>
+                {nftsListData?.nfts.map((nft: AccountNftInfo, index: number) => <NftsList key={index} nft={nft} />)}
+              </TableBody>
             </Table>
           </TableContainer>
         </StyledPaper>
