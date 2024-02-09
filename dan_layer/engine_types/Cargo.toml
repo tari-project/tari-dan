@@ -35,4 +35,7 @@ default = ["debugging"]
 # Includes the ability to create free test coins
 debugging = []
 ts = ["ts-rs"]
-temp = []
+# This feature is used to temporarily fix the issue with the ts-rs crate. Because when we run cargo test --all-feature 
+# it will trigger the ts files generation. But there are some problems that are fixed during the npm run build. But 
+# not on cargo test.
+ts-rs-temporary-fix = []
