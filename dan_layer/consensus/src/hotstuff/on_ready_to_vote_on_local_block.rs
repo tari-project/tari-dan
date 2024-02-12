@@ -683,7 +683,15 @@ where TConsensusSpec: ConsensusSpec
         transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
     ) -> Result<bool, HotStuffError> {
-        let inputs: Vec<SubstateAddress> = transaction.inputs().iter().chain(transaction.filled_inputs()).map(|i| i.to_substate_address()).collect();
+        // For now we are going to only lock inputs with specific versions
+        // TODO: for inputs without version, investigate if we need to use the results of re-execution
+        let inputs: Vec<SubstateAddress> = transaction
+            .inputs().iter()
+            .chain(transaction.filled_inputs())
+            .filter(|i| i.version().is_some())
+            .map(|i| i.to_substate_address())
+            .collect();
+
         let state = SubstateRecord::try_lock_all(
             tx,
             transaction.id(),
@@ -699,7 +707,14 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(false);
         }
-        let inputs: Vec<SubstateAddress> = transaction.input_refs().iter().map(|i| i.to_substate_address()).collect();
+
+        // TODO: Same as before, for inputs without version, investigate if we need to use the results of re-execution
+        let inputs: Vec<SubstateAddress> = transaction
+            .input_refs().iter()
+            .filter(|i| i.version().is_some())
+            .map(|i| i.to_substate_address())
+            .collect();
+
         let state = SubstateRecord::try_lock_all(
             tx,
             transaction.id(),
@@ -733,8 +748,14 @@ where TConsensusSpec: ConsensusSpec
         local_committee_shard: &CommitteeShard,
         locked_inputs: &mut HashSet<SubstateAddress>,
     ) -> Result<bool, HotStuffError> {
+        // TODO: for inputs without version, investigate if we need to use the results of re-execution
         let inputs = local_committee_shard
-            .filter(transaction.inputs().iter().chain(transaction.filled_inputs()).map(|i| i.to_substate_address()))
+            .filter(
+                transaction.inputs().iter()
+                .chain(transaction.filled_inputs())
+                .filter(|i| i.version().is_some())
+                .map(|i| i.to_substate_address())
+            )
             .collect::<HashSet<_>>();
         let state = SubstateRecord::check_lock_all(tx, inputs.iter(), SubstateLockFlag::Write)?;
         if !state.is_acquired() {
@@ -755,7 +776,12 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
         locked_inputs.extend(inputs);
-        let inputs = local_committee_shard.filter(transaction.input_refs().iter().map(|i| i.to_substate_address()))
+        // TODO: Same as before, for inputs without version, investigate if we need to use the results of re-execution
+        let inputs = local_committee_shard
+            .filter(
+                transaction.input_refs().iter()
+                .filter(|i| i.version().is_some())
+                .map(|i| i.to_substate_address()))
             .collect::<HashSet<_>>();
         let state = SubstateRecord::check_lock_all(
             tx,
@@ -788,7 +814,11 @@ where TConsensusSpec: ConsensusSpec
         transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
-        let write_inputs: Vec<SubstateAddress> = transaction.inputs().iter().chain(transaction.filled_inputs()).map(|i| i.to_substate_address())
+        // TODO: for inputs without version, investigate if we need to use the results of re-execution
+        let write_inputs: Vec<SubstateAddress> = transaction.inputs().iter()
+            .chain(transaction.filled_inputs())
+            .filter(|i| i.version().is_some())
+            .map(|i| i.to_substate_address())
             .collect();
         SubstateRecord::try_unlock_many(
             tx,
@@ -796,7 +826,10 @@ where TConsensusSpec: ConsensusSpec
             local_committee_shard.filter(write_inputs.iter()),
             SubstateLockFlag::Write,
         )?;
-        let read_inputs: Vec<SubstateAddress> = transaction.input_refs().iter().map(|i| i.to_substate_address())
+        // TODO: Same as before, for inputs without version, investigate if we need to use the results of re-execution
+        let read_inputs: Vec<SubstateAddress> = transaction.input_refs().iter()
+            .filter(|i| i.version().is_some())
+            .map(|i| i.to_substate_address())
             .collect();
         SubstateRecord::try_unlock_many(
             tx,
