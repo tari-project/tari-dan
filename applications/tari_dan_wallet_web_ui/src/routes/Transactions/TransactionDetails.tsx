@@ -45,7 +45,7 @@ import {
   TransactionResult,
   getRejectReasonFromTransactionResult,
   rejectReasonToString,
-} from "tari-bindings";
+} from "@tarilabs/typescript-bindings";
 
 export default function TransactionDetails() {
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);

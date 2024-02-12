@@ -23,7 +23,7 @@
 import { Chip, Avatar } from "@mui/material";
 import { IoCheckmarkOutline, IoDiamondOutline, IoReload, IoHourglassOutline, IoCloseOutline } from "react-icons/io5";
 import { useTheme } from "@mui/material/styles";
-import { TransactionStatus } from "tari-bindings";
+import { TransactionStatus } from "@tarilabs/typescript-bindings";
 
 interface StatusChipProps {
   status: TransactionStatus;

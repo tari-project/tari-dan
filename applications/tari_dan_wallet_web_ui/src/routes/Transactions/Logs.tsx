@@ -22,7 +22,7 @@
 
 import { TableContainer, Table, TableHead, TableRow, TableCell, TableBody } from "@mui/material";
 import { DataTableCell } from "../../Components/StyledComponents";
-import { LogEntry } from "tari-bindings";
+import { LogEntry } from "@tarilabs/typescript-bindings";
 
 export default function Logs({ data }: { data: Array<LogEntry> }) {
   return (
