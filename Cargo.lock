@@ -9676,10 +9676,13 @@ dependencies = [
 name = "tari_scaffolder"
 version = "0.3.0"
 dependencies = [
+ "anyhow",
  "clap 3.2.25",
  "convert_case 0.6.0",
  "liquid",
  "liquid-core",
+ "serde",
+ "serde_json",
  "tari_dan_engine",
 ]
 

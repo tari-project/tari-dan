@@ -102,7 +102,6 @@ use tari_template_lib::args;
     {% if c.is_method %}
 
      pub async fn run(self, mut client: DaemonClient, dump_buckets: bool, is_dry_run: bool, fees: u64) {
-        let method = "{{c.name}}".to_string();
 
         let mut instructions = vec![];
         {% if c.requires_buckets %}
@@ -123,7 +122,7 @@ use tari_template_lib::args;
         instructions.push(
             Instruction::CallMethod {
                 component_address: ComponentAddress::from_hex(&self.component_address).unwrap(),
-                method,
+                method: "{{c.name}}".to_string(),
                 args: args![
                 {%  for  arg in c.args %}
                     {% if arg.name != "self" %}
@@ -187,7 +186,6 @@ use tari_template_lib::args;
            {% endif %}
 
            let transaction_id = client.submit_instructions(instructions, dump_buckets, false, fees, vec![]).await;
-
            println!("submitted");
            let result = client.wait_for_transaction_result(transaction_id).await;
            println!("result: {:?}", result);
