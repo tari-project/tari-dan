@@ -327,9 +327,9 @@ impl StateTracker {
 
     pub fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError> {
         let mut checkpoint = self.fee_checkpoint.lock().unwrap();
-        let fee_state = self.read_with(|state| state.fee_state().clone());
         if let Some(checkpoint) = checkpoint.take() {
             self.write_with(|state| {
+                let fee_state = state.fee_state().clone();
                 *state = checkpoint;
                 // Preserve fee state across resets
                 *state.fee_state_mut() = fee_state;

@@ -142,29 +142,36 @@ impl ExecutedTransaction {
     }
 
     pub fn to_initial_evidence(&self) -> Evidence {
-        let mut evidence = Evidence::empty();
-        evidence.extend(self.transaction.inputs().iter().map(|input| {
+        let mut deduped_evidence = HashMap::new();
+        deduped_evidence.extend(self.transaction.inputs().iter().map(|input| {
             (*input, ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Write,
             })
         }));
 
-        evidence.extend(self.transaction.input_refs().iter().map(|input_ref| {
+        deduped_evidence.extend(self.transaction.input_refs().iter().map(|input_ref| {
             (*input_ref, ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Read,
             })
         }));
 
-        evidence.extend(self.resulting_outputs.iter().map(|output| {
+        deduped_evidence.extend(self.transaction.filled_inputs().iter().map(|input_ref| {
+            (*input_ref, ShardEvidence {
+                qc_ids: IndexSet::new(),
+                lock: LockFlag::Write,
+            })
+        }));
+
+        deduped_evidence.extend(self.resulting_outputs.iter().map(|output| {
             (*output, ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Write,
             })
         }));
 
-        evidence
+        deduped_evidence.into_iter().collect()
     }
 
     pub fn is_finalized(&self) -> bool {

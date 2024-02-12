@@ -88,15 +88,9 @@ impl Evidence {
 
 impl FromIterator<(SubstateAddress, ShardEvidence)> for Evidence {
     fn from_iter<T: IntoIterator<Item = (SubstateAddress, ShardEvidence)>>(iter: T) -> Self {
-        Evidence {
-            evidence: iter.into_iter().collect(),
-        }
-    }
-}
-
-impl Extend<(SubstateAddress, ShardEvidence)> for Evidence {
-    fn extend<T: IntoIterator<Item = (SubstateAddress, ShardEvidence)>>(&mut self, iter: T) {
-        self.evidence.extend(iter.into_iter())
+        let mut evidence = iter.into_iter().collect::<IndexMap<_, _>>();
+        evidence.sort_keys();
+        Evidence { evidence }
     }
 }
 
