@@ -32,6 +32,7 @@ import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Dialog from "./AddAccount";
 import useAccountStore from "../../../store/accountStore";
 import { useAccountsList } from "../../../api/hooks/useAccounts";
+import { AccountInfo } from "@tarilabs/typescript-bindings";
 
 function SelectAccount() {
   const { accountName, setAccountName } = useAccountStore();
@@ -49,7 +50,6 @@ function SelectAccount() {
   const handleAddAccount = () => {
     setDialogOpen(true);
   };
-
   return (
     <Box sx={{ minWidth: 250 }}>
       <Dialog open={dialogOpen} setOpen={setDialogOpen} />
@@ -58,13 +58,20 @@ function SelectAccount() {
         <Select
           labelId="account-select-label"
           id="account-select"
-          value={accountName}
+          value={
+            dataAccountsList?.accounts.some((account: AccountInfo) => account.account.name == accountName)
+              ? accountName
+              : "addAccount"
+          }
           label="Account"
           onChange={handleChange}
         >
-          {dataAccountsList?.accounts.map((account: any, index: number) => {
+          {dataAccountsList?.accounts.map((account: AccountInfo) => {
+            if (account.account.name === null) {
+              return null;
+            }
             return (
-              <MenuItem value={account.account.name} key={index}>
+              <MenuItem key={account.public_key} value={account.account.name}>
                 {account.account.name}
               </MenuItem>
             );

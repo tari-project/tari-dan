@@ -33,7 +33,7 @@ use tari_engine_types::{
     component::{ComponentBody, ComponentHeader},
     confidential::UnclaimedConfidentialOutput,
     events::Event,
-    fees::{FeeReceipt, FeeSource},
+    fees::{FeeBreakdown, FeeReceipt, FeeSource},
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
     lock::LockFlag,
     logs::LogEntry,
@@ -117,10 +117,6 @@ impl StateTracker {
 
     pub fn num_logs(&self) -> usize {
         self.read_with(|state| state.logs().len())
-    }
-
-    pub fn take_logs(&self) -> Vec<LogEntry> {
-        self.write_with(|state| state.take_logs())
     }
 
     pub fn get_template_address(&self) -> Result<TemplateAddress, RuntimeError> {
@@ -277,7 +273,7 @@ impl StateTracker {
 
         self.write_with(|state| {
             debug!(target: LOG_TARGET, "Add fee: source: {:?}, amount: {}", source, amount);
-            state.fee_state_mut().fee_charges.push((source, amount));
+            state.fee_state_mut().fee_charges.push(FeeBreakdown { source, amount });
         })
     }
 
@@ -327,9 +323,9 @@ impl StateTracker {
 
     pub fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError> {
         let mut checkpoint = self.fee_checkpoint.lock().unwrap();
-        let fee_state = self.read_with(|state| state.fee_state().clone());
         if let Some(checkpoint) = checkpoint.take() {
             self.write_with(|state| {
+                let fee_state = state.fee_state().clone();
                 *state = checkpoint;
                 // Preserve fee state across resets
                 *state.fee_state_mut() = fee_state;

@@ -17,7 +17,15 @@ use tari_dan_common_types::{
 use tari_transaction::TransactionId;
 
 use crate::{
-    consensus_models::{Decision, LeafBlock, LockedBlock, QcId, TransactionAtom, TransactionPoolStatusUpdate},
+    consensus_models::{
+        Decision,
+        LeafBlock,
+        LockedBlock,
+        QcId,
+        TransactionAtom,
+        TransactionPoolStatusUpdate,
+        TransactionRecord,
+    },
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
@@ -309,6 +317,9 @@ impl TransactionPoolRecord {
     }
 
     pub fn calculate_leader_fee(&self, involved: NonZeroU64, exhaust_divisor: u64) -> u64 {
+        if self.current_decision().is_abort() {
+            return 0;
+        }
         // TODO: We essentially burn a random amount depending on the shards involved in the transaction. This means it
         //       is hard to tell how much is actually in circulation unless we track this in the Resource. Right
         //       now we'll set exhaust to 0, which is just transaction_fee / involved.
@@ -447,6 +458,14 @@ impl TransactionPoolRecord {
             let _ = tx.transaction_pool_remove(id).optional()?;
         }
         Ok(())
+    }
+
+    pub fn get_transaction<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<TransactionRecord, TransactionPoolError> {
+        let transaction = TransactionRecord::get(tx, self.transaction_id())?;
+        Ok(transaction)
     }
 }
 

@@ -21,14 +21,16 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useQuery } from "@tanstack/react-query";
-import { getAllTransaction, jsonRpc } from "../../utils/json_rpc";
+import { transactionsGet, transactionsGetAll } from "../../utils/json_rpc";
 import { apiError } from "../helpers/types";
+
+import { TransactionGetAllResponse, TransactionStatus } from "@tarilabs/typescript-bindings";
 
 const useTransactionDetails = (hash: string) => {
   return useQuery({
     queryKey: ["transaction_details"],
     queryFn: () => {
-      return jsonRpc("transactions.get", [hash]);
+      return transactionsGet({ transaction_id: hash });
     },
     onError: (error: apiError) => {
       error;
@@ -36,10 +38,10 @@ const useTransactionDetails = (hash: string) => {
   });
 };
 
-const useGetAllTransactions = (status: string | null | undefined, component: string | null | undefined) => {
+const useGetAllTransactions = (status: TransactionStatus | null, component: string | null) => {
   return useQuery({
     queryKey: ["transactions"],
-    queryFn: () => getAllTransaction(status, component),
+    queryFn: () => transactionsGetAll({ status: status, component: component }),
     onError: (error: apiError) => {
       error;
     },

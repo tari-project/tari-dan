@@ -3,130 +3,70 @@
 
 mod cli;
 mod command;
+mod generators;
 
-use std::{fs, path::Path};
+use std::fs;
 
-use convert_case::{Case, Casing};
-use liquid::model::Value;
 use tari_dan_engine::{
-    template::{LoadedTemplate, TemplateModuleLoader},
-    wasm::compile::compile_template,
+    template::TemplateModuleLoader,
+    wasm::{compile::compile_template, WasmModule},
 };
 
-use crate::{cli::Cli, LoadedTemplate::Wasm};
+use crate::{
+    cli::Cli,
+    generators::{
+        liquid::{LiquidGenerator, LiquidTemplate},
+        CodeGenerator,
+        GeneratorOpts,
+        TemplateDefinition,
+    },
+};
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let cli = Cli::init();
 
-    if cli.clean && fs::remove_dir_all(&cli.output_path).is_err() {
+    let mut opts = GeneratorOpts {
+        output_path: "output/".into(),
+        liquid: None,
+    };
+
+    if let Some(config_file) = &cli.generator_config_file {
+        let config = fs::read_to_string(config_file)?;
+        opts = serde_json::from_str(&config)?;
+    }
+
+    if let Some(output_path) = cli.output_path {
+        opts.output_path = output_path;
+    }
+
+    if let Some(ref mut opts) = opts.liquid {
+        for (k, v) in cli.data.unwrap_or_default() {
+            opts.variables.insert(k, serde_json::Value::String(v));
+        }
+    }
+
+    if cli.clean && fs::remove_dir_all(&opts.output_path).is_err() {
         println!("Failed to clean output directory");
     }
 
-    match &cli.command {
+    match cli.command {
         command::Command::Scaffold(scaffold) => {
             println!("Scaffolding wasm at {:?}", scaffold.wasm_path);
-
-            let wasm = compile_template(&scaffold.wasm_path, &[]).unwrap();
+            let wasm = if scaffold.wasm_path.extension() == Some("wasm".as_ref()) {
+                WasmModule::from_code(fs::read(&scaffold.wasm_path).unwrap())
+            } else {
+                compile_template(&scaffold.wasm_path, &[]).unwrap()
+            };
 
             let loaded_template = wasm.load_template().unwrap();
-            // dbg!(&loaded_template);
-            generate(&loaded_template, cli.output_path.as_ref(), &cli)
-        },
-    }
-    // let config_path = cli.common.config_path();
-    // let cfg = load_configuration(config_path, true, &cli)?;
-    // let config = ApplicationConfig::load_from(&cfg)?;
-    // println!("Starting validator node on network {}", config.network);
-
-    println!("Hello, world!");
-}
-
-fn generate(template: &LoadedTemplate, output_path: &Path, cli: &Cli) {
-    fs::create_dir_all(output_path.join("src")).unwrap();
-    fs::write(
-        output_path.join("Cargo.toml"),
-        replace_tokens(include_str!("./template/Cargo.toml.liquid"), template, cli),
-    )
-    .unwrap();
-    fs::write(
-        output_path.join(".gitignore"),
-        replace_tokens(include_str!("./template/.gitignore.liquid"), template, cli),
-    )
-    .unwrap();
-    fs::write(
-        output_path.join("src/main.rs"),
-        replace_tokens(include_str!("./template/src/main.rs.liquid"), template, cli),
-    )
-    .unwrap();
-    fs::write(
-        output_path.join("src/cli.rs"),
-        replace_tokens(include_str!("./template/src/cli.rs.liquid"), template, cli),
-    )
-    .unwrap();
-    fs::write(
-        output_path.join("src/daemon_client.rs"),
-        replace_tokens(include_str!("./template/src/daemon_client.rs.liquid"), template, cli),
-    )
-    .unwrap();
-    std::process::Command::new("cargo")
-        .args(["fmt"])
-        .current_dir(output_path)
-        .status()
-        .unwrap();
-    // todo!()
-}
-
-fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) -> String {
-    let template = liquid::ParserBuilder::with_stdlib()
-        .build()
-        .unwrap()
-        .parse(in_file)
-        .unwrap();
-
-    let mut globals = liquid::object!({
-        "template_name": loaded_template.template_name(),
-        "template_address" : cli.template_address.clone(),
-    "crates_root": cli.crates_root.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "[crates]".to_string()),
-        "commands": [
-        ]
-    });
-
-    match loaded_template {
-        Wasm(loaded_wasm_template) => {
-            for f in loaded_wasm_template.template_def().functions() {
-                let arr = globals.get_mut("commands").unwrap().as_array_mut().unwrap();
-                let mut args = vec![];
-                let mut is_method = false;
-                let mut requires_buckets = false;
-                for a in &f.arguments {
-                    dbg!(a);
-                    args.push(liquid::object!({
-                        "name": a.name,
-                        "arg_type": a.arg_type.to_string(),
-                    }));
-                    if &a.arg_type.to_string() == "Bucket" {
-                        requires_buckets = true;
-                    }
-                    if &a.name == "self" {
-                        is_method = true;
-                    }
-                }
-
-                arr.push(Value::Object(liquid::object!({
-                    "name": f.name,
-                    "title": f.name.to_case(Case::UpperCamel),
-                    "args" : args,
-                    "is_method": is_method,
-                    "is_mut": f.is_mut,
-                    "output": f.output.to_string(),
-                    "requires_buckets": requires_buckets,
-                })));
+            let template: TemplateDefinition = loaded_template.into();
+            match cli.generator {
+                generators::GeneratorType::RustTemplateCli => {
+                    LiquidGenerator::new(LiquidTemplate::RustCli, opts).generate(&template)?
+                },
             }
         },
-        _ => {
-            todo!("Not yet supported");
-        },
     }
-    dbg!(&globals);
-    template.render(&globals).unwrap()
+
+    Ok(())
 }

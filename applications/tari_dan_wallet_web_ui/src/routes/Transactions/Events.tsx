@@ -30,14 +30,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import CodeBlockExpand from "../../Components/CodeBlock";
 import { useTheme } from "@mui/material/styles";
-
-interface Event {
-  component_address: string;
-  template_address: string;
-  topic: string;
-  tx_hash: string;
-  payload: any;
-}
+import { Event } from "@tarilabs/typescript-bindings";
 
 function RowData({ component_address, template_address, topic, tx_hash, payload }: Event, index: number) {
   const [open, setOpen] = useState(false);
@@ -59,15 +52,15 @@ function RowData({ component_address, template_address, topic, tx_hash, payload 
         <DataTableCell>{topic}</DataTableCell>
         <DataTableCell>
           {shortenString(component_address)}
-          <CopyToClipboard copy={component_address} />
+          {component_address && <CopyToClipboard copy={component_address} />}
         </DataTableCell>
         <DataTableCell>
           {shortenString(template_address)}
-          <CopyToClipboard copy={template_address} />
+          {template_address && <CopyToClipboard copy={template_address} />}
         </DataTableCell>
         <DataTableCell>
           {shortenString(tx_hash)}
-          <CopyToClipboard copy={tx_hash} />
+          {tx_hash && <CopyToClipboard copy={tx_hash} />}
         </DataTableCell>
       </TableRow>
       <TableRow>

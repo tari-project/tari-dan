@@ -36,7 +36,8 @@ import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import { DataTableCell } from "../../../Components/StyledComponents";
 import { useAccountNFTsList, useAccountsGetBalances } from "../../../api/hooks/useAccounts";
 import useAccountStore from "../../../store/accountStore";
-import { removeTagged, shortenString } from "../../../utils/helpers";
+import { shortenString } from "../../../utils/helpers";
+import { AccountNftInfo, BalanceEntry } from "@tarilabs/typescript-bindings";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -52,12 +53,6 @@ interface BalanceRowProps {
   confidential_balance: number;
 }
 
-interface NftsListProps {
-  token_symbol: string;
-  metadata: string;
-  is_burned: boolean;
-}
-
 function BalanceRow({ token_symbol, resource_address, resource_type, balance, confidential_balance }: BalanceRowProps) {
   const { showBalance } = useAccountStore();
   return (
@@ -67,16 +62,15 @@ function BalanceRow({ token_symbol, resource_address, resource_type, balance, co
         <CopyToClipboard copy={token_symbol || resource_address} />
       </DataTableCell>
       <DataTableCell>{resource_type}</DataTableCell>
-      <DataTableCell>{showBalance ? removeTagged(balance) : "*************"}</DataTableCell>
-      <DataTableCell>{showBalance ? removeTagged(confidential_balance) : "**************"}</DataTableCell>
+      <DataTableCell>{showBalance ? balance : "*************"}</DataTableCell>
+      <DataTableCell>{showBalance ? confidential_balance : "**************"}</DataTableCell>
     </TableRow>
   );
 }
 
-function NftsList({ token_symbol, metadata, is_burned }: NftsListProps) {
+function NftsList({ metadata, is_burned }: AccountNftInfo) {
   return (
-    <TableRow key={token_symbol}>
-      <DataTableCell>{token_symbol}</DataTableCell>
+    <TableRow key={metadata}>
       <DataTableCell>{metadata}</DataTableCell>
       <DataTableCell>{is_burned}</DataTableCell>
     </TableRow>
@@ -96,7 +90,7 @@ function TabPanel(props: TabPanelProps) {
     >
       {value === index && (
         <Box sx={{ p: 3 }}>
-          <Typography>{children}</Typography>
+          <Typography component="div">{children}</Typography>
         </Box>
       )}
     </div>
@@ -164,15 +158,17 @@ function Assets({ accountName }: { accountName: string }) {
                 )} */}
                 {balancesData?.balances.map(
                   ({
-                    token_symbol,
+                    vault_address,
                     resource_address,
-                    resource_type,
                     balance,
+                    resource_type,
                     confidential_balance,
-                  }: BalanceRowProps) => {
+                    token_symbol,
+                  }: BalanceEntry) => {
                     return (
                       <BalanceRow
-                        token_symbol={token_symbol}
+                        key={resource_address}
+                        token_symbol={token_symbol || ""}
                         resource_address={resource_address}
                         resource_type={resource_type}
                         balance={balance}
@@ -204,8 +200,8 @@ function Assets({ accountName }: { accountName: string }) {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {nftsListData?.nfts.map(({ token_symbol, metadata, is_burned }: NftsListProps) => {
-                  return <NftsList token_symbol={token_symbol} metadata={metadata} is_burned={is_burned} />;
+                {nftsListData?.nfts.map(({ metadata, is_burned }: AccountNftInfo) => {
+                  return <NftsList metadata={metadata} is_burned={is_burned} />;
                 })}
               </TableBody>
             </Table>

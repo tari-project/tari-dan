@@ -22,6 +22,79 @@
 
 import { Mutex } from "async-mutex";
 import { json } from "react-router-dom";
+import {
+  AccountGetDefaultRequest,
+  AccountGetRequest,
+  AccountGetResponse,
+  AccountNftInfo,
+  AccountSetDefaultRequest,
+  AccountSetDefaultResponse,
+  AccountsCreateFreeTestCoinsRequest,
+  AccountsCreateFreeTestCoinsResponse,
+  AccountsCreateRequest,
+  AccountsCreateResponse,
+  AccountsGetBalancesRequest,
+  AccountsGetBalancesResponse,
+  AccountsInvokeRequest,
+  AccountsInvokeResponse,
+  AccountsListRequest,
+  AccountsListResponse,
+  AuthGetAllJwtRequest,
+  AuthGetAllJwtResponse,
+  AuthLoginAcceptRequest,
+  AuthLoginAcceptResponse,
+  AuthLoginDenyRequest,
+  AuthLoginDenyResponse,
+  AuthLoginRequest,
+  AuthLoginResponse,
+  AuthRevokeTokenRequest,
+  AuthRevokeTokenResponse,
+  CallInstructionRequest,
+  ClaimBurnRequest,
+  ClaimBurnResponse,
+  ClaimValidatorFeesRequest,
+  ClaimValidatorFeesResponse,
+  ConfidentialCreateOutputProofRequest,
+  ConfidentialCreateOutputProofResponse,
+  ConfidentialTransferRequest,
+  ConfidentialTransferResponse,
+  GetAccountNftRequest,
+  GetValidatorFeesRequest,
+  GetValidatorFeesResponse,
+  KeysCreateRequest,
+  KeysCreateResponse,
+  KeysListRequest,
+  KeysListResponse,
+  KeysSetActiveRequest,
+  KeysSetActiveResponse,
+  ListAccountNftRequest,
+  ListAccountNftResponse,
+  MintAccountNftRequest,
+  MintAccountNftResponse,
+  ProofsCancelRequest,
+  ProofsCancelResponse,
+  ProofsGenerateRequest,
+  ProofsGenerateResponse,
+  RevealFundsRequest,
+  RevealFundsResponse,
+  SettingsGetResponse,
+  SettingsSetRequest,
+  SettingsSetResponse,
+  TransactionGetAllRequest,
+  TransactionGetAllResponse,
+  TransactionGetRequest,
+  TransactionGetResponse,
+  TransactionGetResultRequest,
+  TransactionGetResultResponse,
+  TransactionSubmitRequest,
+  TransactionSubmitResponse,
+  TransactionWaitResultRequest,
+  TransactionWaitResultResponse,
+  TransferRequest,
+  TransferResponse,
+  WebRtcStartRequest,
+  WebRtcStartResponse,
+} from "@tarilabs/typescript-bindings";
 
 let token: String | null = null;
 let json_id = 0;
@@ -78,121 +151,94 @@ export async function jsonRpc(method: string, params: any = null) {
   return internalJsonRpc(method, token, params);
 }
 
-// The 'any' types are structs I don't define them here, but we can add them later.
-
 // auth
-export const authLogin = () => jsonRpc("auth.login");
-
-// jwts
-export const getAllTokens = () => jsonRpc("auth.get_all_jwt", []);
-export const authRevokeToken = (token: string) => jsonRpc("auth.revoke", [token]);
-
-// rpc
-export const rpcDiscover = () => jsonRpc("rpc.discover");
-
-// keys
-export const keysCreate = () => jsonRpc("keys.create", []);
-export const keysList = () => jsonRpc("keys.list", []);
-export const keysSetActive = (index: number) => jsonRpc("keys.set_active", [index]);
-
-// transactions
-export const transactionsSubmit = (
-  signingKeyIndex: number | undefined,
-  instructions: any[],
-  fee: number,
-  inputs: any[],
-  overrideInputs: boolean,
-  newOutputs: number,
-  specificNonFungibleOutputs: any[],
-  newNonFungibleOutputs: any[],
-  newNonFungibleIndexOutputs: any[],
-  isDryRun: boolean,
-  proofId: any | undefined,
-) =>
-  jsonRpc("transactions.submit", [
-    signingKeyIndex,
-    instructions,
-    fee,
-    inputs,
-    overrideInputs,
-    newOutputs,
-    specificNonFungibleOutputs,
-    newNonFungibleOutputs,
-    newNonFungibleIndexOutputs,
-    isDryRun,
-    proofId,
-  ]);
-export const transactionsGet = (hash: string) => jsonRpc("transactions.get", [hash]);
-export const transactionsGetResult = (hash: string) => jsonRpc("transactions.get_result", [hash]);
-export const transactionsWaitResult = (hash: string, timeoutSecs: number | null) =>
-  jsonRpc("transactions.wait_result", [hash, timeoutSecs]);
-
-// accounts
-export const accountsClaimBurn = (account: string, claimProof: any, fee: number, key_id: number) =>
-  // Fees are passed as strings because Amount is tagged
-  jsonRpc("accounts.claim_burn", {
-    account,
-    claim_proof: claimProof,
-    fee,
-    key_id,
-  });
-export const accountsCreate = (
-  accountName: string | undefined,
-  signingKeyIndex: number | undefined,
-  customAccessRules: any | undefined,
-  fee: number | undefined,
-  is_default: boolean | false,
-) => jsonRpc("accounts.create", [accountName, signingKeyIndex, customAccessRules, fee, is_default]);
-export const accountsCreateFreeTestCoins = (
-  accountName: string | undefined,
-  amount: number | undefined,
-  fee: number | undefined,
-) => jsonRpc("accounts.create_free_test_coins", [{ Name: accountName }, amount, fee]);
-export const accountsList = (offset: number, limit: number) => jsonRpc("accounts.list", [offset, limit]);
-export const accountsGetBalances = (accountName: string) => jsonRpc("accounts.get_balances", [accountName]);
-export const accountsInvoke = (accountName: string, method: string, args: any[]) =>
-  jsonRpc("accounts.invoke", [accountName, method, args]);
-export const accountsGet = (nameOrAddress: string) => jsonRpc("accounts.get", [nameOrAddress]);
-
-// confidential
-export const confidentialCreateTransferProof = (
-  amount: number,
-  source_accountName: string,
-  resourceAddress: string,
-  destinationAccount: string,
-  destinationStealthPublicKey: string,
-) =>
-  jsonRpc("confidential.create_transfer_proof", [
-    amount,
-    source_accountName,
-    resourceAddress,
-    destinationAccount,
-    destinationStealthPublicKey,
-  ]);
-export const confidentialFinalize = (proofId: number) => jsonRpc("confidential.finalize", [proofId]);
-export const confidentialCancel = (proofId: number) => jsonRpc("confidential.cancel", [proofId]);
-export const confidentialCreateOutputProof = (amount: number) => jsonRpc("confidential.create_output_proof", [amount]);
-
-export const getAllTransaction = (status: string | null | undefined, component: string | null | undefined) =>
-  jsonRpc("transactions.get_all", [status, component]);
-
-export const webrtc = (signalingServerToken: string, permissions: string, name: string) =>
-  jsonRpc("webrtc.start", [signalingServerToken, permissions, name]);
-
-// nfts
-export const accountNFTsList = (offset: number, limit: number) => jsonRpc("nfts.list", [offset, limit]);
+export const authLogin = (request: AuthLoginRequest): Promise<AuthLoginResponse> => jsonRpc("auth.request");
+export const authAccept = (request: AuthLoginAcceptRequest): Promise<AuthLoginAcceptResponse> => jsonRpc("auth.accept");
+export const authDeny = (request: AuthLoginDenyRequest): Promise<AuthLoginDenyResponse> => jsonRpc("auth.deny");
+export const authRevoke = (request: AuthRevokeTokenRequest): Promise<AuthRevokeTokenResponse> => jsonRpc("auth.revoke");
+export const authGetAllJwt = (request: AuthGetAllJwtRequest): Promise<AuthGetAllJwtResponse> =>
+  jsonRpc("auth.get_all_jwt");
 
 // settings
-export const getSettings = () => jsonRpc("settings.get", []);
-export const setSettings = (settings: any) => jsonRpc("settings.set", settings);
+export const settingsGet = (): Promise<SettingsGetResponse> => jsonRpc("settings.get", []);
+export const settingsSet = (request: SettingsSetRequest): Promise<SettingsSetResponse> =>
+  jsonRpc("settings.set", request);
+
+// webrtc
+export const webrtcStart = (request: WebRtcStartRequest): Promise<WebRtcStartResponse> =>
+  jsonRpc("webrtc.start", request);
+
+// rpc
+export const rpcDiscover = (): Promise<string> => jsonRpc("rpc.discover");
+
+// keys
+export const keysCreate = (request: KeysCreateRequest): Promise<KeysCreateResponse> => jsonRpc("keys.create", request);
+export const keysList = (request: KeysListRequest): Promise<KeysListResponse> => jsonRpc("keys.list", request);
+export const keysSetActive = (request: KeysSetActiveRequest): Promise<KeysSetActiveResponse> =>
+  jsonRpc("keys.set_active", request);
+
+export const transactionsSubmitInstruction = (request: CallInstructionRequest): Promise<TransactionSubmitResponse> =>
+  jsonRpc("transactions.submit_instruction", request);
+export const transactionsSubmit = (request: TransactionSubmitRequest): Promise<TransactionSubmitResponse> =>
+  jsonRpc("transactions.submit", request);
+export const transactionsGet = (request: TransactionGetRequest): Promise<TransactionGetResponse> =>
+  jsonRpc("transactions.get", request);
+export const transactionsGetResult = (request: TransactionGetResultRequest): Promise<TransactionGetResultResponse> =>
+  jsonRpc("transactions.get_result", request);
+export const transactionsWaitResult = (request: TransactionWaitResultRequest): Promise<TransactionWaitResultResponse> =>
+  jsonRpc("transactions.wait_result", request);
+export const transactionsGetAll = (request: TransactionGetAllRequest): Promise<TransactionGetAllResponse> =>
+  jsonRpc("transactions.get_all", request);
+
+// accounts
+
+export const accountsRevealFunds = (request: RevealFundsRequest): Promise<RevealFundsResponse> =>
+  jsonRpc("accounts.reveal_funds", request);
+export const accountsClaimBurn = (request: ClaimBurnRequest): Promise<ClaimBurnResponse> =>
+  jsonRpc("accounts.claim_burn", request);
+export const accountsCreate = (request: AccountsCreateRequest): Promise<AccountsCreateResponse> =>
+  jsonRpc("accounts.create", request);
+export const accountsList = (request: AccountsListRequest): Promise<AccountsListResponse> =>
+  jsonRpc("accounts.list", request);
+export const accountsGetBalances = (request: AccountsGetBalancesRequest): Promise<AccountsGetBalancesResponse> =>
+  jsonRpc("accounts.get_balances", request);
+export const accountsInvoke = (request: AccountsInvokeRequest): Promise<AccountsInvokeResponse> =>
+  jsonRpc("accounts.invoke", request);
+export const accountsGet = (request: AccountGetRequest): Promise<AccountGetResponse> =>
+  jsonRpc("accounts.get", request);
+export const accountsGetDefault = (request: AccountGetDefaultRequest): Promise<AccountGetResponse> =>
+  jsonRpc("accounts.get_default", request);
+export const accountsTransfer = (request: TransferRequest): Promise<TransferResponse> =>
+  jsonRpc("accounts.transfer", request);
+export const accountsConfidentialTransfer = (
+  request: ConfidentialTransferRequest,
+): Promise<ConfidentialTransferResponse> => jsonRpc("accounts.confidential_transfer", request);
+export const accountsSetDefault = (request: AccountSetDefaultRequest): Promise<AccountSetDefaultResponse> =>
+  jsonRpc("accounts.set_default", request);
+export const accountsCreateFreeTestCoins = (
+  request: AccountsCreateFreeTestCoinsRequest,
+): Promise<AccountsCreateFreeTestCoinsResponse> => jsonRpc("accounts.create_free_test_coins", request);
+
+// confidential
+export const confidentialCreateTransferProof = (request: ProofsGenerateRequest): Promise<ProofsGenerateResponse> =>
+  jsonRpc("confidential.create_transfer_proof", request);
+export const confidentialFinalize = (request: ProofsCancelRequest): Promise<ProofsCancelResponse> =>
+  jsonRpc("confidential.finalize", request);
+export const confidentialCancel = (request: ProofsCancelRequest): Promise<ProofsCancelResponse> =>
+  jsonRpc("confidential.cancel", request);
+export const confidentialCreateOutputProof = (
+  request: ConfidentialCreateOutputProofRequest,
+): Promise<ConfidentialCreateOutputProofResponse> => jsonRpc("confidential.create_output_proof", request);
+
+// nfts
+export const nftMintAccountNft = (request: MintAccountNftRequest): Promise<MintAccountNftResponse> =>
+  jsonRpc("nfts.mint_account_nft", request);
+export const nftGet = (request: GetAccountNftRequest): Promise<AccountNftInfo> => jsonRpc("nfts.get", request);
+export const nftList = (request: ListAccountNftRequest): Promise<ListAccountNftResponse> =>
+  jsonRpc("nfts.list", request);
 
 // validators
-export const getFeeSummary = (validatorPublicKey: string, minEpoch: number, maxEpoch: number) =>
-  jsonRpc("validators.get_fee_summary", [validatorPublicKey, minEpoch, maxEpoch]);
-export const claimFees = (
-  account: string,
-  maxFee: number,
-  validatorPublicKey: string,
-  epoch: number,
-  isDryRun: boolean,
-) => jsonRpc("validators.claim_fees", [account, maxFee, validatorPublicKey, epoch, isDryRun]);
+export const validatorsGetFeeSummary = (request: GetValidatorFeesRequest): Promise<GetValidatorFeesResponse> =>
+  jsonRpc("validators.get_fee_summary", request);
+export const validatorsClaimFees = (request: ClaimValidatorFeesRequest): Promise<ClaimValidatorFeesResponse> =>
+  jsonRpc("validators.claim_fees", request);

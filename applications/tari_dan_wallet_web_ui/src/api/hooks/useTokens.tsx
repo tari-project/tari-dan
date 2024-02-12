@@ -21,15 +21,15 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { jsonRpc } from "../../utils/json_rpc";
 import { apiError } from "../helpers/types";
 import queryClient from "../queryClient";
+import { authGetAllJwt, authRevoke } from "../../utils/json_rpc";
 
 export const useGetAllTokens = () => {
   return useQuery({
     queryKey: ["jwts_list"],
     queryFn: () => {
-      return jsonRpc("auth.get_all_jwt", []);
+      return authGetAllJwt({});
     },
     onError: (error: apiError) => {
       error;
@@ -38,15 +38,14 @@ export const useGetAllTokens = () => {
 };
 
 export const useAuthRevokeToken = () => {
-  const revokeToken = async (token: string) => {
-    const result = await jsonRpc("auth.revoke", [token]);
-    console.log(token);
+  const revokeToken = async (token: number) => {
+    const result = await authRevoke({ permission_token_id: token });
     return result;
   };
   return useMutation(revokeToken, {
     onError: (error: apiError) => {
       error;
-      console.log(error);
+      console.error(error);
     },
     onSettled: () => {
       queryClient.invalidateQueries(["jwts_list"]);

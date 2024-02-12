@@ -34,8 +34,9 @@ import { useAccountsList, useAccountsTransfer } from "../../../api/hooks/useAcco
 import { useTheme } from "@mui/material/styles";
 import useAccountStore from "../../../store/accountStore";
 import { FormControl, InputLabel, MenuItem, Select, SelectChangeEvent } from "@mui/material";
-import { claimFees } from "../../../utils/json_rpc";
 import { useKeysList } from "../../../api/hooks/useKeys";
+import { validatorsClaimFees } from "../../../utils/json_rpc";
+import { AccountInfo } from "@tarilabs/typescript-bindings";
 
 export default function ClaimFees() {
   const [open, setOpen] = useState(false);
@@ -46,7 +47,7 @@ export default function ClaimFees() {
     fee: "",
     validatorNodePublicKey: "",
     epoch: "",
-    key: "",
+    key_index: -1,
   });
 
   const { data: dataAccountsList } = useAccountsList(0, 10);
@@ -68,17 +69,21 @@ export default function ClaimFees() {
 
   const is_filled = isFormFilled();
 
-  const onClaimFeesKeyChange = (e: SelectChangeEvent<string>) => {
-    let key = e.target.value;
-    let key_index = dataKeysList.keys.indexOf(key);
+  const onClaimFeesKeyChange = (e: SelectChangeEvent<number>) => {
+    if (!dataKeysList) {
+      return;
+    }
+    let key_index = +e.target.value;
     let account = claimFeesFormState.account;
-    let selected_account = dataAccountsList.accounts.find((account: any) => account.account.key_index === key_index);
+    let selected_account = dataAccountsList?.accounts.find(
+      (account: AccountInfo) => account.account.key_index === key_index,
+    );
     let new_account_name;
-    account = selected_account.account.name;
+    account = selected_account?.account.name || "";
     new_account_name = false;
     setClaimFeesFormState({
       ...claimFeesFormState,
-      key: key,
+      key_index: key_index,
       account: account,
     });
   };
@@ -114,13 +119,13 @@ export default function ClaimFees() {
   const onClaim = async () => {
     if (claimFeesFormState.account) {
       setDisabled(true);
-      claimFees(
-        claimFeesFormState.account,
-        3000,
-        claimFeesFormState.validatorNodePublicKey,
-        parseInt(claimFeesFormState.epoch),
-        estimatedFee == 0,
-      )
+      validatorsClaimFees({
+        account: { Name: claimFeesFormState.account },
+        max_fee: 3000,
+        validator_public_key: claimFeesFormState.validatorNodePublicKey,
+        epoch: parseInt(claimFeesFormState.epoch),
+        dry_run: estimatedFee == 0,
+      })
         .then((resp) => {
           if (estimatedFee == 0) {
             setEstimatedFee(resp.fee);
@@ -133,7 +138,7 @@ export default function ClaimFees() {
               fee: "",
               validatorNodePublicKey: "",
               epoch: "",
-              key: "",
+              key_index: -1,
             });
           }
         })
@@ -154,15 +159,10 @@ export default function ClaimFees() {
     setOpen(false);
   };
 
-  const formattedKey = (key: any[]) => {
-    let account = dataAccountsList.accounts.find((account: any) => account.account.key_index === +key[0]);
+  const formattedKey = (key: [number, string, boolean]) => {
+    let account = dataAccountsList?.accounts.find((account: AccountInfo) => account.account.key_index === +key[0]);
     if (account === undefined) {
       return null;
-      return (
-        <div>
-          <b>{key[0]}</b> {key[1]}
-        </div>
-      );
     }
     return (
       <div>
@@ -187,16 +187,23 @@ export default function ClaimFees() {
                 labelId="key"
                 name="key"
                 label="Key"
-                value={claimFeesFormState.key}
+                value={claimFeesFormState.key_index >= 0 ? claimFeesFormState.key_index : ""}
                 onChange={onClaimFeesKeyChange}
                 style={{ flexGrow: 1, minWidth: "200px" }}
                 disabled={disabled}
               >
-                {dataKeysList?.keys?.map((key: any) => (
-                  <MenuItem key={key} value={key}>
-                    {formattedKey(key)}
-                  </MenuItem>
-                ))}
+                {dataKeysList?.keys
+                  ?.filter(
+                    (key: [number, string, boolean]) =>
+                      dataAccountsList?.accounts.find(
+                        (account: AccountInfo) => account.account.key_index === +key[0],
+                      ) !== undefined,
+                  )
+                  .map((key: [number, string, boolean]) => (
+                    <MenuItem key={key[0]} value={key[0]}>
+                      {formattedKey(key)}
+                    </MenuItem>
+                  ))}
               </Select>
             </FormControl>
             <TextField

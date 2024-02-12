@@ -27,8 +27,9 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import CodeBlockExpand from "../../Components/CodeBlock";
 import { useTheme } from "@mui/material/styles";
+import { Instruction } from "@tarilabs/typescript-bindings";
 
-function RowData({ title, data }: any, index: number) {
+function RowData({ title, data }: { title: string; data: Instruction }, index: number) {
   const [open, setOpen] = useState(false);
   const theme = useTheme();
   return (
@@ -65,13 +66,13 @@ function RowData({ title, data }: any, index: number) {
   );
 }
 
-export default function Instructions({ data }: any, index: number) {
+export default function Instructions({ data }: { data: Array<Instruction> }, index: number) {
   return (
     <TableContainer>
       <Table>
         <TableBody>
           {data &&
-            data.map((item: any) => {
+            data.map((item: Instruction) => {
               return <RowData title={Object.keys(item)[0]} data={item} />;
             })}
         </TableBody>

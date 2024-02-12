@@ -174,7 +174,6 @@ pub struct TransactionWaitResultResponse {
     #[cfg_attr(feature = "ts", ts(type = "Array<any> | null"))]
     pub json_result: Option<Vec<Value>>,
     pub status: TransactionStatus,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub final_fee: Amount,
     pub timed_out: bool,
 }
@@ -235,7 +234,6 @@ pub struct KeysCreateResponse {
 pub struct AccountsCreateRequest {
     pub account_name: Option<String>,
     pub custom_access_rules: Option<ComponentAccessRules>,
-    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub max_fee: Option<Amount>,
     pub is_default: bool,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
@@ -258,7 +256,6 @@ pub struct AccountsInvokeRequest {
     pub account: Option<ComponentAddressOrName>,
     pub method: String,
     pub args: Vec<Arg>,
-    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub max_fee: Option<Amount>,
 }
 
@@ -315,10 +312,8 @@ pub struct BalanceEntry {
     pub vault_address: SubstateId,
     #[serde(with = "serde_with::string")]
     pub resource_address: ResourceAddress,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub balance: Amount,
     pub resource_type: ResourceType,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub confidential_balance: Amount,
     pub token_symbol: Option<String>,
 }
@@ -383,12 +378,10 @@ pub struct AccountSetDefaultResponse {}
 pub struct TransferRequest {
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub amount: Amount,
     pub resource_address: ResourceAddress,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub destination_public_key: PublicKey,
-    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub max_fee: Option<Amount>,
     pub dry_run: bool,
 }
@@ -398,9 +391,7 @@ pub struct TransferRequest {
 pub struct TransferResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub fee: Amount,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub fee_refunded: Amount,
     pub result: FinalizeResult,
 }
@@ -408,9 +399,7 @@ pub struct TransferResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ProofsGenerateRequest {
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub amount: Amount,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub reveal_amount: Amount,
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
@@ -450,7 +439,6 @@ pub struct ProofsCancelRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialCreateOutputProofRequest {
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub amount: Amount,
 }
 
@@ -465,12 +453,10 @@ pub struct ConfidentialCreateOutputProofResponse {
 pub struct ConfidentialTransferRequest {
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub amount: Amount,
     pub resource_address: ResourceAddress,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub destination_public_key: PublicKey,
-    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub max_fee: Option<Amount>,
     pub dry_run: bool,
 }
@@ -480,7 +466,6 @@ pub struct ConfidentialTransferRequest {
 pub struct ConfidentialTransferResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub fee: Amount,
     pub result: FinalizeResult,
 }
@@ -492,7 +477,6 @@ pub struct ClaimBurnRequest {
     pub account: Option<ComponentAddressOrName>,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub claim_proof: serde_json::Value,
-    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub max_fee: Option<Amount>,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub key_id: Option<u64>,
@@ -503,7 +487,6 @@ pub struct ClaimBurnRequest {
 pub struct ClaimBurnResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub fee: Amount,
     pub result: FinalizeResult,
 }
@@ -519,12 +502,10 @@ pub struct RevealFundsRequest {
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
     /// Amount to reveal
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub amount_to_reveal: Amount,
     /// Pay fee from revealed funds. If false, previously revealed funds in the account are used.
     pub pay_fee_from_reveal: bool,
     /// The amount of fees to add to the transaction. Any fees not charged are refunded.
-    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub max_fee: Option<Amount>,
 }
 
@@ -533,7 +514,6 @@ pub struct RevealFundsRequest {
 pub struct RevealFundsResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub fee: Amount,
     pub result: FinalizeResult,
 }
@@ -542,9 +522,7 @@ pub struct RevealFundsResponse {
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct AccountsCreateFreeTestCoinsRequest {
     pub account: Option<ComponentAddressOrName>,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub amount: Amount,
-    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub max_fee: Option<Amount>,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub key_id: Option<u64>,
@@ -555,9 +533,7 @@ pub struct AccountsCreateFreeTestCoinsRequest {
 pub struct AccountsCreateFreeTestCoinsResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub amount: Amount,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub fee: Amount,
     pub result: FinalizeResult,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -635,9 +611,7 @@ pub struct MintAccountNftRequest {
     pub account: ComponentAddressOrName,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub metadata: serde_json::Value,
-    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub mint_fee: Option<Amount>,
-    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub create_account_nft_fee: Option<Amount>,
 }
 
@@ -647,7 +621,6 @@ pub struct MintAccountNftResponse {
     pub nft_id: NonFungibleId,
     pub resource_address: ResourceAddress,
     pub result: FinalizeResult,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub fee: Amount,
 }
 
@@ -705,7 +678,6 @@ pub struct GetValidatorFeesRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetValidatorFeesResponse {
-    #[cfg_attr(feature = "ts", ts(type = "Record<Epoch, number>"))]
     pub fee_summary: HashMap<Epoch, Amount>,
 }
 
@@ -714,7 +686,6 @@ pub struct GetValidatorFeesResponse {
 pub struct ClaimValidatorFeesRequest {
     #[serde(default, deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
-    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub max_fee: Option<Amount>,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub validator_public_key: PublicKey,
@@ -727,7 +698,6 @@ pub struct ClaimValidatorFeesRequest {
 pub struct ClaimValidatorFeesResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub fee: Amount,
     pub result: FinalizeResult,
 }

@@ -39,6 +39,13 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Loading from "../../Components/Loading";
 import Error from "../../Components/Error";
+import {
+  FinalizeResult,
+  RejectReason,
+  TransactionResult,
+  getRejectReasonFromTransactionResult,
+  rejectReasonToString,
+} from "@tarilabs/typescript-bindings";
 
 export default function TransactionDetails() {
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
@@ -63,21 +70,12 @@ export default function TransactionDetails() {
     setExpandedPanels([]);
   };
 
-  const renderResult = (result: any) => {
+  const renderResult = (result: FinalizeResult | null) => {
     if (result) {
-      if (result.result.Accept) {
+      if ("Accept" in result.result) {
         return <span>Accepted</span>;
       }
-      if (result.result.AcceptFeeRejectRest) {
-        return <span>{result.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>;
-      }
-      if (result.result.Reject) {
-        return (
-          <span>
-            {Object.keys(result.result.Reject)[0]} - {result.result.Reject[Object.keys(result.result.Reject)[0]]}
-          </span>
-        );
-      }
+      return <span>{rejectReasonToString(getRejectReasonFromTransactionResult(result.result))}</span>;
     } else {
       return <span>In progress</span>;
     }
@@ -107,12 +105,40 @@ export default function TransactionDetails() {
     }
 
     const last_update_time = new Date(data.last_update_time);
-    console.log(data);
     const handleDownload = () => {
       const json = JSON.stringify(data, null, 2);
       const blob = new Blob([json], { type: "application/json" });
       const filename = `tx-${data?.transaction?.id}.json` || "tx-unknown_id.json";
       saveAs(blob, filename);
+    };
+
+    const getTransactionFailure = (txResult: TransactionResult | undefined): string => {
+      if (txResult === undefined || "Accept" in txResult) {
+        return "No reason";
+      }
+      let reason;
+      if ("AcceptFeeRejectRest" in txResult) {
+        reason = txResult.AcceptFeeRejectRest[1];
+      } else {
+        reason = txResult.Reject;
+      }
+      const getReasonString = (x: RejectReason): string => {
+        if (typeof x === "string") {
+          return x;
+        } else if ("ShardsNotPledged" in x) {
+          return `ShardsNotPledged: ${x["ShardsNotPledged"]}`;
+        } else if ("ExecutionFailure" in x) {
+          return `ExecutionFailure: ${x["ExecutionFailure"]}`;
+        } else if ("ShardPledgedToAnotherPayload" in x) {
+          return `ShardPledgedToAnotherPayload: ${x["ShardPledgedToAnotherPayload"]}`;
+        } else if ("ShardRejected" in x) {
+          return `ShardRejected: ${x["ShardRejected"]}`;
+        } else if ("FeesNotPaid" in x) {
+          return `FeesNotPaid: ${x["FeesNotPaid"]}`;
+        }
+        return "Unknown reason";
+      };
+      return getReasonString(reason);
     };
 
     if (data.status === "Rejected" || data.status === "InvalidTransaction") {
@@ -145,11 +171,7 @@ export default function TransactionDetails() {
                 </TableRow>
                 <TableRow>
                   <TableCell>Reason</TableCell>
-                  <DataTableCell>
-                    {data?.transaction_failure
-                      ? `${Object.keys(data.transaction_failure)[0]}: ${Object.values(data.transaction_failure)[0]}`
-                      : "No reason"}
-                  </DataTableCell>
+                  <DataTableCell>{getTransactionFailure(data?.result?.result)}</DataTableCell>
                 </TableRow>
               </TableBody>
             </Table>
@@ -195,12 +217,10 @@ export default function TransactionDetails() {
                       </Button>
                     </DataTableCell>
                   </TableRow>
-                  {data?.transaction_failure ? (
+                  {data?.result?.result ? (
                     <TableRow>
                       <TableCell>Reason</TableCell>
-                      <DataTableCell>
-                        {`${Object.keys(data.transaction_failure)[0]}: ${Object.values(data.transaction_failure)[0]}`}
-                      </DataTableCell>
+                      <DataTableCell>{getTransactionFailure(data?.result?.result)}</DataTableCell>
                     </TableRow>
                   ) : null}
                 </TableBody>

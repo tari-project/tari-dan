@@ -1,5 +1,5 @@
 {
-  "name": "tari-bindings",
+  "name": "@tarilabs/typescript-bindings",
   "version": "1.0.0",
   "description": "",
   "main": "index.ts",

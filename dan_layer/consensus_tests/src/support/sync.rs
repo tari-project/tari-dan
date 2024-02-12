@@ -18,7 +18,7 @@ impl SyncManager for AlwaysSyncedSyncManager {
         Ok(SyncStatus::UpToDate)
     }
 
-    async fn sync(&self) -> Result<(), Self::Error> {
+    async fn sync(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
 }
