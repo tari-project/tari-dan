@@ -32,7 +32,7 @@ import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Dialog from "./AddAccount";
 import useAccountStore from "../../../store/accountStore";
 import { useAccountsList } from "../../../api/hooks/useAccounts";
-import { AccountInfo } from "tari-bindings";
+import { AccountInfo } from "@tarilabs/typescript-bindings";
 
 function SelectAccount() {
   const { accountName, setAccountName } = useAccountStore();

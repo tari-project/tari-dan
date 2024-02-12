@@ -94,7 +94,7 @@ import {
   TransferResponse,
   WebRtcStartRequest,
   WebRtcStartResponse,
-} from "tari-bindings";
+} from "@tarilabs/typescript-bindings";
 
 let token: String | null = null;
 let json_id = 0;

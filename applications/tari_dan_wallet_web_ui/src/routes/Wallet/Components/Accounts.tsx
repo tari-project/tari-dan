@@ -50,7 +50,7 @@ import {
 } from "../../../api/hooks/useAccounts";
 import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import queryClient from "../../../api/queryClient";
-import { AccountInfo } from "tari-bindings";
+import { AccountInfo } from "@tarilabs/typescript-bindings";
 
 function Account(account: AccountInfo, index: number) {
   const { pathname } = useLocation();

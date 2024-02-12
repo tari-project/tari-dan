@@ -37,7 +37,7 @@ import { useTheme } from "@mui/material/styles";
 import { accountsClaimBurn } from "../../../utils/json_rpc";
 import useAccountStore from "../../../store/accountStore";
 import { useKeysList } from "../../../api/hooks/useKeys";
-import { AccountInfo, AccountsListResponse } from "tari-bindings";
+import { AccountInfo, AccountsListResponse } from "@tarilabs/typescript-bindings";
 
 export default function ClaimBurn() {
   const [open, setOpen] = useState(false);

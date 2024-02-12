@@ -35,7 +35,7 @@ import { shortenString } from "../../utils/helpers";
 import { DataTableCell } from "../../Components/StyledComponents";
 import CopyToClipboard from "../../Components/CopyToClipboard";
 import FetchStatusCheck from "../../Components/FetchStatusCheck";
-import { Account, AccountNftInfo, BalanceEntry, substateIdToString } from "tari-bindings";
+import { Account, AccountNftInfo, BalanceEntry, substateIdToString } from "@tarilabs/typescript-bindings";
 
 function BalanceRow(props: BalanceEntry) {
   return (
@@ -164,7 +164,9 @@ function AccountDetailsLayout() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {nftsListData?.nfts.map((nft: AccountNftInfo, index: number) => <NftsList key={index} nft={nft} />)}
+                {nftsListData?.nfts.map((nft: AccountNftInfo, index: number) => (
+                  <NftsList key={index} nft={nft} />
+                ))}
               </TableBody>
             </Table>
           </TableContainer>
