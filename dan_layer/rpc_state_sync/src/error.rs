@@ -30,6 +30,8 @@ pub enum CommsRpcConsensusSyncError {
     NoPeersAvailable { committee_size: usize },
     #[error("Proposal validation error: {0}")]
     ProposalValidationError(#[from] ProposalValidationError),
+    #[error("State tree error: {0}")]
+    StateTreeError(#[from] tari_state_tree::StateTreeError),
 }
 
 impl From<CommsRpcConsensusSyncError> for HotStuffError {

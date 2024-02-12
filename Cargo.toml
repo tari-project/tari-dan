@@ -26,6 +26,7 @@ members = [
     "dan_layer/p2p",
     "dan_layer/rpc_state_sync",
     "dan_layer/state_store_sqlite",
+    "dan_layer/state_tree",
     "dan_layer/storage_lmdb",
     "dan_layer/storage_sqlite",
     "dan_layer/storage",
@@ -87,6 +88,7 @@ tari_networking = { path = "networking/core" }
 tari_rpc_framework = { path = "networking/rpc_framework" }
 tari_rpc_macros = { path = "networking/rpc_macros" }
 tari_state_store_sqlite = { path = "dan_layer/state_store_sqlite" }
+tari_state_tree = { path = "dan_layer/state_tree" }
 tari_swarm = { path = "networking/swarm" }
 tari_template_abi = { version = "0.3.0", path = "dan_layer/template_abi" }
 tari_template_builtin = { path = "dan_layer/template_builtin" }

@@ -119,10 +119,6 @@ impl StateTracker {
         self.read_with(|state| state.logs().len())
     }
 
-    pub fn take_logs(&self) -> Vec<LogEntry> {
-        self.write_with(|state| state.take_logs())
-    }
-
     pub fn get_template_address(&self) -> Result<TemplateAddress, RuntimeError> {
         self.read_with(|state| state.current_template().map(|(a, _)| *a))
     }

@@ -178,9 +178,10 @@ message SubstateData {
 }
 
 message SubstateDestroyedProof {
-  bytes address = 1;
-  tari.dan.consensus.QuorumCertificate destroyed_justify = 2;
-  bytes destroyed_by_transaction = 3;
+  bytes substate_id = 1;
+  uint32 version = 2;
+  tari.dan.consensus.QuorumCertificate destroyed_justify = 3;
+  bytes destroyed_by_transaction = 4;
 }
 
 message SubstateUpdate {

@@ -13,7 +13,6 @@ use tari_dan_common_types::{optional::Optional, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, HighQc, LastSentVote, LastVoted, LeafBlock, TransactionPool},
     StateStore,
-    StateStoreWriteTransaction,
 };
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
 use tari_shutdown::ShutdownSignal;
@@ -184,10 +183,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             shutdown,
         }
     }
-}
-impl<TConsensusSpec> HotstuffWorker<TConsensusSpec>
-where TConsensusSpec: ConsensusSpec
-{
+
     pub async fn start(&mut self) -> Result<(), HotStuffError> {
         self.create_genesis_block_if_required()?;
         let (current_height, high_qc) = self.state_store.with_read_tx(|tx| {
@@ -553,36 +549,36 @@ where TConsensusSpec: ConsensusSpec
     }
 
     fn create_genesis_block_if_required(&self) -> Result<(), HotStuffError> {
-        let mut tx = self.state_store.create_write_tx()?;
+        self.state_store.with_write_tx(|tx| {
+            // The parent for genesis blocks refer to this zero block
+            let zero_block = Block::zero_block(self.network);
+            if !zero_block.exists(tx.deref_mut())? {
+                debug!(target: LOG_TARGET, "Creating zero block");
+                zero_block.justify().insert(tx)?;
+                zero_block.insert(tx)?;
+                zero_block.as_locked_block().set(tx)?;
+                zero_block.as_leaf_block().set(tx)?;
+                zero_block.as_last_executed().set(tx)?;
+                zero_block.as_last_voted().set(tx)?;
+                zero_block.justify().as_high_qc().set(tx)?;
+                zero_block.commit(tx)?;
+            }
 
-        // The parent for genesis blocks refer to this zero block
-        let zero_block = Block::zero_block(self.network);
-        if !zero_block.exists(tx.deref_mut())? {
-            debug!(target: LOG_TARGET, "Creating zero block");
-            zero_block.justify().insert(&mut tx)?;
-            zero_block.insert(&mut tx)?;
-            zero_block.as_locked_block().set(&mut tx)?;
-            zero_block.as_leaf_block().set(&mut tx)?;
-            zero_block.as_last_executed().set(&mut tx)?;
-            zero_block.as_last_voted().set(&mut tx)?;
-            zero_block.justify().as_high_qc().set(&mut tx)?;
-            zero_block.commit(&mut tx)?;
-        }
+            // let mut state_tree = SpreadPrefixStateTree::new(tx);
+            // state_tree.put_substate_changes_at_next_version(None, vec![])?;
 
-        // let genesis = Block::genesis();
-        // if !genesis.exists(tx.deref_mut())? {
-        //     debug!(target: LOG_TARGET, "Creating genesis block");
-        //     genesis.justify().save(&mut tx)?;
-        //     genesis.insert(&mut tx)?;
-        //     genesis.as_locked().set(&mut tx)?;
-        //     genesis.as_leaf_block().set(&mut tx)?;
-        //     genesis.as_last_executed().set(&mut tx)?;
-        //     genesis.justify().as_high_qc().set(&mut tx)?;
-        // }
-
-        tx.commit()?;
-
-        Ok(())
+            // let genesis = Block::genesis();
+            // if !genesis.exists(tx.deref_mut())? {
+            //     debug!(target: LOG_TARGET, "Creating genesis block");
+            //     genesis.justify().save(&mut tx)?;
+            //     genesis.insert(&mut tx)?;
+            //     genesis.as_locked().set(&mut tx)?;
+            //     genesis.as_leaf_block().set(&mut tx)?;
+            //     genesis.as_last_executed().set(&mut tx)?;
+            //     genesis.justify().as_high_qc().set(&mut tx)?;
+            // }
+            Ok(())
+        })
     }
 
     fn publish_event(&self, event: HotstuffEvent) {

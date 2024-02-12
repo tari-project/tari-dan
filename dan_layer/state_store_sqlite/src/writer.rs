@@ -27,6 +27,7 @@ use tari_dan_storage::{
         LeafBlock,
         LockedBlock,
         LockedOutput,
+        PendingStateTreeDiff,
         QcId,
         QuorumCertificate,
         SubstateLockFlag,
@@ -140,6 +141,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
             parked_blocks::block_id.eq(&block_id),
             parked_blocks::parent_block_id.eq(serialize_hex(block.parent())),
             parked_blocks::network.eq(block.network().to_string()),
+            parked_blocks::merkle_root.eq(block.merkle_root().to_string()),
             parked_blocks::height.eq(block.height().as_u64() as i64),
             parked_blocks::epoch.eq(block.epoch().as_u64() as i64),
             parked_blocks::proposed_by.eq(serialize_hex(block.proposed_by().as_bytes())),
@@ -162,7 +164,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
     }
 }
 
-impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_, TAddr> {
+impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'tx, TAddr> {
     type Addr = TAddr;
 
     fn commit(mut self) -> Result<(), StorageError> {
@@ -183,6 +185,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         let insert = (
             blocks::block_id.eq(serialize_hex(block.id())),
             blocks::parent_block_id.eq(serialize_hex(block.parent())),
+            blocks::merkle_root.eq(block.merkle_root().to_string()),
             blocks::network.eq(block.network().to_string()),
             blocks::height.eq(block.height().as_u64() as i64),
             blocks::epoch.eq(block.epoch().as_u64() as i64),
@@ -237,141 +240,6 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             })?;
 
         Ok(())
-    }
-
-    fn missing_transactions_insert<
-        'a,
-        IMissing: IntoIterator<Item = &'a TransactionId>,
-        IAwaiting: IntoIterator<Item = &'a TransactionId>,
-    >(
-        &mut self,
-        block: &Block,
-        missing_transaction_ids: IMissing,
-        awaiting_transaction_ids: IAwaiting,
-    ) -> Result<(), StorageError> {
-        use crate::schema::missing_transactions;
-
-        let missing_transaction_ids = missing_transaction_ids
-            .into_iter()
-            .map(serialize_hex)
-            .collect::<Vec<_>>();
-        let awaiting_transaction_ids = awaiting_transaction_ids
-            .into_iter()
-            .map(serialize_hex)
-            .collect::<Vec<_>>();
-        let block_id_hex = serialize_hex(block.id());
-
-        self.parked_blocks_insert(block)?;
-
-        let values = missing_transaction_ids
-            .iter()
-            .map(|tx_id| {
-                (
-                    missing_transactions::block_id.eq(&block_id_hex),
-                    missing_transactions::block_height.eq(block.height().as_u64() as i64),
-                    missing_transactions::transaction_id.eq(tx_id),
-                    missing_transactions::is_awaiting_execution.eq(false),
-                )
-            })
-            .chain(awaiting_transaction_ids.iter().map(|tx_id| {
-                (
-                    missing_transactions::block_id.eq(&block_id_hex),
-                    missing_transactions::block_height.eq(block.height().as_u64() as i64),
-                    missing_transactions::transaction_id.eq(tx_id),
-                    missing_transactions::is_awaiting_execution.eq(true),
-                )
-            }))
-            .collect::<Vec<_>>();
-
-        diesel::insert_into(missing_transactions::table)
-            .values(values)
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "missing_transactions_insert",
-                source: e,
-            })?;
-
-        Ok(())
-    }
-
-    fn missing_transactions_remove(
-        &mut self,
-        current_height: NodeHeight,
-        transaction_id: &TransactionId,
-    ) -> Result<Option<Block>, StorageError> {
-        use crate::schema::{missing_transactions, transactions};
-
-        // delete all entries that are for previous heights
-        diesel::delete(missing_transactions::table)
-            .filter(missing_transactions::block_height.lt(current_height.as_u64().saturating_sub(1) as i64))
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "missing_transactions_remove",
-                source: e,
-            })?;
-
-        let transaction_id = serialize_hex(transaction_id);
-        let block_id = missing_transactions::table
-            .select(missing_transactions::block_id)
-            .filter(missing_transactions::transaction_id.eq(&transaction_id))
-            .filter(missing_transactions::block_height.eq(current_height.as_u64() as i64))
-            .first::<String>(self.connection())
-            .optional()
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "missing_transactions_remove",
-                source: e,
-            })?;
-        let Some(block_id) = block_id else {
-            return Ok(None);
-        };
-
-        diesel::delete(missing_transactions::table)
-            .filter(missing_transactions::transaction_id.eq(&transaction_id))
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "missing_transactions_remove",
-                source: e,
-            })?;
-        let mut missing_transactions = missing_transactions::table
-            .select(missing_transactions::transaction_id)
-            .filter(missing_transactions::block_id.eq(&block_id))
-            .get_results::<String>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "missing_transactions_remove",
-                source: e,
-            })?;
-
-        if missing_transactions.is_empty() {
-            return self.parked_blocks_remove(&block_id).map(Some);
-        }
-
-        // Make double sure that we dont have these transactions due to a race condition between inserting
-        // missing transactions and them completing execution.
-        let found_transaction_ids = transactions::table
-            .select(transactions::transaction_id)
-            .filter(transactions::transaction_id.eq_any(&missing_transactions))
-            .filter(transactions::result.is_not_null())
-            .get_results::<String>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transactions_get_many",
-                source: e,
-            })?;
-
-        diesel::delete(missing_transactions::table)
-            .filter(missing_transactions::transaction_id.eq_any(&found_transaction_ids))
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "missing_transactions_remove",
-                source: e,
-            })?;
-
-        missing_transactions.retain(|id| found_transaction_ids.iter().all(|found| found != id));
-
-        if missing_transactions.is_empty() {
-            return self.parked_blocks_remove(&block_id).map(Some);
-        }
-
-        Ok(None)
     }
 
     fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate) -> Result<(), StorageError> {
@@ -1001,6 +869,141 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
+    fn missing_transactions_insert<
+        'a,
+        IMissing: IntoIterator<Item = &'a TransactionId>,
+        IAwaiting: IntoIterator<Item = &'a TransactionId>,
+    >(
+        &mut self,
+        block: &Block,
+        missing_transaction_ids: IMissing,
+        awaiting_transaction_ids: IAwaiting,
+    ) -> Result<(), StorageError> {
+        use crate::schema::missing_transactions;
+
+        let missing_transaction_ids = missing_transaction_ids
+            .into_iter()
+            .map(serialize_hex)
+            .collect::<Vec<_>>();
+        let awaiting_transaction_ids = awaiting_transaction_ids
+            .into_iter()
+            .map(serialize_hex)
+            .collect::<Vec<_>>();
+        let block_id_hex = serialize_hex(block.id());
+
+        self.parked_blocks_insert(block)?;
+
+        let values = missing_transaction_ids
+            .iter()
+            .map(|tx_id| {
+                (
+                    missing_transactions::block_id.eq(&block_id_hex),
+                    missing_transactions::block_height.eq(block.height().as_u64() as i64),
+                    missing_transactions::transaction_id.eq(tx_id),
+                    missing_transactions::is_awaiting_execution.eq(false),
+                )
+            })
+            .chain(awaiting_transaction_ids.iter().map(|tx_id| {
+                (
+                    missing_transactions::block_id.eq(&block_id_hex),
+                    missing_transactions::block_height.eq(block.height().as_u64() as i64),
+                    missing_transactions::transaction_id.eq(tx_id),
+                    missing_transactions::is_awaiting_execution.eq(true),
+                )
+            }))
+            .collect::<Vec<_>>();
+
+        diesel::insert_into(missing_transactions::table)
+            .values(values)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "missing_transactions_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn missing_transactions_remove(
+        &mut self,
+        current_height: NodeHeight,
+        transaction_id: &TransactionId,
+    ) -> Result<Option<Block>, StorageError> {
+        use crate::schema::{missing_transactions, transactions};
+
+        // delete all entries that are for previous heights
+        diesel::delete(missing_transactions::table)
+            .filter(missing_transactions::block_height.lt(current_height.as_u64().saturating_sub(1) as i64))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "missing_transactions_remove",
+                source: e,
+            })?;
+
+        let transaction_id = serialize_hex(transaction_id);
+        let block_id = missing_transactions::table
+            .select(missing_transactions::block_id)
+            .filter(missing_transactions::transaction_id.eq(&transaction_id))
+            .filter(missing_transactions::block_height.eq(current_height.as_u64() as i64))
+            .first::<String>(self.connection())
+            .optional()
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "missing_transactions_remove",
+                source: e,
+            })?;
+        let Some(block_id) = block_id else {
+            return Ok(None);
+        };
+
+        diesel::delete(missing_transactions::table)
+            .filter(missing_transactions::transaction_id.eq(&transaction_id))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "missing_transactions_remove",
+                source: e,
+            })?;
+        let mut missing_transactions = missing_transactions::table
+            .select(missing_transactions::transaction_id)
+            .filter(missing_transactions::block_id.eq(&block_id))
+            .get_results::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "missing_transactions_remove",
+                source: e,
+            })?;
+
+        if missing_transactions.is_empty() {
+            return self.parked_blocks_remove(&block_id).map(Some);
+        }
+
+        // Make double sure that we dont have these transactions due to a race condition between inserting
+        // missing transactions and them completing execution.
+        let found_transaction_ids = transactions::table
+            .select(transactions::transaction_id)
+            .filter(transactions::transaction_id.eq_any(&missing_transactions))
+            .filter(transactions::result.is_not_null())
+            .get_results::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transactions_get_many",
+                source: e,
+            })?;
+
+        diesel::delete(missing_transactions::table)
+            .filter(missing_transactions::transaction_id.eq_any(&found_transaction_ids))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "missing_transactions_remove",
+                source: e,
+            })?;
+
+        missing_transactions.retain(|id| found_transaction_ids.iter().all(|found| found != id));
+
+        if missing_transactions.is_empty() {
+            return self.parked_blocks_remove(&block_id).map(Some);
+        }
+
+        Ok(None)
+    }
+
     fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError> {
         use crate::schema::votes;
 
@@ -1367,6 +1370,51 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
 
         // locked.into_iter().map(TryInto::try_into).collect()
         Ok(vec![])
+    }
+
+    fn pending_state_tree_diffs_remove_by_block(
+        &mut self,
+        block_id: &BlockId,
+    ) -> Result<PendingStateTreeDiff, StorageError> {
+        use crate::schema::pending_state_tree_diffs;
+
+        let diff = pending_state_tree_diffs::table
+            .filter(pending_state_tree_diffs::block_id.eq(serialize_hex(block_id)))
+            .first::<sql_models::PendingStateTreeDiff>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "pending_state_tree_diffs_remove_by_block",
+                source: e,
+            })?;
+
+        diesel::delete(pending_state_tree_diffs::table)
+            .filter(pending_state_tree_diffs::id.eq(diff.id))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "pending_state_tree_diffs_remove_by_block",
+                source: e,
+            })?;
+
+        diff.try_into()
+    }
+
+    fn pending_state_tree_diffs_insert(&mut self, pending_diff: &PendingStateTreeDiff) -> Result<(), StorageError> {
+        use crate::schema::pending_state_tree_diffs;
+
+        let insert = (
+            pending_state_tree_diffs::block_id.eq(serialize_hex(pending_diff.block_id)),
+            pending_state_tree_diffs::block_height.eq(pending_diff.block_height.as_u64() as i64),
+            pending_state_tree_diffs::diff_json.eq(serialize_json(&pending_diff.diff)?),
+        );
+
+        diesel::insert_into(pending_state_tree_diffs::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "pending_state_tree_diffs_insert",
+                source: e,
+            })?;
+
+        Ok(())
     }
 }
 

@@ -19,15 +19,23 @@ use tari_dan_common_types::{
     serde_with,
     shard::Shard,
     Epoch,
+    NodeAddressable,
     NodeHeight,
     SubstateAddress,
 };
+use tari_engine_types::substate::SubstateDiff;
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use super::{ForeignProposal, ForeignSendCounters, QuorumCertificate, ValidatorSchnorrSignature};
+use super::{
+    ForeignProposal,
+    ForeignSendCounters,
+    QuorumCertificate,
+    SubstateDestroyedProof,
+    ValidatorSchnorrSignature,
+};
 use crate::{
     consensus_models::{
         Command,
@@ -100,6 +108,7 @@ impl Block {
         epoch: Epoch,
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
+        merkle_root: FixedHash,
         total_leader_fee: u64,
         sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
@@ -112,8 +121,7 @@ impl Block {
             height,
             epoch,
             proposed_by,
-            // TODO
-            merkle_root: FixedHash::zero(),
+            merkle_root,
             commands,
             total_leader_fee,
             is_dummy: false,
@@ -136,6 +144,7 @@ impl Block {
         epoch: Epoch,
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
+        merkle_root: FixedHash,
         total_leader_fee: u64,
         is_dummy: bool,
         is_processed: bool,
@@ -152,8 +161,7 @@ impl Block {
             height,
             epoch,
             proposed_by,
-            // TODO
-            merkle_root: FixedHash::zero(),
+            merkle_root,
             commands,
             total_leader_fee,
             is_dummy,
@@ -174,6 +182,7 @@ impl Block {
             Epoch(0),
             PublicKey::default(),
             Default::default(),
+            FixedHash::zero(),
             0,
             IndexMap::new(),
             None,
@@ -209,6 +218,7 @@ impl Block {
         node_height: NodeHeight,
         high_qc: QuorumCertificate,
         epoch: Epoch,
+        parent_merkle_root: FixedHash,
     ) -> Self {
         let mut block = Self::new(
             network,
@@ -218,6 +228,7 @@ impl Block {
             epoch,
             proposed_by,
             Default::default(),
+            parent_merkle_root,
             0,
             IndexMap::new(),
             None,
@@ -369,6 +380,10 @@ impl Block {
     pub fn set_signature(&mut self, signature: ValidatorSchnorrSignature) {
         self.signature = Some(signature);
     }
+
+    pub fn is_proposed_by_addr<A: NodeAddressable + PartialEq<A>>(&self, address: &A) -> Option<bool> {
+        Some(A::try_from_public_key(&self.proposed_by)? == *address)
+    }
 }
 
 impl Block {
@@ -380,6 +395,7 @@ impl Block {
         tx.blocks_get_tip()
     }
 
+    /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
     pub fn get_all_blocks_between<TTx: StateStoreReadTransaction>(
         tx: &mut TTx,
         start_block_id_exclusive: &BlockId,
@@ -575,11 +591,12 @@ impl Block {
                             substate: substate.into(),
                         }));
                     } else {
-                        updates.push(SubstateUpdate::Destroy {
-                            address: substate.to_substate_address(),
-                            proof: QuorumCertificate::get(tx, &destroyed.justify)?,
+                        updates.push(SubstateUpdate::Destroy(SubstateDestroyedProof {
+                            substate_id: substate.substate_id.clone(),
+                            version: substate.version,
+                            justify: QuorumCertificate::get(tx, &destroyed.justify)?,
                             destroyed_by_transaction: destroyed.by_transaction,
-                        });
+                        }));
                     }
                 } else {
                     updates.push(SubstateUpdate::Create(SubstateCreatedProof {
@@ -618,10 +635,12 @@ impl Block {
             return Ok(high_qc);
         };
 
-        let locked = LockedBlock::get(tx.deref_mut())?;
-        if precommit_node.height() > locked.height {
-            on_locked_block_recurse(tx, &locked, &precommit_node, &mut on_lock_block)?;
-            precommit_node.as_locked_block().set(tx)?;
+        if !precommit_node.is_genesis() {
+            let locked = LockedBlock::get(tx.deref_mut())?;
+            if precommit_node.height() > locked.height {
+                on_locked_block_recurse(tx, &locked, &precommit_node, &mut on_lock_block)?;
+                precommit_node.as_locked_block().set(tx)?;
+            }
         }
 
         // b <- b'.justify.node
@@ -638,10 +657,12 @@ impl Block {
             );
 
             // Commit prepare_node (b)
-            let prepare_node = Block::get(tx.deref_mut(), prepare_node)?;
-            let last_executed = LastExecuted::get(tx.deref_mut())?;
-            on_commit_block_recurse(tx, &last_executed, &prepare_node, &mut on_commit)?;
-            prepare_node.as_last_executed().set(tx)?;
+            if !prepare_node.is_genesis() {
+                let prepare_node = Block::get(tx.deref_mut(), prepare_node)?;
+                let last_executed = LastExecuted::get(tx.deref_mut())?;
+                on_commit_block_recurse(tx, &last_executed, &prepare_node, &mut on_commit)?;
+                prepare_node.as_last_executed().set(tx)?;
+            }
         } else {
             debug!(
                 target: LOG_TARGET,
@@ -702,6 +723,26 @@ impl Block {
             counters.set(tx, self.id())?;
         }
         Ok(())
+    }
+
+    pub fn get_all_substate_diffs<TTx: StateStoreReadTransaction + ?Sized>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Vec<SubstateDiff>, StorageError> {
+        let transactions = self
+            .commands()
+            .iter()
+            .filter_map(|c| c.accept())
+            .filter(|t| t.decision.is_commit())
+            .map(|t| tx.transactions_get(t.id()))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(transactions
+            .into_iter()
+            // TODO: following two should never be None
+            .filter_map(|t_rec| t_rec.result)
+            .filter_map(|t_res| t_res.finalize.into_accept())
+            .collect())
     }
 }
 

@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::MutexGuard;
+use std::{cell::UnsafeCell, sync::MutexGuard};
 
 use diesel::{sql_query, RunQueryDsl, SqliteConnection};
 
@@ -29,22 +29,25 @@ use crate::error::SqliteStorageError;
 const _LOG_TARGET: &str = "tari::dan::storage::sqlite::transaction";
 
 pub struct SqliteTransaction<'a> {
-    connection: MutexGuard<'a, SqliteConnection>,
+    connection: UnsafeCell<MutexGuard<'a, SqliteConnection>>,
     is_done: bool,
 }
 
 impl<'a> SqliteTransaction<'a> {
     pub fn begin(connection: MutexGuard<'a, SqliteConnection>) -> Result<Self, SqliteStorageError> {
         let mut this = Self {
-            connection,
+            connection: UnsafeCell::new(connection),
             is_done: false,
         };
         this.execute_sql("BEGIN TRANSACTION")?;
         Ok(this)
     }
 
-    pub fn connection(&mut self) -> &mut SqliteConnection {
-        &mut self.connection
+    #[allow(clippy::mut_from_ref)]
+    pub fn connection(&self) -> &mut SqliteConnection {
+        // SAFETY: This is safe because only a single thread has access to this connection because SqliteStateStore
+        //         transactions are obtained through a Mutex and UnsafeCell is not Sync
+        unsafe { &mut *self.connection.get() }
     }
 
     pub fn commit(mut self) -> Result<(), SqliteStorageError> {

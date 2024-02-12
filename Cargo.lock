@@ -1673,6 +1673,7 @@ dependencies = [
  "log",
  "rand",
  "serde",
+ "tari_bor",
  "tari_common_types",
  "tari_consensus",
  "tari_crypto",
@@ -8905,9 +8906,11 @@ dependencies = [
  "tari_common_types",
  "tari_dan_common_types",
  "tari_dan_storage",
+ "tari_engine_types",
  "tari_epoch_manager",
  "tari_mmr",
  "tari_shutdown",
+ "tari_state_tree",
  "tari_transaction",
  "thiserror",
  "tokio",
@@ -9173,6 +9176,7 @@ dependencies = [
  "tari_dan_common_types",
  "tari_engine_types",
  "tari_mmr",
+ "tari_state_tree",
  "tari_transaction",
  "thiserror",
  "time",
@@ -9662,6 +9666,7 @@ dependencies = [
  "tari_dan_storage",
  "tari_epoch_manager",
  "tari_rpc_framework",
+ "tari_state_tree",
  "tari_transaction",
  "tari_validator_node_rpc",
  "thiserror",
@@ -9761,10 +9766,28 @@ dependencies = [
  "tari_dan_common_types",
  "tari_dan_storage",
  "tari_engine_types",
+ "tari_state_tree",
  "tari_transaction",
  "tari_utilities",
  "thiserror",
  "time",
+]
+
+[[package]]
+name = "tari_state_tree"
+version = "0.3.0"
+dependencies = [
+ "hex",
+ "indexmap 2.1.0",
+ "itertools 0.11.0",
+ "log",
+ "serde",
+ "tari_common_types",
+ "tari_crypto",
+ "tari_dan_common_types",
+ "tari_engine_types",
+ "tari_template_lib",
+ "thiserror",
 ]
 
 [[package]]

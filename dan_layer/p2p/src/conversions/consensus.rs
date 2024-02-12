@@ -289,6 +289,7 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?,
+            value.merkle_root.try_into()?,
             value.total_leader_fee,
             decode_exact(&value.foreign_indexes)?,
             value.signature.map(TryInto::try_into).transpose()?,

@@ -285,11 +285,25 @@ pub struct SubstateCreatedProof {
 }
 
 #[derive(Debug, Clone)]
+pub struct SubstateDestroyedProof {
+    pub substate_id: SubstateId,
+    pub version: u32,
+    pub justify: QuorumCertificate,
+    pub destroyed_by_transaction: TransactionId,
+}
+
+#[derive(Debug, Clone)]
 pub struct SubstateData {
     pub substate_id: SubstateId,
     pub version: u32,
     pub substate_value: SubstateValue,
     pub created_by_transaction: TransactionId,
+}
+
+impl SubstateData {
+    pub fn into_substate(self) -> Substate {
+        Substate::new(self.version, self.substate_value)
+    }
 }
 
 impl From<SubstateRecord> for SubstateData {
@@ -306,11 +320,7 @@ impl From<SubstateRecord> for SubstateData {
 #[derive(Debug, Clone)]
 pub enum SubstateUpdate {
     Create(SubstateCreatedProof),
-    Destroy {
-        address: SubstateAddress,
-        proof: QuorumCertificate,
-        destroyed_by_transaction: TransactionId,
-    },
+    Destroy(SubstateDestroyedProof),
 }
 
 impl SubstateUpdate {
@@ -351,21 +361,23 @@ impl SubstateUpdate {
                 }
                 .create(tx)?;
             },
-            Self::Destroy {
-                address,
-                proof,
+            Self::Destroy(SubstateDestroyedProof {
+                substate_id,
+                version,
+                justify: proof,
                 destroyed_by_transaction,
-            } => {
+            }) => {
                 debug!(
                     target: LOG_TARGET,
-                    "🔥 Applying substate DESTROY for shard {} (transaction {})",
-                    address,
+                    "🔥 Applying substate DESTROY for substate {}v{} (transaction {})",
+                    substate_id,
+                    version,
                     destroyed_by_transaction
                 );
                 proof.save(tx)?;
                 SubstateRecord::destroy_many(
                     tx,
-                    iter::once(address),
+                    iter::once(SubstateAddress::from_address(&substate_id, version)),
                     block.epoch(),
                     block.id(),
                     proof.id(),

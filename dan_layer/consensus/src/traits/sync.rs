@@ -9,7 +9,7 @@ pub trait SyncManager {
 
     async fn check_sync(&self) -> Result<SyncStatus, Self::Error>;
 
-    async fn sync(&self) -> Result<(), Self::Error>;
+    async fn sync(&mut self) -> Result<(), Self::Error>;
 }
 
 #[derive(Debug, Clone, Copy)]

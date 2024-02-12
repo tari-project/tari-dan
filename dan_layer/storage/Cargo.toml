@@ -19,6 +19,7 @@ tari_transaction = { workspace = true }
 tari_core = { workspace = true, default-features = true }
 tari_mmr = { workspace = true }
 tari_crypto = { workspace = true }
+tari_state_tree = { workspace = true }
 
 anyhow = { workspace = true }
 chrono = { workspace = true }

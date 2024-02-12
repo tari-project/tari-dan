@@ -15,6 +15,7 @@ create table blocks
     id               integer   not null primary key AUTOINCREMENT,
     block_id         text      not NULL,
     parent_block_id  text      not NULL,
+    merkle_root      text      not NULL,
     network          text      not NULL,
     height           bigint    not NULL,
     epoch            bigint    not NULL,
@@ -40,6 +41,7 @@ create table parked_blocks
     id               integer   not null primary key AUTOINCREMENT,
     block_id         text      not NULL,
     parent_block_id  text      not NULL,
+    merkle_root      text      not NULL,
     network          text      not NULL,
     height           bigint    not NULL,
     epoch            bigint    not NULL,
@@ -276,6 +278,32 @@ CREATE TABLE foreign_receive_counters
     counters   text      not NULL,
     created_at timestamp not NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE state_tree
+(
+    id       integer not NULL primary key AUTOINCREMENT,
+    key      text    not NULL,
+    node     text    not NULL,
+    is_stale boolean not null default '0'
+);
+
+-- Duplicate keys are not allowed
+CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (key);
+-- filtering out or by is_stale is used in every query
+CREATE INDEX state_tree_idx_is_stale on state_tree (is_stale);
+
+CREATE TABLE pending_state_tree_diffs
+(
+    id           integer   not NULL primary key AUTOINCREMENT,
+    block_id     text      not NULL,
+    block_height bigint    not NULL,
+    diff_json    text      not NULL,
+    created_at   timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+);
+
+CREATE UNIQUE INDEX pending_state_tree_diffs_uniq_idx_block_id on pending_state_tree_diffs (block_id);
+
 
 -- Debug Triggers
 CREATE TABLE transaction_pool_history
