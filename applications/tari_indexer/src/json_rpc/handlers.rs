@@ -32,8 +32,13 @@ use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use log::{error, warn};
 use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
-use tari_dan_app_utilities::{keypair::RistrettoKeypair, substate_file_cache::SubstateFileCache};
+use tari_dan_app_utilities::{
+    keypair::RistrettoKeypair,
+    substate_file_cache::SubstateFileCache,
+    template_manager::{implementation::TemplateManager, interface::TemplateExecutable},
+};
 use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, PeerAddress};
+use tari_dan_engine::{template::TemplateModuleLoader, wasm::WasmModule};
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::consensus_models::Decision;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
@@ -62,6 +67,8 @@ use tari_indexer_client::{
         GetRelatedTransactionsResponse,
         GetSubstateRequest,
         GetSubstateResponse,
+        GetTemplateDefinitionRequest,
+        GetTemplateDefinitionResponse,
         GetTransactionResultRequest,
         GetTransactionResultResponse,
         IndexerTransactionFinalizedResult,
@@ -99,6 +106,7 @@ pub struct JsonRpcHandlers {
     epoch_manager: EpochManagerHandle<PeerAddress>,
     transaction_manager:
         TransactionManager<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, SubstateFileCache>,
+    template_manager: TemplateManager<PeerAddress>,
     dry_run_transaction_processor: DryRunTransactionProcessor<SubstateFileCache>,
 }
 
@@ -113,6 +121,7 @@ impl JsonRpcHandlers {
             TariValidatorNodeRpcClientFactory,
             SubstateFileCache,
         >,
+        template_manager: TemplateManager<PeerAddress>,
         dry_run_transaction_processor: DryRunTransactionProcessor<SubstateFileCache>,
     ) -> Self {
         Self {
@@ -123,6 +132,7 @@ impl JsonRpcHandlers {
             substate_manager,
             epoch_manager: services.epoch_manager.clone(),
             transaction_manager,
+            template_manager,
             dry_run_transaction_processor,
         }
     }
@@ -585,6 +595,35 @@ impl JsonRpcHandlers {
             current_block_height,
         };
         Ok(JsonRpcResponse::success(answer_id, response))
+    }
+
+    pub async fn get_template_definition(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetTemplateDefinitionRequest = value.parse_params()?;
+        let template = self
+            .template_manager
+            .fetch_template(&request.template_address)
+            .map_err(|e| Self::internal_error(answer_id, e))?;
+        let template = match template.executable {
+            TemplateExecutable::CompiledWasm(code) => WasmModule::from_code(code)
+                .load_template()
+                .map_err(|e| Self::internal_error(answer_id, format!("Error loading template: {}", e)))?,
+            TemplateExecutable::Manifest(_) | TemplateExecutable::Flow(_) => {
+                return Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidRequest,
+                        "Template is not a wasm module".to_string(),
+                        json::Value::Null,
+                    ),
+                ));
+            },
+        };
+
+        Ok(JsonRpcResponse::success(answer_id, GetTemplateDefinitionResponse {
+            definition: template.template_def().clone(),
+            name: template.template_name().to_string(),
+        }))
     }
 
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {

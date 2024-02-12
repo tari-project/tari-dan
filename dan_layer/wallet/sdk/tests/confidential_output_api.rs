@@ -17,9 +17,10 @@ use tari_dan_wallet_sdk::{
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::substate::SubstateId;
+use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-    models::{Amount, EncryptedData},
+    models::{Amount, EncryptedData, TemplateAddress},
     resource::ResourceType,
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
@@ -263,6 +264,10 @@ impl WalletNetworkInterface for PanicIndexer {
         &self,
         _transaction_id: TransactionId,
     ) -> Result<TransactionQueryResult, Self::Error> {
+        panic!("PanicIndexer called")
+    }
+
+    async fn fetch_template_definition(&self, _template_address: TemplateAddress) -> Result<TemplateDef, Self::Error> {
         panic!("PanicIndexer called")
     }
 }

@@ -11,6 +11,8 @@ use tari_engine_types::{
     commit_result::ExecuteResult,
     substate::{Substate, SubstateId},
 };
+use tari_template_abi::TemplateDef;
+use tari_template_lib::prelude::TemplateAddress;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 #[async_trait]
@@ -40,6 +42,8 @@ pub trait WalletNetworkInterface {
         &self,
         transaction_id: TransactionId,
     ) -> Result<TransactionQueryResult, Self::Error>;
+
+    async fn fetch_template_definition(&self, template_address: TemplateAddress) -> Result<TemplateDef, Self::Error>;
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

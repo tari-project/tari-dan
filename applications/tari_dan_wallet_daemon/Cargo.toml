@@ -23,6 +23,7 @@ tari_wallet_daemon_client = { workspace = true }
 tari_template_builtin = { workspace = true }
 # TODO: Ideally we should not have to include the WASM template lib, we should perhaps extract the address types into a separate crate (e.g. template_types)
 tari_template_lib = { workspace = true }
+tari_template_abi = { workspace = true }
 tari_indexer_client = { workspace = true }
 tari_key_manager = { workspace = true }
 

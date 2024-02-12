@@ -15,6 +15,7 @@ use tari_engine_types::{
     commit_result::ExecuteResult,
     serde_with as serde_tools,
     substate::{Substate, SubstateId},
+    TemplateAddress,
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 #[cfg(feature = "ts")]
@@ -285,4 +286,18 @@ pub enum ConnectionDirection {
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetConnectionsResponse {
     pub connections: Vec<Connection>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct GetTemplateDefinitionRequest {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub template_address: TemplateAddress,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct GetTemplateDefinitionResponse {
+    pub name: String,
+    pub definition: tari_template_abi::TemplateDef,
 }

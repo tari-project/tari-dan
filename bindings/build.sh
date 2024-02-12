@@ -1,6 +1,8 @@
 #   Copyright 2023 The Tari Project
 #   SPDX-License-Identifier: BSD-3-Clause
 
+set -e
+
 cargo test --workspace --exclude integration_tests export_bindings --features ts
 npx shx mv ../dan_layer/bindings/src/types/* ./src/types/
 npx shx rm -rf ../dan_layer/bindings/
