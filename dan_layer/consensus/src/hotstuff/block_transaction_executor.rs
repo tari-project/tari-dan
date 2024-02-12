@@ -63,7 +63,7 @@ where TConsensusSpec: ConsensusSpec
         let id: tari_transaction::TransactionId = *transaction.id();
 
         // We only need to re-execute a transaction if any of its input versions is "None"
-        let must_reexecute = Self::has_inputs_without_version(&transaction);
+        let must_reexecute = transaction.has_inputs_without_version();
         if !must_reexecute {
             info!(
                 target: LOG_TARGET,
@@ -96,10 +96,6 @@ where TConsensusSpec: ConsensusSpec
         };
 
         Ok(Some(result))
-    }
-
-    fn has_inputs_without_version(transaction: &Transaction) -> bool {
-        transaction.all_inputs_iter().any(|i| i.version().is_none())
     }
 
     fn new_state_db(&self) -> MemoryStateStore {

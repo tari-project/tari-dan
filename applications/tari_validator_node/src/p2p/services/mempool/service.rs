@@ -331,12 +331,21 @@ where
             iter::once(&tx_substate_address)
                 .chain(unverified_output_shards.iter())
                 .chain(claim_shards.iter()),
-        );
+        );        
 
         if is_input_shard || is_output_shard {
             debug!(target: LOG_TARGET, "🎱 New transaction {} in mempool", transaction.id());
             self.transactions.insert(*transaction.id());
-            self.queue_transaction_for_execution(transaction.clone(), current_epoch, should_propagate, sender_shard);
+
+
+            // The transactions has one or more of its inputs with no version
+            // This means we skip transaction execution in the mempool, as the execution will happen on consensus
+            if transaction.has_inputs_without_version() {
+                self.handle_no_version_transaction(&transaction)?;
+            } else {
+                // All the inputs in the transaction have specific versions, so we execute immmeadiately
+                self.queue_transaction_for_execution(transaction.clone(), current_epoch, should_propagate, sender_shard);
+            }
 
             if should_propagate {
                 // This validator is involved, we to send the transaction to local replicas
@@ -418,6 +427,12 @@ where
                 }
             }
         }
+
+        Ok(())
+    }
+
+    fn handle_no_version_transaction(&mut self, _transaction: &Transaction) -> Result<(), MempoolError> {
+        // TODO: for now we just skip execution, we may want to store the transaction in a new DB table
 
         Ok(())
     }

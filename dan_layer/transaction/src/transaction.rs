@@ -228,6 +228,10 @@ impl Transaction {
         }
         Ok(substates)
     }
+
+    pub fn has_inputs_without_version(&self) -> bool {
+        self.all_inputs_iter().any(|i| i.version().is_none())
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq, Hash)]
