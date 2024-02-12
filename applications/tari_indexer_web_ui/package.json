@@ -22,6 +22,7 @@
     "react-icons": "^4.9.0",
     "react-router-dom": "^6.4.3",
     "react-scripts": "5.0.1",
+    "tari-bindings": "file:../../bindings",
     "typescript": "^4.8.4",
     "use-react-router-breadcrumbs": "^4.0.1",
     "web-vitals": "^2.1.4"

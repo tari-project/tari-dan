@@ -562,7 +562,7 @@ pub struct WebRtcStartResponse {}
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct AuthLoginRequest {
     pub permissions: Vec<String>,
-    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number} | null"))]
     pub duration: Option<Duration>,
 }
 

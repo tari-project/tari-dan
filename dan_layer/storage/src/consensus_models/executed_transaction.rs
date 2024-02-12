@@ -32,10 +32,10 @@ pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
     resulting_outputs: Vec<SubstateAddress>,
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
     execution_time: Duration,
     final_decision: Option<Decision>,
-    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number} | null"))]
     finalized_time: Option<Duration>,
     abort_details: Option<String>,
 }

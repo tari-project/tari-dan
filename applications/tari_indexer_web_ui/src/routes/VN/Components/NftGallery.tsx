@@ -39,6 +39,7 @@ import Typography from "@mui/material/Typography";
 import { Button, ImageList, ImageListItem, ImageListItemBar, TextField } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import { ConfirmDialog } from "../../../Components/AlertDialog";
+import { NonFungibleSubstate } from "tari-bindings";
 
 interface IImageData {
   img: string;
@@ -53,17 +54,20 @@ function NftGallery() {
 
   const updateCollection = () => {
     if (resourceAddress !== undefined) {
-      getNonFungibles(resourceAddress, 0, 10).then((resp) => {
-        console.log({ resp });
-
+      getNonFungibles({ address: { Resource: resourceAddress }, start_index: 0, end_index: 10 }).then((resp) => {
         let nfts: any = [];
-        resp.forEach((nft: any, i: number) => {
+        resp.non_fungibles.forEach((nft: NonFungibleSubstate, i: number) => {
           console.log(nft);
-          let nft_data = nft.substate.substate.NonFungible.data["@@TAGGED@@"][1];
-          let { image_url, name } = nft_data;
-          console.log(image_url);
-          console.log(name);
-          nfts.push({ image_url, name, index: i });
+          if (!("NonFungible" in nft.substate.substate)) {
+            return;
+          }
+          let nft_data = nft.substate.substate.NonFungible?.data;
+          // Was this is a work in progress? There was no image_url coming from the jrpc before this change.
+          // TODO: make this work
+          // let { image_url, name } = nft_data;
+          // console.log(image_url);
+          // console.log(name);
+          // nfts.push({ image_url, name, index: i });
         });
 
         setItems(
@@ -79,7 +83,7 @@ function NftGallery() {
 
   useEffect(() => {
     updateCollection();
-  }, []);
+  });
 
   return (
     <ImageList cols={4} gap={8}>

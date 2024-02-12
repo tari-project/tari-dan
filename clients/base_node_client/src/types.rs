@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::transactions::{tari_amount::MicroMinotari, transaction_components::TransactionOutput};
 use tari_dan_common_types::{Epoch, SubstateAddress};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 #[derive(Debug, Clone)]
 pub struct BaseLayerMetadata {
@@ -25,8 +27,10 @@ pub struct BlockInfo {
     pub next_block_hash: Option<FixedHash>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ValidatorNode {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub public_key: PublicKey,
     pub shard_key: SubstateAddress,
 }

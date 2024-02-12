@@ -8,8 +8,8 @@ export interface ExecutedTransaction {
   transaction: Transaction;
   result: ExecuteResult;
   resulting_outputs: Array<SubstateAddress>;
-  execution_time: string;
+  execution_time: { secs: number; nanos: number };
   final_decision: Decision | null;
-  finalized_time: string | null;
+  finalized_time: { secs: number; nanos: number } | null;
   abort_details: string | null;
 }

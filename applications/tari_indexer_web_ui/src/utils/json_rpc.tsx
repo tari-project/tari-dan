@@ -20,18 +20,40 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import {
+  AddAddressRequest,
+  AddAddressResponse,
+  AddPeerRequest,
+  AddPeerResponse,
+  ClearAddressesResponse,
+  DeleteAddressRequest,
+  DeleteAddressResponse,
+  GetAddressesResponse,
+  GetAllVnsResponse,
+  GetCommsStatsResponse,
+  GetConnectionsResponse,
+  GetEpochManagerStatsResponse,
+  GetIdentityResponse,
+  GetNonFungibleCollectionsResponse,
+  GetNonFungibleCountRequest,
+  GetNonFungibleCountResponse,
+  GetNonFungiblesRequest,
+  GetNonFungiblesResponse,
+  GetRelatedTransactionsRequest,
+  GetRelatedTransactionsResponse,
+  GetSubstateRequest,
+  GetSubstateResponse,
+  GetTransactionResultRequest,
+  GetTransactionResultResponse,
+  InspectSubstateRequest,
+  InspectSubstateResponse,
+  SubmitTransactionResponse,
+} from "tari-bindings";
+
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
   id += 1;
-  let address = "http://localhost:3333";
-  try {
-    address = await (await fetch("/json_rpc_address")).text();
-    if (!address.startsWith("http")) {
-      address = "http://" + address;
-    }
-  } catch (e) {
-    console.warn("Failed to fetch address", e);
-  }
+  let address = "http://127.0.0.1:18010";
   let response = await fetch(address, {
     method: "POST",
     body: JSON.stringify({
@@ -51,79 +73,32 @@ async function jsonRpc(method: string, params: any = null) {
   return json.result;
 }
 
-async function getOpenRpcSchema() {
-  return await jsonRpc("rpc.discover");
-}
-
-async function getIdentity() {
-  return await jsonRpc("get_identity");
-}
-async function getCommsStats() {
-  return await jsonRpc("get_comms_stats");
-}
-async function getAllVns(epoch: number) {
-  return await jsonRpc("get_network_validators", { epoch });
-}
-async function getConnections() {
-  return await jsonRpc("get_connections");
-}
-async function addPeer(public_key: string, addresses: string[]) {
-  return await jsonRpc("add_peer", {
-    public_key,
-    addresses,
-    wait_for_dial: false,
-  });
-}
-async function getRecentTransactions() {
-  return await jsonRpc("get_recent_transactions");
-}
-async function getSubstate(address: string, version?: number) {
-  return await jsonRpc("get_substate", { address, version });
-}
-async function inspectSubstate(address: string, version?: number) {
-  return await jsonRpc("inspect_substate", { address, version });
-}
-async function getAddresses() {
-  return await jsonRpc("get_addresses");
-}
-async function addAddress(address: string) {
-  return await jsonRpc("add_address", [address]);
-}
-async function deleteAddress(address: string) {
-  return await jsonRpc("delete_address", [address]);
-}
-async function clearAddresses() {
-  return await jsonRpc("clear_addresses");
-}
-async function getNonFungibleCollections() {
-  return await jsonRpc("get_non_fungible_collections");
-}
-async function getNonFungibles(address: string, start_index: number, end_index: number) {
-  return await jsonRpc("get_non_fungibles", {
-    address,
-    start_index,
-    end_index,
-  });
-}
-async function getNonFungibleCount(address: string) {
-  return await jsonRpc("get_non_fungible_count", [address]);
-}
-
-export {
-  addAddress,
-  addPeer,
-  clearAddresses,
-  deleteAddress,
-  getAddresses,
-  getAllVns,
-  getCommsStats,
-  getConnections,
-  getIdentity,
-  getOpenRpcSchema,
-  getRecentTransactions,
-  getSubstate,
-  getNonFungibleCollections,
-  getNonFungibles,
-  getNonFungibleCount,
-  inspectSubstate,
-};
+export const getOpenRpcSchema = (): Promise<string> => jsonRpc("rpc.discover");
+export const getIdentity = (): Promise<GetIdentityResponse> => jsonRpc("get_identity");
+export const getAllVns = (epoch: number): Promise<GetAllVnsResponse> => jsonRpc("get_all_vns", { epoch });
+export const addPeer = (request: AddPeerRequest): Promise<AddPeerResponse> => jsonRpc("add_peer", request);
+export const getCommsStats = (): Promise<GetCommsStatsResponse> => jsonRpc("get_comms_stats");
+export const getSubstate = (request: GetSubstateRequest): Promise<GetSubstateResponse> =>
+  jsonRpc("get_substate", request);
+export const inspectSubstate = (request: InspectSubstateRequest): Promise<InspectSubstateResponse> =>
+  jsonRpc("inspect_substate", request);
+export const getAddresses = (): Promise<GetAddressesResponse> => jsonRpc("get_addresses");
+export const addAddress = (request: AddAddressRequest): Promise<AddAddressResponse> => jsonRpc("add_address", request);
+export const deleteAddress = (request: DeleteAddressRequest): Promise<DeleteAddressResponse> =>
+  jsonRpc("delete_address", request);
+export const clearAddresses = (): Promise<ClearAddressesResponse> => jsonRpc("clear_addresses");
+export const getConnections = (): Promise<GetConnectionsResponse> => jsonRpc("get_connections");
+export const getNonFungibleCollections = (): Promise<GetNonFungibleCollectionsResponse> =>
+  jsonRpc("get_non_fungible_collections");
+export const getNonFungibleCount = (request: GetNonFungibleCountRequest): Promise<GetNonFungibleCountResponse> =>
+  jsonRpc("get_non_fungible_count", request);
+export const getNonFungibles = (request: GetNonFungiblesRequest): Promise<GetNonFungiblesResponse> =>
+  jsonRpc("get_non_fungibles", request);
+export const submitTransaction = (request: GetNonFungiblesRequest): Promise<SubmitTransactionResponse> =>
+  jsonRpc("submit_transaction", request);
+export const getTransactionResult = (request: GetTransactionResultRequest): Promise<GetTransactionResultResponse> =>
+  jsonRpc("get_transaction_result", request);
+export const getSubstateTransactions = (
+  request: GetRelatedTransactionsRequest,
+): Promise<GetRelatedTransactionsResponse> => jsonRpc("get_substate_transactions", request);
+export const getEpochManagerStats = (): Promise<GetEpochManagerStatsResponse> => jsonRpc("get_epoch_manager_stats");

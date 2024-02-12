@@ -7,6 +7,7 @@ use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use serde_with::{serde_as, DisplayFromStr};
+use tari_base_node_client::types::ValidatorNode;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::Epoch;
 use tari_dan_storage::consensus_models::Decision;
@@ -64,6 +65,13 @@ pub struct InspectSubstateResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct GetAddressesResponse {
+    #[cfg_attr(feature = "ts", ts(type = "Array<[string, number]>"))]
+    pub addresses: Vec<(String, i64)>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct SubmitTransactionRequest {
     pub transaction: Transaction,
     pub required_substates: Vec<SubstateRequirement>,
@@ -98,9 +106,9 @@ pub enum IndexerTransactionFinalizedResult {
     Finalized {
         final_decision: Decision,
         execution_result: Option<ExecuteResult>,
-        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
         execution_time: Duration,
-        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
         finalized_time: Duration,
         abort_details: Option<String>,
         #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
@@ -118,6 +126,18 @@ pub struct GetIdentityResponse {
     pub public_addresses: Vec<Multiaddr>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct GetAllVnsRequest {
+    pub epoch: Epoch,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct GetAllVnsResponse {
+    pub vns: Vec<ValidatorNode>,
+}
+
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
@@ -125,6 +145,10 @@ pub struct AddAddressRequest {
     #[serde_as(as = "DisplayFromStr")]
     pub address: SubstateId,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct AddAddressResponse {}
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,12 +158,34 @@ pub struct DeleteAddressRequest {
     pub address: SubstateId,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct DeleteAddressResponse {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct ClearAddressesResponse {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct GetNonFungibleCollectionsResponse {
+    #[cfg_attr(feature = "ts", ts(type = "Array<[string, number]>"))]
+    pub collections: Vec<(String, i64)>,
+}
+
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetNonFungibleCountRequest {
     #[serde_as(as = "DisplayFromStr")]
     pub address: SubstateId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct GetNonFungibleCountResponse {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub count: u64,
 }
 
 #[serde_as]
@@ -202,6 +248,12 @@ pub struct AddPeerResponse {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct GetCommsStatsResponse {
+    pub connection_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetEpochManagerStatsResponse {
     pub current_epoch: Epoch,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
@@ -216,9 +268,9 @@ pub struct Connection {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub address: Multiaddr,
     pub direction: ConnectionDirection,
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
     pub age: Duration,
-    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number} | null"))]
     pub ping_latency: Option<Duration>,
 }
 
