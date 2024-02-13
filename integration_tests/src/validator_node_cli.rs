@@ -10,12 +10,12 @@ use tari_engine_types::{
 };
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::args;
+use tari_transaction::SubstateRequirement;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{
     command::transaction::{handle_submit, submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
     from_hex::FromHex,
     key_manager::KeyManager,
-    versioned_substate_id::VersionedSubstateId,
 };
 use tari_validator_node_client::types::SubmitTransactionResponse;
 
@@ -142,58 +142,58 @@ pub(crate) fn add_substate_ids(world: &mut TariWorld, outputs_name: String, diff
         match addr {
             SubstateId::Component(_) => {
                 let component = data.substate_value().component().unwrap();
-                outputs.insert(format!("components/{}", component.module_name), VersionedSubstateId {
+                outputs.insert(format!("components/{}", component.module_name), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[0] += 1;
             },
             SubstateId::Resource(_) => {
-                outputs.insert(format!("resources/{}", counters[1]), VersionedSubstateId {
+                outputs.insert(format!("resources/{}", counters[1]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[1] += 1;
             },
             SubstateId::Vault(_) => {
-                outputs.insert(format!("vaults/{}", counters[2]), VersionedSubstateId {
+                outputs.insert(format!("vaults/{}", counters[2]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[2] += 1;
             },
             SubstateId::NonFungible(_) => {
-                outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateId {
+                outputs.insert(format!("nfts/{}", counters[3]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[3] += 1;
             },
             SubstateId::UnclaimedConfidentialOutput(_) => {
-                outputs.insert(format!("layer_one_commitments/{}", counters[4]), VersionedSubstateId {
+                outputs.insert(format!("layer_one_commitments/{}", counters[4]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[4] += 1;
             },
             SubstateId::NonFungibleIndex(_) => {
-                outputs.insert(format!("nft_indexes/{}", counters[5]), VersionedSubstateId {
+                outputs.insert(format!("nft_indexes/{}", counters[5]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[5] += 1;
             },
             SubstateId::TransactionReceipt(_) => {
-                outputs.insert(format!("transaction_receipt/{}", counters[6]), VersionedSubstateId {
+                outputs.insert(format!("transaction_receipt/{}", counters[6]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[6] += 1;
             },
             SubstateId::FeeClaim(_) => {
-                outputs.insert(format!("fee_claim/{}", counters[7]), VersionedSubstateId {
+                outputs.insert(format!("fee_claim/{}", counters[7]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[7] += 1;
             },
@@ -359,7 +359,7 @@ pub(crate) fn get_cli_data_dir(world: &mut TariWorld) -> PathBuf {
 }
 
 // Remove inputs that have been downed
-fn select_latest_version(mut inputs: Vec<VersionedSubstateId>) -> Vec<VersionedSubstateId> {
+fn select_latest_version(mut inputs: Vec<SubstateRequirement>) -> Vec<SubstateRequirement> {
     inputs.sort_by(|a, b| b.substate_id.cmp(&a.substate_id).then(b.version.cmp(&a.version)));
     inputs.dedup_by(|a, b| a.substate_id == b.substate_id);
     inputs

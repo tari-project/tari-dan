@@ -237,8 +237,8 @@ impl Transaction {
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq, Hash)]
 pub struct SubstateRequirement {
     #[serde(with = "serde_with::string")]
-    substate_id: SubstateId,
-    version: Option<u32>,
+    pub substate_id: SubstateId,
+    pub version: Option<u32>,
 }
 
 impl SubstateRequirement {

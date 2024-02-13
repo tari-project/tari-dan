@@ -63,7 +63,6 @@ use crate::{
     component_manager::ComponentManager,
     from_hex::FromHex,
     key_manager::KeyManager,
-    versioned_substate_id::VersionedSubstateId,
 };
 
 #[derive(Debug, Subcommand, Clone)]
@@ -94,9 +93,9 @@ pub struct CommonSubmitArgs {
     #[clap(long, short = 't')]
     pub wait_for_result_timeout: Option<u64>,
     #[clap(long, short = 'i')]
-    pub inputs: Vec<VersionedSubstateId>,
+    pub inputs: Vec<SubstateRequirement>,
     #[clap(long, alias = "ref")]
-    pub input_refs: Vec<VersionedSubstateId>,
+    pub input_refs: Vec<SubstateRequirement>,
     #[clap(long, short = 'v')]
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -236,13 +235,11 @@ pub async fn submit_transaction(
     // Convert to shard id
     let inputs = inputs
         .into_iter()
-        .map(|versioned_addr| versioned_addr.to_substate_requirement())
         .collect::<Vec<_>>();
 
     let input_refs = common
         .input_refs
         .into_iter()
-        .map(|versioned_addr| versioned_addr.to_substate_requirement())
         .collect::<Vec<_>>();
 
     summarize_request(&instructions, &inputs, 1, common.dry_run);
@@ -587,12 +584,12 @@ fn format_tuple(subtypes: &[Type], result: &InstructionResult) -> String {
 fn load_inputs(
     instructions: &[Instruction],
     component_manager: &ComponentManager,
-) -> Result<Vec<VersionedSubstateId>, anyhow::Error> {
+) -> Result<Vec<SubstateRequirement>, anyhow::Error> {
     let mut inputs = Vec::new();
     for instruction in instructions {
         if let Instruction::CallMethod { component_address, .. } = instruction {
             let addr = SubstateId::Component(*component_address);
-            if inputs.iter().any(|a: &VersionedSubstateId| a.substate_id == addr) {
+            if inputs.iter().any(|a: &SubstateRequirement| a.substate_id == addr) {
                 continue;
             }
             let component = component_manager
@@ -600,12 +597,12 @@ fn load_inputs(
                 .ok_or_else(|| anyhow!("Component {} not found", component_address))?;
             println!("Loaded inputs");
             println!("- {} v{}", addr, component.latest_version());
-            inputs.push(VersionedSubstateId {
+            inputs.push(SubstateRequirement {
                 substate_id: addr,
-                version: component.latest_version(),
+                version: Some(component.latest_version()),
             });
             for child in component.get_children() {
-                println!("  - {} v{}", child.substate_id, child.version);
+                println!("  - {} v{:?}", child.substate_id, child.version);
             }
             inputs.extend(component.get_children());
         }

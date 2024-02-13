@@ -34,7 +34,7 @@ use miner::MinerProcess;
 use tari_common_types::types::PublicKey;
 use tari_core::transactions::test_helpers::{create_test_core_key_manager_with_memory_db, TestKeyManager};
 use tari_crypto::ristretto::{RistrettoComSig, RistrettoSecretKey};
-use tari_validator_node_cli::versioned_substate_id::VersionedSubstateId;
+use tari_transaction::SubstateRequirement;
 use template::RegisteredTemplate;
 use validator_node::ValidatorNodeProcess;
 use wallet::WalletProcess;
@@ -62,7 +62,7 @@ pub struct TariWorld {
     pub vn_seeds: IndexMap<String, ValidatorNodeProcess>,
     pub miners: IndexMap<String, MinerProcess>,
     pub templates: IndexMap<String, RegisteredTemplate>,
-    pub outputs: IndexMap<String, IndexMap<String, VersionedSubstateId>>,
+    pub outputs: IndexMap<String, IndexMap<String, SubstateRequirement>>,
     pub http_server: Option<MockHttpServer>,
     pub template_mock_server_port: Option<u16>,
     pub current_scenario_name: Option<String>,
@@ -126,7 +126,7 @@ impl TariWorld {
             .unwrap_or_else(|| panic!("Base node {} not found", name))
     }
 
-    pub fn get_account_component_address(&self, name: &str) -> Option<VersionedSubstateId> {
+    pub fn get_account_component_address(&self, name: &str) -> Option<SubstateRequirement> {
         let all_components = self
             .outputs
             .get(name)
