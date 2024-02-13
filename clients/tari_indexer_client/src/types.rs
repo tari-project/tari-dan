@@ -7,7 +7,7 @@ use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use serde_with::{serde_as, DisplayFromStr};
-use tari_base_node_client::types::ValidatorNode;
+use tari_base_node_client::types::BaseLayerValidatorNode;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::Epoch;
 use tari_dan_storage::consensus_models::Decision;
@@ -136,7 +136,7 @@ pub struct GetAllVnsRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetAllVnsResponse {
-    pub vns: Vec<ValidatorNode>,
+    pub vns: Vec<BaseLayerValidatorNode>,
 }
 
 #[serde_as]

@@ -111,6 +111,7 @@ export * from "./src/types/TransactionGetResponse";
 export * from "./src/types/AddAddressRequest";
 export * from "./src/types/SubstateId";
 export * from "./src/types/SubstatesGetResponse";
+export * from "./src/types/BaseLayerValidatorNode";
 export * from "./src/types/TransactionReceiptAddress";
 export * from "./src/types/ComponentAddress";
 export * from "./src/types/SubstateType";
