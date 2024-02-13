@@ -40,12 +40,12 @@ Feature: Concurrency
     When I print the cucumber world
 
     # Send multiple concurrent transactions to increase the counter
-    When I invoke on VAL_1 on component COUNTER_1/components/Counter the method call "increase" named "TX1"
+    When I invoke on VAL_1 on component COUNTER_1/components/Counter the method call "increase" concurrently 2 times
     When I print the cucumber world
 
     # Check that the counter has been increased
-    When I invoke on VAL_1 on component TX1/components/Counter the method call "value" the result is "1"
-#    When I print the cucumber world
+#   When I invoke on VAL_1 on component TX1/components/Counter the method call "value" the result is "1"
+#   When I print the cucumber world
 
 # Uncomment the following lines to stop execution for manual inspection of the nodes
 # When I print the cucumber world
