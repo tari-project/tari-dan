@@ -20,9 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut};
+use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut, time::Duration};
 
-use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::{executor, future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::*;
 use tari_consensus::traits::TransactionExecutor;
 use tari_dan_app_utilities::transaction_executor::TransactionProcessorError;
@@ -32,8 +32,10 @@ use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, SubstateRecord, TransactionPool, TransactionRecord},
     StateStore,
 };
+use tari_engine_types::{commit_result::{ExecuteResult, FinalizeResult, TransactionResult}, fees::FeeCostBreakdown, substate::SubstateDiff};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerEvent, EpochManagerReader};
 use tari_state_store_sqlite::SqliteStateStore;
+use tari_template_lib::models::Amount;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{mpsc, oneshot};
 
@@ -341,7 +343,7 @@ where
             // The transactions has one or more of its inputs with no version
             // This means we skip transaction execution in the mempool, as the execution will happen on consensus
             if transaction.has_inputs_without_version() {
-                self.handle_no_version_transaction(&transaction)?;
+                self.handle_no_version_transaction(&transaction, should_propagate, sender_shard).await?;
             } else {
                 // All the inputs in the transaction have specific versions, so we execute immmeadiately
                 self.queue_transaction_for_execution(transaction.clone(), current_epoch, should_propagate, sender_shard);
@@ -431,10 +433,45 @@ where
         Ok(())
     }
 
-    fn handle_no_version_transaction(&mut self, _transaction: &Transaction) -> Result<(), MempoolError> {
+    async fn handle_no_version_transaction(
+        &mut self,
+        transaction: &Transaction,
+        should_propagate: bool,
+        sender_shard: Option<Shard>
+    ) -> Result<(), MempoolError> {
         // TODO: for now we just skip execution, we may want to store the transaction in a new DB table
+        // TODO: do we need some sort of validation at this stage?
 
-        Ok(())
+        info!(
+            target: LOG_TARGET,
+            "✅ Transaction {} has inputs without versions, it goes directly to consensus",
+            transaction.id(),
+        );
+
+        let finalize = FinalizeResult::new(
+            transaction.hash(),
+            vec![],
+            vec![],
+            TransactionResult::Accept(SubstateDiff::new()),
+            FeeCostBreakdown {
+                total_fees_charged: Amount::zero(),
+                breakdown: vec![],
+            },
+        );
+        let executed_transaction = ExecutedTransaction::new(
+            transaction.clone(),
+            ExecuteResult { finalize, fee_receipt: None },
+            vec![],
+            Duration::ZERO,
+        );
+        let execution_result = (transaction.id().clone(), Ok(executed_transaction));
+        let result = MempoolTransactionExecution {
+            result: Ok(execution_result),
+            should_propagate,
+            sender_shard,
+        };
+
+        self.handle_execution_complete(result).await
     }
 
     fn queue_transaction_for_execution(

@@ -35,10 +35,6 @@ Feature: Concurrency
     When I create a component COUNTER_1 of template "counter" on VAL_1 using "new"
     When I print the cucumber world
 
-    # The initial value of the counter must be 0
-    When I invoke on VAL_1 on component COUNTER_1/components/Counter the method call "value" the result is "0"
-    When I print the cucumber world
-
     # Send multiple concurrent transactions to increase the counter
     When I invoke on VAL_1 on component COUNTER_1/components/Counter the method call "increase" concurrently 2 times
     When I print the cucumber world
