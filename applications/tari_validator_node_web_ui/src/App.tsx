@@ -145,9 +145,7 @@ export default function App() {
       });
   };
   useEffect(() => {
-    const id = window.setInterval(() => {
-      refreshEpoch(epoch);
-    }, 2 * 60 * 1000);
+    const id = window.setInterval(() => refreshEpoch(epoch), 2 * 60 * 1000);
     return () => {
       window.clearInterval(id);
     };
