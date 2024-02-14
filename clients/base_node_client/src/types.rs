@@ -29,7 +29,7 @@ pub struct BlockInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
-pub struct ValidatorNode {
+pub struct BaseLayerValidatorNode {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub public_key: PublicKey,
     pub shard_key: SubstateAddress,

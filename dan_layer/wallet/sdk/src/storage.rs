@@ -24,6 +24,7 @@ use crate::models::{
     NonFungibleToken,
     OutputStatus,
     SubstateModel,
+    SubstateType,
     TransactionStatus,
     VaultModel,
     VersionedSubstateId,
@@ -125,6 +126,13 @@ pub trait WalletStoreReader {
     ) -> Result<Vec<WalletTransaction>, WalletStorageError>;
     // Substates
     fn substates_get(&mut self, address: &SubstateId) -> Result<SubstateModel, WalletStorageError>;
+    fn substates_get_all(
+        &mut self,
+        by_type: Option<SubstateType>,
+        by_template_address: Option<&TemplateAddress>,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> Result<Vec<SubstateModel>, WalletStorageError>;
     fn substates_get_children(&mut self, parent: &SubstateId) -> Result<Vec<SubstateModel>, WalletStorageError>;
     // Accounts
     fn accounts_get(&mut self, address: &SubstateId) -> Result<Account, WalletStorageError>;

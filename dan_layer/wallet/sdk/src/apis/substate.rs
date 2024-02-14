@@ -9,11 +9,12 @@ use tari_engine_types::{
     indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     substate::{SubstateId, SubstateValue},
     transaction_receipt::TransactionReceiptAddress,
+    TemplateAddress,
 };
 use tari_transaction::TransactionId;
 
 use crate::{
-    models::{SubstateModel, VersionedSubstateId},
+    models::{SubstateModel, SubstateType, VersionedSubstateId},
     network::WalletNetworkInterface,
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
@@ -42,6 +43,18 @@ where
         let mut tx = self.store.create_read_tx()?;
         let substate = tx.substates_get(address)?;
         Ok(substate)
+    }
+
+    pub fn list_substates(
+        &self,
+        filter_by_type: Option<SubstateType>,
+        filter_by_template: Option<&TemplateAddress>,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> Result<Vec<SubstateModel>, SubstateApiError> {
+        let mut tx = self.store.create_read_tx()?;
+        let substates = tx.substates_get_all(filter_by_type, filter_by_template, limit, offset)?;
+        Ok(substates)
     }
 
     pub fn load_dependent_substates(

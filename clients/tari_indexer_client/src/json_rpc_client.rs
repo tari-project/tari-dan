@@ -38,6 +38,8 @@ use crate::{
         GetNonFungiblesResponse,
         GetSubstateRequest,
         GetSubstateResponse,
+        GetTemplateDefinitionRequest,
+        GetTemplateDefinitionResponse,
         GetTransactionResultRequest,
         GetTransactionResultResponse,
         SubmitTransactionRequest,
@@ -98,6 +100,13 @@ impl IndexerJsonRpcClient {
         req: GetTransactionResultRequest,
     ) -> Result<GetTransactionResultResponse, IndexerClientError> {
         self.send_request("get_transaction_result", req).await
+    }
+
+    pub async fn get_template_definition(
+        &mut self,
+        req: GetTemplateDefinitionRequest,
+    ) -> Result<GetTemplateDefinitionResponse, IndexerClientError> {
+        self.send_request("get_template_definition", req).await
     }
 
     pub async fn delete_address(&mut self, req: DeleteAddressRequest) -> Result<(), IndexerClientError> {

@@ -34,6 +34,8 @@ pub enum Instruction {
         component_address: ComponentAddress,
         method: String,
         #[serde(deserialize_with = "crate::argument_parser::json_deserialize")]
+        // Argument parser takes an array of strings as input
+        #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
         args: Vec<Arg>,
     },
     PutLastInstructionOutputOnWorkspace {

@@ -1,5 +1,5 @@
 {
-  "name": "@tari/wallet_jrpc_client",
+  "name": "@tarilabs/wallet_jrpc_client",
   "version": "1.0.0",
   "description": "Tari wallet JSON-RPC client library",
   "scripts": {
