@@ -532,7 +532,7 @@ impl JsonRpcHandlers {
             let json_results =
                 encode_execute_result_into_json(&exec_result).map_err(|e| Self::internal_error(answer_id, e))?;
 
-            Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
+            return Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
                 result: IndexerTransactionFinalizedResult::Finalized {
                     execution_result: Some(exec_result),
                     final_decision: Decision::Commit,
@@ -542,29 +542,29 @@ impl JsonRpcHandlers {
                     json_results,
                 },
                 transaction_id,
-            }))
-        } else {
-            let transaction_id = self
-                .transaction_manager
-                .submit_transaction(request.transaction, request.required_substates)
-                .await
-                .map_err(|e| match e {
-                    TransactionManagerError::AllValidatorsFailed { .. } => JsonRpcResponse::error(
-                        answer_id,
-                        JsonRpcError::new(
-                            JsonRpcErrorReason::ApplicationError(400),
-                            format!("All validators failed: {}", e),
-                            json::Value::Null,
-                        ),
-                    ),
-                    e => Self::internal_error(answer_id, e),
-                })?;
-
-            Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-                result: IndexerTransactionFinalizedResult::Pending,
-                transaction_id,
-            }))
+            }));
         }
+
+        let transaction_id = self
+            .transaction_manager
+            .submit_transaction(request.transaction, request.required_substates)
+            .await
+            .map_err(|e| match e {
+                TransactionManagerError::AllValidatorsFailed { .. } => JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::ApplicationError(400),
+                        format!("All validators failed: {}", e),
+                        json::Value::Null,
+                    ),
+                ),
+                e => Self::internal_error(answer_id, e),
+            })?;
+
+        Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
+            result: IndexerTransactionFinalizedResult::Pending,
+            transaction_id,
+        }))
     }
 
     pub async fn get_epoch_manager_stats(&self, value: JsonRpcExtractor) -> JrpcResult {

@@ -14,7 +14,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "bindings": "file:../../../bindings"
+    "@tarilabs/typescript-bindings": "file:../../../bindings"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

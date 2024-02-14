@@ -70,14 +70,14 @@ export default function Permissions({
       <FormControl component="fieldset" variant="standard" style={{ width: "100%" }}>
         <Divider />
         <FormGroup>
-          {requiredPermissions.map((permissions) => {
+          {requiredPermissions.map((permission) => {
             return (
               <>
                 <FormControlLabel
                   control={<Switch checked={true} disabled={true} />}
-                  label={permissions.toString()}
+                  label={permission?.toString()}
                   labelPlacement="start"
-                  key={permissions.toString()}
+                  key={permission?.toString()}
                   className="permissions-switch"
                 />
                 <Divider />

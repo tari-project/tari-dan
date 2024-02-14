@@ -105,13 +105,13 @@ const ConnectorDialog = () => {
   };
 
   const handleAuth = () => {
-    let allowedPermissions = [
+    const allowedPermissions = [
       ...permissions,
       ...optionalPermissions.filter((value, index) => chosenOptionalPermissions[index]),
     ];
     webrtcStart({
       signaling_server_token: signalingServerJWT,
-      permissions: JSON.stringify(allowedPermissions),
+      permissions: allowedPermissions,
       name: name,
     }).then((resp) => {
       setPage(page + 1);
