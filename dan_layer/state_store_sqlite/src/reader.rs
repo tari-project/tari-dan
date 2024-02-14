@@ -1158,11 +1158,6 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
                 operation: "transaction_pool_get_many_ready",
                 source: e,
             })?;
-        
-        debug!(
-                target: LOG_TARGET,
-                "transaction_pool_get_many_ready: {:?}",
-                ready_txs.iter().map(|t| t.transaction_id.clone()).collect::<Vec<_>>());
 
         if ready_txs.is_empty() {
             return Ok(Vec::new());
