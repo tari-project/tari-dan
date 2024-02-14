@@ -30,6 +30,8 @@ pub enum JrpcPermission {
     NftGetOwnershipProof(Option<ResourceAddress>),
     AccountBalance(SubstateId),
     AccountList(Option<ComponentAddress>),
+    SubstatesRead,
+    TemplatesRead,
     KeyList,
     TransactionGet,
     TransactionSend(Option<SubstateId>),
@@ -67,6 +69,8 @@ impl FromStr for JrpcPermission {
                 "AccountInfo" => Ok(JrpcPermission::AccountInfo),
                 "NftGetOwnershipProof" => Ok(JrpcPermission::NftGetOwnershipProof(None)),
                 "AccountList" => Ok(JrpcPermission::AccountList(None)),
+                "SubstatesRead" => Ok(JrpcPermission::SubstatesRead),
+                "TemplatesRead" => Ok(JrpcPermission::TemplatesRead),
                 "KeyList" => Ok(JrpcPermission::KeyList),
                 "GetNft" => Ok(JrpcPermission::GetNft(None, None)),
                 "TransactionGet" => Ok(JrpcPermission::TransactionGet),
@@ -95,6 +99,8 @@ impl Display for JrpcPermission {
             JrpcPermission::GetNft(_, _) => f.write_str("GetNft"),
             JrpcPermission::StartWebrtc => f.write_str("StartWebrtc"),
             JrpcPermission::Admin => f.write_str("Admin"),
+            JrpcPermission::SubstatesRead => f.write_str("SubstatesRead"),
+            JrpcPermission::TemplatesRead => f.write_str("TemplatesRead"),
         }
     }
 }

@@ -29,15 +29,17 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_wallet_sdk::{
     apis::jwt::Claims,
-    models::{Account, ConfidentialProofId, TransactionStatus},
+    models::{Account, ConfidentialProofId, SubstateType, TransactionStatus},
 };
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult},
     instruction::Instruction,
     instruction_result::InstructionResult,
     serde_with,
-    substate::SubstateId,
+    substate::{Substate, SubstateId},
+    TemplateAddress,
 };
+use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::Arg,
     auth::ComponentAccessRules,
@@ -716,4 +718,58 @@ pub struct SettingsSetResponse {}
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct SettingsGetResponse {
     pub indexer_url: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct SubstatesListRequest {
+    #[serde(default, deserialize_with = "serde_with::string::option::deserialize")]
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub filter_by_template: Option<TemplateAddress>,
+    pub filter_by_type: Option<SubstateType>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct SubstatesListResponse {
+    pub substates: Vec<WalletSubstateRecord>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct SubstatesGetRequest {
+    pub substate_id: SubstateId,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct SubstatesGetResponse {
+    pub record: WalletSubstateRecord,
+    pub value: Substate,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct WalletSubstateRecord {
+    pub substate_id: SubstateId,
+    pub parent_id: Option<SubstateId>,
+    pub module_name: Option<String>,
+    pub version: u32,
+    #[serde(default, with = "serde_with::string::option")]
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub template_address: Option<TemplateAddress>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct TemplatesGetRequest {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[serde(with = "serde_with::string")]
+    pub template_address: TemplateAddress,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct TemplatesGetResponse {
+    pub template_definition: TemplateDef,
 }

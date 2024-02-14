@@ -7,7 +7,7 @@ use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use serde_with::{serde_as, DisplayFromStr};
-use tari_base_node_client::types::ValidatorNode;
+use tari_base_node_client::types::BaseLayerValidatorNode;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::Epoch;
 use tari_dan_storage::consensus_models::Decision;
@@ -15,6 +15,7 @@ use tari_engine_types::{
     commit_result::ExecuteResult,
     serde_with as serde_tools,
     substate::{Substate, SubstateId},
+    TemplateAddress,
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 #[cfg(feature = "ts")]
@@ -135,7 +136,7 @@ pub struct GetAllVnsRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetAllVnsResponse {
-    pub vns: Vec<ValidatorNode>,
+    pub vns: Vec<BaseLayerValidatorNode>,
 }
 
 #[serde_as]
@@ -285,4 +286,18 @@ pub enum ConnectionDirection {
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct GetConnectionsResponse {
     pub connections: Vec<Connection>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct GetTemplateDefinitionRequest {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub template_address: TemplateAddress,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct GetTemplateDefinitionResponse {
+    pub name: String,
+    pub definition: tari_template_abi::TemplateDef,
 }

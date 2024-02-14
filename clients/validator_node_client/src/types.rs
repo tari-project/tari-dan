@@ -25,10 +25,10 @@ use std::{ops::RangeInclusive, time::Duration};
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use tari_common_types::{transaction::TxId, types::PublicKey};
-use tari_dan_common_types::{committee::CommitteeShard, shard::Shard, Epoch, SubstateAddress};
+use tari_dan_common_types::{committee::CommitteeShard, shard::Shard, Epoch, PeerAddress, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, Decision, ExecutedTransaction, QuorumDecision, SubstateRecord},
-    global::models::ValidatorNode,
+    global::models,
     Ordering,
 };
 use tari_engine_types::{
@@ -282,18 +282,46 @@ pub struct GetCommitteeRequest {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
-pub struct GetNetworkCommitteeResponse<TAddr> {
+pub struct GetNetworkCommitteeResponse {
     pub current_epoch: Epoch,
-    pub committees: Vec<CommitteeShardInfo<TAddr>>,
+    pub committees: Vec<CommitteeShardInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
-pub struct CommitteeShardInfo<TAddr> {
+pub struct CommitteeShardInfo {
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub shard: Shard,
     pub substate_address_range: RangeInclusive<SubstateAddress>,
-    pub validators: Vec<ValidatorNode<TAddr>>,
+    pub validators: Vec<ValidatorNode>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct ValidatorNode {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub address: PeerAddress,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub public_key: PublicKey,
+    pub shard_key: SubstateAddress,
+    pub epoch: Epoch,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub committee_shard: Option<Shard>,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub fee_claim_public_key: PublicKey,
+}
+
+impl From<models::ValidatorNode<PeerAddress>> for ValidatorNode {
+    fn from(value: models::ValidatorNode<PeerAddress>) -> Self {
+        Self {
+            address: value.address,
+            public_key: value.public_key,
+            shard_key: value.shard_key,
+            epoch: value.epoch,
+            committee_shard: value.committee_shard,
+            fee_claim_public_key: value.fee_claim_public_key,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

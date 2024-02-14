@@ -27,6 +27,7 @@ use ts_rs::TS;
 use crate::rust::{boxed::Box, string::String, vec::Vec};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum TemplateDef {
     V1(TemplateDefV1),
 }
@@ -58,6 +59,7 @@ impl TemplateDef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TemplateDefV1 {
     pub template_name: String,
     pub tari_version: String,
@@ -71,6 +73,7 @@ impl TemplateDefV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FunctionDef {
     pub name: String,
     pub arguments: Vec<ArgDef>,
@@ -79,6 +82,7 @@ pub struct FunctionDef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ArgDef {
     pub name: String,
     pub arg_type: Type,

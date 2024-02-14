@@ -10,6 +10,8 @@ pub mod keys;
 pub mod nfts;
 pub mod rpc;
 pub mod settings;
+pub mod substates;
+pub mod templates;
 pub mod transaction;
 pub mod validator;
 pub mod webrtc;

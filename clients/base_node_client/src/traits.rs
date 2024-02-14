@@ -8,14 +8,14 @@ use tari_dan_common_types::SubstateAddress;
 
 use crate::{
     error::BaseNodeClientError,
-    types::{BaseLayerConsensusConstants, BaseLayerMetadata, SideChainUtxos, ValidatorNode},
+    types::{BaseLayerConsensusConstants, BaseLayerMetadata, BaseLayerValidatorNode, SideChainUtxos},
 };
 
 #[async_trait]
 pub trait BaseNodeClient: Send + Sync + Clone {
     async fn test_connection(&mut self) -> Result<(), BaseNodeClientError>;
     async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, BaseNodeClientError>;
-    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, BaseNodeClientError>;
+    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<BaseLayerValidatorNode>, BaseNodeClientError>;
     async fn get_shard_key(
         &mut self,
         height: u64,
