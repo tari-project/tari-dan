@@ -23,10 +23,15 @@
 import { useState, useEffect } from "react";
 import { fromHexString } from "../VN/Components/helpers";
 import EChartsReact from "echarts-for-react";
-import { ICommitteeChart, GetNetworkCommitteesResponse, CommitteeShardInfo } from "../../utils/interfaces";
+import { ICommitteeChart } from "../../utils/interfaces";
 import "../../theme/echarts.css";
+import type {
+  CommitteeShardInfo,
+  GetNetworkCommitteeResponse,
+  ValidatorNode,
+} from "@tarilabs/typescript-bindings/validator-node-client";
 
-export default function CommitteesRadial({ committees }: { committees: GetNetworkCommitteesResponse }) {
+export default function CommitteesRadial({ committees }: { committees: GetNetworkCommitteeResponse }) {
   const [chartData, setChartData] = useState<ICommitteeChart>({
     activeleft: [],
     inactiveleft: [],
@@ -86,7 +91,7 @@ export default function CommitteesRadial({ committees }: { committees: GetNetwor
       }
     });
     setChartData(info);
-    const newTitles = dataset.map((info) => `Committee ${info.shard}`);
+    const newTitles = dataset.map((info: CommitteeShardInfo) => `Committee ${info.shard}`);
     setTitles(newTitles);
   }, [committees]);
 
@@ -99,7 +104,7 @@ export default function CommitteesRadial({ committees }: { committees: GetNetwor
     } = data;
 
     const memberList = validators
-      .map((member) => `<li>${member.address}</li>`)
+      .map((member: ValidatorNode) => `<li>${member.address}</li>`)
       .slice(0, 5)
       .join("");
 

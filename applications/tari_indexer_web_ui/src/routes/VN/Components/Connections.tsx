@@ -22,7 +22,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { addPeer, getConnections } from "../../../utils/json_rpc";
-import { shortenString, toHexString } from "./helpers";
+import { shortenString } from "./helpers";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -36,7 +36,7 @@ import { TextField } from "@mui/material";
 import { Form } from "react-router-dom";
 import Fade from "@mui/material/Fade";
 import CopyToClipboard from "../../../Components/CopyToClipboard";
-import { Connection } from "tari-bindings";
+import type { Connection } from "@tarilabs/typescript-bindings/tari-indexer-client";
 
 interface Duration {
   secs: number;

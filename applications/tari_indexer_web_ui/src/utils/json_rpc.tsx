@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import {
+import type {
   AddAddressRequest,
   AddAddressResponse,
   AddPeerRequest,
@@ -48,12 +48,20 @@ import {
   InspectSubstateRequest,
   InspectSubstateResponse,
   SubmitTransactionResponse,
-} from "tari-bindings";
+} from "@tarilabs/typescript-bindings/tari-indexer-client";
 
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
   id += 1;
-  let address = "http://127.0.0.1:18010";
+  let address = "http://localhost:18300";
+  try {
+    address = await (await fetch("/json_rpc_address")).text();
+    if (!address.startsWith("http")) {
+      address = "http://" + address;
+    }
+  } catch (e) {
+    console.warn("Failed to fetch address", e);
+  }
   let response = await fetch(address, {
     method: "POST",
     body: JSON.stringify({

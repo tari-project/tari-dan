@@ -29,6 +29,7 @@ import TableBody from "@mui/material/TableBody";
 import TableContainer from "@mui/material/TableContainer";
 import TablePagination from "@mui/material/TablePagination";
 import "./Committees.css";
+import { emptyRows } from "../../utils/helpers";
 
 function Committee({
   begin,
@@ -38,13 +39,13 @@ function Committee({
 }: {
   begin: string;
   end: string;
-  members: Array<string>;
+  members: Array<[string, string]>;
   publicKey: string;
 }) {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - members.length) : 0;
+  const emptyRowsCnt = emptyRows(page, rowsPerPage, members);
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -85,14 +86,14 @@ function Committee({
           <Table>
             <TableBody>
               {members.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((member) => (
-                <TableRow key={member}>
-                  <DataTableCell className={`member ${member === publicKey ? "me" : ""}`}>{member}</DataTableCell>
+                <TableRow key={member[1]}>
+                  <DataTableCell className={`member ${member[1] === publicKey ? "me" : ""}`}>{member[1]}</DataTableCell>
                 </TableRow>
               ))}
-              {emptyRows > 0 && (
+              {emptyRowsCnt > 0 && (
                 <TableRow
                   style={{
-                    height: 67 * emptyRows,
+                    height: 67 * emptyRowsCnt,
                   }}
                 >
                   <DataTableCell colSpan={4} />

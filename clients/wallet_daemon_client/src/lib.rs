@@ -120,7 +120,11 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
+)]
 pub enum ComponentAddressOrName {
     ComponentAddress(ComponentAddress),
     Name(String),

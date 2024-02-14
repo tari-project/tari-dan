@@ -21,10 +21,11 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import React from "react";
-import { Grid, Table, TableContainer, TableBody, TableHead, TableRow, TableCell } from "@mui/material";
+import { Table, TableContainer, TableBody, TableHead, TableRow, TableCell } from "@mui/material";
 import StatusChip from "../../Components/StatusChip";
+import type { TransactionAtom } from "@tarilabs/typescript-bindings";
 
-function Transaction({ transaction }: any) {
+function Transaction({ transaction }: { transaction: TransactionAtom }) {
   return (
     <TableRow>
       <TableCell>
@@ -39,7 +40,7 @@ function Transaction({ transaction }: any) {
   );
 }
 
-export default function Transactions({ transactions }: any) {
+export default function Transactions({ transactions }: { transactions: TransactionAtom[] }) {
   return (
     <TableContainer>
       <Table>
@@ -52,7 +53,7 @@ export default function Transactions({ transactions }: any) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {transactions.map((tx: any) => (
+          {transactions.map((tx: TransactionAtom) => (
             <Transaction key={tx.id} transaction={tx} />
           ))}
         </TableBody>

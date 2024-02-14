@@ -20,18 +20,63 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { GetNetworkCommitteesResponse } from "./interfaces";
+import type {
+  AddPeerRequest,
+  GetAllVnsRequest,
+  GetAllVnsResponse,
+  GetBlockRequest,
+  GetBlockResponse,
+  GetBlocksCountResponse,
+  GetCommitteeRequest,
+  GetCommitteeResponse,
+  GetCommsStatsResponse,
+  GetConnectionsResponse,
+  GetEpochManagerStatsResponse,
+  GetIdentityResponse,
+  GetMempoolStatsResponse,
+  GetNetworkCommitteeResponse,
+  GetRecentTransactionsResponse,
+  GetShardKeyRequest,
+  GetShardKeyResponse,
+  GetStateRequest,
+  GetStateResponse,
+  GetSubstateRequest,
+  GetSubstateResponse,
+  GetSubstatesByTransactionRequest,
+  GetSubstatesByTransactionResponse,
+  GetTemplateRequest,
+  GetTemplateResponse,
+  GetTemplatesRequest,
+  GetTemplatesResponse,
+  GetTransactionRequest,
+  GetTransactionResponse,
+  GetTransactionResultRequest,
+  GetTransactionResultResponse,
+  GetTxPoolResponse,
+  ListBlocksRequest,
+  ListBlocksResponse,
+  RegisterValidatorNodeRequest,
+  RegisterValidatorNodeResponse,
+  SubmitTransactionRequest,
+  SubmitTransactionResponse,
+  TemplateRegistrationRequest,
+  TemplateRegistrationResponse,
+  VNGetValidatorFeesRequest,
+  VNGetValidatorFeesResponse,
+} from "@tarilabs/typescript-bindings/validator-node-client";
 
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
   id += 1;
-  let address = "http://127.0.0.1:18010";
+  let address = "http://localhost:18300";
   try {
     address = await (await fetch("/json_rpc_address")).text();
     if (!address.startsWith("http")) {
       address = "http://" + address;
     }
-  } catch {}
+  } catch (e) {
+    console.warn("Failed to fetch address", e);
+  }
   let response = await fetch(address, {
     method: "POST",
     body: JSON.stringify({
@@ -51,103 +96,54 @@ async function jsonRpc(method: string, params: any = null) {
   }
   return json.result;
 }
-async function getIdentity() {
-  return await jsonRpc("get_identity");
-}
-async function getEpochManagerStats() {
-  return await jsonRpc("get_epoch_manager_stats");
-}
-async function getCommsStats() {
-  return await jsonRpc("get_comms_stats");
-}
-async function getMempoolStats() {
-  return await jsonRpc("get_mempool_stats");
-}
-async function getShardKey(height: number, public_key: string) {
-  return await jsonRpc("get_shard_key", [height, public_key]);
-}
-async function getCommittee(epoch: number, substate_address: string) {
-  return await jsonRpc("get_committee", { epoch, substate_address });
-}
-async function getAllVns(epoch: number) {
-  return await jsonRpc("get_all_vns", epoch);
-}
-async function getNetworkCommittees(): Promise<GetNetworkCommitteesResponse> {
-  return await jsonRpc("get_network_committees", {});
-}
-async function getConnections() {
-  return await jsonRpc("get_connections");
-}
-async function addPeer(public_key: string, addresses: string[]) {
-  return await jsonRpc("add_peer", {
-    public_key,
-    addresses,
-    wait_for_dial: false,
-  });
-}
-async function registerValidatorNode(feeClaimPublicKeyHex: string) {
-  return await jsonRpc("register_validator_node", {
-    fee_claim_public_key: feeClaimPublicKeyHex,
-  });
-}
-async function getRecentTransactions() {
-  return await jsonRpc("get_recent_transactions");
-}
-async function getTransaction(transaction_id: string) {
-  return await jsonRpc("get_transaction", { transaction_id });
-}
-async function getFees(start_epoch: number, end_epoch: number, claim_leader_public_key: string) {
-  return await jsonRpc("get_fees", [[start_epoch, end_epoch], claim_leader_public_key]);
-}
-async function getUpSubstates(transaction_id: string) {
-  return await jsonRpc("get_substates_created_by_transaction", {
-    transaction_id,
-  });
-}
-async function getDownSubstates(transaction_id: string) {
-  return await jsonRpc("get_substates_destroyed_by_transaction", {
-    transaction_id,
-  });
-}
-async function getTemplates(limit: number) {
-  return await jsonRpc("get_templates", [limit]);
-}
-async function getTemplate(address: string) {
-  return await jsonRpc("get_template", [address]);
-}
 
-async function listBlocks(block_id: string | null, limit: number) {
-  return await jsonRpc("list_blocks", [block_id, limit]);
-}
+// Transaction
+export const submitTransaction = (request: SubmitTransactionRequest): Promise<SubmitTransactionResponse> =>
+  jsonRpc("submit_transaction", request);
+export const getRecentTransactions = (): Promise<GetRecentTransactionsResponse> => jsonRpc("get_recent_transactions");
+export const getTransaction = (request: GetTransactionRequest): Promise<GetTransactionResponse> =>
+  jsonRpc("get_transaction", request);
+export const getTransactionResult = (request: GetTransactionResultRequest): Promise<GetTransactionResultResponse> =>
+  jsonRpc("get_transaction_result", request);
+export const getState = (request: GetStateRequest): Promise<GetStateResponse> => jsonRpc("get_state", request);
+export const getSubstate = (request: GetSubstateRequest): Promise<GetSubstateResponse> =>
+  jsonRpc("get_substate", request);
+export const getUpSubstates = (request: GetSubstatesByTransactionRequest): Promise<GetSubstatesByTransactionResponse> =>
+  jsonRpc("get_substates_created_by_transaction", request);
+export const getDownSubstates = (
+  request: GetSubstatesByTransactionRequest,
+): Promise<GetSubstatesByTransactionResponse> => jsonRpc("get_substates_destroyed_by_transaction", request);
+export const listBlocks = (request: ListBlocksRequest): Promise<ListBlocksResponse> => jsonRpc("list_blocks", request);
+export const getTxPool = (): Promise<GetTxPoolResponse> => jsonRpc("get_tx_pool");
 
-async function getBlock(block_id: string) {
-  return await jsonRpc("get_block", [block_id]);
-}
+// Blocks
+export const getBlock = (request: GetBlockRequest): Promise<GetBlockResponse> => jsonRpc("get_block", request);
+export const getBlocksCount = (): Promise<GetBlocksCountResponse> => jsonRpc("get_blocks_count");
 
-async function getBlocksCount() {
-  return await jsonRpc("get_blocks_count");
-}
+// Template
+export const getTemplate = (request: GetTemplateRequest): Promise<GetTemplateResponse> =>
+  jsonRpc("get_template", request);
+export const getTemplates = (request: GetTemplatesRequest): Promise<GetTemplatesResponse> =>
+  jsonRpc("get_templates", request);
+export const registerTemplate = (request: TemplateRegistrationRequest): Promise<TemplateRegistrationResponse> =>
+  jsonRpc("register_template", request);
 
-export {
-  getAllVns,
-  getBlock,
-  listBlocks,
-  getBlocksCount,
-  getCommittee,
-  getCommsStats,
-  getConnections,
-  addPeer,
-  getEpochManagerStats,
-  getIdentity,
-  getMempoolStats,
-  getRecentTransactions,
-  getShardKey,
-  getTemplate,
-  getTemplates,
-  getTransaction,
-  getFees,
-  getUpSubstates,
-  getDownSubstates,
-  getNetworkCommittees,
-  registerValidatorNode,
-};
+// Validator Node
+export const getIdentity = (): Promise<GetIdentityResponse> => jsonRpc("get_identity");
+export const registerValidatorNode = (request: RegisterValidatorNodeRequest): Promise<RegisterValidatorNodeResponse> =>
+  jsonRpc("register_validator_node", request);
+export const getMempoolStats = (): Promise<GetMempoolStatsResponse> => jsonRpc("get_mempool_stats");
+export const getEpochManagerStats = (): Promise<GetEpochManagerStatsResponse> => jsonRpc("get_epoch_manager_stats");
+export const getShardKey = (request: GetShardKeyRequest): Promise<GetShardKeyResponse> =>
+  jsonRpc("get_shard_key", request);
+export const getCommittee = (request: GetCommitteeRequest): Promise<GetCommitteeResponse> =>
+  jsonRpc("get_committee", request);
+export const getAllVns = (request: GetAllVnsRequest): Promise<GetAllVnsResponse> => jsonRpc("get_all_vns", request);
+export const getNetworkCommittees = (): Promise<GetNetworkCommitteeResponse> => jsonRpc("get_network_committees", {});
+export const getFees = (request: VNGetValidatorFeesRequest): Promise<VNGetValidatorFeesResponse> =>
+  jsonRpc("get_fees", request);
+
+// Comms
+export const addPeer = (request: AddPeerRequest) => jsonRpc("add_peer", request);
+export const getCommsStats = (): Promise<GetCommsStatsResponse> => jsonRpc("get_comms_stats");
+export const getConnections = (): Promise<GetConnectionsResponse> => jsonRpc("get_connections");

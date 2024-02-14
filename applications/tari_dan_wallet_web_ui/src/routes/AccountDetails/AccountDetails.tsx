@@ -35,7 +35,8 @@ import { shortenString } from "../../utils/helpers";
 import { DataTableCell } from "../../Components/StyledComponents";
 import CopyToClipboard from "../../Components/CopyToClipboard";
 import FetchStatusCheck from "../../Components/FetchStatusCheck";
-import { Account, AccountNftInfo, BalanceEntry, substateIdToString } from "@tarilabs/typescript-bindings";
+import { substateIdToString } from "@tarilabs/typescript-bindings";
+import type { AccountNftInfo, BalanceEntry } from "@tarilabs/typescript-bindings/wallet-daemon-client";
 
 function BalanceRow(props: BalanceEntry) {
   return (

@@ -69,7 +69,7 @@ pub enum RuleRequirement {
     /// Requires execution within a specific component
     ScopedToComponent(ComponentAddress),
     /// Requires execution within a specific template
-    ScopedToTemplate(#[cfg_attr(feature = "ts", ts(type = "Array<number>"))] TemplateAddress),
+    ScopedToTemplate(#[cfg_attr(feature = "ts", ts(type = "Uint8Array"))] TemplateAddress),
 }
 
 impl From<ResourceAddress> for RuleRequirement {

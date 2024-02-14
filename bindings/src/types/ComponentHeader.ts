@@ -4,7 +4,7 @@ import type { ComponentBody } from "./ComponentBody";
 import type { OwnerRule } from "./OwnerRule";
 
 export interface ComponentHeader {
-  template_address: string;
+  template_address: Uint8Array;
   module_name: string;
   owner_key: string;
   owner_rule: OwnerRule;

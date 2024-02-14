@@ -23,7 +23,7 @@ use crate::{
 pub enum Instruction {
     CallFunction {
         #[serde(with = "serde_with::hex")]
-        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
         template_address: TemplateAddress,
         function: String,
         #[serde(deserialize_with = "crate::argument_parser::json_deserialize")]

@@ -43,15 +43,16 @@ import SearchFilter from "../../../Components/SearchFilter";
 import Typography from "@mui/material/Typography";
 import Fade from "@mui/material/Fade";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
+import { emptyRows } from "../../../utils/helpers";
+import type { TemplateMetadata } from "@tarilabs/typescript-bindings/validator-node-client";
 
 export interface ITemplate {
   id: string;
-  address: Uint8Array;
-  binary_sha: number[];
-  height: number;
   name: string;
+  address: Uint8Array;
   url: string;
-  hexaddress: string;
+  binary_sha: Array<number>;
+  height: number;
   show: boolean;
 }
 
@@ -62,19 +63,20 @@ function Templates() {
   const [lastSort, setLastSort] = useState({ column: "", order: -1 });
 
   useEffect(() => {
-    getTemplates(10).then((response) => {
+    getTemplates({ limit: 10 }).then((response) => {
       setTemplates(
         response.templates
           .slice()
-          .sort((a: ITemplate, b: ITemplate) => b.height - a.height)
-          .map(({ address, binary_sha, height, name, url, show = true }: ITemplate) => ({
-            id: toHex(address),
-            address,
-            binary_sha,
-            height,
-            name,
-            url,
-            show,
+          .sort((a: TemplateMetadata, b: TemplateMetadata) => b.height - a.height)
+          .map((template: TemplateMetadata) => ({
+            id: toHex(template.address),
+            name: template.name,
+            address: template.address,
+            url: template.url,
+            binary_sha: template.binary_sha,
+            height: template.height,
+            template: template,
+            show: true,
           })),
       );
     });
@@ -91,7 +93,7 @@ function Templates() {
     // }
     if (column) {
       setTemplates(
-        [...templates].sort((r0: any, r1: any) =>
+        [...templates].sort((r0: ITemplate, r1: ITemplate) =>
           r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0,
         ),
       );
@@ -103,7 +105,7 @@ function Templates() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   // Avoid a layout jump when reaching the last page with empty rows.
-  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - templates.length) : 0;
+  const emptyRowsCnt = emptyRows(page, rowsPerPage, templates);
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -249,10 +251,10 @@ function Templates() {
                 </TableCell>
               </TableRow>
             )}
-            {emptyRows > 0 && (
+            {emptyRowsCnt > 0 && (
               <TableRow
                 style={{
-                  height: 67 * emptyRows,
+                  height: 67 * emptyRowsCnt,
                 }}
               >
                 <TableCell colSpan={4} />

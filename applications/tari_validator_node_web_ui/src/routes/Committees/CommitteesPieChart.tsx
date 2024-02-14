@@ -23,14 +23,25 @@
 import { useState, useEffect } from "react";
 import EChartsReact from "echarts-for-react";
 import "../../theme/echarts.css";
-import { GetNetworkCommitteesResponse } from "../../utils/interfaces";
+import type {
+  CommitteeShardInfo,
+  GetNetworkCommitteeResponse,
+} from "@tarilabs/typescript-bindings/validator-node-client";
+
+interface IData {
+  value: number;
+  name: string;
+  committee: any;
+  link: string;
+  range: string;
+}
 
 const MyChartComponent = ({ chartData }: MyChartComponentProps) => {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<IData[]>([]);
   const [titles, setTitles] = useState<string[]>([]);
 
   useEffect(() => {
-    const mappedTitles = chartData.committees.map((shardInfo) => {
+    const mappedTitles = chartData.committees.map((shardInfo: CommitteeShardInfo) => {
       return `${shardInfo.substate_address_range.start.slice(0, 6)}... - ${shardInfo.substate_address_range.end.slice(
         0,
         6,
@@ -38,25 +49,22 @@ const MyChartComponent = ({ chartData }: MyChartComponentProps) => {
     });
     setTitles(mappedTitles);
 
-    const mappedContent = chartData.committees.reverse().map((shardInfo) => {
-      const data: any = {
-        value: shardInfo.validators.length,
-        name: `${shardInfo.substate_address_range.start.slice(0, 6)}... - ${shardInfo.substate_address_range.end.slice(
-          0,
-          6,
-        )}...`,
-        committee: shardInfo.validators,
-        link: `/committees/${shardInfo.substate_address_range.start},${shardInfo.substate_address_range.end}`,
-        range: `${shardInfo.substate_address_range.start}<br />${shardInfo.substate_address_range.end}`,
-      };
-      return data;
-    });
+    const mappedContent = chartData.committees.reverse().map((shardInfo) => ({
+      value: shardInfo.validators.length,
+      name: `${shardInfo.substate_address_range.start.slice(0, 6)}... - ${shardInfo.substate_address_range.end.slice(
+        0,
+        6,
+      )}...`,
+      committee: shardInfo.validators,
+      link: `/committees/${shardInfo.substate_address_range.start},${shardInfo.substate_address_range.end}`,
+      range: `${shardInfo.substate_address_range.start}<br />${shardInfo.substate_address_range.end}`,
+    }));
     setData(mappedContent);
   }, [chartData]);
 
   console.log(titles);
 
-  const tooltipFomatter = (params: any) => {
+  const tooltipFormatter = (params: any) => {
     const { committee, link, range } = params.data;
     return `<b>Range:</b><br />${range}<br />
     <b>Bucket:</b> ${committee[0].committee_bucket} <br/>
@@ -73,7 +81,7 @@ const MyChartComponent = ({ chartData }: MyChartComponentProps) => {
       trigger: "item",
       position: "right",
       confine: true,
-      formatter: tooltipFomatter,
+      formatter: tooltipFormatter,
       enterable: true,
       backgroundColor: "#ffffffe6",
     },
@@ -107,7 +115,7 @@ const MyChartComponent = ({ chartData }: MyChartComponentProps) => {
 };
 
 interface MyChartComponentProps {
-  chartData: GetNetworkCommitteesResponse;
+  chartData: GetNetworkCommitteeResponse;
 }
 
 export default MyChartComponent;

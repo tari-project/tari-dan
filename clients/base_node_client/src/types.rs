@@ -28,7 +28,11 @@ pub struct BlockInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/base-node-client/")
+)]
 pub struct BaseLayerValidatorNode {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub public_key: PublicKey,

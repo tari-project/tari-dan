@@ -22,21 +22,14 @@
 
 import { useState } from "react";
 import { TableContainer, Table, TableHead, TableRow, TableCell, TableBody, Collapse } from "@mui/material";
-import { DataTableCell, CodeBlock, AccordionIconButton } from "../../Components/StyledComponents";
+import { DataTableCell, AccordionIconButton } from "../../Components/StyledComponents";
 import { shortenString } from "../../utils/helpers";
 import CopyToClipboard from "../../Components/CopyToClipboard";
 import { renderJson } from "../../utils/helpers";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import CodeBlockExpand from "../../Components/CodeBlock";
-
-interface Event {
-  component_address: string;
-  template_address: string;
-  topic: string;
-  tx_hash: string;
-  payload: any;
-}
+import type { Event } from "@tarilabs/typescript-bindings";
 
 function RowData({ component_address, template_address, topic, tx_hash, payload }: Event, index: number) {
   const [open, setOpen] = useState(false);
@@ -56,10 +49,12 @@ function RowData({ component_address, template_address, topic, tx_hash, payload 
           </AccordionIconButton>
         </DataTableCell>
         <DataTableCell>{topic}</DataTableCell>
-        <DataTableCell>
-          {shortenString(component_address)}
-          <CopyToClipboard copy={component_address} />
-        </DataTableCell>
+        {component_address && (
+          <DataTableCell>
+            {shortenString(component_address)}
+            <CopyToClipboard copy={component_address} />
+          </DataTableCell>
+        )}
         <DataTableCell>
           {shortenString(template_address)}
           <CopyToClipboard copy={template_address} />

@@ -63,16 +63,6 @@ const renderJson = (json: any) => {
   }
 };
 
-function removeTagged(obj: any) {
-  if (obj === undefined) {
-    return "undefined";
-  }
-  if (obj["@@TAGGED@@"] !== undefined) {
-    return obj["@@TAGGED@@"][1];
-  }
-  return obj;
-}
-
 function fromHexString(hexString: string) {
   let res = [];
   for (let i = 0; i < hexString.length; i += 2) {
@@ -87,10 +77,6 @@ function shortenString(string: string, start: number = 8, end: number = 8) {
 
 function emptyRows(page: number, rowsPerPage: number, array: any[]) {
   return page > 0 ? Math.max(0, (1 + page) * rowsPerPage - array.length) : 0;
-}
-
-function handleChangePage(event: unknown, newPage: number, setPage: React.Dispatch<React.SetStateAction<number>>) {
-  setPage(newPage);
 }
 
 function handleChangeRowsPerPage(
@@ -137,11 +123,9 @@ function displayDuration(duration: Duration) {
 export {
   emptyRows,
   fromHexString,
-  handleChangePage,
   handleChangeRowsPerPage,
   primitiveDateTimeToDate,
   primitiveDateTimeToSecs,
-  removeTagged,
   renderJson,
   shortenString,
   displayDuration,

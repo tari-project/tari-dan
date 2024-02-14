@@ -21,14 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { Chip, Avatar } from "@mui/material";
-import {
-  IoCheckmarkOutline,
-  IoDiamondOutline,
-  IoReload,
-  IoHourglassOutline,
-  IoCloseOutline,
-  IoBandageOutline,
-} from "react-icons/io5";
+import { IoCheckmarkOutline, IoHourglassOutline, IoCloseOutline, IoBandageOutline } from "react-icons/io5";
 
 interface StatusChipProps {
   status: "Commit" | "Abort" | "Loading" | "Dummy";
