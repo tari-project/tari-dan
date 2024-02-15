@@ -12,8 +12,10 @@ use ts_rs::TS;
 use crate::{shard::Shard, SubstateAddress};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Committee<TAddr> {
     // TODO: not pub
+    #[cfg_attr(feature = "ts", ts(type = "Array<[string, string]>"))]
     pub members: Vec<(TAddr, PublicKey)>,
 }
 

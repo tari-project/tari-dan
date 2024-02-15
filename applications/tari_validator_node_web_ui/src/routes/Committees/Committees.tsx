@@ -31,7 +31,8 @@ import TableRow from "@mui/material/TableRow";
 import TablePagination from "@mui/material/TablePagination";
 import { Typography } from "@mui/material";
 import CommitteesWaterfall from "./CommitteesWaterfall";
-import { CommitteeShardInfo } from "../../utils/interfaces";
+import { emptyRows } from "../../utils/helpers";
+import type { CommitteeShardInfo } from "@tarilabs/typescript-bindings/validator-node-client";
 
 function Committees({ committees, peerId }: { committees: CommitteeShardInfo[] | null; peerId: string }) {
   const [page, setPage] = useState(0);
@@ -41,7 +42,7 @@ function Committees({ committees, peerId }: { committees: CommitteeShardInfo[] |
     return <Typography>Committees are loading</Typography>;
   }
 
-  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - committees.length) : 0;
+  const emptyRowsCnt = emptyRows(page, rowsPerPage, committees);
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -73,10 +74,10 @@ function Committees({ committees, peerId }: { committees: CommitteeShardInfo[] |
                 peerId={peerId}
               />
             ))}
-            {emptyRows > 0 && (
+            {emptyRowsCnt > 0 && (
               <TableRow
                 style={{
-                  height: 67 * emptyRows,
+                  height: 67 * emptyRowsCnt,
                 }}
               >
                 <TableCell colSpan={2} />

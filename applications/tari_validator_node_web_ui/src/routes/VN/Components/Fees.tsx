@@ -36,29 +36,31 @@ function Fees() {
   useEffect(() => {
     if (epoch !== undefined && identity !== undefined) {
       // console.log(identity)
-      getFees(0, epoch.current_epoch, identity.public_key).then((resp) => {
-        let min_epoch = epoch.current_epoch;
-        let max_epoch = 0;
-        let total_fees: { [epoch: number]: number } = {};
-        let fees_due: { [epoch: number]: number } = {};
-        for (let fees of resp.fees) {
-          min_epoch = Math.min(min_epoch, fees.epoch);
-          max_epoch = Math.max(max_epoch, fees.epoch);
-          if (!(fees.epoch in total_fees)) {
-            total_fees[fees.epoch] = fees.total_transaction_fee;
-            fees_due[fees.epoch] = fees.total_fee_due;
-          } else {
-            total_fees[fees.epoch] += fees.total_transaction_fee;
-            fees_due[fees.epoch] += fees.total_fee_due;
+      getFees({ epoch_range: { start: 0, end: epoch.current_epoch }, validator_public_key: identity.public_key }).then(
+        (resp) => {
+          let min_epoch = epoch.current_epoch;
+          let max_epoch = 0;
+          let total_fees: { [epoch: number]: number } = {};
+          let fees_due: { [epoch: number]: number } = {};
+          for (let fees of resp.fees) {
+            min_epoch = Math.min(min_epoch, fees.epoch);
+            max_epoch = Math.max(max_epoch, fees.epoch);
+            if (!(fees.epoch in total_fees)) {
+              total_fees[fees.epoch] = fees.total_transaction_fee;
+              fees_due[fees.epoch] = fees.total_fee_due;
+            } else {
+              total_fees[fees.epoch] += fees.total_transaction_fee;
+              fees_due[fees.epoch] += fees.total_fee_due;
+            }
           }
-        }
-        setMinEpoch(min_epoch);
-        setMaxEpoch(max_epoch);
-        setTotalFeesPerEpoch(
-          Array.from({ length: max_epoch - min_epoch + 1 }, (_, i) => total_fees[i + min_epoch] || 0),
-        );
-        setDueFeesPerEpoch(Array.from({ length: max_epoch - min_epoch + 1 }, (_, i) => fees_due[i + min_epoch] || 0));
-      });
+          setMinEpoch(min_epoch);
+          setMaxEpoch(max_epoch);
+          setTotalFeesPerEpoch(
+            Array.from({ length: max_epoch - min_epoch + 1 }, (_, i) => total_fees[i + min_epoch] || 0),
+          );
+          setDueFeesPerEpoch(Array.from({ length: max_epoch - min_epoch + 1 }, (_, i) => fees_due[i + min_epoch] || 0));
+        },
+      );
     }
   }, [identity, epoch]);
 

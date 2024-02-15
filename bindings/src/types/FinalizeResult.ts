@@ -6,7 +6,7 @@ import type { LogEntry } from "./LogEntry";
 import type { TransactionResult } from "./TransactionResult";
 
 export interface FinalizeResult {
-  transaction_hash: string;
+  transaction_hash: Uint8Array;
   events: Array<Event>;
   logs: Array<LogEntry>;
   execution_results: Array<InstructionResult>;

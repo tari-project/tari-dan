@@ -40,7 +40,6 @@ import Container from "@mui/material/Container";
 import Breadcrumbs from "../Components/Breadcrumbs";
 import { breadcrumbRoutes } from "../App";
 import Grid from "@mui/material/Grid";
-import Switch from "@mui/material/Switch";
 
 const drawerWidth = 300;
 

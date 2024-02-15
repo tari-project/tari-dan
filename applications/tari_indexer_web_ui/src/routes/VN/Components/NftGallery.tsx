@@ -21,25 +21,10 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from "react";
-import { getNonFungibles, getNonFungibleCount, getNonFungibleCollections } from "../../../utils/json_rpc";
-import { Form, useParams } from "react-router-dom";
-import { renderJson } from "../../../utils/helpers";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
-import { DataTableCell, CodeBlock, AccordionIconButton, BoxHeading2 } from "../../../Components/StyledComponents";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
-import Collapse from "@mui/material/Collapse";
-import TablePagination from "@mui/material/TablePagination";
-import Typography from "@mui/material/Typography";
-import { Button, ImageList, ImageListItem, ImageListItemBar, TextField } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import { ConfirmDialog } from "../../../Components/AlertDialog";
-import { NonFungibleSubstate } from "tari-bindings";
+import { getNonFungibles } from "../../../utils/json_rpc";
+import { useParams } from "react-router-dom";
+import { ImageList, ImageListItem, ImageListItemBar } from "@mui/material";
+import type { NonFungibleSubstate } from "@tarilabs/typescript-bindings/tari-indexer-client";
 
 interface IImageData {
   img: string;
@@ -61,7 +46,7 @@ function NftGallery() {
           if (!("NonFungible" in nft.substate.substate)) {
             return;
           }
-          let nft_data = nft.substate.substate.NonFungible?.data;
+          // let nft_data = nft.substate.substate.NonFungible?.data;
           // Was this is a work in progress? There was no image_url coming from the jrpc before this change.
           // TODO: make this work
           // let { image_url, name } = nft_data;

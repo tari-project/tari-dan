@@ -29,11 +29,12 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import { IoArrowDownCircle, IoArrowUpCircle } from "react-icons/io5";
 import CodeBlockDialog from "../../Components/CodeBlock";
+import type { SubstateRecord } from "@tarilabs/typescript-bindings";
 
-function RowData({ info, state }: any, index: number) {
+function RowData({ info, state }: { info: SubstateRecord; state: string }, index: number) {
   const [open, setOpen] = useState(false);
-  const itemKey = Object.keys(info.address)[0];
-  const itemValue = Object.values(info.address)[0];
+  const itemKey = Object.keys(info.substate_id)[0];
+  const itemValue = Object.values(info.substate_id)[0];
   return (
     <>
       <TableRow key={`${index}-1`}>
@@ -82,7 +83,7 @@ function RowData({ info, state }: any, index: number) {
   );
 }
 
-export default function Substates({ upData, downData }: { upData: any; downData: any }) {
+export default function Substates({ upData, downData }: { upData: SubstateRecord[]; downData: SubstateRecord[] }) {
   // const down = data.Accept.down_substates;
   const up = upData;
   const down = downData;
@@ -90,10 +91,10 @@ export default function Substates({ upData, downData }: { upData: any; downData:
     <TableContainer>
       <Table>
         <TableBody>
-          {up.map((item: any, index: number) => {
+          {up.map((item: SubstateRecord, index: number) => {
             return <RowData info={item} state="Up" key={index} />;
           })}
-          {down.map((item: any, index: number) => {
+          {down.map((item: SubstateRecord, index: number) => {
             return <RowData info={item} state="Down" key={index} />;
           })}
         </TableBody>

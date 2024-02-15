@@ -48,8 +48,6 @@ interface ITableAddresses {
 type ColumnKey = keyof ITableAddresses;
 
 function RowData({ id, address, count }: { id: string; address: string; count: number }) {
-  const [open1, setOpen1] = useState(false);
-  const [data, setData] = useState<string | null>(null);
   let navigate = useNavigate();
   return (
     <>

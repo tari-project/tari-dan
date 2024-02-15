@@ -31,18 +31,20 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import TablePagination from "@mui/material/TablePagination";
 import { DataTableCell } from "../../../Components/StyledComponents";
+import { emptyRows } from "../../../utils/helpers";
+import type { BaseLayerValidatorNode } from "@tarilabs/typescript-bindings/base-node-client";
 
 function AllVNs({ epoch }: { epoch: number }) {
-  const [vns, setVns] = useState([]);
+  const [vns, setVns] = useState<BaseLayerValidatorNode[]>([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   useEffect(() => {
-    getAllVns(epoch).then((response) => {
+    getAllVns({ epoch }).then((response) => {
       setVns(response.vns);
     });
   }, [epoch]);
 
-  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - vns.length) : 0;
+  const emptyRowsCnt = emptyRows(page, rowsPerPage, vns);
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -71,10 +73,10 @@ function AllVNs({ epoch }: { epoch: number }) {
               <DataTableCell>{shard_key}</DataTableCell>
             </TableRow>
           ))}
-          {emptyRows > 0 && (
+          {emptyRowsCnt > 0 && (
             <TableRow
               style={{
-                height: 67 * emptyRows,
+                height: 67 * emptyRowsCnt,
               }}
             >
               <TableCell colSpan={2} />

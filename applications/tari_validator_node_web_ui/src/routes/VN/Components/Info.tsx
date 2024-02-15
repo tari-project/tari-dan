@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState } from "react";
-import { IEpoch, IIdentity } from "../../../utils/interfaces";
 import { registerValidatorNode } from "../../../utils/json_rpc";
 import "./Info.css";
 import Table from "@mui/material/Table";
@@ -32,20 +31,27 @@ import TableRow from "@mui/material/TableRow";
 import Button from "@mui/material/Button";
 import { DataTableCell } from "../../../Components/StyledComponents";
 import { TextField } from "@mui/material";
+import type {
+  GetEpochManagerStatsResponse,
+  GetIdentityResponse,
+} from "@tarilabs/typescript-bindings/validator-node-client";
 
-function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentity; shardKey: string | null }) {
+function Info({
+  epoch,
+  identity,
+  shardKey,
+}: {
+  epoch: GetEpochManagerStatsResponse;
+  identity: GetIdentityResponse;
+  shardKey: string | null;
+}) {
   const [registering, setRegistering] = useState(false);
   const [registerMessage, setRegisterMessage] = useState("");
   const [feeClaimPublicKey, setRegisterFeeClaimPublicKey] = useState("");
   const register = () => {
     setRegistering(true);
-    registerValidatorNode(feeClaimPublicKey).then((response) => {
-      if (response.message) {
-        setRegistering(false);
-        setRegisterMessage(response.message);
-      } else {
-        setRegisterMessage(`Registration successful, the TxId ${response.transaction_id}`);
-      }
+    registerValidatorNode({ fee_claim_public_key: feeClaimPublicKey }).then((response) => {
+      setRegisterMessage(`Registration successful, the TxId ${response.transaction_id}`);
     });
   };
   const renderShardKey = () => {
@@ -119,7 +125,7 @@ function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentit
               <DataTableCell>
                 {epoch.committee_shard ? (
                   <>
-                    Bucket: {epoch.committee_shard.bucket}
+                    Bucket: {epoch.committee_shard.shard}
                     <br />
                     Num committees: {epoch.committee_shard.num_committees}
                     <br />

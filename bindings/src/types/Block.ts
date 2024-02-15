@@ -3,6 +3,7 @@ import type { Command } from "./Command";
 import type { Epoch } from "./Epoch";
 import type { NodeHeight } from "./NodeHeight";
 import type { QuorumCertificate } from "./QuorumCertificate";
+import type { Shard } from "./Shard";
 
 export interface Block {
   id: string;
@@ -18,7 +19,7 @@ export interface Block {
   is_dummy: boolean;
   is_processed: boolean;
   is_committed: boolean;
-  foreign_indexes: Array<{ shard: string; counter: number }>;
-  stored_at: string | null;
+  foreign_indexes: Record<Shard, bigint>;
+  stored_at: Array<number> | null;
   signature: { public_nonce: string; signature: string } | null;
 }

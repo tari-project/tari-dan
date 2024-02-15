@@ -7,4 +7,4 @@ export type RuleRequirement =
   | { Resource: ResourceAddress }
   | { NonFungibleAddress: NonFungibleAddress }
   | { ScopedToComponent: ComponentAddress }
-  | { ScopedToTemplate: Array<number> };
+  | { ScopedToTemplate: Uint8Array };

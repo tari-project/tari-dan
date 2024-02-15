@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from "react";
-import { toHexString } from "./helpers";
 import { Link } from "react-router-dom";
 import { renderJson } from "../../../utils/helpers";
 import Table from "@mui/material/Table";

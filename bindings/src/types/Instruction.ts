@@ -7,7 +7,7 @@ import type { ConfidentialOutput } from "./ConfidentialOutput";
 import type { LogLevel } from "./LogLevel";
 
 export type Instruction =
-  | { CallFunction: { template_address: string; function: string; args: Array<Arg> } }
+  | { CallFunction: { template_address: Uint8Array; function: string; args: Array<Arg> } }
   | { CallMethod: { component_address: ComponentAddress; method: string; args: Array<string> } }
   | { PutLastInstructionOutputOnWorkspace: { key: Array<number> } }
   | { EmitLog: { level: LogLevel; message: string } }

@@ -22,7 +22,7 @@
 
 import { TableContainer, Table, TableHead, TableRow, TableCell, TableBody } from "@mui/material";
 import { DataTableCell } from "../../Components/StyledComponents";
-import { LogEntry } from "@tarilabs/typescript-bindings";
+import type { LogEntry } from "@tarilabs/typescript-bindings";
 
 export default function Logs({ data }: { data: Array<LogEntry> }) {
   return (
@@ -35,7 +35,7 @@ export default function Logs({ data }: { data: Array<LogEntry> }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {data.map(({ level, message, timestamp }: LogEntry, index: number) => {
+          {data.map(({ level, message }: LogEntry, index: number) => {
             return (
               <TableRow key={index}>
                 <DataTableCell>{level}</DataTableCell>

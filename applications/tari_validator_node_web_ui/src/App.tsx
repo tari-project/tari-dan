@@ -34,22 +34,25 @@ import TemplateFunctions from "./routes/VN/Components/TemplateFunctions";
 import Layout from "./theme/LayoutMain";
 import CommitteeMembers from "./routes/Committees/CommitteeMembers";
 import { createContext, useState, useEffect } from "react";
-import { IEpoch, IIdentity } from "./utils/interfaces";
-import { getEpochManagerStats, getIdentity, getRecentTransactions, getShardKey } from "./utils/json_rpc";
+import { getEpochManagerStats, getIdentity, getShardKey } from "./utils/json_rpc";
 import TransactionDetails from "./routes/Transactions/TransactionDetails";
 import BlockDetails from "./routes/Blocks/BlockDetails";
+import type {
+  GetEpochManagerStatsResponse,
+  GetIdentityResponse,
+} from "@tarilabs/typescript-bindings/validator-node-client";
 
 interface IContext {
-  epoch: IEpoch | undefined;
-  identity: IIdentity | undefined;
-  shardKey: string | null;
-  error: string;
+  epoch?: GetEpochManagerStatsResponse;
+  identity?: GetIdentityResponse;
+  shardKey?: string | null;
+  error?: string;
 }
 
 export const VNContext = createContext<IContext>({
   epoch: undefined,
   identity: undefined,
-  shardKey: null,
+  shardKey: undefined,
   error: "",
 });
 
@@ -122,15 +125,16 @@ export const breadcrumbRoutes = [
 ];
 
 export default function App() {
-  const [epoch, setEpoch] = useState<IEpoch | undefined>(undefined);
-  const [identity, setIdentity] = useState<IIdentity | undefined>(undefined);
+  const [epoch, setEpoch] = useState<GetEpochManagerStatsResponse | undefined>(undefined);
+  const [identity, setIdentity] = useState<GetIdentityResponse | undefined>(undefined);
   const [shardKey, setShardKey] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   // Refresh every 2 minutes
-  const refreshEpoch = (epoch: IEpoch | undefined) => {
+  const refreshEpoch = (epoch: GetEpochManagerStatsResponse | undefined) => {
     getEpochManagerStats()
       .then((response) => {
+        console.log("getEpochManagerStats", response);
         if (response.current_epoch !== epoch?.current_epoch) {
           setEpoch(response);
         }
@@ -141,12 +145,7 @@ export default function App() {
       });
   };
   useEffect(() => {
-    const id = window.setInterval(
-      () => {
-        refreshEpoch(epoch);
-      },
-      2 * 60 * 1000,
-    );
+    const id = window.setInterval(() => refreshEpoch(epoch), 2 * 60 * 1000);
     return () => {
       window.clearInterval(id);
     };
@@ -167,7 +166,7 @@ export default function App() {
   useEffect(() => {
     if (epoch !== undefined && identity !== undefined) {
       // The *10 is from the hardcoded constant in VN.
-      getShardKey(epoch.current_epoch * 10, identity.public_key).then((response) => {
+      getShardKey({ height: epoch.current_epoch * 10, public_key: identity.public_key }).then((response) => {
         setShardKey(response.shard_key);
       });
     }

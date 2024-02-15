@@ -39,13 +39,8 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Loading from "../../Components/Loading";
 import Error from "../../Components/Error";
-import {
-  FinalizeResult,
-  RejectReason,
-  TransactionResult,
-  getRejectReasonFromTransactionResult,
-  rejectReasonToString,
-} from "@tarilabs/typescript-bindings";
+import type { FinalizeResult, RejectReason, TransactionResult } from "@tarilabs/typescript-bindings";
+import { getRejectReasonFromTransactionResult, rejectReasonToString } from "@tarilabs/typescript-bindings";
 
 export default function TransactionDetails() {
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);

@@ -9,12 +9,16 @@ use std::{
 };
 
 use log::*;
+#[cfg(feature = "ts")]
+use serde::Deserialize;
 use serde::Serialize;
 use tari_dan_common_types::{
     committee::CommitteeShard,
     optional::{IsNotFoundError, Optional},
 };
 use tari_transaction::TransactionId;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     consensus_models::{
@@ -35,6 +39,11 @@ use crate::{
 const _LOG_TARGET: &str = "tari::dan::storage::transaction_pool";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS, Deserialize),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub enum TransactionPoolStage {
     /// Transaction has just come in and has never been proposed
     New,
@@ -225,6 +234,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TransactionPoolRecord {
     transaction: TransactionAtom,
     stage: TransactionPoolStage,

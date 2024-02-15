@@ -89,10 +89,9 @@ pub struct Block {
     /// Flag that indicates that the block has been committed.
     is_committed: bool,
     /// Counter for each foreign shard for reliable broadcast.
-    #[cfg_attr(feature = "ts", ts(type = "Array<{shard: string, counter: number}>"))]
     foreign_indexes: IndexMap<Shard, u64>,
     /// Timestamp when was this stored.
-    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>| null"))]
     stored_at: Option<PrimitiveDateTime>,
     /// Signature of block by the proposer.
     #[cfg_attr(feature = "ts", ts(type = "{public_nonce : string, signature: string} | null"))]

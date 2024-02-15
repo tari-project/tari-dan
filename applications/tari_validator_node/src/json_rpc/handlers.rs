@@ -51,16 +51,22 @@ use tari_validator_node_client::{
         CommitteeShardInfo,
         ConnectionDirection,
         DryRunTransactionFinalizeResult,
+        GetAllVnsRequest,
+        GetAllVnsResponse,
         GetBlockRequest,
         GetBlockResponse,
         GetBlocksCountResponse,
         GetCommitteeRequest,
+        GetCommitteeResponse,
+        GetCommsStatsResponse,
         GetConnectionsResponse,
         GetEpochManagerStatsResponse,
         GetIdentityResponse,
+        GetMempoolStatsResponse,
         GetNetworkCommitteeResponse,
         GetRecentTransactionsResponse,
-        GetShardKey,
+        GetShardKeyRequest,
+        GetShardKeyResponse,
         GetStateRequest,
         GetStateResponse,
         GetSubstateRequest,
@@ -573,8 +579,7 @@ impl JsonRpcHandlers {
                 ),
             )
         })?;
-        let response = json!({ "size": size });
-        Ok(JsonRpcResponse::success(answer_id, response))
+        Ok(JsonRpcResponse::success(answer_id, GetMempoolStatsResponse { size }))
     }
 
     pub async fn get_epoch_manager_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -676,20 +681,20 @@ impl JsonRpcHandlers {
             .map_err(internal_error(answer_id))?;
 
         let status = if peers.is_empty() { "Offline" } else { "Online" };
-        let response = json!({ "connection_status": status });
-        Ok(JsonRpcResponse::success(answer_id, response))
+        Ok(JsonRpcResponse::success(answer_id, GetCommsStatsResponse {
+            connection_status: status.to_string(),
+        }))
     }
 
     pub async fn get_shard_key(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let request = value.parse_params::<GetShardKey>()?;
+        let request = value.parse_params::<GetShardKeyRequest>()?;
         if let Ok(shard_key) = self
             .base_node_client()
             .get_shard_key(request.height, &request.public_key)
             .await
         {
-            let response = json!({ "shard_key": shard_key });
-            Ok(JsonRpcResponse::success(answer_id, response))
+            Ok(JsonRpcResponse::success(answer_id, GetShardKeyResponse { shard_key }))
         } else {
             Err(JsonRpcResponse::error(
                 answer_id,
@@ -710,8 +715,7 @@ impl JsonRpcHandlers {
             .get_committee(request.epoch, request.substate_address)
             .await
         {
-            let response = json!({ "committee": committee });
-            Ok(JsonRpcResponse::success(answer_id, response))
+            Ok(JsonRpcResponse::success(answer_id, GetCommitteeResponse { committee }))
         } else {
             Err(JsonRpcResponse::error(
                 answer_id,
@@ -774,10 +778,9 @@ impl JsonRpcHandlers {
 
     pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let epoch: u64 = value.parse_params()?;
-        if let Ok(vns) = self.base_node_client().get_validator_nodes(epoch * 10).await {
-            let response = json!({ "vns": vns });
-            Ok(JsonRpcResponse::success(answer_id, response))
+        let GetAllVnsRequest { epoch } = value.parse_params::<GetAllVnsRequest>()?;
+        if let Ok(vns) = self.base_node_client().get_validator_nodes(epoch.as_u64() * 10).await {
+            Ok(JsonRpcResponse::success(answer_id, GetAllVnsResponse { vns }))
         } else {
             Err(JsonRpcResponse::error(
                 answer_id,

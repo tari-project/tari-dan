@@ -22,7 +22,7 @@
 
 import { Mutex } from "async-mutex";
 import { json } from "react-router-dom";
-import {
+import type {
   AccountGetDefaultRequest,
   AccountGetRequest,
   AccountGetResponse,
@@ -94,7 +94,7 @@ import {
   TransferResponse,
   WebRtcStartRequest,
   WebRtcStartResponse,
-} from "@tarilabs/typescript-bindings";
+} from "@tarilabs/typescript-bindings/wallet-daemon-client";
 
 let token: String | null = null;
 let json_id = 0;

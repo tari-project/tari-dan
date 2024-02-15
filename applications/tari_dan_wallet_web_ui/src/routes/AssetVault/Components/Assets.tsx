@@ -37,7 +37,7 @@ import { DataTableCell } from "../../../Components/StyledComponents";
 import { useAccountNFTsList, useAccountsGetBalances } from "../../../api/hooks/useAccounts";
 import useAccountStore from "../../../store/accountStore";
 import { shortenString } from "../../../utils/helpers";
-import { AccountNftInfo, BalanceEntry } from "@tarilabs/typescript-bindings";
+import type { AccountNftInfo, BalanceEntry } from "@tarilabs/typescript-bindings/wallet-daemon-client";
 
 interface TabPanelProps {
   children?: React.ReactNode;
