@@ -23,7 +23,7 @@ use tari_engine_types::{
 use tari_template_lib::{crypto::RistrettoPublicKeyBytes, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 
-const _LOG_TARGET: &str = "tari::dan::transaction_executor";
+const LOG_TARGET: &str = "tari::dan::transaction_executor";
 
 #[derive(Debug, Clone)]
 pub struct TariDanTransactionProcessor<TTemplateProvider> {
@@ -51,6 +51,11 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         state_store: MemoryStateStore,
         virtual_substates: VirtualSubstates,
     ) -> Result<ExecutedTransaction, Self::Error> {
+        info!(
+            target: LOG_TARGET,
+            "Transaction {} executing",
+            transaction.id(),
+        );
         let timer = Instant::now();
         // Include ownership token for the signers of this in the auth scope
         let owner_token = get_auth_token(transaction.signer_public_key());

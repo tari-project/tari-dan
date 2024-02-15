@@ -354,7 +354,6 @@ where TConsensusSpec: ConsensusSpec
         let mut locked_outputs = HashSet::new();
 
         let executor: BlockTransactionExecutor<TConsensusSpec> = BlockTransactionExecutor::new(
-            self.store.clone(),
             self.epoch_manager.clone(),
             self.transaction_executor.clone(),
         );
@@ -417,15 +416,35 @@ where TConsensusSpec: ConsensusSpec
 
                                 // Re-execute the transaction if one or more input versions are None
                                 let executed = t.get_transaction(tx.deref_mut())?;
-                                let execution_result = executor.execute(executed.transaction().clone())?;
-                                if let Some(res) = execution_result {
-                                    info!(
-                                        target: LOG_TARGET,
-                                        "Transaction {} reexecuted sucessfully for block {}. Resulting outputs: {:?}",
-                                        transaction.id(),
-                                        block.id(),
-                                        res.resulting_outputs()
-                                    );
+                                let execution_result = executor.execute(executed.transaction().clone(), tx);
+                                match execution_result {
+                                    Ok(res) => {
+                                        if let Some(res) = res {
+                                            info!(
+                                                target: LOG_TARGET,
+                                                "Transaction {} reexecuted sucessfully for block {}. Resulting outputs: {:?}",
+                                                transaction.id(),
+                                                block.id(),
+                                                res.resulting_outputs()
+                                            );
+                                        } else {
+                                            info!(
+                                                target: LOG_TARGET,
+                                                "Transaction {} reexecuted sucessfully for block {}. No result",
+                                                transaction.id(),
+                                                block.id(),
+                                            );
+                                        }
+                                    },
+                                    Err(e) => {
+                                        error!(
+                                            target: LOG_TARGET,
+                                            "Transaction {} reexecution error for block {}: {}",
+                                            transaction.id(),
+                                            block.id(),
+                                            e
+                                        );
+                                    },
                                 }
 
                                 // Lock all inputs for the transaction as part of Prepare
