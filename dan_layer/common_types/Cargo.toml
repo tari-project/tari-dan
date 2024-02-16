@@ -14,10 +14,6 @@ tari_engine_types = { workspace = true }
 tari_hash_domains = { workspace = true }
 tari_bor = { workspace = true, default-features = true }
 tari_mmr = { workspace = true }
-tari_core = { workspace = true, default-features = false, features = [
-  "transactions",
-  "base_node_proto",
-] }
 
 libp2p-identity = { workspace = true, features = [
   "sr25519",
