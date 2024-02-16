@@ -267,26 +267,3 @@ overflow-checks = true
 #minotari_node = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #tari_metrics = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 
-# Make a copy of this code, uncomment and replace account and my-branch with the name of your fork and the branch you want to temporarily use
-[patch."https://github.com/tari-project/tari.git"]
-minotari_app_grpc = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-minotari_wallet_grpc_client= { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-minotari_node_grpc_client = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_common = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_common_types = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_comms = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_comms_rpc_macros = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_core = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_key_manager = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_mmr = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_p2p = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_shutdown = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_storage = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_script = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-minotari_wallet = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-minotari_console_wallet = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_service_framework = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_comms_dht = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-minotari_app_utilities = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-minotari_node = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
-tari_metrics = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
