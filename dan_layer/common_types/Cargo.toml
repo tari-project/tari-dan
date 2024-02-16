@@ -30,9 +30,6 @@ serde = { workspace = true, default-features = true }
 ruint = { workspace = true }
 ts-rs = { workspace = true, optional = true }
 
-[build-dependencies]
-tari_common = { workspace = true, features = ["build"] }
-
 [package.metadata.cargo-machete]
 ignored = ["prost", "prost-types"] # false positive, used in OUT_DIR structs
 
