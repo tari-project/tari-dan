@@ -20,8 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_wallet_daemon_client::{types::WebRtcStartRequest, WalletDaemonClient};
+use url::Url;
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum WebRtcSubcommand {
@@ -31,9 +33,11 @@ pub enum WebRtcSubcommand {
 
 #[derive(Debug, Args, Clone)]
 pub struct StartArgs {
-    pub signaling_server_token: String,
-    pub webrtc_permissions_token: String,
-    pub token_name: String,
+    #[clap(long, alias = "url")]
+    pub signaling_server_url: Option<Url>,
+    pub signaling_server_token: Option<String>,
+    pub webrtc_permissions_token: Option<serde_json::Value>,
+    pub token_name: Option<String>,
 }
 
 impl WebRtcSubcommand {
@@ -41,12 +45,23 @@ impl WebRtcSubcommand {
         #[allow(clippy::enum_glob_use)]
         use WebRtcSubcommand::*;
         match self {
-            Start(args) => {
+            Start(mut args) => {
+                if let Some(url) = args.signaling_server_url {
+                    let mut parts = url.path_segments().ok_or_else(|| anyhow!("Malformed Tari URL"))?;
+                    args.signaling_server_token =
+                        Some(parts.next().ok_or_else(|| anyhow!("Malformed Tari URL"))?.to_string());
+
+                    let token = parts.next().ok_or_else(|| anyhow!("Malformed Tari URL"))?;
+                    let token = urlencoding::decode(token)?;
+                    args.webrtc_permissions_token = Some(serde_json::from_str(token.as_ref())?);
+                    args.token_name = Some(parts.next().ok_or_else(|| anyhow!("Malformed Tari URL"))?.to_string());
+                }
+
                 let _resp = client
                     .webrtc_start(WebRtcStartRequest {
-                        signaling_server_token: args.signaling_server_token,
-                        permissions: args.webrtc_permissions_token,
-                        name: args.token_name,
+                        signaling_server_token: args.signaling_server_token.unwrap(),
+                        permissions: args.webrtc_permissions_token.unwrap(),
+                        name: args.token_name.unwrap(),
                     })
                     .await?;
             },

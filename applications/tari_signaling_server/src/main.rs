@@ -5,7 +5,7 @@ mod cli;
 mod data;
 mod jrpc_server;
 
-use std::fs;
+use std::{fs, time::Duration};
 
 use cli::Cli;
 use data::Data;
@@ -29,7 +29,8 @@ async fn main() -> Result<(), anyhow::Error> {
         return Err(e.into());
     }
 
-    let data = Data::new();
+    // TODO: configure expiration
+    let data = Data::new().with_expiration(Duration::from_secs(24 * 60 * 60));
 
     let address = cli.listen_address();
     jrpc_server::listen(cli.base_dir(), address, data, shutdown_signal).await?;

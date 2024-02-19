@@ -2,6 +2,6 @@
 
 export interface WebRtcStartRequest {
   signaling_server_token: string;
-  permissions: string;
+  permissions: object;
   name: string;
 }

@@ -99,6 +99,7 @@ pub struct GetAddressesResponse {
 )]
 pub struct SubmitTransactionRequest {
     pub transaction: Transaction,
+    #[serde(default)]
     pub required_substates: Vec<SubstateRequirement>,
     pub is_dry_run: bool,
 }
@@ -428,6 +429,7 @@ pub struct GetConnectionsResponse {
 )]
 pub struct GetTemplateDefinitionRequest {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[serde(with = "serde_tools::string")]
     pub template_address: TemplateAddress,
 }
 

@@ -7,7 +7,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use jsonwebtoken::{decode, encode, errors, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{errors, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use tari_engine_types::substate::SubstateId;
 use tari_template_lib::prelude::{ComponentAddress, ResourceAddress};
@@ -195,7 +195,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
             permissions,
             exp: valid_till.duration_since(UNIX_EPOCH).unwrap().as_secs() as usize,
         };
-        let auth_token = encode(
+        let auth_token = jsonwebtoken::encode(
             &Header::default(),
             &my_claims,
             &EncodingKey::from_secret(self.auth_secret_key.as_ref()),
@@ -204,7 +204,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
     }
 
     fn check_auth_token(&self, auth_token: &str) -> Result<AuthClaims, JwtApiError> {
-        let auth_token_data = decode::<AuthClaims>(
+        let auth_token_data = jsonwebtoken::decode::<AuthClaims>(
             auth_token,
             &DecodingKey::from_secret(self.auth_secret_key.as_ref()),
             &Validation::default(),
@@ -213,7 +213,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
     }
 
     fn get_token_claims(&self, token: &str) -> Result<Claims, JwtApiError> {
-        let claims = decode::<Claims>(
+        let claims = jsonwebtoken::decode::<Claims>(
             token,
             &DecodingKey::from_secret(self.jwt_secret_key.as_ref()),
             &Validation::default(),
@@ -234,7 +234,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
             permissions: auth_claims.permissions,
             exp: auth_claims.exp,
         };
-        let permissions_token = encode(
+        let permissions_token = jsonwebtoken::encode(
             &Header::default(),
             &my_claims,
             &EncodingKey::from_secret(self.jwt_secret_key.as_ref()),

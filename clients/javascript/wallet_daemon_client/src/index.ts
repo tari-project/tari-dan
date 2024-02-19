@@ -9,20 +9,30 @@ import {
     AccountGetResponse,
     AccountsGetBalancesRequest,
     AccountsGetBalancesResponse,
+    SubstatesGetRequest,
+    SubstatesGetResponse,
+    SubstatesListRequest,
+    SubstatesListResponse,
+    TransactionSubmitRequest,
+    TransactionSubmitResponse,
+    TransactionGetResultRequest,
+    TransactionGetResultResponse,
+    TransactionWaitResultRequest,
+    TransactionWaitResultResponse, TemplatesGetRequest, TemplatesGetResponse,
+} from '@tarilabs/typescript-bindings/wallet-daemon-client';
+
+import {
     Arg,
     FinalizeResult,
     TemplateDef,
     FunctionDef,
     Type,
     ArgDef,
-    Instruction, SubstatesGetRequest, SubstatesGetResponse, SubstatesListRequest, SubstatesListResponse,
+    Instruction,
     SubstateType,
-    TransactionSubmitRequest,
-    TransactionSubmitResponse,
+    TransactionStatus,
     SubstateId,
-    TransactionWaitResultRequest,
-    TransactionWaitResultResponse, TemplatesGetRequest, TemplatesGetResponse,
-} from 'bindings/index';
+} from '@tarilabs/typescript-bindings/index';
 
 export type {
     AccountGetDefaultRequest,
@@ -34,8 +44,11 @@ export type {
     FunctionDef,
     Type,
     ArgDef,
+    TransactionGetResultRequest,
+    TransactionGetResultResponse,
     TemplatesGetResponse,
     TemplatesGetRequest,
+    TransactionStatus,
     SubstatesGetResponse,
     SubstatesGetRequest,
     SubstateId,
@@ -103,6 +116,9 @@ export class WalletDaemonClient {
 
     substatesList(params: SubstatesListRequest): Promise<SubstatesListResponse> {
         return this.__invokeRpc("substates.list", params);
+    }
+    getTransactionResult(params: TransactionGetResultRequest): Promise<TransactionWaitResultResponse> {
+        return this.__invokeRpc("transactions.get_result", params);
     }
 
     waitForTransactionResult(params: TransactionWaitResultRequest): Promise<TransactionWaitResultResponse> {

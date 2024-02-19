@@ -24,7 +24,6 @@ use std::{collections::HashMap, time::Duration};
 
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_wallet_sdk::{
@@ -120,7 +119,7 @@ pub struct TransactionSubmitResponse {
     pub inputs: Vec<SubstateRequirement>,
     pub result: Option<ExecuteResult>,
     #[cfg_attr(feature = "ts", ts(type = "Array<any> | null"))]
-    pub json_result: Option<Vec<Value>>,
+    pub json_result: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -191,7 +190,7 @@ pub struct TransactionGetResultResponse {
     pub status: TransactionStatus,
     pub result: Option<FinalizeResult>,
     #[cfg_attr(feature = "ts", ts(type = "Array<any> | null"))]
-    pub json_result: Option<Vec<Value>>,
+    pub json_result: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -218,7 +217,7 @@ pub struct TransactionWaitResultResponse {
     pub transaction_id: TransactionId,
     pub result: Option<FinalizeResult>,
     #[cfg_attr(feature = "ts", ts(type = "Array<any> | null"))]
-    pub json_result: Option<Vec<Value>>,
+    pub json_result: Option<Vec<serde_json::Value>>,
     pub status: TransactionStatus,
     pub final_fee: Amount,
     pub timed_out: bool,
@@ -764,7 +763,8 @@ pub struct WebRtcStart {
 )]
 pub struct WebRtcStartRequest {
     pub signaling_server_token: String,
-    pub permissions: String,
+    #[cfg_attr(feature = "ts", ts(type = "object"))]
+    pub permissions: serde_json::Value,
     pub name: String,
 }
 

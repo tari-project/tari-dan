@@ -231,6 +231,7 @@ ts-rs = { version = "7.1", features = [
     "indexmap-impl",
 ] }
 url = "2.4.1"
+urlencoding = "2.1.3"
 wasmer = "2.3.0"
 wasmer-middlewares = "2.3.0"
 webrtc = "0.9.0"
