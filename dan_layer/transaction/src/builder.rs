@@ -17,31 +17,26 @@ use tari_template_lib::{
     models::{Amount, ComponentAddress, ConfidentialWithdrawProof, ResourceAddress},
 };
 
-use crate::{signature::TransactionSignatureFields, Transaction, TransactionSignature};
+use crate::{unsigned_transaction::UnsignedTransaction, Transaction, TransactionSignature};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
-    instructions: Vec<Instruction>,
-    fee_instructions: Vec<Instruction>,
+    unsigned_transaction: UnsignedTransaction,
     signature: Option<TransactionSignature>,
-    inputs: Vec<SubstateAddress>,
-    input_refs: Vec<SubstateAddress>,
-    outputs: Vec<SubstateAddress>,
-    min_epoch: Option<Epoch>,
-    max_epoch: Option<Epoch>,
 }
 
 impl TransactionBuilder {
     pub fn new() -> Self {
         Self {
-            instructions: Vec::new(),
-            fee_instructions: Vec::new(),
+            unsigned_transaction: UnsignedTransaction::default(),
             signature: None,
-            inputs: Vec::new(),
-            input_refs: Vec::new(),
-            outputs: Vec::new(),
-            min_epoch: None,
-            max_epoch: None,
+        }
+    }
+
+    pub fn with_unsigned_transaction(self, unsigned_transaction: UnsignedTransaction) -> Self {
+        Self {
+            unsigned_transaction,
+            signature: None,
         }
     }
 
@@ -112,7 +107,7 @@ impl TransactionBuilder {
     }
 
     pub fn with_fee_instructions(mut self, instructions: Vec<Instruction>) -> Self {
-        self.fee_instructions = instructions;
+        self.unsigned_transaction.fee_instructions = instructions;
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
@@ -120,28 +115,28 @@ impl TransactionBuilder {
 
     pub fn with_fee_instructions_builder<F: FnOnce(TransactionBuilder) -> TransactionBuilder>(mut self, f: F) -> Self {
         let builder = f(TransactionBuilder::new());
-        self.fee_instructions = builder.instructions;
+        self.unsigned_transaction.fee_instructions = builder.unsigned_transaction.instructions;
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
     }
 
     pub fn add_fee_instruction(mut self, instruction: Instruction) -> Self {
-        self.fee_instructions.push(instruction);
+        self.unsigned_transaction.fee_instructions.push(instruction);
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
     }
 
     pub fn add_instruction(mut self, instruction: Instruction) -> Self {
-        self.instructions.push(instruction);
+        self.unsigned_transaction.instructions.push(instruction);
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
     }
 
     pub fn with_instructions(mut self, instructions: Vec<Instruction>) -> Self {
-        self.instructions.extend(instructions);
+        self.unsigned_transaction.instructions.extend(instructions);
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
@@ -153,22 +148,13 @@ impl TransactionBuilder {
     }
 
     pub fn sign(mut self, secret_key: &PrivateKey) -> Self {
-        let signature_fields = TransactionSignatureFields {
-            fee_instructions: self.fee_instructions.clone(),
-            instructions: self.instructions.clone(),
-            inputs: self.inputs.clone(),
-            input_refs: self.input_refs.clone(),
-            min_epoch: self.min_epoch,
-            max_epoch: self.max_epoch,
-        };
-
-        self.signature = Some(TransactionSignature::sign(secret_key, signature_fields));
+        self.signature = Some(TransactionSignature::sign(secret_key, &self.unsigned_transaction));
         self
     }
 
     /// Add an input to be consumed
     pub fn add_input(mut self, input_object: SubstateAddress) -> Self {
-        self.inputs.push(input_object);
+        self.unsigned_transaction.inputs.push(input_object);
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
@@ -183,7 +169,7 @@ impl TransactionBuilder {
     }
 
     pub fn with_inputs<I: IntoIterator<Item = SubstateAddress>>(mut self, inputs: I) -> Self {
-        self.inputs.extend(inputs);
+        self.unsigned_transaction.inputs.extend(inputs);
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
@@ -191,7 +177,7 @@ impl TransactionBuilder {
 
     /// Add an input to be used without mutation
     pub fn add_input_ref(mut self, input_object: SubstateAddress) -> Self {
-        self.input_refs.push(input_object);
+        self.unsigned_transaction.input_refs.push(input_object);
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
@@ -206,63 +192,50 @@ impl TransactionBuilder {
     }
 
     pub fn with_input_refs<I: IntoIterator<Item = SubstateAddress>>(mut self, inputs: I) -> Self {
-        self.input_refs.extend(inputs);
+        self.unsigned_transaction.input_refs.extend(inputs);
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
     }
 
-    pub fn add_output(mut self, output_object: SubstateAddress) -> Self {
-        self.outputs.push(output_object);
-        self
-    }
-
-    pub fn with_substate_outputs<I: IntoIterator<Item = (B, u32)>, B: Borrow<SubstateId>>(self, outputs: I) -> Self {
-        self.with_outputs(
-            outputs
-                .into_iter()
-                .map(|(a, v)| SubstateAddress::from_address(a.borrow(), v)),
-        )
-    }
-
-    pub fn with_outputs<I: IntoIterator<Item = SubstateAddress>>(mut self, outputs: I) -> Self {
-        self.outputs.extend(outputs);
-        self
-    }
-
-    pub fn add_output_ref(mut self, output_object: SubstateAddress) -> Self {
-        self.outputs.push(output_object);
-        self
-    }
-
     pub fn with_min_epoch(mut self, min_epoch: Option<Epoch>) -> Self {
-        self.min_epoch = min_epoch;
+        self.unsigned_transaction.min_epoch = min_epoch;
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
     }
 
     pub fn with_max_epoch(mut self, max_epoch: Option<Epoch>) -> Self {
-        self.max_epoch = max_epoch;
+        self.unsigned_transaction.max_epoch = max_epoch;
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
     }
 
-    pub fn build_as_instructions(mut self) -> Vec<Instruction> {
-        self.instructions.drain(..).collect()
+    pub fn build_unsigned_transaction(self) -> UnsignedTransaction {
+        self.unsigned_transaction
     }
 
-    pub fn build(mut self) -> Transaction {
+    pub fn build(self) -> Transaction {
+        let UnsignedTransaction {
+            fee_instructions,
+            instructions,
+            inputs,
+            input_refs,
+            filled_inputs,
+            min_epoch,
+            max_epoch,
+        } = self.unsigned_transaction;
+
         Transaction::new(
-            self.fee_instructions.drain(..).collect(),
-            self.instructions.drain(..).collect(),
-            self.signature.take().expect("not signed"),
-            self.inputs,
-            self.input_refs,
-            vec![],
-            self.min_epoch,
-            self.max_epoch,
+            fee_instructions,
+            instructions,
+            self.signature.expect("not signed"),
+            inputs,
+            input_refs,
+            filled_inputs,
+            min_epoch,
+            max_epoch,
         )
     }
 }

@@ -24,6 +24,7 @@ export * from "./src/types/NonFungibleAddress";
 export * from "./src/types/FeeSource";
 export * from "./src/types/TransactionAtom";
 export * from "./src/types/Event";
+export * from "./src/types/UnsignedTransaction";
 export * from "./src/types/NonFungibleId";
 export * from "./src/types/Resource";
 export * from "./src/types/RestrictedAccessRule";

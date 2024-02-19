@@ -1,6 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-use std::{collections::HashSet, convert::TryFrom, time::Duration};
+use std::{collections::HashSet, time::Duration};
 
 use anyhow::anyhow;
 use futures::{future, future::Either};
@@ -43,22 +43,21 @@ pub async fn handle_submit_instruction(
     token: Option<String>,
     req: CallInstructionRequest,
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
-    let mut instructions = req.instructions;
+    let mut builder = Transaction::builder().with_instructions(req.instructions);
+
     if let Some(dump_account) = req.dump_outputs_into {
-        instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
-            key: b"bucket".to_vec(),
-        });
         let AccountGetResponse {
             account: dump_account, ..
         } = accounts::handle_get(context, token.clone(), AccountGetRequest {
             name_or_address: dump_account,
         })
         .await?;
-        instructions.push(Instruction::CallMethod {
-            component_address: dump_account.address.as_component_address().unwrap(),
-            method: "deposit".to_string(),
-            args: args![Variable("bucket")],
-        });
+
+        builder = builder.put_last_instruction_output_on_workspace("bucket").call_method(
+            dump_account.address.as_component_address().unwrap(),
+            "deposit",
+            args![Variable("bucket")],
+        );
     }
     let AccountGetResponse {
         account: fee_account, ..
@@ -66,20 +65,27 @@ pub async fn handle_submit_instruction(
         name_or_address: req.fee_account,
     })
     .await?;
+
+    let transaction = builder
+        .fee_transaction_pay_from_component(
+            fee_account.address.as_component_address().unwrap(),
+            req.max_fee.try_into()?,
+        )
+        .with_min_epoch(req.min_epoch.map(Epoch))
+        .with_max_epoch(req.max_epoch.map(Epoch))
+        .build_unsigned_transaction();
+
     let request = TransactionSubmitRequest {
+        transaction: Some(transaction),
         signing_key_index: Some(fee_account.key_index),
-        fee_instructions: vec![Instruction::CallMethod {
-            component_address: fee_account.address.as_component_address().unwrap(),
-            method: "pay_fee".to_string(),
-            args: args![Amount::try_from(req.max_fee)?],
-        }],
-        instructions,
+        fee_instructions: vec![],
+        instructions: vec![],
         inputs: req.inputs,
         override_inputs: req.override_inputs.unwrap_or_default(),
         is_dry_run: req.is_dry_run,
         proof_ids: vec![],
-        min_epoch: req.min_epoch.map(Epoch),
-        max_epoch: req.max_epoch.map(Epoch),
+        min_epoch: None,
+        max_epoch: None,
     };
     handle_submit(context, token, request).await
 }
@@ -102,8 +108,18 @@ pub async fn handle_submit(
         req.inputs
     } else {
         // If we are not overriding inputs, we will use inputs that we know about in the local substate id db
-        let mut substates = get_referenced_substate_addresses(&req.instructions)?;
-        substates.extend(get_referenced_substate_addresses(&req.fee_instructions)?);
+        let mut substates = get_referenced_substate_addresses(
+            req.transaction
+                .as_ref()
+                .map(|t| &t.instructions)
+                .unwrap_or(&req.instructions),
+        )?;
+        substates.extend(get_referenced_substate_addresses(
+            req.transaction
+                .as_ref()
+                .map(|t| &t.fee_instructions)
+                .unwrap_or(&req.fee_instructions),
+        )?);
         let substates = substates.into_iter().collect::<Vec<_>>();
         let loaded_dependent_substates = sdk
             .substate_api()
@@ -115,13 +131,20 @@ pub async fn handle_submit(
         [req.inputs, loaded_dependent_substates].concat()
     };
 
-    let transaction = Transaction::builder()
-        .with_instructions(req.instructions)
-        .with_fee_instructions(req.fee_instructions)
-        .with_min_epoch(req.min_epoch)
-        .with_max_epoch(req.max_epoch)
-        .sign(&key.key)
-        .build();
+    let transaction = if let Some(transaction) = req.transaction {
+        Transaction::builder()
+            .with_unsigned_transaction(transaction)
+            .sign(&key.key)
+            .build()
+    } else {
+        Transaction::builder()
+            .with_instructions(req.instructions)
+            .with_fee_instructions(req.fee_instructions)
+            .with_min_epoch(req.min_epoch)
+            .with_max_epoch(req.max_epoch)
+            .sign(&key.key)
+            .build()
+    };
 
     for proof_id in req.proof_ids {
         // update the proofs table with the corresponding transaction hash

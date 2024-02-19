@@ -167,6 +167,18 @@ impl FromStr for ComponentAddressOrName {
     }
 }
 
+impl From<ComponentAddress> for ComponentAddressOrName {
+    fn from(address: ComponentAddress) -> Self {
+        Self::ComponentAddress(address)
+    }
+}
+
+impl From<String> for ComponentAddressOrName {
+    fn from(name: String) -> Self {
+        Self::Name(name)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WalletDaemonClient {
     client: reqwest::Client,
