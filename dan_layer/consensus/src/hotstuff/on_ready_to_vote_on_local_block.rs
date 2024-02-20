@@ -469,6 +469,11 @@ where TConsensusSpec: ConsensusSpec
                                                 executed.resulting_outputs()
                                         );
                                         executed.update(tx)?;
+
+                                        // Unlock any outputs that were locked
+                                        // we need this to be able to bundle concurrent transactions into the same block
+                                        // NOTE: this assumes that transactions without versions are LOCAL ONLY
+                                        self.unlock_outputs(tx, &executed, local_committee_shard)?;
                                     }
                                 }
                             }
@@ -827,7 +832,7 @@ where TConsensusSpec: ConsensusSpec
         transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
-        // TODO: for inputs without version, investigate if we need to use the results of re-execution
+        // We ignore inputs without version
         let write_inputs: Vec<SubstateAddress> = transaction.inputs().iter()
             .chain(transaction.filled_inputs())
             .filter(|i| i.version().is_some())
@@ -839,7 +844,7 @@ where TConsensusSpec: ConsensusSpec
             local_committee_shard.filter(write_inputs.iter()),
             SubstateLockFlag::Write,
         )?;
-        // TODO: Same as before, for inputs without version, investigate if we need to use the results of re-execution
+        // We ignore inputs without version
         let read_inputs: Vec<SubstateAddress> = transaction.input_refs().iter()
             .filter(|i| i.version().is_some())
             .map(|i| i.to_substate_address())
