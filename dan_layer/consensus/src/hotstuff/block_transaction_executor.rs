@@ -1,7 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, sync::Arc, time::Instant};
+use std::{collections::{HashMap, HashSet}, sync::Arc, time::Instant};
 
 use log::info;
 use tari_dan_common_types::{Epoch, SubstateAddress};
@@ -11,7 +11,8 @@ use tari_dan_engine::{
 use tari_dan_storage::{consensus_models::{ExecutedTransaction, SubstateRecord}, StateStore, StateStoreReadTransaction, StorageError};
 use tari_engine_types::{substate::SubstateId, virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates}};
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::{Instruction, Transaction};
+use tari_mmr::ArrayLikeExt;
+use tari_transaction::{Instruction, SubstateRequirement, Transaction};
 
 use crate::traits::{ConsensusSpec, TransactionExecutor};
 
@@ -55,33 +56,34 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    pub fn execute(&self, transaction: Transaction, mut db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,) -> Result<Option<ExecutedTransaction>, BlockTransactionExecutorError> {
+    pub fn execute(&self, transaction: Transaction, mut db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
         let id: tari_transaction::TransactionId = *transaction.id();
+          
+        // Get the latest input substates
+        let inputs: HashSet<SubstateRequirement> = self.resolve_substates(&transaction, &mut db_tx)?;
 
-        // We only need to re-execute a transaction if any of its input versions is "None"
-        let must_reexecute = transaction.has_inputs_without_version();
-        if !must_reexecute {
-            info!(
-                target: LOG_TARGET,
-                "Skipping transaction {} execution as all inputs specify the version",
-                id,
-            );
-            return Ok(None)
-        }
-
+        // Create a memory db with all the input substates
         let state_db = Self::new_state_db();
-        self.resolve_substates(&transaction, &mut db_tx, &state_db)?;
+        self.add_substates_to_memory_db(db_tx, &inputs, &state_db)?;
 
-        // TODO
+        // TODO: create the virtual substates for execution
         let virtual_substates = VirtualSubstates::new();
 
-        info!(target: LOG_TARGET, "Transaction {} executing. virtual_substates = [{}]", id, virtual_substates.keys().map(|addr| addr.to_string()).collect::<Vec<_>>().join(", "));
-        let executor = self.executor.clone();
-        
-        let result = executor.execute(transaction, state_db, virtual_substates)
+        // Execute the transaction and get the result
+        info!(target: LOG_TARGET, "Transaction {} executing. virtual_substates = [{}]", id, virtual_substates.keys().map(|addr| addr.to_string()).collect::<Vec<_>>().join(", "));        
+        let mut executed = self.executor.execute(transaction, state_db, virtual_substates)
             .map_err(|e| BlockTransactionExecutorError::ExecutionThreadFailure(e.to_string()))?;
-        info!(target: LOG_TARGET, "Transaction {} executed. result: {:?}", id, result);
-        Ok(Some(result))
+        info!(target: LOG_TARGET, "Transaction {} executed. result: {:?}", id, executed);
+
+        // Update the filled inputs to set the specific version, as we already know it after execution
+        info!(target: LOG_TARGET, "Transaction {} old filled inputs: {:?}", id, executed.transaction().filled_inputs());
+        let filled_inputs_mut = executed.transaction_mut().filled_inputs_mut();
+        inputs.into_iter().for_each(|input| {
+            filled_inputs_mut.push(input);
+        });
+        info!(target: LOG_TARGET, "Transaction {} new filled inputs: {:?}", id, executed.transaction().filled_inputs());
+
+        Ok(executed)
     }
 
     fn new_state_db() -> MemoryStateStore {
@@ -97,45 +99,43 @@ where TConsensusSpec: ConsensusSpec
     fn resolve_substates(
         &self,
         transaction: &Transaction,
-        db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        out: &MemoryStateStore,
-    ) -> Result<HashSet<SubstateAddress>, BlockTransactionExecutorError> {
-        let input_addresses = self.resolve_local_substates(transaction, db_tx, out)?;
+        db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>
+    ) -> Result<HashSet<SubstateRequirement>, BlockTransactionExecutorError> {
+        let input_addresses = self.resolve_local_substates(transaction, db_tx)?;
 
         if input_addresses.is_empty() {
             // TODO: for now we are going to err if there is any unknown or remote substate in the tx
             Err(BlockTransactionExecutorError::RemoteSubstatesNotAllowed)        
         } else {
-            self.add_substates_to_memory_db(db_tx, &input_addresses, out)?;
             Ok(input_addresses)
         }
     }
 
-    fn resolve_local_substates(&self, transaction: &Transaction, db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>, out: &MemoryStateStore,) -> Result<HashSet<SubstateAddress>, BlockTransactionExecutorError> {
+    fn resolve_local_substates(&self, transaction: &Transaction, db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>) -> Result<HashSet<SubstateRequirement>, BlockTransactionExecutorError> {
         let inputs = transaction.all_inputs_iter();
 
-        let input_addresses = inputs.map(|input| {
+        let input_requirements = inputs.map(|input| {
             if input.version.is_some() {
-                Ok(input.to_substate_address())
+                Ok(input.clone())
             } else {       
-                // TODO: what to do if the DB does not have the substate?
+                // TODO: what to do if the DB does not have the substate? for now we return an error
                 let version = Self::get_last_substate_version(db_tx, input.substate_id())
                     .ok_or(BlockTransactionExecutorError::PlaceHolderError)?;
-                Ok(SubstateAddress::from_address(input.substate_id(), version))
+                Ok(SubstateRequirement::new(input.substate_id().clone(), Some(version)))
             }
-        }).collect::<Result<HashSet<SubstateAddress>, BlockTransactionExecutorError>>()?;
-
+        }).collect::<Result<HashSet<SubstateRequirement>, BlockTransactionExecutorError>>()?;
 
         info!(
             target: LOG_TARGET,
-            "resolve_local_substates 2, input_addresses: {:?}", input_addresses);
+            "resolve_local_substates 2, input_addresses: {:?}", input_requirements);
 
-        Ok(input_addresses)
+        Ok(input_requirements)
     }
 
-    fn add_substates_to_memory_db(&self, db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>, addresses: &HashSet<SubstateAddress>, out: &MemoryStateStore) -> Result<(), BlockTransactionExecutorError>{
+    fn add_substates_to_memory_db(&self, db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>, inputs: &HashSet<SubstateRequirement>, out: &MemoryStateStore) -> Result<(), BlockTransactionExecutorError>{
         let mut substates = vec![];
-        for address in addresses {
+        for input in inputs {
+            let address = input.to_substate_address();
             let substate = db_tx.substates_get(&address)?;
             substates.push(substate);
         }

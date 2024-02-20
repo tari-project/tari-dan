@@ -33,7 +33,7 @@ use tari_dan_storage::{
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::broadcast;
 
 use super::{block_transaction_executor::BlockTransactionExecutor, proposer::Proposer};
@@ -412,21 +412,18 @@ where TConsensusSpec: ConsensusSpec
 
                         if tx_rec.current_decision() == t.decision {
                             if tx_rec.current_decision().is_commit() {
-                                let transaction = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
-
-                                // Re-execute the transaction if one or more input versions are None
-                                let executed = t.get_transaction(tx.deref_mut())?;
-                                let execution_result = executor.execute(executed.transaction().clone(), tx)?;
+                                let executed = self.get_executed_transaction(tx, &t.id, &executor)?;
+                                let transaction = executed.transaction();
 
                                 // Lock all inputs for the transaction as part of Prepare
                                 let is_inputs_locked = self.check_lock_inputs(
                                     tx,
-                                    transaction.transaction(),
+                                    transaction,
                                     local_committee_shard,
                                     &mut locked_inputs,
                                 )?;
                                 let is_outputs_locked = is_inputs_locked &&
-                                    self.check_lock_outputs(tx, &transaction, &mut locked_outputs)?;
+                                    self.check_lock_outputs(tx, &executed, &mut locked_outputs)?;
 
                                 if !is_inputs_locked {
                                     // Unable to lock all inputs - do not vote
@@ -459,37 +456,19 @@ where TConsensusSpec: ConsensusSpec
                                     return Ok(None);
                                 } else {
                                     // We have locked all inputs and outputs
-                                    match execution_result {
-                                        Some(mut executed) => {
-                                            info!(
-                                                target: LOG_TARGET,
-                                                "Transaction {} reexecuted sucessfully for block {}. Resulting outputs: {:?}",
-                                                transaction.id(),
-                                                block.id(),
-                                                    executed.resulting_outputs()
-                                            );
-                                            let has_involved_shards = executed.num_involved_shards() > 0;
-                                            if has_involved_shards {
-                                                executed.update(tx)?;
-                                            } else {
-                                                match executed.result().finalize.result.full_reject() {
-                                                Some(reason) => {
-                                                    executed
-                                                        .set_abort(format!("Transaction failed: {}", reason))
-                                                        .update(tx)?;
-                                                    },
-                                                None => {
-                                                    executed
-                                                        .set_abort("Consensus after re-execution failed: No involved shards")
-                                                        .update(tx)?;
-                                                    },
-                                                }
-                                            }
-   
-                                        },
-                                        None => {
-                                            // The transaction was not reexecuted
-                                        },
+
+                                    // We need to update the database (transaction result and inputs/outpus)
+                                    // in case the transaction was re-executed
+                                    let has_involved_shards = executed.num_involved_shards() > 0;
+                                    if transaction.has_inputs_without_version() && has_involved_shards {
+                                        info!(
+                                            target: LOG_TARGET,
+                                            "Transaction {} reexecuted sucessfully for block {}. Resulting outputs: {:?}. Updating database",
+                                            transaction.id(),
+                                            block.id(),
+                                                executed.resulting_outputs()
+                                        );
+                                        executed.update(tx)?;
                                     }
                                 }
                             }
@@ -697,6 +676,18 @@ where TConsensusSpec: ConsensusSpec
         }
 
         Ok(Some(QuorumDecision::Accept))
+    }
+
+    fn get_executed_transaction(&self, tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>, transaction_id: &TransactionId, executor: &BlockTransactionExecutor<TConsensusSpec>) -> Result<ExecutedTransaction, HotStuffError> {
+        let executed = ExecutedTransaction::get(tx.deref_mut(), transaction_id)?;
+        let transaction = executed.transaction();
+
+        if transaction.has_inputs_without_version() {
+            let executed = executor.execute(executed.transaction().clone(), tx)?;
+            Ok(executed)
+        } else {
+            Ok(executed)
+        }
     }
 
     fn lock_inputs(
