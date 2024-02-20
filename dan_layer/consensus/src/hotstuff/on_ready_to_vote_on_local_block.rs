@@ -416,36 +416,7 @@ where TConsensusSpec: ConsensusSpec
 
                                 // Re-execute the transaction if one or more input versions are None
                                 let executed = t.get_transaction(tx.deref_mut())?;
-                                let execution_result = executor.execute(executed.transaction().clone(), tx);
-                                match execution_result {
-                                    Ok(res) => {
-                                        if let Some(res) = res {
-                                            info!(
-                                                target: LOG_TARGET,
-                                                "Transaction {} reexecuted sucessfully for block {}. Resulting outputs: {:?}",
-                                                transaction.id(),
-                                                block.id(),
-                                                res.resulting_outputs()
-                                            );
-                                        } else {
-                                            info!(
-                                                target: LOG_TARGET,
-                                                "Transaction {} reexecuted sucessfully for block {}. No result",
-                                                transaction.id(),
-                                                block.id(),
-                                            );
-                                        }
-                                    },
-                                    Err(e) => {
-                                        error!(
-                                            target: LOG_TARGET,
-                                            "Transaction {} reexecution error for block {}: {}",
-                                            transaction.id(),
-                                            block.id(),
-                                            e
-                                        );
-                                    },
-                                }
+                                let execution_result = executor.execute(executed.transaction().clone(), tx)?;
 
                                 // Lock all inputs for the transaction as part of Prepare
                                 let is_inputs_locked = self.check_lock_inputs(
@@ -488,6 +459,38 @@ where TConsensusSpec: ConsensusSpec
                                     return Ok(None);
                                 } else {
                                     // We have locked all inputs and outputs
+                                    match execution_result {
+                                        Some(mut executed) => {
+                                            info!(
+                                                target: LOG_TARGET,
+                                                "Transaction {} reexecuted sucessfully for block {}. Resulting outputs: {:?}",
+                                                transaction.id(),
+                                                block.id(),
+                                                    executed.resulting_outputs()
+                                            );
+                                            let has_involved_shards = executed.num_involved_shards() > 0;
+                                            if has_involved_shards {
+                                                executed.update(tx)?;
+                                            } else {
+                                                match executed.result().finalize.result.full_reject() {
+                                                Some(reason) => {
+                                                    executed
+                                                        .set_abort(format!("Transaction failed: {}", reason))
+                                                        .update(tx)?;
+                                                    },
+                                                None => {
+                                                    executed
+                                                        .set_abort("Consensus after re-execution failed: No involved shards")
+                                                        .update(tx)?;
+                                                    },
+                                                }
+                                            }
+   
+                                        },
+                                        None => {
+                                            // The transaction was not reexecuted
+                                        },
+                                    }
                                 }
                             }
 
