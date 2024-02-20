@@ -756,8 +756,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 args.assert_no_args("CreateVault")?;
 
                 self.tracker.write_with(|state| {
-                    let resource_lock =
-                        state.lock_substate(&SubstateId::Resource(*resource_address), LockFlag::Read)?;
+                    let substate_id = SubstateId::Resource(*resource_address);
+                    let resource_lock = state.lock_substate(&substate_id, LockFlag::Read)?;
 
                     // Require deposit permissions on the resource to create the vault (even if empty)
                     state
@@ -786,6 +786,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         resource_address
                     );
                     state.unlock_substate(resource_lock)?;
+
+                    // The resource has been "claimed" by an empty vault
+                    state.current_call_scope_mut()?.move_node_to_owned(&substate_id)?;
 
                     Ok(InvokeResult::encode(&vault_id)?)
                 })
