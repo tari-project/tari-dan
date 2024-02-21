@@ -39,6 +39,32 @@ export function substateIdToString(substateId: SubstateId | null): string {
   return "Unknown";
 }
 
+export function stringToSubstateId(substateId: string): SubstateId {
+  const parts = substateId.split("_", 2);
+  if (parts.length !== 2) {
+    throw new Error(`Invalid substate id: ${substateId}`);
+  }
+
+  switch (parts[0]) {
+    case "component":
+      return { Component: parts[1] };
+    case "resource":
+      return { Resource: parts[1] };
+    case "vault":
+      return { Vault: parts[1] };
+    case "commitment":
+      return { UnclaimedConfidentialOutput: parts[1] };
+    case "nft":
+      return { NonFungible: parts[1] };
+    case "txreceipt":
+      return { TransactionReceipt: parts[1] };
+    case "feeclaim":
+      return { FeeClaim: parts[1] };
+    default:
+      throw new Error(`Unknown substate id: ${substateId}`);
+  }
+}
+
 export function rejectReasonToString(reason: RejectReason | null): string {
   if (reason === null) {
     return "";

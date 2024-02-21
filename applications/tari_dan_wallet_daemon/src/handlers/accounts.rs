@@ -655,7 +655,7 @@ pub async fn handle_claim_burn(
         &account_public_key,
         max_fee,
         account_secret_key,
-        accounts_api,
+        &accounts_api,
         context,
     )
     .await?;
@@ -676,7 +676,7 @@ async fn finish_claiming<T: WalletStore>(
     account_public_key: &RistrettoPublicKey,
     max_fee: Amount,
     account_secret_key: DerivedKey<RistrettoPublicKey>,
-    accounts_api: tari_dan_wallet_sdk::apis::accounts::AccountsApi<'_, T>,
+    accounts_api: &tari_dan_wallet_sdk::apis::accounts::AccountsApi<'_, T>,
     context: &HandlerContext,
 ) -> Result<
     (
@@ -791,19 +791,22 @@ pub async fn handle_create_free_test_coins(
     // ------------------------------
     let (tx_id, finalized) = finish_claiming(
         instructions,
-        account_address,
+        account_address.clone(),
         new_account_name,
         sdk,
         inputs,
         &account_public_key,
         max_fee,
         account_secret_key,
-        accounts_api,
+        &accounts_api,
         context,
     )
     .await?;
 
+    let account = accounts_api.get_account_by_address(&account_address)?;
+
     Ok(AccountsCreateFreeTestCoinsResponse {
+        account,
         transaction_id: tx_id,
         amount,
         fee: max_fee,

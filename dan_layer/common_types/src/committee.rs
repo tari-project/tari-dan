@@ -15,7 +15,7 @@ use crate::{shard::Shard, SubstateAddress};
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Committee<TAddr> {
     // TODO: not pub
-    #[cfg_attr(feature = "ts", ts(type = "Array<[string, string]>"))]
+    #[cfg_attr(feature = "ts", ts(type = "Array<[TAddr, string]>"))]
     pub members: Vec<(TAddr, PublicKey)>,
 }
 
