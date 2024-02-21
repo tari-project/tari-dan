@@ -7,5 +7,4 @@ export interface TransactionAtom {
   decision: Decision;
   evidence: Evidence;
   transaction_fee: number;
-  leader_fee: number;
 }

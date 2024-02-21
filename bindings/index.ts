@@ -36,6 +36,7 @@ export * from "./src/types/ConfidentialOutput";
 export * from "./src/types/NonFungibleContainer";
 export * from "./src/types/Shard";
 export * from "./src/types/VaultId";
+export * from "./src/types/BlockFee";
 export * from "./src/types/LockFlag";
 export * from "./src/types/TransactionSignature";
 export * from "./src/types/ResourceType";
