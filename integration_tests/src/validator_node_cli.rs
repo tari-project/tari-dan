@@ -206,7 +206,7 @@ pub async fn concurrent_call_method(
     vn_name: String,
     fq_component_name: String,
     method_call: String,
-    _times: usize,
+    times: usize,
 ) -> Result<SubmitTransactionResponse, RejectReason> {
     let vn_data_dir = get_cli_data_dir(world);
     let (input_group, component_name) = fq_component_name.split_once('/').unwrap_or_else(|| {
@@ -229,9 +229,10 @@ pub async fn concurrent_call_method(
     // For concurrent transactions we DO NOT specify the versions
     component.version = None;
 
-    call_method_inner(vn_client.clone(), vn_data_dir.clone(), component.clone(), method_call.clone()).await
-
     /*
+    call_method_inner(vn_client.clone(), vn_data_dir.clone(), component.clone(), method_call.clone()).await
+    */
+
     let mut handles = Vec::new();
     for _ in 0..times {
         let handle = tokio::spawn(
@@ -254,7 +255,6 @@ pub async fn concurrent_call_method(
     } else {
         Err(RejectReason::ExecutionFailure("No responses from any of the concurrent calls".to_owned()))
     }
-     */
 }
 
 pub async fn call_method(

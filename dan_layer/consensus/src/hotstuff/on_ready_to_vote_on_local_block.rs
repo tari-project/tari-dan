@@ -353,7 +353,7 @@ where TConsensusSpec: ConsensusSpec
         let mut locked_inputs = HashSet::new();
         let mut locked_outputs = HashSet::new();
 
-        let executor: BlockTransactionExecutor<TConsensusSpec> = BlockTransactionExecutor::new(
+        let mut executor: BlockTransactionExecutor<TConsensusSpec> = BlockTransactionExecutor::new(
             self.epoch_manager.clone(),
             self.transaction_executor.clone(),
         );
@@ -412,7 +412,7 @@ where TConsensusSpec: ConsensusSpec
 
                         if tx_rec.current_decision() == t.decision {
                             if tx_rec.current_decision().is_commit() {
-                                let executed = self.get_executed_transaction(tx, &t.id, &executor)?;
+                                let executed = self.get_executed_transaction(tx, &t.id, &mut executor)?;
                                 let transaction = executed.transaction();
 
                                 // Lock all inputs for the transaction as part of Prepare
@@ -469,11 +469,6 @@ where TConsensusSpec: ConsensusSpec
                                                 executed.resulting_outputs()
                                         );
                                         executed.update(tx)?;
-
-                                        // Unlock any outputs that were locked
-                                        // we need this to be able to bundle concurrent transactions into the same block
-                                        // NOTE: this assumes that transactions without versions are LOCAL ONLY
-                                        self.unlock_outputs(tx, &executed, local_committee_shard)?;
                                     }
                                 }
                             }
@@ -683,7 +678,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(Some(QuorumDecision::Accept))
     }
 
-    fn get_executed_transaction(&self, tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>, transaction_id: &TransactionId, executor: &BlockTransactionExecutor<TConsensusSpec>) -> Result<ExecutedTransaction, HotStuffError> {
+    fn get_executed_transaction(&self, tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>, transaction_id: &TransactionId, executor: &mut BlockTransactionExecutor<TConsensusSpec>) -> Result<ExecutedTransaction, HotStuffError> {
         let executed = ExecutedTransaction::get(tx.deref_mut(), transaction_id)?;
         let transaction = executed.transaction();
 
