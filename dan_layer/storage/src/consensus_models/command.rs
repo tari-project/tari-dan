@@ -129,8 +129,6 @@ pub struct TransactionAtom {
     pub evidence: Evidence,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub transaction_fee: u64,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
-    pub leader_fee: u64,
 }
 
 impl TransactionAtom {
@@ -157,8 +155,8 @@ impl Display for TransactionAtom {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "TransactionAtom({}, {}, {}, {})",
-            self.id, self.decision, self.transaction_fee, self.leader_fee
+            "TransactionAtom({}, {}, {})",
+            self.id, self.decision, self.transaction_fee,
         )
     }
 }

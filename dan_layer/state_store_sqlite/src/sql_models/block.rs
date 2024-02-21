@@ -4,7 +4,7 @@
 use diesel::{Queryable, QueryableByName};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, NodeHeight};
-use tari_dan_storage::{consensus_models, StorageError};
+use tari_dan_storage::{consensus_models, consensus_models::BlockFee, StorageError};
 use tari_utilities::byte_array::ByteArray;
 use time::PrimitiveDateTime;
 
@@ -27,7 +27,8 @@ pub struct Block {
     pub qc_id: String,
     pub command_count: i64,
     pub commands: String,
-    pub total_leader_fee: i64,
+    pub leader_fee: i64,
+    pub global_exhaust_burn: i64,
     pub is_committed: bool,
     pub is_processed: bool,
     pub is_dummy: bool,
@@ -59,7 +60,10 @@ impl Block {
             })?,
             deserialize_json(&self.commands)?,
             deserialize_hex_try_from(&self.merkle_root)?,
-            self.total_leader_fee as u64,
+            BlockFee {
+                leader_fee: self.leader_fee as u64,
+                global_exhaust_burn: self.global_exhaust_burn as u64,
+            },
             self.is_dummy,
             self.is_processed,
             self.is_committed,
@@ -83,7 +87,8 @@ pub struct ParkedBlock {
     pub justify: String,
     pub command_count: i64,
     pub commands: String,
-    pub total_leader_fee: i64,
+    pub leader_fee: i64,
+    pub global_exhaust_burn: i64,
     pub foreign_indexes: String,
     pub signature: Option<String>,
     pub created_at: PrimitiveDateTime,
@@ -114,7 +119,10 @@ impl TryFrom<ParkedBlock> for consensus_models::Block {
             })?,
             deserialize_json(&value.commands)?,
             deserialize_hex_try_from(&value.merkle_root)?,
-            value.total_leader_fee as u64,
+            BlockFee {
+                leader_fee: value.leader_fee as u64,
+                global_exhaust_burn: value.global_exhaust_burn as u64,
+            },
             false,
             false,
             false,

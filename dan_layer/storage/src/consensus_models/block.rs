@@ -73,8 +73,7 @@ pub struct Block {
     epoch: Epoch,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     proposed_by: PublicKey,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
-    total_leader_fee: u64,
+    block_fee: BlockFee,
 
     // Body
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -108,7 +107,7 @@ impl Block {
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
         merkle_root: FixedHash,
-        total_leader_fee: u64,
+        block_fee: BlockFee,
         sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
     ) -> Self {
@@ -122,7 +121,7 @@ impl Block {
             proposed_by,
             merkle_root,
             commands,
-            total_leader_fee,
+            block_fee,
             is_dummy: false,
             is_processed: false,
             is_committed: false,
@@ -144,7 +143,7 @@ impl Block {
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
         merkle_root: FixedHash,
-        total_leader_fee: u64,
+        block_fee: BlockFee,
         is_dummy: bool,
         is_processed: bool,
         is_committed: bool,
@@ -162,7 +161,7 @@ impl Block {
             proposed_by,
             merkle_root,
             commands,
-            total_leader_fee,
+            block_fee,
             is_dummy,
             is_processed,
             is_committed,
@@ -182,7 +181,7 @@ impl Block {
             PublicKey::default(),
             Default::default(),
             FixedHash::zero(),
-            0,
+            BlockFee::default(),
             IndexMap::new(),
             None,
         )
@@ -200,7 +199,7 @@ impl Block {
             proposed_by: PublicKey::default(),
             merkle_root: FixedHash::zero(),
             commands: Default::default(),
-            total_leader_fee: 0,
+            block_fee: BlockFee::default(),
             is_dummy: false,
             is_processed: false,
             is_committed: true,
@@ -228,7 +227,7 @@ impl Block {
             proposed_by,
             Default::default(),
             parent_merkle_root,
-            0,
+            BlockFee::default(),
             IndexMap::new(),
             None,
         );
@@ -243,6 +242,7 @@ impl Block {
             .chain(&self.parent)
             .chain(&self.justify)
             .chain(&self.height)
+            .chain(&self.block_fee)
             .chain(&self.epoch)
             .chain(&self.proposed_by)
             .chain(&self.merkle_root)
@@ -332,8 +332,8 @@ impl Block {
         self.epoch
     }
 
-    pub fn total_leader_fee(&self) -> u64 {
-        self.total_leader_fee
+    pub fn block_fee(&self) -> &BlockFee {
+        &self.block_fee
     }
 
     pub fn proposed_by(&self) -> &PublicKey {
@@ -753,6 +753,35 @@ impl Display for Block {
             self.height(),
             self.id(),
             self.commands().len()
+        )
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct BlockFee {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub leader_fee: u64,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub global_exhaust_burn: u64,
+}
+
+impl BlockFee {
+    pub fn leader_fee(&self) -> u64 {
+        self.leader_fee
+    }
+
+    pub fn global_exhaust_burn(&self) -> u64 {
+        self.global_exhaust_burn
+    }
+}
+
+impl Display for BlockFee {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Leader fee: {}, Burnt: {}",
+            self.leader_fee, self.global_exhaust_burn
         )
     }
 }

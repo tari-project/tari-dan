@@ -809,7 +809,7 @@ impl JsonRpcHandlers {
         Ok(JsonRpcResponse::success(answer_id, GetValidatorFeesResponse {
             fees: blocks
                 .into_iter()
-                .filter(|b| b.total_leader_fee() > 0)
+                .filter(|b| b.block_fee().leader_fee() > 0)
                 .map(Into::into)
                 .collect(),
         }))

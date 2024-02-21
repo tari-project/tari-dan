@@ -821,7 +821,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         use crate::schema::blocks;
 
         let total_fee = blocks::table
-            .select(diesel::dsl::sum(blocks::total_leader_fee))
+            .select(diesel::dsl::sum(blocks::leader_fee))
             .filter(blocks::epoch.eq(epoch.as_u64() as i64))
             .filter(blocks::proposed_by.eq(serialize_hex(validator_public_key.as_bytes())))
             .first::<Option<BigDecimal>>(self.connection())

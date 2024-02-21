@@ -21,7 +21,6 @@ pub struct TransactionPoolRecord {
     pub evidence: String,
     pub remote_evidence: Option<String>,
     pub transaction_fee: i64,
-    pub leader_fee: i64,
     pub stage: String,
     // TODO: This is the last stage update, but does not reflect the actual stage (which comes from the
     //       transaction_pool_state_updates table). This is kind of a hack to make transaction_pool_count work
@@ -55,7 +54,6 @@ impl TransactionPoolRecord {
                 decision: parse_from_string(&self.original_decision)?,
                 evidence,
                 transaction_fee: self.transaction_fee as u64,
-                leader_fee: self.leader_fee as u64,
             },
             parse_from_string(&self.stage)?,
             pending_stage,
