@@ -56,11 +56,11 @@ struct PublishArgs {
     dan_testing_jrpc_url: String,
 }
 
-impl Into<BuildArgs> for PublishArgs {
-    fn into(self) -> BuildArgs {
+impl From<PublishArgs> for BuildArgs {
+    fn from(val: PublishArgs) -> BuildArgs {
         BuildArgs {
-            path: self.path,
-            profile: self.profile,
+            path: val.path,
+            profile: val.profile,
         }
     }
 }
@@ -154,15 +154,13 @@ fn ensure_prefix(url: &str) -> String {
 fn search_wasm_files(directory: &PathBuf) -> Option<String> {
     let path = Path::new(directory);
     if let Ok(entries) = fs::read_dir(path) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        if let Some(extension) = entry.path().extension() {
-                            if extension == "wasm" {
-                                if let Some(file_name) = entry.file_name().to_str() {
-                                    return Some(file_name.to_string());
-                                }
+        for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                if file_type.is_file() {
+                    if let Some(extension) = entry.path().extension() {
+                        if extension == "wasm" {
+                            if let Some(file_name) = entry.file_name().to_str() {
+                                return Some(file_name.to_string());
                             }
                         }
                     }
@@ -181,17 +179,13 @@ async fn publish(args: PublishArgs) {
         .join("target")
         .join("wasm32-unknown-unknown")
         .join(args.profile.unwrap_or("release".to_string()));
-    let wasm_name;
-
-    match search_wasm_files(&directory) {
-        Some(filename) => {
-            wasm_name = filename;
-        },
+    let wasm_name = match search_wasm_files(&directory) {
+        Some(filename) => filename,
         None => {
             println!("No wasm file found in the directory");
             return;
         },
-    }
+    };
 
     let file_path = directory.join(wasm_name.clone());
     let jrpc_url = ensure_prefix(args.dan_testing_jrpc_url.as_str());
@@ -233,7 +227,6 @@ async fn publish(args: PublishArgs) {
     if !response.status().is_success() {
         println!("Failed to mine");
         println!("{:?}", response);
-        return;
     }
 }
 
@@ -262,21 +255,18 @@ async fn list_registered_templates(args: ListRegisteredTemplatesArgs) {
 }
 
 fn scaffold(args: ScaffoldArgs) {
-    let wasm_name;
     let directory = Path::new(&args.path)
         .join("package")
         .join("target")
         .join("wasm32-unknown-unknown")
         .join(args.profile.unwrap_or("release".to_string()));
-    match search_wasm_files(&directory) {
-        Some(filename) => {
-            wasm_name = filename;
-        },
+    let wasm_name = match search_wasm_files(&directory) {
+        Some(filename) => filename,
         None => {
             println!("No wasm file found in the directory");
             return;
         },
-    }
+    };
 
     let mut opts = generators::GeneratorOpts {
         output_path: "output/".into(),
