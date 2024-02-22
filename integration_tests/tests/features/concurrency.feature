@@ -36,15 +36,10 @@ Feature: Concurrency
     When I print the cucumber world
 
     # Send multiple concurrent transactions to increase the counter
+    # TODO: when concurrency is fully working, call it with "2 times" or higher
     When I invoke on VAL_1 on component COUNTER_1/components/Counter the method call "increase" concurrently 1 times
     When I print the cucumber world
 
     # Check that the counter has been increased
-#   When I invoke on VAL_1 on component TX1/components/Counter the method call "value" the result is "1"
-#   When I print the cucumber world
-
-# Uncomment the following lines to stop execution for manual inspection of the nodes
-# When I print the cucumber world
-# When I wait 5000 seconds
-
-
+    # TODO: uncomment when concurrency is fully working
+    # When I invoke on VAL_1 on component TX1/components/Counter the method call "value" the result is "2"  

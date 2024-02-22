@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{borrow::Borrow, collections::HashSet, num::NonZeroU64, ops::DerefMut};
+use std::{collections::HashSet, num::NonZeroU64, ops::DerefMut};
 
 use log::*;
 use tari_dan_common_types::{
@@ -353,6 +353,8 @@ where TConsensusSpec: ConsensusSpec
         let mut locked_inputs = HashSet::new();
         let mut locked_outputs = HashSet::new();
 
+        // Executor used for transactions that have inputs without specific versions.
+        // It lives through the entire block so multiple transactions can be "chained" together in the same block
         let mut executor: BlockTransactionExecutor<TConsensusSpec> = BlockTransactionExecutor::new(
             self.epoch_manager.clone(),
             self.transaction_executor.clone(),
@@ -458,16 +460,9 @@ where TConsensusSpec: ConsensusSpec
                                     // We have locked all inputs and outputs
 
                                     // We need to update the database (transaction result and inputs/outpus)
-                                    // in case the transaction was re-executed
+                                    // in case the transaction was re-executed because it has inputs without versions
                                     let has_involved_shards = executed.num_involved_shards() > 0;
                                     if transaction.has_inputs_without_version() && has_involved_shards {
-                                        info!(
-                                            target: LOG_TARGET,
-                                            "Transaction {} reexecuted sucessfully for block {}. Resulting outputs: {:?}. Updating database",
-                                            transaction.id(),
-                                            block.id(),
-                                                executed.resulting_outputs()
-                                        );
                                         executed.update(tx)?;
                                     }
                                 }
@@ -678,6 +673,9 @@ where TConsensusSpec: ConsensusSpec
         Ok(Some(QuorumDecision::Accept))
     }
 
+    // Returns the execution result of a transaction.
+    // If the transaction has all inputs with specific versions, it was executed in the mempool so we only fetch the result from database.
+    // If the transaction has one or more inputs without version, we execute it now with the most recent input versions it needs.
     fn get_executed_transaction(&self, tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>, transaction_id: &TransactionId, executor: &mut BlockTransactionExecutor<TConsensusSpec>) -> Result<ExecutedTransaction, HotStuffError> {
         let executed = ExecutedTransaction::get(tx.deref_mut(), transaction_id)?;
         let transaction = executed.transaction();
