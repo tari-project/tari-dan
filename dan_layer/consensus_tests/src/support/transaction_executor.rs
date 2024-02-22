@@ -29,8 +29,8 @@ impl TransactionExecutor for TestTransactionProcessor {
     fn execute(
         &self,
         transaction: Transaction,
-        state_store: MemoryStateStore,
-        virtual_substates: VirtualSubstates,
+        _state_store: MemoryStateStore,
+        _virtual_substates: VirtualSubstates,
     ) -> Result<ExecutedTransaction, Self::Error> {
         let outputs = vec![];
         let result = ExecuteResult {

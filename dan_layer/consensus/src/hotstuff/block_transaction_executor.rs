@@ -55,11 +55,11 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    pub fn execute(&mut self, transaction: Transaction, mut db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
+    pub fn execute(&mut self, transaction: Transaction, db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
         let id: tari_transaction::TransactionId = *transaction.id();
           
         // Get the latest input substates
-        let inputs: HashSet<SubstateRequirement> = self.resolve_substates(&transaction, &mut db_tx)?;
+        let inputs: HashSet<SubstateRequirement> = self.resolve_substates(&transaction, db_tx)?;
         info!(target: LOG_TARGET, "Transaction {} executing. Inputs: {:?}", id, inputs);
 
         // Create a memory db with all the input substates, needed for the transaction execution

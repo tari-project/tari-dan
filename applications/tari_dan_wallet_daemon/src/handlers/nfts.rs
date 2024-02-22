@@ -7,7 +7,6 @@ use anyhow::anyhow;
 use log::info;
 use tari_common_types::types::PublicKey;
 use tari_crypto::{keys::PublicKey as PK, ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
-use tari_dan_common_types::SubstateAddress;
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager},
     models::Account,

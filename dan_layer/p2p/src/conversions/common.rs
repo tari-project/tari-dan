@@ -27,7 +27,7 @@ use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_crypto::{hashing::DomainSeparation, signatures::SchnorrSignature, tari_utilities::ByteArray};
 use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_storage::consensus_models::{ValidatorSchnorrSignature, ValidatorSignature};
-use tari_transaction::{SubstateRequirement, TransactionSignature};
+use tari_transaction::TransactionSignature;
 
 use crate::proto;
 

@@ -22,7 +22,7 @@
 
 use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut, time::Duration};
 
-use futures::{executor, future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::*;
 use tari_consensus::traits::TransactionExecutor;
 use tari_dan_app_utilities::transaction_executor::TransactionProcessorError;
@@ -464,7 +464,7 @@ where
             vec![],
             Duration::ZERO,
         );
-        let execution_result = (transaction.id().clone(), Ok(executed_transaction));
+        let execution_result = (*transaction.id(), Ok(executed_transaction));
         let result = MempoolTransactionExecution {
             result: Ok(execution_result),
             should_propagate,

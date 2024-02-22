@@ -59,7 +59,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_engine_types::lock::LockFlag;
-use tari_transaction::{SubstateRequirement, TransactionId};
+use tari_transaction::TransactionId;
 use tari_utilities::ByteArray;
 
 use crate::{

@@ -13,7 +13,7 @@ use tari_crypto::{
     ristretto::{RistrettoComSig, RistrettoPublicKey},
     tari_utilities::ByteArray,
 };
-use tari_dan_common_types::{optional::Optional, SubstateAddress};
+use tari_dan_common_types::optional::Optional;
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
     confidential::{get_commitment_factory, ConfidentialProofStatement},

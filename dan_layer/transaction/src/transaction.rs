@@ -142,8 +142,8 @@ impl Transaction {
     pub fn all_input_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
         self.input_addresses()
             .into_iter()
-            .chain(self.input_address_refs().into_iter())
-            .chain(self.filled_input_addresses().into_iter())
+            .chain(self.input_address_refs())
+            .chain(self.filled_input_addresses())
     }
 
     pub fn filled_inputs(&self) -> &[SubstateRequirement] {
