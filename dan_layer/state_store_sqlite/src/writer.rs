@@ -508,7 +508,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     ) -> Result<(), StorageError> {
         use crate::schema::foreign_receive_counters;
 
-        let insert = (foreign_receive_counters::counters.eq(serialize_json(&foreign_receive_counter.counters)?), );
+        let insert = (foreign_receive_counters::counters.eq(serialize_json(&foreign_receive_counter.counters)?),);
 
         diesel::insert_into(foreign_receive_counters::table)
             .values(insert)
@@ -599,7 +599,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn transactions_save_all<'a, I: IntoIterator<Item=&'a TransactionRecord>>(
+    fn transactions_save_all<'a, I: IntoIterator<Item = &'a TransactionRecord>>(
         &mut self,
         txs: I,
     ) -> Result<(), StorageError> {
@@ -801,7 +801,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn transaction_pool_set_all_transitions<'a, I: IntoIterator<Item=&'a TransactionId>>(
+    fn transaction_pool_set_all_transitions<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         locked_block: &LockedBlock,
         new_locked_block: &LockedBlock,
@@ -825,7 +825,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 operation: "transaction_pool_set_all_transitions",
                 details: format!("Found {} transactions, but {} were queried", count, tx_ids.len()),
             }
-                .into());
+            .into());
         }
 
         let updates = self.get_transaction_atom_state_updates_between_blocks(
@@ -870,8 +870,8 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
 
     fn missing_transactions_insert<
         'a,
-        IMissing: IntoIterator<Item=&'a TransactionId>,
-        IAwaiting: IntoIterator<Item=&'a TransactionId>,
+        IMissing: IntoIterator<Item = &'a TransactionId>,
+        IAwaiting: IntoIterator<Item = &'a TransactionId>,
     >(
         &mut self,
         block: &Block,
@@ -1026,7 +1026,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn substates_try_lock_many<'a, I: IntoIterator<Item=&'a SubstateAddress>>(
+    fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
         &mut self,
         locked_by_tx: &TransactionId,
         objects: I,
@@ -1055,7 +1055,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                     objects.len()
                 ),
             }
-                .into());
+            .into());
         }
 
         if locked_details.iter().any(|(w, _)| *w) {
@@ -1079,7 +1079,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                         operation: "transactions_try_lock_many(Write)",
                         source: e,
                     })?;
-            }
+            },
             SubstateLockFlag::Read => {
                 diesel::update(substates::table)
                     .filter(substates::address.eq_any(objects))
@@ -1089,13 +1089,13 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                         operation: "transactions_try_lock_many(Read)",
                         source: e,
                     })?;
-            }
+            },
         }
 
         Ok(SubstateLockState::LockAcquired)
     }
 
-    fn substates_try_unlock_many<'a, I: IntoIterator<Item=&'a SubstateAddress>>(
+    fn substates_try_unlock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
         &mut self,
         locked_by_tx: &TransactionId,
         objects: I,
@@ -1149,7 +1149,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                         operation: "substates_try_unlock_many",
                         source: e,
                     })?;
-            }
+            },
             SubstateLockFlag::Read => {
                 // let locked_r = substates::table
                 //     .select(substates::read_locks)
@@ -1185,13 +1185,13 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                         operation: "substates_try_unlock_many",
                         source: e,
                     })?;
-            }
+            },
         }
 
         Ok(())
     }
 
-    fn substate_down_many<I: IntoIterator<Item=SubstateAddress>>(
+    fn substate_down_many<I: IntoIterator<Item = SubstateAddress>>(
         &mut self,
         addresses: I,
         epoch: Epoch,
@@ -1221,7 +1221,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                     addresses.len()
                 ),
             }
-                .into());
+            .into());
         }
         if require_locks {
             if let Some((addr, _)) = is_writable.iter().find(|(_, w)| !*w) {
@@ -1229,7 +1229,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                     operation: "substate_down",
                     details: format!("Substate {} is not write locked", addr),
                 }
-                    .into());
+                .into());
             }
         }
 
@@ -1290,9 +1290,9 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         transaction_id: &TransactionId,
         output_addresses: I,
     ) -> Result<SubstateLockState, StorageError>
-        where
-            I: IntoIterator<Item=B>,
-            B: Borrow<SubstateAddress>,
+    where
+        I: IntoIterator<Item = B>,
+        B: Borrow<SubstateAddress>,
     {
         use crate::schema::locked_outputs;
         let block_id_hex = serialize_hex(block_id);
@@ -1328,9 +1328,9 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     }
 
     fn locked_outputs_release_all<I, B>(&mut self, output_addresses: I) -> Result<Vec<LockedOutput>, StorageError>
-        where
-            I: IntoIterator<Item=B>,
-            B: Borrow<SubstateAddress>,
+    where
+        I: IntoIterator<Item = B>,
+        B: Borrow<SubstateAddress>,
     {
         use crate::schema::locked_outputs;
 
