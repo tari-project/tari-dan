@@ -222,6 +222,8 @@ impl ExecutedTransaction {
                 .as_ref()
                 .and_then(|f| f.total_fees_paid().as_u64_checked())
                 .unwrap_or(0),
+            // We calculate the leader fee later depending on the epoch of the block
+            leader_fee: None,
         }
     }
 }

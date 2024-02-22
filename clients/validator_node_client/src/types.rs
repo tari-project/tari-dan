@@ -455,6 +455,7 @@ pub struct GetCommitteeRequest {
 pub struct GetCommitteeResponse {
     pub committee: Committee<PeerAddress>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "ts",
@@ -712,7 +713,7 @@ impl From<Block> for ValidatorFee {
             validator_public_key: value.proposed_by().clone(),
             epoch: value.epoch(),
             block_id: *value.id(),
-            total_fee_due: value.block_fee().leader_fee(),
+            total_fee_due: value.total_leader_fee(),
             total_transaction_fee: value
                 .commands()
                 .iter()

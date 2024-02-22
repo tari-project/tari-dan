@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, ops::DerefMut};
+use std::{collections::HashSet, num::NonZeroU64, ops::DerefMut};
 
 use log::*;
 use tari_common::configuration::Network;
@@ -41,13 +41,7 @@ use tokio::sync::broadcast;
 
 use super::proposer::Proposer;
 use crate::{
-    hotstuff::{
-        calculate_block_fee,
-        error::HotStuffError,
-        event::HotstuffEvent,
-        ProposalValidationError,
-        EXHAUST_DIVISOR,
-    },
+    hotstuff::{error::HotStuffError, event::HotstuffEvent, ProposalValidationError, EXHAUST_DIVISOR},
     messages::{HotstuffMessage, VoteMessage},
     traits::{
         hooks::ConsensusHooks,
@@ -385,8 +379,7 @@ where TConsensusSpec: ConsensusSpec
         block: &Block,
         local_committee_shard: &CommitteeShard,
     ) -> Result<Option<QuorumDecision>, HotStuffError> {
-        let mut total_block_fee = 0;
-        let mut distinct_accept_shards = HashSet::new();
+        let mut total_leader_fee = 0;
         let mut locked_inputs = HashSet::new();
         let mut locked_outputs = HashSet::new();
         for cmd in block.commands() {
@@ -622,26 +615,39 @@ where TConsensusSpec: ConsensusSpec
                             return Ok(None);
                         }
 
-                        distinct_accept_shards.extend(
-                            tx_rec
-                                .transaction()
-                                .evidence
-                                .shards_iter()
-                                .map(|s| s.to_committee_shard(local_committee_shard.num_committees())),
-                        );
-                        let calculated_tx_fee = tx_rec.transaction().transaction_fee;
-                        if calculated_tx_fee != t.transaction_fee {
+                        let distinct_shards =
+                            local_committee_shard.count_distinct_shards(tx_rec.transaction().evidence.shards_iter());
+                        let distinct_shards = NonZeroU64::new(distinct_shards as u64).ok_or_else(|| {
+                            HotStuffError::InvariantError(format!(
+                                "Distinct shards is zero for transaction {} in block {}",
+                                tx_rec.transaction_id(),
+                                block.id()
+                            ))
+                        })?;
+
+                        if t.leader_fee.is_none() {
+                            warn!(
+                                target: LOG_TARGET,
+                                "❌ Leader fee for tx {} is None for Accept command in block {}",
+                                t.id,
+                                block.id(),
+                            );
+                            return Ok(None);
+                        }
+
+                        let calculated_leader_fee = tx_rec.calculate_leader_fee(distinct_shards, EXHAUST_DIVISOR);
+                        if calculated_leader_fee != *t.leader_fee.as_ref().expect("None already checked") {
                             warn!(
                                 target: LOG_TARGET,
                                 "❌ Accept leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
                                 block.id(),
-                                t.transaction_fee,
-                                calculated_tx_fee
+                                t.leader_fee.as_ref().expect("None already checked"),
+                                calculated_leader_fee
                             );
 
                             return Ok(None);
                         }
-                        total_block_fee += calculated_tx_fee;
+                        total_leader_fee += calculated_leader_fee.fee();
                         // If the decision was changed to Abort, which can only happen when a foreign shard decides
                         // ABORT, and we decide COMMIT, we set SomePrepared, otherwise
                         // AllPrepared. There are no further stages after these, so these MUST
@@ -677,14 +683,13 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
-        let block_fee = calculate_block_fee(total_block_fee, distinct_accept_shards.len() as u64, EXHAUST_DIVISOR);
-        if block_fee != *block.block_fee() {
+        if total_leader_fee != block.total_leader_fee() {
             warn!(
                 target: LOG_TARGET,
                 "❌ Leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
                 block.id(),
-                block.block_fee(),
-                block_fee
+                block.total_leader_fee(),
+                total_leader_fee
             );
             return Ok(None);
         }
@@ -1080,7 +1085,7 @@ where TConsensusSpec: ConsensusSpec
                 target: LOG_TARGET,
                 "🪙 Validator fee for block {} ({}, Total Fees Paid = {})",
                 block.proposed_by(),
-                block.block_fee(),
+                block.total_leader_fee(),
                 total_transaction_fee
             );
         }

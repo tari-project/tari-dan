@@ -4,20 +4,17 @@
 use std::{
     fmt::{Display, Formatter},
     marker::PhantomData,
+    num::NonZeroU64,
     str::FromStr,
 };
 
 use log::*;
-#[cfg(feature = "ts")]
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{
     committee::CommitteeShard,
     optional::{IsNotFoundError, Optional},
 };
 use tari_transaction::TransactionId;
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
 use crate::{
     consensus_models::{
@@ -40,7 +37,7 @@ const _LOG_TARGET: &str = "tari::dan::storage::transaction_pool";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(
     feature = "ts",
-    derive(TS, Deserialize),
+    derive(ts_rs::TS, Deserialize),
     ts(export, export_to = "../../bindings/src/types/")
 )]
 pub enum TransactionPoolStage {
@@ -233,7 +230,11 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct TransactionPoolRecord {
     transaction: TransactionAtom,
     stage: TransactionPoolStage,
@@ -310,9 +311,10 @@ impl TransactionPoolRecord {
         self.is_ready
     }
 
-    pub fn get_final_transaction_atom(&self) -> TransactionAtom {
+    pub fn get_final_transaction_atom(&self, leader_fee: LeaderFee) -> TransactionAtom {
         TransactionAtom {
             decision: self.current_decision(),
+            leader_fee: Some(leader_fee),
             ..self.transaction.clone()
         }
     }
@@ -321,6 +323,41 @@ impl TransactionPoolRecord {
         TransactionAtom {
             decision: self.current_local_decision(),
             ..self.transaction.clone()
+        }
+    }
+
+    pub fn calculate_leader_fee(&self, num_involved_shards: NonZeroU64, exhaust_divisor: u64) -> LeaderFee {
+        let transaction_fee = self.transaction.transaction_fee;
+        let target_burn = transaction_fee.checked_div(exhaust_divisor).unwrap_or(0);
+        let block_fee_after_burn = transaction_fee - target_burn;
+
+        let mut leader_fee = block_fee_after_burn / num_involved_shards;
+        // The extra amount that is burnt from dividing the number of shards involved
+        let excess_remainder_burn = block_fee_after_burn % num_involved_shards;
+
+        // Adjust the leader fee to account for the remainder
+        // If the remainder accounts for an extra burn of greater than half the number of involved shards, we
+        // give each validator an extra 1 in fees if enough fees are available, burning less than the exhaust target.
+        // Otherwise, we burn a little more than/equal to the exhaust target.
+        let actual_burn = if excess_remainder_burn > 0 &&
+            // If the div floor burn accounts for 1 less fee for more than half of number of shards, and ...
+            excess_remainder_burn >= num_involved_shards.get() / 2 &&
+            // ... if there are enough fees to pay out an additional 1 to all shards
+            (leader_fee + 1) * num_involved_shards.get() <= transaction_fee
+        {
+            // Pay each leader 1 more
+            leader_fee += 1;
+
+            // We burn a little less due to the remainder
+            target_burn.saturating_sub(num_involved_shards.get() - excess_remainder_burn)
+        } else {
+            // We burn a little more due to the remainder
+            target_burn + excess_remainder_burn
+        };
+
+        LeaderFee {
+            fee: leader_fee,
+            global_exhaust_burn: actual_burn,
         }
     }
 
@@ -375,7 +412,7 @@ impl TransactionPoolRecord {
                     from: self.current_stage(),
                     to: pending_stage,
                     is_ready,
-                })
+                });
             },
         }
 
@@ -468,6 +505,166 @@ impl IsNotFoundError for TransactionPoolError {
         match self {
             TransactionPoolError::StorageError(e) => e.is_not_found_error(),
             _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
+pub struct LeaderFee {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub fee: u64,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub global_exhaust_burn: u64,
+}
+
+impl LeaderFee {
+    pub fn fee(&self) -> u64 {
+        self.fee
+    }
+
+    pub fn global_exhaust_burn(&self) -> u64 {
+        self.global_exhaust_burn
+    }
+}
+
+impl Display for LeaderFee {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Leader fee: {}, Burnt: {}", self.fee, self.global_exhaust_burn)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::{rngs::OsRng, Rng};
+
+    use super::*;
+
+    mod calculate_leader_fee {
+        use super::*;
+
+        fn create_record_with_fee(fee: u64) -> TransactionPoolRecord {
+            TransactionPoolRecord {
+                transaction: TransactionAtom {
+                    id: TransactionId::new([0; 32]),
+                    decision: Decision::Commit,
+                    evidence: Default::default(),
+                    transaction_fee: fee,
+                    leader_fee: None,
+                },
+                stage: TransactionPoolStage::New,
+                pending_stage: None,
+                local_decision: None,
+                remote_decision: None,
+                is_ready: false,
+            }
+        }
+
+        fn check_calculate_leader_fee(
+            total_tx_fee: u64,
+            total_num_involved_shards: u64,
+            exhaust_divisor: u64,
+        ) -> LeaderFee {
+            let tx = create_record_with_fee(total_tx_fee);
+            let leader_fee = tx.calculate_leader_fee(total_num_involved_shards.try_into().unwrap(), exhaust_divisor);
+            // Total payable fee + burn is always equal to the total block fee
+            assert_eq!(
+                leader_fee.fee * total_num_involved_shards + leader_fee.global_exhaust_burn,
+                total_tx_fee,
+                "Fees were created or lost in the calculation. Expected: {}, Actual: {}",
+                total_tx_fee,
+                leader_fee.fee * total_num_involved_shards + leader_fee.global_exhaust_burn
+            );
+
+            let deviation_from_target_burn =
+                leader_fee.global_exhaust_burn as f32 - (total_tx_fee.checked_div(exhaust_divisor).unwrap_or(0) as f32);
+            assert!(
+                deviation_from_target_burn.abs() <= total_num_involved_shards as f32,
+                "Deviation from target burn is too high: {} (target: {}, actual: {}, num_shards: {}, divisor: {})",
+                deviation_from_target_burn,
+                total_tx_fee.checked_div(exhaust_divisor).unwrap_or(0),
+                leader_fee.global_exhaust_burn,
+                total_num_involved_shards,
+                exhaust_divisor
+            );
+
+            leader_fee
+        }
+
+        #[test]
+        fn it_calculates_the_correct_leader_fee() {
+            let fee = check_calculate_leader_fee(100, 1, 20);
+            assert_eq!(fee.fee, 95);
+            assert_eq!(fee.global_exhaust_burn, 5);
+
+            let fee = check_calculate_leader_fee(100, 1, 10);
+            assert_eq!(fee.fee, 90);
+            assert_eq!(fee.global_exhaust_burn, 10);
+
+            let fee = check_calculate_leader_fee(100, 2, 0);
+            assert_eq!(fee.fee, 50);
+            assert_eq!(fee.global_exhaust_burn, 0);
+
+            let fee = check_calculate_leader_fee(100, 2, 10);
+            assert_eq!(fee.fee, 45);
+            assert_eq!(fee.global_exhaust_burn, 10);
+
+            let fee = check_calculate_leader_fee(100, 3, 0);
+            assert_eq!(fee.fee, 33);
+            // Even with no exhaust, we still burn 1 due to integer div floor
+            assert_eq!(fee.global_exhaust_burn, 1);
+
+            let fee = check_calculate_leader_fee(100, 3, 10);
+            assert_eq!(fee.fee, 30);
+            assert_eq!(fee.global_exhaust_burn, 10);
+
+            let fee = check_calculate_leader_fee(98, 3, 10);
+            assert_eq!(fee.fee, 30);
+            assert_eq!(fee.global_exhaust_burn, 8);
+
+            let fee = check_calculate_leader_fee(98, 3, 21);
+            assert_eq!(fee.fee, 32);
+            // target burn is 4, but the remainder burn is 5, so we give 1 more to the leaders and burn 2
+            assert_eq!(fee.global_exhaust_burn, 2);
+
+            // Target burn is 8, and the remainder burn is 8, so we burn 8
+            let fee = check_calculate_leader_fee(98, 10, 10);
+            assert_eq!(fee.fee, 9);
+            assert_eq!(fee.global_exhaust_burn, 8);
+
+            let fee = check_calculate_leader_fee(19802, 45, 20);
+            assert_eq!(fee.fee, 418);
+            assert_eq!(fee.global_exhaust_burn, 992);
+
+            // High burn amount due to not enough fees to pay out all involved shards to compensate
+            let fee = check_calculate_leader_fee(311, 45, 20);
+            assert_eq!(fee.fee, 6);
+            assert_eq!(fee.global_exhaust_burn, 41);
+        }
+
+        #[test]
+        fn simple_fuzz() {
+            let mut total_fees = 0;
+            let mut total_burnt = 0;
+            for _ in 0..1_000_000 {
+                let fee = OsRng.gen_range(100..100000u64);
+                let involved = OsRng.gen_range(1..100u64);
+                let fee = check_calculate_leader_fee(fee, involved, 20);
+                total_fees += fee.fee * involved;
+                total_burnt += fee.global_exhaust_burn;
+            }
+
+            println!(
+                "total fees: {}, total burnt: {}, {}%",
+                total_fees,
+                total_burnt,
+                // Should approach 5%, tends to be ~5.25%
+                (total_burnt as f64 / total_fees as f64) * 100.0
+            );
         }
     }
 }

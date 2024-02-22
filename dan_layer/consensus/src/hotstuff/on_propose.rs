@@ -2,7 +2,8 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::BTreeSet,
+    num::NonZeroU64,
     ops::{Deref, DerefMut},
 };
 
@@ -37,7 +38,6 @@ use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
     hotstuff::{
-        calculate_block_fee,
         calculate_state_merkle_diff,
         diff_to_substate_changes,
         error::HotStuffError,
@@ -203,11 +203,10 @@ where TConsensusSpec: ConsensusSpec
         let current_version = high_qc.block_height().as_u64(); // parent_block.height.as_u64();
         let next_height = parent_block.height() + NodeHeight(1);
 
-        let mut total_block_fee = 0;
+        let mut total_leader_fee = 0;
         let mut substate_changes = vec![];
         let locked_block = LockedBlock::get(tx)?;
         let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
-        let mut distinct_accept_shards = HashSet::new();
         let commands = ForeignProposal::get_all_new(tx)?
             .into_iter()
             .filter(|foreign_proposal| {
@@ -231,14 +230,16 @@ where TConsensusSpec: ConsensusSpec
                 // prepared. We can now propose to Accept it. We also propose the decision change which everyone
                 // should agree with if they received the same foreign LocalPrepare.
                 TransactionPoolStage::LocalPrepared => {
-                    distinct_accept_shards.extend(
-                        t.transaction()
-                            .evidence
-                            .shards_iter()
-                            .map(|s| s.to_committee_shard(local_committee_shard.num_committees())),
-                    );
-                    total_block_fee += t.transaction().transaction_fee;
-                    let tx_atom = t.get_final_transaction_atom();
+                    let involved = local_committee_shard.count_distinct_shards(t.transaction().evidence.shards_iter());
+                    let involved = NonZeroU64::new(involved as u64).ok_or_else(|| {
+                        HotStuffError::InvariantError(format!(
+                            "Number of involved shards is zero for transaction {}",
+                            t.transaction_id(),
+                        ))
+                    })?;
+                    let leader_fee = t.calculate_leader_fee(involved, EXHAUST_DIVISOR);
+                    total_leader_fee += leader_fee.fee();
+                    let tx_atom = t.get_final_transaction_atom(leader_fee);
                     if tx_atom.decision.is_commit() {
                         let transaction = t.get_transaction(tx)?;
                         let result = transaction.result().ok_or_else(|| {
@@ -302,8 +303,6 @@ where TConsensusSpec: ConsensusSpec
         // Ensure that foreign indexes are canonically ordered
         foreign_indexes.sort_keys();
 
-        let block_fee = calculate_block_fee(total_block_fee, distinct_accept_shards.len() as u64, EXHAUST_DIVISOR);
-
         let mut next_block = Block::new(
             self.network,
             *parent_block.block_id(),
@@ -313,7 +312,7 @@ where TConsensusSpec: ConsensusSpec
             proposed_by,
             commands,
             state_root,
-            block_fee,
+            total_leader_fee,
             foreign_indexes,
             None,
         );

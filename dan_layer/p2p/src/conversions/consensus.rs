@@ -39,7 +39,6 @@ use tari_consensus::messages::{
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight, ValidatorMetadata};
 use tari_dan_storage::consensus_models::{
-    BlockFee,
     BlockId,
     Command,
     Decision,
@@ -47,6 +46,7 @@ use tari_dan_storage::consensus_models::{
     ForeignProposal,
     ForeignProposalState,
     HighQc,
+    LeaderFee,
     QcId,
     QuorumCertificate,
     QuorumDecision,
@@ -258,7 +258,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             proposed_by: ByteArray::as_bytes(value.proposed_by()).to_vec(),
             merkle_root: value.merkle_root().as_slice().to_vec(),
             justify: Some(value.justify().into()),
-            block_fee: Some(value.block_fee().into()),
+            total_leader_fee: value.total_leader_fee(),
             commands: value.commands().iter().map(Into::into).collect(),
             foreign_indexes: encode(value.foreign_indexes()).unwrap(),
             signature: value.get_signature().map(Into::into),
@@ -291,36 +291,10 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
                 .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?,
             value.merkle_root.try_into()?,
-            value
-                .block_fee
-                .map(TryInto::try_into)
-                .transpose()?
-                .ok_or_else(|| anyhow!("Block fee not provided"))?,
+            value.total_leader_fee,
             decode_exact(&value.foreign_indexes)?,
             value.signature.map(TryInto::try_into).transpose()?,
         ))
-    }
-}
-
-// -------------------------------- BlockFee -------------------------------- //
-
-impl From<&BlockFee> for proto::consensus::BlockFee {
-    fn from(value: &BlockFee) -> Self {
-        Self {
-            leader_fee: value.leader_fee,
-            global_exhaust_burn: value.global_exhaust_burn,
-        }
-    }
-}
-
-impl TryFrom<proto::consensus::BlockFee> for BlockFee {
-    type Error = anyhow::Error;
-
-    fn try_from(value: proto::consensus::BlockFee) -> Result<Self, Self::Error> {
-        Ok(Self {
-            leader_fee: value.leader_fee,
-            global_exhaust_burn: value.global_exhaust_burn,
-        })
     }
 }
 
@@ -366,6 +340,7 @@ impl From<&TransactionAtom> for proto::consensus::TransactionAtom {
             decision: proto::consensus::Decision::from(value.decision) as i32,
             evidence: Some((&value.evidence).into()),
             fee: value.transaction_fee,
+            leader_fee: value.leader_fee.as_ref().map(|a| a.into()),
         }
     }
 }
@@ -384,6 +359,28 @@ impl TryFrom<proto::consensus::TransactionAtom> for TransactionAtom {
                 .ok_or_else(|| anyhow!("evidence not provided"))?
                 .try_into()?,
             transaction_fee: value.fee,
+            leader_fee: value.leader_fee.map(TryInto::try_into).transpose()?,
+        })
+    }
+}
+// -------------------------------- BlockFee -------------------------------- //
+
+impl From<&LeaderFee> for proto::consensus::LeaderFee {
+    fn from(value: &LeaderFee) -> Self {
+        Self {
+            leader_fee: value.fee,
+            global_exhaust_burn: value.global_exhaust_burn,
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::LeaderFee> for LeaderFee {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::LeaderFee) -> Result<Self, Self::Error> {
+        Ok(Self {
+            fee: value.leader_fee,
+            global_exhaust_burn: value.global_exhaust_burn,
         })
     }
 }

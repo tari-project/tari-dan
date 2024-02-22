@@ -24,11 +24,11 @@ fn create_tx_atom() -> TransactionAtom {
         decision: Decision::Commit,
         evidence: Default::default(),
         transaction_fee: 0,
+        leader_fee: None,
     }
 }
 
 mod confirm_all_transitions {
-
     use super::*;
 
     #[test]

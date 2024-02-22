@@ -21,6 +21,7 @@ pub struct TransactionPoolRecord {
     pub evidence: String,
     pub remote_evidence: Option<String>,
     pub transaction_fee: i64,
+    pub leader_fee: Option<String>,
     pub stage: String,
     // TODO: This is the last stage update, but does not reflect the actual stage (which comes from the
     //       transaction_pool_state_updates table). This is kind of a hack to make transaction_pool_count work
@@ -54,6 +55,7 @@ impl TransactionPoolRecord {
                 decision: parse_from_string(&self.original_decision)?,
                 evidence,
                 transaction_fee: self.transaction_fee as u64,
+                leader_fee: self.leader_fee.as_deref().map(deserialize_json).transpose()?,
             },
             parse_from_string(&self.stage)?,
             pending_stage,
@@ -81,7 +83,7 @@ pub struct TransactionPoolStateUpdate {
     pub evidence: String,
     #[diesel(sql_type = diesel::sql_types::Bool)]
     pub is_ready: bool,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    #[diesel(sql_type = diesel::sql_types::Nullable < diesel::sql_types::Text >)]
     pub local_decision: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Timestamp)]
     pub created_at: PrimitiveDateTime,
