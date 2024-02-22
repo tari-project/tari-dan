@@ -8,7 +8,6 @@ license.workspace = true
 
 [dependencies]
 tari_crypto = { workspace = true }
-tari_dan_common_types = { workspace = true }
 tari_dan_wallet_daemon = { workspace = true }
 tari_dan_wallet_sdk = { workspace = true }
 tari_dan_wallet_storage_sqlite = { workspace = true }
