@@ -90,12 +90,12 @@ pub struct ValidatorNodeConfig {
     /// GRPC address of the validator node  application
     pub grpc_address: Option<Multiaddr>,
     /// JSON-RPC address of the validator node  application
-    pub json_rpc_address: Option<SocketAddr>,
+    pub json_rpc_listener_address: Option<SocketAddr>,
     /// The jrpc address where the UI should connect (it can be the same as the json_rpc_address, but doesn't have to
     /// be), if this will be None, then the listen_addr will be used.
-    pub ui_connect_address: Option<String>,
+    pub json_rpc_public_address: Option<String>,
     /// The address of the HTTP UI
-    pub http_ui_address: Option<SocketAddr>,
+    pub http_ui_listener_address: Option<SocketAddr>,
     /// The node will re-register each epoch
     pub auto_register: bool,
     /// Template config
@@ -140,9 +140,9 @@ impl Default for ValidatorNodeConfig {
             p2p: P2pConfig::default(),
             rpc: RpcConfig::default(),
             grpc_address: Some("/ip4/127.0.0.1/tcp/18144".parse().unwrap()),
-            json_rpc_address: Some("127.0.0.1:18200".parse().unwrap()),
-            ui_connect_address: None,
-            http_ui_address: Some("127.0.0.1:5001".parse().unwrap()),
+            json_rpc_listener_address: Some("127.0.0.1:18200".parse().unwrap()),
+            json_rpc_public_address: None,
+            http_ui_listener_address: Some("127.0.0.1:5001".parse().unwrap()),
             auto_register: true,
             templates: TemplateConfig::default(),
             no_fees: false,

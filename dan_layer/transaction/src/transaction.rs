@@ -14,11 +14,15 @@ use tari_engine_types::{
     substate::SubstateId,
 };
 use tari_template_lib::{models::ComponentAddress, Hash};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{builder::TransactionBuilder, transaction_id::TransactionId, TransactionSignature};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Transaction {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     id: TransactionId,
     fee_instructions: Vec<Instruction>,
     instructions: Vec<Instruction>,
@@ -187,7 +191,7 @@ impl Transaction {
                 Instruction::CallFunction { args, .. } => {
                     for arg in args.iter().filter_map(|a| a.as_literal_bytes()) {
                         let value = IndexedValue::from_raw(arg)?;
-                        substates.extend(value.referenced_substates());
+                        substates.extend(value.referenced_substates().filter(|id| !id.is_virtual()));
                     }
                 },
                 Instruction::CallMethod {
@@ -198,7 +202,7 @@ impl Transaction {
                     substates.insert(SubstateId::Component(*component_address));
                     for arg in args.iter().filter_map(|a| a.as_literal_bytes()) {
                         let value = IndexedValue::from_raw(arg)?;
-                        substates.extend(value.referenced_substates());
+                        substates.extend(value.referenced_substates().filter(|id| !id.is_virtual()));
                     }
                 },
                 Instruction::ClaimBurn { claim } => {
@@ -212,6 +216,7 @@ impl Transaction {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct SubstateRequirement {
     #[serde(with = "serde_with::string")]
     substate_id: SubstateId,

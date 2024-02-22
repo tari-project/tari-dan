@@ -7,10 +7,12 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use jsonwebtoken::{decode, encode, errors, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{errors, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use tari_engine_types::substate::SubstateId;
 use tari_template_lib::prelude::{ComponentAddress, ResourceAddress};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter};
 
@@ -22,11 +24,14 @@ pub struct JwtApi<'a, TStore> {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum JrpcPermission {
     AccountInfo,
     NftGetOwnershipProof(Option<ResourceAddress>),
     AccountBalance(SubstateId),
     AccountList(Option<ComponentAddress>),
+    SubstatesRead,
+    TemplatesRead,
     KeyList,
     TransactionGet,
     TransactionSend(Option<SubstateId>),
@@ -64,6 +69,8 @@ impl FromStr for JrpcPermission {
                 "AccountInfo" => Ok(JrpcPermission::AccountInfo),
                 "NftGetOwnershipProof" => Ok(JrpcPermission::NftGetOwnershipProof(None)),
                 "AccountList" => Ok(JrpcPermission::AccountList(None)),
+                "SubstatesRead" => Ok(JrpcPermission::SubstatesRead),
+                "TemplatesRead" => Ok(JrpcPermission::TemplatesRead),
                 "KeyList" => Ok(JrpcPermission::KeyList),
                 "GetNft" => Ok(JrpcPermission::GetNft(None, None)),
                 "TransactionGet" => Ok(JrpcPermission::TransactionGet),
@@ -92,11 +99,14 @@ impl Display for JrpcPermission {
             JrpcPermission::GetNft(_, _) => f.write_str("GetNft"),
             JrpcPermission::StartWebrtc => f.write_str("StartWebrtc"),
             JrpcPermission::Admin => f.write_str("Admin"),
+            JrpcPermission::SubstatesRead => f.write_str("SubstatesRead"),
+            JrpcPermission::TemplatesRead => f.write_str("TemplatesRead"),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct JrpcPermissions(pub Vec<JrpcPermission>);
 
 impl FromStr for JrpcPermissions {
@@ -138,7 +148,9 @@ impl TryFrom<&[String]> for JrpcPermissions {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Claims {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub id: u64,
     pub name: String,
     pub permissions: JrpcPermissions,
@@ -183,7 +195,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
             permissions,
             exp: valid_till.duration_since(UNIX_EPOCH).unwrap().as_secs() as usize,
         };
-        let auth_token = encode(
+        let auth_token = jsonwebtoken::encode(
             &Header::default(),
             &my_claims,
             &EncodingKey::from_secret(self.auth_secret_key.as_ref()),
@@ -192,7 +204,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
     }
 
     fn check_auth_token(&self, auth_token: &str) -> Result<AuthClaims, JwtApiError> {
-        let auth_token_data = decode::<AuthClaims>(
+        let auth_token_data = jsonwebtoken::decode::<AuthClaims>(
             auth_token,
             &DecodingKey::from_secret(self.auth_secret_key.as_ref()),
             &Validation::default(),
@@ -201,7 +213,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
     }
 
     fn get_token_claims(&self, token: &str) -> Result<Claims, JwtApiError> {
-        let claims = decode::<Claims>(
+        let claims = jsonwebtoken::decode::<Claims>(
             token,
             &DecodingKey::from_secret(self.jwt_secret_key.as_ref()),
             &Validation::default(),
@@ -222,7 +234,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
             permissions: auth_claims.permissions,
             exp: auth_claims.exp,
         };
-        let permissions_token = encode(
+        let permissions_token = jsonwebtoken::encode(
             &Header::default(),
             &my_claims,
             &EncodingKey::from_secret(self.jwt_secret_key.as_ref()),

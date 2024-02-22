@@ -25,7 +25,7 @@ use tari_dan_wallet_sdk::apis::jwt::JwtApiError;
 use tari_shutdown::ShutdownSignal;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
-use super::handlers::HandlerContext;
+use super::handlers::{substates, templates, HandlerContext};
 use crate::handlers::{
     accounts,
     confidential,
@@ -154,6 +154,12 @@ async fn handler(
             },
             _ => Ok(value.method_not_found(&value.method)),
         },
+        Some(("substates", method)) => match method {
+            "get" => call_handler(context, value, token, substates::handle_get).await,
+            "list" => call_handler(context, value, token, substates::handle_list).await,
+            _ => Ok(value.method_not_found(&value.method)),
+        },
+        Some(("templates", "get")) => call_handler(context, value, token, templates::handle_get).await,
         Some(("nfts", method)) => match method {
             "mint_account_nft" => call_handler(context, value, token, nfts::handle_mint_account_nft).await,
             "get" => call_handler(context, value, token, nfts::handle_get_nft).await,

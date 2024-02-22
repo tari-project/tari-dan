@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{BlockId, LeafBlock, LockedBlock, QuorumCertificate, TransactionPoolError},
@@ -8,6 +9,7 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
+use tari_state_tree::StateTreeError;
 use tari_transaction::TransactionId;
 
 use crate::traits::{InboundMessagingError, OutboundMessagingError};
@@ -16,6 +18,8 @@ use crate::traits::{InboundMessagingError, OutboundMessagingError};
 pub enum HotStuffError {
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
+    #[error("State tree error: {0}")]
+    StateTreeError(#[from] StateTreeError),
     #[error("Internal channel send error when {context}")]
     InternalChannelClosed { context: &'static str },
     #[error("Inbound messaging error: {0}")]
@@ -80,6 +84,8 @@ pub enum HotStuffError {
         local_height: NodeHeight,
         qc_height: NodeHeight,
     },
+    #[error("Invalid sync request: {details}")]
+    InvalidSyncRequest { details: String },
 }
 
 impl From<EpochManagerError> for HotStuffError {
@@ -170,4 +176,16 @@ pub enum ProposalValidationError {
     QuorumWasNotReached { qc: QuorumCertificate },
     #[error("Merkle proof error: {0}")]
     BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
+    #[error("Invalid network in block {block_id}: expected {expected_network}, given {block_network}")]
+    InvalidNetwork {
+        expected_network: String,
+        block_network: String,
+        block_id: BlockId,
+    },
+    #[error("Invalid state merkle root for block {block_id}: calculated {calculated} but block has {from_block}")]
+    InvalidStateMerkleRoot {
+        block_id: BlockId,
+        calculated: FixedHash,
+        from_block: FixedHash,
+    },
 }

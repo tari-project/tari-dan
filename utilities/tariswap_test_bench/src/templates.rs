@@ -10,15 +10,18 @@ pub async fn get_templates(vn_url: &Url) -> anyhow::Result<(TemplateMetadata, Te
 
     let faucet = templates
         .iter()
-        .find(|t| t.name.to_ascii_lowercase() == "faucet")
+        .find(|t| t.name.to_ascii_lowercase().contains("faucet"))
         .ok_or(anyhow::anyhow!("Faucet template not found"))?
         .clone();
 
     let tariswap = templates
         .iter()
-        .find(|t| t.name.to_ascii_lowercase() == "tariswap")
+        .find(|t| t.name.to_ascii_lowercase().contains("tariswap"))
         .ok_or(anyhow::anyhow!("Tariswap template not found"))?
         .clone();
+
+    log::info!("Faucet template: {}", faucet.address);
+    log::info!("Tariswap template: {}", tariswap.address);
 
     Ok((faucet, tariswap))
 }

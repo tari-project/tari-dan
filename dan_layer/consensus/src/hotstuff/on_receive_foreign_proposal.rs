@@ -16,6 +16,7 @@ use tari_dan_storage::{
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
+use tari_transaction::TransactionId;
 
 use crate::{
     hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle, ProposalValidationError},
@@ -70,7 +71,45 @@ where TConsensusSpec: ConsensusSpec
             .epoch_manager
             .get_committee_shard(block.epoch(), vn.shard_key)
             .await?;
-        let foreign_proposal = ForeignProposal::new(committee_shard.shard(), *block.id());
+
+        let local_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
+        if let Err(err) = self.validate_proposed_block(
+            &from,
+            &block,
+            committee_shard.shard(),
+            local_shard.shard(),
+            &foreign_receive_counter,
+        ) {
+            warn!(
+                target: LOG_TARGET,
+                "🔥 FOREIGN PROPOSAL: Invalid proposal from {}: {}. Ignoring.",
+                from,
+                err
+            );
+            // Invalid blocks should not cause the state machine to transition to Error
+            return Ok(());
+        }
+
+        foreign_receive_counter.increment(&committee_shard.shard());
+
+        let tx_ids = block
+            .commands()
+            .iter()
+            .filter_map(|command| {
+                if let Some(tx) = command.local_prepared() {
+                    if !committee_shard.includes_any_shard(command.evidence().shards_iter()) {
+                        return None;
+                    }
+                    // We are interested in the commands that are for us, they will be in local prepared and one of the
+                    // evidence shards will be ours
+                    Some(tx.id)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<TransactionId>>();
+
+        let foreign_proposal = ForeignProposal::new(committee_shard.shard(), *block.id(), tx_ids);
         if self
             .store
             .with_read_tx(|tx| ForeignProposal::exists(tx, &foreign_proposal))?
@@ -83,15 +122,6 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
-        let local_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
-        self.validate_proposed_block(
-            &from,
-            &block,
-            committee_shard.shard(),
-            local_shard.shard(),
-            &foreign_receive_counter,
-        )?;
-        foreign_receive_counter.increment(&committee_shard.shard());
         self.store.with_write_tx(|tx| {
             foreign_receive_counter.save(tx)?;
             foreign_proposal.upsert(tx)?;

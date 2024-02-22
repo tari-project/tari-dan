@@ -2,7 +2,10 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common_types::types::PublicKey;
-use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker};
+use tari_consensus::{
+    hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker},
+    traits::hooks::NoopHooks,
+};
 use tari_dan_common_types::{shard::Shard, SubstateAddress};
 use tari_dan_storage::consensus_models::TransactionPool;
 use tari_shutdown::ShutdownSignal;
@@ -99,6 +102,7 @@ impl ValidatorBuilder {
                 .clone_for(self.address.clone(), self.public_key.clone(), self.shard);
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             self.address.clone(),
+            Default::default(),
             inbound_messaging,
             outbound_messaging,
             rx_new_transactions,
@@ -110,6 +114,7 @@ impl ValidatorBuilder {
             transaction_pool,
             tx_events.clone(),
             tx_mempool,
+            NoopHooks,
             shutdown_signal.clone(),
         );
 

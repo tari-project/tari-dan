@@ -1,10 +1,15 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::BTreeSet, num::NonZeroU64, ops::DerefMut};
+use std::{
+    collections::BTreeSet,
+    num::NonZeroU64,
+    ops::{Deref, DerefMut},
+};
 
 use indexmap::IndexMap;
 use log::*;
+use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
@@ -22,6 +27,7 @@ use tari_dan_storage::{
         LastProposed,
         LeafBlock,
         LockedBlock,
+        PendingStateTreeDiff,
         QuorumCertificate,
         TransactionPool,
         TransactionPoolStage,
@@ -31,7 +37,13 @@ use tari_dan_storage::{
 use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
-    hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, proposer},
+    hotstuff::{
+        calculate_state_merkle_diff,
+        common::EXHAUST_DIVISOR,
+        diff_to_substate_changes,
+        error::HotStuffError,
+        proposer,
+    },
     messages::{HotstuffMessage, ProposalMessage},
     traits::{ConsensusSpec, OutboundMessaging, ValidatorSignatureService},
 };
@@ -39,6 +51,7 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_locally";
 
 pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
+    network: Network,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
@@ -50,6 +63,7 @@ impl<TConsensusSpec> OnPropose<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
+        network: Network,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
@@ -57,6 +71,7 @@ where TConsensusSpec: ConsensusSpec
         outbound_messaging: TConsensusSpec::OutboundMessaging,
     ) -> Self {
         Self {
+            network,
             store,
             epoch_manager,
             transaction_pool,
@@ -167,6 +182,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn build_next_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
@@ -184,8 +200,11 @@ where TConsensusSpec: ConsensusSpec
         } else {
             self.transaction_pool.get_batch_for_next_block(tx, TARGET_BLOCK_SIZE)?
         };
+        let current_version = high_qc.block_height().as_u64(); // parent_block.height.as_u64();
+        let next_height = parent_block.height() + NodeHeight(1);
 
         let mut total_leader_fee = 0;
+        let mut substate_changes = vec![];
         let locked_block = LockedBlock::get(tx)?;
         let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
         let commands = ForeignProposal::get_all_new(tx)?
@@ -220,7 +239,25 @@ where TConsensusSpec: ConsensusSpec
                     })?;
                     let leader_fee = t.calculate_leader_fee(involved, EXHAUST_DIVISOR);
                     total_leader_fee += leader_fee;
-                    Ok(Command::Accept(t.get_final_transaction_atom(leader_fee)))
+                    let tx_atom = t.get_final_transaction_atom(leader_fee);
+                    if tx_atom.decision.is_commit() {
+                        let transaction = t.get_transaction(tx)?;
+                        let result = transaction.result().ok_or_else(|| {
+                            HotStuffError::InvariantError(format!(
+                                "Transaction {} is committed but has no result when proposing",
+                                t.transaction_id(),
+                            ))
+                        })?;
+
+                        let diff = result.finalize.result.accept().ok_or_else(|| {
+                            HotStuffError::InvariantError(format!(
+                                "Transaction {} has COMMIT decision but execution failed when proposing",
+                                t.transaction_id(),
+                            ))
+                        })?;
+                        substate_changes.extend(diff_to_substate_changes(diff));
+                    }
+                    Ok(Command::Accept(tx_atom))
                 },
                 // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes
                 // agreed with the Accept, more (possibly empty) blocks with QCs will be
@@ -240,6 +277,16 @@ where TConsensusSpec: ConsensusSpec
             commands.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
         );
 
+        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(tx, high_qc.block_id())?;
+
+        let (state_root, _) = calculate_state_merkle_diff(
+            tx.deref(),
+            current_version,
+            next_height.as_u64(),
+            pending,
+            substate_changes,
+        )?;
+
         let non_local_buckets = proposer::get_non_local_shards_from_commands(
             tx,
             &commands,
@@ -257,12 +304,14 @@ where TConsensusSpec: ConsensusSpec
         foreign_indexes.sort_keys();
 
         let mut next_block = Block::new(
+            self.network,
             *parent_block.block_id(),
             high_qc,
-            parent_block.height() + NodeHeight(1),
+            next_height,
             epoch,
             proposed_by,
             commands,
+            state_root,
             total_leader_fee,
             foreign_indexes,
             None,

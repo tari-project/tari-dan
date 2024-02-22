@@ -222,6 +222,17 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
 
         Ok(Response::new(GetTransactionResultResponse {
             status: PayloadResultStatus::Finalized.into(),
+
+            final_decision: proto::consensus::Decision::from(final_decision) as i32,
+            execution_time_ms: transaction
+                .execution_time()
+                .map(|t| u64::try_from(t.as_millis()).unwrap_or(u64::MAX))
+                .unwrap_or_default(),
+            finalized_time_ms: transaction
+                .finalized_time()
+                .map(|t| u64::try_from(t.as_millis()).unwrap_or(u64::MAX))
+                .unwrap_or_default(),
+            abort_details,
             // For simplicity, we simply encode the whole result as a CBOR blob.
             execution_result: transaction
                 .into_final_result()
@@ -230,8 +241,6 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
                 .transpose()
                 .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
                 .unwrap_or_default(),
-            final_decision: proto::consensus::Decision::from(final_decision) as i32,
-            abort_details,
         }))
     }
 

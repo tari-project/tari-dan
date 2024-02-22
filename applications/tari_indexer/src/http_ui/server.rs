@@ -57,7 +57,7 @@ pub async fn run_http_ui_server(address: SocketAddr, json_rpc_address: String) -
     Ok(())
 }
 
-static PROJECT_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../tari_indexer_web_ui/build");
+static PROJECT_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../tari_indexer_web_ui/dist");
 
 async fn handler(uri: Uri) -> impl IntoResponse {
     let path = uri.path();

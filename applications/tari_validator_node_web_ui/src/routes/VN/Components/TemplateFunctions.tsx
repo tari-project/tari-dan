@@ -22,7 +22,6 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { ITemplate } from "../../../utils/interfaces";
 import { getTemplate } from "../../../utils/json_rpc";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -35,23 +34,23 @@ import PageHeading from "../../../Components/PageHeading";
 import Grid from "@mui/material/Grid";
 import { StyledPaper } from "../../../Components/StyledComponents";
 import { fromHexString } from "./helpers";
+import type { ArgDef, GetTemplateResponse } from "@tarilabs/typescript-bindings/validator-node-client";
 
 function TemplateFunctions() {
   const { address } = useParams();
-  const [info, setInfo] = useState<ITemplate>();
-
-  const load = (address: any) => {
-    getTemplate(address).then((response) => {
-      setInfo(response);
-    });
-  };
+  const [info, setInfo] = useState<GetTemplateResponse>();
 
   useEffect(() => {
-    const data = address ? fromHexString(address.replace("0x", "")) : "";
+    const load = (address: Uint8Array) => {
+      getTemplate({ template_address: address }).then((response) => {
+        setInfo(response);
+      });
+    };
+    const data = address ? fromHexString(address.replace("0x", "")) : new Uint8Array();
     load(data);
-  }, []);
+  }, [address]);
 
-  const renderFunctions = (template: ITemplate) => {
+  const renderFunctions = (template: GetTemplateResponse) => {
     return (
       <TableContainer>
         <BoxHeading2>{template.abi.template_name}</BoxHeading2>
@@ -69,7 +68,7 @@ function TemplateFunctions() {
                 <DataTableCell style={{ textAlign: "left" }}>{fn.name}</DataTableCell>
                 <DataTableCell>
                   {fn.arguments
-                    .map((a: any) => {
+                    .map((a: ArgDef) => {
                       return a.name + ":" + a.arg_type;
                     })
                     .join(", ")}

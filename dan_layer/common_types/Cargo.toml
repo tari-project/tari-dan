@@ -7,14 +7,16 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+tari_common = { workspace = true }
 tari_common_types = { workspace = true }
 tari_crypto = { workspace = true, features = ["borsh"] }
 tari_engine_types = { workspace = true }
+tari_hash_domains = { workspace = true }
 tari_bor = { workspace = true, default-features = true }
 tari_mmr = { workspace = true }
 tari_core = { workspace = true, default-features = false, features = [
   "transactions",
-  "base_node_proto"
+  "base_node_proto",
 ] }
 
 libp2p-identity = { workspace = true, features = [
@@ -30,9 +32,13 @@ prost = { workspace = true }
 prost-types = { workspace = true }
 serde = { workspace = true, default-features = true }
 ruint = { workspace = true }
+ts-rs = { workspace = true, optional = true }
 
 [build-dependencies]
 tari_common = { workspace = true, features = ["build"] }
 
 [package.metadata.cargo-machete]
 ignored = ["prost", "prost-types"] # false positive, used in OUT_DIR structs
+
+[features]
+ts = ["ts-rs"]

@@ -22,9 +22,12 @@
 
 use serde::{Deserialize, Serialize};
 use tari_template_lib::prelude::NonFungibleAddress;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 /// Holds a reference to another substate
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct NonFungibleIndex {
     referenced_address: NonFungibleAddress,
 }

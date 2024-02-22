@@ -26,7 +26,7 @@ import Error from "./Error";
 import Typography from "@mui/material/Typography";
 
 function Mempool() {
-  const [state, setState] = useState();
+  const [state, setState] = useState<number>();
   const [error, setError] = useState<String>();
   useEffect(() => {
     getMempoolStats()

@@ -40,7 +40,7 @@ import { renderJson } from "../utils/helpers";
 
 interface ICodeBlockExpand {
   title: string;
-  content: string;
+  content: any;
 }
 
 const CodeBlock = styled(Box)(({ theme }) => ({

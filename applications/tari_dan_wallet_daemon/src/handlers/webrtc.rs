@@ -43,11 +43,11 @@ pub fn handle_start(
         })?;
     let webrtc_start_request = value.parse_params::<WebRtcStartRequest>()?;
     let shutdown_signal = (*shutdown_signal).clone();
-    let permissions = serde_json::from_str::<JrpcPermissions>(&webrtc_start_request.permissions).map_err(|e| {
+    let permissions = serde_json::from_value::<JrpcPermissions>(webrtc_start_request.permissions).map_err(|e| {
         JsonRpcResponse::error(
             answer_id,
             JsonRpcError::new(
-                JsonRpcErrorReason::InternalError,
+                JsonRpcErrorReason::InvalidRequest,
                 e.to_string(),
                 serde_json::Value::Null,
             ),

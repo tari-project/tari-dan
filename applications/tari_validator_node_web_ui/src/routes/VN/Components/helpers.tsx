@@ -109,12 +109,12 @@ function toHexString(byteArray: number[]) {
   }).join("");
 }
 
-function fromHexString(hexString: string) {
+function fromHexString(hexString: string): Uint8Array {
   let res = [];
   for (let i = 0; i < hexString.length; i += 2) {
     res.push(Number("0x" + hexString.substring(i, i + 2)));
   }
-  return res;
+  return new Uint8Array(res);
 }
 
 function shortenString(string: string, start: number = 8, end: number = 8) {

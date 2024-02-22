@@ -9,11 +9,15 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{shard::Shard, NodeHeight};
+use tari_transaction::TransactionId;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use super::BlockId;
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum ForeignProposalState {
     New,
     Proposed,
@@ -44,20 +48,26 @@ impl FromStr for ForeignProposalState {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ForeignProposal {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub bucket: Shard,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub block_id: BlockId,
     pub state: ForeignProposalState,
     pub proposed_height: Option<NodeHeight>,
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
+    pub transactions: Vec<TransactionId>,
 }
 
 impl ForeignProposal {
-    pub fn new(bucket: Shard, block_id: BlockId) -> Self {
+    pub fn new(bucket: Shard, block_id: BlockId, transactions: Vec<TransactionId>) -> Self {
         Self {
             bucket,
             block_id,
             state: ForeignProposalState::New,
             proposed_height: None,
+            transactions,
         }
     }
 
@@ -96,5 +106,12 @@ impl ForeignProposal {
         to_block_id: &BlockId,
     ) -> Result<Vec<Self>, StorageError> {
         tx.foreign_proposal_get_all_pending(from_block_id, to_block_id)
+    }
+
+    pub fn get_all_proposed<TTx: StateStoreReadTransaction + ?Sized>(
+        tx: &mut TTx,
+        to_height: NodeHeight,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.foreign_proposal_get_all_proposed(to_height)
     }
 }

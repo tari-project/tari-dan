@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,6 @@ pub struct Transaction {
     pub fee_instructions: String,
     pub meta: String,
     pub result: Option<String>,
-    pub json_result: Option<String>,
     pub qcs: Option<String>,
     pub final_fee: Option<i64>,
     pub status: String,
@@ -35,6 +34,9 @@ pub struct Transaction {
     pub max_epoch: Option<i64>,
     pub updated_at: NaiveDateTime,
     pub created_at: NaiveDateTime,
+    pub json_result: Option<String>,
+    pub executed_time_ms: Option<i64>,
+    pub finalized_time_ms: Option<i64>,
 }
 
 /// Struct used to keep inputs and outputs in a single field as json
@@ -76,6 +78,12 @@ impl Transaction {
             final_fee: self.final_fee.map(|f| f.into()),
             qcs: self.qcs.map(|q| deserialize_json(&q)).transpose()?.unwrap_or_default(),
             is_dry_run: self.is_dry_run,
+            execution_time: self
+                .executed_time_ms
+                .map(|t| u64::try_from(t).map(Duration::from_millis).unwrap_or_default()),
+            finalized_time: self
+                .finalized_time_ms
+                .map(|t| u64::try_from(t).map(Duration::from_millis).unwrap_or_default()),
             // TODO: This is always None
             json_result: self
                 .json_result

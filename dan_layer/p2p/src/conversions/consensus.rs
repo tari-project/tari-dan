@@ -250,6 +250,7 @@ impl TryFrom<proto::consensus::RequestedTransactionMessage> for RequestedTransac
 impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Block {
     fn from(value: &tari_dan_storage::consensus_models::Block) -> Self {
         Self {
+            network: value.network().as_byte().into(),
             height: value.height().as_u64(),
             epoch: value.epoch().as_u64(),
             parent_id: value.parent().as_bytes().to_vec(),
@@ -268,7 +269,12 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::Block) -> Result<Self, Self::Error> {
+        let network = u8::try_from(value.network)
+            .map_err(|_| anyhow!("Block conversion: Invalid network byte {}", value.network))?
+            .try_into()?;
+
         Ok(Self::new(
+            network,
             value.parent_id.try_into()?,
             value
                 .justify
@@ -283,6 +289,7 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?,
+            value.merkle_root.try_into()?,
             value.total_leader_fee,
             decode_exact(&value.foreign_indexes)?,
             value.signature.map(TryInto::try_into).transpose()?,
@@ -391,6 +398,7 @@ impl From<&ForeignProposal> for proto::consensus::ForeignProposal {
             block_id: value.block_id.as_bytes().to_vec(),
             state: proto::consensus::ForeignProposalState::from(value.state).into(),
             mined_at: value.proposed_height.map(|a| a.0).unwrap_or(0),
+            transactions: value.transactions.iter().map(|tx| tx.as_bytes().to_vec()).collect(),
         }
     }
 }
@@ -410,6 +418,11 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
             } else {
                 Some(NodeHeight(value.mined_at))
             },
+            transactions: value
+                .transactions
+                .into_iter()
+                .map(|tx| tx.try_into())
+                .collect::<Result<_, _>>()?,
         })
     }
 }

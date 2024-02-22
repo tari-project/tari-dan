@@ -28,16 +28,21 @@ use tari_template_lib::{
     prelude::ComponentAddress,
     Hash,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::serde_with;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Event {
     #[serde(with = "serde_with::hex::option")]
     component_address: Option<ComponentAddress>,
     #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     template_address: TemplateAddress,
     #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     tx_hash: Hash,
     topic: String,
     // NOTE: We need to use an ordered map here. HashMaps are unordered, so when we pledge this state the hash

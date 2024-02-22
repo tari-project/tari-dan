@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use tari_common::configuration::Network;
 use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey};
 use tari_dan_storage::consensus_models::Block;
 use tari_epoch_manager::EpochManagerReader;
@@ -9,6 +10,17 @@ use crate::{
     hotstuff::{HotStuffError, ProposalValidationError},
     traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
 };
+
+pub fn check_network(candidate_block: &Block, network: Network) -> Result<(), ProposalValidationError> {
+    if candidate_block.network() != network {
+        return Err(ProposalValidationError::InvalidNetwork {
+            block_network: candidate_block.network().to_string(),
+            expected_network: network.to_string(),
+            block_id: *candidate_block.id(),
+        });
+    }
+    Ok(())
+}
 
 pub fn check_hash_and_height(candidate_block: &Block) -> Result<(), ProposalValidationError> {
     if candidate_block.height().is_zero() || candidate_block.is_genesis() {
@@ -91,7 +103,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         let vn = epoch_manager
             .get_validator_node_by_public_key(candidate_block.justify().epoch(), signature.public_key())
             .await?;
-        vns.push(vn.node_hash());
+        vns.push(vn.get_node_hash(candidate_block.network()));
     }
     let merkle_root = epoch_manager
         .get_validator_node_merkle_root(candidate_block.justify().epoch())

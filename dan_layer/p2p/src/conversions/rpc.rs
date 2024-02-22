@@ -4,7 +4,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
-use tari_dan_storage::consensus_models::{SubstateCreatedProof, SubstateData, SubstateUpdate};
+use tari_dan_storage::consensus_models::{SubstateCreatedProof, SubstateData, SubstateDestroyedProof, SubstateUpdate};
 use tari_engine_types::substate::{SubstateId, SubstateValue};
 
 use crate::proto;
@@ -37,6 +37,34 @@ impl From<SubstateCreatedProof> for proto::rpc::SubstateCreatedProof {
     }
 }
 
+impl TryFrom<proto::rpc::SubstateDestroyedProof> for SubstateDestroyedProof {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::rpc::SubstateDestroyedProof) -> Result<Self, Self::Error> {
+        Ok(Self {
+            substate_id: SubstateId::from_bytes(&value.substate_id)?,
+            version: value.version,
+            justify: value
+                .destroyed_justify
+                .map(TryInto::try_into)
+                .transpose()?
+                .ok_or_else(|| anyhow!("destroyed_justify not provided"))?,
+            destroyed_by_transaction: value.destroyed_by_transaction.try_into()?,
+        })
+    }
+}
+
+impl From<SubstateDestroyedProof> for proto::rpc::SubstateDestroyedProof {
+    fn from(value: SubstateDestroyedProof) -> Self {
+        Self {
+            substate_id: value.substate_id.to_bytes(),
+            version: value.version,
+            destroyed_justify: Some((&value.justify).into()),
+            destroyed_by_transaction: value.destroyed_by_transaction.as_bytes().to_vec(),
+        }
+    }
+}
+
 impl TryFrom<proto::rpc::SubstateUpdate> for SubstateUpdate {
     type Error = anyhow::Error;
 
@@ -44,15 +72,7 @@ impl TryFrom<proto::rpc::SubstateUpdate> for SubstateUpdate {
         let update = value.update.ok_or_else(|| anyhow!("update not provided"))?;
         match update {
             proto::rpc::substate_update::Update::Create(substate_proof) => Ok(Self::Create(substate_proof.try_into()?)),
-            proto::rpc::substate_update::Update::Destroy(proof) => Ok(Self::Destroy {
-                address: proof.address.try_into()?,
-                proof: proof
-                    .destroyed_justify
-                    .map(TryInto::try_into)
-                    .transpose()?
-                    .ok_or_else(|| anyhow!("destroyed_justify not provided"))?,
-                destroyed_by_transaction: proof.destroyed_by_transaction.try_into()?,
-            }),
+            proto::rpc::substate_update::Update::Destroy(proof) => Ok(Self::Destroy(proof.try_into()?)),
         }
     }
 }
@@ -61,15 +81,7 @@ impl From<SubstateUpdate> for proto::rpc::SubstateUpdate {
     fn from(value: SubstateUpdate) -> Self {
         let update = match value {
             SubstateUpdate::Create(proof) => proto::rpc::substate_update::Update::Create(proof.into()),
-            SubstateUpdate::Destroy {
-                proof,
-                address,
-                destroyed_by_transaction,
-            } => proto::rpc::substate_update::Update::Destroy(proto::rpc::SubstateDestroyedProof {
-                address: address.as_bytes().to_vec(),
-                destroyed_justify: Some((&proof).into()),
-                destroyed_by_transaction: destroyed_by_transaction.as_bytes().to_vec(),
-            }),
+            SubstateUpdate::Destroy(proof) => proto::rpc::substate_update::Update::Destroy(proof.into()),
         };
 
         Self { update: Some(update) }

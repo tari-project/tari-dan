@@ -8,11 +8,11 @@ use std::{
 };
 
 use log::*;
+use tari_common::configuration::Network;
 use tari_dan_common_types::{optional::Optional, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, HighQc, LastSentVote, LastVoted, LeafBlock, TransactionPool},
     StateStore,
-    StateStoreWriteTransaction,
 };
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
 use tari_shutdown::ShutdownSignal;
@@ -38,18 +38,20 @@ use crate::{
         vote_receiver::VoteReceiver,
     },
     messages::{HotstuffMessage, SyncRequestMessage},
-    traits::{ConsensusSpec, InboundMessaging, LeaderStrategy, OutboundMessaging},
+    traits::{hooks::ConsensusHooks, ConsensusSpec, InboundMessaging, LeaderStrategy, OutboundMessaging},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
 
 pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
+    network: Network,
+    hooks: TConsensusSpec::Hooks,
 
     tx_events: broadcast::Sender<HotstuffEvent>,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     inbound_messaging: TConsensusSpec::InboundMessaging,
-    rx_new_transactions: mpsc::Receiver<TransactionId>,
+    rx_new_transactions: mpsc::Receiver<(TransactionId, usize)>,
 
     on_inbound_message: OnInboundMessage<TConsensusSpec>,
     on_next_sync_view: OnNextSyncViewHandler<TConsensusSpec>,
@@ -75,9 +77,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
+        network: Network,
         inbound_messaging: TConsensusSpec::InboundMessaging,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
-        rx_new_transactions: mpsc::Receiver<TransactionId>,
+        rx_new_transactions: mpsc::Receiver<(TransactionId, usize)>,
         state_store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -86,10 +89,12 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         tx_mempool: mpsc::UnboundedSender<Transaction>,
+        hooks: TConsensusSpec::Hooks,
         shutdown: ShutdownSignal,
     ) -> Self {
         let pacemaker = PaceMaker::new();
         let vote_receiver = VoteReceiver::new(
+            network,
             state_store.clone(),
             leader_strategy.clone(),
             epoch_manager.clone(),
@@ -100,16 +105,17 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             Proposer::<TConsensusSpec>::new(state_store.clone(), epoch_manager.clone(), outbound_messaging.clone());
         Self {
             validator_addr: validator_addr.clone(),
+            network,
             tx_events: tx_events.clone(),
             outbound_messaging: outbound_messaging.clone(),
             inbound_messaging,
             rx_new_transactions,
 
             on_inbound_message: OnInboundMessage::new(
+                network,
                 state_store.clone(),
                 epoch_manager.clone(),
                 leader_strategy.clone(),
-                pacemaker.clone_handle(),
                 signing_service.clone(),
                 outbound_messaging.clone(),
             ),
@@ -132,6 +138,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 transaction_pool.clone(),
                 tx_events,
                 proposer.clone(),
+                network,
+                hooks.clone(),
             ),
             on_receive_foreign_proposal: OnReceiveForeignProposalHandler::new(
                 state_store.clone(),
@@ -141,6 +149,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             ),
             on_receive_vote: OnReceiveVoteHandler::new(vote_receiver.clone()),
             on_receive_new_view: OnReceiveNewViewHandler::new(
+                network,
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
@@ -153,6 +162,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             ),
             on_receive_requested_txs: OnReceiveRequestedTransactions::new(tx_mempool),
             on_propose: OnPropose::new(
+                network,
                 state_store.clone(),
                 epoch_manager.clone(),
                 transaction_pool.clone(),
@@ -169,13 +179,11 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
             pacemaker: pacemaker.clone_handle(),
             pacemaker_worker: Some(pacemaker),
+            hooks,
             shutdown,
         }
     }
-}
-impl<TConsensusSpec> HotstuffWorker<TConsensusSpec>
-where TConsensusSpec: ConsensusSpec
-{
+
     pub async fn start(&mut self) -> Result<(), HotStuffError> {
         self.create_genesis_block_if_required()?;
         let (current_height, high_qc) = self.state_store.with_read_tx(|tx| {
@@ -210,8 +218,14 @@ where TConsensusSpec: ConsensusSpec
 
         self.request_initial_catch_up_sync().await?;
 
+        let mut prev_height = self.pacemaker.current_height();
         loop {
             let current_height = self.pacemaker.current_height() + NodeHeight(1);
+
+            if current_height != prev_height {
+                self.hooks.on_pacemaker_height_changed(current_height);
+                prev_height = current_height;
+            }
 
             debug!(
                 target: LOG_TARGET,
@@ -222,7 +236,9 @@ where TConsensusSpec: ConsensusSpec
             tokio::select! {
                 Some(result) = self.inbound_messaging.next_message() => {
                     let (from, msg) = result?;
+                    self.hooks.on_message_received(&msg);
                     if let Err(err) = self.on_inbound_message.handle(current_height, from, msg).await {
+                        self.hooks.on_error(&err);
                         error!(target: LOG_TARGET, "Error handling message: {}", err);
                     }
                 },
@@ -234,9 +250,15 @@ where TConsensusSpec: ConsensusSpec
                     }
                 },
 
-                Some(tx_id) = self.rx_new_transactions.recv() => {
+                Some((tx_id, pending)) = self.rx_new_transactions.recv() => {
+                    self.hooks.on_transaction_ready(&tx_id);
                     if let Err(err) = self.on_inbound_message.update_parked_blocks(current_height, &tx_id).await {
+                        self.hooks.on_error(&err);
                         error!(target: LOG_TARGET, "Error checking parked blocks: {}", err);
+                    }
+                    // Only propose now if there are no pending transactions
+                    if pending == 0 {
+                        self.pacemaker.beat();
                     }
                 },
 
@@ -252,6 +274,7 @@ where TConsensusSpec: ConsensusSpec
                 },
 
                 maybe_leaf_block = on_force_beat.wait() => {
+                    self.hooks.on_beat();
                     if let Err(e) = self.propose_if_leader(maybe_leaf_block).await {
                         self.on_failure("propose_if_leader", &e).await;
                         return Err(e);
@@ -329,6 +352,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     async fn on_failure(&mut self, context: &str, err: &HotStuffError) {
+        self.hooks.on_error(err);
         self.publish_event(HotstuffEvent::Failure {
             message: err.to_string(),
         });
@@ -356,12 +380,14 @@ where TConsensusSpec: ConsensusSpec
     }
 
     async fn on_leader_timeout(&mut self, new_height: NodeHeight) -> Result<(), HotStuffError> {
+        self.hooks.on_leader_timeout(new_height);
         self.on_next_sync_view.handle(new_height).await?;
         self.publish_event(HotstuffEvent::LeaderTimeout { new_height });
         Ok(())
     }
 
     async fn on_beat(&mut self) -> Result<(), HotStuffError> {
+        self.hooks.on_beat();
         if !self
             .state_store
             .with_read_tx(|tx| self.transaction_pool.has_uncommitted_transactions(tx))?
@@ -422,6 +448,7 @@ where TConsensusSpec: ConsensusSpec
                 local_height,
                 qc_height,
             }) => {
+                self.hooks.on_needs_sync(local_height, qc_height);
                 if qc_height.as_u64() - local_height.as_u64() > MAX_BLOCKS_PER_SYNC as u64 {
                     warn!(
                         target: LOG_TARGET,
@@ -522,36 +549,36 @@ where TConsensusSpec: ConsensusSpec
     }
 
     fn create_genesis_block_if_required(&self) -> Result<(), HotStuffError> {
-        let mut tx = self.state_store.create_write_tx()?;
+        self.state_store.with_write_tx(|tx| {
+            // The parent for genesis blocks refer to this zero block
+            let zero_block = Block::zero_block(self.network);
+            if !zero_block.exists(tx.deref_mut())? {
+                debug!(target: LOG_TARGET, "Creating zero block");
+                zero_block.justify().insert(tx)?;
+                zero_block.insert(tx)?;
+                zero_block.as_locked_block().set(tx)?;
+                zero_block.as_leaf_block().set(tx)?;
+                zero_block.as_last_executed().set(tx)?;
+                zero_block.as_last_voted().set(tx)?;
+                zero_block.justify().as_high_qc().set(tx)?;
+                zero_block.commit(tx)?;
+            }
 
-        // The parent for genesis blocks refer to this zero block
-        let zero_block = Block::zero_block();
-        if !zero_block.exists(tx.deref_mut())? {
-            debug!(target: LOG_TARGET, "Creating zero block");
-            zero_block.justify().insert(&mut tx)?;
-            zero_block.insert(&mut tx)?;
-            zero_block.as_locked_block().set(&mut tx)?;
-            zero_block.as_leaf_block().set(&mut tx)?;
-            zero_block.as_last_executed().set(&mut tx)?;
-            zero_block.as_last_voted().set(&mut tx)?;
-            zero_block.justify().as_high_qc().set(&mut tx)?;
-            zero_block.commit(&mut tx)?;
-        }
+            // let mut state_tree = SpreadPrefixStateTree::new(tx);
+            // state_tree.put_substate_changes_at_next_version(None, vec![])?;
 
-        // let genesis = Block::genesis();
-        // if !genesis.exists(tx.deref_mut())? {
-        //     debug!(target: LOG_TARGET, "Creating genesis block");
-        //     genesis.justify().save(&mut tx)?;
-        //     genesis.insert(&mut tx)?;
-        //     genesis.as_locked().set(&mut tx)?;
-        //     genesis.as_leaf_block().set(&mut tx)?;
-        //     genesis.as_last_executed().set(&mut tx)?;
-        //     genesis.justify().as_high_qc().set(&mut tx)?;
-        // }
-
-        tx.commit()?;
-
-        Ok(())
+            // let genesis = Block::genesis();
+            // if !genesis.exists(tx.deref_mut())? {
+            //     debug!(target: LOG_TARGET, "Creating genesis block");
+            //     genesis.justify().save(&mut tx)?;
+            //     genesis.insert(&mut tx)?;
+            //     genesis.as_locked().set(&mut tx)?;
+            //     genesis.as_leaf_block().set(&mut tx)?;
+            //     genesis.as_last_executed().set(&mut tx)?;
+            //     genesis.justify().as_high_qc().set(&mut tx)?;
+            // }
+            Ok(())
+        })
     }
 
     fn publish_event(&self, event: HotstuffEvent) {

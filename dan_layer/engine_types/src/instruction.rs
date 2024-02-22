@@ -10,6 +10,8 @@ use tari_template_lib::{
     args::{Arg, LogLevel},
     models::{Amount, ComponentAddress, TemplateAddress},
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     confidential::{ConfidentialClaim, ConfidentialOutput},
@@ -17,9 +19,11 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum Instruction {
     CallFunction {
         #[serde(with = "serde_with::hex")]
+        #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
         template_address: TemplateAddress,
         function: String,
         #[serde(deserialize_with = "crate::argument_parser::json_deserialize")]
@@ -30,6 +34,8 @@ pub enum Instruction {
         component_address: ComponentAddress,
         method: String,
         #[serde(deserialize_with = "crate::argument_parser::json_deserialize")]
+        // Argument parser takes an array of strings as input
+        #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
         args: Vec<Arg>,
     },
     PutLastInstructionOutputOnWorkspace {
@@ -43,7 +49,9 @@ pub enum Instruction {
         claim: Box<ConfidentialClaim>,
     },
     ClaimValidatorFees {
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         epoch: u64,
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
         validator_public_key: PublicKey,
     },
     DropAllProofsInWorkspace,

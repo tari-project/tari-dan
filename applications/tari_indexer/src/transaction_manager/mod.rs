@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod error;
+pub(crate) mod error;
 
 use std::{collections::HashSet, fmt::Display, future::Future, iter, sync::Arc};
 
@@ -176,6 +176,7 @@ where
             return Err(TransactionManagerError::NoCommitteeMembers);
         }
 
+        let mut last_error = None;
         for validator in all_members {
             let client = self.client_provider.create_client(&validator);
             match callback(client).await {
@@ -185,13 +186,17 @@ where
                 Err(err) => {
                     warn!(
                         target: LOG_TARGET,
-                        "Failed to dial validator node '{}': {}", validator, err
+                        "Request failed for validator '{}': {}", validator, err
                     );
+                    last_error = Some(err.to_string());
                     continue;
                 },
             }
         }
 
-        Err(TransactionManagerError::AllValidatorsFailed { committee_size })
+        Err(TransactionManagerError::AllValidatorsFailed {
+            committee_size,
+            last_error,
+        })
     }
 }

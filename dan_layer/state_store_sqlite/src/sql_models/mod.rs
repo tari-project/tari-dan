@@ -4,6 +4,7 @@
 mod block;
 mod bookkeeping;
 mod leaf_block;
+mod pending_state_tree_diff;
 mod quorum_certificate;
 mod substate;
 mod transaction;
@@ -13,6 +14,7 @@ mod vote;
 pub use block::*;
 pub use bookkeeping::*;
 pub use leaf_block::*;
+pub use pending_state_tree_diff::*;
 pub use quorum_certificate::*;
 pub use substate::*;
 pub use transaction::*;

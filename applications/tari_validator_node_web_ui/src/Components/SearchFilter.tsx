@@ -104,7 +104,7 @@ const TransactionFilter: React.FC<ISearchProps> = ({
       let changed = updatedObject.length !== stateObject.length;
       if (!changed) {
         for (let i = 0; i < stateObject.length && !changed; ++i) {
-          changed ||= stateObject[i] !== updatedObject[i] || stateObject[i]?.["show"] != updatedObject[i]?.["show"];
+          changed ||= stateObject[i] !== updatedObject[i] || stateObject[i]?.["show"] !== updatedObject[i]?.["show"];
         }
       }
       if (changed) {

@@ -18,6 +18,8 @@ serde = { workspace = true, default-features = false, features = [
     "alloc",
 ] }
 serde_with = { workspace = true }
+ts-rs = { workspace = true, optional = true }
+
 
 [dev-dependencies]
 serde_json = { workspace = true }
@@ -26,3 +28,4 @@ serde_json = { workspace = true }
 default = ["macro", "std"]
 macro = ["tari_template_macros"]
 std = ["serde/std", "tari_bor/std"]
+ts = ["ts-rs"]

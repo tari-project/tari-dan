@@ -32,6 +32,8 @@ pub struct ClaimFeesArgs {
     pub epoch: u64,
     #[clap(long)]
     pub max_fee: Option<u32>,
+    #[clap(long)]
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -77,6 +79,7 @@ pub async fn handle_claim_validator_fees(
         validator_public_key,
         epoch,
         max_fee,
+        dry_run,
     } = args;
 
     println!("Submitting claim validator fees transaction...");
@@ -90,6 +93,7 @@ pub async fn handle_claim_validator_fees(
             validator_public_key: PublicKey::from_canonical_bytes(validator_public_key.into_inner().as_bytes())
                 .map_err(anyhow::Error::msg)?,
             epoch: Epoch(epoch),
+            dry_run,
         })
         .await?;
 

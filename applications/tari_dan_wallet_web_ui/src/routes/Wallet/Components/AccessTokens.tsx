@@ -49,6 +49,8 @@ import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import { AccordionIconButton, CodeBlock, DataTableCell } from "../../../Components/StyledComponents";
 import { useAuthRevokeToken, useGetAllTokens } from "../../../api/hooks/useTokens";
 import { shortenString } from "../../../utils/helpers";
+import type { Claims, JrpcPermission, JrpcPermissions } from "@tarilabs/typescript-bindings";
+import { jrpcPermissionToString } from "@tarilabs/typescript-bindings";
 
 function AlertDialog({ fn, row }: any) {
   const [open, setOpen] = useState(false);
@@ -100,11 +102,11 @@ export default function AccessTokens() {
   const { data, isLoading, error, isError } = useGetAllTokens();
   const { mutate } = useAuthRevokeToken();
 
-  const handleRevoke = async (id: string) => {
+  const handleRevoke = async (id: number) => {
     mutate(id);
   };
 
-  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - data?.jwt) : 0;
+  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - (data?.jwt.length || 0)) : 0;
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -115,7 +117,17 @@ export default function AccessTokens() {
     setPage(0);
   };
 
-  function RowData({ id, name, permissions, formattedDate }: any) {
+  function RowData({
+    id,
+    name,
+    permissions,
+    formattedDate,
+  }: {
+    id: number;
+    name: string;
+    permissions: JrpcPermissions;
+    formattedDate: string;
+  }) {
     const [open, setOpen] = useState(false);
 
     return (
@@ -170,9 +182,10 @@ export default function AccessTokens() {
               <CodeBlock style={{ marginBottom: "10px" }}>
                 Permissions:
                 <List>
-                  {permissions.map((item: string) => (
-                    <ListItem key={item}>{item}</ListItem>
-                  ))}
+                  {permissions.map((item: JrpcPermission) => {
+                    let permission = jrpcPermissionToString(item);
+                    return <ListItem key={permission}>{permission}</ListItem>;
+                  })}
                 </List>
               </CodeBlock>
             </Collapse>
@@ -206,18 +219,11 @@ export default function AccessTokens() {
             <TableBody>
               {data?.jwt
                 ?.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                .map(({ id, name, permissions, exp }: any) => {
+                .map(({ id, name, permissions, exp }: Claims) => {
                   const date = new Date(exp * 1000);
                   const formattedDate = `${date.toISOString().slice(0, 10)} ${date.toISOString().slice(11, 16)}`;
                   return (
-                    <RowData
-                      key={id}
-                      id={id}
-                      name={name}
-                      expiryDate={formattedDate}
-                      permissions={permissions}
-                      formattedDate={formattedDate}
-                    />
+                    <RowData key={id} id={id} name={name} permissions={permissions} formattedDate={formattedDate} />
                   );
                 })}
 

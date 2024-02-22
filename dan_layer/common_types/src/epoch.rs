@@ -24,9 +24,12 @@ use std::fmt::Display;
 
 use newtype_ops::newtype_ops;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
-pub struct Epoch(pub u64);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct Epoch(#[cfg_attr(feature = "ts", ts(type = "number"))] pub u64);
 
 impl Epoch {
     pub fn as_u64(self) -> u64 {

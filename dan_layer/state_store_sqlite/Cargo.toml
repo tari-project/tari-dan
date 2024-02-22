@@ -8,12 +8,13 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+# TODO: needed for FixedHash
+tari_common_types = { workspace = true }
 tari_dan_storage = { workspace = true }
 tari_dan_common_types = { workspace = true }
 tari_transaction = { workspace = true }
 tari_engine_types = { workspace = true }
-# TODO: needed for FixedHash
-tari_common_types = { workspace = true }
+tari_state_tree = { workspace = true }
 tari_utilities = { workspace = true }
 
 anyhow = { workspace = true }

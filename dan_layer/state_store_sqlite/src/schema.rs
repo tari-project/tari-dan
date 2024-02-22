@@ -5,6 +5,8 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         parent_block_id -> Text,
+        merkle_root -> Text,
+        network -> Text,
         height -> BigInt,
         epoch -> BigInt,
         proposed_by -> Text,
@@ -28,6 +30,7 @@ diesel::table! {
         block_id -> Text,
         state -> Text,
         proposed_height -> Nullable<BigInt>,
+        transactions -> Text,
         created_at -> Timestamp,
     }
 }
@@ -142,6 +145,8 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         parent_block_id -> Text,
+        merkle_root -> Text,
+        network -> Text,
         height -> BigInt,
         epoch -> BigInt,
         proposed_by -> Text,
@@ -156,12 +161,31 @@ diesel::table! {
 }
 
 diesel::table! {
+    pending_state_tree_diffs (id) {
+        id -> Integer,
+        block_id -> Text,
+        block_height -> BigInt,
+        diff_json -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     quorum_certificates (id) {
         id -> Integer,
         qc_id -> Text,
         block_id -> Text,
         json -> Text,
         created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    state_tree (id) {
+        id -> Integer,
+        key -> Text,
+        node -> Text,
+        is_stale -> Bool,
     }
 }
 
@@ -258,6 +282,7 @@ diesel::table! {
         result -> Nullable<Text>,
         execution_time_ms -> Nullable<BigInt>,
         final_decision -> Nullable<Text>,
+        finalized_at -> Nullable<Timestamp>,
         abort_details -> Nullable<Text>,
         min_epoch -> Nullable<BigInt>,
         max_epoch -> Nullable<BigInt>,
@@ -280,6 +305,9 @@ diesel::table! {
 
 diesel::allow_tables_to_appear_in_same_query!(
     blocks,
+    foreign_proposals,
+    foreign_receive_counters,
+    foreign_send_counters,
     high_qcs,
     last_executed,
     last_proposed,
@@ -290,7 +318,9 @@ diesel::allow_tables_to_appear_in_same_query!(
     locked_outputs,
     missing_transactions,
     parked_blocks,
+    pending_state_tree_diffs,
     quorum_certificates,
+    state_tree,
     substates,
     transaction_pool,
     transaction_pool_history,

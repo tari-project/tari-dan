@@ -20,44 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-interface IEpoch {
-  current_epoch: number;
-  is_valid: boolean;
-  committee_shard: CommitteeShard | null;
-}
-
-interface IIdentity {
-  peer_id: string;
-  public_addresses: string[];
-  public_key: string;
-}
-
-interface CommitteeShard {
-  bucket: number;
-  num_committees: number;
-  num_members: number;
-}
-
-interface IFunction {
-  name: string;
-  arguments: Array<string>;
-  output: string;
-}
-
-interface ITemplate {
-  registration_metadata: {
-    address: string;
-    url: string;
-    binary_sha: Array<number>;
-    height: number;
-  };
-  abi: { template_name: string; functions: Array<IFunction> };
-}
-
-type ICommittees = [string, string, string[]][];
-
-type ICommitteeMap = [number, number, string[]];
-
 interface ICommitteeChart {
   activeleft: number[];
   inactiveleft: number[];
@@ -66,35 +28,4 @@ interface ICommitteeChart {
   activeright: number[];
 }
 
-interface GetNetworkCommitteesResponse {
-  current_epoch: number;
-  committees: Array<CommitteeShardInfo>;
-}
-
-interface CommitteeShardInfo {
-  shard: number;
-  substate_address_range: {
-    end: string;
-    start: string;
-  };
-  validators: Array<CommitteeValidatorInfo>;
-}
-
-interface CommitteeValidatorInfo {
-  address: string;
-  committee_bucket: number;
-  epoch: number;
-  shard_key: string;
-}
-
-export {
-  type IEpoch,
-  type IIdentity,
-  type ITemplate,
-  type ICommittees,
-  type ICommitteeChart,
-  type ICommitteeMap,
-  type GetNetworkCommitteesResponse,
-  type CommitteeShardInfo,
-  type CommitteeValidatorInfo,
-};
+export { type ICommitteeChart };

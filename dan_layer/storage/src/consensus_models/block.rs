@@ -11,6 +11,7 @@ use std::{
 use indexmap::IndexMap;
 use log::*;
 use serde::{Deserialize, Serialize};
+use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, FixedHashSizeError, PublicKey};
 use tari_dan_common_types::{
     hashing,
@@ -18,13 +19,23 @@ use tari_dan_common_types::{
     serde_with,
     shard::Shard,
     Epoch,
+    NodeAddressable,
     NodeHeight,
     SubstateAddress,
 };
+use tari_engine_types::substate::SubstateDiff;
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
-use super::{ForeignProposal, ForeignSendCounters, QuorumCertificate, ValidatorSchnorrSignature};
+use super::{
+    ForeignProposal,
+    ForeignSendCounters,
+    QuorumCertificate,
+    SubstateDestroyedProof,
+    ValidatorSchnorrSignature,
+};
 use crate::{
     consensus_models::{
         Command,
@@ -48,17 +59,25 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::storage::consensus_models::block";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Block {
     // Header
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     id: BlockId,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    network: Network,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     parent: BlockId,
     justify: QuorumCertificate,
     height: NodeHeight,
     epoch: Epoch,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     proposed_by: PublicKey,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     total_leader_fee: u64,
 
     // Body
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     merkle_root: FixedHash,
     // BTreeSet is used for the deterministic block hash, that is, transactions are always ordered by TransactionId.
     commands: BTreeSet<Command>,
@@ -72,32 +91,36 @@ pub struct Block {
     /// Counter for each foreign shard for reliable broadcast.
     foreign_indexes: IndexMap<Shard, u64>,
     /// Timestamp when was this stored.
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>| null"))]
     stored_at: Option<PrimitiveDateTime>,
     /// Signature of block by the proposer.
+    #[cfg_attr(feature = "ts", ts(type = "{public_nonce : string, signature: string} | null"))]
     signature: Option<ValidatorSchnorrSignature>,
 }
 
 impl Block {
     pub fn new(
+        network: Network,
         parent: BlockId,
         justify: QuorumCertificate,
         height: NodeHeight,
         epoch: Epoch,
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
+        merkle_root: FixedHash,
         total_leader_fee: u64,
         sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
     ) -> Self {
         let mut block = Self {
             id: BlockId::genesis(),
+            network,
             parent,
             justify,
             height,
             epoch,
             proposed_by,
-            // TODO
-            merkle_root: FixedHash::zero(),
+            merkle_root,
             commands,
             total_leader_fee,
             is_dummy: false,
@@ -114,12 +137,14 @@ impl Block {
     #[allow(clippy::too_many_arguments)]
     pub fn load(
         id: BlockId,
+        network: Network,
         parent: BlockId,
         justify: QuorumCertificate,
         height: NodeHeight,
         epoch: Epoch,
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
+        merkle_root: FixedHash,
         total_leader_fee: u64,
         is_dummy: bool,
         is_processed: bool,
@@ -130,13 +155,13 @@ impl Block {
     ) -> Self {
         Self {
             id,
+            network,
             parent,
             justify,
             height,
             epoch,
             proposed_by,
-            // TODO
-            merkle_root: FixedHash::zero(),
+            merkle_root,
             commands,
             total_leader_fee,
             is_dummy,
@@ -148,14 +173,16 @@ impl Block {
         }
     }
 
-    pub fn genesis() -> Self {
+    pub fn genesis(network: Network) -> Self {
         Self::new(
+            network,
             BlockId::genesis(),
             QuorumCertificate::genesis(),
             NodeHeight(0),
             Epoch(0),
             PublicKey::default(),
             Default::default(),
+            FixedHash::zero(),
             0,
             IndexMap::new(),
             None,
@@ -163,8 +190,9 @@ impl Block {
     }
 
     /// This is the parent block for all genesis blocks. Its block ID is always zero.
-    pub fn zero_block() -> Self {
+    pub fn zero_block(network: Network) -> Self {
         Self {
+            network,
             id: BlockId::genesis(),
             parent: BlockId::genesis(),
             justify: QuorumCertificate::genesis(),
@@ -184,19 +212,23 @@ impl Block {
     }
 
     pub fn dummy_block(
+        network: Network,
         parent: BlockId,
         proposed_by: PublicKey,
         node_height: NodeHeight,
         high_qc: QuorumCertificate,
         epoch: Epoch,
+        parent_merkle_root: FixedHash,
     ) -> Self {
         let mut block = Self::new(
+            network,
             parent,
             high_qc,
             node_height,
             epoch,
             proposed_by,
             Default::default(),
+            parent_merkle_root,
             0,
             IndexMap::new(),
             None,
@@ -208,6 +240,7 @@ impl Block {
 
     pub fn calculate_hash(&self) -> FixedHash {
         hashing::block_hasher()
+            .chain(&self.network)
             .chain(&self.parent)
             .chain(&self.justify)
             .chain(&self.height)
@@ -274,6 +307,10 @@ impl Block {
 
     pub fn id(&self) -> &BlockId {
         &self.id
+    }
+
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     pub fn parent(&self) -> &BlockId {
@@ -343,6 +380,10 @@ impl Block {
     pub fn set_signature(&mut self, signature: ValidatorSchnorrSignature) {
         self.signature = Some(signature);
     }
+
+    pub fn is_proposed_by_addr<A: NodeAddressable + PartialEq<A>>(&self, address: &A) -> Option<bool> {
+        Some(A::try_from_public_key(&self.proposed_by)? == *address)
+    }
 }
 
 impl Block {
@@ -354,6 +395,7 @@ impl Block {
         tx.blocks_get_tip()
     }
 
+    /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
     pub fn get_all_blocks_between<TTx: StateStoreReadTransaction>(
         tx: &mut TTx,
         start_block_id_exclusive: &BlockId,
@@ -460,7 +502,7 @@ impl Block {
         tx.blocks_is_ancestor(self.parent(), ancestor)
     }
 
-    pub fn get_parent<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+    pub fn get_parent<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
         if self.id.is_genesis() {
             return Err(StorageError::NotFound {
                 item: "Block".to_string(),
@@ -549,11 +591,12 @@ impl Block {
                             substate: substate.into(),
                         }));
                     } else {
-                        updates.push(SubstateUpdate::Destroy {
-                            address: substate.to_substate_address(),
-                            proof: QuorumCertificate::get(tx, &destroyed.justify)?,
+                        updates.push(SubstateUpdate::Destroy(SubstateDestroyedProof {
+                            substate_id: substate.substate_id.clone(),
+                            version: substate.version,
+                            justify: QuorumCertificate::get(tx, &destroyed.justify)?,
                             destroyed_by_transaction: destroyed.by_transaction,
-                        });
+                        }));
                     }
                 } else {
                     updates.push(SubstateUpdate::Create(SubstateCreatedProof {
@@ -570,15 +613,14 @@ impl Block {
     pub fn update_nodes<TTx, TFnOnLock, TFnOnCommit, E>(
         &self,
         tx: &mut TTx,
-        on_lock_block: TFnOnLock,
-        on_commit: TFnOnCommit,
-        locked_blocks: &mut Vec<Block>,
+        mut on_lock_block: TFnOnLock,
+        mut on_commit: TFnOnCommit,
     ) -> Result<HighQc, E>
     where
         TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
         TTx::Target: StateStoreReadTransaction,
-        TFnOnLock: FnOnce(&mut TTx, &LockedBlock, &Block, &mut Vec<Block>) -> Result<(), E>,
-        TFnOnCommit: FnOnce(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
+        TFnOnLock: FnMut(&mut TTx, &LockedBlock, &Block) -> Result<(), E>,
+        TFnOnCommit: FnMut(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
         E: From<StorageError>,
     {
         let high_qc = self.justify().update_high_qc(tx)?;
@@ -593,10 +635,12 @@ impl Block {
             return Ok(high_qc);
         };
 
-        let locked_block = LockedBlock::get(tx.deref_mut())?;
-        if precommit_node.height() > locked_block.height {
-            on_lock_block(tx, &locked_block, &precommit_node, locked_blocks)?;
-            precommit_node.as_locked_block().set(tx)?;
+        if !precommit_node.is_genesis() {
+            let locked = LockedBlock::get(tx.deref_mut())?;
+            if precommit_node.height() > locked.height {
+                on_locked_block_recurse(tx, &locked, &precommit_node, &mut on_lock_block)?;
+                precommit_node.as_locked_block().set(tx)?;
+            }
         }
 
         // b <- b'.justify.node
@@ -613,10 +657,12 @@ impl Block {
             );
 
             // Commit prepare_node (b)
-            let prepare_node = Block::get(tx.deref_mut(), prepare_node)?;
-            let last_executed = LastExecuted::get(tx.deref_mut())?;
-            on_commit(tx, &last_executed, &prepare_node)?;
-            prepare_node.as_last_executed().set(tx)?;
+            if !prepare_node.is_genesis() {
+                let prepare_node = Block::get(tx.deref_mut(), prepare_node)?;
+                let last_executed = LastExecuted::get(tx.deref_mut())?;
+                on_commit_block_recurse(tx, &last_executed, &prepare_node, &mut on_commit)?;
+                prepare_node.as_last_executed().set(tx)?;
+            }
         } else {
             debug!(
                 target: LOG_TARGET,
@@ -677,6 +723,26 @@ impl Block {
             counters.set(tx, self.id())?;
         }
         Ok(())
+    }
+
+    pub fn get_all_substate_diffs<TTx: StateStoreReadTransaction + ?Sized>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Vec<SubstateDiff>, StorageError> {
+        let transactions = self
+            .commands()
+            .iter()
+            .filter_map(|c| c.accept())
+            .filter(|t| t.decision.is_commit())
+            .map(|t| tx.transactions_get(t.id()))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(transactions
+            .into_iter()
+            // TODO: following two should never be None
+            .filter_map(|t_rec| t_rec.result)
+            .filter_map(|t_res| t_res.finalize.into_accept())
+            .collect())
     }
 }
 
@@ -754,4 +820,45 @@ impl Display for BlockId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
     }
+}
+
+fn on_locked_block_recurse<TTx, F, E>(
+    tx: &mut TTx,
+    locked: &LockedBlock,
+    block: &Block,
+    callback: &mut F,
+) -> Result<(), E>
+where
+    TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+    TTx::Target: StateStoreReadTransaction,
+    E: From<StorageError>,
+    F: FnMut(&mut TTx, &LockedBlock, &Block) -> Result<(), E>,
+{
+    if locked.height < block.height() {
+        let parent = block.get_parent(tx.deref_mut())?;
+        on_locked_block_recurse(tx, locked, &parent, callback)?;
+        callback(tx, locked, block)?;
+    }
+    Ok(())
+}
+
+fn on_commit_block_recurse<TTx, F, E>(
+    tx: &mut TTx,
+    last_executed: &LastExecuted,
+    block: &Block,
+    callback: &mut F,
+) -> Result<(), E>
+where
+    TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+    TTx::Target: StateStoreReadTransaction,
+    E: From<StorageError>,
+    F: FnMut(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
+{
+    if last_executed.height < block.height() {
+        let parent = block.get_parent(tx.deref_mut())?;
+        // Recurse to "catch up" any parent parent blocks we may not have executed
+        on_commit_block_recurse(tx, last_executed, &parent, callback)?;
+        callback(tx, last_executed, block)?;
+    }
+    Ok(())
 }

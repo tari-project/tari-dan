@@ -130,18 +130,17 @@ where
     /// provided to reduce effort/time required to scan.
     pub async fn get_substate(
         &self,
-        substate_address: &SubstateId,
-        version_hint: Option<u32>,
+        substate_id: &SubstateId,
+        lowest_version: Option<u32>,
     ) -> Result<SubstateResult, IndexerError> {
-        info!(target: LOG_TARGET, "get_substate: {} ", substate_address);
-
-        self.get_latest_substate_from_committee(substate_address, version_hint.unwrap_or(0))
-            .await
+        let version = lowest_version.unwrap_or(0);
+        debug!(target: LOG_TARGET, "get_substate: {}v{}", substate_id, version);
+        self.get_latest_substate_from_committee(substate_id, version).await
     }
 
     async fn get_latest_substate_from_committee(
         &self,
-        substate_address: &SubstateId,
+        substate_id: &SubstateId,
         lowest_version: u32,
     ) -> Result<SubstateResult, IndexerError> {
         let mut version = lowest_version;
@@ -149,10 +148,10 @@ where
         let mut cached_version = None;
 
         // start from the latest cached version of the substate (if cached previously)
-        let cache_res = self.substate_cache.read(substate_address.to_address_string()).await?;
+        let cache_res = self.substate_cache.read(substate_id.to_address_string()).await?;
         if let Some(entry) = cache_res {
             if entry.version > version {
-                info!(target: LOG_TARGET, "Substate cache hit for {} with version {}", entry.version, substate_address.to_address_string());
+                debug!(target: LOG_TARGET, "Substate cache hit for {} with version {}", entry.version, substate_id);
                 cached_version = Some(entry.version);
                 // we will request newer versions of the cached substate
                 version = entry.version + 1;
@@ -161,9 +160,8 @@ where
         }
 
         loop {
-            let substate_result = self
-                .get_specific_substate_from_committee(substate_address, version)
-                .await?;
+            let substate_result = self.get_specific_substate_from_committee(substate_id, version).await?;
+            debug!(target: LOG_TARGET, "Substate result for {} with version {}: {:?}", substate_id.to_address_string(), version, substate_result);
             match substate_result {
                 // when it's a "Down" state, we need to ask a higher version until we find an "Up" or "DoesNotExist"
                 result @ SubstateResult::Down { .. } => {
@@ -175,7 +173,7 @@ where
                     break;
                 },
                 // stop and upgrade the last result if the substate is UP, as it's the latest
-                _ => {
+                SubstateResult::Up { .. } => {
                     last_result = Some(substate_result);
                     break;
                 },
@@ -184,20 +182,20 @@ where
 
         if let Some(substate_result) = &last_result {
             // update the substate cache if the substate exists and the version is newer than the cached one
-            if let SubstateResult::Up { substate, .. } = &substate_result {
+            if let SubstateResult::Up { substate, .. } = substate_result {
                 let should_update_cache = match cached_version {
                     Some(v) => v < substate.version(),
                     None => true,
                 };
 
                 if should_update_cache {
-                    info!(target: LOG_TARGET, "Updating cached substate {} with version {}", substate_address.to_address_string(), substate.version());
+                    debug!(target: LOG_TARGET, "Updating cached substate {} with version {}", substate_id.to_address_string(), substate.version());
                     let entry = SubstateCacheEntry {
                         version: substate.version(),
                         substate_result: substate_result.clone(),
                     };
                     self.substate_cache
-                        .write(substate_address.to_address_string(), &entry)
+                        .write(substate_id.to_address_string(), &entry)
                         .await?;
                 };
             }
@@ -214,6 +212,7 @@ where
         version: u32,
     ) -> Result<SubstateResult, IndexerError> {
         let shard = SubstateAddress::from_address(substate_address, version);
+        debug!(target: LOG_TARGET, "get_specific_substate_from_committee: {substate_address}:v{version} {shard}");
         self.get_specific_substate_from_committee_by_shard(shard).await
     }
 
@@ -232,16 +231,20 @@ where
         let mut last_error = None;
         for vn_addr in committee.addresses() {
             // TODO: we cannot request data from ourselves via p2p rpc - so we should exclude ourselves from requests
+            debug!(target: LOG_TARGET, "Getting substate {} from vn {}", shard, vn_addr);
 
             match self.get_substate_from_vn(vn_addr, shard).await {
-                Ok(substate_result) => match substate_result {
-                    SubstateResult::Up { .. } | SubstateResult::Down { .. } => return Ok(substate_result),
-                    SubstateResult::DoesNotExist => {
-                        if num_nexist_substate_results > f {
-                            return Ok(substate_result);
-                        }
-                        num_nexist_substate_results += 1;
-                    },
+                Ok(substate_result) => {
+                    debug!(target: LOG_TARGET, "Got substate result for {} from vn {}: {:?}", shard, vn_addr, substate_result);
+                    match substate_result {
+                        SubstateResult::Up { .. } | SubstateResult::Down { .. } => return Ok(substate_result),
+                        SubstateResult::DoesNotExist => {
+                            if num_nexist_substate_results > f {
+                                return Ok(substate_result);
+                            }
+                            num_nexist_substate_results += 1;
+                        },
+                    }
                 },
                 Err(e) => {
                     // We ignore a single VN error and keep querying the rest of the committee

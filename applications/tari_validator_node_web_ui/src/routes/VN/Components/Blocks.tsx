@@ -21,90 +21,25 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from "react";
-import {
-  listBlocks,
-  getBlocksCount,
-  getIdentity,
-  getRecentTransactions,
-  getTransaction,
-  getUpSubstates,
-} from "../../../utils/json_rpc";
-import { toHexString } from "./helpers";
+import { listBlocks, getBlocksCount, getIdentity } from "../../../utils/json_rpc";
 import { Link } from "react-router-dom";
-import { primitiveDateTimeToDate, primitiveDateTimeToSecs, renderJson } from "../../../utils/helpers";
+import { emptyRows, primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../../utils/helpers";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import { DataTableCell, CodeBlock, AccordionIconButton, BoxHeading2 } from "../../../Components/StyledComponents";
+import { DataTableCell, BoxHeading2 } from "../../../Components/StyledComponents";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
-import Collapse from "@mui/material/Collapse";
 import TablePagination from "@mui/material/TablePagination";
 import Typography from "@mui/material/Typography";
 import HeadingMenu from "../../../Components/HeadingMenu";
 import SearchFilter from "../../../Components/SearchFilter";
 import Fade from "@mui/material/Fade";
 import StatusChip from "../../../Components/StatusChip";
-
-// TODO: fill this, and change instructions in IRecentTransaction
-// interface IInstruction {
-// }
-
-interface ISignature {
-  public_nonce: string;
-  signature: string;
-}
-interface ITransactionSignature {
-  public_key: string;
-  signature: ISignature;
-}
-
-interface IRecentTransaction {
-  id: string;
-  fee_instructions: any[];
-  instructions: any[];
-  signature: ITransactionSignature;
-  inputs: string[];
-  input_refs: string[];
-  outputs: string[];
-  filled_inputs: string[];
-  filled_outputs: string[];
-}
-
-// TODO: fill these ()
-type IBlockId = string;
-
-export interface IQuorumCertificate {
-  block_id: IBlockId;
-  decision: string;
-}
-
-type INodeHeight = number;
-
-type IEpoch = number;
-
-type IPublicKey = string;
-
-type IFixedHash = string;
-
-export interface ICommand {}
-
-export interface IBlock {
-  id: IBlockId;
-  parent: IBlockId;
-  justify: IQuorumCertificate;
-  height: INodeHeight;
-  epoch: IEpoch;
-  proposed_by: IPublicKey;
-  total_leader_fee: number;
-  merkle_root: IFixedHash;
-  stored_at: number[];
-  commands: ICommand[];
-  is_dummy: boolean;
-}
+import type { Block } from "@tarilabs/typescript-bindings";
 
 export interface ITableBlock {
   id: string;
@@ -121,10 +56,6 @@ export interface ITableBlock {
   show?: boolean;
 }
 
-interface IGetBlockReponse {
-  blocks: IBlock[];
-}
-
 type ColumnKey = keyof ITableBlock;
 
 function Blocks() {
@@ -133,10 +64,10 @@ function Blocks() {
 
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [blockCount, setBlockCount] = useState(0);
+  // const [blockCount, setBlockCount] = useState(0);
 
   // Avoid a layout jump when reaching the last page with empty rows.
-  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - blocks.length) : 0;
+  const emptyRowsCnt = emptyRows(page, rowsPerPage, blocks);
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -151,23 +82,23 @@ function Blocks() {
     Promise.all([getIdentity(), getBlocksCount()]).then(([identity, resp]) => {
       // TODO: remove this once the pagination is done
       // resp.count = 100;
-      setBlockCount(resp.count);
-      listBlocks(null, resp.count).then((resp: IGetBlockReponse) => {
+      // setBlockCount(resp.count);
+      listBlocks({ from_id: null, limit: resp.count }).then((resp) => {
         let times = Object.fromEntries(
-          resp.blocks.map((block: IBlock) => [block.id, primitiveDateTimeToSecs(block.stored_at)]),
+          resp.blocks.map((block) => [block.id, primitiveDateTimeToSecs(block.stored_at || [])]),
         );
         setBlocks(
-          resp.blocks.map((block: IBlock) => {
+          resp.blocks.map((block: Block) => {
             return {
               id: block.id,
               epoch: block.epoch,
               height: block.height,
               decision: block.justify.decision,
               total_leader_fee: block.total_leader_fee,
-              proposed_by_me: block.proposed_by == identity.public_key,
+              proposed_by_me: block.proposed_by === identity.public_key,
               transactions_cnt: block.commands.length,
               block_time: times[block.id] - times[block.justify.block_id],
-              stored_at: primitiveDateTimeToDate(block.stored_at),
+              stored_at: primitiveDateTimeToDate(block.stored_at || []),
               proposed_by: block.proposed_by,
               show: true,
               is_dummy: block.is_dummy,
@@ -453,7 +384,10 @@ function Blocks() {
                       <DataTableCell>{epoch}</DataTableCell>
                       <DataTableCell>{height}</DataTableCell>
                       <DataTableCell>
-                        <StatusChip status={is_dummy ? "Dummy" : decision == "Accept" ? "Commit" : "Abort"} showTitle />
+                        <StatusChip
+                          status={is_dummy ? "Dummy" : decision === "Accept" ? "Commit" : "Abort"}
+                          showTitle
+                        />
                       </DataTableCell>
                       <DataTableCell>{transactions_cnt}</DataTableCell>
                       <DataTableCell>
@@ -477,10 +411,10 @@ function Blocks() {
                 </TableCell>
               </TableRow>
             )}
-            {emptyRows > 0 && (
+            {emptyRowsCnt > 0 && (
               <TableRow
                 style={{
-                  height: 67 * emptyRows,
+                  height: 67 * emptyRowsCnt,
                 }}
               >
                 <TableCell colSpan={4} />

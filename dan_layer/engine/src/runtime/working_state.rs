@@ -798,7 +798,7 @@ impl WorkingState {
             .fee_state
             .fee_charges
             .iter()
-            .map(|(_, fee)| Amount::try_from(*fee).expect("fee overflowed i64::MAX"))
+            .map(|breakdown| Amount::try_from(breakdown.amount).expect("fee overflowed i64::MAX"))
             .sum::<Amount>();
         let total_fee_payment = self
             .fee_state

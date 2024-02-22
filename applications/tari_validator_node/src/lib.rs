@@ -30,6 +30,8 @@ mod event_subscription;
 mod grpc;
 mod http_ui;
 mod json_rpc;
+#[cfg(feature = "metrics")]
+mod metrics;
 mod p2p;
 mod registration;
 mod substate_resolver;
@@ -114,6 +116,9 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         keypair.public_key(),keypair.to_peer_address(),
     );
 
+    #[cfg(feature = "metrics")]
+    let metrics_registry = create_metrics_registry(keypair.public_key());
+
     let (base_node_client, wallet_client) = create_base_layer_clients(config).await?;
     let services = spawn_services(
         config,
@@ -121,24 +126,31 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         keypair.clone(),
         global_db,
         ConsensusConstants::devnet(), // TODO: change this eventually
+        #[cfg(feature = "metrics")]
+        &metrics_registry,
     )
     .await?;
     let info = services.networking.get_local_peer_info().await.unwrap();
     info!(target: LOG_TARGET, "🚀 Node started: {}", info);
 
     // Run the JSON-RPC API
-    let mut jrpc_address = config.validator_node.json_rpc_address;
+    let mut jrpc_address = config.validator_node.json_rpc_listener_address;
     if let Some(jrpc_address) = jrpc_address.as_mut() {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", jrpc_address);
         let handlers = JsonRpcHandlers::new(wallet_client, base_node_client, &services);
-        *jrpc_address = spawn_json_rpc(*jrpc_address, handlers)?;
+        *jrpc_address = spawn_json_rpc(
+            *jrpc_address,
+            handlers,
+            #[cfg(feature = "metrics")]
+            metrics_registry,
+        )?;
         // Run the http ui
-        if let Some(address) = config.validator_node.http_ui_address {
+        if let Some(address) = config.validator_node.http_ui_listener_address {
             task::spawn(run_http_ui_server(
                 address,
                 config
                     .validator_node
-                    .ui_connect_address
+                    .json_rpc_public_address
                     .clone()
                     .unwrap_or_else(|| jrpc_address.to_string()),
             ));
@@ -147,17 +159,13 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
 
     fs::write(config.common.base_path.join("pid"), process::id().to_string())
         .map_err(|e| ExitError::new(ExitCode::UnknownError, e))?;
-    run_dan_node(services, shutdown_signal).await?;
-
-    Ok(())
-}
-
-async fn run_dan_node(services: Services, shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node = DanNode::new(services);
     info!(target: LOG_TARGET, "🚀 Validator node started!");
     node.start(shutdown_signal)
         .await
-        .map_err(|e| ExitError::new(ExitCode::UnknownError, e))
+        .map_err(|e| ExitError::new(ExitCode::UnknownError, e))?;
+
+    Ok(())
 }
 
 async fn create_base_layer_clients(
@@ -177,4 +185,12 @@ async fn create_base_layer_clients(
     }));
 
     Ok((base_node_client, wallet_client))
+}
+
+#[cfg(feature = "metrics")]
+fn create_metrics_registry(public_key: &tari_common_types::types::PublicKey) -> prometheus::Registry {
+    let mut labels = std::collections::HashMap::with_capacity(2);
+    labels.insert("app".to_string(), "ValidatorNode".to_string());
+    labels.insert("public_key".to_string(), public_key.to_string());
+    prometheus::Registry::new_custom(Some("tari".to_string()), Some(labels)).unwrap()
 }

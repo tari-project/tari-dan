@@ -23,6 +23,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use log::info;
+use tari_common::configuration::Network;
 use tari_dan_app_utilities::{
     template_manager::implementation::TemplateManager,
     transaction_executor::{TariDanTransactionProcessor, TransactionExecutor},
@@ -36,6 +37,7 @@ use tari_dan_engine::{
 };
 use tari_engine_types::{
     commit_result::ExecuteResult,
+    instruction::Instruction,
     substate::{Substate, SubstateId},
     virtual_substate::{VirtualSubstate, VirtualSubstateId},
 };
@@ -64,6 +66,9 @@ pub struct DryRunTransactionProcessor<TSubstateCache> {
     transaction_autofiller:
         TransactionAutofiller<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache>,
     template_manager: TemplateManager<PeerAddress>,
+    substate_scanner:
+        Arc<SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache>>,
+    network: Network,
 }
 
 impl<TSubstateCache> DryRunTransactionProcessor<TSubstateCache>
@@ -76,14 +81,17 @@ where TSubstateCache: SubstateCache + 'static
             SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache>,
         >,
         template_manager: TemplateManager<PeerAddress>,
+        network: Network,
     ) -> Self {
-        let transaction_autofiller = TransactionAutofiller::new(substate_scanner);
+        let transaction_autofiller = TransactionAutofiller::new(substate_scanner.clone());
 
         Self {
             epoch_manager,
             client_provider,
             transaction_autofiller,
             template_manager,
+            substate_scanner,
+            network,
         }
     }
 
@@ -106,7 +114,7 @@ where TSubstateCache: SubstateCache + 'static
 
         let payload_processor = self.build_payload_processor(&transaction);
 
-        let virtual_substates = Self::get_virtual_substates(epoch);
+        let virtual_substates = self.get_virtual_substates(&transaction, epoch).await?;
 
         let mut state_store = new_state_store();
         state_store.extend(found_substates);
@@ -134,7 +142,7 @@ where TSubstateCache: SubstateCache + 'static
             FeeTable::zero_rated()
         };
 
-        TariDanTransactionProcessor::new(self.template_manager.clone(), fee_table)
+        TariDanTransactionProcessor::new(self.network, self.template_manager.clone(), fee_table)
     }
 
     fn transaction_includes_fees(transaction: &Transaction) -> bool {
@@ -208,7 +216,11 @@ where TSubstateCache: SubstateCache + 'static
         })
     }
 
-    fn get_virtual_substates(epoch: Epoch) -> VirtualSubstates {
+    async fn get_virtual_substates(
+        &self,
+        transaction: &Transaction,
+        epoch: Epoch,
+    ) -> Result<VirtualSubstates, DryRunTransactionProcessorError> {
         let mut virtual_substates = VirtualSubstates::new();
 
         virtual_substates.insert(
@@ -216,7 +228,41 @@ where TSubstateCache: SubstateCache + 'static
             VirtualSubstate::CurrentEpoch(epoch.as_u64()),
         );
 
-        virtual_substates
+        let claim_instructions = transaction
+            .instructions()
+            .iter()
+            .chain(transaction.fee_instructions())
+            .filter_map(|instruction| {
+                if let Instruction::ClaimValidatorFees {
+                    epoch,
+                    validator_public_key,
+                } = instruction
+                {
+                    Some((Epoch(*epoch), validator_public_key.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if !claim_instructions.is_empty() {
+            for (epoch, public_key) in claim_instructions {
+                let vn = self
+                    .epoch_manager
+                    .get_validator_node_by_public_key(epoch, &public_key)
+                    .await?;
+                let address = VirtualSubstateId::UnclaimedValidatorFee {
+                    epoch: epoch.as_u64(),
+                    address: public_key,
+                };
+                let virtual_substate = self
+                    .substate_scanner
+                    .get_virtual_substate_from_committee(address.clone(), vn.shard_key)
+                    .await?;
+                virtual_substates.insert(address, virtual_substate);
+            }
+        }
+
+        Ok(virtual_substates)
     }
 }
 

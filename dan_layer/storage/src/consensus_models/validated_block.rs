@@ -7,7 +7,7 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, NodeHeight};
 
 use crate::{
-    consensus_models::{Block, BlockId},
+    consensus_models::{Block, BlockId, QuorumCertificate},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -48,6 +48,10 @@ impl ValidBlock {
 
     pub fn proposed_by(&self) -> &PublicKey {
         self.block.proposed_by()
+    }
+
+    pub fn justify(&self) -> &QuorumCertificate {
+        self.block.justify()
     }
 
     pub fn dummy_blocks(&self) -> &[Block] {

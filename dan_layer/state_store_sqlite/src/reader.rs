@@ -44,6 +44,7 @@ use tari_dan_storage::{
         LastVoted,
         LeafBlock,
         LockedBlock,
+        PendingStateTreeDiff,
         QcId,
         QuorumCertificate,
         SubstateLockFlag,
@@ -64,7 +65,7 @@ use tari_utilities::ByteArray;
 
 use crate::{
     error::SqliteStorageError,
-    serialization::{deserialize_hex_try_from, deserialize_json, serialize_hex},
+    serialization::{deserialize_hex_try_from, deserialize_json, serialize_hex, serialize_json},
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };
@@ -84,7 +85,7 @@ impl<'a, TAddr> SqliteStateStoreReadTransaction<'a, TAddr> {
         }
     }
 
-    pub(crate) fn connection(&mut self) -> &mut SqliteConnection {
+    pub(crate) fn connection(&self) -> &mut SqliteConnection {
         self.transaction.connection()
     }
 
@@ -202,6 +203,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned> SqliteStateStore
         sql_frag
     }
 
+    /// Returns the blocks from the start_block (inclusive) to the end_block (inclusive).
     fn get_block_ids_between(
         &mut self,
         start_block: &BlockId,
@@ -275,24 +277,10 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned> SqliteStateStore
     }
 }
 
-impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransaction
-    for SqliteStateStoreReadTransaction<'_, TAddr>
+impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStoreReadTransaction
+    for SqliteStateStoreReadTransaction<'tx, TAddr>
 {
     type Addr = TAddr;
-
-    fn last_voted_get(&mut self) -> Result<LastVoted, StorageError> {
-        use crate::schema::last_voted;
-
-        let last_voted = last_voted::table
-            .order_by(last_voted::id.desc())
-            .first::<sql_models::LastVoted>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "last_voted_get",
-                source: e,
-            })?;
-
-        last_voted.try_into()
-    }
 
     fn last_sent_vote_get(&mut self) -> Result<LastSentVote, StorageError> {
         use crate::schema::last_sent_vote;
@@ -302,6 +290,20 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .first::<sql_models::LastSentVote>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "last_sent_vote_get",
+                source: e,
+            })?;
+
+        last_voted.try_into()
+    }
+
+    fn last_voted_get(&mut self) -> Result<LastVoted, StorageError> {
+        use crate::schema::last_voted;
+
+        let last_voted = last_voted::table
+            .order_by(last_voted::id.desc())
+            .first::<sql_models::LastVoted>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "last_voted_get",
                 source: e,
             })?;
 
@@ -384,6 +386,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         let foreign_proposals = foreign_proposals::table
             .filter(foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32))
             .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
+            .filter(foreign_proposals::transactions.eq(serialize_json(&foreign_proposal.transactions)?))
             .count()
             .limit(1)
             .get_result::<i64>(self.connection())
@@ -436,6 +439,24 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .into_iter()
             .filter_map(|command| command.foreign_proposal().cloned())
             .collect::<Vec<ForeignProposal>>())
+    }
+
+    fn foreign_proposal_get_all_proposed(
+        &mut self,
+        to_height: NodeHeight,
+    ) -> Result<Vec<ForeignProposal>, StorageError> {
+        use crate::schema::foreign_proposals;
+
+        let foreign_proposals = foreign_proposals::table
+            .filter(foreign_proposals::state.eq(ForeignProposalState::Proposed.to_string()))
+            .filter(foreign_proposals::proposed_height.le(to_height.0 as i64))
+            .load::<sql_models::ForeignProposal>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_get_all",
+                source: e,
+            })?;
+
+        foreign_proposals.into_iter().map(|p| p.try_into()).collect()
     }
 
     fn foreign_send_counters_get(&mut self, block_id: &BlockId) -> Result<ForeignSendCounters, StorageError> {
@@ -648,6 +669,61 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .collect()
     }
 
+    fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError> {
+        use crate::schema::blocks;
+
+        let count = blocks::table
+            .filter(blocks::block_id.eq(serialize_hex(block_id)))
+            .count()
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_exists",
+                source: e,
+            })?;
+
+        Ok(count > 0)
+    }
+
+    fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError> {
+        if !self.blocks_exists(descendant)? {
+            return Err(StorageError::QueryError {
+                reason: format!("blocks_is_ancestor: descendant block {} does not exist", descendant),
+            });
+        }
+
+        if !self.blocks_exists(ancestor)? {
+            return Err(StorageError::QueryError {
+                reason: format!("blocks_is_ancestor: ancestor block {} does not exist", ancestor),
+            });
+        }
+
+        // TODO: this scans all the way to genesis for every query - can optimise though it's low priority for now
+        let is_ancestor = sql_query(
+            r#"
+            WITH RECURSIVE tree(bid, parent) AS (
+                  SELECT block_id, parent_block_id FROM blocks where block_id = ?
+                UNION ALL
+                  SELECT block_id, parent_block_id
+                    FROM blocks JOIN tree ON block_id = tree.parent AND tree.bid != tree.parent -- stop recursing at zero block (or any self referencing block)
+            )
+            SELECT count(1) as "count" FROM tree WHERE bid = ? LIMIT 1
+        "#,
+        )
+        .bind::<Text, _>(serialize_hex(descendant))
+        // .bind::<Text, _>(serialize_hex(BlockId::genesis())) // stop recursing at zero block
+        .bind::<Text, _>(serialize_hex(ancestor))
+        .get_result::<Count>(self.connection())
+        .map_err(|e| SqliteStorageError::DieselError {
+            operation: "blocks_is_ancestor",
+            source: e,
+        })?;
+
+        debug!(target: LOG_TARGET, "blocks_is_ancestor: is_ancestor: {}", is_ancestor.count);
+
+        Ok(is_ancestor.count > 0)
+    }
+
     fn blocks_get_all_by_parent(&mut self, parent_id: &BlockId) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
@@ -721,61 +797,6 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
                 b.try_convert(qc)
             })
             .collect()
-    }
-
-    fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError> {
-        use crate::schema::blocks;
-
-        let count = blocks::table
-            .filter(blocks::block_id.eq(serialize_hex(block_id)))
-            .count()
-            .limit(1)
-            .get_result::<i64>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "blocks_exists",
-                source: e,
-            })?;
-
-        Ok(count > 0)
-    }
-
-    fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError> {
-        if !self.blocks_exists(descendant)? {
-            return Err(StorageError::QueryError {
-                reason: format!("blocks_is_ancestor: descendant block {} does not exist", descendant),
-            });
-        }
-
-        if !self.blocks_exists(ancestor)? {
-            return Err(StorageError::QueryError {
-                reason: format!("blocks_is_ancestor: ancestor block {} does not exist", ancestor),
-            });
-        }
-
-        // TODO: this scans all the way to genesis for every query - can optimise though it's low priority for now
-        let is_ancestor = sql_query(
-            r#"
-            WITH RECURSIVE tree(bid, parent) AS (
-                  SELECT block_id, parent_block_id FROM blocks where block_id = ?
-                UNION ALL
-                  SELECT block_id, parent_block_id
-                    FROM blocks JOIN tree ON block_id = tree.parent AND tree.bid != tree.parent -- stop recursing at zero block (or any self referencing block)
-            )
-            SELECT count(1) as "count" FROM tree WHERE bid = ? LIMIT 1
-        "#,
-        )
-        .bind::<Text, _>(serialize_hex(descendant))
-        // .bind::<Text, _>(serialize_hex(BlockId::genesis())) // stop recursing at zero block
-        .bind::<Text, _>(serialize_hex(ancestor))
-        .get_result::<Count>(self.connection())
-        .map_err(|e| SqliteStorageError::DieselError {
-            operation: "blocks_is_ancestor",
-            source: e,
-        })?;
-
-        debug!(target: LOG_TARGET, "blocks_is_ancestor: is_ancestor: {}", is_ancestor.count);
-
-        Ok(is_ancestor.count > 0)
     }
 
     fn blocks_get_pending_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError> {
@@ -1007,86 +1028,6 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         deserialize_json(&qc_json)
     }
 
-    fn transactions_fetch_involved_shards(
-        &mut self,
-        transaction_ids: HashSet<TransactionId>,
-    ) -> Result<HashSet<SubstateAddress>, StorageError> {
-        use crate::schema::transactions;
-
-        let tx_ids = transaction_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
-
-        let involved_shards = transactions::table
-            .select((transactions::inputs, transactions::input_refs))
-            .filter(transactions::transaction_id.eq_any(tx_ids))
-            .load::<(String, String)>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transaction_pools_fetch_involved_shards",
-                source: e,
-            })?;
-
-        let shards = involved_shards
-            .into_iter()
-            .map(|(inputs, input_refs)| {
-                (
-                    // a Result is very inconvenient with flat_map
-                    deserialize_json::<HashSet<SubstateAddress>>(&inputs).unwrap(),
-                    deserialize_json::<HashSet<SubstateAddress>>(&input_refs).unwrap(),
-                )
-            })
-            .flat_map(|(inputs, input_refs)| inputs.into_iter().chain(input_refs).collect::<HashSet<_>>())
-            .collect();
-
-        Ok(shards)
-    }
-
-    fn votes_count_for_block(&mut self, block_id: &BlockId) -> Result<u64, StorageError> {
-        use crate::schema::votes;
-
-        let count = votes::table
-            .filter(votes::block_id.eq(serialize_hex(block_id)))
-            .count()
-            .first::<i64>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "votes_count_for_block",
-                source: e,
-            })?;
-
-        Ok(count as u64)
-    }
-
-    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError> {
-        use crate::schema::votes;
-
-        let votes = votes::table
-            .filter(votes::block_id.eq(serialize_hex(block_id)))
-            .get_results::<sql_models::Vote>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "votes_get_for_block",
-                source: e,
-            })?;
-
-        votes.into_iter().map(Vote::try_from).collect()
-    }
-
-    fn votes_get_by_block_and_sender(
-        &mut self,
-        block_id: &BlockId,
-        sender_leaf_hash: &FixedHash,
-    ) -> Result<Vote, StorageError> {
-        use crate::schema::votes;
-
-        let vote = votes::table
-            .filter(votes::block_id.eq(serialize_hex(block_id)))
-            .filter(votes::sender_leaf_hash.eq(serialize_hex(sender_leaf_hash)))
-            .first::<sql_models::Vote>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "votes_get",
-                source: e,
-            })?;
-
-        Vote::try_from(vote)
-    }
-
     fn transaction_pool_get(
         &mut self,
         from_block_id: &BlockId,
@@ -1308,6 +1249,86 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         Ok(count as usize)
     }
 
+    fn transactions_fetch_involved_shards(
+        &mut self,
+        transaction_ids: HashSet<TransactionId>,
+    ) -> Result<HashSet<SubstateAddress>, StorageError> {
+        use crate::schema::transactions;
+
+        let tx_ids = transaction_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
+
+        let involved_shards = transactions::table
+            .select((transactions::inputs, transactions::input_refs))
+            .filter(transactions::transaction_id.eq_any(tx_ids))
+            .load::<(String, String)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pools_fetch_involved_shards",
+                source: e,
+            })?;
+
+        let shards = involved_shards
+            .into_iter()
+            .map(|(inputs, input_refs)| {
+                (
+                    // a Result is very inconvenient with flat_map
+                    deserialize_json::<HashSet<SubstateAddress>>(&inputs).unwrap(),
+                    deserialize_json::<HashSet<SubstateAddress>>(&input_refs).unwrap(),
+                )
+            })
+            .flat_map(|(inputs, input_refs)| inputs.into_iter().chain(input_refs).collect::<HashSet<_>>())
+            .collect();
+
+        Ok(shards)
+    }
+
+    fn votes_get_by_block_and_sender(
+        &mut self,
+        block_id: &BlockId,
+        sender_leaf_hash: &FixedHash,
+    ) -> Result<Vote, StorageError> {
+        use crate::schema::votes;
+
+        let vote = votes::table
+            .filter(votes::block_id.eq(serialize_hex(block_id)))
+            .filter(votes::sender_leaf_hash.eq(serialize_hex(sender_leaf_hash)))
+            .first::<sql_models::Vote>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "votes_get",
+                source: e,
+            })?;
+
+        Vote::try_from(vote)
+    }
+
+    fn votes_count_for_block(&mut self, block_id: &BlockId) -> Result<u64, StorageError> {
+        use crate::schema::votes;
+
+        let count = votes::table
+            .filter(votes::block_id.eq(serialize_hex(block_id)))
+            .count()
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "votes_count_for_block",
+                source: e,
+            })?;
+
+        Ok(count as u64)
+    }
+
+    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError> {
+        use crate::schema::votes;
+
+        let votes = votes::table
+            .filter(votes::block_id.eq(serialize_hex(block_id)))
+            .get_results::<sql_models::Vote>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "votes_get_for_block",
+                source: e,
+            })?;
+
+        votes.into_iter().map(Vote::try_from).collect()
+    }
+
     fn substates_get(&mut self, address: &SubstateAddress) -> Result<SubstateRecord, StorageError> {
         use crate::schema::substates;
 
@@ -1467,6 +1488,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
                     .eq(&transaction_id_hex)
                     .or(substates::destroyed_by_transaction.eq(Some(&transaction_id_hex))),
             )
+            .order_by(substates::id.asc())
             .get_results::<sql_models::SubstateRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_get_all_for_transaction",
@@ -1550,6 +1572,59 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         } else {
             Ok(SubstateLockState::LockAcquired)
         }
+    }
+
+    fn pending_state_tree_diffs_exists_for_block(&mut self, block_id: &BlockId) -> Result<bool, StorageError> {
+        use crate::schema::pending_state_tree_diffs;
+
+        let count = pending_state_tree_diffs::table
+            .count()
+            .filter(pending_state_tree_diffs::block_id.eq(serialize_hex(block_id)))
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "pending_state_tree_diffs_exists_for_block",
+                source: e,
+            })?;
+
+        Ok(count > 0)
+    }
+
+    fn pending_state_tree_diffs_get_all_up_to_commit_block(
+        &mut self,
+        block_id: &BlockId,
+    ) -> Result<Vec<PendingStateTreeDiff>, StorageError> {
+        use crate::schema::{blocks, pending_state_tree_diffs};
+
+        // Get the last committed block
+        let committed_block_id = blocks::table
+            .select(blocks::block_id)
+            .filter(blocks::is_committed.eq(true))
+            .order_by(blocks::height.desc())
+            .first::<String>(self.connection())
+            .map(|s| deserialize_hex_try_from::<BlockId>(&s))
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "pending_state_tree_diffs_get_all_pending",
+                source: e,
+            })??;
+
+        let mut block_ids = self.get_block_ids_between(&committed_block_id, block_id)?;
+
+        // Exclude commit block
+        block_ids.pop();
+        if block_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let diffs = pending_state_tree_diffs::table
+            .filter(pending_state_tree_diffs::block_id.eq_any(block_ids))
+            .order_by(pending_state_tree_diffs::block_height.asc())
+            .get_results::<sql_models::PendingStateTreeDiff>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "pending_state_tree_diffs_get_all_pending",
+                source: e,
+            })?;
+
+        diffs.into_iter().map(TryInto::try_into).collect()
     }
 }
 

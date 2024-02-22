@@ -41,6 +41,7 @@ import { DataTableCell } from "../../Components/StyledComponents";
 import { useGetAllTransactions } from "../../api/hooks/useTransactions";
 import { emptyRows, handleChangePage, handleChangeRowsPerPage } from "../../utils/helpers";
 import { useAccountsGet } from "../../api/hooks/useAccounts";
+import type { FinalizeResult, Transaction, TransactionStatus } from "@tarilabs/typescript-bindings";
 
 export default function Transactions({ accountName }: { accountName: string }) {
   const { data: accountsData } = useAccountsGet(accountName);
@@ -48,11 +49,11 @@ export default function Transactions({ accountName }: { accountName: string }) {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const { data, isLoading, error, isError, refetch } = useGetAllTransactions(
     null,
-    accountsData?.account.address.Component || null,
+    (accountsData && "Component" in accountsData?.account.address && accountsData?.account.address.Component) || null,
   );
   useEffect(() => {
     refetch();
-  }, [accountsData?.account.address.Component]);
+  }, [accountsData?.account.address]);
   const theme = useTheme();
 
   return (
@@ -74,41 +75,43 @@ export default function Transactions({ accountName }: { accountName: string }) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {data?.transactions?.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((t: any) => {
-                if (t?.[0]?.id !== undefined) {
-                  const hash = t[0].id;
-                  return (
-                    <TableRow key={hash}>
-                      <DataTableCell>
-                        <Link
-                          to={`/transactions/${hash}`}
-                          style={{
-                            textDecoration: "none",
-                            color: theme.palette.text.secondary,
-                          }}
-                        >
-                          {hash}
-                        </Link>
-                      </DataTableCell>
-                      <DataTableCell>
-                        <StatusChip status={t[2]} showTitle />
-                      </DataTableCell>
-                      <DataTableCell>{t?.[1]?.cost_breakdown?.total_fees_charged || 0}</DataTableCell>
-                      <DataTableCell>
-                        <IconButton
-                          component={Link}
-                          to={`/transactions/${hash}`}
-                          style={{
-                            color: theme.palette.text.secondary,
-                          }}
-                        >
-                          <ChevronRight />
-                        </IconButton>
-                      </DataTableCell>
-                    </TableRow>
-                  );
-                }
-              })}
+              {data?.transactions
+                ?.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .map((t: [Transaction, FinalizeResult | null, TransactionStatus, string]) => {
+                  if (t?.[0]?.id !== undefined) {
+                    const hash = t[0].id;
+                    return (
+                      <TableRow key={hash}>
+                        <DataTableCell>
+                          <Link
+                            to={`/transactions/${hash}`}
+                            style={{
+                              textDecoration: "none",
+                              color: theme.palette.text.secondary,
+                            }}
+                          >
+                            {hash}
+                          </Link>
+                        </DataTableCell>
+                        <DataTableCell>
+                          <StatusChip status={t[2]} showTitle />
+                        </DataTableCell>
+                        <DataTableCell>{t?.[1]?.cost_breakdown?.total_fees_charged || 0}</DataTableCell>
+                        <DataTableCell>
+                          <IconButton
+                            component={Link}
+                            to={`/transactions/${hash}`}
+                            style={{
+                              color: theme.palette.text.secondary,
+                            }}
+                          >
+                            <ChevronRight />
+                          </IconButton>
+                        </DataTableCell>
+                      </TableRow>
+                    );
+                  }
+                })}
               {emptyRows(page, rowsPerPage, data?.transactions) > 0 && (
                 <TableRow
                   style={{

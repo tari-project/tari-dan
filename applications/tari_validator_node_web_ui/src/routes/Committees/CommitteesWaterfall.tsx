@@ -25,7 +25,7 @@ import { fromHexString } from "../VN/Components/helpers";
 import EChartsReact from "echarts-for-react";
 import { ICommitteeChart } from "../../utils/interfaces";
 import "../../theme/echarts.css";
-import { CommitteeShardInfo } from "../../utils/interfaces";
+import type { CommitteeShardInfo, ValidatorNode } from "@tarilabs/typescript-bindings/validator-node-client";
 
 export default function CommitteesWaterfall({ committees }: { committees: CommitteeShardInfo[] }) {
   const [chartData, setChartData] = useState<ICommitteeChart>({
@@ -97,7 +97,7 @@ export default function CommitteesWaterfall({ committees }: { committees: Commit
     const end = fromHexString(data.substate_address_range.end)[0];
 
     const memberList = data.validators
-      .map((member) => `<li>${member.address}</li>`)
+      .map((member: ValidatorNode) => `<li>${member.address}</li>`)
       .slice(0, 5)
       .join("");
 

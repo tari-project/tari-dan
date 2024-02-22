@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    scrape_interval: 5s
+    metrics_path: "/_metrics"
+    static_configs:
+      - targets: ['host.docker.internal:18200']
+
+  #- job_name: 'node'
+    #static_configs:
+      #- targets: ['node-exporter:9100']
+
+remote_write:
+  - url: 'http://grafana:3000'
+    basic_auth:
+      username: 'admin'
+      password: 'admin'

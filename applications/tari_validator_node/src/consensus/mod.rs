@@ -1,6 +1,7 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
+use tari_common::configuration::Network;
 use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker};
 use tari_dan_storage::consensus_models::TransactionPool;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
@@ -25,12 +26,15 @@ use crate::{
 
 mod handle;
 mod leader_selection;
+#[cfg(feature = "metrics")]
+pub mod metrics;
 mod signature_service;
 mod spec;
 mod state_manager;
 
 pub use handle::*;
 use sqlite_message_logger::SqliteMessageLogger;
+use tari_consensus::traits::ConsensusSpec;
 use tari_dan_app_utilities::keypair::RistrettoKeypair;
 use tari_dan_common_types::PeerAddress;
 use tari_rpc_state_sync::RpcStateSyncManager;
@@ -38,13 +42,15 @@ use tari_rpc_state_sync::RpcStateSyncManager;
 use crate::p2p::services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging};
 
 pub async fn spawn(
+    network: Network,
     store: SqliteStateStore<PeerAddress>,
     keypair: RistrettoKeypair,
     epoch_manager: EpochManagerHandle<PeerAddress>,
-    rx_new_transactions: mpsc::Receiver<TransactionId>,
+    rx_new_transactions: mpsc::Receiver<(TransactionId, usize)>,
     inbound_messaging: ConsensusInboundMessaging<SqliteMessageLogger>,
     outbound_messaging: ConsensusOutboundMessaging<SqliteMessageLogger>,
     client_factory: TariValidatorNodeRpcClientFactory,
+    hooks: <TariConsensusSpec as ConsensusSpec>::Hooks,
     shutdown_signal: ShutdownSignal,
 ) -> (
     JoinHandle<Result<(), anyhow::Error>>,
@@ -62,6 +68,7 @@ pub async fn spawn(
 
     let hotstuff_worker = HotstuffWorker::<TariConsensusSpec>::new(
         validator_addr,
+        network,
         inbound_messaging,
         outbound_messaging,
         rx_new_transactions,
@@ -73,6 +80,7 @@ pub async fn spawn(
         transaction_pool,
         tx_hotstuff_events.clone(),
         tx_mempool,
+        hooks,
         shutdown_signal.clone(),
     );
 
@@ -80,7 +88,7 @@ pub async fn spawn(
     let context = ConsensusWorkerContext {
         epoch_manager: epoch_manager.clone(),
         hotstuff: hotstuff_worker,
-        state_sync: RpcStateSyncManager::new(epoch_manager, store, leader_strategy, client_factory),
+        state_sync: RpcStateSyncManager::new(network, epoch_manager, store, leader_strategy, client_factory),
         tx_current_state,
     };
 

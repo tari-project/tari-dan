@@ -9,8 +9,11 @@ use tari_indexer_lib::{error::IndexerError, transaction_autofiller::TransactionA
 pub enum TransactionManagerError {
     #[error("Epoch manager error: {0}")]
     EpochManagerError(#[from] EpochManagerError),
-    #[error("Rpc call failed for all ({committee_size}) validators")]
-    AllValidatorsFailed { committee_size: usize },
+    #[error("Rpc call failed for all ({committee_size}) validators: {}", .last_error.as_deref().unwrap_or("unknown"))]
+    AllValidatorsFailed {
+        committee_size: usize,
+        last_error: Option<String>,
+    },
     #[error("No committee at present. Try again later")]
     NoCommitteeMembers,
     #[error("{entity} not found: {key}")]
