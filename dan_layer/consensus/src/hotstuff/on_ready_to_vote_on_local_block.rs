@@ -36,11 +36,11 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::broadcast;
 
-use super::{block_transaction_executor::BlockTransactionExecutor, proposer::Proposer};
+use super::proposer::Proposer;
 use crate::{
     hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, event::HotstuffEvent, ProposalValidationError},
     messages::{HotstuffMessage, VoteMessage},
-    traits::{ConsensusSpec, LeaderStrategy, OutboundMessaging, StateManager, VoteSignatureService},
+    traits::{ConsensusSpec, LeaderStrategy, OutboundMessaging, StateManager, BlockTransactionExecutor, BlockTransactionExecutorBuilder, VoteSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_lock_block_ready";
@@ -56,7 +56,7 @@ pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_events: broadcast::Sender<HotstuffEvent>,
     proposer: Proposer<TConsensusSpec>,
-    transaction_executor: TConsensusSpec::TransactionExecutor,
+    transaction_executor_builder: TConsensusSpec::BlockTransactionExecutorBuilder,
 }
 
 impl<TConsensusSpec> OnReadyToVoteOnLocalBlock<TConsensusSpec>
@@ -73,7 +73,7 @@ where TConsensusSpec: ConsensusSpec
         outbound_messaging: TConsensusSpec::OutboundMessaging,
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
-        transaction_executor: TConsensusSpec::TransactionExecutor,
+        transaction_executor_builder: TConsensusSpec::BlockTransactionExecutorBuilder,
     ) -> Self {
         Self {
             validator_addr,
@@ -86,7 +86,7 @@ where TConsensusSpec: ConsensusSpec
             outbound_messaging,
             tx_events,
             proposer,
-            transaction_executor,
+            transaction_executor_builder,
         }
     }
 
@@ -355,8 +355,7 @@ where TConsensusSpec: ConsensusSpec
 
         // Executor used for transactions that have inputs without specific versions.
         // It lives through the entire block so multiple transactions can be "chained" together in the same block
-        let mut executor: BlockTransactionExecutor<TConsensusSpec> =
-            BlockTransactionExecutor::new(self.epoch_manager.clone(), self.transaction_executor.clone());
+        let mut executor = self.transaction_executor_builder.build();
 
         for cmd in block.commands() {
             if let Some(transaction) = cmd.transaction() {
@@ -675,13 +674,15 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         transaction_id: &TransactionId,
-        executor: &mut BlockTransactionExecutor<TConsensusSpec>,
+        executor: &mut Box<dyn BlockTransactionExecutor<TConsensusSpec::StateStore>>,
     ) -> Result<ExecutedTransaction, HotStuffError> {
         let executed = ExecutedTransaction::get(tx.deref_mut(), transaction_id)?;
         let transaction = executed.transaction();
 
         if transaction.has_inputs_without_version() {
-            let executed = executor.execute(executed.transaction().clone(), tx)?;
+            let executed = executor
+                .execute(executed.transaction().clone(), tx)
+                .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
             Ok(executed)
         } else {
             Ok(executed)

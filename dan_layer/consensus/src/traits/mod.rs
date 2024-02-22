@@ -28,7 +28,7 @@ pub trait ConsensusSpec: Send + Sync + Clone + 'static {
     type SignatureService: VoteSignatureService + ValidatorSignatureService + Send + Sync + Clone + 'static;
     type StateManager: StateManager<Self::StateStore> + Send + Sync + 'static;
     type SyncManager: SyncManager + Send + Sync + 'static;
-    type TransactionExecutor: TransactionExecutor + Send + Sync + Clone + 'static;
+    type BlockTransactionExecutorBuilder: BlockTransactionExecutorBuilder<Self::StateStore> + Send + Sync + Clone + 'static;
     type InboundMessaging: InboundMessaging<Addr = Self::Addr> + Send + Sync + 'static;
     type OutboundMessaging: OutboundMessaging<Addr = Self::Addr> + Clone + Send + Sync + 'static;
 }

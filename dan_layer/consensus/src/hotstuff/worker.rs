@@ -84,7 +84,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         signing_service: TConsensusSpec::SignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        transaction_executor: TConsensusSpec::TransactionExecutor,
+        transaction_executor_builder: TConsensusSpec::BlockTransactionExecutorBuilder,
         tx_events: broadcast::Sender<HotstuffEvent>,
         tx_mempool: mpsc::UnboundedSender<Transaction>,
         shutdown: ShutdownSignal,
@@ -133,7 +133,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 transaction_pool.clone(),
                 tx_events,
                 proposer.clone(),
-                transaction_executor.clone(),
+                transaction_executor_builder.clone(),
             ),
             on_receive_foreign_proposal: OnReceiveForeignProposalHandler::new(
                 state_store.clone(),

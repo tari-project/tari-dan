@@ -2,8 +2,7 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_consensus::traits::TransactionExecutor;
-use tari_dan_app_utilities::transaction_executor::TransactionProcessorError;
+use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
 use tari_dan_common_types::Epoch;
 use tari_dan_engine::{
     bootstrap_state,

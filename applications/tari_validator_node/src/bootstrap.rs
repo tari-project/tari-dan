@@ -79,7 +79,7 @@ use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
-    consensus::{self, ConsensusHandle},
+    consensus::{self, ConsensusHandle, TariDanBlockTransactionExecutorBuilder},
     dry_run_transaction_processor::DryRunTransactionProcessor,
     p2p::{
         create_tari_validator_node_rpc_service,
@@ -236,6 +236,8 @@ pub async fn spawn_services(
     let outbound_messaging =
         ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
 
+    let transaction_executor_builder = TariDanBlockTransactionExecutorBuilder::new(epoch_manager.clone(), payload_processor.clone());
+
     let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
         state_store.clone(),
         keypair.clone(),
@@ -245,7 +247,7 @@ pub async fn spawn_services(
         outbound_messaging.clone(),
         validator_node_client_factory.clone(),
         shutdown.clone(),
-        payload_processor.clone(),
+        transaction_executor_builder,
     )
     .await;
     handles.push(consensus_join_handle);

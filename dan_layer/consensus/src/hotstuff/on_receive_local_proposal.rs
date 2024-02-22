@@ -57,7 +57,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
-        transaction_executor: TConsensusSpec::TransactionExecutor,
+        transaction_executor_builder: TConsensusSpec::BlockTransactionExecutorBuilder,
     ) -> Self {
         Self {
             store: store.clone(),
@@ -75,7 +75,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 outbound_messaging,
                 tx_events,
                 proposer,
-                transaction_executor,
+                transaction_executor_builder,
             ),
         }
     }

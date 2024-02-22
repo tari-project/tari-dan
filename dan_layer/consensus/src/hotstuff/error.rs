@@ -10,7 +10,6 @@ use tari_epoch_manager::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_transaction::TransactionId;
 
-use super::block_transaction_executor::BlockTransactionExecutorError;
 use crate::traits::{InboundMessagingError, OutboundMessagingError};
 
 #[derive(Debug, thiserror::Error)]
@@ -81,8 +80,8 @@ pub enum HotStuffError {
         local_height: NodeHeight,
         qc_height: NodeHeight,
     },
-    #[error("Block transaction executor error: {0}")]
-    BlockTransactionExecutorError(#[from] BlockTransactionExecutorError),
+    #[error("Transaction executor error: {0}")]
+    TransactionExecutorError(String),
 }
 
 impl From<EpochManagerError> for HotStuffError {

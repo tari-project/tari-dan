@@ -23,10 +23,9 @@
 use std::{collections::HashMap, sync::Arc};
 
 use log::info;
-use tari_consensus::traits::TransactionExecutor;
 use tari_dan_app_utilities::{
     template_manager::implementation::TemplateManager,
-    transaction_executor::TariDanTransactionProcessor,
+    transaction_executor::{TariDanTransactionProcessor, TransactionExecutor as _},
 };
 use tari_dan_common_types::{Epoch, PeerAddress, SubstateAddress};
 use tari_dan_engine::{

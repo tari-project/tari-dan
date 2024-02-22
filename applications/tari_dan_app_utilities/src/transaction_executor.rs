@@ -5,7 +5,6 @@ use std::{sync::Arc, time::Instant};
 
 use log::*;
 use tari_common_types::types::PublicKey;
-use tari_consensus::traits::TransactionExecutor;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, SubstateAddress};
 use tari_dan_engine::{
@@ -23,7 +22,18 @@ use tari_engine_types::{
 use tari_template_lib::{crypto::RistrettoPublicKeyBytes, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 
-const LOG_TARGET: &str = "tari::dan::transaction_executor";
+const _LOG_TARGET: &str = "tari::dan::transaction_executor";
+
+pub trait TransactionExecutor {
+    type Error: std::error::Error + Send + Sync + 'static;
+
+    fn execute(
+        &self,
+        transaction: Transaction,
+        state_store: MemoryStateStore,
+        virtual_substates: VirtualSubstates,
+    ) -> Result<ExecutedTransaction, Self::Error>;
+}
 
 #[derive(Debug, Clone)]
 pub struct TariDanTransactionProcessor<TTemplateProvider> {
@@ -51,11 +61,6 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         state_store: MemoryStateStore,
         virtual_substates: VirtualSubstates,
     ) -> Result<ExecutedTransaction, Self::Error> {
-        info!(
-            target: LOG_TARGET,
-            "Transaction {} executing",
-            transaction.id(),
-        );
         let timer = Instant::now();
         // Include ownership token for the signers of this in the auth scope
         let owner_token = get_auth_token(transaction.signer_public_key());

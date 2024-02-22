@@ -28,6 +28,9 @@ mod leader_selection;
 mod signature_service;
 mod spec;
 mod state_manager;
+mod block_transaction_executor;
+
+pub use block_transaction_executor::{TariDanBlockTransactionExecutor, TariDanBlockTransactionExecutorBuilder};
 
 pub use handle::*;
 use sqlite_message_logger::SqliteMessageLogger;
@@ -50,7 +53,7 @@ pub async fn spawn(
     outbound_messaging: ConsensusOutboundMessaging<SqliteMessageLogger>,
     client_factory: TariValidatorNodeRpcClientFactory,
     shutdown_signal: ShutdownSignal,
-    transaction_executor: TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
+    transaction_executor_builder: TariDanBlockTransactionExecutorBuilder<EpochManagerHandle<PeerAddress>, TariDanTransactionProcessor<TemplateManager<PeerAddress>>>,
 ) -> (
     JoinHandle<Result<(), anyhow::Error>>,
     ConsensusHandle,
@@ -76,7 +79,7 @@ pub async fn spawn(
         signing_service,
         state_manager,
         transaction_pool,
-        transaction_executor.clone(),
+        transaction_executor_builder.clone(),
         tx_hotstuff_events.clone(),
         tx_mempool,
         shutdown_signal.clone(),
