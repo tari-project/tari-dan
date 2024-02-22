@@ -20,38 +20,28 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    fmt::Display,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 pub use tari_template_lib::args::LogLevel;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct LogEntry {
-    pub timestamp: u64,
     pub message: String,
     pub level: LogLevel,
 }
 
 impl LogEntry {
     pub fn new(level: LogLevel, message: String) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            // If the errors, the clock has been set before the UNIX_EPOCH
-            .unwrap_or_else(|_| Duration::from_secs(0))
-            .as_secs();
-        Self {
-            timestamp: now,
-            message,
-            level,
-        }
+        Self { message, level }
     }
 }
 
 impl Display for LogEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {} {}", self.timestamp, self.level, self.message)
+        write!(f, "{} {}", self.level, self.message)
     }
 }

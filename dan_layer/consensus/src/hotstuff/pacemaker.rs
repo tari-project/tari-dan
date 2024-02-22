@@ -20,11 +20,11 @@ use crate::hotstuff::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::pacemaker";
 const MAX_DELTA: Duration = Duration::from_secs(300);
+const BLOCK_TIME: Duration = Duration::from_secs(10);
 
 pub struct PaceMaker {
     pace_maker_handle: PaceMakerHandle,
     handle_receiver: mpsc::Receiver<PacemakerRequest>,
-    block_time: Duration,
     current_height: CurrentHeight,
     current_high_qc_height: NodeHeight,
 }
@@ -47,8 +47,6 @@ impl PaceMaker {
                 on_leader_timeout,
                 current_height.clone(),
             ),
-            // TODO: make network constant. We're starting slow with 10s but should be 1s in the future
-            block_time: Duration::from_secs(10),
             current_height,
             current_high_qc_height: NodeHeight(0),
         }
@@ -101,7 +99,7 @@ impl PaceMaker {
                                 info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_height, delta);
                                 leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
                                 // set a timer for when we must send a block...
-                                block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                                block_timer.as_mut().reset(tokio::time::Instant::now() + BLOCK_TIME);
                            },
                             PacemakerRequest::Start { high_qc_height } => {
                                 info!(target: LOG_TARGET, "🚀 Starting pacemaker at leaf height {} and high QC: {}", self.current_height, high_qc_height);
@@ -112,7 +110,7 @@ impl PaceMaker {
                                 let delta = self.delta_time();
                                 info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_height, delta);
                                 leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
-                                block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                                block_timer.as_mut().reset(tokio::time::Instant::now() + BLOCK_TIME);
                                 on_beat.beat();
                                 started = true;
                             }
@@ -130,11 +128,11 @@ impl PaceMaker {
                     }
                 },
                 () = &mut block_timer => {
-                    block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                    block_timer.as_mut().reset(tokio::time::Instant::now() + BLOCK_TIME);
                     on_force_beat.beat(None);
                 }
                 () = &mut leader_timeout => {
-                    block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                    block_timer.as_mut().reset(tokio::time::Instant::now() + BLOCK_TIME);
 
                     let delta = self.delta_time();
                     leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
@@ -156,7 +154,7 @@ impl PaceMaker {
         let current_height = self.current_height.get();
         if current_height.is_zero() {
             // Allow extra time for the first block
-            return self.block_time * 2;
+            return BLOCK_TIME * 2;
         }
         let exp = u32::try_from(cmp::min(
             u64::from(u32::MAX),
@@ -169,7 +167,7 @@ impl PaceMaker {
         );
         // TODO: get real avg latency
         let avg_latency = Duration::from_secs(2);
-        self.block_time + delta + avg_latency
+        BLOCK_TIME + delta + avg_latency
     }
 }
 

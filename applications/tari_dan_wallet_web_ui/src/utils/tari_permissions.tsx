@@ -324,7 +324,6 @@ export class TariPermissionTransactionSend {
     }
   }
   toJSON() {
-    console.log("JSON TariPermissionTransactionSend", this.value);
     if (this.value === undefined) {
       return { TransactionSend: null };
     } else {
@@ -420,5 +419,5 @@ export function parse(permission: any) {
   } else if (permission.hasOwnProperty("NftGetOwnershipProof")) {
     return new TariPermissionNftGetOwnershipProof(permission.NftGetOwnershipProof);
   }
-  return null;
+  return permission;
 }

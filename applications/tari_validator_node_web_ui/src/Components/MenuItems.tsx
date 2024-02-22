@@ -29,7 +29,6 @@ import {
   IoHome,
   IoPeopleOutline,
   IoPeople,
-  IoBarChartOutline,
   IoBarChart,
   IoGitNetworkOutline,
   IoGitNetwork,

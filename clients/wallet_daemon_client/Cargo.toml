@@ -15,9 +15,14 @@ tari_transaction = { workspace = true }
 tari_dan_wallet_sdk = { workspace = true }
 # TODO: Ideally we should not have to include the WASM template lib, we should perhaps extract the address types into a separate crate (e.g. template_types)
 tari_template_lib = { workspace = true }
+tari_template_abi = { workspace = true }
 
 chrono = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, default-features = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+ts-rs = { workspace = true, optional = true }
+
+[features]
+ts = ["ts-rs"]

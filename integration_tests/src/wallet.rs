@@ -136,6 +136,7 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
 
             eprintln!("Using wallet temp_dir: {}", temp_dir.display());
 
+            wallet_config.wallet.set_base_path(temp_dir.clone());
             wallet_config.wallet.network = Network::LocalNet;
             wallet_config.wallet.password = Some("test".into());
             wallet_config.wallet.grpc_enabled = true;
@@ -143,7 +144,11 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
                 Some(Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", grpc_port)).unwrap());
             wallet_config.wallet.data_dir = temp_dir.join("data/wallet");
             wallet_config.wallet.db_file = temp_dir.join("db/console_wallet.db");
-
+            wallet_config.wallet.contacts_auto_ping_interval = Duration::from_secs(2);
+            wallet_config
+                .wallet
+                .base_node_service_config
+                .base_node_monitor_max_refresh_interval = Duration::from_secs(15);
             wallet_config.wallet.p2p.transport.transport_type = TransportType::Tcp;
             wallet_config.wallet.p2p.transport.tcp.listener_address =
                 Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();

@@ -3,6 +3,7 @@
 
 use blake2::{digest::consts::U32, Blake2b};
 use serde::{Deserialize, Serialize};
+use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
 use tari_core::{consensus::DomainSeparatedConsensusHasher, transactions::TransactionHashDomain};
 
@@ -25,8 +26,8 @@ impl ValidatorMetadata {
     }
 }
 
-pub fn vn_node_hash(public_key: &PublicKey, substate_address: &SubstateAddress) -> FixedHash {
-    DomainSeparatedConsensusHasher::<TransactionHashDomain, Blake2b<U32>>::new("validator_node")
+pub fn vn_node_hash(network: Network, public_key: &PublicKey, substate_address: &SubstateAddress) -> FixedHash {
+    DomainSeparatedConsensusHasher::<TransactionHashDomain, Blake2b<U32>>::new_with_network("validator_node", network)
         .chain(public_key)
         .chain(&substate_address.0)
         .finalize()

@@ -9,15 +9,27 @@ use std::{
 };
 
 use log::*;
+#[cfg(feature = "ts")]
+use serde::Deserialize;
 use serde::Serialize;
 use tari_dan_common_types::{
     committee::CommitteeShard,
     optional::{IsNotFoundError, Optional},
 };
 use tari_transaction::TransactionId;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
-    consensus_models::{Decision, LeafBlock, LockedBlock, QcId, TransactionAtom, TransactionPoolStatusUpdate},
+    consensus_models::{
+        Decision,
+        LeafBlock,
+        LockedBlock,
+        QcId,
+        TransactionAtom,
+        TransactionPoolStatusUpdate,
+        TransactionRecord,
+    },
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
@@ -27,6 +39,11 @@ use crate::{
 const _LOG_TARGET: &str = "tari::dan::storage::transaction_pool";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS, Deserialize),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub enum TransactionPoolStage {
     /// Transaction has just come in and has never been proposed
     New,
@@ -217,6 +234,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TransactionPoolRecord {
     transaction: TransactionAtom,
     stage: TransactionPoolStage,
@@ -309,6 +327,9 @@ impl TransactionPoolRecord {
     }
 
     pub fn calculate_leader_fee(&self, involved: NonZeroU64, exhaust_divisor: u64) -> u64 {
+        if self.current_decision().is_abort() {
+            return 0;
+        }
         // TODO: We essentially burn a random amount depending on the shards involved in the transaction. This means it
         //       is hard to tell how much is actually in circulation unless we track this in the Resource. Right
         //       now we'll set exhaust to 0, which is just transaction_fee / involved.
@@ -447,6 +468,14 @@ impl TransactionPoolRecord {
             let _ = tx.transaction_pool_remove(id).optional()?;
         }
         Ok(())
+    }
+
+    pub fn get_transaction<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<TransactionRecord, TransactionPoolError> {
+        let transaction = TransactionRecord::get(tx, self.transaction_id())?;
+        Ok(transaction)
     }
 }
 

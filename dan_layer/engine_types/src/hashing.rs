@@ -29,10 +29,9 @@ use blake2::{
 use digest::Digest;
 use serde::Serialize;
 use tari_bor::encode_into;
-use tari_crypto::{hash_domain, hashing::DomainSeparation};
+use tari_crypto::hashing::DomainSeparation;
+use tari_hash_domains::TariEngineHashDomain;
 use tari_template_lib::Hash;
-
-hash_domain!(TariEngineHashDomain, "com.tari.dan.engine", 0);
 
 pub fn hasher64(label: EngineHashDomainLabel) -> TariHasher64 {
     TariHasher64::new_with_label::<TariEngineHashDomain>(label.as_label())
@@ -42,6 +41,10 @@ pub fn template_hasher64() -> TariHasher64 {
     hasher64(EngineHashDomainLabel::Template)
 }
 
+pub fn substate_value_hasher32() -> TariHasher32 {
+    hasher32(EngineHashDomainLabel::SubstateValue)
+}
+
 pub fn hasher32(label: EngineHashDomainLabel) -> TariHasher32 {
     TariHasher32::new_with_label::<TariEngineHashDomain>(label.as_label())
 }
@@ -49,8 +52,6 @@ pub fn hasher32(label: EngineHashDomainLabel) -> TariHasher32 {
 pub fn template_hasher32() -> TariHasher32 {
     hasher32(EngineHashDomainLabel::Template)
 }
-
-hash_domain!(ConfidentialOutputHashDomain, "com.tari.dan.confidential_output", 1);
 
 #[derive(Debug, Clone)]
 pub struct TariHasher32 {
@@ -178,6 +179,7 @@ pub enum EngineHashDomainLabel {
     TransactionReceipt,
     FeeClaimAddress,
     QuorumCertificate,
+    SubstateValue,
 }
 
 impl EngineHashDomainLabel {
@@ -201,6 +203,7 @@ impl EngineHashDomainLabel {
             Self::TransactionReceipt => "TransactionReceipt",
             Self::FeeClaimAddress => "FeeClaimAddress",
             Self::QuorumCertificate => "QuorumCertificate",
+            Self::SubstateValue => "SubstateValue",
         }
     }
 }

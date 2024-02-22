@@ -42,6 +42,8 @@ use tari_template_lib::models::Amount;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{mpsc, oneshot};
 
+#[cfg(feature = "metrics")]
+use super::metrics::PrometheusMempoolMetrics;
 use super::MempoolError;
 use crate::{
     consensus::ConsensusHandle,
@@ -72,7 +74,7 @@ pub struct MempoolService<TValidator, TExecutedValidator, TExecutor, TSubstateRe
     transactions: HashSet<TransactionId>,
     pending_executions: FuturesUnordered<BoxFuture<'static, MempoolTransactionExecution>>,
     mempool_requests: mpsc::Receiver<MempoolRequest>,
-    tx_executed_transactions: mpsc::Sender<TransactionId>,
+    tx_executed_transactions: mpsc::Sender<(TransactionId, usize)>,
     epoch_manager: EpochManagerHandle<PeerAddress>,
     before_execute_validator: TValidator,
     after_execute_validator: TExecutedValidator,
@@ -83,6 +85,8 @@ pub struct MempoolService<TValidator, TExecutedValidator, TExecutor, TSubstateRe
     gossip: MempoolGossip<PeerAddress>,
     rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
     consensus_handle: ConsensusHandle,
+    #[cfg(feature = "metrics")]
+    metrics: PrometheusMempoolMetrics,
 }
 
 impl<TValidator, TExecutedValidator, TExecutor, TSubstateResolver>
@@ -96,7 +100,7 @@ where
     pub(super) fn new(
         mempool_requests: mpsc::Receiver<MempoolRequest>,
         gossip: Gossip,
-        tx_executed_transactions: mpsc::Sender<TransactionId>,
+        tx_executed_transactions: mpsc::Sender<(TransactionId, usize)>,
         epoch_manager: EpochManagerHandle<PeerAddress>,
         transaction_executor: TExecutor,
         substate_resolver: TSubstateResolver,
@@ -105,6 +109,7 @@ where
         state_store: SqliteStateStore<PeerAddress>,
         rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
         consensus_handle: ConsensusHandle,
+        #[cfg(feature = "metrics")] metrics: PrometheusMempoolMetrics,
     ) -> Self {
         Self {
             gossip: MempoolGossip::new(epoch_manager.clone(), gossip),
@@ -121,6 +126,8 @@ where
             transaction_pool: TransactionPool::new(),
             rx_consensus_to_mempool,
             consensus_handle,
+            #[cfg(feature = "metrics")]
+            metrics,
         }
     }
 
@@ -295,12 +302,18 @@ where
         let mut transaction = TransactionRecord::new(transaction);
         self.state_store.with_write_tx(|tx| transaction.insert(tx))?;
 
+        #[cfg(feature = "metrics")]
+        self.metrics.on_transaction_received(&transaction);
+
         if let Err(e) = self.before_execute_validator.validate(transaction.transaction()).await {
             self.state_store.with_write_tx(|tx| {
                 transaction
                     .set_abort(format!("Mempool validation failed: {}", e))
                     .update(tx)
             })?;
+
+            #[cfg(feature = "metrics")]
+            self.metrics.on_transaction_validation_error(transaction.id(), &e);
             return Err(e);
         }
 
@@ -512,6 +525,9 @@ where
         // This is due to a bug or possibly db failure only
         let (transaction_id, exec_result) = result?;
 
+        #[cfg(feature = "metrics")]
+        self.metrics.on_transaction_executed(&transaction_id, &exec_result);
+
         // The avoids the case where:
         // 1. A transaction is received and start executing
         // 2. The node switches to sync mode
@@ -581,6 +597,8 @@ where
                             executed.id(),
                             e,
                         );
+                        #[cfg(feature = "metrics")]
+                        self.metrics.on_transaction_validation_error(&transaction_id, &e);
                         self.state_store.with_write_tx(|tx| {
                             match executed.result().finalize.result.full_reject() {
                                 Some(reason) => {
@@ -690,7 +708,13 @@ where
         }
 
         // Notify consensus that a transaction is ready to go!
-        if is_consensus_running && self.tx_executed_transactions.send(*executed.id()).await.is_err() {
+        let pending_exec_size = self.pending_executions.len();
+        if is_consensus_running &&
+            self.tx_executed_transactions
+                .send((*executed.id(), pending_exec_size))
+                .await
+                .is_err()
+        {
             debug!(
                 target: LOG_TARGET,
                 "Executed transaction channel closed before executed transaction could be sent"

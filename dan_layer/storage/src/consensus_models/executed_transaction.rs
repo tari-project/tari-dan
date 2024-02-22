@@ -16,6 +16,8 @@ use tari_engine_types::{
     lock::LockFlag,
 };
 use tari_transaction::{Transaction, TransactionId};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     consensus_models::{Decision, Evidence, ShardEvidence, TransactionAtom, TransactionRecord},
@@ -25,12 +27,16 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
     resulting_outputs: Vec<SubstateAddress>,
+    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
     execution_time: Duration,
     final_decision: Option<Decision>,
+    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number} | null"))]
+    finalized_time: Option<Duration>,
     abort_details: Option<String>,
 }
 
@@ -47,6 +53,7 @@ impl ExecutedTransaction {
             execution_time,
             resulting_outputs,
             final_decision: None,
+            finalized_time: None,
             abort_details: None,
         }
     }
@@ -138,29 +145,36 @@ impl ExecutedTransaction {
     }
 
     pub fn to_initial_evidence(&self) -> Evidence {
-        let mut evidence = Evidence::empty();
-        evidence.extend(self.transaction.inputs().iter().map(|input| {
+        let mut deduped_evidence = HashMap::new();
+        deduped_evidence.extend(self.transaction.inputs().iter().map(|input| {
             (input.to_substate_address(), ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Write,
             })
         }));
 
-        evidence.extend(self.transaction.input_refs().iter().map(|input_ref| {
+        deduped_evidence.extend(self.transaction.input_refs().iter().map(|input_ref| {
             (input_ref.to_substate_address(), ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Read,
             })
         }));
 
-        evidence.extend(self.resulting_outputs.iter().map(|output| {
-            (output.clone(), ShardEvidence {
+        deduped_evidence.extend(self.transaction.filled_inputs().iter().map(|input_ref| {
+            (input_ref.to_substate_address(), ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Write,
             })
         }));
 
-        evidence
+        deduped_evidence.extend(self.resulting_outputs.iter().map(|output| {
+            (*output, ShardEvidence {
+                qc_ids: IndexSet::new(),
+                lock: LockFlag::Write,
+            })
+        }));
+
+        deduped_evidence.into_iter().collect()
     }
 
     pub fn is_finalized(&self) -> bool {
@@ -171,13 +185,17 @@ impl ExecutedTransaction {
         self.final_decision
     }
 
+    pub fn finalized_time(&self) -> Option<Duration> {
+        self.finalized_time
+    }
+
     pub fn abort_details(&self) -> Option<&String> {
         self.abort_details.as_ref()
     }
 
     pub fn set_final_decision(&mut self, decision: Decision) -> &mut Self {
         self.final_decision = Some(decision);
-        if decision.is_abort() {
+        if decision.is_abort() && self.abort_details.is_none() {
             self.abort_details = Some(
                 self.result
                     .finalize
@@ -317,6 +335,7 @@ impl TryFrom<TransactionRecord> for ExecutedTransaction {
             result: value.result.unwrap(),
             execution_time: value.execution_time.unwrap_or_default(),
             final_decision: value.final_decision,
+            finalized_time: value.finalized_time,
             resulting_outputs: value.resulting_outputs,
             abort_details: value.abort_details,
         })

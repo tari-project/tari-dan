@@ -34,7 +34,7 @@ use tari_dan_common_types::SubstateAddress;
 use tari_utilities::ByteArray;
 
 use crate::{
-    types::{BaseLayerConsensusConstants, BaseLayerMetadata, BlockInfo, SideChainUtxos, ValidatorNode},
+    types::{BaseLayerConsensusConstants, BaseLayerMetadata, BaseLayerValidatorNode, BlockInfo, SideChainUtxos},
     BaseNodeClient,
     BaseNodeClientError,
 };
@@ -114,7 +114,7 @@ impl BaseNodeClient for GrpcBaseNodeClient {
         })
     }
 
-    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, BaseNodeClientError> {
+    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<BaseLayerValidatorNode>, BaseNodeClientError> {
         let inner = self.connection().await?;
 
         let request = grpc::GetActiveValidatorNodesRequest { height };
@@ -124,7 +124,7 @@ impl BaseNodeClient for GrpcBaseNodeClient {
         loop {
             match stream.message().await {
                 Ok(Some(val)) => {
-                    vns.push(ValidatorNode {
+                    vns.push(BaseLayerValidatorNode {
                         public_key: PublicKey::from_canonical_bytes(&val.public_key).map_err(|_| {
                             BaseNodeClientError::InvalidPeerMessage("public_key was not a valid public key".to_string())
                         })?,

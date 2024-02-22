@@ -23,6 +23,7 @@ use tari_indexer_client::{
         SubmitTransactionRequest,
     },
 };
+use tari_template_lib::models::TemplateAddress;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use url::ParseError;
 
@@ -133,6 +134,18 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
             result: convert_indexer_result_to_wallet_result(resp.result),
         })
     }
+
+    async fn fetch_template_definition(
+        &self,
+        template_address: TemplateAddress,
+    ) -> Result<tari_template_abi::TemplateDef, Self::Error> {
+        let mut client = self.get_client()?;
+        let resp = client
+            .get_template_definition(tari_indexer_client::types::GetTemplateDefinitionRequest { template_address })
+            .await?;
+
+        Ok(resp.definition)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -162,11 +175,15 @@ fn convert_indexer_result_to_wallet_result(result: IndexerTransactionFinalizedRe
         IndexerTransactionFinalizedResult::Finalized {
             final_decision,
             execution_result,
+            finalized_time,
+            execution_time,
             abort_details,
             json_results,
         } => TransactionFinalizedResult::Finalized {
             final_decision,
             execution_result,
+            execution_time,
+            finalized_time,
             abort_details,
             json_results,
         },

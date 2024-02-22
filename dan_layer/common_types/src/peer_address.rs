@@ -6,11 +6,14 @@ use std::{fmt::Display, hash::Hash};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use tari_crypto::ristretto::RistrettoPublicKey;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{DerivableFromPublicKey, NodeAddressable};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
-pub struct PeerAddress(PeerId);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct PeerAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] PeerId);
 
 impl PeerAddress {
     pub fn as_peer_id(&self) -> PeerId {

@@ -26,13 +26,17 @@ use tari_dan_wallet_sdk::{
         NonFungibleToken,
         OutputStatus,
         SubstateModel,
+        SubstateType,
         TransactionStatus,
         VaultModel,
         WalletTransaction,
     },
     storage::{WalletStorageError, WalletStoreReader},
 };
-use tari_engine_types::substate::{InvalidSubstateIdFormat, SubstateId};
+use tari_engine_types::{
+    substate::{InvalidSubstateIdFormat, SubstateId},
+    TemplateAddress,
+};
 use tari_template_lib::{
     models::{ResourceAddress, VaultId},
     prelude::{ComponentAddress, NonFungibleId},
@@ -237,6 +241,36 @@ impl WalletStoreReader for ReadTransaction<'_> {
 
         let rec = rec.try_to_record()?;
         Ok(rec)
+    }
+
+    fn substates_get_all(
+        &mut self,
+        by_type: Option<SubstateType>,
+        by_template_address: Option<&TemplateAddress>,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> Result<Vec<SubstateModel>, WalletStorageError> {
+        use crate::schema::substates;
+
+        let mut query = substates::table.into_boxed();
+        if let Some(template_address) = by_template_address {
+            query = query.filter(substates::template_address.eq(template_address.to_string()));
+        }
+        if let Some(substate_type) = by_type {
+            query = query.filter(substates::address.like(format!("{}_%", substate_type.as_prefix_str())));
+        }
+        if let Some(limit) = limit {
+            query = query.limit(limit as i64);
+        }
+        if let Some(offset) = offset {
+            query = query.offset(offset as i64);
+        }
+
+        let rows = query
+            .get_results::<models::Substate>(self.connection())
+            .map_err(|e| WalletStorageError::general("substates_get_all", e))?;
+
+        rows.into_iter().map(|rec| rec.try_to_record()).collect()
     }
 
     fn substates_get_children(&mut self, parent: &SubstateId) -> Result<Vec<SubstateModel>, WalletStorageError> {

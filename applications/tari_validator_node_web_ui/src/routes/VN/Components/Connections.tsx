@@ -22,7 +22,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { addPeer, getConnections } from "../../../utils/json_rpc";
-import { toHexString, shortenString } from "./helpers";
+import { shortenString } from "./helpers";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -36,21 +36,7 @@ import { TextField } from "@mui/material";
 import { Form } from "react-router-dom";
 import Fade from "@mui/material/Fade";
 import CopyToClipboard from "../../../Components/CopyToClipboard";
-
-interface IConnection {
-  connection_id: number;
-  address: string;
-  age: Duration;
-  direction: boolean;
-  peer_id: string;
-  ping_latency: Duration | null;
-  // public_key: string;
-}
-
-interface Duration {
-  secs: number;
-  nanos: number;
-}
+import type { Connection } from "@tarilabs/typescript-bindings/validator-node-client";
 
 const useInterval = (fn: () => Promise<unknown>, ms: number) => {
   const timeout = useRef<number>();
@@ -72,7 +58,7 @@ const useInterval = (fn: () => Promise<unknown>, ms: number) => {
 };
 
 function Connections() {
-  const [connections, setConnections] = useState<IConnection[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [showPeerDialog, setShowAddPeerDialog] = useState(false);
   const [formState, setFormState] = useState({ publicKey: "", address: "" });
 
@@ -81,7 +67,11 @@ function Connections() {
   };
 
   const onSubmitAddPeer = async () => {
-    await addPeer(formState.publicKey, formState.address ? [formState.address] : []);
+    await addPeer({
+      public_key: formState.publicKey,
+      addresses: formState.address ? [formState.address] : [],
+      wait_for_dial: false,
+    });
     setFormState({ publicKey: "", address: "" });
     setShowAddPeerDialog(false);
   };
@@ -166,7 +156,7 @@ function Connections() {
   );
 }
 
-function displayDuration(duration: Duration) {
+function displayDuration(duration: { secs: number; nanos: number }) {
   if (duration.secs === 0) {
     if (duration.nanos > 1000000) {
       return `${(duration.nanos / 1000000).toFixed(2)}ms`;

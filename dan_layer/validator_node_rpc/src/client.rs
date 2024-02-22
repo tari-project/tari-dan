@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::convert::TryInto;
+use std::{convert::TryInto, time::Duration};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -56,6 +56,8 @@ pub enum TransactionResultStatus {
 pub struct FinalizedResult {
     pub execute_result: Option<ExecuteResult>,
     pub final_decision: Decision,
+    pub execution_time: Duration,
+    pub finalized_time: Duration,
     pub abort_details: Option<String>,
 }
 
@@ -228,9 +230,14 @@ impl<TMsg: MessageSpec> ValidatorNodeRpcClient for TariValidatorNodeRpcClient<TM
                         ))
                     })?;
 
+                let execution_time = Duration::from_millis(response.execution_time_ms);
+                let finalized_time = Duration::from_millis(response.finalized_time_ms);
+
                 Ok(TransactionResultStatus::Finalized(FinalizedResult {
                     execute_result: execution_result,
                     final_decision,
+                    execution_time,
+                    finalized_time,
                     abort_details: Some(response.abort_details).filter(|s| s.is_empty()),
                 }))
             },

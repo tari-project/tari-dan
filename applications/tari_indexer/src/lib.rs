@@ -126,6 +126,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         services.validator_node_client_factory.clone(),
         dan_layer_scanner,
         services.template_manager.clone(),
+        config.network,
     );
 
     // Run the JSON-RPC API
@@ -143,6 +144,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
             base_node_client,
             substate_manager.clone(),
             transaction_manager,
+            services.template_manager.clone(),
             dry_run_transaction_processor,
         );
         task::spawn(run_json_rpc(jrpc_address, handlers));

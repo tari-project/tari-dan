@@ -8,12 +8,14 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+tari_common = { workspace = true }
 tari_bor = { workspace = true, features = ["json_encoding"] }
 tari_common_types = { workspace = true }
 tari_crypto = { workspace = true, features = ["borsh"] }
 tari_template_abi = { workspace = true, features = ["std"] }
 tari_template_lib = { workspace = true }
 tari_utilities = { workspace = true }
+tari_hash_domains = { workspace = true }
 
 borsh = { workspace = true }
 # if we set this version in the workspace it would break other crates
@@ -26,8 +28,14 @@ lazy_static = { workspace = true }
 serde = { workspace = true, default-features = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+ts-rs = { workspace = true, optional = true }
 
 [features]
 default = ["debugging"]
 # Includes the ability to create free test coins
 debugging = []
+ts = ["ts-rs"]
+# This feature is used to temporarily fix the issue with the ts-rs crate. Because when we run cargo test --all-feature 
+# it will trigger the ts files generation. But there are some problems that are fixed during the npm run build. But 
+# not on cargo test.
+ts-rs-temporary-fix = []

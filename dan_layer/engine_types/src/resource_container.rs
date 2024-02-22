@@ -23,6 +23,8 @@ use tari_template_lib::{
     },
     prelude::ResourceType,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     confidential::{validate_confidential_proof, validate_confidential_withdraw, ConfidentialOutput},
@@ -31,6 +33,7 @@ use crate::{
 
 /// Instances of a single resource kept in Buckets and Vaults
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum ResourceContainer {
     Fungible {
         address: ResourceAddress,
@@ -44,8 +47,12 @@ pub enum ResourceContainer {
     },
     Confidential {
         address: ResourceAddress,
+        #[cfg_attr(feature = "ts", ts(type = "Record<string, ConfidentialOutput>"))]
+        #[cfg_attr(all(feature = "ts", feature = "ts-rs-temporary-fix"), ts(skip))]
         commitments: BTreeMap<Commitment, ConfidentialOutput>,
         revealed_amount: Amount,
+        #[cfg_attr(feature = "ts", ts(type = "Record<string, ConfidentialOutput>"))]
+        #[cfg_attr(all(feature = "ts", feature = "ts-rs-temporary-fix"), ts(skip))]
         locked_commitments: BTreeMap<Commitment, ConfidentialOutput>,
         locked_revealed_amount: Amount,
     },

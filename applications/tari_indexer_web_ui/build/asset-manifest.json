@@ -1,0 +1,18 @@
+{
+  "files": {
+    "main.css": "/static/css/main.7ca7ff7f.css",
+    "main.js": "/static/js/main.ffd9e9fe.js",
+    "static/js/787.eed3d788.chunk.js": "/static/js/787.eed3d788.chunk.js",
+    "static/media/AvenirLTStd-Heavy.otf": "/static/media/AvenirLTStd-Heavy.2bf862513010fcd4697e.otf",
+    "static/media/AvenirLTStd-Book.otf": "/static/media/AvenirLTStd-Book.1a2a32640c30f954931c.otf",
+    "static/media/AvenirLTStd-Medium.otf": "/static/media/AvenirLTStd-Medium.63d50f308877dab93052.otf",
+    "index.html": "/index.html",
+    "main.7ca7ff7f.css.map": "/static/css/main.7ca7ff7f.css.map",
+    "main.ffd9e9fe.js.map": "/static/js/main.ffd9e9fe.js.map",
+    "787.eed3d788.chunk.js.map": "/static/js/787.eed3d788.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.7ca7ff7f.css",
+    "static/js/main.ffd9e9fe.js"
+  ]
+}

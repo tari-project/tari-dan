@@ -6,12 +6,17 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_core::transactions::transaction_components::ValidatorNodeHashDomain;
 use tari_crypto::{keys::PublicKey as _, signatures::SchnorrSignature};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 pub type ValidatorSchnorrSignature = SchnorrSignature<PublicKey, PrivateKey, ValidatorNodeHashDomain>;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ValidatorSignature {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub public_key: PublicKey,
+    #[cfg_attr(feature = "ts", ts(type = "{public_nonce : string, signature: string}"))]
     pub signature: ValidatorSchnorrSignature,
 }
 

@@ -10,6 +10,7 @@ license.workspace = true
 [dependencies]
 tari_dan_engine = { workspace = true }
 tari_crypto = { workspace = true }
+tari_common = { workspace = true }
 tari_common_types = { workspace = true }
 tari_template_lib = { workspace = true }
 tari_engine_types = { workspace = true }

@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
@@ -11,6 +13,7 @@ use crate::{
 
 /// A zero-knowledge proof of a confidential transfer
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialOutputProof {
     /// Proof of the confidential resources that are going to be transferred to the receiver
     pub output_statement: ConfidentialStatement,
@@ -24,26 +27,33 @@ pub struct ConfidentialOutputProof {
 /// A zero-knowledge proof that a confidential resource amount is valid
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialStatement {
     #[serde_as(as = "Bytes")]
     pub commitment: [u8; 32],
     /// Public nonce (R) that was used to generate the commitment mask
     // #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub sender_public_nonce: RistrettoPublicKeyBytes,
     /// Commitment value encrypted for the receiver. Without this it would be difficult (not impossible) for the
     /// receiver to determine the value component of the commitment.
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub encrypted_data: EncryptedData,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub minimum_value_promise: u64,
     pub revealed_amount: Amount,
 }
 
 /// A zero-knowledge proof that a withdrawal of confidential resources from a vault is valid
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialWithdrawProof {
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub inputs: Vec<PedersonCommitmentBytes>,
     pub output_proof: ConfidentialOutputProof,
     /// Balance proof
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub balance_proof: BalanceProofSignature,
 }
 

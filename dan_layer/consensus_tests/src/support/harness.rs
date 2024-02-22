@@ -21,7 +21,7 @@ use tari_shutdown::{Shutdown, ShutdownSignal};
 use tari_transaction::TransactionId;
 use tokio::{sync::broadcast, task};
 
-use super::HotstuffFilter;
+use super::MessageFilter;
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
@@ -283,7 +283,7 @@ pub struct TestBuilder {
     sql_address: String,
     timeout: Option<Duration>,
     debug_sql_file: Option<String>,
-    hotstuff_filter: Option<HotstuffFilter>,
+    message_filter: Option<MessageFilter>,
 }
 
 impl TestBuilder {
@@ -293,7 +293,7 @@ impl TestBuilder {
             sql_address: ":memory:".to_string(),
             timeout: Some(Duration::from_secs(10)),
             debug_sql_file: None,
-            hotstuff_filter: None,
+            message_filter: None,
         }
     }
 
@@ -337,8 +337,8 @@ impl TestBuilder {
         self
     }
 
-    pub fn with_hotstuff_filter(mut self, hotstuff_filter: HotstuffFilter) -> Self {
-        self.hotstuff_filter = Some(hotstuff_filter);
+    pub fn with_message_filter(mut self, message_filter: MessageFilter) -> Self {
+        self.message_filter = Some(message_filter);
         self
     }
 
@@ -389,7 +389,7 @@ impl TestBuilder {
         let (channels, validators) = self
             .build_validators(&leader_strategy, &epoch_manager, shutdown.to_signal())
             .await;
-        let network = spawn_network(channels, shutdown.to_signal(), self.hotstuff_filter);
+        let network = spawn_network(channels, shutdown.to_signal(), self.message_filter);
 
         Test {
             validators,

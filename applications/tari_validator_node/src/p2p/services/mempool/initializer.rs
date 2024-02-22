@@ -28,6 +28,8 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::{sync::mpsc, task, task::JoinHandle};
 
+#[cfg(feature = "metrics")]
+use super::metrics::PrometheusMempoolMetrics;
 use crate::{
     consensus::ConsensusHandle,
     p2p::services::{
@@ -39,7 +41,7 @@ use crate::{
 
 pub fn spawn<TExecutor, TValidator, TExecutedValidator, TSubstateResolver>(
     gossip: Gossip,
-    tx_executed_transactions: mpsc::Sender<TransactionId>,
+    tx_executed_transactions: mpsc::Sender<(TransactionId, usize)>,
     epoch_manager: EpochManagerHandle<PeerAddress>,
     transaction_executor: TExecutor,
     substate_resolver: TSubstateResolver,
@@ -48,6 +50,7 @@ pub fn spawn<TExecutor, TValidator, TExecutedValidator, TSubstateResolver>(
     state_store: SqliteStateStore<PeerAddress>,
     rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
     consensus_handle: ConsensusHandle,
+    #[cfg(feature = "metrics")] metrics_registry: &prometheus::Registry,
 ) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
 where
     TValidator: Validator<Transaction, Error = MempoolError> + Send + Sync + 'static,
@@ -59,6 +62,8 @@ where
     // running on a single task and so there is no benefit to buffering multiple requests.
     let (tx_mempool_request, rx_mempool_request) = mpsc::channel(1);
 
+    #[cfg(feature = "metrics")]
+    let metrics = PrometheusMempoolMetrics::new(metrics_registry);
     let mempool = MempoolService::new(
         rx_mempool_request,
         gossip,
@@ -71,6 +76,8 @@ where
         state_store,
         rx_consensus_to_mempool,
         consensus_handle,
+        #[cfg(feature = "metrics")]
+        metrics,
     );
     let handle = MempoolHandle::new(tx_mempool_request);
 

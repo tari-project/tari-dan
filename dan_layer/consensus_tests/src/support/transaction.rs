@@ -3,15 +3,17 @@
 
 use std::{iter, time::Duration};
 
+use rand::{distributions::Alphanumeric, rngs::OsRng, Rng};
 use tari_common_types::types::PrivateKey;
 use tari_dan_common_types::SubstateAddress;
 use tari_dan_storage::consensus_models::{Decision, ExecutedTransaction};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
+    component::{ComponentBody, ComponentHeader},
     fees::{FeeCostBreakdown, FeeReceipt},
-    substate::SubstateDiff,
+    substate::{Substate, SubstateDiff},
 };
-use tari_transaction::Transaction;
+use tari_transaction::{id_provider::IdProvider, Transaction};
 
 use crate::support::helpers::random_shard_in_bucket;
 
@@ -22,6 +24,7 @@ pub fn build_transaction_from(
     resulting_outputs: Vec<SubstateAddress>,
 ) -> ExecutedTransaction {
     let tx_id = *tx.id();
+    let id_provider = IdProvider::new(tx_id.into_array().into(), 1000);
     ExecutedTransaction::new(
         tx,
         ExecuteResult {
@@ -30,7 +33,24 @@ pub fn build_transaction_from(
                 vec![],
                 vec![],
                 if decision.is_commit() {
-                    TransactionResult::Accept(SubstateDiff::new())
+                    let mut diff = SubstateDiff::new();
+                    for _ in &resulting_outputs {
+                        let obj = id_provider.new_component_address(Default::default(), None).unwrap();
+                        let s = (0..100).map(|_| OsRng.sample(Alphanumeric) as char).collect::<String>();
+                        let random_state = tari_bor::to_value(&s).unwrap();
+                        diff.up(
+                            obj.into(),
+                            Substate::new(0, ComponentHeader {
+                                template_address: Default::default(),
+                                module_name: "Test".to_string(),
+                                owner_key: Default::default(),
+                                owner_rule: Default::default(),
+                                access_rules: Default::default(),
+                                body: ComponentBody { state: random_state },
+                            }),
+                        )
+                    }
+                    TransactionResult::Accept(diff)
                 } else {
                     TransactionResult::Reject(RejectReason::ExecutionFailure("Test failure".to_string()))
                 },

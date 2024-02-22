@@ -4,6 +4,7 @@
 use std::{sync::Arc, time::Instant};
 
 use log::*;
+use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, SubstateAddress};
@@ -39,13 +40,15 @@ pub trait TransactionExecutor {
 pub struct TariDanTransactionProcessor<TTemplateProvider> {
     template_provider: Arc<TTemplateProvider>,
     fee_table: FeeTable,
+    network: Network,
 }
 
 impl<TTemplateProvider> TariDanTransactionProcessor<TTemplateProvider> {
-    pub fn new(template_provider: TTemplateProvider, fee_table: FeeTable) -> Self {
+    pub fn new(network: Network, template_provider: TTemplateProvider, fee_table: FeeTable) -> Self {
         Self {
             template_provider: Arc::new(template_provider),
             fee_table,
+            network,
         }
     }
 }
@@ -77,6 +80,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             auth_params,
             virtual_substates,
             modules,
+            self.network,
         );
         let tx_id = transaction.hash();
         let result = match processor.execute(transaction.clone()) {

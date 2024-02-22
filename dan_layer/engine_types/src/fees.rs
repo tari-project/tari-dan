@@ -5,17 +5,20 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use tari_template_lib::models::{Amount, VaultId};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::resource_container::ResourceContainer;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FeeReceipt {
     /// The total amount of the fee payment(s)
     pub total_fee_payment: Amount,
     /// Total fees paid after refunds
     pub total_fees_paid: Amount,
     /// Breakdown of fee costs
-    pub cost_breakdown: Vec<(FeeSource, u64)>,
+    pub cost_breakdown: Vec<FeeBreakdown>,
 }
 
 impl FeeReceipt {
@@ -28,7 +31,13 @@ impl FeeReceipt {
 
     /// The total amount of fees charged. This may be more than total_fees_paid if the user paid an insufficient amount.
     pub fn total_fees_charged(&self) -> Amount {
-        Amount::try_from(self.cost_breakdown.iter().map(|(_, c)| *c).sum::<u64>()).unwrap()
+        Amount::try_from(
+            self.cost_breakdown
+                .iter()
+                .map(|breakdown| breakdown.amount)
+                .sum::<u64>(),
+        )
+        .unwrap()
     }
 
     pub fn total_refunded(&self) -> Amount {
@@ -61,6 +70,7 @@ impl FeeReceipt {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum FeeSource {
     Initial,
     RuntimeCall,
@@ -70,9 +80,18 @@ pub enum FeeSource {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct FeeBreakdown {
+    pub source: FeeSource,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub amount: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FeeCostBreakdown {
     pub total_fees_charged: Amount,
-    pub breakdown: Vec<(FeeSource, u64)>,
+    pub breakdown: Vec<FeeBreakdown>,
 }
 
 #[derive(Debug)]

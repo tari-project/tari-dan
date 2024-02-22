@@ -31,7 +31,7 @@ import IconButton from "@mui/material/IconButton";
 import Collapse from "@mui/material/Collapse";
 import { Typography } from "@mui/material";
 import ManageSearchOutlinedIcon from "@mui/icons-material/ManageSearchOutlined";
-import { CommitteeValidatorInfo } from "../../utils/interfaces";
+import type { ValidatorNode } from "@tarilabs/typescript-bindings/validator-node-client";
 
 function Committee({
   begin,
@@ -41,7 +41,7 @@ function Committee({
 }: {
   begin: string;
   end: string;
-  members: CommitteeValidatorInfo[];
+  members: ValidatorNode[];
   peerId: string;
 }) {
   const [openMembers, setOpenMembers] = useState(false);

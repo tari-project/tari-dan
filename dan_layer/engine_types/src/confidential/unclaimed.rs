@@ -24,9 +24,14 @@
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::Commitment;
 use tari_template_lib::models::EncryptedData;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct UnclaimedConfidentialOutput {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub commitment: Commitment,
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub encrypted_data: EncryptedData,
 }

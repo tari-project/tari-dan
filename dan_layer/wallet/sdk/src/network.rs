@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::time::Duration;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -9,6 +11,8 @@ use tari_engine_types::{
     commit_result::ExecuteResult,
     substate::{Substate, SubstateId},
 };
+use tari_template_abi::TemplateDef;
+use tari_template_lib::prelude::TemplateAddress;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 #[async_trait]
@@ -38,6 +42,8 @@ pub trait WalletNetworkInterface {
         &self,
         transaction_id: TransactionId,
     ) -> Result<TransactionQueryResult, Self::Error>;
+
+    async fn fetch_template_definition(&self, template_address: TemplateAddress) -> Result<TemplateDef, Self::Error>;
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -60,6 +66,8 @@ pub enum TransactionFinalizedResult {
     Finalized {
         final_decision: Decision,
         execution_result: Option<ExecuteResult>,
+        execution_time: Duration,
+        finalized_time: Duration,
         abort_details: Option<String>,
         json_results: Vec<Value>,
     },

@@ -22,7 +22,7 @@
 
 use std::{net::SocketAddr, sync::Arc};
 
-use axum::{extract::Extension, routing::post, Router};
+use axum::{extract::Extension, middleware, routing::post, Router};
 use axum_jrpc::{JrpcResult, JsonRpcExtractor};
 use log::*;
 use tower_http::cors::CorsLayer;
@@ -35,6 +35,7 @@ pub async fn run_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandle
     let router = Router::new()
         .route("/", post(handler))
         .route("/json_rpc", post(handler))
+        .layer(middleware::from_fn(logger::middleware_fn))
         .layer(Extension(Arc::new(handlers)))
         .layer(CorsLayer::permissive());
 
@@ -54,7 +55,7 @@ pub async fn run_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandle
 }
 
 async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: JsonRpcExtractor) -> JrpcResult {
-    debug!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
+    info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
     debug!(target: LOG_TARGET, "🌐 JSON-RPC body: {:?}", value);
     match value.method.as_str() {
         "rpc.discover" => handlers.rpc_discover(value),
@@ -76,6 +77,73 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "get_transaction_result" => handlers.get_transaction_result(value).await,
         "get_substate_transactions" => handlers.get_substate_transactions(value).await,
         "get_epoch_manager_stats" => handlers.get_epoch_manager_stats(value).await,
+        "get_template_definition" => handlers.get_template_definition(value).await,
         method => Ok(value.method_not_found(method)),
+    }
+}
+
+// TODO: this is a janky and fairly costly logger found on SO, replace with tracing middleware
+mod logger {
+    use async_graphql::futures_util;
+    use axum::{
+        body::{Body, Bytes, HttpBody},
+        http::{Request, Response, StatusCode},
+        middleware::Next,
+        response::IntoResponse,
+    };
+    use libp2p::bytes::{Buf, BufMut};
+
+    use super::*;
+
+    // use Body as type here
+    pub async fn middleware_fn(
+        req: Request<Body>,
+        next: Next<Body>,
+    ) -> Result<impl IntoResponse, (StatusCode, String)> {
+        let (parts, body) = req.into_parts();
+        let req = Request::from_parts(parts, body);
+
+        let res = next.run(req).await;
+
+        let (parts, body) = res.into_parts();
+        let body_bytes = to_bytes(body).await.unwrap();
+        debug!(target: LOG_TARGET, "🌐 Response: {}", String::from_utf8_lossy(&body_bytes));
+
+        Ok(Response::from_parts(parts, Body::from(body_bytes)))
+    }
+
+    async fn to_bytes<T>(body: T) -> Result<Bytes, T::Error>
+    where T: HttpBody {
+        futures_util::pin_mut!(body);
+
+        // If there's only 1 chunk, we can just return Buf::to_bytes()
+        let mut first = if let Some(buf) = body.data().await {
+            buf?
+        } else {
+            return Ok(Bytes::new());
+        };
+
+        let second = if let Some(buf) = body.data().await {
+            buf?
+        } else {
+            return Ok(first.copy_to_bytes(first.remaining()));
+        };
+
+        // Don't pre-emptively reserve *too* much.
+        let rest = (body.size_hint().lower() as usize).min(1024 * 16);
+        let cap = first
+            .remaining()
+            .saturating_add(second.remaining())
+            .saturating_add(rest);
+        // With more than 1 buf, we gotta flatten into a Vec first.
+        let mut vec = Vec::with_capacity(cap);
+        vec.put(first);
+        vec.put(second);
+
+        while let Some(buf) = body.data().await {
+            vec.put(buf?);
+        }
+
+        Ok(vec.into())
     }
 }

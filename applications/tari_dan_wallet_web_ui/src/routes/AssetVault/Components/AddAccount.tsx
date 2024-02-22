@@ -37,12 +37,7 @@ function AddAccount({ open, setOpen }: { open: boolean; setOpen: React.Dispatch<
   const [accountFormState, setAccountFormState] = useState({
     accountName: "",
   });
-  const { mutateAsync: mutateAddAccount } = useAccountsCreate(
-    accountFormState.accountName,
-    undefined,
-    undefined,
-    false,
-  );
+  const { mutateAsync: mutateAddAccount } = useAccountsCreate(accountFormState.accountName, null, null, false);
   const theme = useTheme();
 
   const handleClose = () => {

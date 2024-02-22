@@ -24,6 +24,7 @@ use axum_jrpc::{
     JsonRpcResponse,
 };
 use log::*;
+use serde_json as json;
 use serde_json::json;
 use tari_dan_wallet_sdk::apis::jwt::JrpcPermissions;
 use tari_shutdown::ShutdownSignal;
@@ -31,9 +32,6 @@ use tower_http::cors::CorsLayer;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 
 use crate::data::Data;
-
-// use super::handlers::HandlerContext;
-// use crate::handlers::{accounts, confidential, error::HandlerError, keys, rpc, transaction, Handler};
 
 const LOG_TARGET: &str = "tari::signaling_server::json_rpc";
 
@@ -76,90 +74,124 @@ pub async fn listen(
     Ok(())
 }
 
-fn add_offer(
-    id: u64,
-    value: &JsonRpcExtractor,
-    mut data: MutexGuard<Data>,
-) -> std::result::Result<std::string::String, anyhow::Error> {
+fn add_offer(id: u64, value: JsonRpcExtractor, mut data: MutexGuard<Data>) -> Result<json::Value, JsonRpcResponse> {
     info!(
         target: LOG_TARGET,
         "Adding offer to id {id} : {}",
-        value.parsed.as_str().unwrap()
+        value.parsed
     );
-    data.add_offer(id, value.parsed.as_str().unwrap().to_string());
-    Ok(serde_json::to_string("").unwrap())
+    data.add_offer(id, value.parse_params()?);
+    Ok(json::Value::Null)
 }
 
 fn add_offer_ice_candidate(
     id: u64,
-    value: &JsonRpcExtractor,
+    value: JsonRpcExtractor,
     mut data: MutexGuard<Data>,
-) -> std::result::Result<std::string::String, anyhow::Error> {
+) -> Result<json::Value, JsonRpcResponse> {
     info!(
         target: LOG_TARGET,
         "Adding offer ice candidate to id {id} : {}", value.parsed
     );
-    match serde_json::from_value::<RTCIceCandidateInit>(value.parsed.clone()) {
-        Ok(ice_candidate) => {
-            data.add_offer_ice_candidate(id, ice_candidate);
-            Ok(serde_json::to_string("").unwrap())
-        },
-        Err(e) => Err(anyhow::anyhow!(e)),
-    }
+    let ice_candidate = value.parse_params::<RTCIceCandidateInit>()?;
+    data.add_offer_ice_candidate(id, ice_candidate);
+    Ok(json::Value::Null)
 }
 
-fn add_answer(
-    id: u64,
-    value: &JsonRpcExtractor,
-    mut data: MutexGuard<Data>,
-) -> std::result::Result<std::string::String, anyhow::Error> {
+fn add_answer(id: u64, value: JsonRpcExtractor, mut data: MutexGuard<Data>) -> Result<json::Value, JsonRpcResponse> {
     info!(target: LOG_TARGET, "Adding answer to id {id} : {}", value.parsed);
-    data.add_answer(id, value.parsed.to_string());
-    Ok(serde_json::to_string("").unwrap())
+    data.add_answer(id, value.parse_params()?);
+    Ok(json::Value::Null)
 }
 
 fn add_answer_ice_candidate(
     id: u64,
-    value: &JsonRpcExtractor,
+    value: JsonRpcExtractor,
     mut data: MutexGuard<Data>,
-) -> std::result::Result<std::string::String, anyhow::Error> {
+) -> Result<json::Value, JsonRpcResponse> {
     info!(
         target: LOG_TARGET,
         "Adding answer ice candidate to id {id} : {}", value.parsed
     );
-    match serde_json::from_value::<RTCIceCandidateInit>(value.parsed.clone()) {
-        Ok(ice_candidate) => {
-            data.add_answer_ice_candidate(id, ice_candidate);
-            Ok(serde_json::to_string("").unwrap())
-        },
-        Err(e) => Err(anyhow::anyhow!(e)),
-    }
+
+    let ice_candidate = value.parse_params::<RTCIceCandidateInit>()?;
+    data.add_answer_ice_candidate(id, ice_candidate);
+    Ok(json::Value::Null)
 }
 
-fn get_offer(id: u64, data: MutexGuard<Data>) -> std::result::Result<std::string::String, anyhow::Error> {
+fn get_offer(id: u64, value: JsonRpcExtractor, data: MutexGuard<Data>) -> Result<json::Value, JsonRpcResponse> {
     info!(target: LOG_TARGET, "Getting offer for id {id}");
     println!("Offer {}", data.get_offer(id).map(|res| res.clone()).unwrap());
-    data.get_offer(id).map(|res| res.clone())
+    data.get_offer(id).cloned().map_err(|e| {
+        JsonRpcResponse::error(
+            value.get_answer_id(),
+            JsonRpcError::new(
+                JsonRpcErrorReason::ApplicationError(404),
+                "Offer not found".to_string(),
+                json!({
+                    "id": id,
+                    "error": e.to_string(),
+                }),
+            ),
+        )
+    })
 }
 
-fn get_answer(id: u64, data: MutexGuard<Data>) -> std::result::Result<std::string::String, anyhow::Error> {
+fn get_answer(id: u64, data: MutexGuard<Data>) -> Result<json::Value, JsonRpcResponse> {
     info!(target: LOG_TARGET, "Getting answer for id {id}");
-    data.get_answer(id).map(|res| res.clone())
+    data.get_answer(id).cloned().map_err(|e| {
+        JsonRpcResponse::error(
+            0,
+            JsonRpcError::new(
+                JsonRpcErrorReason::ApplicationError(404),
+                "Answer not found".to_string(),
+                json!({
+                    "id": id,
+                    "error": e.to_string(),
+                }),
+            ),
+        )
+    })
 }
 
 fn get_offer_ice_candidates(
     id: u64,
+    value: JsonRpcExtractor,
     data: MutexGuard<Data>,
-) -> std::result::Result<std::string::String, anyhow::Error> {
+) -> Result<json::Value, JsonRpcResponse> {
     info!(target: LOG_TARGET, "Getting offer ice candidate for id {id}");
-    Ok(serde_json::to_string(data.get_offer_ice_candidates(id).unwrap()).unwrap())
+    let res = data.get_offer_ice_candidates(id).map_err(|e| {
+        JsonRpcResponse::error(
+            value.get_answer_id(),
+            JsonRpcError::new(JsonRpcErrorReason::ApplicationError(404), e.to_string(), json!({})),
+        )
+    })?;
+    json::to_value(res).map_err(|e| {
+        JsonRpcResponse::error(
+            value.get_answer_id(),
+            JsonRpcError::new(JsonRpcErrorReason::InternalError, e.to_string(), json!({})),
+        )
+    })
 }
 fn get_answer_ice_candidates(
     id: u64,
+    value: JsonRpcExtractor,
     data: MutexGuard<Data>,
-) -> std::result::Result<std::string::String, anyhow::Error> {
+) -> Result<json::Value, JsonRpcResponse> {
     info!(target: LOG_TARGET, "Getting answer ice candidate for id {id}");
-    Ok(serde_json::to_string(data.get_answer_ice_candidates(id).unwrap()).unwrap())
+    let res = data.get_answer_ice_candidates(id).map_err(|e| {
+        JsonRpcResponse::error(
+            value.get_answer_id(),
+            JsonRpcError::new(JsonRpcErrorReason::ApplicationError(404), e.to_string(), json!({})),
+        )
+    })?;
+
+    json::to_value(res).map_err(|e| {
+        JsonRpcResponse::error(
+            value.get_answer_id(),
+            JsonRpcError::new(JsonRpcErrorReason::InternalError, e.to_string(), json!({})),
+        )
+    })
 }
 
 async fn handler(
@@ -169,7 +201,7 @@ async fn handler(
 ) -> JrpcResult {
     let answer_id = value.get_answer_id();
     let mut data = data.lock().unwrap();
-    let result;
+    let payload;
     if let Some(token) = token {
         let id = match data.check_jwt(token) {
             Ok(id) => id,
@@ -180,15 +212,15 @@ async fn handler(
                 ));
             },
         };
-        result = match value.method() {
-            "add.offer" => add_offer(id, &value, data),
-            "add.offer_ice_candidate" => add_offer_ice_candidate(id, &value, data),
-            "add.answer" => add_answer(id, &value, data),
-            "add.answer_ice_candidate" => add_answer_ice_candidate(id, &value, data),
-            "get.offer" => get_offer(id, data),
-            "get.answer" => get_answer(id, data),
-            "get.offer_ice_candidates" => get_offer_ice_candidates(id, data),
-            "get.answer_ice_candidates" => get_answer_ice_candidates(id, data),
+        payload = match value.method() {
+            "add.offer" => add_offer(id, value, data)?,
+            "add.offer_ice_candidate" => add_offer_ice_candidate(id, value, data)?,
+            "add.answer" => add_answer(id, value, data)?,
+            "add.answer_ice_candidate" => add_answer_ice_candidate(id, value, data)?,
+            "get.offer" => get_offer(id, value, data)?,
+            "get.answer" => get_answer(id, data)?,
+            "get.offer_ice_candidates" => get_offer_ice_candidates(id, value, data)?,
+            "get.answer_ice_candidates" => get_answer_ice_candidates(id, value, data)?,
             _ => {
                 error!(target: LOG_TARGET, "Method not found {}", value.method);
                 return Ok(JsonRpcResponse::error(
@@ -198,27 +230,30 @@ async fn handler(
             },
         }
     } else {
-        result = match value.method() {
+        payload = match value.method() {
             "auth.login" => {
                 info!(target: LOG_TARGET, "Generating new JWT token");
-                let permissions = serde_json::from_value::<JrpcPermissions>(value.parsed).map_err(|e| {
+                let permissions: JrpcPermissions = value.parse_params()?;
+                let jwt = data.generate_jwt(permissions).map_err(|e| {
                     JsonRpcResponse::error(
                         answer_id,
-                        JsonRpcError::new(
-                            JsonRpcErrorReason::InternalError,
-                            e.to_string(),
-                            serde_json::Value::Null,
-                        ),
+                        JsonRpcError::new(JsonRpcErrorReason::InternalError, e.to_string(), json!({})),
                     )
                 })?;
-                data.generate_jwt(permissions)
+
+                json::to_value(jwt).map_err(|e| {
+                    JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(JsonRpcErrorReason::InternalError, e.to_string(), json!({})),
+                    )
+                })?
             },
             _ => {
                 error!(
                     target: LOG_TARGET,
                     "Without bearer token there is only one method available \"auth.login\""
                 );
-                return Ok(JsonRpcResponse::error(
+                return Err(JsonRpcResponse::error(
                     answer_id,
                     JsonRpcError::new(JsonRpcErrorReason::ApplicationError(401), "".to_string(), json!({})),
                 ));
@@ -226,14 +261,5 @@ async fn handler(
         };
     }
 
-    match result {
-        Ok(payload) => Ok(JsonRpcResponse::success(answer_id, payload)),
-        Err(e) => {
-            error!(target: LOG_TARGET, "Error {:?}", e);
-            Ok(JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(JsonRpcErrorReason::ApplicationError(500), value.method, json!({})),
-            ))
-        },
-    }
+    Ok(JsonRpcResponse::success(answer_id, payload))
 }

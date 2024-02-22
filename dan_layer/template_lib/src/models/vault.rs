@@ -32,6 +32,8 @@ use tari_template_abi::{
     },
     EngineOp,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use super::{BinaryTag, NonFungible, Proof, ProofAuth};
 use crate::{
@@ -57,7 +59,8 @@ const TAG: u64 = BinaryTag::VaultId as u64;
 
 /// A vault's unique identification in the Tari network
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct VaultId(BorTag<Hash, TAG>);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct VaultId(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<Hash, TAG>);
 
 impl VaultId {
     pub const fn new(address: Hash) -> Self {

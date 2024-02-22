@@ -14,6 +14,8 @@ use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, SubstateAddress};
 use tari_engine_types::substate::{Substate, SubstateId, SubstateValue};
 use tari_transaction::TransactionId;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     consensus_models::{Block, BlockId, QcId, QuorumCertificate},
@@ -25,13 +27,18 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::storage::consensus_models::substate";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct SubstateRecord {
     pub substate_id: SubstateId,
     pub version: u32,
     pub substate_value: SubstateValue,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub state_hash: FixedHash,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_by_transaction: TransactionId,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_justify: QcId,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_block: BlockId,
     pub created_height: NodeHeight,
     pub created_at_epoch: Epoch,
@@ -39,9 +46,13 @@ pub struct SubstateRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct SubstateDestroyed {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub by_transaction: TransactionId,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub justify: QcId,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub by_block: BlockId,
     pub at_epoch: Epoch,
 }
@@ -274,11 +285,25 @@ pub struct SubstateCreatedProof {
 }
 
 #[derive(Debug, Clone)]
+pub struct SubstateDestroyedProof {
+    pub substate_id: SubstateId,
+    pub version: u32,
+    pub justify: QuorumCertificate,
+    pub destroyed_by_transaction: TransactionId,
+}
+
+#[derive(Debug, Clone)]
 pub struct SubstateData {
     pub substate_id: SubstateId,
     pub version: u32,
     pub substate_value: SubstateValue,
     pub created_by_transaction: TransactionId,
+}
+
+impl SubstateData {
+    pub fn into_substate(self) -> Substate {
+        Substate::new(self.version, self.substate_value)
+    }
 }
 
 impl From<SubstateRecord> for SubstateData {
@@ -295,11 +320,7 @@ impl From<SubstateRecord> for SubstateData {
 #[derive(Debug, Clone)]
 pub enum SubstateUpdate {
     Create(SubstateCreatedProof),
-    Destroy {
-        address: SubstateAddress,
-        proof: QuorumCertificate,
-        destroyed_by_transaction: TransactionId,
-    },
+    Destroy(SubstateDestroyedProof),
 }
 
 impl SubstateUpdate {
@@ -340,21 +361,23 @@ impl SubstateUpdate {
                 }
                 .create(tx)?;
             },
-            Self::Destroy {
-                address,
-                proof,
+            Self::Destroy(SubstateDestroyedProof {
+                substate_id,
+                version,
+                justify: proof,
                 destroyed_by_transaction,
-            } => {
+            }) => {
                 debug!(
                     target: LOG_TARGET,
-                    "🔥 Applying substate DESTROY for shard {} (transaction {})",
-                    address,
+                    "🔥 Applying substate DESTROY for substate {}v{} (transaction {})",
+                    substate_id,
+                    version,
                     destroyed_by_transaction
                 );
                 proof.save(tx)?;
                 SubstateRecord::destroy_many(
                     tx,
-                    iter::once(address),
+                    iter::once(SubstateAddress::from_address(&substate_id, version)),
                     block.epoch(),
                     block.id(),
                     proof.id(),

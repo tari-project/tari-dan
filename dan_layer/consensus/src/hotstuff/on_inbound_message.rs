@@ -7,6 +7,7 @@ use std::{
 };
 
 use log::*;
+use tari_common::configuration::Network;
 use tari_dan_common_types::{NodeAddressable, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, TransactionRecord},
@@ -18,8 +19,14 @@ use tari_transaction::TransactionId;
 use tokio::{sync::mpsc, time};
 
 use crate::{
-    block_validations::{check_hash_and_height, check_proposed_by_leader, check_quorum_certificate, check_signature},
-    hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle},
+    block_validations::{
+        check_hash_and_height,
+        check_network,
+        check_proposed_by_leader,
+        check_quorum_certificate,
+        check_signature,
+    },
+    hotstuff::error::HotStuffError,
     messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage},
     traits::{ConsensusSpec, OutboundMessaging},
 };
@@ -29,10 +36,10 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::inbound_messages";
 pub type IncomingMessageResult<TAddr> = Result<Option<(TAddr, HotstuffMessage)>, NeedsSync<TAddr>>;
 
 pub struct OnInboundMessage<TConsensusSpec: ConsensusSpec> {
+    network: Network,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
-    pacemaker: PaceMakerHandle,
     vote_signing_service: TConsensusSpec::SignatureService,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_msg_ready: mpsc::UnboundedSender<(TConsensusSpec::Addr, HotstuffMessage)>,
@@ -43,19 +50,19 @@ impl<TConsensusSpec> OnInboundMessage<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
+        network: Network,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
-        pacemaker: PaceMakerHandle,
         vote_signing_service: TConsensusSpec::SignatureService,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
     ) -> Self {
         let (tx_msg_ready, rx_msg_ready) = mpsc::unbounded_channel();
         Self {
+            network,
             store,
             epoch_manager,
             leader_strategy,
-            pacemaker,
             vote_signing_service,
             outbound_messaging,
             tx_msg_ready,
@@ -100,6 +107,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     async fn check_proposal(&mut self, block: Block) -> Result<Option<Block>, HotStuffError> {
+        check_network(&block, self.network)?;
         check_hash_and_height(&block)?;
         let committee_for_block = self
             .epoch_manager
@@ -176,7 +184,6 @@ where TConsensusSpec: ConsensusSpec
                 HotstuffMessage::Proposal(ProposalMessage { block: unparked_block }),
             )?;
         }
-        self.pacemaker.beat();
         Ok(())
     }
 

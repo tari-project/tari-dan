@@ -165,45 +165,43 @@ where
     TAddr: NodeAddressable,
     TSubstateCache: SubstateCache,
 {
-    let scan_res = match req.version() {
-        Some(version) => {
-            let shard = SubstateRequirement::new(req.substate_id().clone(), Some(version));
-            if transaction.all_inputs_iter().any(|s| *s == shard) {
-                // Shard is already an input
-                return Ok(None);
-            }
-
-            // if the client specified a version, we need to retrieve it
-            substate_scanner
-                .get_specific_substate_from_committee(req.substate_id(), version)
-                .await?
-        },
-        None => {
-            // if the client didn't specify a version, we fetch the latest one
-            substate_scanner.get_substate(req.substate_id(), None).await?
-        },
-    };
-
-    if let SubstateResult::Up { substate, id, .. } = &scan_res {
-        info!(
-            target: LOG_TARGET,
-            "Filling input substate {}:v{}",
-            id,
-            substate.version()
-        );
-        let shard = SubstateRequirement::new(req.substate_id().clone(), Some(substate.version()));
+    let mut version = req.version().unwrap_or(0);
+    loop {
+        let shard = SubstateRequirement::new(req.substate_id().clone(), Some(version));
         if transaction.all_inputs_iter().any(|s| *s == shard) {
-            // Shard is already an input (TODO: what a waste)
+            // Shard is already an input
             return Ok(None);
         }
 
-        Ok(Some((id.clone(), substate.clone())))
-    } else {
-        warn!(
-            target: LOG_TARGET,
-            "🖋️ The substate for input requirement {} is not in UP status, skipping", req
-        );
-        Ok(None)
+        let scan_res = substate_scanner.get_substate(req.substate_id(), Some(version)).await?;
+
+        match scan_res {
+            SubstateResult::DoesNotExist => {
+                warn!( target: LOG_TARGET, "🖋️ The substate for input requirement {}:v{} does not exist, skipping", req.substate_id() , version);
+                return Ok(None);
+            },
+            SubstateResult::Up { substate, id, .. } => {
+                info!(
+                    target: LOG_TARGET,
+                    "Filling input substate {}:v{}",
+                    id,
+                    substate.version()
+                );
+                let shard = SubstateRequirement::new(req.substate_id().clone(), Some(version));
+                if transaction.all_inputs_iter().any(|s| *s == shard) {
+                    // Shard is already an input (TODO: what a waste)
+                    return Ok(None);
+                }
+
+                return Ok(Some((id, substate)));
+            },
+            SubstateResult::Down { id, .. } => {
+                warn!(target: LOG_TARGET, "🖋️ The substate for input requirement {id}v{version} is DOWN, continuing to search");
+                // Down in this shard, try the next version
+                version += 1;
+                continue;
+            },
+        }
     }
 }
 

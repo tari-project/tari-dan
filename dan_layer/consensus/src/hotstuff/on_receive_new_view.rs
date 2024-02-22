@@ -7,6 +7,7 @@ use std::{
 };
 
 use log::*;
+use tari_common::configuration::Network;
 use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, LeafBlock, LockedBlock, QuorumCertificate},
@@ -16,7 +17,7 @@ use tari_epoch_manager::EpochManagerReader;
 
 use super::vote_receiver::VoteReceiver;
 use crate::{
-    hotstuff::{common::calculate_dummy_blocks, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
+    hotstuff::{common::calculate_last_dummy_block, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::NewViewMessage,
     traits::{ConsensusSpec, LeaderStrategy},
 };
@@ -24,6 +25,7 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_new_view";
 
 pub struct OnReceiveNewViewHandler<TConsensusSpec: ConsensusSpec> {
+    network: Network,
     store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
@@ -36,6 +38,7 @@ impl<TConsensusSpec> OnReceiveNewViewHandler<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
+        network: Network,
         store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
@@ -43,6 +46,7 @@ where TConsensusSpec: ConsensusSpec
         vote_receiver: VoteReceiver<TConsensusSpec>,
     ) -> Self {
         Self {
+            network,
             store,
             leader_strategy,
             epoch_manager,
@@ -81,7 +85,7 @@ where TConsensusSpec: ConsensusSpec
         debug!(
             target: LOG_TARGET,
             "🌟 Received NEWVIEW for qc {} new height {} from {}",
-            high_qc.id(),
+            high_qc,
             new_height,
             from
         );
@@ -186,15 +190,23 @@ where TConsensusSpec: ConsensusSpec
         if newview_count == threshold {
             info!(target: LOG_TARGET, "🌟✅ NEWVIEW for block {} (high_qc: {}) has reached quorum ({}/{})", new_height, high_qc.as_high_qc(), newview_count, threshold);
 
+            let high_qc_block = self.store.with_read_tx(|tx| high_qc.get_block(tx))?;
             // Determine how many missing blocks we must fill without actually creating them.
             // This node, as well as all other replicas, will create the blocks in on_receive_proposal.
-            let dummy_blocks =
-                calculate_dummy_blocks(epoch, &high_qc, new_height, &self.leader_strategy, &local_committee);
+            let last_dummy_block = calculate_last_dummy_block(
+                self.network,
+                epoch,
+                &high_qc,
+                *high_qc_block.merkle_root(),
+                new_height,
+                &self.leader_strategy,
+                &local_committee,
+            );
             // Set the last voted block so that we do not vote on other conflicting blocks
-            if let Some(last_dummy) = dummy_blocks.last() {
+            if let Some(last_dummy) = last_dummy_block {
                 debug!(target: LOG_TARGET, "🍼 dummy leaf block {}", last_dummy);
                 // Force beat so that a block is proposed even if there are no transactions
-                self.pacemaker.force_beat(last_dummy.as_leaf_block());
+                self.pacemaker.force_beat(last_dummy);
             } else {
                 warn!(target: LOG_TARGET, "❌ No dummy blocks were created for height {}", new_height);
             }

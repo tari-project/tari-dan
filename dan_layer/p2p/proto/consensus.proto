@@ -42,15 +42,16 @@ message VoteMessage {
 
 message Block {
   bytes parent_id = 1;
-  QuorumCertificate justify = 2;
-  uint64 height = 3;
-  uint64 epoch = 4;
-  bytes proposed_by = 6;
-  bytes merkle_root = 7;
-  repeated Command commands = 8;
-  uint64 total_leader_fee = 9;
-  bytes foreign_indexes = 10;
-  tari.dan.common.Signature signature = 11;
+  int32 network = 2;
+  QuorumCertificate justify = 3;
+  uint64 height = 4;
+  uint64 epoch = 5;
+  bytes proposed_by = 7;
+  bytes merkle_root = 8;
+  repeated Command commands = 9;
+  uint64 total_leader_fee = 10;
+  bytes foreign_indexes = 11;
+  tari.dan.common.Signature signature = 12;
 }
 
 message Command {
@@ -74,6 +75,7 @@ message ForeignProposal {
   bytes block_id = 2;
   ForeignProposalState state = 3;
   uint64 mined_at = 4;
+  repeated bytes transactions = 5;
 }
 
 message TransactionAtom {

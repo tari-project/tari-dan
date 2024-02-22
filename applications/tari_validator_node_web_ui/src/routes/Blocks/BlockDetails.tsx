@@ -35,42 +35,49 @@ import Loading from "../../Components/Loading";
 import { getBlock, getIdentity } from "../../utils/json_rpc";
 import Transactions from "./Transactions";
 import { primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../utils/helpers";
+import type { Block, TransactionAtom } from "@tarilabs/typescript-bindings";
+import type { GetIdentityResponse } from "@tarilabs/typescript-bindings/validator-node-client";
 
 export default function BlockDetails() {
   const { blockId } = useParams();
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<String>();
-  const [block, setBlock] = useState<any>();
-  const [prepare, setPrepare] = useState<string[]>([]);
-  const [localPrepared, setLocalPrepared] = useState<string[]>([]);
-  const [accept, setAccept] = useState<string[]>([]);
-  const [identity, setIdentity] = useState<any>();
+  const [block, setBlock] = useState<Block>();
+  const [prepare, setPrepare] = useState<TransactionAtom[]>([]);
+  const [localPrepared, setLocalPrepared] = useState<TransactionAtom[]>([]);
+  const [accept, setAccept] = useState<TransactionAtom[]>([]);
+  const [identity, setIdentity] = useState<GetIdentityResponse>();
   const [blockTime, setBlockTime] = useState<number>(0);
 
   useEffect(() => {
     if (blockId !== undefined) {
-      Promise.all([getBlock(blockId), getIdentity()])
+      Promise.all([getBlock({ block_id: blockId }), getIdentity()])
         .then(([resp, identity]) => {
           setIdentity(identity);
           setBlock(resp.block);
           if (resp?.block?.justify?.block_id) {
-            getBlock(resp.block.justify.block_id).then((justify) => {
-              let blockTime = primitiveDateTimeToSecs(resp.block.stored_at);
-              let justifyTime = primitiveDateTimeToSecs(justify.block.stored_at);
-              setBlockTime(blockTime - justifyTime);
+            getBlock({ block_id: resp.block.justify.block_id }).then((justify) => {
+              if (resp.block.stored_at && justify.block.stored_at) {
+                let blockTime = primitiveDateTimeToSecs(resp.block.stored_at);
+                let justifyTime = primitiveDateTimeToSecs(justify.block.stored_at);
+                setBlockTime(blockTime - justifyTime);
+              }
             });
           }
           setPrepare([]);
           setLocalPrepared([]);
           setAccept([]);
           for (let command of resp.block.commands) {
-            if (command.Prepare) {
-              setPrepare((prepare) => [...prepare, command.Prepare]);
-            } else if (command.LocalPrepared) {
-              setLocalPrepared((localPrepared) => [...localPrepared, command.LocalPrepared]);
-            } else if (command.Accept) {
-              setAccept((accept) => [...accept, command.Accept]);
+            if ("Prepare" in command) {
+              let newPrepare = command.Prepare;
+              setPrepare((prepare: TransactionAtom[]) => [...prepare, newPrepare]);
+            } else if ("LocalPrepared" in command) {
+              let newLocalPrepared = command.LocalPrepared;
+              setLocalPrepared((localPrepared: TransactionAtom[]) => [...localPrepared, newLocalPrepared]);
+            } else if ("Accept" in command) {
+              let newAccept = command.Accept;
+              setAccept((accept: TransactionAtom[]) => [...accept, newAccept]);
             }
           }
         })
@@ -125,44 +132,48 @@ export default function BlockDetails() {
                           </TableRow>
                           <TableRow>
                             <TableCell>Epoch</TableCell>
-                            <DataTableCell>{block.epoch}</DataTableCell>
+                            <DataTableCell>{block!.epoch}</DataTableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Height</TableCell>
-                            <DataTableCell>{block.height}</DataTableCell>
+                            <DataTableCell>{block!.height}</DataTableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Parent block</TableCell>
                             <DataTableCell>
-                              <a href={`/blocks/${block.parent}`}>{block.parent}</a>
+                              <a href={`/blocks/${block!.parent}`}>{block!.parent}</a>
                             </DataTableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Total Fees</TableCell>
                             <DataTableCell>
-                              <div className={block.proposed_by == identity.public_key ? "my_money" : ""}>
-                                {block.total_leader_fee}
+                              <div className={block!.proposed_by === identity!.public_key ? "my_money" : ""}>
+                                {block!.total_leader_fee}
                               </div>
                             </DataTableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Status</TableCell>
                             <DataTableCell>
-                              <StatusChip status={block.justify.decision == "Accept" ? "Commit" : "Abort"} />
+                              <StatusChip status={block!.justify.decision === "Accept" ? "Commit" : "Abort"} />
                             </DataTableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Proposed by</TableCell>
-                            <DataTableCell>{block.proposed_by}</DataTableCell>
+                            <DataTableCell>{block!.proposed_by}</DataTableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Block time</TableCell>
                             <DataTableCell>{blockTime} secs</DataTableCell>
                           </TableRow>
-                          <TableRow>
-                            <TableCell>Stored at</TableCell>
-                            <DataTableCell>{primitiveDateTimeToDate(block.stored_at).toLocaleString()}</DataTableCell>
-                          </TableRow>
+                          {block!.stored_at && (
+                            <TableRow>
+                              <TableCell>Stored at</TableCell>
+                              <DataTableCell>
+                                {primitiveDateTimeToDate(block!.stored_at).toLocaleString()}
+                              </DataTableCell>
+                            </TableRow>
+                          )}
                         </TableBody>
                       </Table>
                     </TableContainer>

@@ -27,8 +27,9 @@ import { renderJson } from "../../utils/helpers";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import CodeBlockExpand from "../../Components/CodeBlock";
+import type { Instruction } from "@tarilabs/typescript-bindings";
 
-function RowData({ title, data, index }: any) {
+function RowData({ title, data, index }: { title: string; data: Instruction; index: number }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -58,12 +59,12 @@ function RowData({ title, data, index }: any) {
   );
 }
 
-export default function FeeInstructions({ data }: any) {
+export default function FeeInstructions({ data }: { data: Instruction[] }) {
   return (
     <TableContainer>
       <Table>
         <TableBody>
-          {data.map((item: any, index: number) => (
+          {data.map((item: Instruction, index: number) => (
             <RowData key={index} index={index} title={Object.keys(item)[0]} data={item} />
           ))}
         </TableBody>

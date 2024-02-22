@@ -309,9 +309,10 @@ pub async fn call_method(
     let mut client = world.get_validator_node(&vn_name).get_client();
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
-    if let Some(failure) = resp.dry_run_result.as_ref().unwrap().finalize.reject() {
+    if let Some(failure) = resp.dry_run_result.as_ref().unwrap().finalize.full_reject() {
         return Err(failure.clone());
     }
+
     // store the account component address and other substate ids for later reference
     add_substate_ids(
         world,

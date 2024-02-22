@@ -1,13 +1,18 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{fmt::Display, ops::DerefMut};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    ops::{Deref, DerefMut},
+};
 
 use async_trait::async_trait;
 use futures::StreamExt;
 use log::*;
+use tari_common::configuration::Network;
 use tari_consensus::{
-    hotstuff::ProposalValidationError,
+    hotstuff::{calculate_state_merkle_diff, hash_substate, ProposalValidationError},
     traits::{ConsensusSpec, LeaderStrategy, SyncManager, SyncStatus},
 };
 use tari_dan_common_types::{committee::Committee, optional::Optional, NodeHeight, PeerAddress};
@@ -17,8 +22,8 @@ use tari_dan_storage::{
         Block,
         BlockId,
         HighQc,
-        LastExecuted,
         LockedBlock,
+        PendingStateTreeDiff,
         QuorumCertificate,
         SubstateUpdate,
         TransactionPoolRecord,
@@ -29,6 +34,7 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_rpc_framework::RpcError;
+use tari_state_tree::SubstateChange;
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::{
     client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory},
@@ -42,6 +48,7 @@ const LOG_TARGET: &str = "tari::dan::comms_rpc_state_sync";
 const MAX_SUBSTATE_UPDATES: usize = 10000;
 
 pub struct RpcStateSyncManager<TConsensusSpec: ConsensusSpec> {
+    network: Network,
     epoch_manager: TConsensusSpec::EpochManager,
     state_store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -52,12 +59,14 @@ impl<TConsensusSpec> RpcStateSyncManager<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 {
     pub fn new(
+        network: Network,
         epoch_manager: TConsensusSpec::EpochManager,
         state_store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         client_factory: TariValidatorNodeRpcClientFactory,
     ) -> Self {
         Self {
+            network,
             epoch_manager,
             state_store,
             leader_strategy,
@@ -75,7 +84,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
     }
 
     async fn sync_with_peer(
-        &self,
+        &mut self,
         addr: &TConsensusSpec::Addr,
         locked_block: &LockedBlock,
     ) -> Result<(), CommsRpcConsensusSyncError> {
@@ -92,7 +101,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
     fn create_zero_block_if_required(&self) -> Result<(), CommsRpcConsensusSyncError> {
         let mut tx = self.state_store.create_write_tx()?;
 
-        let zero_block = Block::zero_block();
+        let zero_block = Block::zero_block(self.network);
         if !zero_block.exists(tx.deref_mut())? {
             debug!(target: LOG_TARGET, "Creating zero block");
             zero_block.justify().insert(&mut tx)?;
@@ -112,7 +121,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
     #[allow(clippy::too_many_lines)]
     async fn sync_blocks(
-        &self,
+        &mut self,
         client: &mut ValidatorNodeRpcClient,
         locked_block: &LockedBlock,
     ) -> Result<(), CommsRpcConsensusSyncError> {
@@ -125,6 +134,9 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         let mut counter = 0usize;
 
         let mut expected_height = locked_block.height + NodeHeight(1);
+        // Stores the uncommitted state updates for each block. When a block reaches a 3-chain, the updates are removed
+        // and applied.
+        let mut pending_state_updates = HashMap::new();
 
         while let Some(resp) = stream.next().await {
             let msg = resp.map_err(RpcError::from)?;
@@ -231,7 +243,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             } else {
                 expected_height = block.height() + NodeHeight(1);
             }
-            self.process_block(block, qcs, updates, transactions).await?;
+            self.process_block(block, qcs, updates, transactions, &mut pending_state_updates)
+                .await?;
         }
 
         info!(target: LOG_TARGET, "🌐 {counter} blocks synced to height {}", expected_height - NodeHeight(1));
@@ -240,11 +253,12 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
     }
 
     async fn process_block(
-        &self,
+        &mut self,
         block: Block,
         qcs: Vec<QuorumCertificate>,
         updates: Vec<SubstateUpdate>,
         transactions: Vec<TransactionRecord>,
+        pending_state_updates: &mut HashMap<BlockId, Vec<SubstateUpdate>>,
     ) -> Result<(), CommsRpcConsensusSyncError> {
         // Note: this is only used for dummy block calculation, so we avoid the epoch manager call unless it is needed.
         // Otherwise, the committee is empty.
@@ -280,11 +294,13 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                     let leader = self.leader_strategy.get_leader_public_key(&local_committee, next_height);
 
                     let dummy_block = Block::dummy_block(
+                       self.network,
                         last_dummy_block.id,
                         leader.clone(),
                         next_height,
                         block.justify().clone(),
                         block.epoch(),
+                        *block.merkle_root(),
                     );
                     dummy_block.save(tx)?;
                     last_dummy_block = BlockIdAndHeight { id: *dummy_block.id(), height: next_height };
@@ -301,58 +317,122 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 // block that we already have
                 return Ok(());
             }
+
             for qc in qcs {
                 qc.save(tx)?;
             }
+
+            self.check_and_update_state_merkle_tree(tx, &block, &updates)?;
+
+            if !updates.is_empty() {
+                pending_state_updates.insert(*block.id(), updates);
+            }
+
             block.update_nodes(
                 tx,
-                |_, _, _, _| Ok(()),
-                |tx, last_executed, block| {
-                    let new_last_exec = block.as_last_executed();
-                    Self::mark_block_committed(tx, last_executed, block)?;
-                    new_last_exec.set(tx)?;
-
-                    TransactionPoolRecord::remove_any(
-                        tx,
-                        block.commands().iter().filter_map(|cmd| cmd.accept()).map(|t| &t.id),
-                    )?;
-
+                |_, _, _| Ok(()),
+                |tx, _last_executed, block| {
+                    debug!(target: LOG_TARGET, "Sync is committing block {}", block);
+                    Self::commit_block(tx,  block, pending_state_updates)?;
+                    block.as_last_executed().set(tx)?;
                     Ok::<_, CommsRpcConsensusSyncError>(())
                 },
-                &mut Vec::new(),
             )?;
-            // Ensure we dont vote on a synced block
+
+            // Ensure we don't vote on or re-process a synced block
             block.as_last_voted().set(tx)?;
-            let (ups, downs) = updates.into_iter().partition::<Vec<_>, _>(|u| u.is_create());
-            // First do UPs then do DOWNs
-            // TODO: stage the updates, then check against the state hash in the block, then persist
-            for update in ups {
-                update.apply(tx, &block)?;
-            }
-            for update in downs {
-                update.apply(tx, &block)?;
-            }
+            block.set_as_processed(tx)?;
+
             Ok(())
         })
     }
 
-    fn mark_block_committed(
+    fn check_and_update_state_merkle_tree(
+        &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        last_executed: &LastExecuted,
         block: &Block,
+        updates: &[SubstateUpdate],
     ) -> Result<(), CommsRpcConsensusSyncError> {
-        if last_executed.height < block.height() {
-            let parent = block.get_parent(tx.deref_mut())?;
-            // Recurse to "catch up" any parent parent blocks we may not have executed
-            block.commit(tx)?;
-            Self::mark_block_committed(tx, last_executed, &parent)?;
-            debug!(
-                target: LOG_TARGET,
-                "✅ COMMIT block {}, last executed height = {}",
+        let pending_tree_updates = PendingStateTreeDiff::get_all_up_to_commit_block(tx.deref_mut(), block.id())?;
+        let current_version = block.justify().block_height().as_u64();
+        let next_version = block.height().as_u64();
+
+        let changes = updates.iter().map(|update| match update {
+            SubstateUpdate::Create(create) => SubstateChange::Up {
+                id: create.substate.substate_id.clone(),
+                value_hash: hash_substate(&create.substate.clone().into_substate()),
+            },
+            SubstateUpdate::Destroy(destroy) => SubstateChange::Down {
+                id: destroy.substate_id.clone(),
+            },
+        });
+
+        let (root_hash, tree_diff) =
+            calculate_state_merkle_diff(tx.deref(), current_version, next_version, pending_tree_updates, changes)?;
+
+        if root_hash != *block.merkle_root() {
+            return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
+                "Merkle root in block {} does not match the merkle root of the state tree. Block MR: {}, Calculated \
+                 MR: {}",
                 block,
-                last_executed.height
-            );
+                block.merkle_root(),
+                root_hash
+            )));
         }
+
+        // Persist pending state tree diff
+        PendingStateTreeDiff::new(*block.id(), block.height(), tree_diff).save(tx)?;
+
+        Ok(())
+    }
+
+    fn commit_block(
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        block: &Block,
+        pending_state_updates: &mut HashMap<BlockId, Vec<SubstateUpdate>>,
+    ) -> Result<(), CommsRpcConsensusSyncError> {
+        block.commit(tx)?;
+
+        if block.is_dummy() {
+            return Ok(());
+        }
+
+        // Finalize any ACCEPTED transactions
+        for tx_atom in block.commands().iter().filter_map(|cmd| cmd.accept()) {
+            if let Some(mut transaction) = tx_atom.get_transaction(tx.deref_mut()).optional()? {
+                transaction.final_decision = Some(tx_atom.decision);
+                if tx_atom.decision.is_abort() {
+                    transaction.abort_details = Some("Abort decision via sync".to_string());
+                }
+                // TODO: execution result - we should execute or we should get the execution result via sync
+                transaction.update(tx)?;
+            }
+        }
+
+        // Remove from pool including any pending updates
+        TransactionPoolRecord::remove_any(
+            tx,
+            block.commands().iter().filter_map(|cmd| cmd.accept()).map(|t| &t.id),
+        )?;
+
+        let diff = PendingStateTreeDiff::remove_by_block(tx, block.id())?;
+        let mut tree = tari_state_tree::SpreadPrefixStateTree::new(tx);
+        tree.commit_diff(diff.diff)?;
+
+        // Commit the state if any
+        if let Some(updates) = pending_state_updates.remove(block.id()) {
+            debug!(target: LOG_TARGET, "Committed block {} has {} state update(s)", block, updates.len());
+            let (ups, downs) = updates.into_iter().partition::<Vec<_>, _>(|u| u.is_create());
+            // First do UPs then do DOWNs
+            for update in ups {
+                update.apply(tx, block)?;
+            }
+            for update in downs {
+                update.apply(tx, block)?;
+            }
+        }
+
+        debug!(target: LOG_TARGET, "✅ COMMIT block {}", block);
         Ok(())
     }
 }
@@ -443,7 +523,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
         Ok(SyncStatus::UpToDate)
     }
 
-    async fn sync(&self) -> Result<(), Self::Error> {
+    async fn sync(&mut self) -> Result<(), Self::Error> {
         let committee = self.get_sync_peers().await?;
         if committee.is_empty() {
             warn!(target: LOG_TARGET, "No peers available for sync");
@@ -456,7 +536,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
             let locked_block = self
                 .state_store
                 .with_read_tx(|tx| LockedBlock::get(tx).optional())?
-                .unwrap_or_else(|| Block::zero_block().as_locked_block());
+                .unwrap_or_else(|| Block::zero_block(self.network).as_locked_block());
 
             match self.sync_with_peer(member, &locked_block).await {
                 Ok(()) => {

@@ -32,8 +32,13 @@ use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use log::{error, warn};
 use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
-use tari_dan_app_utilities::{keypair::RistrettoKeypair, substate_file_cache::SubstateFileCache};
-use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, Epoch, PeerAddress};
+use tari_dan_app_utilities::{
+    keypair::RistrettoKeypair,
+    substate_file_cache::SubstateFileCache,
+    template_manager::{implementation::TemplateManager, interface::TemplateExecutable},
+};
+use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, PeerAddress};
+use tari_dan_engine::{template::TemplateModuleLoader, wasm::WasmModule};
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::consensus_models::Decision;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
@@ -43,18 +48,27 @@ use tari_indexer_client::{
         AddAddressRequest,
         AddPeerRequest,
         AddPeerResponse,
+        ClearAddressesResponse,
         ConnectionDirection,
         DeleteAddressRequest,
+        GetAddressesResponse,
+        GetAllVnsRequest,
+        GetAllVnsResponse,
+        GetCommsStatsResponse,
         GetConnectionsResponse,
         GetEpochManagerStatsResponse,
         GetIdentityResponse,
+        GetNonFungibleCollectionsResponse,
         GetNonFungibleCountRequest,
+        GetNonFungibleCountResponse,
         GetNonFungiblesRequest,
         GetNonFungiblesResponse,
         GetRelatedTransactionsRequest,
         GetRelatedTransactionsResponse,
         GetSubstateRequest,
         GetSubstateResponse,
+        GetTemplateDefinitionRequest,
+        GetTemplateDefinitionResponse,
         GetTransactionResultRequest,
         GetTransactionResultResponse,
         IndexerTransactionFinalizedResult,
@@ -78,7 +92,7 @@ use crate::{
     dry_run::processor::DryRunTransactionProcessor,
     json_rpc::error::internal_error,
     substate_manager::SubstateManager,
-    transaction_manager::TransactionManager,
+    transaction_manager::{error::TransactionManagerError, TransactionManager},
 };
 
 const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
@@ -92,6 +106,7 @@ pub struct JsonRpcHandlers {
     epoch_manager: EpochManagerHandle<PeerAddress>,
     transaction_manager:
         TransactionManager<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, SubstateFileCache>,
+    template_manager: TemplateManager<PeerAddress>,
     dry_run_transaction_processor: DryRunTransactionProcessor<SubstateFileCache>,
 }
 
@@ -106,6 +121,7 @@ impl JsonRpcHandlers {
             TariValidatorNodeRpcClientFactory,
             SubstateFileCache,
         >,
+        template_manager: TemplateManager<PeerAddress>,
         dry_run_transaction_processor: DryRunTransactionProcessor<SubstateFileCache>,
     ) -> Self {
         Self {
@@ -116,6 +132,7 @@ impl JsonRpcHandlers {
             substate_manager,
             epoch_manager: services.epoch_manager.clone(),
             transaction_manager,
+            template_manager,
             dry_run_transaction_processor,
         }
     }
@@ -156,13 +173,10 @@ impl JsonRpcHandlers {
 
     pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let epoch: u64 = value.parse_params()?;
-        let epoch_blocks = self.consensus_constants.epoch_to_height(Epoch(epoch));
+        let GetAllVnsRequest { epoch } = value.parse_params()?;
+        let epoch_blocks = self.consensus_constants.epoch_to_height(epoch);
         match self.base_node_client().get_validator_nodes(epoch_blocks).await {
-            Ok(vns) => {
-                let response = json!({ "vns": vns });
-                Ok(JsonRpcResponse::success(answer_id, response))
-            },
+            Ok(vns) => Ok(JsonRpcResponse::success(answer_id, GetAllVnsResponse { vns })),
             Err(e) => Err(Self::internal_error(answer_id, format!("Failed to get all vns: {}", e))),
         }
     }
@@ -216,8 +230,9 @@ impl JsonRpcHandlers {
             .map_err(internal_error(answer_id))?;
 
         let status = if peers.is_empty() { "Offline" } else { "Online" };
-        let response = json!({ "connection_status": status });
-        Ok(JsonRpcResponse::success(answer_id, response))
+        Ok(JsonRpcResponse::success(answer_id, GetCommsStatsResponse {
+            connection_status: status.to_string(),
+        }))
     }
 
     pub async fn get_connections(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -253,14 +268,16 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: GetSubstateRequest = value.parse_params()?;
 
-        match self
+        let maybe_substate = self
             .substate_manager
             .get_substate(&request.address, request.version)
             .await
             .map_err(|e| {
                 warn!(target: LOG_TARGET, "Error getting substate: {}", e);
                 Self::internal_error(answer_id, format!("Error getting substate: {}", e))
-            })? {
+            })?;
+
+        match maybe_substate {
             Some(substate_resp) => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
                 address: substate_resp.address,
                 version: substate_resp.version,
@@ -383,7 +400,7 @@ impl JsonRpcHandlers {
         let res = self.substate_manager.get_all_addresses_from_db().await;
 
         match res {
-            Ok(addresses) => Ok(JsonRpcResponse::success(answer_id, addresses)),
+            Ok(addresses) => Ok(JsonRpcResponse::success(answer_id, GetAddressesResponse { addresses })),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error getting addresses: {}", e);
                 Err(Self::internal_error(
@@ -431,7 +448,7 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
 
         match self.substate_manager.delete_all_substates_from_db().await {
-            Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
+            Ok(_) => Ok(JsonRpcResponse::success(answer_id, ClearAddressesResponse {})),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error clearing addresses: {}", e);
                 Err(Self::internal_error(
@@ -448,7 +465,9 @@ impl JsonRpcHandlers {
         let res = self.substate_manager.get_non_fungible_collections().await;
 
         match res {
-            Ok(collections) => Ok(JsonRpcResponse::success(answer_id, collections)),
+            Ok(collections) => Ok(JsonRpcResponse::success(answer_id, GetNonFungibleCollectionsResponse {
+                collections,
+            })),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error getting non fungible collections: {}", e);
                 Err(Self::internal_error(
@@ -471,7 +490,9 @@ impl JsonRpcHandlers {
                 Self::internal_error(answer_id, format!("Error getting non fungible count: {}", e))
             })?;
 
-        Ok(JsonRpcResponse::success(answer_id, count))
+        Ok(JsonRpcResponse::success(answer_id, GetNonFungibleCountResponse {
+            count,
+        }))
     }
 
     pub async fn get_non_fungibles(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -511,27 +532,39 @@ impl JsonRpcHandlers {
             let json_results =
                 encode_execute_result_into_json(&exec_result).map_err(|e| Self::internal_error(answer_id, e))?;
 
-            Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
+            return Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
                 result: IndexerTransactionFinalizedResult::Finalized {
                     execution_result: Some(exec_result),
                     final_decision: Decision::Commit,
                     abort_details: None,
+                    finalized_time: Default::default(),
+                    execution_time: Default::default(),
                     json_results,
                 },
                 transaction_id,
-            }))
-        } else {
-            let transaction_id = self
-                .transaction_manager
-                .submit_transaction(request.transaction, request.required_substates)
-                .await
-                .map_err(|e| Self::internal_error(answer_id, e))?;
-
-            Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-                result: IndexerTransactionFinalizedResult::Pending,
-                transaction_id,
-            }))
+            }));
         }
+
+        let transaction_id = self
+            .transaction_manager
+            .submit_transaction(request.transaction, request.required_substates)
+            .await
+            .map_err(|e| match e {
+                TransactionManagerError::AllValidatorsFailed { .. } => JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::ApplicationError(400),
+                        format!("All validators failed: {}", e),
+                        json::Value::Null,
+                    ),
+                ),
+                e => Self::internal_error(answer_id, e),
+            })?;
+
+        Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
+            result: IndexerTransactionFinalizedResult::Pending,
+            transaction_id,
+        }))
     }
 
     pub async fn get_epoch_manager_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -564,18 +597,46 @@ impl JsonRpcHandlers {
         Ok(JsonRpcResponse::success(answer_id, response))
     }
 
+    pub async fn get_template_definition(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetTemplateDefinitionRequest = value.parse_params()?;
+        let template = self
+            .template_manager
+            .fetch_template(&request.template_address)
+            .map_err(|e| Self::internal_error(answer_id, e))?;
+        let template = match template.executable {
+            TemplateExecutable::CompiledWasm(code) => WasmModule::from_code(code)
+                .load_template()
+                .map_err(|e| Self::internal_error(answer_id, format!("Error loading template: {}", e)))?,
+            TemplateExecutable::Manifest(_) | TemplateExecutable::Flow(_) => {
+                return Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidRequest,
+                        "Template is not a wasm module".to_string(),
+                        json::Value::Null,
+                    ),
+                ));
+            },
+        };
+
+        Ok(JsonRpcResponse::success(answer_id, GetTemplateDefinitionResponse {
+            definition: template.template_def().clone(),
+            name: template.template_name().to_string(),
+        }))
+    }
+
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: GetTransactionResultRequest = value.parse_params()?;
 
-        let maybe_result = self
+        let result = self
             .transaction_manager
             .get_transaction_result(request.transaction_id)
             .await
             .optional()
-            .map_err(|e| Self::internal_error(answer_id, e))?;
-
-        let result = maybe_result.ok_or_else(|| Self::not_found(answer_id, "Transaction not found"))?;
+            .map_err(|e| Self::internal_error(answer_id, e))?
+            .ok_or_else(|| Self::not_found(answer_id, "Transaction not found"))?;
 
         let resp = match result {
             TransactionResultStatus::Pending => GetTransactionResultResponse {
@@ -588,6 +649,8 @@ impl JsonRpcHandlers {
                     result: IndexerTransactionFinalizedResult::Finalized {
                         final_decision: finalized.final_decision,
                         execution_result: finalized.execute_result,
+                        execution_time: finalized.execution_time,
+                        finalized_time: finalized.finalized_time,
                         abort_details: finalized.abort_details,
                         json_results,
                     },
@@ -643,6 +706,8 @@ impl JsonRpcHandlers {
                     IndexerTransactionFinalizedResult::Finalized {
                         final_decision: finalized.final_decision,
                         execution_result: finalized.execute_result,
+                        execution_time: finalized.execution_time,
+                        finalized_time: finalized.finalized_time,
                         abort_details: finalized.abort_details,
                         json_results,
                     }

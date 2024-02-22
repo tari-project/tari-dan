@@ -20,11 +20,17 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::process::Command;
+use std::{env, process::Command};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../tari_indexer_web_ui/src");
     println!("cargo:rerun-if-changed=../tari_indexer_web_ui/public");
+
+    if env::var_os("CARGO_FEATURE_TS").is_some() {
+        println!("cargo:warning=The web ui is not being compiled when we are generating typescript types/interfaces.");
+        return Ok(());
+    }
+
     let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
 
     if let Err(error) = Command::new(npm)

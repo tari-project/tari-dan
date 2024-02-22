@@ -10,6 +10,8 @@ use tari_template_lib::{
     prelude::{ComponentAddress, Metadata, NonFungibleAddress},
     Hash,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     fee_claim::FeeClaimAddress,
@@ -21,9 +23,11 @@ use crate::{
 const MAX_VISITOR_DEPTH: usize = 50;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct IndexedValue {
     indexed: IndexedWellKnownTypes,
     #[serde(with = "serde_with::cbor_value")]
+    #[cfg_attr(feature = "ts", ts(type = "any"))]
     value: tari_bor::Value,
 }
 
@@ -115,6 +119,7 @@ impl Default for IndexedValue {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct IndexedWellKnownTypes {
     bucket_ids: Vec<BucketId>,
     proof_ids: Vec<ProofId>,

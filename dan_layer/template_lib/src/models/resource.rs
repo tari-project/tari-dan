@@ -26,6 +26,8 @@ use tari_template_abi::rust::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use super::BinaryTag;
 use crate::{hash::HashParseError, newtype_struct_serde_impl, Hash};
@@ -34,7 +36,8 @@ const TAG: u64 = BinaryTag::ResourceAddress.as_u64();
 
 /// The unique identification of a resource in the Tari network
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ResourceAddress(BorTag<Hash, TAG>);
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct ResourceAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<Hash, TAG>);
 
 impl ResourceAddress {
     pub const fn new(address: Hash) -> Self {

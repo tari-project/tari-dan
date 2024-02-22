@@ -24,6 +24,7 @@ use std::sync::Arc;
 
 use log::*;
 use tari_bor::to_value;
+use tari_common::configuration::Network;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
@@ -69,6 +70,7 @@ pub struct TransactionProcessor<TTemplateProvider> {
     auth_params: AuthParams,
     virtual_substates: VirtualSubstates,
     modules: Vec<Arc<dyn RuntimeModule>>,
+    network: Network,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> TransactionProcessor<TTemplateProvider> {
@@ -78,6 +80,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         auth_params: AuthParams,
         virtual_substates: VirtualSubstates,
         modules: Vec<Arc<dyn RuntimeModule>>,
+        network: Network,
     ) -> Self {
         Self {
             template_provider,
@@ -85,6 +88,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             auth_params,
             virtual_substates,
             modules,
+            network,
         }
     }
 
@@ -96,6 +100,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             auth_params,
             virtual_substates,
             modules,
+            network,
         } = self;
 
         let initial_auth_scope = AuthorizationScope::new(auth_params.initial_ownership_proofs);
@@ -106,6 +111,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             transaction.signer_public_key().clone(),
             modules,
             MAX_CALL_DEPTH,
+            network,
         )?;
 
         let runtime = Runtime::new(Arc::new(runtime_interface));

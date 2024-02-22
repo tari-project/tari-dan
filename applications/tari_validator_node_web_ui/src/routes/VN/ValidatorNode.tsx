@@ -34,11 +34,11 @@ import { StyledPaper } from "../../Components/StyledComponents";
 import Grid from "@mui/material/Grid";
 import SecondaryHeading from "../../Components/SecondaryHeading";
 import { VNContext } from "../../App";
-import { GetNetworkCommitteesResponse } from "../../utils/interfaces";
 import { getNetworkCommittees } from "../../utils/json_rpc";
+import type { GetNetworkCommitteeResponse } from "@tarilabs/typescript-bindings/validator-node-client";
 
 function ValidatorNode() {
-  const [committees, setCommittees] = useState<GetNetworkCommitteesResponse | null>(null);
+  const [committees, setCommittees] = useState<GetNetworkCommitteeResponse | null>(null);
 
   const { epoch, identity, shardKey, error } = useContext(VNContext);
 
@@ -49,7 +49,7 @@ function ValidatorNode() {
   if (error !== "") {
     return <div className="error">{error}</div>;
   }
-  if (epoch === undefined || identity === undefined) return <div>Loading</div>;
+  if (epoch === undefined || identity === undefined || shardKey === undefined) return <div>Loading</div>;
 
   return (
     <>

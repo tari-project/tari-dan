@@ -35,10 +35,10 @@ import Permissions from "./Permissions";
 import CheckMark from "./CheckMark";
 import ConnectorLogo from "./ConnectorLogo";
 import { parse } from "../../utils/tari_permissions";
-import { webrtc } from "../../utils/json_rpc";
 import ConfirmTransaction from "./ConfirmTransaction";
 import Stepper from "../Stepper";
 import { useTheme } from "@mui/material/styles";
+import { webrtcStart } from "../../utils/json_rpc";
 
 const ConnectorDialog = () => {
   const [page, setPage] = useState(1);
@@ -105,14 +105,15 @@ const ConnectorDialog = () => {
   };
 
   const handleAuth = () => {
-    console.log("chosenOptionalPermissions", chosenOptionalPermissions);
-    let allowedPermissions = [
+    const allowedPermissions = [
       ...permissions,
       ...optionalPermissions.filter((value, index) => chosenOptionalPermissions[index]),
     ];
-    console.log("jwt", signalingServerJWT);
-    console.log("perm", JSON.stringify(allowedPermissions));
-    webrtc(signalingServerJWT, JSON.stringify(allowedPermissions), name).then((resp) => {
+    webrtcStart({
+      signaling_server_token: signalingServerJWT,
+      permissions: allowedPermissions,
+      name: name,
+    }).then((resp) => {
       setPage(page + 1);
     });
   };

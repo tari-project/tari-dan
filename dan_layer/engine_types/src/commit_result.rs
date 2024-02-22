@@ -24,6 +24,8 @@ use std::fmt::{self, Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 use tari_template_lib::Hash;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 use crate::{
     events::Event,
@@ -35,6 +37,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ExecuteResult {
     /// The finalized result to commit. If the fee transaction succeeds but the transaction fails, this will be accept.
     pub finalize: FinalizeResult,
@@ -93,8 +96,10 @@ impl ExecuteResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FinalizeResult {
     #[serde(with = "serde_with::hex")]
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
     pub transaction_hash: Hash,
     pub events: Vec<Event>,
     pub logs: Vec<LogEntry>,
@@ -132,6 +137,22 @@ impl FinalizeResult {
         }
     }
 
+    pub fn accept(&self) -> Option<&SubstateDiff> {
+        match self.result {
+            TransactionResult::Accept(ref diff) => Some(diff),
+            TransactionResult::AcceptFeeRejectRest(ref diff, _) => Some(diff),
+            TransactionResult::Reject(_) => None,
+        }
+    }
+
+    pub fn into_accept(self) -> Option<SubstateDiff> {
+        match self.result {
+            TransactionResult::Accept(diff) => Some(diff),
+            TransactionResult::AcceptFeeRejectRest(diff, _) => Some(diff),
+            TransactionResult::Reject(_) => None,
+        }
+    }
+
     pub fn reject(&self) -> Option<&RejectReason> {
         match self.result {
             TransactionResult::Accept(_) => None,
@@ -166,6 +187,7 @@ impl FinalizeResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum TransactionResult {
     Accept(SubstateDiff),
     AcceptFeeRejectRest(SubstateDiff, RejectReason),
@@ -233,6 +255,7 @@ impl Display for TransactionResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum RejectReason {
     ShardsNotPledged(String),
     ExecutionFailure(String),

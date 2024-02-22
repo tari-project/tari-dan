@@ -1,0 +1,14 @@
+{
+  "name": "@tarilabs/typescript-bindings",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.ts",
+  "scripts": {
+    "build": "sh build.sh"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "shx": "^0.3.4"
+  }
+}

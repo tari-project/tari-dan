@@ -37,12 +37,12 @@ pub struct Cli {
     #[clap(long, aliases = &["tracing", "enable-tracing"])]
     pub tracing_enabled: bool,
     /// Bind address for JSON-rpc server
-    #[clap(long, alias = "rpc-address")]
-    pub json_rpc_address: Option<SocketAddr>,
-    #[clap(long, alias = "http-ui-address")]
-    pub http_ui_address: Option<SocketAddr>,
-    #[clap(long, env = "TARI_VN_UI_CONNECT_ADDRESS")]
-    pub ui_connect_address: Option<String>,
+    #[clap(long, alias = "json-rpc-address")]
+    pub json_rpc_listener_address: Option<SocketAddr>,
+    #[clap(long, env = "TARI_VN_HTTP_UI_LISTENER_ADDRESS", alias = "http-ui-address")]
+    pub http_ui_listener_address: Option<SocketAddr>,
+    #[clap(long, env = "TARI_VN_JSON_RPC_PUBLIC_ADDRESS")]
+    pub json_rpc_public_address: Option<String>,
     #[clap(long, short = 's')]
     pub peer_seeds: Vec<String>,
     #[clap(long)]
@@ -66,21 +66,21 @@ impl ConfigOverrideProvider for Cli {
         overrides.push(("validator_node.override_from".to_string(), network.to_string()));
         overrides.push(("p2p.seeds.override_from".to_string(), network.to_string()));
 
-        if let Some(ref json_rpc_address) = self.json_rpc_address {
+        if let Some(ref json_rpc_address) = self.json_rpc_listener_address {
             overrides.push((
-                "validator_node.json_rpc_address".to_string(),
+                "validator_node.json_rpc_listener_address".to_string(),
                 json_rpc_address.to_string(),
             ));
         }
-        if let Some(ref ui_connect_address) = self.ui_connect_address {
+        if let Some(ref ui_connect_address) = self.json_rpc_public_address {
             overrides.push((
-                "validator_node.ui_connect_address".to_string(),
+                "validator_node.json_rpc_public_address".to_string(),
                 ui_connect_address.to_string(),
             ));
         }
-        if let Some(ref http_ui_address) = self.http_ui_address {
+        if let Some(ref http_ui_address) = self.http_ui_listener_address {
             overrides.push((
-                "validator_node.http_ui_address".to_string(),
+                "validator_node.http_ui_listener_address".to_string(),
                 http_ui_address.to_string(),
             ));
         }

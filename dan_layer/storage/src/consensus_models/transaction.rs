@@ -27,6 +27,7 @@ pub struct TransactionRecord {
     pub execution_time: Option<Duration>,
     pub resulting_outputs: Vec<SubstateAddress>,
     pub final_decision: Option<Decision>,
+    pub finalized_time: Option<Duration>,
     pub abort_details: Option<String>,
 }
 
@@ -37,6 +38,7 @@ impl TransactionRecord {
             result: None,
             execution_time: None,
             final_decision: None,
+            finalized_time: None,
             resulting_outputs: Vec::new(),
             abort_details: None,
         }
@@ -47,6 +49,7 @@ impl TransactionRecord {
         result: Option<ExecuteResult>,
         execution_time: Option<Duration>,
         final_decision: Option<Decision>,
+        finalized_time: Option<Duration>,
         resulting_outputs: Vec<SubstateAddress>,
         abort_details: Option<String>,
     ) -> Self {
@@ -55,6 +58,7 @@ impl TransactionRecord {
             result,
             execution_time,
             final_decision,
+            finalized_time,
             resulting_outputs,
             abort_details,
         }
@@ -99,6 +103,10 @@ impl TransactionRecord {
         self.execution_time
     }
 
+    pub fn finalized_time(&self) -> Option<Duration> {
+        self.finalized_time
+    }
+
     pub fn is_finalized(&self) -> bool {
         self.final_decision.is_some()
     }
@@ -114,6 +122,8 @@ impl TransactionRecord {
     }
 
     pub fn into_final_result(self) -> Option<ExecuteResult> {
+        // TODO: This is hacky, result should be broken up into execution result, validation (mempool) result, finality
+        //       result. These results are independent of each other.
         self.final_decision().and_then(|d| {
             if d.is_commit() {
                 self.result
@@ -236,6 +246,7 @@ impl From<ExecutedTransaction> for TransactionRecord {
     fn from(tx: ExecutedTransaction) -> Self {
         let execution_time = tx.execution_time();
         let final_decision = tx.final_decision();
+        let finalized_time = tx.finalized_time();
         let abort_details = tx.abort_details().cloned();
         let resulting_outputs = tx.resulting_outputs().to_vec();
         let (transaction, result) = tx.dissolve();
@@ -245,6 +256,7 @@ impl From<ExecutedTransaction> for TransactionRecord {
             result: Some(result),
             execution_time: Some(execution_time),
             final_decision,
+            finalized_time,
             resulting_outputs,
             abort_details,
         }

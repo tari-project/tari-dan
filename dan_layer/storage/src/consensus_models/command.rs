@@ -11,15 +11,18 @@ use serde::{Deserialize, Serialize};
 use tari_dan_common_types::SubstateAddress;
 use tari_engine_types::lock::LockFlag;
 use tari_transaction::TransactionId;
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
-use super::ForeignProposal;
+use super::{ExecutedTransaction, ForeignProposal, TransactionRecord};
 use crate::{
-    consensus_models::{Decision, ExecutedTransaction, QcId},
+    consensus_models::{Decision, QcId},
     StateStoreReadTransaction,
     StorageError,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Evidence {
     evidence: IndexMap<SubstateAddress, ShardEvidence>,
 }
@@ -85,20 +88,16 @@ impl Evidence {
 
 impl FromIterator<(SubstateAddress, ShardEvidence)> for Evidence {
     fn from_iter<T: IntoIterator<Item = (SubstateAddress, ShardEvidence)>>(iter: T) -> Self {
-        Evidence {
-            evidence: iter.into_iter().collect(),
-        }
-    }
-}
-
-impl Extend<(SubstateAddress, ShardEvidence)> for Evidence {
-    fn extend<T: IntoIterator<Item = (SubstateAddress, ShardEvidence)>>(&mut self, iter: T) {
-        self.evidence.extend(iter.into_iter())
+        let mut evidence = iter.into_iter().collect::<IndexMap<_, _>>();
+        evidence.sort_keys();
+        Evidence { evidence }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ShardEvidence {
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub qc_ids: IndexSet<QcId>,
     pub lock: LockFlag,
 }
@@ -122,11 +121,15 @@ impl ShardEvidence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct TransactionAtom {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub id: TransactionId,
     pub decision: Decision,
     pub evidence: Evidence,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub transaction_fee: u64,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub leader_fee: u64,
 }
 
@@ -136,6 +139,13 @@ impl TransactionAtom {
     }
 
     pub fn get_transaction<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<TransactionRecord, StorageError> {
+        TransactionRecord::get(tx, &self.id)
+    }
+
+    pub fn get_executed_transaction<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
     ) -> Result<ExecutedTransaction, StorageError> {
@@ -154,6 +164,7 @@ impl Display for TransactionAtom {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum Command {
     /// Command to prepare a transaction.
     Prepare(TransactionAtom),
