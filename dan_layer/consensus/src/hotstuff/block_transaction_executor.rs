@@ -56,7 +56,7 @@ where TConsensusSpec: ConsensusSpec
     pub fn execute(
         &mut self,
         transaction: Transaction,
-        db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        db_tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
         let id: tari_transaction::TransactionId = *transaction.id();
 
@@ -108,7 +108,7 @@ where TConsensusSpec: ConsensusSpec
     fn resolve_substates(
         &self,
         transaction: &Transaction,
-        db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        db_tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
     ) -> Result<HashSet<SubstateRequirement>, BlockTransactionExecutorError> {
         let mut resolved_substates = HashSet::new();
         for input in transaction.all_inputs_iter() {
@@ -127,7 +127,7 @@ where TConsensusSpec: ConsensusSpec
     fn resolve_local_substate(
         &self,
         id: &SubstateId,
-        db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        db_tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
     ) -> Result<SubstateRequirement, BlockTransactionExecutorError> {
         let version =
             Self::get_last_substate_version(db_tx, id).ok_or(BlockTransactionExecutorError::PlaceHolderError)?;
@@ -136,7 +136,7 @@ where TConsensusSpec: ConsensusSpec
 
     fn add_substates_to_memory_db(
         &self,
-        db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        db_tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         inputs: &HashSet<SubstateRequirement>,
         out: &MemoryStateStore,
     ) -> Result<(), BlockTransactionExecutorError> {
@@ -157,7 +157,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     fn get_last_substate_version(
-        db_tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        db_tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         substate_id: &SubstateId,
     ) -> Option<u32> {
         // TODO: store in DB the substate_id and version so we can just fetch the latest one and we don't have to loop
