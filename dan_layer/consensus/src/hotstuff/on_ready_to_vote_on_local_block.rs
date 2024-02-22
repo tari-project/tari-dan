@@ -45,10 +45,12 @@ use crate::{
     messages::{HotstuffMessage, VoteMessage},
     traits::{
         hooks::ConsensusHooks,
+        BlockTransactionExecutor,
+        BlockTransactionExecutorBuilder,
         ConsensusSpec,
         LeaderStrategy,
         OutboundMessaging,
-        StateManager, BlockTransactionExecutor, BlockTransactionExecutorBuilder,
+        StateManager,
         VoteSignatureService,
     },
 };

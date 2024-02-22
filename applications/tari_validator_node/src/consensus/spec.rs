@@ -5,12 +5,16 @@ use sqlite_message_logger::SqliteMessageLogger;
 #[cfg(not(feature = "metrics"))]
 use tari_consensus::traits::hooks::NoopHooks;
 use tari_consensus::traits::ConsensusSpec;
-use tari_dan_app_utilities::{template_manager::implementation::TemplateManager, transaction_executor::TariDanTransactionProcessor};
+use tari_dan_app_utilities::{
+    template_manager::implementation::TemplateManager,
+    transaction_executor::TariDanTransactionProcessor,
+};
 use tari_dan_common_types::PeerAddress;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_rpc_state_sync::RpcStateSyncManager;
 use tari_state_store_sqlite::SqliteStateStore;
 
+use super::TariDanBlockTransactionExecutorBuilder;
 #[cfg(feature = "metrics")]
 use crate::consensus::metrics::PrometheusConsensusMetrics;
 use crate::{
@@ -22,13 +26,15 @@ use crate::{
     p2p::services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
 };
 
-use super::TariDanBlockTransactionExecutorBuilder;
-
 #[derive(Clone)]
 pub struct TariConsensusSpec;
 
 impl ConsensusSpec for TariConsensusSpec {
     type Addr = PeerAddress;
+    type BlockTransactionExecutorBuilder = TariDanBlockTransactionExecutorBuilder<
+        Self::EpochManager,
+        TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
+    >;
     type EpochManager = EpochManagerHandle<Self::Addr>;
     #[cfg(not(feature = "metrics"))]
     type Hooks = NoopHooks;
@@ -41,5 +47,4 @@ impl ConsensusSpec for TariConsensusSpec {
     type StateManager = TariStateManager;
     type StateStore = SqliteStateStore<Self::Addr>;
     type SyncManager = RpcStateSyncManager<Self>;
-    type BlockTransactionExecutorBuilder = TariDanBlockTransactionExecutorBuilder<Self::EpochManager, TariDanTransactionProcessor<TemplateManager<PeerAddress>>>;
 }

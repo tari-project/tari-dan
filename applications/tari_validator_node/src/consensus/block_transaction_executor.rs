@@ -4,6 +4,11 @@
 use std::collections::{HashMap, HashSet};
 
 use log::info;
+use tari_consensus::traits::{
+    BlockTransactionExecutor,
+    BlockTransactionExecutorBuilder,
+    BlockTransactionExecutorError,
+};
 use tari_dan_app_utilities::transaction_executor::TransactionExecutor;
 use tari_dan_common_types::SubstateAddress;
 use tari_dan_engine::{
@@ -14,8 +19,6 @@ use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore, StateS
 use tari_engine_types::{commit_result::TransactionResult, substate::SubstateId, virtual_substate::VirtualSubstates};
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::{SubstateRequirement, Transaction};
-
-use tari_consensus::traits::{BlockTransactionExecutor, BlockTransactionExecutorBuilder, BlockTransactionExecutorError};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::block_transaction_executor";
 
@@ -28,24 +31,28 @@ pub struct TariDanBlockTransactionExecutorBuilder<TEpochManager: EpochManagerRea
 impl<TEpochManager, TExecutor> TariDanBlockTransactionExecutorBuilder<TEpochManager, TExecutor>
 where
     TEpochManager: EpochManagerReader,
-    TExecutor: TransactionExecutor
+    TExecutor: TransactionExecutor,
 {
     pub fn new(epoch_manager: TEpochManager, executor: TExecutor) -> Self {
         Self {
             epoch_manager,
-            executor
+            executor,
         }
     }
 }
 
-impl<TExecutor, TStateStore, TEpochManager> BlockTransactionExecutorBuilder<TStateStore> for TariDanBlockTransactionExecutorBuilder<TEpochManager, TExecutor>
+impl<TExecutor, TStateStore, TEpochManager> BlockTransactionExecutorBuilder<TStateStore>
+    for TariDanBlockTransactionExecutorBuilder<TEpochManager, TExecutor>
 where
     TStateStore: StateStore,
     TExecutor: TransactionExecutor + Clone + 'static,
     TEpochManager: EpochManagerReader + Clone + 'static,
 {
     fn build(&self) -> Box<dyn BlockTransactionExecutor<TStateStore>> {
-        Box::new(TariDanBlockTransactionExecutor::new(self.epoch_manager.clone(), self.executor.clone()))
+        Box::new(TariDanBlockTransactionExecutor::new(
+            self.epoch_manager.clone(),
+            self.executor.clone(),
+        ))
     }
 }
 
@@ -61,10 +68,11 @@ pub struct TariDanBlockTransactionExecutor<TEpochManager, TExecutor> {
     output_versions: HashMap<SubstateId, u32>,
 }
 
-impl<TEpochManager, TExecutor, TStateStore> BlockTransactionExecutor<TStateStore> for TariDanBlockTransactionExecutor<TEpochManager, TExecutor>
+impl<TEpochManager, TExecutor, TStateStore> BlockTransactionExecutor<TStateStore>
+    for TariDanBlockTransactionExecutor<TEpochManager, TExecutor>
 where
     TStateStore: StateStore,
-    TExecutor: TransactionExecutor
+    TExecutor: TransactionExecutor,
 {
     fn execute(
         &mut self,
@@ -109,8 +117,7 @@ where
     }
 }
 
-impl<TEpochManager, TExecutor> TariDanBlockTransactionExecutor<TEpochManager, TExecutor>
-{
+impl<TEpochManager, TExecutor> TariDanBlockTransactionExecutor<TEpochManager, TExecutor> {
     pub fn new(epoch_manager: TEpochManager, executor: TExecutor) -> Self {
         Self {
             epoch_manager,
@@ -143,8 +150,8 @@ impl<TEpochManager, TExecutor> TariDanBlockTransactionExecutor<TEpochManager, TE
         id: &SubstateId,
         db_tx: &mut <TStateStore as StateStore>::ReadTransaction<'_>,
     ) -> Result<SubstateRequirement, BlockTransactionExecutorError> {
-        let version =
-            Self::get_last_substate_version::<TStateStore>(db_tx, id).ok_or(BlockTransactionExecutorError::PlaceHolderError)?;
+        let version = Self::get_last_substate_version::<TStateStore>(db_tx, id)
+            .ok_or(BlockTransactionExecutorError::PlaceHolderError)?;
         Ok(SubstateRequirement::new(id.clone(), Some(version)))
     }
 

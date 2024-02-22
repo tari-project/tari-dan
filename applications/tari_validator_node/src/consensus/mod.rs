@@ -24,6 +24,7 @@ use crate::{
     event_subscription::EventSubscription,
 };
 
+mod block_transaction_executor;
 mod handle;
 mod leader_selection;
 #[cfg(feature = "metrics")]
@@ -31,10 +32,8 @@ pub mod metrics;
 mod signature_service;
 mod spec;
 mod state_manager;
-mod block_transaction_executor;
 
 pub use block_transaction_executor::{TariDanBlockTransactionExecutor, TariDanBlockTransactionExecutorBuilder};
-
 pub use handle::*;
 use sqlite_message_logger::SqliteMessageLogger;
 use tari_consensus::traits::ConsensusSpec;
@@ -59,7 +58,10 @@ pub async fn spawn(
     client_factory: TariValidatorNodeRpcClientFactory,
     hooks: <TariConsensusSpec as ConsensusSpec>::Hooks,
     shutdown_signal: ShutdownSignal,
-    transaction_executor_builder: TariDanBlockTransactionExecutorBuilder<EpochManagerHandle<PeerAddress>, TariDanTransactionProcessor<TemplateManager<PeerAddress>>>,
+    transaction_executor_builder: TariDanBlockTransactionExecutorBuilder<
+        EpochManagerHandle<PeerAddress>,
+        TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
+    >,
 ) -> (
     JoinHandle<Result<(), anyhow::Error>>,
     ConsensusHandle,
