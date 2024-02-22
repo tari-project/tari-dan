@@ -88,7 +88,8 @@ impl ExecutedTransaction {
     }
 
     pub fn involved_shards_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
-        self.transaction.all_inputs_iter()
+        self.transaction
+            .all_inputs_iter()
             .map(|input| input.to_substate_address())
             .chain(self.resulting_outputs.clone())
     }

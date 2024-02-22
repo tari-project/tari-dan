@@ -174,7 +174,10 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn with_substate_inputs<I: IntoIterator<Item = (B, Option<u32>)>, B: Borrow<SubstateId>>(self, inputs: I) -> Self {
+    pub fn with_substate_inputs<I: IntoIterator<Item = (B, Option<u32>)>, B: Borrow<SubstateId>>(
+        self,
+        inputs: I,
+    ) -> Self {
         self.with_inputs(
             inputs
                 .into_iter()
@@ -197,7 +200,10 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn with_substate_input_refs<I: IntoIterator<Item = (B, Option<u32>)>, B: Borrow<SubstateId>>(self, inputs: I) -> Self {
+    pub fn with_substate_input_refs<I: IntoIterator<Item = (B, Option<u32>)>, B: Borrow<SubstateId>>(
+        self,
+        inputs: I,
+    ) -> Self {
         self.with_input_refs(
             inputs
                 .into_iter()
@@ -217,7 +223,10 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn with_substate_outputs<I: IntoIterator<Item = (B, Option<u32>)>, B: Borrow<SubstateId>>(self, outputs: I) -> Self {
+    pub fn with_substate_outputs<I: IntoIterator<Item = (B, Option<u32>)>, B: Borrow<SubstateId>>(
+        self,
+        outputs: I,
+    ) -> Self {
         self.with_outputs(
             outputs
                 .into_iter()

@@ -116,7 +116,10 @@ impl Transaction {
     }
 
     pub fn input_address_refs(&self) -> Vec<SubstateAddress> {
-        self.input_refs.iter().map(|i: &SubstateRequirement| i.to_substate_address()).collect()
+        self.input_refs
+            .iter()
+            .map(|i: &SubstateRequirement| i.to_substate_address())
+            .collect()
     }
 
     pub fn inputs(&self) -> &[SubstateRequirement] {
@@ -124,7 +127,10 @@ impl Transaction {
     }
 
     pub fn input_addresses(&self) -> Vec<SubstateAddress> {
-        self.inputs.iter().map(|i: &SubstateRequirement| i.to_substate_address()).collect()
+        self.inputs
+            .iter()
+            .map(|i: &SubstateRequirement| i.to_substate_address())
+            .collect()
     }
 
     /// Returns (fee instructions, instructions)
@@ -151,7 +157,10 @@ impl Transaction {
     }
 
     pub fn filled_input_addresses(&self) -> Vec<SubstateAddress> {
-        self.filled_inputs.iter().map(|i: &SubstateRequirement| i.to_substate_address()).collect()
+        self.filled_inputs
+            .iter()
+            .map(|i: &SubstateRequirement| i.to_substate_address())
+            .collect()
     }
 
     pub fn filled_inputs_mut(&mut self) -> &mut Vec<SubstateRequirement> {

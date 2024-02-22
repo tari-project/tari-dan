@@ -229,23 +229,26 @@ pub async fn concurrent_call_method(
     // For concurrent transactions we DO NOT specify the versions
     component.version = None;
 
-    /*
-    call_method_inner(vn_client.clone(), vn_data_dir.clone(), component.clone(), method_call.clone()).await
-    */
+    // call_method_inner(vn_client.clone(), vn_data_dir.clone(), component.clone(), method_call.clone()).await
 
     let mut handles = Vec::new();
     for _ in 0..times {
-        let handle = tokio::spawn(
-            call_method_inner(vn_client.clone(), vn_data_dir.clone(), component.clone(), method_call.clone())
-        );
+        let handle = tokio::spawn(call_method_inner(
+            vn_client.clone(),
+            vn_data_dir.clone(),
+            component.clone(),
+            method_call.clone(),
+        ));
         handles.push(handle);
     }
-    
+
     let mut last_resp = None;
     for handle in handles {
-        let result = handle.await.map_err(|e| RejectReason::ExecutionFailure(e.to_string()))?;
+        let result = handle
+            .await
+            .map_err(|e| RejectReason::ExecutionFailure(e.to_string()))?;
         match result {
-            Ok(response) => { last_resp = Some(response) },
+            Ok(response) => last_resp = Some(response),
             Err(e) => return Err(e),
         }
     }
@@ -253,7 +256,9 @@ pub async fn concurrent_call_method(
     if let Some(res) = last_resp {
         Ok(res)
     } else {
-        Err(RejectReason::ExecutionFailure("No responses from any of the concurrent calls".to_owned()))
+        Err(RejectReason::ExecutionFailure(
+            "No responses from any of the concurrent calls".to_owned(),
+        ))
     }
 }
 

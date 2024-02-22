@@ -11,7 +11,8 @@ use std::{
 use log::*;
 use serde::Serialize;
 use tari_dan_common_types::{
-    committee::CommitteeShard, optional::{IsNotFoundError, Optional}
+    committee::CommitteeShard,
+    optional::{IsNotFoundError, Optional},
 };
 use tari_transaction::TransactionId;
 

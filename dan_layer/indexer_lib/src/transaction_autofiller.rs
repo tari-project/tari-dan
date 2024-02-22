@@ -126,7 +126,10 @@ where
                         substate.version()
                     );
                     let substate_requirement = SubstateRequirement::new(id.clone(), Some(substate.version()));
-                    if autofilled_transaction.all_inputs_iter().any(|s| *s == substate_requirement) {
+                    if autofilled_transaction
+                        .all_inputs_iter()
+                        .any(|s| *s == substate_requirement)
+                    {
                         // Shard is already an input (TODO: what a waste)
                         continue;
                     }

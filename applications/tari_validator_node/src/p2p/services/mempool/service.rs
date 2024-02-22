@@ -32,7 +32,11 @@ use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, SubstateRecord, TransactionPool, TransactionRecord},
     StateStore,
 };
-use tari_engine_types::{commit_result::{ExecuteResult, FinalizeResult, TransactionResult}, fees::FeeCostBreakdown, substate::SubstateDiff};
+use tari_engine_types::{
+    commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
+    fees::FeeCostBreakdown,
+    substate::SubstateDiff,
+};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerEvent, EpochManagerReader};
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::models::Amount;
@@ -333,20 +337,25 @@ where
             iter::once(&tx_substate_address)
                 .chain(unverified_output_shards.iter())
                 .chain(claim_shards.iter()),
-        );        
+        );
 
         if is_input_shard || is_output_shard {
             debug!(target: LOG_TARGET, "🎱 New transaction {} in mempool", transaction.id());
             self.transactions.insert(*transaction.id());
 
-
             // The transactions has one or more of its inputs with no version
             // This means we skip transaction execution in the mempool, as the execution will happen on consensus
             if transaction.has_inputs_without_version() {
-                self.handle_no_version_transaction(&transaction, should_propagate, sender_shard).await?;
+                self.handle_no_version_transaction(&transaction, should_propagate, sender_shard)
+                    .await?;
             } else {
                 // All the inputs in the transaction have specific versions, so we execute immmeadiately
-                self.queue_transaction_for_execution(transaction.clone(), current_epoch, should_propagate, sender_shard);
+                self.queue_transaction_for_execution(
+                    transaction.clone(),
+                    current_epoch,
+                    should_propagate,
+                    sender_shard,
+                );
             }
 
             if should_propagate {
@@ -411,14 +420,10 @@ where
                 let substate_addresses = transaction.involved_shards_iter().collect();
                 if let Err(e) = self
                     .gossip
-                    .gossip_to_foreign_replicas(
-                        current_epoch,
-                        substate_addresses,
-                        NewTransactionMessage {
-                            transaction,
-                            output_shards: vec![],
-                        },
-                    )
+                    .gossip_to_foreign_replicas(current_epoch, substate_addresses, NewTransactionMessage {
+                        transaction,
+                        output_shards: vec![],
+                    })
                     .await
                 {
                     error!(
@@ -437,7 +442,7 @@ where
         &mut self,
         transaction: &Transaction,
         should_propagate: bool,
-        sender_shard: Option<Shard>
+        sender_shard: Option<Shard>,
     ) -> Result<(), MempoolError> {
         // TODO: for now we just skip execution, we may want to store the transaction in a new DB table
         // TODO: do we need some sort of validation at this stage?
@@ -460,7 +465,10 @@ where
         );
         let executed_transaction = ExecutedTransaction::new(
             transaction.clone(),
-            ExecuteResult { finalize, fee_receipt: None },
+            ExecuteResult {
+                finalize,
+                fee_receipt: None,
+            },
             vec![],
             Duration::ZERO,
         );
@@ -639,7 +647,10 @@ where
 
         self.epoch_manager.get_local_committee_shard(current_epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
-        let all_inputs_iter = executed.transaction().all_inputs_iter().map(|i| i.to_substate_address());
+        let all_inputs_iter = executed
+            .transaction()
+            .all_inputs_iter()
+            .map(|i| i.to_substate_address());
         let is_input_shard = local_committee_shard.includes_any_shard(all_inputs_iter) |
             (executed.transaction().inputs().len() + executed.transaction().input_refs().len() == 0);
 

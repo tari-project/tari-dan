@@ -134,11 +134,7 @@ impl From<&Transaction> for proto::transaction::Transaction {
         let signature = transaction.signature().clone().into();
         let inputs = transaction.inputs().iter().map(Into::into).collect();
         let input_refs = transaction.input_refs().iter().map(Into::into).collect();
-        let filled_inputs = transaction
-            .filled_inputs()
-            .iter()
-            .map(Into::into)
-            .collect();
+        let filled_inputs = transaction.filled_inputs().iter().map(Into::into).collect();
         let fee_instructions = transaction.fee_instructions().to_vec();
         let instructions = transaction.instructions().to_vec();
         let min_epoch = transaction

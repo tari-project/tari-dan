@@ -58,12 +58,7 @@ use tari_validator_node_client::{
 };
 use tokio::time::MissedTickBehavior;
 
-use crate::{
-    command::manifest,
-    component_manager::ComponentManager,
-    from_hex::FromHex,
-    key_manager::KeyManager,
-};
+use crate::{command::manifest, component_manager::ComponentManager, from_hex::FromHex, key_manager::KeyManager};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TransactionSubcommand {
@@ -233,14 +228,9 @@ pub async fn submit_transaction(
     };
 
     // Convert to shard id
-    let inputs = inputs
-        .into_iter()
-        .collect::<Vec<_>>();
+    let inputs = inputs.into_iter().collect::<Vec<_>>();
 
-    let input_refs = common
-        .input_refs
-        .into_iter()
-        .collect::<Vec<_>>();
+    let input_refs = common.input_refs.into_iter().collect::<Vec<_>>();
 
     summarize_request(&instructions, &inputs, 1, common.dry_run);
     println!();
