@@ -34,6 +34,8 @@ pub struct Block {
     pub foreign_indexes: String,
     pub signature: Option<String>,
     pub created_at: PrimitiveDateTime,
+    pub block_time: Option<i64>,
+    pub timestamp: i64,
     pub base_layer_block_hash: String,
 }
 
@@ -67,6 +69,8 @@ impl Block {
             deserialize_json(&self.foreign_indexes)?,
             self.signature.map(|val| deserialize_json(&val)).transpose()?,
             self.created_at,
+            self.block_time.map(|v| v as u64),
+            self.timestamp as u64,
             deserialize_hex_try_from(&self.base_layer_block_hash)?,
         ))
     }
@@ -89,6 +93,8 @@ pub struct ParkedBlock {
     pub foreign_indexes: String,
     pub signature: Option<String>,
     pub created_at: PrimitiveDateTime,
+    pub block_time: Option<i64>,
+    pub timestamp: i64,
     pub base_layer_block_hash: String,
 }
 
@@ -124,6 +130,8 @@ impl TryFrom<ParkedBlock> for consensus_models::Block {
             deserialize_json(&value.foreign_indexes)?,
             value.signature.map(|val| deserialize_json(&val)).transpose()?,
             value.created_at,
+            value.block_time.map(|v| v as u64),
+            value.timestamp as u64,
             deserialize_hex_try_from(&value.base_layer_block_hash)?,
         ))
     }

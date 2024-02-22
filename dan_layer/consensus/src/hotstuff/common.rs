@@ -39,6 +39,7 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
     leader_strategy: &TLeaderStrategy,
     local_committee: &Committee<TAddr>,
     parent_base_layer_block_hash: FixedHash,
+    parent_timestamp: u64,
 ) -> Option<LeafBlock> {
     let mut parent_block = high_qc.as_leaf_block();
     let mut current_height = high_qc.block_height() + NodeHeight(1);
@@ -69,6 +70,7 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
             epoch,
             parent_merkle_root,
             parent_base_layer_block_hash,
+            parent_timestamp,
         );
         debug!(
             target: LOG_TARGET,

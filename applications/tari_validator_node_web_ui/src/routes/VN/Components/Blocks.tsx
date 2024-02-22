@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from "react";
-import { listBlocks, getBlocksCount, getIdentity } from "../../../utils/json_rpc";
+import { listBlocks, getBlocksCount, getIdentity, getBlocks, getFilteredBlocksCount } from "../../../utils/json_rpc";
 import { Link } from "react-router-dom";
 import { emptyRows, primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../../utils/helpers";
 import Table from "@mui/material/Table";
@@ -36,38 +36,27 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import TablePagination from "@mui/material/TablePagination";
 import Typography from "@mui/material/Typography";
 import HeadingMenu from "../../../Components/HeadingMenu";
-import SearchFilter from "../../../Components/SearchFilter";
+import Filter from "../../../Components/Filter";
 import Fade from "@mui/material/Fade";
 import StatusChip from "../../../Components/StatusChip";
-import type { Block } from "@tariproject/typescript-bindings";
-
-export interface ITableBlock {
-  id: string;
-  epoch: number;
-  height: number;
-  decision: string;
-  total_leader_fee: number;
-  proposed_by_me: boolean;
-  proposed_by: string;
-  transactions_cnt: number;
-  block_time: number;
-  stored_at: Date;
-  is_dummy: boolean;
-  show?: boolean;
-}
-
-type ColumnKey = keyof ITableBlock;
+import { Ordering, type Block } from "@tarilabs/typescript-bindings";
+import type { GetIdentityResponse } from "@tarilabs/typescript-bindings/validator-node-client";
 
 function Blocks() {
-  const [blocks, setBlocks] = useState<ITableBlock[]>([]);
-  const [lastSort, setLastSort] = useState({ column: "", order: -1 });
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [blocksCount, setBlocksCount] = useState(0);
+  const [lastSort, setLastSort] = useState({ column: "height", order: -1 });
+  const [identity, setIdentity] = useState<GetIdentityResponse>();
 
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  // const [blockCount, setBlockCount] = useState(0);
+  const [ordering, setOrdering] = useState<Ordering>("Descending");
+  const [orderingIndex, setOrderingIndex] = useState(2);
+  const [filter, setFilter] = useState<string | null>(null);
+  const [filterIndex, setFilterIndex] = useState(0);
 
   // Avoid a layout jump when reaching the last page with empty rows.
-  const emptyRowsCnt = emptyRows(page, rowsPerPage, blocks);
+  const emptyRowsCnt = rowsPerPage - blocks.length;
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -79,86 +68,94 @@ function Blocks() {
   };
 
   useEffect(() => {
-    Promise.all([getIdentity(), getBlocksCount()]).then(([identity, resp]) => {
-      // TODO: remove this once the pagination is done
-      // resp.count = 100;
-      // setBlockCount(resp.count);
-      listBlocks({ from_id: null, limit: resp.count }).then((resp) => {
-        let times = Object.fromEntries(
-          resp.blocks.map((block) => [block.id, primitiveDateTimeToSecs(block.stored_at || [])]),
-        );
-        setBlocks(
-          resp.blocks.map((block: Block) => {
-            return {
-              id: block.id,
-              epoch: block.epoch,
-              height: block.height,
-              decision: block.justify.decision,
-              total_leader_fee: block.total_leader_fee,
-              proposed_by_me: block.proposed_by === identity.public_key,
-              transactions_cnt: block.commands.length,
-              block_time: times[block.id] - times[block.justify.block_id],
-              stored_at: primitiveDateTimeToDate(block.stored_at || []),
-              proposed_by: block.proposed_by,
-              show: true,
-              is_dummy: block.is_dummy,
-            };
-          }),
-        );
+    getIdentity().then((resp) => setIdentity(resp));
+  }, []);
+
+  useEffect(() => {
+    getFilteredBlocksCount({ filter: filter, filter_index: filterIndex }).then((resp) => {
+      setBlocksCount(resp.count);
+      if (rowsPerPage * page > resp.count) {
+        setPage(Math.floor(resp.count / rowsPerPage));
+      }
+      getBlocks({
+        limit: rowsPerPage,
+        offset: page * rowsPerPage,
+        ordering_index: orderingIndex,
+        ordering: ordering,
+        filter_index: filterIndex,
+        filter: filter,
+      }).then((resp) => {
+        setBlocks(resp.blocks);
       });
     });
-  }, []);
-  const sort = (column: ColumnKey, order: number) => {
-    if (column) {
-      setBlocks(
-        [...blocks].sort((r0: any, r1: any) =>
-          r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0,
-        ),
-      );
-      setLastSort({ column, order });
+  }, [page, rowsPerPage, ordering, orderingIndex, filter, filterIndex]);
+
+  const columnNameToId = (column: string) => {
+    switch (column) {
+      case "id":
+        return 0;
+      case "epoch":
+        return 1;
+      case "height":
+        return 2;
+      case "transactions_cnt":
+        return 4;
+      case "total_leader_fee":
+        return 5;
+      case "block_time":
+        return 6;
+      case "stored_at":
+        return 7;
+      case "proposed_by":
+        return 8;
     }
+    return 0;
   };
+
+  const sort = (column: string, order: number) => {
+    setOrderingIndex(columnNameToId(column));
+    setOrdering(order == 1 ? "Ascending" : "Descending");
+    setLastSort({ column, order });
+  };
+
   return (
     <>
       <BoxHeading2>
-        <SearchFilter
-          stateObject={blocks}
-          setStateObject={setBlocks}
-          setPage={setPage}
+        <Filter
           filterItems={[
             {
               title: "Block id",
-              value: "block_id",
-              filterFn: (value: string, row: ITableBlock) => row.id.toLowerCase().includes(value.toLowerCase()),
+              value: "id",
             },
             {
               title: "Epoch",
               value: "epoch",
-              filterFn: (value: string, row: ITableBlock) => String(row.epoch).includes(value),
             },
             {
               title: "Height",
               value: "height",
-              filterFn: (value: string, row: ITableBlock) => String(row.height).includes(value),
             },
             {
-              title: "Decision",
-              value: "decision",
-              filterFn: (value: string, row: ITableBlock) => row.decision.includes(value),
-            },
-            {
-              title: "# of Transactions",
+              title: "Min # of Transactions",
               value: "transactions_cnt",
-              filterFn: (value: string, row: ITableBlock) => String(row.transactions_cnt).includes(value),
             },
             {
-              title: "Total fees",
+              title: "Min total fees",
               value: "total_leader_fee",
-              filterFn: (value: string, row: ITableBlock) => String(row.total_leader_fee).includes(value),
+            },
+            {
+              title: "Proposed by",
+              value: "proposed_by",
             },
           ]}
-          placeholder="Search for Transactions"
-          defaultSearch="block_id"
+          placeholder="Search for Blocks"
+          defaultSearch="id"
+          setSearchValue={(value) => {
+            setFilter(value);
+          }}
+          setSearchColumn={(name) => {
+            setFilterIndex(columnNameToId(name));
+          }}
         />
       </BoxHeading2>
       <TableContainer>
@@ -229,25 +226,7 @@ function Blocks() {
                 />
               </TableCell>
               <TableCell>
-                <HeadingMenu
-                  menuTitle="Status"
-                  menuItems={[
-                    {
-                      title: "Decision",
-                      fn: () => sort("decision", 1),
-                      icon: <KeyboardArrowUpIcon />,
-                    },
-                    {
-                      title: "Sort Descending",
-                      fn: () => sort("decision", -1),
-                      icon: <KeyboardArrowDownIcon />,
-                    },
-                  ]}
-                  showArrow
-                  lastSort={lastSort}
-                  columnName="decision"
-                  sortFunction={sort}
-                />
+                <HeadingMenu menuTitle="Status" showArrow={false} columnName="decision" />
               </TableCell>
               <TableCell>
                 <HeadingMenu
@@ -357,55 +336,42 @@ function Blocks() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {blocks
-              .filter(({ show }) => show === true)
-              .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-              .map(
-                ({
-                  id,
-                  epoch,
-                  height,
-                  decision,
-                  total_leader_fee,
-                  transactions_cnt,
-                  proposed_by_me,
-                  stored_at,
-                  block_time,
-                  proposed_by,
-                  is_dummy,
-                }) => {
-                  return (
-                    <TableRow key={id}>
-                      <DataTableCell>
-                        <Link to={`/blocks/${id}`} style={{ textDecoration: "none" }}>
-                          {id.slice(0, 8)}
-                        </Link>
-                      </DataTableCell>
-                      <DataTableCell>{epoch}</DataTableCell>
-                      <DataTableCell>{height}</DataTableCell>
-                      <DataTableCell>
-                        <StatusChip
-                          status={is_dummy ? "Dummy" : decision === "Accept" ? "Commit" : "Abort"}
-                          showTitle
-                        />
-                      </DataTableCell>
-                      <DataTableCell>{transactions_cnt}</DataTableCell>
-                      <DataTableCell>
-                        <div className={proposed_by_me ? "my_money" : ""}>{total_leader_fee}</div>
-                      </DataTableCell>
-                      <DataTableCell>{block_time} secs</DataTableCell>
-                      <DataTableCell>{stored_at.toLocaleString()}</DataTableCell>
-                      <DataTableCell>
-                        <div className={proposed_by_me ? "my_money" : ""}>{proposed_by.slice(0, 8)}</div>
-                      </DataTableCell>
-                    </TableRow>
-                  );
-                },
-              )}
-            {blocks.filter(({ show }) => show === true).length === 0 && (
+            {blocks.map((block) => {
+              return (
+                <TableRow key={block.id}>
+                  <DataTableCell>
+                    <Link to={`/blocks/${block.id}`} style={{ textDecoration: "none" }}>
+                      {block.id.slice(0, 8)}
+                    </Link>
+                  </DataTableCell>
+                  <DataTableCell>{block.epoch}</DataTableCell>
+                  <DataTableCell>{block.height}</DataTableCell>
+                  <DataTableCell>
+                    <StatusChip
+                      status={block.is_dummy ? "Dummy" : block.justify.decision === "Accept" ? "Commit" : "Abort"}
+                      showTitle
+                    />
+                  </DataTableCell>
+                  <DataTableCell>{block.commands.length}</DataTableCell>
+                  <DataTableCell>
+                    <div className={block.proposed_by == identity?.public_key ? "my_money" : ""}>
+                      {block.total_leader_fee}
+                    </div>
+                  </DataTableCell>
+                  <DataTableCell>{block.block_time} secs</DataTableCell>
+                  <DataTableCell>{primitiveDateTimeToDate(block.stored_at || []).toLocaleString()}</DataTableCell>
+                  <DataTableCell>
+                    <div className={block.proposed_by == identity?.public_key ? "my_money" : ""}>
+                      {block.proposed_by.slice(0, 8)}
+                    </div>
+                  </DataTableCell>
+                </TableRow>
+              );
+            })}
+            {blocks.length == 0 && (
               <TableRow>
                 <TableCell colSpan={4} style={{ textAlign: "center" }}>
-                  <Fade in={blocks.filter(({ show }) => show === true).length === 0} timeout={500}>
+                  <Fade in={blocks.length == 0} timeout={500}>
                     <Typography variant="h5">No results found</Typography>
                   </Fade>
                 </TableCell>
@@ -425,7 +391,7 @@ function Blocks() {
         <TablePagination
           rowsPerPageOptions={[10, 25, 50]}
           component="div"
-          count={blocks.filter((transaction) => transaction.show === true).length}
+          count={blocksCount}
           rowsPerPage={rowsPerPage}
           page={page}
           onPageChange={handleChangePage}

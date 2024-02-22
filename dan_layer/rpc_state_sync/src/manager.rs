@@ -301,6 +301,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         block.justify().clone(),
                         block.epoch(),
                         *block.merkle_root(),
+                        block.timestamp(),
                         *block.base_layer_block_hash(),
                     );
                     dummy_block.save(tx)?;
