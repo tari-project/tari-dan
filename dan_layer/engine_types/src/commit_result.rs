@@ -221,7 +221,7 @@ impl TransactionResult {
             Self::AcceptFeeRejectRest(substate_diff, _) => substate_diff,
             Self::Reject(reject_result) => {
                 panic!("{}: {:?}", msg, reject_result);
-            }
+            },
         }
     }
 }

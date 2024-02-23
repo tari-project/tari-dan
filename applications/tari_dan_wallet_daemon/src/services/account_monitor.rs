@@ -54,10 +54,10 @@ pub struct AccountMonitor<TStore, TNetworkInterface> {
 }
 
 impl<TStore, TNetworkInterface> AccountMonitor<TStore, TNetworkInterface>
-    where
-        TStore: WalletStore,
-        TNetworkInterface: WalletNetworkInterface,
-        TNetworkInterface::Error: IsNotFoundError,
+where
+    TStore: WalletStore,
+    TNetworkInterface: WalletNetworkInterface,
+    TNetworkInterface::Error: IsNotFoundError,
 {
     pub fn new(
         notify: Notify<WalletEvent>,
@@ -111,7 +111,7 @@ impl<TStore, TNetworkInterface> AccountMonitor<TStore, TNetworkInterface>
         match req {
             AccountMonitorRequest::RefreshAccount { account, reply } => {
                 let _ignore = reply.send(self.refresh_account(&account).await);
-            }
+            },
         }
     }
 
@@ -287,7 +287,7 @@ impl<TStore, TNetworkInterface> AccountMonitor<TStore, TNetworkInterface>
                         "NonFungible ID {} is found in the vault, but not found in substate diff", id
                     );
                     continue;
-                }
+                },
             };
 
             let is_burned = nft.contents().is_none();
@@ -305,7 +305,7 @@ impl<TStore, TNetworkInterface> AccountMonitor<TStore, TNetworkInterface>
                         "Failed to decode non fungible metadata, with error: {}", e
                     );
                     continue;
-                }
+                },
             };
 
             let non_fungible = NonFungibleToken {
@@ -361,7 +361,7 @@ impl<TStore, TNetworkInterface> AccountMonitor<TStore, TNetworkInterface>
                             "👁️‍🗨️ Failed to parse account substate {} in tx {}: {}", a, tx_id, e
                         );
                         None
-                    }
+                    },
                 }
             })
             .collect::<Vec<_>>();
@@ -475,7 +475,7 @@ impl<TStore, TNetworkInterface> AccountMonitor<TStore, TNetworkInterface>
                     e
                 );
                 None
-            }
+            },
         };
 
         let token_symbol = maybe_resource.and_then(|r| r.metadata().get(TOKEN_SYMBOL).map(|s| s.to_string()));
@@ -502,16 +502,16 @@ impl<TStore, TNetworkInterface> AccountMonitor<TStore, TNetworkInterface>
                 if let Some(account) = event.new_account {
                     self.pending_accounts.insert(event.transaction_id, account);
                 }
-            }
+            },
             WalletEvent::TransactionFinalized(event) => {
                 if let Some(diff) = event.finalize.result.accept() {
                     self.process_result(event.transaction_id, diff).await?;
                 }
-            }
+            },
             WalletEvent::TransactionInvalid(event) => {
                 self.pending_accounts.remove(&event.transaction_id);
-            }
-            WalletEvent::AccountCreated(_) | WalletEvent::AccountChanged(_) | WalletEvent::AuthLoginRequest(_) => {}
+            },
+            WalletEvent::AccountCreated(_) | WalletEvent::AccountChanged(_) | WalletEvent::AuthLoginRequest(_) => {},
         }
         Ok(())
     }
