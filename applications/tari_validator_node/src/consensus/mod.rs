@@ -33,7 +33,7 @@ mod signature_service;
 mod spec;
 mod state_manager;
 
-pub use block_transaction_executor::{TariDanBlockTransactionExecutor, TariDanBlockTransactionExecutorBuilder};
+pub use block_transaction_executor::TariDanBlockTransactionExecutorBuilder;
 pub use handle::*;
 use sqlite_message_logger::SqliteMessageLogger;
 use tari_consensus::traits::ConsensusSpec;

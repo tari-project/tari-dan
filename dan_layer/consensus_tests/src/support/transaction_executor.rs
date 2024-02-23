@@ -3,35 +3,47 @@
 
 use std::time::Duration;
 
-use tari_consensus::traits::TransactionExecutor;
-use tari_dan_app_utilities::transaction_executor::TransactionProcessorError;
-use tari_dan_engine::state_store::memory::MemoryStateStore;
-use tari_dan_storage::consensus_models::ExecutedTransaction;
-use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
-    virtual_substate::VirtualSubstates,
-};
+use tari_consensus::traits::{BlockTransactionExecutor, BlockTransactionExecutorBuilder, BlockTransactionExecutorError};
+use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
+use tari_engine_types::
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult};
 use tari_template_lib::Hash;
 use tari_transaction::Transaction;
 
 #[derive(Debug, Clone)]
-pub struct TestTransactionProcessor {}
+pub struct TestBlockTransactionExecutorBuilder {}
 
-impl TestTransactionProcessor {
+impl TestBlockTransactionExecutorBuilder {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl TransactionExecutor for TestTransactionProcessor {
-    type Error = TransactionProcessorError;
+impl<TStateStore> BlockTransactionExecutorBuilder<TStateStore> for TestBlockTransactionExecutorBuilder 
+where TStateStore: StateStore
+{
+    fn build(&self) -> Box<dyn BlockTransactionExecutor<TStateStore>> {
+        return Box::new(TestBlockTransactionProcessor::new())
+    }
+}
 
+#[derive(Debug, Clone)]
+pub struct TestBlockTransactionProcessor {}
+
+impl TestBlockTransactionProcessor {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl<TStateStore> BlockTransactionExecutor<TStateStore> for TestBlockTransactionProcessor
+where TStateStore: StateStore
+{
     fn execute(
-        &self,
+        &mut self,
         transaction: Transaction,
-        _state_store: MemoryStateStore,
-        _virtual_substates: VirtualSubstates,
-    ) -> Result<ExecutedTransaction, Self::Error> {
+        _db_tx: &mut TStateStore::ReadTransaction<'_>,
+    ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
         let outputs = vec![];
         let result = ExecuteResult {
             finalize: FinalizeResult {
@@ -40,7 +52,7 @@ impl TransactionExecutor for TestTransactionProcessor {
                 logs: vec![],
                 execution_results: vec![],
                 result: TransactionResult::Reject(RejectReason::ExecutionFailure(
-                    "TestTransactionProcessor is just a mock".to_owned(),
+                    "TestBlockTransactionProcessor is just a mock".to_owned(),
                 )),
                 cost_breakdown: None,
             },
@@ -50,3 +62,5 @@ impl TransactionExecutor for TestTransactionProcessor {
         Ok(ExecutedTransaction::new(transaction, result, outputs, execution_time))
     }
 }
+
+

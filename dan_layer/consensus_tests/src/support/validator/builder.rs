@@ -13,17 +13,7 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tokio::sync::{broadcast, mpsc, watch};
 
 use crate::support::{
-    address::TestAddress,
-    epoch_manager::TestEpochManager,
-    messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
-    signing_service::TestVoteSignatureService,
-    sync::AlwaysSyncedSyncManager,
-    NoopStateManager,
-    RoundRobinLeaderStrategy,
-    TestConsensusSpec,
-    TestTransactionProcessor,
-    Validator,
-    ValidatorChannels,
+    address::TestAddress, epoch_manager::TestEpochManager, messaging_impls::{TestInboundMessaging, TestOutboundMessaging}, signing_service::TestVoteSignatureService, sync::AlwaysSyncedSyncManager, NoopStateManager, RoundRobinLeaderStrategy, TestBlockTransactionExecutorBuilder, TestConsensusSpec, Validator, ValidatorChannels
 };
 
 pub struct ValidatorBuilder {
@@ -101,8 +91,8 @@ impl ValidatorBuilder {
                 .as_ref()
                 .unwrap()
                 .clone_for(self.address.clone(), self.public_key.clone(), self.shard);
-
-        let payload_processor = TestTransactionProcessor::new();
+        
+        let transaction_executor_builder = TestBlockTransactionExecutorBuilder::new();
 
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             self.address.clone(),
@@ -116,7 +106,7 @@ impl ValidatorBuilder {
             signing_service,
             noop_state_manager.clone(),
             transaction_pool,
-            payload_processor.clone(),
+            transaction_executor_builder,
             tx_events.clone(),
             tx_mempool,
             NoopHooks,
