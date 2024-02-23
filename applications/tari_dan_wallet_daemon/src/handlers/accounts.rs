@@ -77,6 +77,7 @@ use crate::{
         get_account_or_default,
         get_account_with_inputs,
         invalid_params,
+        wait_for_account_create_or_update,
         wait_for_result,
     },
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
@@ -478,7 +479,7 @@ pub async fn handle_reveal_funds(
             result: finalized.finalize,
         })
     })
-    .await?
+        .await?
 }
 
 #[allow(clippy::too_many_lines)]
@@ -508,22 +509,22 @@ pub async fn handle_claim_burn(
                 .as_str()
                 .ok_or_else(|| invalid_params::<&str>("reciprocal_claim_public_key", None))?,
         )
-        .map_err(|e| invalid_params("reciprocal_claim_public_key", Some(e)))?,
+            .map_err(|e| invalid_params("reciprocal_claim_public_key", Some(e)))?,
     )
-    .map_err(|e| invalid_params("reciprocal_claim_public_key", Some(e)))?;
+        .map_err(|e| invalid_params("reciprocal_claim_public_key", Some(e)))?;
     let commitment = base64::decode(
         claim_proof["commitment"]
             .as_str()
             .ok_or_else(|| invalid_params::<&str>("commitment", None))?,
     )
-    .map_err(|e| invalid_params("commitment", Some(e)))?;
+        .map_err(|e| invalid_params("commitment", Some(e)))?;
     let range_proof = base64::decode(
         claim_proof["range_proof"]
             .as_str()
             .or_else(|| claim_proof["rangeproof"].as_str())
             .ok_or_else(|| invalid_params::<&str>("range_proof", None))?,
     )
-    .map_err(|e| invalid_params("range_proof", Some(e)))?;
+        .map_err(|e| invalid_params("range_proof", Some(e)))?;
 
     let public_nonce = PublicKey::from_canonical_bytes(
         &base64::decode(
@@ -531,27 +532,27 @@ pub async fn handle_claim_burn(
                 .as_str()
                 .ok_or_else(|| invalid_params::<&str>("ownership_proof.public_nonce", None))?,
         )
-        .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e)))?,
+            .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e)))?,
     )
-    .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e)))?;
+        .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e)))?;
     let u = PrivateKey::from_canonical_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["u"]
                 .as_str()
                 .ok_or_else(|| invalid_params::<&str>("ownership_proof.u", None))?,
         )
-        .map_err(|e| invalid_params("ownership_proof.u", Some(e)))?,
+            .map_err(|e| invalid_params("ownership_proof.u", Some(e)))?,
     )
-    .map_err(|e| invalid_params("ownership_proof.u", Some(e)))?;
+        .map_err(|e| invalid_params("ownership_proof.u", Some(e)))?;
     let v = PrivateKey::from_canonical_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["v"]
                 .as_str()
                 .ok_or_else(|| invalid_params::<&str>("ownership_proof.v", None))?,
         )
-        .map_err(|e| invalid_params("ownership_proof.v", Some(e)))?,
+            .map_err(|e| invalid_params("ownership_proof.v", Some(e)))?,
     )
-    .map_err(|e| invalid_params("ownership_proof.v", Some(e)))?;
+        .map_err(|e| invalid_params("ownership_proof.v", Some(e)))?;
 
     let mut inputs = vec![];
     let accounts_api = sdk.accounts_api();
@@ -658,7 +659,7 @@ pub async fn handle_claim_burn(
         &accounts_api,
         context,
     )
-    .await?;
+        .await?;
 
     Ok(ClaimBurnResponse {
         transaction_id: tx_id,
@@ -738,12 +739,16 @@ async fn finish_claiming<T: WalletStore>(
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
-    if let Some(reason) = finalized.finalize.reject() {
+    if let Some(reason) = finalized.finalize.full_reject() {
         return Err(anyhow::anyhow!(
             "Fee transaction succeeded (fees charged) however the transaction failed: {}",
             reason
         ));
     }
+
+    // Wait for the monitor to pick up the new or updated account
+    wait_for_account_create_or_update(&mut events, &account_address).await?;
+
     Ok((tx_id, finalized))
 }
 
@@ -801,7 +806,7 @@ pub async fn handle_create_free_test_coins(
         &accounts_api,
         context,
     )
-    .await?;
+        .await?;
 
     let account = accounts_api.get_account_by_address(&account_address)?;
 
@@ -831,7 +836,7 @@ fn get_or_create_account<T: WalletStore>(
                 .ok_or_else(|| anyhow::anyhow!("No default account found. Please set a default account."))?;
 
             Some(account)
-        },
+        }
     };
     let (account_address, account_secret_key, new_account_name) = match maybe_account {
         Some(account) => {
@@ -843,7 +848,7 @@ fn get_or_create_account<T: WalletStore>(
             inputs.push(account_substate.address);
 
             (account.address, account_secret_key, None)
-        },
+        }
         None => {
             let name = account
                 .as_ref()
@@ -860,7 +865,7 @@ fn get_or_create_account<T: WalletStore>(
 
             // We have no involved substate addresses, so we need to add an output
             (account_address.into(), account_secret_key, Some(name.to_string()))
-        },
+        }
     };
     Ok((account_address, account_secret_key, new_account_name))
 }
@@ -1028,7 +1033,7 @@ async fn get_or_create_account_address(
             // the account already exists in the network, so we must add the substate id to the inputs
             debug!(target: LOG_TARGET, "Account {} exists. Adding input.", res.address);
             inputs.push(res.address);
-        },
+        }
         None => {
             // the account does not exists, so we must add a instruction to create it, matching the public key
             debug!(target: LOG_TARGET, "Account does not exist. Adding create instruction");
@@ -1040,7 +1045,7 @@ async fn get_or_create_account_address(
                 function: "create".to_string(),
                 args: args![owner_token],
             });
-        },
+        }
     };
 
     Ok(account_address)
@@ -1238,7 +1243,7 @@ pub async fn handle_confidential_transfer(
             result: finalized.finalize,
         })
     })
-    .await?
+        .await?
 }
 
 fn is_account_substate(substate: &Substate) -> bool {
