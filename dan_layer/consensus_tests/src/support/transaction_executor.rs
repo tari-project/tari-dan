@@ -26,7 +26,7 @@ impl<TStateStore> BlockTransactionExecutorBuilder<TStateStore> for TestBlockTran
 where TStateStore: StateStore
 {
     fn build(&self) -> Box<dyn BlockTransactionExecutor<TStateStore>> {
-        return Box::new(TestBlockTransactionProcessor::new());
+        Box::new(TestBlockTransactionProcessor::new())
     }
 }
 
