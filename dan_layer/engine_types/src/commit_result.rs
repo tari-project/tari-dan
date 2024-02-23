@@ -138,11 +138,7 @@ impl FinalizeResult {
     }
 
     pub fn accept(&self) -> Option<&SubstateDiff> {
-        match self.result {
-            TransactionResult::Accept(ref diff) => Some(diff),
-            TransactionResult::AcceptFeeRejectRest(ref diff, _) => Some(diff),
-            TransactionResult::Reject(_) => None,
-        }
+        self.result.accept()
     }
 
     pub fn into_accept(self) -> Option<SubstateDiff> {
@@ -154,19 +150,11 @@ impl FinalizeResult {
     }
 
     pub fn reject(&self) -> Option<&RejectReason> {
-        match self.result {
-            TransactionResult::Accept(_) => None,
-            TransactionResult::AcceptFeeRejectRest(_, _) => None,
-            TransactionResult::Reject(ref reason) => Some(reason),
-        }
+        self.result.reject()
     }
 
     pub fn full_reject(&self) -> Option<&RejectReason> {
-        match self.result {
-            TransactionResult::Accept(_) => None,
-            TransactionResult::AcceptFeeRejectRest(_, ref reason) => Some(reason),
-            TransactionResult::Reject(ref reason) => Some(reason),
-        }
+        self.result.full_reject()
     }
 
     pub fn is_full_accept(&self) -> bool {
@@ -233,7 +221,7 @@ impl TransactionResult {
             Self::AcceptFeeRejectRest(substate_diff, _) => substate_diff,
             Self::Reject(reject_result) => {
                 panic!("{}: {:?}", msg, reject_result);
-            },
+            }
         }
     }
 }
