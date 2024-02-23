@@ -10,6 +10,7 @@ use std::{
     process::Command,
 };
 
+use anyhow::anyhow;
 use clap::Parser;
 use generators::GeneratorType;
 use serde_json::{json, Value};
@@ -96,14 +97,26 @@ fn parse_hashmap(input: &str) -> anyhow::Result<HashMap<String, String>> {
     let mut map = HashMap::new();
     for pair in input.split(',') {
         let mut parts = pair.splitn(2, ':');
-        let key = parts.next().unwrap().to_string();
-        let value = parts.next().unwrap_or("").to_string();
+        let key = parts
+            .next()
+            .ok_or(anyhow!(
+                "The `data` input is wrong. Values should be comma separated and each value has to be in format \
+                 `string:string`."
+            ))?
+            .to_string();
+        let value = parts
+            .next()
+            .ok_or(anyhow!(
+                "The `data` input is wrong. Values should be comma separated and each value has to be in format \
+                 `string:string`."
+            ))?
+            .to_string();
         map.insert(key, value);
     }
     Ok(map)
 }
 
-fn generate(args: GenerateArgs) {
+fn generate(args: GenerateArgs) -> anyhow::Result<()> {
     let output = Command::new("cargo")
         .arg("generate")
         .arg("-n")
@@ -119,9 +132,10 @@ fn generate(args: GenerateArgs) {
         let stderr = String::from_utf8_lossy(&output.stderr);
         println!("{}", stderr);
     }
+    Ok(())
 }
 
-fn build(args: BuildArgs) {
+fn build(args: BuildArgs) -> anyhow::Result<()> {
     let path = args.path.unwrap_or(".".into());
     let path = Path::new(&path).join("package");
     let profile = match args.profile {
@@ -144,6 +158,7 @@ fn build(args: BuildArgs) {
         let stderr = String::from_utf8_lossy(&output.stderr);
         println!("{}", stderr);
     }
+    Ok(())
 }
 
 fn ensure_prefix(url: &str) -> String {
@@ -174,21 +189,15 @@ fn search_wasm_files(directory: &PathBuf) -> Option<String> {
     None
 }
 
-async fn publish(args: PublishArgs) {
-    build(args.clone().into());
+async fn publish(args: PublishArgs) -> anyhow::Result<()> {
+    build(args.clone().into())?;
 
     let directory = Path::new(&args.path.unwrap_or(".".into()))
         .join("package")
         .join("target")
         .join("wasm32-unknown-unknown")
         .join(args.profile.unwrap_or("release".to_string()));
-    let wasm_name = match search_wasm_files(&directory) {
-        Some(filename) => filename,
-        None => {
-            println!("No wasm file found in the directory");
-            return;
-        },
-    };
+    let wasm_name = search_wasm_files(&directory).ok_or(anyhow!("No wasm file found in the directory"))?;
 
     let file_path = directory.join(wasm_name.clone());
     let jrpc_url = ensure_prefix(args.dan_testing_jrpc_url.as_str());
@@ -207,9 +216,7 @@ async fn publish(args: PublishArgs) {
         .expect("failed to send request");
 
     if !response.status().is_success() {
-        println!("Failed to upload template");
-        println!("{:?}", response);
-        return;
+        return Err(anyhow!("Failed to upload template.\n{:?}", response));
     }
 
     let request = json!({
@@ -224,16 +231,16 @@ async fn publish(args: PublishArgs) {
         .json(&request)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .send()
-        .await
-        .unwrap();
+        .await?;
 
     if !response.status().is_success() {
         println!("Failed to mine");
         println!("{:?}", response);
     }
+    Ok(())
 }
 
-async fn list_registered_templates(args: ListRegisteredTemplatesArgs) {
+async fn list_registered_templates(args: ListRegisteredTemplatesArgs) -> anyhow::Result<()> {
     let jrpc_url = ensure_prefix(args.dan_testing_jrpc_url.as_str());
 
     let request = json!({
@@ -248,24 +255,31 @@ async fn list_registered_templates(args: ListRegisteredTemplatesArgs) {
         .json(&request)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .send()
-        .await
-        .unwrap();
-    let result = response.json::<Value>().await.unwrap();
+        .await?;
+    let result = response.json::<Value>().await?;
     println!("Templates:");
-    for templates in result["result"]["templates"].as_array().unwrap() {
-        let name = templates["name"].as_str().unwrap();
+    for templates in result["result"]["templates"]
+        .as_array()
+        .ok_or(anyhow!("Template address is not an array"))?
+    {
+        let name = templates["name"].as_str().unwrap_or("Name was not returned");
         let address_bytes = templates["address"]
             .as_array()
-            .unwrap()
+            .ok_or(anyhow!("Address is not an array"))?
             .iter()
-            .map(|v| v.as_u64().unwrap() as u8)
-            .collect::<Vec<_>>();
+            .map(|v| {
+                v.as_u64()
+                    .ok_or(anyhow!("Address is not a u64"))
+                    .and_then(|v| u8::try_from(v).map_err(|_| anyhow!("Address is not a u8")))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         let address = hex::encode(address_bytes.clone());
         println!("Template: {} Address: {}", name, address);
     }
+    Ok(())
 }
 
-async fn scaffold(args: ScaffoldArgs) {
+async fn scaffold(args: ScaffoldArgs) -> anyhow::Result<()> {
     let mut opts = generators::GeneratorOpts {
         output_path: "output/".into(),
         liquid: Some(generators::LiquidGeneratorOpts {
@@ -277,8 +291,8 @@ async fn scaffold(args: ScaffoldArgs) {
     };
 
     if let Some(config_file) = &args.generator_config_file {
-        let config = fs::read_to_string(config_file).unwrap();
-        opts = serde_json::from_str(&config).unwrap();
+        let config = fs::read_to_string(config_file)?;
+        opts = serde_json::from_str(&config)?;
     }
 
     if let Some(output_path) = args.output_path {
@@ -293,7 +307,7 @@ async fn scaffold(args: ScaffoldArgs) {
     let request = json!({
         "jsonrpc" : "2.0",
         "method": "get_template",
-        "params": [hex::decode(args.address).unwrap()],
+        "params": [hex::decode(args.address)?],
         "id": 1
     });
     let response = reqwest::Client::new()
@@ -301,17 +315,20 @@ async fn scaffold(args: ScaffoldArgs) {
         .json(&request)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .send()
-        .await
-        .unwrap();
-    let response = response.json::<Value>().await.unwrap();
-    let name: &str = response["result"]["registration_metadata"]["name"].as_str().unwrap();
-    let url = response["result"]["registration_metadata"]["url"].as_str().unwrap();
-    let file_response = reqwest::get(url).await.unwrap();
+        .await?;
+    let response = response.json::<Value>().await?;
+    let name: &str = response["result"]["registration_metadata"]["name"]
+        .as_str()
+        .unwrap_or("unnamed.wasm");
+    let url = response["result"]["registration_metadata"]["url"]
+        .as_str()
+        .ok_or(anyhow!("No url found"))?;
+    let file_response = reqwest::get(url).await?;
     let wasm_file_path = opts.output_path.join(name);
-    create_dir_all(wasm_file_path.parent().unwrap()).unwrap();
-    let mut dest = File::create(wasm_file_path.clone()).unwrap();
-    let content = file_response.bytes().await.unwrap();
-    std::io::copy(&mut content.as_ref(), &mut dest).unwrap();
+    create_dir_all(wasm_file_path.parent().ok_or(anyhow!("Wasm file path is not valid."))?)?;
+    let mut dest = File::create(wasm_file_path.clone())?;
+    let content = file_response.bytes().await?;
+    std::io::copy(&mut content.as_ref(), &mut dest)?;
     drop(dest);
 
     if let Some(ref mut opts) = opts.liquid {
@@ -321,24 +338,26 @@ async fn scaffold(args: ScaffoldArgs) {
     }
 
     println!("Scaffolding wasm at {:?}", wasm_file_path);
-    let f = fs::read(&wasm_file_path).unwrap();
+    let f = fs::read(&wasm_file_path)?;
     let wasm = WasmModule::from_code(f);
-    let loaded_template = wasm.load_template().unwrap();
+    let loaded_template = wasm.load_template()?;
     let template = loaded_template.into();
     match args.generator {
-        GeneratorType::RustTemplateCli => LiquidGenerator::new(LiquidTemplate::RustCli, opts)
-            .generate(&template)
-            .unwrap(),
+        GeneratorType::RustTemplateCli => LiquidGenerator::new(LiquidTemplate::RustCli, opts).generate(&template)?,
     };
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() {
-    match Cli::parse() {
+    let result = match Cli::parse() {
         Cli::Generate(args) => generate(args),
         Cli::Build(args) => build(args),
         Cli::Publish(args) => publish(args).await,
         Cli::ListRegisteredTemplates(args) => list_registered_templates(args).await,
         Cli::Scaffold(args) => scaffold(args).await,
+    };
+    if result.is_err() {
+        println!("Error: {}", result.err().unwrap());
     }
 }
