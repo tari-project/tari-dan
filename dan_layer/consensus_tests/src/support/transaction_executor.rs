@@ -3,10 +3,13 @@
 
 use std::time::Duration;
 
-use tari_consensus::traits::{BlockTransactionExecutor, BlockTransactionExecutorBuilder, BlockTransactionExecutorError};
+use tari_consensus::traits::{
+    BlockTransactionExecutor,
+    BlockTransactionExecutorBuilder,
+    BlockTransactionExecutorError,
+};
 use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
-use tari_engine_types::
-    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult};
+use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult};
 use tari_template_lib::Hash;
 use tari_transaction::Transaction;
 
@@ -19,11 +22,11 @@ impl TestBlockTransactionExecutorBuilder {
     }
 }
 
-impl<TStateStore> BlockTransactionExecutorBuilder<TStateStore> for TestBlockTransactionExecutorBuilder 
+impl<TStateStore> BlockTransactionExecutorBuilder<TStateStore> for TestBlockTransactionExecutorBuilder
 where TStateStore: StateStore
 {
     fn build(&self) -> Box<dyn BlockTransactionExecutor<TStateStore>> {
-        return Box::new(TestBlockTransactionProcessor::new())
+        return Box::new(TestBlockTransactionProcessor::new());
     }
 }
 
@@ -62,5 +65,3 @@ where TStateStore: StateStore
         Ok(ExecutedTransaction::new(transaction, result, outputs, execution_time))
     }
 }
-
-

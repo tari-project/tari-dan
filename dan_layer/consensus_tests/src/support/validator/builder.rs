@@ -13,7 +13,17 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tokio::sync::{broadcast, mpsc, watch};
 
 use crate::support::{
-    address::TestAddress, epoch_manager::TestEpochManager, messaging_impls::{TestInboundMessaging, TestOutboundMessaging}, signing_service::TestVoteSignatureService, sync::AlwaysSyncedSyncManager, NoopStateManager, RoundRobinLeaderStrategy, TestBlockTransactionExecutorBuilder, TestConsensusSpec, Validator, ValidatorChannels
+    address::TestAddress,
+    epoch_manager::TestEpochManager,
+    messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
+    signing_service::TestVoteSignatureService,
+    sync::AlwaysSyncedSyncManager,
+    NoopStateManager,
+    RoundRobinLeaderStrategy,
+    TestBlockTransactionExecutorBuilder,
+    TestConsensusSpec,
+    Validator,
+    ValidatorChannels,
 };
 
 pub struct ValidatorBuilder {
@@ -91,7 +101,7 @@ impl ValidatorBuilder {
                 .as_ref()
                 .unwrap()
                 .clone_for(self.address.clone(), self.public_key.clone(), self.shard);
-        
+
         let transaction_executor_builder = TestBlockTransactionExecutorBuilder::new();
 
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
