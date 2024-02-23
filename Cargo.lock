@@ -9405,6 +9405,7 @@ dependencies = [
  "anyhow",
  "clap 3.2.25",
  "convert_case 0.6.0",
+ "hex",
  "liquid",
  "liquid-core",
  "reqwest",

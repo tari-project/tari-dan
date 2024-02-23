@@ -12,6 +12,7 @@ tari_dan_engine = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 convert_case = { workspace = true }
+hex = { workspace = true }
 liquid = { workspace = true }
 liquid-core = { workspace = true }
 reqwest = { workspace = true, features = ["multipart", "json"] }

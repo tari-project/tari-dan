@@ -5,7 +5,7 @@ mod generators;
 
 use std::{
     collections::HashMap,
-    fs,
+    fs::{self, create_dir_all, File},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -76,8 +76,6 @@ struct ListRegisteredTemplatesArgs {
 
 #[derive(clap::Args, Debug)]
 struct ScaffoldArgs {
-    #[clap(long, short = 'p')]
-    path: PathBuf,
     #[clap(long, short = 's')]
     pub clean: bool,
     #[clap(long, short = 'o')]
@@ -88,8 +86,10 @@ struct ScaffoldArgs {
     pub data: Option<HashMap<String, String>>,
     #[clap(long, short = 'c', alias = "config")]
     pub generator_config_file: Option<PathBuf>,
-    #[clap(long)]
-    profile: Option<String>,
+    #[clap(long, short = 'a')]
+    address: String,
+    #[clap(long, short = 'j')]
+    dan_testing_jrpc_url: String,
 }
 
 fn parse_hashmap(input: &str) -> anyhow::Result<HashMap<String, String>> {
@@ -244,7 +244,7 @@ async fn list_registered_templates(args: ListRegisteredTemplatesArgs) {
     });
 
     let response = reqwest::Client::new()
-        .post(jrpc_url)
+        .post(jrpc_url.clone())
         .json(&request)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .send()
@@ -253,27 +253,27 @@ async fn list_registered_templates(args: ListRegisteredTemplatesArgs) {
     let result = response.json::<Value>().await.unwrap();
     println!("Templates:");
     for templates in result["result"]["templates"].as_array().unwrap() {
-        println!("{}", templates["name"].as_str().unwrap());
+        let name = templates["name"].as_str().unwrap();
+        let address_bytes = templates["address"]
+            .as_array()
+            .unwrap()
+            .into_iter()
+            .map(|v| v.as_u64().unwrap() as u8)
+            .collect::<Vec<_>>();
+        let address = hex::encode(address_bytes.clone());
+        println!("Template: {} Address: {}", name, address);
     }
 }
 
-fn scaffold(args: ScaffoldArgs) {
-    let directory = Path::new(&args.path)
-        .join("package")
-        .join("target")
-        .join("wasm32-unknown-unknown")
-        .join(args.profile.unwrap_or("release".to_string()));
-    let wasm_name = match search_wasm_files(&directory) {
-        Some(filename) => filename,
-        None => {
-            println!("No wasm file found in the directory");
-            return;
-        },
-    };
-
+async fn scaffold(args: ScaffoldArgs) {
     let mut opts = generators::GeneratorOpts {
         output_path: "output/".into(),
-        liquid: None,
+        liquid: Some(generators::LiquidGeneratorOpts {
+            skip_format: false,
+            variables: vec![("template_address".to_string(), Value::String(args.address.clone()))]
+                .into_iter()
+                .collect(),
+        }),
     };
 
     if let Some(config_file) = &args.generator_config_file {
@@ -285,19 +285,43 @@ fn scaffold(args: ScaffoldArgs) {
         opts.output_path = output_path;
     }
 
+    if args.clean && fs::remove_dir_all(&opts.output_path).is_err() {
+        println!("Failed to clean output directory");
+    }
+
+    let jrpc_url = ensure_prefix(args.dan_testing_jrpc_url.as_str());
+    let request = json!({
+        "jsonrpc" : "2.0",
+        "method": "get_template",
+        "params": [hex::decode(args.address).unwrap()],
+        "id": 1
+    });
+    let response = reqwest::Client::new()
+        .post(jrpc_url)
+        .json(&request)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .send()
+        .await
+        .unwrap();
+    let response = response.json::<Value>().await.unwrap();
+    let name: &str = response["result"]["registration_metadata"]["name"].as_str().unwrap();
+    let url = response["result"]["registration_metadata"]["url"].as_str().unwrap();
+    let file_response = reqwest::get(url).await.unwrap();
+    let wasm_file_path = opts.output_path.join(name);
+    create_dir_all(wasm_file_path.parent().unwrap()).unwrap();
+    let mut dest = File::create(wasm_file_path.clone()).unwrap();
+    let content = file_response.bytes().await.unwrap();
+    std::io::copy(&mut content.as_ref(), &mut dest).unwrap();
+    drop(dest);
+
     if let Some(ref mut opts) = opts.liquid {
         for (k, v) in args.data.unwrap_or_default() {
             opts.variables.insert(k, serde_json::Value::String(v));
         }
     }
 
-    if args.clean && fs::remove_dir_all(&opts.output_path).is_err() {
-        println!("Failed to clean output directory");
-    }
-
-    let wasm_path = directory.join(wasm_name);
-    println!("Scaffolding wasm at {:?}", wasm_path);
-    let f = fs::read(&wasm_path).unwrap();
+    println!("Scaffolding wasm at {:?}", wasm_file_path);
+    let f = fs::read(&wasm_file_path).unwrap();
     let wasm = WasmModule::from_code(f);
     let loaded_template = wasm.load_template().unwrap();
     let template = loaded_template.into();
@@ -315,6 +339,6 @@ async fn main() {
         Cli::Build(args) => build(args),
         Cli::Publish(args) => publish(args).await,
         Cli::ListRegisteredTemplates(args) => list_registered_templates(args).await,
-        Cli::Scaffold(args) => scaffold(args),
+        Cli::Scaffold(args) => scaffold(args).await,
     }
 }
