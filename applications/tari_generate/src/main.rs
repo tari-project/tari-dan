@@ -257,7 +257,7 @@ async fn list_registered_templates(args: ListRegisteredTemplatesArgs) {
         let address_bytes = templates["address"]
             .as_array()
             .unwrap()
-            .into_iter()
+            .iter()
             .map(|v| v.as_u64().unwrap() as u8)
             .collect::<Vec<_>>();
         let address = hex::encode(address_bytes.clone());
