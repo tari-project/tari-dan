@@ -101,6 +101,8 @@ message ConfidentialOutputProof {
   ConfidentialStatement output_statement = 1;
   ConfidentialStatement change_statement = 2;
   bytes range_proof = 3;
+  uint64 output_revealed_amount = 4;
+  uint64 change_revealed_amount = 5;
 }
 
 message ConfidentialStatement {
@@ -108,5 +110,4 @@ message ConfidentialStatement {
   bytes sender_public_nonce = 2;
   bytes encrypted_value = 3;
   uint64 minimum_value_promise = 4;
-  uint64 revealed_amount = 5;
 }

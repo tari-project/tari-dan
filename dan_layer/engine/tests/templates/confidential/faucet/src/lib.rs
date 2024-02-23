@@ -44,6 +44,19 @@ mod faucet_template {
             .create()
         }
 
+        pub fn mint_revealed(&mut self, amount: Amount) {
+            let proof = ConfidentialOutputProof::mint_revealed(amount);
+            let bucket = ResourceManager::get(self.vault.resource_address()).mint_confidential(proof);
+            self.vault.deposit(bucket);
+        }
+
+        pub fn mint_revealed_with_range_proof(&mut self, amount: Amount) {
+            let mut proof = ConfidentialOutputProof::mint_revealed(amount);
+            proof.range_proof = vec![1, 2, 3];
+            let bucket = ResourceManager::get(self.vault.resource_address()).mint_confidential(proof);
+            self.vault.deposit(bucket);
+        }
+
         pub fn mint_more(&mut self, proof: ConfidentialOutputProof) {
             let bucket = ResourceManager::get(self.vault.resource_address()).mint_confidential(proof);
             self.vault.deposit(bucket);
@@ -61,6 +74,10 @@ mod faucet_template {
         /// Utility function for tests
         pub fn split_coins(bucket: Bucket, proof: ConfidentialWithdrawProof) -> (Bucket, Bucket) {
             bucket.split_confidential(proof)
+        }
+
+        pub fn vault_balance(&self) -> Amount {
+            self.vault.balance()
         }
     }
 }

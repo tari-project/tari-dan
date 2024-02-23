@@ -89,7 +89,12 @@ pub fn generate_withdraw_proof(
     let input_commitment = PedersonCommitmentBytes::from(copy_fixed(input_commitment.as_bytes()));
     let balance_proof = generate_balance_proof(input_mask, &output_mask, change_mask.as_ref(), revealed_amount);
 
-    let output_statement = output_proof.output_statement;
+    let output_statement = output_proof.output_statement.map(|o| ConfidentialStatement {
+        commitment: o.commitment,
+        sender_public_nonce: Default::default(),
+        encrypted_data: EncryptedData::default(),
+        minimum_value_promise: o.minimum_value_promise,
+    });
 
     WithdrawProofOutput {
         output_mask,
@@ -97,20 +102,15 @@ pub fn generate_withdraw_proof(
         proof: ConfidentialWithdrawProof {
             inputs: vec![input_commitment],
             output_proof: ConfidentialOutputProof {
-                output_statement: ConfidentialStatement {
-                    commitment: output_statement.commitment,
-                    sender_public_nonce: Default::default(),
-                    encrypted_data: EncryptedData::default(),
-                    minimum_value_promise: output_statement.minimum_value_promise,
-                    revealed_amount,
-                },
+                output_statement,
+                output_revealed_amount: revealed_amount,
                 change_statement: output_proof.change_statement.map(|statement| ConfidentialStatement {
                     commitment: statement.commitment,
                     sender_public_nonce: Default::default(),
                     encrypted_data: EncryptedData::default(),
                     minimum_value_promise: statement.minimum_value_promise,
-                    revealed_amount: Amount::zero(),
                 }),
+                change_revealed_amount: Amount::zero(),
                 range_proof: output_proof.range_proof,
             },
             balance_proof,
@@ -142,8 +142,19 @@ pub fn generate_withdraw_proof_with_inputs(
         revealed_amount,
     );
 
-    let output_statement = output_proof.output_statement;
-    let change_statement = output_proof.change_statement;
+    let output_statement = output_proof.output_statement.map(|o| ConfidentialStatement {
+        commitment: o.commitment,
+        // R and encrypted value are informational and can be left out as far as the VN is concerned
+        sender_public_nonce: Default::default(),
+        encrypted_data: EncryptedData::default(),
+        minimum_value_promise: o.minimum_value_promise,
+    });
+    let change_statement = output_proof.change_statement.map(|ch| ConfidentialStatement {
+        commitment: ch.commitment,
+        sender_public_nonce: Default::default(),
+        encrypted_data: EncryptedData::default(),
+        minimum_value_promise: ch.minimum_value_promise,
+    });
 
     WithdrawProofOutput {
         output_mask,
@@ -151,21 +162,10 @@ pub fn generate_withdraw_proof_with_inputs(
         proof: ConfidentialWithdrawProof {
             inputs: input_commitments,
             output_proof: ConfidentialOutputProof {
-                output_statement: ConfidentialStatement {
-                    commitment: output_statement.commitment,
-                    // R and encrypted value are informational and can be left out as far as the VN is concerned
-                    sender_public_nonce: Default::default(),
-                    encrypted_data: Default::default(),
-                    minimum_value_promise: output_statement.minimum_value_promise,
-                    revealed_amount,
-                },
-                change_statement: change_statement.map(|change| ConfidentialStatement {
-                    commitment: change.commitment,
-                    sender_public_nonce: Default::default(),
-                    encrypted_data: Default::default(),
-                    minimum_value_promise: change.minimum_value_promise,
-                    revealed_amount: Amount::zero(),
-                }),
+                output_statement,
+                output_revealed_amount: revealed_amount,
+                change_statement,
+                change_revealed_amount: Amount::zero(),
                 range_proof: output_proof.range_proof,
             },
             balance_proof,
@@ -183,27 +183,27 @@ fn generate_confidential_proof_from_statements(
     output_statement: ConfidentialProofStatement,
     change_statement: Option<ConfidentialProofStatement>,
 ) -> Result<ConfidentialOutputProof, RangeProofError> {
-    let proof_change_statement = change_statement.as_ref().map(|statement| ConfidentialStatement {
+    let output_range_proof = generate_extended_bullet_proof(&output_statement, change_statement.as_ref())?;
+
+    let proof_change_statement = change_statement.map(|statement| ConfidentialStatement {
         commitment: commitment_to_bytes(&statement.mask, statement.amount),
         sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(statement.sender_public_nonce.as_bytes())
             .expect("[generate_confidential_proof] change nonce"),
         encrypted_data: Default::default(),
         minimum_value_promise: statement.minimum_value_promise,
-        revealed_amount: Amount::zero(),
     });
 
-    let output_range_proof = generate_extended_bullet_proof(&output_statement, change_statement.as_ref())?;
-
     Ok(ConfidentialOutputProof {
-        output_statement: ConfidentialStatement {
+        output_statement: Some(ConfidentialStatement {
             commitment: commitment_to_bytes(&output_statement.mask, output_statement.amount),
             sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(output_statement.sender_public_nonce.as_bytes())
                 .expect("[generate_confidential_proof] output nonce"),
             encrypted_data: Default::default(),
             minimum_value_promise: output_statement.minimum_value_promise,
-            revealed_amount: Amount::zero(),
-        },
+        }),
+        output_revealed_amount: Amount::zero(),
         change_statement: proof_change_statement,
+        change_revealed_amount: Amount::zero(),
         range_proof: output_range_proof.0,
     })
 }

@@ -60,12 +60,7 @@ impl ConfidentialCryptoApi {
             .iter()
             .fold(PrivateKey::default(), |acc, output| acc + &output.mask);
 
-        let revealed_amount = output_proof.output_statement.revealed_amount +
-            output_proof
-                .change_statement
-                .as_ref()
-                .map(|st| st.revealed_amount)
-                .unwrap_or_default();
+        let revealed_amount = output_proof.output_revealed_amount + output_proof.change_revealed_amount;
         let balance_proof = generate_balance_proof(
             &agg_input_mask,
             &output_statement.mask,
@@ -82,6 +77,8 @@ impl ConfidentialCryptoApi {
                 output_statement,
                 change_statement,
                 range_proof: output_proof.range_proof,
+                output_revealed_amount: output_proof.output_revealed_amount,
+                change_revealed_amount: output_proof.change_revealed_amount,
             },
             balance_proof,
         })

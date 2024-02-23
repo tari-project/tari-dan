@@ -5,7 +5,7 @@
 // there is no way to actually mutate the compressed value once it is lazily initialized.
 #![allow(clippy::mutable_key_type)]
 
-use std::{collections::BTreeMap, iter, mem};
+use std::{collections::BTreeMap, mem};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::Commitment;
@@ -89,12 +89,17 @@ impl ResourceContainer {
         }
     }
 
-    pub fn validate_confidential_mint(
+    pub fn mint_confidential(
         address: ResourceAddress,
         proof: ConfidentialOutputProof,
     ) -> Result<ResourceContainer, ResourceError> {
         if proof.change_statement.is_some() {
             return Err(ResourceError::InvalidConfidentialMintWithChange);
+        }
+        if !proof.change_revealed_amount.is_zero() {
+            return Err(ResourceError::InvalidConfidentialProof {
+                details: "Change revealed amount must be zero for minting".to_string(),
+            });
         }
         let validated_proof = validate_confidential_proof(&proof)?;
         assert!(
@@ -103,8 +108,12 @@ impl ResourceContainer {
         );
         Ok(ResourceContainer::Confidential {
             address,
-            commitments: iter::once((validated_proof.output.commitment.clone(), validated_proof.output)).collect(),
-            revealed_amount: Amount::zero(),
+            commitments: validated_proof
+                .output
+                .into_iter()
+                .map(|o| (o.commitment.clone(), o))
+                .collect(),
+            revealed_amount: validated_proof.output_revealed_amount,
             locked_commitments: BTreeMap::new(),
             locked_revealed_amount: Amount::zero(),
         })
@@ -370,7 +379,7 @@ impl ResourceContainer {
                 if let Some(change) = validated_proof.change_output {
                     if commitments.insert(change.commitment.clone(), change).is_some() {
                         return Err(ResourceError::InvariantError(
-                            "Confidential deposit contained duplicate commitment in change commitment".to_string(),
+                            "Confidential withdraw contained duplicate commitment in change commitment".to_string(),
                         ));
                     }
                     *revealed_amount += validated_proof.change_revealed_amount;
@@ -378,7 +387,7 @@ impl ResourceContainer {
 
                 Ok(ResourceContainer::confidential(
                     *self.resource_address(),
-                    Some((validated_proof.output.commitment.clone(), validated_proof.output)),
+                    validated_proof.output.map(|o| (o.commitment.clone(), o)),
                     validated_proof.output_revealed_amount,
                 ))
             },
