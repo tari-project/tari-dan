@@ -132,8 +132,8 @@ async fn indexer_scans_network_events(
 
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
     let query = format!(
-        r#"{{ getEventsForComponent(componentAddress: "{}", version: {:?}) {{ componentAddress, templateAddress, txHash, topic, payload }} }}"#,
-        component_address.substate_id, component_address.version
+        r#"{{ getEventsForComponent(componentAddress: "{}", version: {}) {{ componentAddress, templateAddress, txHash, topic, payload }} }}"#,
+        component_address.substate_id, component_address.version.unwrap()
     );
     let res = graphql_client
         .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
