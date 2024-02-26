@@ -32,6 +32,7 @@ use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use log::{error, warn};
 use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
+use tari_crypto::tari_utilities::hex::to_hex;
 use tari_dan_app_utilities::{
     keypair::RistrettoKeypair,
     substate_file_cache::SubstateFileCache,
@@ -74,9 +75,12 @@ use tari_indexer_client::{
         IndexerTransactionFinalizedResult,
         InspectSubstateRequest,
         InspectSubstateResponse,
+        ListTemplatesRequest,
+        ListTemplatesResponse,
         NonFungibleSubstate,
         SubmitTransactionRequest,
         SubmitTransactionResponse,
+        TemplateMetadata,
     },
 };
 use tari_networking::{is_supported_multiaddr, NetworkingHandle, NetworkingService};
@@ -623,6 +627,28 @@ impl JsonRpcHandlers {
         Ok(JsonRpcResponse::success(answer_id, GetTemplateDefinitionResponse {
             definition: template.template_def().clone(),
             name: template.template_name().to_string(),
+        }))
+    }
+
+    pub async fn list_templates(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let req: ListTemplatesRequest = value.parse_params()?;
+        let templates = self
+            .template_manager
+            .fetch_template_metadata(req.limit as usize)
+            .map_err(|e| Self::internal_error(answer_id, e))?;
+
+        Ok(JsonRpcResponse::success(answer_id, ListTemplatesResponse {
+            templates: templates
+                .into_iter()
+                .map(|t| TemplateMetadata {
+                    name: t.name,
+                    address: t.address,
+                    url: t.url,
+                    binary_sha: to_hex(&t.binary_sha),
+                    height: t.height,
+                })
+                .collect(),
         }))
     }
 
