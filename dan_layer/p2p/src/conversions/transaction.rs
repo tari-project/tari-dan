@@ -405,6 +405,7 @@ impl TryFrom<proto::transaction::ConfidentialWithdrawProof> for ConfidentialWith
                     PedersonCommitmentBytes::from_bytes(&v).map_err(|e| anyhow!("Invalid input commitment bytes: {e}"))
                 })
                 .collect::<Result<_, _>>()?,
+            input_revealed_amount: val.input_revealed_amount.try_into()?,
             output_proof: val
                 .output_proof
                 .ok_or_else(|| anyhow!("output_proof is missing"))?
@@ -419,6 +420,10 @@ impl From<ConfidentialWithdrawProof> for proto::transaction::ConfidentialWithdra
     fn from(val: ConfidentialWithdrawProof) -> Self {
         Self {
             inputs: val.inputs.iter().map(|v| v.as_bytes().to_vec()).collect(),
+            input_revealed_amount: val
+                .input_revealed_amount
+                .as_u64_checked()
+                .expect("input_revealed_amount is negative or too large"),
             output_proof: Some(val.output_proof.into()),
             balance_proof: val.balance_proof.as_bytes().to_vec(),
         }

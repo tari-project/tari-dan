@@ -63,10 +63,41 @@ pub struct ConfidentialWithdrawProof {
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub inputs: Vec<PedersonCommitmentBytes>,
+    /// The amount to withdraw from revealed funds i.e. the revealed funds as inputs
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub input_revealed_amount: Amount,
     pub output_proof: ConfidentialOutputProof,
     /// Balance proof
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub balance_proof: BalanceProofSignature,
+}
+
+impl ConfidentialWithdrawProof {
+    /// Creates a withdrawal proof for revealed funds of a specific amount
+    pub fn revealed_withdraw(amount: Amount) -> Self {
+        // There are no confidential inputs or outputs (this amounts to the same thing as a Fungible resource transfer)
+        // So signature s = 0 + e.x where x is a 0 excess, is valid.
+        let balance_proof = BalanceProofSignature::try_from_parts(&[0u8; 32], &[0u8; 32]).unwrap();
+
+        Self {
+            inputs: vec![],
+            input_revealed_amount: amount,
+            output_proof: ConfidentialOutputProof::mint_revealed(amount),
+            balance_proof,
+        }
+    }
+
+    pub fn revealed_input_amount(&self) -> Amount {
+        self.input_revealed_amount
+    }
+
+    pub fn revealed_output_amount(&self) -> Amount {
+        self.output_proof.output_revealed_amount
+    }
+
+    pub fn revealed_change_amount(&self) -> Amount {
+        self.output_proof.change_revealed_amount
+    }
 }
 
 /// Used by the receiver to determine the value component of the commitment, in both confidential transfers and Minotari

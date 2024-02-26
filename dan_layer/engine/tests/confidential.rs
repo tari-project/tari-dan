@@ -329,6 +329,7 @@ fn multi_commitment_join() {
             (withdraw_proof1.output_mask, Amount(1000)),
             (withdraw_proof2.output_mask, Amount(1000)),
         ],
+        Amount::zero(),
         Amount(2000),
         None,
         Amount(0),
@@ -387,24 +388,46 @@ fn multi_commitment_join() {
 }
 
 #[test]
-fn mint_revealed() {
+fn mint_and_transfer_revealed() {
     let (confidential_proof, _mask, _change) = generate_confidential_proof(Amount(100), None);
-    let (mut template_test, faucet, _faucet_resx) = setup(confidential_proof);
+    let (mut test, faucet, faucet_resx) = setup(confidential_proof);
 
-    template_test.call_method::<()>(faucet, "mint_revealed", args![Amount(123)], vec![]);
-    let balance: Amount = template_test.call_method(faucet, "vault_balance", args![], vec![]);
+    let faucet_resx = faucet_resx.as_resource_address().unwrap();
+
+    let (user_account, _, _) = test.create_empty_account();
+
+    test.call_method::<()>(faucet, "mint_revealed", args![Amount(123)], vec![]);
+    let balance: Amount = test.call_method(faucet, "vault_balance", args![], vec![]);
     assert_eq!(balance, Amount(123));
+
+    // Convert 100 revealed funds to confidential and the remaining 23 to revealed
+    let withdraw = generate_withdraw_proof_with_inputs(&[], Amount(123), Amount(100), None, Amount(23));
+
+    let result = test.execute_expect_success(
+        Transaction::builder()
+            .call_method(faucet, "take_free_coins", args![withdraw.proof])
+            .put_last_instruction_output_on_workspace("b")
+            .call_method(user_account, "deposit", args![Workspace("b")])
+            .call_method(user_account, "balance", args![faucet_resx])
+            .sign(test.get_test_secret_key())
+            .build(),
+        vec![],
+    );
+
+    // The account should have a revealed balance of 23 revealed funds
+    let account_balance = result.finalize.execution_results[3].decode::<Amount>().unwrap();
+    assert_eq!(account_balance, Amount(23));
 }
 
 #[test]
 fn mint_revealed_with_invalid_proof() {
     let (confidential_proof, _mask, _change) = generate_confidential_proof(Amount(100), None);
-    let (mut template_test, faucet, _faucet_resx) = setup(confidential_proof);
+    let (mut test, faucet, _faucet_resx) = setup(confidential_proof);
 
-    let reason = template_test.execute_expect_failure(
+    let reason = test.execute_expect_failure(
         Transaction::builder()
             .call_method(faucet, "mint_revealed_with_range_proof", args![Amount(123)])
-            .sign(template_test.get_test_secret_key())
+            .sign(test.get_test_secret_key())
             .build(),
         vec![],
     );

@@ -63,7 +63,11 @@ mod faucet_template {
         }
 
         pub fn take_free_coins(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
-            debug!("Withdrawing <unknown> coins from faucet");
+            debug!(
+                "Withdrawing {} revealed coins from faucet and {} commitments",
+                proof.revealed_input_amount(),
+                proof.inputs.len()
+            );
             self.vault.withdraw_confidential(proof)
         }
 

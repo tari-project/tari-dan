@@ -53,12 +53,14 @@ pub fn generate_balance_proof(
     input_mask: &PrivateKey,
     output_mask: &PrivateKey,
     change_mask: Option<&PrivateKey>,
-    revealed_amount: Amount,
+    input_revealed_amount: Amount,
+    output_revealed_amount: Amount,
 ) -> BalanceProofSignature {
     let secret_excess = input_mask - output_mask - change_mask.unwrap_or(&PrivateKey::default());
     let excess = PublicKey::from_secret_key(&secret_excess);
     let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
-    let challenge = challenges::confidential_withdraw64(&excess, &public_nonce, revealed_amount);
+    let challenge =
+        challenges::confidential_withdraw64(&excess, &public_nonce, input_revealed_amount, output_revealed_amount);
 
     let sig = Signature::sign_raw_uniform(&secret_excess, nonce, &challenge).unwrap();
     BalanceProofSignature::try_from_parts(sig.get_public_nonce().as_bytes(), sig.get_signature().as_bytes()).unwrap()
@@ -87,7 +89,13 @@ pub fn generate_withdraw_proof(
     let total_amount = output_amount + change_amount.unwrap_or_else(Amount::zero) + revealed_amount;
     let input_commitment = get_commitment_factory().commit_value(input_mask, total_amount.value() as u64);
     let input_commitment = PedersonCommitmentBytes::from(copy_fixed(input_commitment.as_bytes()));
-    let balance_proof = generate_balance_proof(input_mask, &output_mask, change_mask.as_ref(), revealed_amount);
+    let balance_proof = generate_balance_proof(
+        input_mask,
+        &output_mask,
+        change_mask.as_ref(),
+        Amount::zero(),
+        revealed_amount,
+    );
 
     let output_statement = output_proof.output_statement.map(|o| ConfidentialStatement {
         commitment: o.commitment,
@@ -101,6 +109,7 @@ pub fn generate_withdraw_proof(
         change_mask,
         proof: ConfidentialWithdrawProof {
             inputs: vec![input_commitment],
+            input_revealed_amount: Amount::zero(),
             output_proof: ConfidentialOutputProof {
                 output_statement,
                 output_revealed_amount: revealed_amount,
@@ -119,27 +128,29 @@ pub fn generate_withdraw_proof(
 }
 
 pub fn generate_withdraw_proof_with_inputs(
-    input: &[(PrivateKey, Amount)],
+    inputs: &[(PrivateKey, Amount)],
+    input_revealed_amount: Amount,
     output_amount: Amount,
     change_amount: Option<Amount>,
-    revealed_amount: Amount,
+    revealed_output_amount: Amount,
 ) -> WithdrawProofOutput {
     let (output_proof, output_mask, change_mask) = generate_confidential_proof(output_amount, change_amount);
-    let input_commitments = input
+    let input_commitments = inputs
         .iter()
         .map(|(input_mask, amount)| {
             let input_commitment = get_commitment_factory().commit_value(input_mask, amount.value() as u64);
             PedersonCommitmentBytes::from(copy_fixed(input_commitment.as_bytes()))
         })
         .collect();
-    let input_private_excess = input
+    let input_private_excess = inputs
         .iter()
         .fold(PrivateKey::default(), |acc, (input_mask, _)| acc + input_mask);
     let balance_proof = generate_balance_proof(
         &input_private_excess,
         &output_mask,
         change_mask.as_ref(),
-        revealed_amount,
+        input_revealed_amount,
+        revealed_output_amount,
     );
 
     let output_statement = output_proof.output_statement.map(|o| ConfidentialStatement {
@@ -161,9 +172,10 @@ pub fn generate_withdraw_proof_with_inputs(
         change_mask,
         proof: ConfidentialWithdrawProof {
             inputs: input_commitments,
+            input_revealed_amount,
             output_proof: ConfidentialOutputProof {
                 output_statement,
-                output_revealed_amount: revealed_amount,
+                output_revealed_amount: revealed_output_amount,
                 change_statement,
                 change_revealed_amount: Amount::zero(),
                 range_proof: output_proof.range_proof,

@@ -93,8 +93,9 @@ message OptionalVersion {
 
 message ConfidentialWithdrawProof {
   repeated bytes inputs = 1;
-  ConfidentialOutputProof output_proof = 2;
-  bytes balance_proof = 3;
+  uint64 input_revealed_amount = 2;
+  ConfidentialOutputProof output_proof = 3;
+  bytes balance_proof = 4;
 }
 
 message ConfidentialOutputProof {

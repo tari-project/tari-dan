@@ -140,6 +140,8 @@ pub async fn handle_create_transfer_proof(
 
     let proof = sdk.confidential_crypto_api().generate_withdraw_proof(
         &inputs,
+        // TODO: support for using revealed funds as input for proof generation
+        Amount::zero(),
         &output_statement,
         maybe_change_statement.as_ref(),
     )?;

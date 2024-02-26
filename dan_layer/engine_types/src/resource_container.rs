@@ -387,12 +387,35 @@ impl ResourceContainer {
                     .collect::<Result<Vec<_>, ResourceError>>()?;
 
                 let validated_proof = validate_confidential_withdraw(&inputs, proof)?;
+
+                // Withdraw revealed amount
+                if validated_proof.input_revealed_amount > *revealed_amount {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: format!(
+                            "Bucket contained insufficient funds. Required: {}, Available: {}",
+                            validated_proof.input_revealed_amount, revealed_amount
+                        ),
+                    });
+                }
+                *revealed_amount -= validated_proof.input_revealed_amount;
+
                 if let Some(change) = validated_proof.change_output {
                     if commitments.insert(change.commitment.clone(), change).is_some() {
                         return Err(ResourceError::InvariantError(
                             "Confidential withdraw contained duplicate commitment in change commitment".to_string(),
                         ));
                     }
+
+                    if validated_proof.change_revealed_amount > *revealed_amount {
+                        return Err(ResourceError::InsufficientBalance {
+                            details: format!(
+                                "withdraw_confidential: resource container did not contain enough revealed funds for \
+                                 change. Required: {}, Available: {}",
+                                validated_proof.change_revealed_amount, revealed_amount
+                            ),
+                        });
+                    }
+
                     *revealed_amount += validated_proof.change_revealed_amount;
                 }
 
