@@ -7341,6 +7341,7 @@ dependencies = [
  "js-sys",
  "log",
  "mime",
+ "mime_guess",
  "native-tls",
  "once_cell",
  "percent-encoding",
@@ -9399,6 +9400,23 @@ dependencies = [
 name = "tari_features"
 version = "1.0.0-dan.5"
 source = "git+https://github.com/tari-project/tari.git?branch=feature-dan2#e422a12d86b8f6f4df3dedb961883f8ee58c55d3"
+
+[[package]]
+name = "tari_generate"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "clap 3.2.25",
+ "convert_case 0.6.0",
+ "hex",
+ "liquid",
+ "liquid-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tari_dan_engine",
+ "tokio",
+]
 
 [[package]]
 name = "tari_hash_domains"

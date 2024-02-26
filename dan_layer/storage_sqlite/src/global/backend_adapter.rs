@@ -208,9 +208,15 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
 
     fn get_templates(&self, tx: &mut Self::DbTransaction<'_>, limit: usize) -> Result<Vec<DbTemplate>, Self::Error> {
         use crate::global::schema::templates::dsl;
-        let templates = dsl::templates
+        let mut templates = dsl::templates
             .filter(templates::status.eq(TemplateStatus::Active.as_str()))
-            .limit(i64::try_from(limit).unwrap_or(i64::MAX))
+            .into_boxed();
+
+        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+        if limit > 0 {
+            templates = templates.limit(limit);
+        }
+        let templates = templates
             .get_results::<TemplateModel>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
