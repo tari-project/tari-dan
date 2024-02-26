@@ -113,7 +113,7 @@ export default function TransactionDetails() {
 
   useEffect(() => {
     getTransactionByHash();
-  });
+  }, []);
 
   const handleChange = (panel: string) => (event: React.SyntheticEvent, isExpanded: boolean) => {
     setExpandedPanels((prevExpandedPanels) => {
