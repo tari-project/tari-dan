@@ -51,6 +51,10 @@ impl Bucket {
         self.resource_container.amount()
     }
 
+    pub fn number_of_confidential_commitments(&self) -> usize {
+        self.resource_container.number_of_confidential_commitments()
+    }
+
     pub fn locked_amount(&self) -> Amount {
         self.resource_container.locked_amount()
     }

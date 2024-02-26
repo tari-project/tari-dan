@@ -402,6 +402,7 @@ pub enum BucketAction {
     CreateProof,
     GetNonFungibleIds,
     GetNonFungibles,
+    CountConfidentialCommitments,
 }
 
 /// A bucket burn operation argument

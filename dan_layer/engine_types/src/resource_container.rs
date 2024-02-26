@@ -127,6 +127,17 @@ impl ResourceContainer {
         }
     }
 
+    pub fn number_of_confidential_commitments(&self) -> usize {
+        match self {
+            ResourceContainer::Confidential {
+                commitments,
+                locked_commitments,
+                ..
+            } => commitments.len() + locked_commitments.len(),
+            _ => 0,
+        }
+    }
+
     pub fn locked_amount(&self) -> Amount {
         match self {
             ResourceContainer::Fungible { locked_amount, .. } => *locked_amount,

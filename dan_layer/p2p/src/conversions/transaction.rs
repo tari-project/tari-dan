@@ -178,7 +178,7 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
                     function,
                     args,
                 }
-            }
+            },
             InstructionType::Method => {
                 let method = request.method;
                 let component_address = Hash::try_from(request.component_address)?.into();
@@ -187,10 +187,10 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
                     method,
                     args,
                 }
-            }
+            },
             InstructionType::PutOutputInWorkspace => {
                 Instruction::PutLastInstructionOutputOnWorkspace { key: request.key }
-            }
+            },
             InstructionType::EmitLog => Instruction::EmitLog {
                 level: request.log_level.parse()?,
                 message: request.log_message,
@@ -218,7 +218,7 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
                 validator_public_key: PublicKey::from_canonical_bytes(
                     &request.claim_validator_fees_validator_public_key,
                 )
-                    .map_err(|e| anyhow!("claim_validator_fees_validator_public_key: {}", e))?,
+                .map_err(|e| anyhow!("claim_validator_fees_validator_public_key: {}", e))?,
             },
             InstructionType::DropAllProofsInWorkspace => Instruction::DropAllProofsInWorkspace,
             InstructionType::CreateFreeTestCoins => Instruction::CreateFreeTestCoins {
@@ -245,7 +245,7 @@ impl From<Instruction> for proto::transaction::Instruction {
                 result.template_address = template_address.to_vec();
                 result.function = function;
                 result.args = args.into_iter().map(|a| a.into()).collect();
-            }
+            },
             Instruction::CallMethod {
                 component_address,
                 method,
@@ -255,16 +255,16 @@ impl From<Instruction> for proto::transaction::Instruction {
                 result.component_address = component_address.as_bytes().to_vec();
                 result.method = method;
                 result.args = args.into_iter().map(|a| a.into()).collect();
-            }
+            },
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {
                 result.instruction_type = InstructionType::PutOutputInWorkspace as i32;
                 result.key = key;
-            }
+            },
             Instruction::EmitLog { level, message } => {
                 result.instruction_type = InstructionType::EmitLog as i32;
                 result.log_level = level.to_string();
                 result.log_message = message;
-            }
+            },
             Instruction::ClaimBurn { claim } => {
                 result.instruction_type = InstructionType::ClaimBurn as i32;
                 result.claim_burn_commitment_address = claim.output_address.to_vec();
@@ -272,7 +272,7 @@ impl From<Instruction> for proto::transaction::Instruction {
                 result.claim_burn_proof_of_knowledge = Some(claim.proof_of_knowledge.into());
                 result.claim_burn_public_key = claim.public_key.to_vec();
                 result.claim_burn_withdraw_proof = claim.withdraw_proof.map(Into::into);
-            }
+            },
             Instruction::ClaimValidatorFees {
                 epoch,
                 validator_public_key,
@@ -280,10 +280,10 @@ impl From<Instruction> for proto::transaction::Instruction {
                 result.instruction_type = InstructionType::ClaimValidatorFees as i32;
                 result.claim_validator_fees_epoch = epoch;
                 result.claim_validator_fees_validator_public_key = validator_public_key.to_vec();
-            }
+            },
             Instruction::DropAllProofsInWorkspace => {
                 result.instruction_type = InstructionType::DropAllProofsInWorkspace as i32;
-            }
+            },
             // TODO: debugging feature should not be the default. Perhaps a better way to create faucet coins is to mint
             //       a faucet vault in the genesis state for dev networks and use faucet builtin template to withdraw
             //       funds.
@@ -296,7 +296,7 @@ impl From<Instruction> for proto::transaction::Instruction {
                 result.create_free_test_coins_output_blob = output
                     .map(|o| tari_bor::encode(&o).unwrap())
                     .unwrap_or_else(|| tari_bor::encode(&None::<ConfidentialOutput>).unwrap());
-            }
+            },
         }
         result
     }
@@ -327,11 +327,11 @@ impl From<Arg> for proto::transaction::Arg {
             Arg::Literal(data) => {
                 result.arg_type = 0;
                 result.data = tari_bor::encode(&data).unwrap();
-            }
+            },
             Arg::Workspace(data) => {
                 result.arg_type = 1;
                 result.data = data;
-            }
+            },
         }
 
         result

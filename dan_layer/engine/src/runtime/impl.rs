@@ -104,6 +104,7 @@ use crate::{
     template::LoadedTemplate,
     transaction::TransactionProcessor,
 };
+
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 
 #[derive(Clone)]
@@ -1285,6 +1286,18 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         .collect();
 
                     Ok(InvokeResult::encode(&nfts)?)
+                })
+            },
+            BucketAction::CountConfidentialCommitments => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "CountConfidentialCommitments bucket action requires a bucket id".to_string(),
+                })?;
+                args.assert_no_args("Bucket::CountConfidentialCommitments")?;
+
+                self.tracker.write_with(|state| {
+                    let bucket = state.get_bucket(bucket_id)?;
+                    Ok(InvokeResult::encode(&bucket.number_of_confidential_commitments())?)
                 })
             },
         }
