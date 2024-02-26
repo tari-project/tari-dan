@@ -1354,6 +1354,20 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     Ok(InvokeResult::encode(&proof.resource_type())?)
                 })
             },
+            ProofAction::GetNonFungibles => {
+                let proof_id = proof_ref.proof_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "proof_ref",
+                    reason: "GetNonFungibles proof action requires a proof id".to_string(),
+                })?;
+
+                args.assert_no_args("Proof.GetNonFungibles")?;
+
+                self.tracker.write_with(|state| {
+                    let proof = state.get_proof(proof_id)?;
+                    let nfts = proof.non_fungible_token_ids();
+                    Ok(InvokeResult::encode(&nfts)?)
+                })
+            },
             ProofAction::Authorize => {
                 let proof_id = proof_ref.proof_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "proof_ref",

@@ -572,6 +572,7 @@ pub enum ProofAction {
     GetAmount,
     GetResourceAddress,
     GetResourceType,
+    GetNonFungibles,
     Authorize,
     DropAuthorize,
     Drop,

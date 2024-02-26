@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::{call_engine, rust::fmt, EngineOp};
@@ -28,7 +30,7 @@ use ts_rs::TS;
 
 use crate::{
     args::{InvokeResult, ProofAction, ProofInvokeArg, ProofRef},
-    models::{Amount, BinaryTag, ResourceAddress},
+    models::{Amount, BinaryTag, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
 };
 
@@ -88,6 +90,17 @@ impl Proof {
 
         resp.decode()
             .expect("Proof GetResourceType returned invalid resource type")
+    }
+
+    pub fn get_non_fungibles(&self) -> BTreeSet<NonFungibleId> {
+        let resp: InvokeResult = call_engine(EngineOp::ProofInvoke, &ProofInvokeArg {
+            proof_ref: ProofRef::Ref(self.id),
+            action: ProofAction::GetNonFungibles,
+            args: invoke_args![],
+        });
+
+        resp.decode()
+            .expect("Proof GetNonFungibles returned invalid non-fungibles")
     }
 
     pub fn amount(&self) -> Amount {

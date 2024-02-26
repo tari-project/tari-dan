@@ -116,8 +116,8 @@ impl NonFungibleResourceBuilder {
     pub fn with_non_fungibles<'a, I, T, U>(mut self, tokens: I) -> Self
     where
         I: IntoIterator<Item = (NonFungibleId, (&'a T, &'a U))>,
-        T: Serialize + 'a,
-        U: Serialize + 'a,
+        T: Serialize + ?Sized + 'a,
+        U: Serialize + ?Sized + 'a,
     {
         self.tokens_ids.extend(
             tokens
