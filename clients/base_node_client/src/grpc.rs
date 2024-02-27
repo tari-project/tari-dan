@@ -107,8 +107,8 @@ impl BaseNodeClient for GrpcBaseNodeClient {
             .metadata
             .ok_or_else(|| BaseNodeClientError::InvalidPeerMessage("Base node returned no metadata".to_string()))?;
         Ok(BaseLayerMetadata {
-            height_of_longest_chain: metadata.height_of_longest_chain,
-            tip_hash: metadata.best_block.try_into().map_err(|_| {
+            height_of_longest_chain: metadata.best_block_height,
+            tip_hash: metadata.best_block_hash.try_into().map_err(|_| {
                 BaseNodeClientError::InvalidPeerMessage("best_block was not a valid fixed hash".to_string())
             })?,
         })

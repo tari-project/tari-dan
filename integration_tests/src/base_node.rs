@@ -22,7 +22,7 @@
 
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 
-use minotari_node::{run_base_node, BaseNodeConfig, MetricsConfig};
+use minotari_node::{run_base_node, BaseNodeConfig};
 use rand::rngs::OsRng;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{configuration::CommonConfig, exit_codes::ExitError};
@@ -88,7 +88,6 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
                     peer_seeds: peer_seeds.into(),
                     ..Default::default()
                 },
-                metrics: MetricsConfig::default(),
             };
 
             println!("Using base_node temp_dir: {}", temp_dir.display());
