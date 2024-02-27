@@ -7,12 +7,12 @@ use async_trait::async_trait;
 use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, SubstateAddress};
-use tari_dan_engine::{runtime::VirtualSubstates, state_store::memory::MemoryStateStore};
+use tari_dan_engine::state_store::memory::MemoryStateStore;
 use tari_dan_storage::{consensus_models::SubstateRecord, StateStore, StorageError};
 use tari_engine_types::{
     instruction::Instruction,
     substate::SubstateId,
-    virtual_substate::{VirtualSubstate, VirtualSubstateId},
+    virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates},
 };
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
 use tari_indexer_lib::{error::IndexerError, substate_cache::SubstateCache, substate_scanner::SubstateScanner};
@@ -61,9 +61,8 @@ where
         transaction: &Transaction,
         out: &MemoryStateStore,
     ) -> Result<HashSet<SubstateAddress>, SubstateResolverError> {
-        let (local_substates, missing_shards) = self
-            .store
-            .with_read_tx(|tx| SubstateRecord::get_any(tx, transaction.all_inputs_iter()))?;
+        let inputs = transaction.all_input_addresses_iter();
+        let (local_substates, missing_shards) = self.store.with_read_tx(|tx| SubstateRecord::get_any(tx, inputs))?;
 
         info!(
             target: LOG_TARGET,

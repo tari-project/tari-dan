@@ -106,7 +106,7 @@ impl CallScope {
     }
 
     pub fn remove_bucket_from_scope(&mut self, bucket_id: BucketId) -> bool {
-        self.bucket_scope.remove(&bucket_id)
+        self.bucket_scope.swap_remove(&bucket_id)
     }
 
     pub fn add_proof_to_scope(&mut self, proof_id: ProofId) {
@@ -115,7 +115,7 @@ impl CallScope {
     }
 
     pub fn remove_lock_from_scope(&mut self, lock_id: LockId) -> Result<(), RuntimeError> {
-        if !self.lock_scope.remove(&lock_id) {
+        if !self.lock_scope.swap_remove(&lock_id) {
             return Err(RuntimeError::LockError(LockError::LockIdNotFound { lock_id }));
         }
         Ok(())
@@ -134,7 +134,7 @@ impl CallScope {
     }
 
     pub fn move_node_to_owned(&mut self, address: &SubstateId) -> Result<(), RuntimeError> {
-        if self.orphans.remove(address) && !self.owned.insert(address.clone()) {
+        if self.orphans.swap_remove(address) && !self.owned.insert(address.clone()) {
             return Err(RuntimeError::DuplicateSubstate {
                 address: address.clone(),
             });
@@ -170,8 +170,8 @@ impl CallScope {
     /// Add a substate to the owned nodes set without checking if it is already in the scope. This is used when
     /// initializing the root scope from the state store.
     pub fn add_substate_to_owned(&mut self, address: SubstateId) {
-        self.referenced.remove(&address);
-        self.orphans.remove(&address);
+        self.referenced.swap_remove(&address);
+        self.orphans.swap_remove(&address);
         self.owned.insert(address);
     }
 
@@ -195,7 +195,7 @@ impl CallScope {
     pub fn update_from_child_scope(&mut self, child: CallScope) {
         self.owned.extend(child.owned.iter().cloned());
         for owned in &child.owned {
-            self.orphans.remove(owned);
+            self.orphans.swap_remove(owned);
         }
         self.proof_scope.extend(child.proof_scope.iter().copied());
         self.bucket_scope.extend(child.bucket_scope.iter().copied());

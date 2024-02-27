@@ -41,8 +41,6 @@ pub use module::{RuntimeModule, RuntimeModuleError};
 mod fee_state;
 mod tracker;
 
-mod virtual_substate;
-pub use virtual_substate::VirtualSubstates;
 mod locking;
 pub mod scope;
 pub use locking::{LockError, LockState};

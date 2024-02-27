@@ -17,6 +17,7 @@ mod spec;
 mod state_manager;
 mod sync;
 mod transaction;
+mod transaction_executor;
 mod validator;
 
 pub use address::*;
@@ -26,4 +27,5 @@ pub use network::*;
 pub use spec::*;
 pub use state_manager::*;
 pub use transaction::*;
+pub use transaction_executor::*;
 pub use validator::*;

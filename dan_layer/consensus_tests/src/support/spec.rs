@@ -4,6 +4,7 @@
 use tari_consensus::traits::{hooks::NoopHooks, ConsensusSpec};
 use tari_state_store_sqlite::SqliteStateStore;
 
+use super::TestBlockTransactionExecutorBuilder;
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
@@ -19,6 +20,7 @@ pub struct TestConsensusSpec;
 
 impl ConsensusSpec for TestConsensusSpec {
     type Addr = TestAddress;
+    type BlockTransactionExecutorBuilder = TestBlockTransactionExecutorBuilder;
     type EpochManager = TestEpochManager;
     type Hooks = NoopHooks;
     type InboundMessaging = TestInboundMessaging;

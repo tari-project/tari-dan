@@ -36,7 +36,7 @@ use tari_dan_storage::{
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::broadcast;
 
 use super::proposer::Proposer;
@@ -45,6 +45,8 @@ use crate::{
     messages::{HotstuffMessage, VoteMessage},
     traits::{
         hooks::ConsensusHooks,
+        BlockTransactionExecutor,
+        BlockTransactionExecutorBuilder,
         ConsensusSpec,
         LeaderStrategy,
         OutboundMessaging,
@@ -66,6 +68,7 @@ pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_events: broadcast::Sender<HotstuffEvent>,
     proposer: Proposer<TConsensusSpec>,
+    transaction_executor_builder: TConsensusSpec::BlockTransactionExecutorBuilder,
     network: Network,
     hooks: TConsensusSpec::Hooks,
 }
@@ -84,6 +87,7 @@ where TConsensusSpec: ConsensusSpec
         outbound_messaging: TConsensusSpec::OutboundMessaging,
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
+        transaction_executor_builder: TConsensusSpec::BlockTransactionExecutorBuilder,
         network: Network,
         hooks: TConsensusSpec::Hooks,
     ) -> Self {
@@ -98,6 +102,7 @@ where TConsensusSpec: ConsensusSpec
             outbound_messaging,
             tx_events,
             proposer,
+            transaction_executor_builder,
             network,
             hooks,
         }
@@ -382,6 +387,11 @@ where TConsensusSpec: ConsensusSpec
         let mut total_leader_fee = 0;
         let mut locked_inputs = HashSet::new();
         let mut locked_outputs = HashSet::new();
+
+        // Executor used for transactions that have inputs without specific versions.
+        // It lives through the entire block so multiple transactions can be "chained" together in the same block
+        let mut executor = self.transaction_executor_builder.build();
+
         for cmd in block.commands() {
             if let Some(transaction) = cmd.transaction() {
                 let Some(mut tx_rec) = self
@@ -436,16 +446,14 @@ where TConsensusSpec: ConsensusSpec
 
                         if tx_rec.current_decision() == t.decision {
                             if tx_rec.current_decision().is_commit() {
-                                let transaction = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
+                                let executed = self.get_executed_transaction(tx, &t.id, &mut executor)?;
+                                let transaction = executed.transaction();
+
                                 // Lock all inputs for the transaction as part of Prepare
-                                let is_inputs_locked = self.check_lock_inputs(
-                                    tx,
-                                    transaction.transaction(),
-                                    local_committee_shard,
-                                    &mut locked_inputs,
-                                )?;
-                                let is_outputs_locked = is_inputs_locked &&
-                                    self.check_lock_outputs(tx, &transaction, &mut locked_outputs)?;
+                                let is_inputs_locked =
+                                    self.check_lock_inputs(tx, transaction, local_committee_shard, &mut locked_inputs)?;
+                                let is_outputs_locked =
+                                    is_inputs_locked && self.check_lock_outputs(tx, &executed, &mut locked_outputs)?;
 
                                 if !is_inputs_locked {
                                     // Unable to lock all inputs - do not vote
@@ -478,6 +486,13 @@ where TConsensusSpec: ConsensusSpec
                                     return Ok(None);
                                 } else {
                                     // We have locked all inputs and outputs
+
+                                    // We need to update the database (transaction result and inputs/outpus)
+                                    // in case the transaction was re-executed because it has inputs without versions
+                                    let has_involved_shards = executed.num_involved_shards() > 0;
+                                    if transaction.has_inputs_without_version() && has_involved_shards {
+                                        executed.update(tx)?;
+                                    }
                                 }
                             }
 
@@ -697,16 +712,49 @@ where TConsensusSpec: ConsensusSpec
         Ok(Some(QuorumDecision::Accept))
     }
 
+    // Returns the execution result of a transaction.
+    // If the transaction has all inputs with specific versions, it was executed in the mempool so we only fetch the
+    // result from database. If the transaction has one or more inputs without version, we execute it now with the
+    // most recent input versions it needs.
+    fn get_executed_transaction(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        transaction_id: &TransactionId,
+        executor: &mut Box<dyn BlockTransactionExecutor<TConsensusSpec::StateStore>>,
+    ) -> Result<ExecutedTransaction, HotStuffError> {
+        let executed = ExecutedTransaction::get(tx.deref_mut(), transaction_id)?;
+        let transaction = executed.transaction();
+
+        if transaction.has_inputs_without_version() {
+            let executed = executor
+                .execute(executed.transaction().clone(), tx)
+                .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
+            Ok(executed)
+        } else {
+            Ok(executed)
+        }
+    }
+
     fn lock_inputs(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
     ) -> Result<bool, HotStuffError> {
+        // For now we are going to only lock inputs with specific versions
+        // TODO: for inputs without version, investigate if we need to use the results of re-execution
+        let inputs: Vec<SubstateAddress> = transaction
+            .inputs()
+            .iter()
+            .chain(transaction.filled_inputs())
+            .filter(|i| i.version().is_some())
+            .map(|i| i.to_substate_address())
+            .collect();
+
         let state = SubstateRecord::try_lock_all(
             tx,
             transaction.id(),
-            local_committee_shard.filter(transaction.inputs().iter().chain(transaction.filled_inputs())),
+            local_committee_shard.filter(inputs.iter()),
             SubstateLockFlag::Write,
         )?;
         if !state.is_acquired() {
@@ -718,10 +766,19 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(false);
         }
+
+        // TODO: Same as before, for inputs without version, investigate if we need to use the results of re-execution
+        let inputs: Vec<SubstateAddress> = transaction
+            .input_refs()
+            .iter()
+            .filter(|i| i.version().is_some())
+            .map(|i| i.to_substate_address())
+            .collect();
+
         let state = SubstateRecord::try_lock_all(
             tx,
             transaction.id(),
-            local_committee_shard.filter(transaction.input_refs()),
+            local_committee_shard.filter(inputs.iter()),
             SubstateLockFlag::Read,
         )?;
 
@@ -751,9 +808,16 @@ where TConsensusSpec: ConsensusSpec
         local_committee_shard: &CommitteeShard,
         locked_inputs: &mut HashSet<SubstateAddress>,
     ) -> Result<bool, HotStuffError> {
+        // TODO: for inputs without version, investigate if we need to use the results of re-execution
         let inputs = local_committee_shard
-            .filter(transaction.inputs().iter().chain(transaction.filled_inputs()))
-            .copied()
+            .filter(
+                transaction
+                    .inputs()
+                    .iter()
+                    .chain(transaction.filled_inputs())
+                    .filter(|i| i.version().is_some())
+                    .map(|i| i.to_substate_address()),
+            )
             .collect::<HashSet<_>>();
         let state = SubstateRecord::check_lock_all(tx, inputs.iter(), SubstateLockFlag::Write)?;
         if !state.is_acquired() {
@@ -774,12 +838,17 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
         locked_inputs.extend(inputs);
-
-        let state = SubstateRecord::check_lock_all(
-            tx,
-            local_committee_shard.filter(transaction.input_refs()),
-            SubstateLockFlag::Read,
-        )?;
+        // TODO: Same as before, for inputs without version, investigate if we need to use the results of re-execution
+        let inputs = local_committee_shard
+            .filter(
+                transaction
+                    .input_refs()
+                    .iter()
+                    .filter(|i| i.version().is_some())
+                    .map(|i| i.to_substate_address()),
+            )
+            .collect::<HashSet<_>>();
+        let state = SubstateRecord::check_lock_all(tx, inputs.iter(), SubstateLockFlag::Read)?;
 
         if !state.is_acquired() {
             warn!(
@@ -806,16 +875,31 @@ where TConsensusSpec: ConsensusSpec
         transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
+        // We ignore inputs without version
+        let write_inputs: Vec<SubstateAddress> = transaction
+            .inputs()
+            .iter()
+            .chain(transaction.filled_inputs())
+            .filter(|i| i.version().is_some())
+            .map(|i| i.to_substate_address())
+            .collect();
         SubstateRecord::try_unlock_many(
             tx,
             transaction.id(),
-            local_committee_shard.filter(transaction.inputs().iter().chain(transaction.filled_inputs())),
+            local_committee_shard.filter(write_inputs.iter()),
             SubstateLockFlag::Write,
         )?;
+        // We ignore inputs without version
+        let read_inputs: Vec<SubstateAddress> = transaction
+            .input_refs()
+            .iter()
+            .filter(|i| i.version().is_some())
+            .map(|i| i.to_substate_address())
+            .collect();
         SubstateRecord::try_unlock_many(
             tx,
             transaction.id(),
-            local_committee_shard.filter(transaction.input_refs()),
+            local_committee_shard.filter(read_inputs.iter()),
             SubstateLockFlag::Read,
         )?;
         Ok(())

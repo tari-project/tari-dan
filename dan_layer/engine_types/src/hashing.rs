@@ -64,6 +64,10 @@ impl TariHasher32 {
         Self { hasher }
     }
 
+    pub fn from_digest(digest: Blake2b<U32>) -> Self {
+        Self { hasher: digest }
+    }
+
     pub fn update<T: Serialize + ?Sized>(&mut self, data: &T) {
         // CBOR encoding does not make any contract to say that if the writer is infallible (as it is here) then
         // encoding in infallible. However this should be the case. Since it is very unergonomic to return an

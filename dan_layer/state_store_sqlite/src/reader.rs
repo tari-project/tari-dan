@@ -1134,7 +1134,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             let evidence = deserialize_json::<Evidence>(&update.evidence)?;
             let evidence = evidence
                 .iter()
-                .map(|(shard, evidence)| (*shard, evidence.lock))
+                .map(|(shard, evidence)| (shard.clone(), evidence.lock))
                 .collect::<HashSet<(SubstateAddress, _)>>();
             processed_substates.insert(deserialize_hex_try_from(tx_id)?, evidence);
         }
@@ -1153,7 +1153,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                             .transaction()
                             .evidence
                             .iter()
-                            .map(|(shard, evidence)| (*shard, evidence.lock))
+                            .map(|(shard, evidence)| (shard.clone(), evidence.lock))
                             .collect::<HashMap<_, _>>();
 
                         // Are there any conflicts between the currently selected set and this transaction?

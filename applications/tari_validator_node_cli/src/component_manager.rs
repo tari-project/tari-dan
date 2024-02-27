@@ -29,8 +29,7 @@ use tari_engine_types::{
     serde_with,
     substate::{SubstateDiff, SubstateId},
 };
-
-use crate::versioned_substate_id::VersionedSubstateId;
+use tari_transaction::SubstateRequirement;
 
 pub struct ComponentManager {
     store: jfs::Store,
@@ -53,7 +52,7 @@ impl ComponentManager {
         &self,
         substate_addr: SubstateId,
         version: u32,
-        children: Vec<VersionedSubstateId>,
+        children: Vec<SubstateRequirement>,
     ) -> anyhow::Result<()> {
         let substate = match self.get_root_substate(&substate_addr)? {
             Some(mut substate) => {
@@ -92,9 +91,9 @@ impl ComponentManager {
                 addr @ SubstateId::Vault(_) |
                 addr @ SubstateId::NonFungible(_) |
                 addr @ SubstateId::NonFungibleIndex(_) => {
-                    children.push(VersionedSubstateId {
+                    children.push(SubstateRequirement {
                         substate_id: addr.clone(),
-                        version: substate.version(),
+                        version: Some(substate.version()),
                     });
                 },
                 addr => {
@@ -143,7 +142,7 @@ impl ComponentManager {
 pub struct SubstateMetadata {
     #[serde(with = "serde_with::string")]
     pub address: SubstateId,
-    pub versions: Vec<(u32, Vec<VersionedSubstateId>)>,
+    pub versions: Vec<(u32, Vec<SubstateRequirement>)>,
 }
 
 impl SubstateMetadata {
@@ -151,7 +150,7 @@ impl SubstateMetadata {
         self.versions.last().map(|(v, _)| *v).expect("versions is empty")
     }
 
-    pub fn get_children(&self) -> Vec<VersionedSubstateId> {
+    pub fn get_children(&self) -> Vec<SubstateRequirement> {
         self.versions.last().map(|(_, c)| c.clone()).expect("versions is empty")
     }
 }
