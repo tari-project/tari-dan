@@ -27,7 +27,7 @@ struct Request {
     id: u64,
     method: String,
     params: json::Value,
-    token: String,
+    token: Option<String>,
 }
 
 #[derive(Serialize, Debug)]
@@ -104,53 +104,40 @@ pub async fn on_message(
     d_on_message: Arc<RTCDataChannel>,
     permissions_token: String,
     address: SocketAddr,
-) {
-    match String::from_utf8(msg.data.to_vec()) {
-        Ok(msg_str) => match serde_json::from_str::<Request>(&msg_str) {
-            Ok(request) => {
-                let response;
-                if request.method == "get.token" {
-                    match json::to_value(permissions_token) {
-                        Ok(token) => {
-                            response = Response {
-                                payload: token,
-                                id: request.id,
-                            }
-                        },
-                        Err(e) => {
-                            log::error!(target: LOG_TARGET, "{}", e.to_string());
-                            return;
-                        },
-                    }
-                } else {
-                    let result = make_request(address, Some(request.token), request.method, request.params)
-                        .await
-                        .unwrap_or_else(|e| json!({"error": e.to_string()}));
-                    response = Response {
-                        payload: result,
-                        id: request.id,
-                    };
-                }
-                let text = serde_json::to_string(&response).unwrap_or_else(|e| e.to_string());
-                if let Err(e) = d_on_message.send_text(text).await {
-                    log::error!(target: LOG_TARGET, "{}", e.to_string())
-                };
-            },
-            Err(e) => log::error!(target: LOG_TARGET, "Error parsing request: {}", e.to_string()),
-        },
-        Err(e) => log::error!(target: LOG_TARGET, "Message is not valid UTF-8: {}", e.to_string()),
-    };
+) -> anyhow::Result<()> {
+    let request = serde_json::from_reader::<_, Request>(&mut msg.data.as_ref())?;
+
+    let response;
+    if request.method == "get.token" {
+        let token = json::to_value(permissions_token)?;
+        response = Response {
+            payload: token,
+            id: request.id,
+        }
+    } else {
+        let result = make_request(address, request.token, request.method, request.params)
+            .await
+            .unwrap_or_else(|e| json!({"error": e.to_string()}));
+        response = Response {
+            payload: result,
+            id: request.id,
+        };
+    }
+    let text = serde_json::to_string(&response).unwrap_or_else(|e| e.to_string());
+    d_on_message.send_text(text).await?;
+    Ok(())
 }
 
 pub async fn on_data_channel(d: Arc<RTCDataChannel>, permissions_token: String, address: SocketAddr) {
     let d_on_message = d.clone();
     d.on_message(Box::new(move |msg: DataChannelMessage| {
-        Box::pin(on_message(
-            msg,
-            d_on_message.clone(),
-            permissions_token.clone(),
-            address,
-        ))
+        let d_on_message = d_on_message.clone();
+        let permissions_token = permissions_token.clone();
+        Box::pin(async move {
+            if let Err(err) = on_message(msg, d_on_message.clone(), permissions_token.clone(), address).await {
+                log::error!(target: LOG_TARGET, "Error handling message: {}", err);
+            }
+        })
     }))
 }
 
