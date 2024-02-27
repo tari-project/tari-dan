@@ -2,12 +2,13 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_dan_engine::runtime::{LockError, RuntimeError};
-use tari_engine_types::indexed_value::IndexedWellKnownTypes;
+use tari_engine_types::{indexed_value::IndexedWellKnownTypes, resource_container::ResourceError};
 use tari_template_lib::{
     args,
     args::VaultAction,
     constants::XTR2,
     models::{Amount, ComponentAddress, ResourceAddress},
+    prelude::ResourceType,
 };
 use tari_template_test_tooling::{support::assert_error::assert_reject_reason, TemplateTest};
 use tari_transaction::Transaction;
@@ -295,5 +296,42 @@ fn it_disallows_vault_access_if_vault_is_not_owned() {
     // the component, but we're not in a component context.
     assert_reject_reason(reason, RuntimeError::SubstateOutOfScope {
         address: vault_id.into(),
+    });
+}
+
+#[test]
+fn it_disallows_minting_different_resource_type() {
+    let mut test = TemplateTest::new(["tests/templates/resource_shenanigans"]);
+    let template_addr = test.get_template_address("Shenanigans");
+    let (account, _, _) = test.create_empty_account();
+
+    let result = test.execute_expect_success(
+        Transaction::builder()
+            .call_function(template_addr, "new", args![])
+            .sign(test.get_test_secret_key())
+            .build(),
+        vec![],
+    );
+
+    let component = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    let reason = test.execute_expect_failure(
+        Transaction::builder()
+            .call_method(component, "mint_different_resource_type", args![])
+            .put_last_instruction_output_on_workspace("bucket")
+            .call_method(account, "deposit", args![Workspace("bucket")])
+            .sign(test.get_test_secret_key())
+            .build(),
+        vec![],
+    );
+
+    // We explicitly check that the mint fails. The deposit will also fail with a resource type mismatch, but if that
+    // happened, it means we were able to create a bucket in the first place, which should not be permitted.
+    assert_reject_reason(reason, ResourceError::ResourceTypeMismatch {
+        operate: "mint",
+        expected: ResourceType::NonFungible,
+        given: ResourceType::Fungible,
     });
 }

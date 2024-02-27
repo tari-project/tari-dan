@@ -739,6 +739,7 @@ pub struct AccountsCreateFreeTestCoinsRequest {
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
 pub struct AccountsCreateFreeTestCoinsResponse {
+    pub account: Account,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
     pub amount: Amount,

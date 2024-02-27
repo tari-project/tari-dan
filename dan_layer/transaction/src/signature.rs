@@ -8,7 +8,7 @@ use tari_crypto::{
     keys::PublicKey as PublicKeyT,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_dan_common_types::{Epoch, SubstateAddress};
+use tari_dan_common_types::Epoch;
 use tari_engine_types::{
     hashing::{hasher64, EngineHashDomainLabel},
     instruction::Instruction,
@@ -16,7 +16,7 @@ use tari_engine_types::{
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use crate::unsigned_transaction::UnsignedTransaction;
+use crate::{unsigned_transaction::UnsignedTransaction, SubstateRequirement};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
@@ -67,8 +67,8 @@ impl TransactionSignature {
 struct TransactionSignatureFields<'a> {
     fee_instructions: &'a [Instruction],
     instructions: &'a [Instruction],
-    inputs: &'a [SubstateAddress],
-    input_refs: &'a [SubstateAddress],
+    inputs: &'a [SubstateRequirement],
+    input_refs: &'a [SubstateRequirement],
     min_epoch: Option<Epoch>,
     max_epoch: Option<Epoch>,
 }

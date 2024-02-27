@@ -84,6 +84,8 @@ pub enum HotStuffError {
         local_height: NodeHeight,
         qc_height: NodeHeight,
     },
+    #[error("Transaction executor error: {0}")]
+    TransactionExecutorError(String),
     #[error("Invalid sync request: {details}")]
     InvalidSyncRequest { details: String },
 }

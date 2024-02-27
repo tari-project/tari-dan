@@ -32,6 +32,7 @@ use tari_engine_types::{
     instruction::Instruction,
     instruction_result::InstructionResult,
     lock::LockFlag,
+    virtual_substate::VirtualSubstates,
 };
 use tari_template_abi::{FunctionDef, Type};
 use tari_template_lib::{
@@ -52,7 +53,6 @@ use crate::{
         RuntimeModule,
         StateFinalize,
         StateTracker,
-        VirtualSubstates,
     },
     state_store::memory::MemoryStateStore,
     template::LoadedTemplate,

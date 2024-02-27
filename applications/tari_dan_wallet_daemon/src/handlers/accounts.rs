@@ -13,7 +13,7 @@ use tari_crypto::{
     ristretto::{RistrettoComSig, RistrettoPublicKey},
     tari_utilities::ByteArray,
 };
-use tari_dan_common_types::{optional::Optional, SubstateAddress};
+use tari_dan_common_types::optional::Optional;
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
     confidential::{get_commitment_factory, ConfidentialProofStatement},
@@ -37,7 +37,7 @@ use tari_template_lib::{
     prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateRequirement, Transaction};
 use tari_wallet_daemon_client::{
     types::{
         AccountGetDefaultRequest,
@@ -77,6 +77,7 @@ use crate::{
         get_account_or_default,
         get_account_with_inputs,
         invalid_params,
+        wait_for_account_create_or_update,
         wait_for_result,
     },
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
@@ -135,12 +136,12 @@ pub async fn handle_create(
         .with_input_refs(
             input_refs
                 .iter()
-                .map(|s| SubstateAddress::from_address(&s.substate_id, s.version)),
+                .map(|s| SubstateRequirement::new(s.substate_id.clone(), Some(s.version))),
         )
         .with_inputs(
             inputs
                 .iter()
-                .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version)),
+                .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version))),
         )
         .sign(&signing_key.key)
         .build();
@@ -238,7 +239,7 @@ pub async fn handle_invoke(
 
     let inputs = inputs
         .into_iter()
-        .map(|s| SubstateAddress::from_address(&s.substate_id, s.version));
+        .map(|s| SubstateRequirement::new(s.substate_id.clone(), Some(s.version)));
 
     let account_address = account.address.as_component_address().unwrap();
     let transaction = Transaction::builder()
@@ -452,7 +453,7 @@ pub async fn handle_reveal_funds(
 
         let inputs = inputs
             .into_iter()
-            .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version));
+            .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version)));
 
         let transaction = builder.with_inputs(inputs).sign(&account_key.key).build();
 
@@ -655,7 +656,7 @@ pub async fn handle_claim_burn(
         &account_public_key,
         max_fee,
         account_secret_key,
-        accounts_api,
+        &accounts_api,
         context,
     )
     .await?;
@@ -676,7 +677,7 @@ async fn finish_claiming<T: WalletStore>(
     account_public_key: &RistrettoPublicKey,
     max_fee: Amount,
     account_secret_key: DerivedKey<RistrettoPublicKey>,
-    accounts_api: tari_dan_wallet_sdk::apis::accounts::AccountsApi<'_, T>,
+    accounts_api: &tari_dan_wallet_sdk::apis::accounts::AccountsApi<'_, T>,
     context: &HandlerContext,
 ) -> Result<
     (
@@ -717,7 +718,7 @@ async fn finish_claiming<T: WalletStore>(
     });
     let inputs = inputs
         .into_iter()
-        .map(|s| SubstateAddress::from_address(&s.substate_id, s.version));
+        .map(|s| SubstateRequirement::new(s.substate_id.clone(), Some(s.version)));
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
         .with_inputs(inputs)
@@ -735,15 +736,19 @@ async fn finish_claiming<T: WalletStore>(
         }),
     });
     let finalized = wait_for_result(&mut events, tx_id).await?;
-    if let Some(reject) = finalized.finalize.result.reject() {
+    if let Some(reject) = finalized.finalize.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
-    if let Some(reason) = finalized.finalize.reject() {
+    if let Some(reason) = finalized.finalize.full_reject() {
         return Err(anyhow::anyhow!(
             "Fee transaction succeeded (fees charged) however the transaction failed: {}",
             reason
         ));
     }
+
+    // Wait for the monitor to pick up the new or updated account
+    wait_for_account_create_or_update(&mut events, &account_address).await?;
+
     Ok((tx_id, finalized))
 }
 
@@ -791,19 +796,22 @@ pub async fn handle_create_free_test_coins(
     // ------------------------------
     let (tx_id, finalized) = finish_claiming(
         instructions,
-        account_address,
+        account_address.clone(),
         new_account_name,
         sdk,
         inputs,
         &account_public_key,
         max_fee,
         account_secret_key,
-        accounts_api,
+        &accounts_api,
         context,
     )
     .await?;
 
+    let account = accounts_api.get_account_by_address(&account_address)?;
+
     Ok(AccountsCreateFreeTestCoinsResponse {
+        account,
         transaction_id: tx_id,
         amount,
         fee: max_fee,
@@ -891,9 +899,9 @@ pub async fn handle_transfer(
         .substate_api()
         .scan_for_substate(&SubstateId::Resource(req.resource_address), None)
         .await?;
-    let resource_substate_address = SubstateAddress::from_address(
-        &resource_substate.address.substate_id,
-        resource_substate.address.version,
+    let resource_substate_address = SubstateRequirement::new(
+        resource_substate.address.substate_id.clone(),
+        Some(resource_substate.address.version),
     );
     inputs.push(resource_substate.address);
 

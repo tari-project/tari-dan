@@ -222,7 +222,13 @@ impl ResourceContainer {
                 }
                 *revealed_amount += other_amount;
             },
-            _ => return Err(ResourceError::ResourceTypeMismatch),
+            (this, other) => {
+                return Err(ResourceError::ResourceTypeMismatch {
+                    operate: "deposit",
+                    expected: this.resource_type(),
+                    given: other.resource_type(),
+                })
+            },
         }
         Ok(())
     }
@@ -521,7 +527,11 @@ impl ResourceContainer {
 
     pub fn unlock(&mut self, container: ResourceContainer) -> Result<(), ResourceError> {
         if self.resource_type() != container.resource_type() {
-            return Err(ResourceError::ResourceTypeMismatch);
+            return Err(ResourceError::ResourceTypeMismatch {
+                operate: "unlock",
+                expected: self.resource_type(),
+                given: container.resource_type(),
+            });
         }
         if self.resource_address() != container.resource_address() {
             return Err(ResourceError::ResourceAddressMismatch {
@@ -720,8 +730,12 @@ impl ResourceContainer {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResourceError {
-    #[error("Resource types do not match")]
-    ResourceTypeMismatch,
+    #[error("Attempted to {operate} a {expected} resource, but the resource type is {given}")]
+    ResourceTypeMismatch {
+        operate: &'static str,
+        expected: ResourceType,
+        given: ResourceType,
+    },
     #[error("Resource addresses do not match: expected:{expected}, actual:{actual}")]
     ResourceAddressMismatch {
         expected: ResourceAddress,

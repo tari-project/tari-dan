@@ -4,7 +4,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use log::*;
-use tari_dan_common_types::{NodeAddressable, SubstateAddress};
+use tari_dan_common_types::NodeAddressable;
 use tari_engine_types::{
     indexed_value::IndexedValueError,
     substate::{Substate, SubstateId},
@@ -74,7 +74,7 @@ where
         for handle in handles {
             let res = handle.await??;
             if let Some((address, substate)) = res {
-                let shard = SubstateAddress::from_address(&address, substate.version());
+                let shard = SubstateRequirement::new(address.clone(), Some(substate.version()));
                 if autofilled_transaction.input_refs().contains(&shard) {
                     // Shard is already an input as a ref
                     continue;
@@ -125,12 +125,15 @@ where
                         id,
                         substate.version()
                     );
-                    let substate_address = SubstateAddress::from_address(&id, substate.version());
-                    if autofilled_transaction.all_inputs_iter().any(|s| *s == substate_address) {
+                    let substate_requirement = SubstateRequirement::new(id.clone(), Some(substate.version()));
+                    if autofilled_transaction
+                        .all_inputs_iter()
+                        .any(|s| *s == substate_requirement)
+                    {
                         // Shard is already an input (TODO: what a waste)
                         continue;
                     }
-                    autofilled_inputs.push(SubstateAddress::from_address(&id, substate.version()));
+                    autofilled_inputs.push(SubstateRequirement::new(id, Some(substate.version())));
                     found_substates.insert(address, substate);
                 //       found_this_round += 1;
                 } else {
@@ -164,7 +167,7 @@ where
 {
     let mut version = req.version().unwrap_or(0);
     loop {
-        let shard = SubstateAddress::from_address(req.substate_id(), version);
+        let shard = SubstateRequirement::new(req.substate_id().clone(), Some(version));
         if transaction.all_inputs_iter().any(|s| *s == shard) {
             // Shard is already an input
             return Ok(None);
@@ -184,7 +187,7 @@ where
                     id,
                     substate.version()
                 );
-                let shard = SubstateAddress::from_address(&id, substate.version());
+                let shard = SubstateRequirement::new(req.substate_id().clone(), Some(version));
                 if transaction.all_inputs_iter().any(|s| *s == shard) {
                     // Shard is already an input (TODO: what a waste)
                     return Ok(None);

@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut};
+use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut, time::Duration};
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::*;
@@ -31,8 +31,14 @@ use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, SubstateRecord, TransactionPool, TransactionRecord},
     StateStore,
 };
+use tari_engine_types::{
+    commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
+    fees::FeeCostBreakdown,
+    substate::SubstateDiff,
+};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerEvent, EpochManagerReader};
 use tari_state_store_sqlite::SqliteStateStore;
+use tari_template_lib::models::Amount;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{mpsc, oneshot};
 
@@ -332,8 +338,8 @@ where
         let tx_substate_address = SubstateAddress::for_transaction_receipt(transaction.id().into_array().into());
 
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
-
-        let mut is_input_shard = local_committee_shard.includes_any_shard(transaction.all_inputs_iter());
+        let transaction_inputs = transaction.all_inputs_iter().map(|i| i.to_substate_address());
+        let mut is_input_shard = local_committee_shard.includes_any_shard(transaction_inputs);
         // Special temporary case: if there are no input shards an output shard will also propagate. No inputs is
         // invalid, however we must support them for now because of CreateFreeTestCoin transactions.
         is_input_shard |= transaction.inputs().len() + transaction.input_refs().len() == 0;
@@ -348,7 +354,21 @@ where
         if is_input_shard || is_output_shard {
             debug!(target: LOG_TARGET, "🎱 New transaction {} in mempool", transaction.id());
             self.transactions.insert(*transaction.id());
-            self.queue_transaction_for_execution(transaction.clone(), current_epoch, should_propagate, sender_shard);
+
+            // The transactions has one or more of its inputs with no version
+            // This means we skip transaction execution in the mempool, as the execution will happen on consensus
+            if transaction.has_inputs_without_version() {
+                self.handle_no_version_transaction(&transaction, should_propagate, sender_shard)
+                    .await?;
+            } else {
+                // All the inputs in the transaction have specific versions, so we execute immmeadiately
+                self.queue_transaction_for_execution(
+                    transaction.clone(),
+                    current_epoch,
+                    should_propagate,
+                    sender_shard,
+                );
+            }
 
             if should_propagate {
                 // This validator is involved, we to send the transaction to local replicas
@@ -377,11 +397,12 @@ where
                     // Forward to foreign replicas.
                     // We assume that at least f other local replicas receive this transaction and also forward to their
                     // matching replica(s)
+                    let substate_addresses = transaction.involved_shards_iter().collect();
                     if let Err(e) = self
                         .gossip
                         .forward_to_foreign_replicas(
                             current_epoch,
-                            transaction.involved_shards_iter().copied().collect(),
+                            substate_addresses,
                             NewTransactionMessage {
                                 transaction,
                                 output_shards: vec![],
@@ -408,16 +429,13 @@ where
             if should_propagate {
                 // This validator is not involved, so we forward the transaction to f + 1 replicas per distinct shard
                 // per input shard ID because we may be the only validator that has received this transaction.
+                let substate_addresses = transaction.involved_shards_iter().collect();
                 if let Err(e) = self
                     .gossip
-                    .gossip_to_foreign_replicas(
-                        current_epoch,
-                        transaction.involved_shards_iter().copied().collect(),
-                        NewTransactionMessage {
-                            transaction,
-                            output_shards: vec![],
-                        },
-                    )
+                    .gossip_to_foreign_replicas(current_epoch, substate_addresses, NewTransactionMessage {
+                        transaction,
+                        output_shards: vec![],
+                    })
                     .await
                 {
                     error!(
@@ -430,6 +448,50 @@ where
         }
 
         Ok(())
+    }
+
+    async fn handle_no_version_transaction(
+        &mut self,
+        transaction: &Transaction,
+        should_propagate: bool,
+        sender_shard: Option<Shard>,
+    ) -> Result<(), MempoolError> {
+        // TODO: for now we just skip execution, we may want to store the transaction in a new DB table
+        // TODO: do we need some sort of validation at this stage?
+
+        info!(
+            target: LOG_TARGET,
+            "✅ Transaction {} has inputs without versions, it goes directly to consensus",
+            transaction.id(),
+        );
+
+        let finalize = FinalizeResult::new(
+            transaction.hash(),
+            vec![],
+            vec![],
+            TransactionResult::Accept(SubstateDiff::new()),
+            FeeCostBreakdown {
+                total_fees_charged: Amount::zero(),
+                breakdown: vec![],
+            },
+        );
+        let executed_transaction = ExecutedTransaction::new(
+            transaction.clone(),
+            ExecuteResult {
+                finalize,
+                fee_receipt: None,
+            },
+            vec![],
+            Duration::ZERO,
+        );
+        let execution_result = (*transaction.id(), Ok(executed_transaction));
+        let result = MempoolTransactionExecution {
+            result: Ok(execution_result),
+            should_propagate,
+            sender_shard,
+        };
+
+        self.handle_execution_complete(result).await
     }
 
     fn queue_transaction_for_execution(
@@ -602,7 +664,11 @@ where
 
         self.epoch_manager.get_local_committee_shard(current_epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
-        let is_input_shard = local_committee_shard.includes_any_shard(executed.transaction().all_inputs_iter()) |
+        let all_inputs_iter = executed
+            .transaction()
+            .all_inputs_iter()
+            .map(|i| i.to_substate_address());
+        let is_input_shard = local_committee_shard.includes_any_shard(all_inputs_iter) |
             (executed.transaction().inputs().len() + executed.transaction().input_refs().len() == 0);
 
         if should_propagate && is_input_shard {

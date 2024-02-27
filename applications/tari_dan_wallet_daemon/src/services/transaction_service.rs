@@ -180,8 +180,9 @@ where
             },
             WalletEvent::TransactionInvalid(_) |
             WalletEvent::TransactionFinalized(_) |
-            WalletEvent::AccountChanged(_) => {},
-            WalletEvent::AuthLoginRequest(_) => {},
+            WalletEvent::AccountChanged(_) |
+            WalletEvent::AuthLoginRequest(_) |
+            WalletEvent::AccountCreated(_) => {},
         }
         Ok(())
     }

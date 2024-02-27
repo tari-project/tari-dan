@@ -160,11 +160,9 @@ pub async fn transfer_confidential(
 
     let source_account_addr = world
         .get_account_component_address(&source_account_name)
-        .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version)))
         .unwrap_or_else(|| panic!("Source account {} not found", source_account_name));
     let dest_account_addr = world
         .get_account_component_address(&dest_account_name)
-        .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version)))
         .unwrap_or_else(|| panic!("Destination account {} not found", dest_account_name));
 
     let source_account_name = ComponentAddressOrName::Name(source_account_name);
@@ -432,7 +430,7 @@ pub async fn submit_manifest_with_signing_keys(
                 .get(s.trim())
                 .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
         })
-        .map(|(_, addr)| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version)))
+        .map(|(_, addr)| addr.clone())
         .collect::<Vec<_>>();
 
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
@@ -509,7 +507,7 @@ pub async fn submit_manifest(
                 .get(s.trim())
                 .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
         })
-        .map(|(_, addr)| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version)))
+        .map(|(_, addr)| addr.clone())
         .collect::<Vec<_>>();
 
     let instructions = parse_manifest(&manifest_content, globals, HashMap::new()).unwrap();

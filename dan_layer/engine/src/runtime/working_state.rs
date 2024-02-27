@@ -25,11 +25,11 @@ use tari_engine_types::{
     non_fungible_index::NonFungibleIndex,
     proof::{ContainerRef, LockedResource, Proof},
     resource::Resource,
-    resource_container::ResourceContainer,
+    resource_container::{ResourceContainer, ResourceError},
     substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
     transaction_receipt::TransactionReceipt,
     vault::Vault,
-    virtual_substate::{VirtualSubstate, VirtualSubstateId},
+    virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates},
     TemplateAddress,
 };
 use tari_template_lib::{
@@ -62,7 +62,6 @@ use crate::{
         AuthorizationScope,
         RuntimeError,
         TransactionCommitError,
-        VirtualSubstates,
     },
     state_store::memory::MemoryStateStore,
 };
@@ -533,6 +532,14 @@ impl WorkingState {
         // Increase the total supply, this also validates that the resource already exists.
         {
             let resource_mut = self.get_resource_mut(locked_resource)?;
+            if resource_mut.resource_type() != resource_container.resource_type() {
+                return Err(ResourceError::ResourceTypeMismatch {
+                    operate: "mint",
+                    expected: resource_mut.resource_type(),
+                    given: resource_container.resource_type(),
+                }
+                .into());
+            }
             resource_mut.increase_total_supply(resource_container.amount());
         }
 

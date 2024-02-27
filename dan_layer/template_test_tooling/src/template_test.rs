@@ -21,7 +21,7 @@ use tari_dan_common_types::crypto::create_key_pair;
 use tari_dan_engine::{
     bootstrap_state,
     fees::{FeeModule, FeeTable},
-    runtime::{AuthParams, RuntimeModule, VirtualSubstates},
+    runtime::{AuthParams, RuntimeModule},
     state_store::{
         memory::{MemoryStateStore, MemoryWriteTransaction},
         AtomicDb,
@@ -39,7 +39,7 @@ use tari_engine_types::{
     resource_container::ResourceContainer,
     substate::{Substate, SubstateDiff, SubstateId},
     vault::Vault,
-    virtual_substate::{VirtualSubstate, VirtualSubstateId},
+    virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates},
 };
 use tari_template_builtin::{ACCOUNT_NFT_TEMPLATE_ADDRESS, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{

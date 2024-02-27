@@ -210,6 +210,19 @@ async fn call_component_method(
     // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
+#[when(expr = r#"I invoke on {word} on component {word} the method call "{word}" concurrently {int} times"#)]
+async fn call_component_method_concurrently(
+    world: &mut TariWorld,
+    vn_name: String,
+    component_name: String,
+    method_call: String,
+    times: usize,
+) {
+    validator_node_cli::concurrent_call_method(world, vn_name, component_name, method_call, times)
+        .await
+        .unwrap();
+}
+
 #[when(
     expr = r#"I invoke on {word} on component {word} the method call "{word}" named "{word}" the result is error {string}"#
 )]

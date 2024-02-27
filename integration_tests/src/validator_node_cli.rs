@@ -10,14 +10,14 @@ use tari_engine_types::{
 };
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::args;
+use tari_transaction::SubstateRequirement;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{
     command::transaction::{handle_submit, submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
     from_hex::FromHex,
     key_manager::KeyManager,
-    versioned_substate_id::VersionedSubstateId,
 };
-use tari_validator_node_client::types::SubmitTransactionResponse;
+use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNodeClient};
 
 use crate::{logging::get_base_dir_for_scenario, TariWorld};
 
@@ -142,62 +142,123 @@ pub(crate) fn add_substate_ids(world: &mut TariWorld, outputs_name: String, diff
         match addr {
             SubstateId::Component(_) => {
                 let component = data.substate_value().component().unwrap();
-                outputs.insert(format!("components/{}", component.module_name), VersionedSubstateId {
+                outputs.insert(format!("components/{}", component.module_name), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[0] += 1;
             },
             SubstateId::Resource(_) => {
-                outputs.insert(format!("resources/{}", counters[1]), VersionedSubstateId {
+                outputs.insert(format!("resources/{}", counters[1]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[1] += 1;
             },
             SubstateId::Vault(_) => {
-                outputs.insert(format!("vaults/{}", counters[2]), VersionedSubstateId {
+                outputs.insert(format!("vaults/{}", counters[2]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[2] += 1;
             },
             SubstateId::NonFungible(_) => {
-                outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateId {
+                outputs.insert(format!("nfts/{}", counters[3]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[3] += 1;
             },
             SubstateId::UnclaimedConfidentialOutput(_) => {
-                outputs.insert(format!("layer_one_commitments/{}", counters[4]), VersionedSubstateId {
+                outputs.insert(format!("layer_one_commitments/{}", counters[4]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[4] += 1;
             },
             SubstateId::NonFungibleIndex(_) => {
-                outputs.insert(format!("nft_indexes/{}", counters[5]), VersionedSubstateId {
+                outputs.insert(format!("nft_indexes/{}", counters[5]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[5] += 1;
             },
             SubstateId::TransactionReceipt(_) => {
-                outputs.insert(format!("transaction_receipt/{}", counters[6]), VersionedSubstateId {
+                outputs.insert(format!("transaction_receipt/{}", counters[6]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[6] += 1;
             },
             SubstateId::FeeClaim(_) => {
-                outputs.insert(format!("fee_claim/{}", counters[7]), VersionedSubstateId {
+                outputs.insert(format!("fee_claim/{}", counters[7]), SubstateRequirement {
                     substate_id: addr.clone(),
-                    version: data.version(),
+                    version: Some(data.version()),
                 });
                 counters[7] += 1;
             },
         }
+    }
+}
+
+pub async fn concurrent_call_method(
+    world: &mut TariWorld,
+    vn_name: String,
+    fq_component_name: String,
+    method_call: String,
+    times: usize,
+) -> Result<SubmitTransactionResponse, RejectReason> {
+    let vn_data_dir = get_cli_data_dir(world);
+    let (input_group, component_name) = fq_component_name.split_once('/').unwrap_or_else(|| {
+        panic!(
+            "Component name must be in the format '{{group}}/components/{{template_name}}', got {}",
+            fq_component_name
+        )
+    });
+
+    let vn_client = world.get_validator_node(&vn_name).get_client();
+
+    let mut component = world
+        .outputs
+        .get(input_group)
+        .unwrap_or_else(|| panic!("No outputs found with name {}", input_group))
+        .iter()
+        .find(|(name, _)| **name == component_name)
+        .map(|(_, data)| data.clone())
+        .unwrap_or_else(|| panic!("No component named {}", component_name));
+    // For concurrent transactions we DO NOT specify the versions
+    component.version = None;
+
+    // call_method_inner(vn_client.clone(), vn_data_dir.clone(), component.clone(), method_call.clone()).await
+
+    let mut handles = Vec::new();
+    for _ in 0..times {
+        let handle = tokio::spawn(call_method_inner(
+            vn_client.clone(),
+            vn_data_dir.clone(),
+            component.clone(),
+            method_call.clone(),
+        ));
+        handles.push(handle);
+    }
+
+    let mut last_resp = None;
+    for handle in handles {
+        let result = handle
+            .await
+            .map_err(|e| RejectReason::ExecutionFailure(e.to_string()))?;
+        match result {
+            Ok(response) => last_resp = Some(response),
+            Err(e) => return Err(e),
+        }
+    }
+
+    if let Some(res) = last_resp {
+        Ok(res)
+    } else {
+        Err(RejectReason::ExecutionFailure(
+            "No responses from any of the concurrent calls".to_owned(),
+        ))
     }
 }
 
@@ -258,6 +319,42 @@ pub async fn call_method(
         outputs_name,
         resp.dry_run_result.as_ref().unwrap().finalize.result.accept().unwrap(),
     );
+    Ok(resp)
+}
+
+async fn call_method_inner(
+    vn_client: ValidatorNodeClient,
+    vn_data_dir: PathBuf,
+    component: SubstateRequirement,
+    method_call: String,
+) -> Result<SubmitTransactionResponse, RejectReason> {
+    let instruction = CliInstruction::CallMethod {
+        component_address: component.substate_id.clone(),
+        // TODO: actually parse the method call for arguments
+        method_name: method_call,
+        args: vec![],
+    };
+
+    println!("Inputs: {}", component);
+    let args = SubmitArgs {
+        instruction,
+        common: CommonSubmitArgs {
+            wait_for_result: true,
+            wait_for_result_timeout: Some(60),
+            inputs: vec![component],
+            input_refs: vec![],
+            version: None,
+            dump_outputs_into: None,
+            account_template_address: None,
+            dry_run: false,
+        },
+    };
+    let resp = handle_submit(args, vn_data_dir, &mut vn_client.clone()).await.unwrap();
+
+    if let Some(failure) = resp.dry_run_result.as_ref().unwrap().finalize.reject() {
+        return Err(failure.clone());
+    }
+
     Ok(resp)
 }
 
@@ -360,7 +457,7 @@ pub(crate) fn get_cli_data_dir(world: &mut TariWorld) -> PathBuf {
 }
 
 // Remove inputs that have been downed
-fn select_latest_version(mut inputs: Vec<VersionedSubstateId>) -> Vec<VersionedSubstateId> {
+fn select_latest_version(mut inputs: Vec<SubstateRequirement>) -> Vec<SubstateRequirement> {
     inputs.sort_by(|a, b| b.substate_id.cmp(&a.substate_id).then(b.version.cmp(&a.version)));
     inputs.dedup_by(|a, b| a.substate_id == b.substate_id);
     inputs
