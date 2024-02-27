@@ -38,6 +38,7 @@ use tari_engine_types::{
     lock::LockFlag,
     logs::LogEntry,
     substate::{SubstateId, SubstateValue},
+    virtual_substate::VirtualSubstates,
     TemplateAddress,
 };
 use tari_template_lib::{
@@ -56,7 +57,6 @@ use crate::{
         workspace::Workspace,
         AuthorizationScope,
         RuntimeError,
-        VirtualSubstates,
     },
     state_store::memory::MemoryStateStore,
 };

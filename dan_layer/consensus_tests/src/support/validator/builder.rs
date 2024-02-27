@@ -20,6 +20,7 @@ use crate::support::{
     sync::AlwaysSyncedSyncManager,
     NoopStateManager,
     RoundRobinLeaderStrategy,
+    TestBlockTransactionExecutorBuilder,
     TestConsensusSpec,
     Validator,
     ValidatorChannels,
@@ -100,6 +101,9 @@ impl ValidatorBuilder {
                 .as_ref()
                 .unwrap()
                 .clone_for(self.address.clone(), self.public_key.clone(), self.shard);
+
+        let transaction_executor_builder = TestBlockTransactionExecutorBuilder::new();
+
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             self.address.clone(),
             Default::default(),
@@ -112,6 +116,7 @@ impl ValidatorBuilder {
             signing_service,
             noop_state_manager.clone(),
             transaction_pool,
+            transaction_executor_builder,
             tx_events.clone(),
             tx_mempool,
             NoopHooks,

@@ -4,11 +4,10 @@
 use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::Epoch;
-use tari_dan_engine::runtime::VirtualSubstates;
 use tari_dan_storage::{consensus_models::Block, StateStore, StorageError};
 use tari_engine_types::{
     fee_claim::FeeClaim,
-    virtual_substate::{VirtualSubstate, VirtualSubstateId},
+    virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates},
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_template_lib::models::Amount;

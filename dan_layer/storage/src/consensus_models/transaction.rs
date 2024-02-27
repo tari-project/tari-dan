@@ -84,8 +84,11 @@ impl TransactionRecord {
         self.result.as_ref()
     }
 
-    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
-        self.transaction.involved_shards_iter().chain(&self.resulting_outputs)
+    pub fn involved_shards_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+        self.transaction
+            .all_inputs_iter()
+            .map(|input| input.to_substate_address())
+            .chain(self.resulting_outputs.clone())
     }
 
     pub fn resulting_outputs(&self) -> &[SubstateAddress] {
@@ -234,7 +237,7 @@ impl TransactionRecord {
         }
         Ok(transactions
             .into_iter()
-            .map(|t| (*t.transaction.id(), t.involved_shards_iter().copied().collect()))
+            .map(|t| (*t.transaction.id(), t.involved_shards_iter().collect()))
             .collect())
     }
 }

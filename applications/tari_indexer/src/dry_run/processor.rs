@@ -26,20 +26,19 @@ use log::info;
 use tari_common::configuration::Network;
 use tari_dan_app_utilities::{
     template_manager::implementation::TemplateManager,
-    transaction_executor::{TariDanTransactionProcessor, TransactionExecutor},
+    transaction_executor::{TariDanTransactionProcessor, TransactionExecutor as _},
 };
 use tari_dan_common_types::{Epoch, PeerAddress, SubstateAddress};
 use tari_dan_engine::{
     bootstrap_state,
     fees::FeeTable,
-    runtime::VirtualSubstates,
     state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
 };
 use tari_engine_types::{
     commit_result::ExecuteResult,
     instruction::Instruction,
     substate::{Substate, SubstateId},
-    virtual_substate::{VirtualSubstate, VirtualSubstateId},
+    virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates},
 };
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_lib::{
@@ -162,7 +161,7 @@ where TSubstateCache: SubstateCache + 'static
                 continue;
             }
 
-            let (id, substate) = self.fetch_substate(*address, epoch).await?;
+            let (id, substate) = self.fetch_substate(address.to_substate_address(), epoch).await?;
             substates.insert(id, substate);
         }
 

@@ -86,14 +86,13 @@ use tokio::{sync::mpsc, task::JoinHandle};
 #[cfg(feature = "metrics")]
 use crate::consensus::metrics::PrometheusConsensusMetrics;
 use crate::{
-    consensus,
-    consensus::ConsensusHandle,
+    consensus::{self, ConsensusHandle, TariDanBlockTransactionExecutorBuilder},
     dry_run_transaction_processor::DryRunTransactionProcessor,
     p2p::{
         create_tari_validator_node_rpc_service,
         services::{
-            mempool,
             mempool::{
+                self,
                 ClaimFeeTransactionValidator,
                 EpochRangeValidator,
                 FeeTransactionValidator,
@@ -246,6 +245,9 @@ pub async fn spawn_services(
     let outbound_messaging =
         ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
 
+    let transaction_executor_builder =
+        TariDanBlockTransactionExecutorBuilder::new(epoch_manager.clone(), payload_processor.clone());
+
     #[cfg(feature = "metrics")]
     let metrics = PrometheusConsensusMetrics::new(state_store.clone(), metrics_registry);
     #[cfg(not(feature = "metrics"))]
@@ -262,6 +264,7 @@ pub async fn spawn_services(
         validator_node_client_factory.clone(),
         metrics,
         shutdown.clone(),
+        transaction_executor_builder,
     )
     .await;
     handles.push(consensus_join_handle);
