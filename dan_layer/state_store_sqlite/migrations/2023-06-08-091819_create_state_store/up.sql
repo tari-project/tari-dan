@@ -181,20 +181,21 @@ create unique index transactions_uniq_idx_id on transactions (transaction_id);
 
 create table transaction_pool
 (
-    id                integer   not null primary key AUTOINCREMENT,
-    transaction_id    text      not null,
-    original_decision text      not null,
-    local_decision    text      null,
-    remote_decision   text      null,
-    evidence          text      not null,
-    remote_evidence   text      null,
-    transaction_fee   bigint    not null,
-    leader_fee        text      null,
-    stage             text      not null,
-    pending_stage     text      null,
-    is_ready          boolean   not null,
-    updated_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                  integer   not null primary key AUTOINCREMENT,
+    transaction_id      text      not null,
+    original_decision   text      not null,
+    local_decision      text      null,
+    remote_decision     text      null,
+    evidence            text      not null,
+    remote_evidence     text      null,
+    transaction_fee     bigint    not null,
+    leader_fee          bigint    null,
+    global_exhaust_burn bigint    null,
+    stage               text      not null,
+    pending_stage       text      null,
+    is_ready            boolean   not null,
+    updated_at          timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at          timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
 create unique index transaction_pool_uniq_idx_transaction_id on transaction_pool (transaction_id);
@@ -308,22 +309,23 @@ CREATE UNIQUE INDEX pending_state_tree_diffs_uniq_idx_block_id on pending_state_
 -- Debug Triggers
 CREATE TABLE transaction_pool_history
 (
-    history_id        INTEGER PRIMARY KEY,
-    id                integer   not null,
-    transaction_id    text      not null,
-    original_decision text      not null,
-    local_decision    text      null,
-    remote_decision   text      null,
-    evidence          text      not null,
-    transaction_fee   bigint    not null,
-    leader_fee        text      null,
-    stage             text      not null,
-    new_stage         text      not null,
-    is_ready          boolean   not null,
-    new_is_ready      boolean   not null,
-    updated_at        timestamp NOT NULL,
-    created_at        timestamp NOT NULL,
-    change_time       DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))
+    history_id          INTEGER PRIMARY KEY,
+    id                  integer   not null,
+    transaction_id      text      not null,
+    original_decision   text      not null,
+    local_decision      text      null,
+    remote_decision     text      null,
+    evidence            text      not null,
+    transaction_fee     bigint    not null,
+    leader_fee          bigint    null,
+    global_exhaust_burn bigint    null,
+    stage               text      not null,
+    new_stage           text      not null,
+    is_ready            boolean   not null,
+    new_is_ready        boolean   not null,
+    updated_at          timestamp NOT NULL,
+    created_at          timestamp NOT NULL,
+    change_time         DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))
 );
 
 CREATE TRIGGER copy_transaction_pool_history
@@ -339,6 +341,7 @@ BEGIN
                                           evidence,
                                           transaction_fee,
                                           leader_fee,
+                                          global_exhaust_burn,
                                           stage,
                                           new_stage,
                                           is_ready,
@@ -353,6 +356,7 @@ BEGIN
             OLD.evidence,
             OLD.transaction_fee,
             OLD.leader_fee,
+            OLD.global_exhaust_burn,
             OLD.stage,
             NEW.stage,
             OLD.is_ready,
