@@ -70,11 +70,7 @@ impl FromStr for ComponentAddress {
     type Err = HashParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = if let Some(stripped) = s.strip_prefix("component_") {
-            stripped
-        } else {
-            s
-        };
+        let s = s.strip_prefix("component_").unwrap_or(s);
         let hash = Hash::from_hex(s)?;
         Ok(Self::new(hash))
     }
