@@ -48,11 +48,17 @@ pub mod challenges {
             .result()
     }
 
-    pub fn confidential_withdraw64(excess: &PublicKey, public_nonce: &PublicKey, revealed_amount: Amount) -> [u8; 64] {
+    pub fn confidential_withdraw64(
+        excess: &PublicKey,
+        public_nonce: &PublicKey,
+        input_revealed_amount: Amount,
+        output_revealed_amount: Amount,
+    ) -> [u8; 64] {
         hasher64(EngineHashDomainLabel::ConfidentialTransfer)
             .chain(excess)
             .chain(public_nonce)
-            .chain(&revealed_amount)
+            .chain(&input_revealed_amount)
+            .chain(&output_revealed_amount)
             .result()
     }
 

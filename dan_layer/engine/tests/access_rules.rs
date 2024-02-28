@@ -223,6 +223,7 @@ mod component_access_rules {
 }
 
 mod resource_access_rules {
+    use tari_template_lib::models::Metadata;
 
     use super::*;
 
@@ -443,7 +444,7 @@ mod resource_access_rules {
         );
 
         // User can take tokens
-        test.execute_expect_success(
+        let result = test.execute_expect_success(
             Transaction::builder()
                 .call_method(user_account, "create_proof_by_non_fungible_ids", args![
                     badge_resource,
@@ -453,6 +454,7 @@ mod resource_access_rules {
                     ]
                 ])
                 .put_last_instruction_output_on_workspace("proof")
+                .call_method(component_address, "get_nft_data_using_proof", args![Workspace("proof")])
                 .call_method(component_address, "take_tokens_using_proof", args![
                     Workspace("proof"),
                     Amount(10)
@@ -464,6 +466,9 @@ mod resource_access_rules {
                 .build(),
             vec![user_proof.clone()],
         );
+
+        let badge_data = result.finalize.execution_results[2].decode::<Vec<Metadata>>().unwrap();
+        assert!(badge_data.iter().all(|b| b.contains_key("colour")));
 
         let vaults: BTreeMap<ResourceAddress, VaultId> = test.extract_component_value(user_account, "$.vaults");
         let user_badge_vault_id = vaults[&badge_resource];

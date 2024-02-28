@@ -2,12 +2,18 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_template_lib::prelude::*;
+
 const BADGE_NAMES: [&str; 4] = ["mint", "burn", "withdraw", "deposit"];
 
 pub fn create_badge_resource(recall_rule: AccessRule) -> Bucket {
+    let mut metadata = Metadata::new();
+    metadata.insert("colour", "blue");
     ResourceBuilder::non_fungible()
         .mint_many_with(BADGE_NAMES, |name| {
-            (NonFungibleId::from_string(name), (Vec::new(), Vec::new()))
+            (
+                NonFungibleId::from_string(name),
+                (tari_bor::encode(&metadata).unwrap(), Vec::new()),
+            )
         })
         .recallable(recall_rule)
         .build_bucket()
@@ -160,7 +166,13 @@ mod access_rules_template {
         }
 
         pub fn mint_new_badge(&self) -> Bucket {
-            ResourceManager::get(self.badges.resource_address()).mint_non_fungible(NonFungibleId::random(), &(), &())
+            let mut metadata = Metadata::new();
+            metadata.insert("colour", "blue");
+            ResourceManager::get(self.badges.resource_address()).mint_non_fungible(
+                NonFungibleId::random(),
+                &metadata,
+                &(),
+            )
         }
 
         pub fn take_tokens(&mut self, amount: Amount) -> Bucket {
@@ -178,6 +190,15 @@ mod access_rules_template {
                     panic!("Access denied");
                 },
             }
+        }
+
+        pub fn get_nft_data_using_proof(&self, proof: Proof) -> Vec<Metadata> {
+            let nfts = proof.get_non_fungibles();
+            let manager = ResourceManager::get(proof.resource_address());
+            nfts.iter()
+                .map(|nft| manager.get_non_fungible(nft))
+                .map(|nft| nft.get_data())
+                .collect()
         }
 
         pub fn set_value(&mut self, value: u32) {

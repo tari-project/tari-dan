@@ -29,6 +29,7 @@ use tari_template_abi::rust::{collections::BTreeMap, fmt::Display};
 use ts_rs::TS;
 
 use super::BinaryTag;
+
 const TAG: u64 = BinaryTag::Metadata as u64;
 
 /// A collection of user-defined data used to describe other types, for example, non-fungible tokens or events
@@ -50,6 +51,10 @@ impl Metadata {
 
     pub fn get(&self, key: &str) -> Option<&String> {
         self.0.get(key)
+    }
+
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.0.contains_key(key)
     }
 
     pub fn merge(&mut self, other: Metadata) -> &mut Self {
