@@ -77,6 +77,7 @@ use crate::{
         get_account_or_default,
         get_account_with_inputs,
         invalid_params,
+        wait_for_account_create_or_update,
         wait_for_result,
     },
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
@@ -655,7 +656,7 @@ pub async fn handle_claim_burn(
         &account_public_key,
         max_fee,
         account_secret_key,
-        accounts_api,
+        &accounts_api,
         context,
     )
     .await?;
@@ -676,7 +677,7 @@ async fn finish_claiming<T: WalletStore>(
     account_public_key: &RistrettoPublicKey,
     max_fee: Amount,
     account_secret_key: DerivedKey<RistrettoPublicKey>,
-    accounts_api: tari_dan_wallet_sdk::apis::accounts::AccountsApi<'_, T>,
+    accounts_api: &tari_dan_wallet_sdk::apis::accounts::AccountsApi<'_, T>,
     context: &HandlerContext,
 ) -> Result<
     (
@@ -735,15 +736,19 @@ async fn finish_claiming<T: WalletStore>(
         }),
     });
     let finalized = wait_for_result(&mut events, tx_id).await?;
-    if let Some(reject) = finalized.finalize.result.reject() {
+    if let Some(reject) = finalized.finalize.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
-    if let Some(reason) = finalized.finalize.reject() {
+    if let Some(reason) = finalized.finalize.full_reject() {
         return Err(anyhow::anyhow!(
             "Fee transaction succeeded (fees charged) however the transaction failed: {}",
             reason
         ));
     }
+
+    // Wait for the monitor to pick up the new or updated account
+    wait_for_account_create_or_update(&mut events, &account_address).await?;
+
     Ok((tx_id, finalized))
 }
 
@@ -791,19 +796,22 @@ pub async fn handle_create_free_test_coins(
     // ------------------------------
     let (tx_id, finalized) = finish_claiming(
         instructions,
-        account_address,
+        account_address.clone(),
         new_account_name,
         sdk,
         inputs,
         &account_public_key,
         max_fee,
         account_secret_key,
-        accounts_api,
+        &accounts_api,
         context,
     )
     .await?;
 
+    let account = accounts_api.get_account_by_address(&account_address)?;
+
     Ok(AccountsCreateFreeTestCoinsResponse {
+        account,
         transaction_id: tx_id,
         amount,
         fee: max_fee,

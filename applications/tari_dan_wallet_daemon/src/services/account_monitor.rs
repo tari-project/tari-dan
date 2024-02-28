@@ -40,7 +40,7 @@ use tokio::{
 
 use crate::{
     notify::Notify,
-    services::{AccountChangedEvent, NewAccountInfo, Reply, WalletEvent},
+    services::{AccountChangedEvent, AccountCreatedEvent, NewAccountInfo, Reply, WalletEvent},
 };
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::account_monitor";
@@ -134,7 +134,7 @@ where
 
             if is_updated {
                 self.notify.notify(AccountChangedEvent {
-                    account_address: account.address.clone(),
+                    account_address: account.address,
                 });
             } else {
                 info!(
@@ -185,14 +185,14 @@ where
                 .await
                 .optional()?;
             let Some(ValidatorScanResult {
-                address: versioned_addr,
-                substate,
-                created_by_tx,
-            }) = scan_result
-            else {
-                warn!(target: LOG_TARGET, "Vault {} for account {} does not exist according to validator node", vault_addr, versioned_account_address);
-                continue;
-            };
+                         address: versioned_addr,
+                         substate,
+                         created_by_tx,
+                     }) = scan_result
+                else {
+                    warn!(target: LOG_TARGET, "Vault {} for account {} does not exist according to validator node", vault_addr, versioned_account_address);
+                    continue;
+                };
 
             if let Some(vault_version) = maybe_vault_version {
                 // The first time a vault is found, know about the vault substate from the tx result but never added
@@ -324,20 +324,23 @@ where
         let substate_api = self.wallet_sdk.substate_api();
         let accounts_api = self.wallet_sdk.accounts_api();
 
-        if let Some(new_account) = self.pending_accounts.remove(&tx_id) {
+        let mut new_account = None;
+        if let Some(account) = self.pending_accounts.remove(&tx_id) {
             // Filter for a _new_ account created in this transaction
             let new_account_address =
                 find_new_account_address(diff).ok_or_else(|| AccountMonitorError::ExpectedNewAccount {
                     tx_id,
-                    account_name: new_account.name.clone().unwrap_or_else(|| "<no-name>".to_string()),
+                    account_name: account.name.clone().unwrap_or_else(|| "<no-name>".to_string()),
                 })?;
 
             accounts_api.add_account(
-                new_account.name.as_deref(),
+                account.name.as_deref(),
                 new_account_address,
-                new_account.key_index,
-                new_account.is_default,
+                account.key_index,
+                account.is_default,
             )?;
+
+            new_account = Some(accounts_api.get_account_by_address(new_account_address)?);
         }
 
         let mut vaults = diff
@@ -379,6 +382,7 @@ where
             }
         }
 
+        let mut updated_accounts = vec![];
         // Process all existing vaults that belong to an account
         for (vault_addr, substate) in vaults {
             let vault_addr = SubstateId::Vault(vault_addr);
@@ -414,7 +418,20 @@ where
 
             // Update the vault balance / confidential outputs
             self.refresh_vault(&account_addr, vault, &nfts).await?;
+            updated_accounts.push(account_addr);
         }
+
+        if let Some(account) = new_account {
+            self.notify.notify(AccountCreatedEvent {
+                account,
+                created_by_tx: tx_id,
+            });
+        } else {
+            for account_address in updated_accounts {
+                self.notify.notify(AccountChangedEvent { account_address });
+            }
+        }
+
         Ok(())
     }
 
@@ -494,8 +511,7 @@ where
             WalletEvent::TransactionInvalid(event) => {
                 self.pending_accounts.remove(&event.transaction_id);
             },
-            WalletEvent::AccountChanged(_) => {},
-            WalletEvent::AuthLoginRequest(_) => {},
+            WalletEvent::AccountCreated(_) | WalletEvent::AccountChanged(_) | WalletEvent::AuthLoginRequest(_) => {},
         }
         Ok(())
     }

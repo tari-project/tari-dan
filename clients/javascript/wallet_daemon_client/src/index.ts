@@ -9,17 +9,22 @@ import {
     AccountGetResponse,
     AccountsGetBalancesRequest,
     AccountsGetBalancesResponse,
-    SubstatesGetRequest,
+    TransactionGetResultRequest,
+    TransactionGetResultResponse,
+    TemplatesGetResponse,
+    TemplatesGetRequest,
     SubstatesGetResponse,
+    SubstatesGetRequest,
     SubstatesListRequest,
     SubstatesListResponse,
     TransactionSubmitRequest,
     TransactionSubmitResponse,
-    TransactionGetResultRequest,
-    TransactionGetResultResponse,
     TransactionWaitResultRequest,
-    TransactionWaitResultResponse, TemplatesGetRequest, TemplatesGetResponse,
-} from '@tarilabs/typescript-bindings/wallet-daemon-client';
+    TransactionWaitResultResponse,
+    AccountsCreateFreeTestCoinsRequest,
+    AccountsCreateFreeTestCoinsResponse,
+    ComponentAddressOrName,
+} from '@tariproject/typescript-bindings/wallet-daemon-client';
 
 import {
     Arg,
@@ -32,9 +37,24 @@ import {
     SubstateType,
     TransactionStatus,
     SubstateId,
-} from '@tarilabs/typescript-bindings/index';
+    substateIdToString,
+    stringToSubstateId,
+    rejectReasonToString
+} from '@tariproject/typescript-bindings/index';
+import {FetchRpcTransport, RpcTransport} from "./transports";
+
+export * as transports from './transports';
+
+export {
+    substateIdToString,
+    stringToSubstateId,
+    rejectReasonToString,
+};
 
 export type {
+    ComponentAddressOrName,
+    AccountsCreateFreeTestCoinsRequest,
+    AccountsCreateFreeTestCoinsResponse,
     AccountGetDefaultRequest,
     AccountGetRequest,
     AccountGetResponse,
@@ -64,19 +84,28 @@ export type {
     TransactionWaitResultResponse
 };
 
-export function createClient(url: string): WalletDaemonClient {
-    return new WalletDaemonClient(url);
-}
 
 export class WalletDaemonClient {
     private token: string | null;
-    private url: string;
+    private transport: RpcTransport;
     private id: number;
 
-    constructor(url: string) {
+    constructor(transport: RpcTransport) {
         this.token = null;
-        this.url = url;
+        this.transport = transport;
         this.id = 0;
+    }
+
+    static new(transport: RpcTransport): WalletDaemonClient {
+        return new WalletDaemonClient(transport);
+    }
+
+    static usingFetchTransport(url: string): WalletDaemonClient {
+        return WalletDaemonClient.new(FetchRpcTransport.new(url));
+    }
+
+    getTransport() {
+        return this.transport;
     }
 
     setToken(token: string) {
@@ -110,6 +139,7 @@ export class WalletDaemonClient {
     submitTransaction(params: TransactionSubmitRequest): Promise<TransactionSubmitResponse> {
         return this.__invokeRpc("transactions.submit", params);
     }
+
     substatesGet(params: SubstatesGetRequest): Promise<SubstatesGetResponse> {
         return this.__invokeRpc("substates.get", params);
     }
@@ -117,6 +147,7 @@ export class WalletDaemonClient {
     substatesList(params: SubstatesListRequest): Promise<SubstatesListResponse> {
         return this.__invokeRpc("substates.list", params);
     }
+
     getTransactionResult(params: TransactionGetResultRequest): Promise<TransactionWaitResultResponse> {
         return this.__invokeRpc("transactions.get_result", params);
     }
@@ -129,28 +160,19 @@ export class WalletDaemonClient {
         return this.__invokeRpc("templates.get", params);
     }
 
+    createFreeTestCoins(params: AccountsCreateFreeTestCoinsRequest): Promise<AccountsCreateFreeTestCoinsResponse> {
+        return this.__invokeRpc("accounts.create_free_test_coins", params);
+    }
+
     async __invokeRpc(method: string, params: object = null) {
         const id = this.id++;
-        const headers = {
-            "Content-Type": "application/json",
-        };
-        if (this.token) {
-            headers["Authorization"] = `Bearer ${this.token}`;
-        }
-        const response = await fetch(this.url, {
-            method: "POST",
-            body: JSON.stringify({
-                method: method,
-                jsonrpc: "2.0",
-                id: id,
-                params: params || {},
-            }),
-            headers,
-        });
-        const json = await response.json();
-        if (json.error) {
-            throw new Error(`${json.error.code}: ${json.error.message}`);
-        }
-        return json.result;
+        const response = await this.transport.sendRequest<any>({
+            method,
+            jsonrpc: "2.0",
+            id: id,
+            params: params || {},
+        }, {token: this.token, timeout_millis: null});
+
+        return response;
     }
 }

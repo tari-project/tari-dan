@@ -10,6 +10,7 @@ use tari_dan_wallet_sdk::{
     DanWalletSdk,
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
+use tari_engine_types::substate::SubstateId;
 use tari_transaction::TransactionId;
 use tari_wallet_daemon_client::ComponentAddressOrName;
 use tokio::sync::broadcast;
@@ -37,6 +38,24 @@ pub async fn wait_for_result(
                         .unwrap_or_else(|| "Unknown".to_string()),
                     event.status,
                 ));
+            },
+            _ => {},
+        }
+    }
+}
+
+pub async fn wait_for_account_create_or_update(
+    events: &mut broadcast::Receiver<WalletEvent>,
+    account_address: &SubstateId,
+) -> Result<SubstateId, anyhow::Error> {
+    loop {
+        let wallet_event = events.recv().await?;
+        match wallet_event {
+            WalletEvent::AccountCreated(event) if event.account.address == *account_address => {
+                return Ok(event.account.address);
+            },
+            WalletEvent::AccountChanged(event) if event.account_address == *account_address => {
+                return Ok(event.account_address);
             },
             _ => {},
         }

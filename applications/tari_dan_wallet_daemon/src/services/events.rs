@@ -4,7 +4,7 @@
 use std::time::SystemTime;
 
 use serde_json::Value;
-use tari_dan_wallet_sdk::models::TransactionStatus;
+use tari_dan_wallet_sdk::models::{Account, TransactionStatus};
 use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateId};
 use tari_template_lib::models::Amount;
 use tari_transaction::TransactionId;
@@ -14,6 +14,7 @@ pub enum WalletEvent {
     TransactionSubmitted(TransactionSubmittedEvent),
     TransactionFinalized(TransactionFinalizedEvent),
     TransactionInvalid(TransactionInvalidEvent),
+    AccountCreated(AccountCreatedEvent),
     AccountChanged(AccountChangedEvent),
     AuthLoginRequest(AuthLoginRequestEvent),
 }
@@ -48,6 +49,12 @@ impl From<AuthLoginRequestEvent> for WalletEvent {
     }
 }
 
+impl From<AccountCreatedEvent> for WalletEvent {
+    fn from(value: AccountCreatedEvent) -> Self {
+        Self::AccountCreated(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TransactionSubmittedEvent {
     pub transaction_id: TransactionId,
@@ -69,6 +76,12 @@ pub struct TransactionFinalizedEvent {
     pub final_fee: Amount,
     pub status: TransactionStatus,
     pub json_result: Option<Vec<Value>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountCreatedEvent {
+    pub account: Account,
+    pub created_by_tx: TransactionId,
 }
 
 #[derive(Debug, Clone)]
