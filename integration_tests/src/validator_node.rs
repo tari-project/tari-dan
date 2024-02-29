@@ -24,7 +24,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-
+use core::time::Duration;
 use reqwest::Url;
 use tari_common::{
     configuration::{CommonConfig, StringList},
@@ -74,6 +74,7 @@ pub async fn spawn_validator_node(
     validator_node_name: String,
     base_node_name: String,
     wallet_name: String,
+    min_block_time: Duration,
 ) -> ValidatorNodeProcess {
     // each spawned VN will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
@@ -125,6 +126,9 @@ pub async fn spawn_validator_node(
 
         // The VNS will try to auto register upon startup
         config.validator_node.auto_register = false;
+
+        // Minimu block time (to allow testing concurrent transactions in the same block)
+        config.validator_node.min_block_time = min_block_time;
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);
