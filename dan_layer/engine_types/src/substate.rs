@@ -99,7 +99,7 @@ pub enum SubstateId {
     Resource(#[serde(with = "serde_with::string")] ResourceAddress),
     Vault(#[serde(with = "serde_with::string")] VaultId),
     UnclaimedConfidentialOutput(#[cfg_attr(feature = "ts", ts(type = "string"))] UnclaimedConfidentialOutputAddress),
-    NonFungible(NonFungibleAddress),
+    NonFungible(#[serde(with = "serde_with::string")] NonFungibleAddress),
     NonFungibleIndex(NonFungibleIndexAddress),
     TransactionReceipt(TransactionReceiptAddress),
     FeeClaim(FeeClaimAddress),
