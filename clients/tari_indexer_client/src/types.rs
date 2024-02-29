@@ -17,6 +17,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateId},
     TemplateAddress,
 };
+use tari_template_abi::TemplateDef;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
@@ -114,6 +115,44 @@ pub struct SubmitTransactionResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
     pub result: IndexerTransactionFinalizedResult,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+)]
+pub struct ListTemplatesRequest {
+    pub limit: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+)]
+pub struct ListTemplatesResponse {
+    pub templates: Vec<TemplateMetadata>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+)]
+pub struct TemplateMetadata {
+    pub name: String,
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub address: TemplateAddress,
+    pub url: String,
+    /// SHA hash of binary
+    pub binary_sha: String,
+    /// Block height in which the template was published
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub height: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -441,5 +480,5 @@ pub struct GetTemplateDefinitionRequest {
 )]
 pub struct GetTemplateDefinitionResponse {
     pub name: String,
-    pub definition: tari_template_abi::TemplateDef,
+    pub definition: TemplateDef,
 }

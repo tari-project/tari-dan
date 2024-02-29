@@ -94,7 +94,6 @@ pub fn generate_confidential_proof(
                     .expect("[generate_confidential_proof] change nonce"),
                 encrypted_data: stmt.encrypted_data.clone(),
                 minimum_value_promise: stmt.minimum_value_promise,
-                revealed_amount: stmt.reveal_amount,
             })
         })
         .transpose()?;
@@ -104,16 +103,17 @@ pub fn generate_confidential_proof(
     let output_range_proof = generate_extended_bullet_proof(output_statement, change_statement)?;
 
     Ok(ConfidentialOutputProof {
-        output_statement: ConfidentialStatement {
+        output_statement: Some(ConfidentialStatement {
             commitment: copy_fixed(commitment.as_bytes()),
             sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(output_statement.sender_public_nonce.as_bytes())
                 .expect("[generate_confidential_proof] output nonce"),
             encrypted_data: output_statement.encrypted_data.clone(),
             minimum_value_promise: output_statement.minimum_value_promise,
-            revealed_amount: output_statement.reveal_amount,
-        },
+        }),
         change_statement: proof_change_statement,
         range_proof: output_range_proof.0,
+        output_revealed_amount: output_statement.reveal_amount,
+        change_revealed_amount: change_statement.map(|stmt| stmt.reveal_amount).unwrap_or_default(),
     })
 }
 
@@ -259,9 +259,9 @@ mod tests {
         #[test]
         fn it_is_invalid_if_minimum_value_changed() {
             let mut proof = create_valid_proof(100.into(), 100);
-            proof.output_statement.minimum_value_promise = 99;
+            proof.output_statement.as_mut().unwrap().minimum_value_promise = 99;
             validate_confidential_proof(&proof).unwrap_err();
-            proof.output_statement.minimum_value_promise = 1000;
+            proof.output_statement.as_mut().unwrap().minimum_value_promise = 1000;
             validate_confidential_proof(&proof).unwrap_err();
         }
     }
