@@ -183,6 +183,7 @@ pub trait WalletStoreReader {
 
     fn non_fungible_token_get_all(
         &mut self,
+        account: Account,
         limit: u64,
         offset: u64,
     ) -> Result<Vec<NonFungibleToken>, WalletStorageError>;

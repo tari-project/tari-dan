@@ -37,6 +37,7 @@ import {
 import { apiError } from "../helpers/types";
 import queryClient from "../queryClient";
 import type { Arg, ComponentAccessRules } from "@tariproject/typescript-bindings";
+import type { ComponentAddressOrName } from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 //   Fees are passed as strings because Amount is tagged
 export const useAccountsClaimBurn = (account: string, claimProof: string, fee: number) => {
@@ -195,10 +196,10 @@ export const useAccountsGet = (name: string) => {
   });
 };
 
-export const useAccountNFTsList = (offset: number, limit: number) => {
+export const useAccountNFTsList = (account: ComponentAddressOrName | null, offset: number, limit: number) => {
   return useQuery({
     queryKey: ["nfts_list"],
-    queryFn: () => nftList({ offset, limit }),
+    queryFn: () => nftList({ account, offset, limit }),
     onError: (error: apiError) => {
       error;
     },

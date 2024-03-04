@@ -8,6 +8,7 @@ use diesel::{
     dsl::sum,
     sql_query,
     BoolExpressionMethods,
+    JoinOnDsl,
     OptionalExtension,
     QueryDsl,
     RunQueryDsl,
@@ -746,12 +747,22 @@ impl WalletStoreReader for ReadTransaction<'_> {
 
     fn non_fungible_token_get_all(
         &mut self,
+        account: Account,
         limit: u64,
         offset: u64,
     ) -> Result<Vec<NonFungibleToken>, WalletStorageError> {
-        use crate::schema::{non_fungible_tokens, vaults};
+        use crate::schema::{non_fungible_tokens, substates, vaults};
+
+        // let vaults = vaults::table.select(vaults::id).filter(vaults::account_id.eq(account.id));
+        let vaults_ids = vaults::table
+            .left_join(substates::table.on(vaults::address.eq(substates::address)))
+            .filter(substates::parent_address.eq(account.address.to_string()))
+            .select(vaults::id)
+            .load::<i32>(self.connection())
+            .map_err(|e| WalletStorageError::general("non_fungible_token_get_all", e))?;
 
         let non_fungibles = non_fungible_tokens::table
+            .filter(non_fungible_tokens::vault_id.eq_any(vaults_ids))
             .limit(limit as i64)
             .offset(offset as i64)
             .load::<models::NonFungibleToken>(self.connection())
