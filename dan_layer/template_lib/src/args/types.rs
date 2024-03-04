@@ -51,7 +51,6 @@ use crate::{
     prelude::{ComponentAccessRules, ConfidentialOutputProof, TemplateAddress},
     resource::ResourceType,
     template::BuiltinTemplate,
-    Hash,
 };
 
 // -------------------------------- LOGS -------------------------------- //
@@ -161,7 +160,6 @@ pub struct CreateComponentArg {
     pub encoded_state: tari_bor::Value,
     pub owner_rule: OwnerRule,
     pub access_rules: ComponentAccessRules,
-    pub component_id: Option<Hash>,
     pub address_allocation: Option<AddressAllocation<ComponentAddress>>,
 }
 

@@ -28,6 +28,7 @@ use tari_engine_types::{
 use tari_shutdown::ShutdownSignal;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
+    models::VaultId,
     prelude::{NonFungibleId, ResourceAddress},
     resource::TOKEN_SYMBOL,
 };
@@ -177,34 +178,34 @@ where
             .filter(|s| s.substate_id.is_vault())
             .map(|s| (s.substate_id, s.version))
             .collect::<HashMap<_, _>>();
-        for vault in vaults_value.vault_ids() {
-            let vault_addr = SubstateId::Vault(*vault);
-            let maybe_vault_version = known_child_vaults.get(&vault_addr).copied();
+        for vault_id in vaults_value.vault_ids() {
+            let vault_substate_id = SubstateId::Vault(*vault_id);
+            let maybe_vault_version = known_child_vaults.get(&vault_substate_id).copied();
             let scan_result = substate_api
-                .scan_for_substate(&vault_addr, maybe_vault_version)
+                .scan_for_substate(&vault_substate_id, maybe_vault_version)
                 .await
                 .optional()?;
             let Some(ValidatorScanResult {
-                         address: versioned_addr,
-                         substate,
-                         created_by_tx,
-                     }) = scan_result
-                else {
-                    warn!(target: LOG_TARGET, "Vault {} for account {} does not exist according to validator node", vault_addr, versioned_account_address);
-                    continue;
-                };
+                address: versioned_addr,
+                substate,
+                created_by_tx,
+            }) = scan_result
+            else {
+                warn!(target: LOG_TARGET, "Vault {} for account {} does not exist according to validator node", vault_substate_id, versioned_account_address);
+                continue;
+            };
 
             if let Some(vault_version) = maybe_vault_version {
                 // The first time a vault is found, know about the vault substate from the tx result but never added
                 // it to the database.
-                if versioned_addr.version == vault_version && accounts_api.has_vault(&vault_addr)? {
+                if versioned_addr.version == vault_version && accounts_api.has_vault(&vault_substate_id)? {
                     info!(target: LOG_TARGET, "Vault {} is up to date", versioned_addr.substate_id);
                     continue;
                 }
             }
 
             let SubstateValue::Vault(vault) = substate else {
-                error!(target: LOG_TARGET, "Substate {} is not a vault. This should be impossible.", vault_addr);
+                error!(target: LOG_TARGET, "Substate {} is not a vault. This should be impossible.", vault_substate_id);
                 continue;
             };
 
@@ -216,10 +217,15 @@ where
                 versioned_addr,
             )?;
 
-            self.add_vault_to_account_if_not_exist(&versioned_account_address.substate_id, &vault)
+            self.add_vault_to_account_if_not_exist(&versioned_account_address.substate_id, *vault_id, &vault)
                 .await?;
-            self.refresh_vault(&versioned_account_address.substate_id, &vault, &HashMap::new())
-                .await?;
+            self.refresh_vault(
+                &versioned_account_address.substate_id,
+                *vault_id,
+                &vault,
+                &HashMap::new(),
+            )
+            .await?;
         }
 
         Ok(is_updated)
@@ -228,6 +234,7 @@ where
     async fn refresh_vault(
         &self,
         account_addr: &SubstateId,
+        vault_id: VaultId,
         vault: &Vault,
         nfts: &HashMap<&NonFungibleId, &NonFungibleContainer>,
     ) -> Result<(), AccountMonitorError> {
@@ -235,7 +242,7 @@ where
         let non_fungibles_api = self.wallet_sdk.non_fungible_api();
 
         let balance = vault.balance();
-        let vault_addr = SubstateId::Vault(*vault.vault_id());
+        let vault_addr = SubstateId::Vault(vault_id);
         if !accounts_api.exists_by_address(account_addr)? {
             // This is not our account
             return Ok(());
@@ -244,7 +251,7 @@ where
             info!(
                 target: LOG_TARGET,
                 "🔒️ NEW vault {} in account {}",
-                vault.vault_id(),
+                vault_id,
                 account_addr
             );
             accounts_api.add_vault(
@@ -261,7 +268,7 @@ where
         info!(
             target: LOG_TARGET,
             "🔒️ vault {} in account {} has new balance {}",
-            vault.vault_id(),
+            vault_id,
             account_addr,
             balance
         );
@@ -269,7 +276,7 @@ where
             info!(
                 target: LOG_TARGET,
                 "🔒️ vault {} in account {} has {} confidential commitments",
-                vault.vault_id(),
+                vault_id,
                 account_addr,
                 commitments.len()
             );
@@ -310,7 +317,7 @@ where
 
             let non_fungible = NonFungibleToken {
                 is_burned,
-                vault_id: *vault.vault_id(),
+                vault_id,
                 nft_id: id.clone(),
                 metadata,
             };
@@ -376,16 +383,17 @@ where
             for vault_id in value.vault_ids() {
                 // Any vaults we process here do not need to be reprocesed later
                 if let Some(vault) = vaults.remove(vault_id).and_then(|s| s.substate_value().vault()) {
-                    self.add_vault_to_account_if_not_exist(account_addr, vault).await?;
-                    self.refresh_vault(account_addr, vault, &nfts).await?;
+                    self.add_vault_to_account_if_not_exist(account_addr, *vault_id, vault)
+                        .await?;
+                    self.refresh_vault(account_addr, *vault_id, vault, &nfts).await?;
                 }
             }
         }
 
         let mut updated_accounts = vec![];
         // Process all existing vaults that belong to an account
-        for (vault_addr, substate) in vaults {
-            let vault_addr = SubstateId::Vault(vault_addr);
+        for (vault_id, substate) in vaults {
+            let vault_addr = SubstateId::Vault(vault_id);
             let SubstateValue::Vault(vault) = substate.substate_value() else {
                 error!(target: LOG_TARGET, "👁️‍🗨️ Substate {} is not a vault. This should be impossible.", vault_addr);
                 continue;
@@ -409,15 +417,16 @@ where
                 info!(
                     target: LOG_TARGET,
                     "👁️‍🗨️ Vault {} not in any known account",
-                    vault.vault_id(),
+                    vault_addr,
                 );
                 continue;
             }
 
-            self.add_vault_to_account_if_not_exist(&account_addr, vault).await?;
+            self.add_vault_to_account_if_not_exist(&account_addr, vault_id, vault)
+                .await?;
 
             // Update the vault balance / confidential outputs
-            self.refresh_vault(&account_addr, vault, &nfts).await?;
+            self.refresh_vault(&account_addr, vault_id, vault, &nfts).await?;
             updated_accounts.push(account_addr);
         }
 
@@ -454,9 +463,10 @@ where
     async fn add_vault_to_account_if_not_exist(
         &self,
         account_addr: &SubstateId,
+        vault_id: VaultId,
         vault: &Vault,
     ) -> Result<(), AccountMonitorError> {
-        let vault_addr = SubstateId::Vault(*vault.vault_id());
+        let vault_addr = SubstateId::Vault(vault_id);
         let accounts_api = self.wallet_sdk.accounts_api();
         if !accounts_api.exists_by_address(account_addr)? {
             // This is not our account
@@ -471,7 +481,7 @@ where
                 warn!(
                     target: LOG_TARGET,
                     "👁️‍🗨️ Failed to scan vault {} from VN: {}",
-                    vault.vault_id(),
+                    vault_id,
                     e
                 );
                 None
@@ -482,7 +492,7 @@ where
         info!(
             target: LOG_TARGET,
             "👁️‍🗨️ New {} in account {}",
-            vault.vault_id(),
+            vault_id,
             account_addr
         );
         accounts_api.add_vault(

@@ -10,7 +10,7 @@ use ts_rs::TS;
 
 use crate::resource_container::ResourceContainer;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FeeReceipt {
     /// The total amount of the fee payment(s)

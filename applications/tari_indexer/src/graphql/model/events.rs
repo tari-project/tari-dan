@@ -25,7 +25,7 @@ use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use log::*;
 use serde::{Deserialize, Serialize};
-use tari_template_lib::{prelude::ComponentAddress, Hash};
+use tari_template_lib::{models::ObjectKey, prelude::ComponentAddress, Hash};
 use tari_transaction::TransactionId;
 
 use crate::substate_manager::SubstateManager;
@@ -35,7 +35,7 @@ const LOG_TARGET: &str = "tari::indexer::graphql::events";
 #[derive(SimpleObject, Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Event {
-    pub component_address: Option<[u8; 32]>,
+    pub component_address: Option<[u8; ObjectKey::LENGTH]>,
     pub template_address: [u8; 32],
     pub tx_hash: [u8; 32],
     pub topic: String,
@@ -45,7 +45,9 @@ pub struct Event {
 impl Event {
     fn from_engine_event(event: tari_engine_types::events::Event) -> Result<Self, anyhow::Error> {
         Ok(Self {
-            component_address: event.component_address().map(|comp_addr| comp_addr.into_array()),
+            component_address: event
+                .component_address()
+                .map(|comp_addr| comp_addr.as_object_key().into_array()),
             template_address: event.template_address().into_array(),
             tx_hash: event.tx_hash().into_array(),
             topic: event.topic(),
@@ -140,7 +142,7 @@ impl EventQuery {
         )?;
 
         Ok(Event {
-            component_address: Some(component_address.into_array()),
+            component_address: Some(component_address.as_object_key().into_array()),
             template_address: template_address.into_array(),
             tx_hash: tx_hash.into_array(),
             topic,

@@ -102,11 +102,22 @@ fn check_ownership(
 ) -> Result<bool, RuntimeError> {
     match ownership.owner_rule {
         OwnerRule::OwnedBySigner => {
-            let owner_proof = ownership.owner_key.to_non_fungible_address();
+            let Some(owner_key) = ownership.owner_key else {
+                return Ok(false);
+            };
+            let owner_proof = owner_key.to_non_fungible_address();
             Ok(scope.virtual_proofs().contains(&owner_proof))
         },
         OwnerRule::None => Ok(false),
         OwnerRule::ByAccessRule(rule) => check_access_rule(state, scope, rule),
+        OwnerRule::ByPublicKey(key) => {
+            let Some(owner_key) = ownership.owner_key else {
+                return Ok(false);
+            };
+
+            let owner_proof = key.to_non_fungible_address();
+            Ok(key == owner_key && scope.virtual_proofs().contains(&owner_proof))
+        },
     }
 }
 

@@ -7,7 +7,7 @@ use indexmap::IndexSet;
 use tari_engine_types::{indexed_value::IndexedWellKnownTypes, lock::LockId, substate::SubstateId, TemplateAddress};
 use tari_template_lib::{
     constants::XTR2,
-    models::{BucketId, ProofId},
+    models::{BucketId, EntityId, ProofId},
     prelude::PUBLIC_IDENTITY_RESOURCE_ADDRESS,
 };
 
@@ -276,14 +276,16 @@ pub struct CallFrame {
     scope: CallScope,
     current_template: TemplateAddress,
     current_module: String,
+    entity_id: EntityId,
 }
 
 impl CallFrame {
-    pub fn new(current_template: TemplateAddress, current_module: String) -> Self {
+    pub fn for_static(current_template: TemplateAddress, current_module: String, entity_id: EntityId) -> Self {
         Self {
             scope: CallScope::new(),
             current_template,
             current_module,
+            entity_id,
         }
     }
 
@@ -291,11 +293,13 @@ impl CallFrame {
         current_template: TemplateAddress,
         current_module: String,
         component_lock: LockedSubstate,
+        entity_id: EntityId,
     ) -> Self {
         Self {
             scope: CallScope::for_component(component_lock),
             current_template,
             current_module,
+            entity_id,
         }
     }
 
@@ -311,6 +315,14 @@ impl CallFrame {
         self.scope
     }
 
+    pub fn entity_id(&self) -> EntityId {
+        self.entity_id
+    }
+
+    pub fn set_entity_id(&mut self, entity_id: EntityId) {
+        self.entity_id = entity_id;
+    }
+
     pub fn current_template(&self) -> (&TemplateAddress, &str) {
         (&self.current_template, &self.current_module)
     }
@@ -323,11 +335,13 @@ pub enum PushCallFrame {
         module_name: String,
         component_lock: LockedSubstate,
         arg_scope: IndexedWellKnownTypes,
+        entity_id: EntityId,
     },
     Static {
         template_address: TemplateAddress,
         module_name: String,
         arg_scope: IndexedWellKnownTypes,
+        entity_id: EntityId,
     },
 }
 
@@ -346,15 +360,16 @@ impl PushCallFrame {
         }
     }
 
-    pub fn into_new_call_frame(self) -> CallFrame {
+    pub(super) fn into_new_call_frame(self) -> CallFrame {
         match self {
             Self::ForComponent {
                 template_address,
                 module_name,
                 component_lock,
                 arg_scope,
+                entity_id,
             } => {
-                let mut frame = CallFrame::for_component(template_address, module_name, component_lock);
+                let mut frame = CallFrame::for_component(template_address, module_name, component_lock, entity_id);
                 frame.scope_mut().include_in_scope(&arg_scope);
                 frame
             },
@@ -362,11 +377,19 @@ impl PushCallFrame {
                 template_address,
                 module_name,
                 arg_scope,
+                entity_id,
             } => {
-                let mut frame = CallFrame::new(template_address, module_name);
+                let mut frame = CallFrame::for_static(template_address, module_name, entity_id);
                 frame.scope_mut().include_in_scope(&arg_scope);
                 frame
             },
+        }
+    }
+
+    pub fn entity_id(&self) -> Option<EntityId> {
+        match self {
+            Self::ForComponent { entity_id, .. } => Some(*entity_id),
+            Self::Static { .. } => None,
         }
     }
 }

@@ -9091,6 +9091,7 @@ dependencies = [
  "tari_engine_types",
  "tari_hash_domains",
  "tari_mmr",
+ "tari_template_lib",
  "ts-rs",
 ]
 
@@ -10023,7 +10024,6 @@ dependencies = [
  "tari_dan_engine",
  "tari_dan_storage",
  "tari_engine_types",
- "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction",
  "tari_transaction_manifest",

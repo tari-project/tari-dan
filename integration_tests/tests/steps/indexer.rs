@@ -14,6 +14,7 @@ use integration_tests::{
 use libp2p::Multiaddr;
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_indexer_client::types::AddPeerRequest;
+use tari_template_lib::models::ObjectKey;
 
 #[when(expr = "indexer {word} connects to all other validators")]
 async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: String) {
@@ -90,7 +91,6 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
     // insert event mock data in the substate manager database
     indexer.insert_event_mock_data().await;
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
-    let component_address = [0u8; 32];
     let template_address = [0u8; 32];
     let tx_hash = [0u8; 32];
     let query = format!(
@@ -104,7 +104,7 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
         .expect("Failed to obtain getEventsForTransaction query result");
     let res = res.get("getEventsForTransaction").unwrap();
     assert_eq!(res.len(), 1);
-    assert_eq!(res[0].component_address, Some(component_address));
+    assert_eq!(res[0].component_address, Some(ObjectKey::default().into_array()));
     assert_eq!(res[0].template_address, template_address);
     assert_eq!(res[0].tx_hash, tx_hash);
     assert_eq!(res[0].topic, "my_event");

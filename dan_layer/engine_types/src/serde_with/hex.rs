@@ -73,7 +73,7 @@ pub mod vec {
     pub fn deserialize<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
     where
         D: Deserializer<'de>,
-        T: TryFrom<Vec<u8>>,
+        T: for<'a> TryFrom<&'a [u8]>,
     {
         let vec = if d.is_human_readable() {
             let strs = <Vec<String> as Deserialize>::deserialize(d)?;
@@ -86,7 +86,7 @@ pub mod vec {
 
         let values = vec
             .into_iter()
-            .map(|v| T::try_from(v).map_err(|_| serde::de::Error::custom("Failed to convert bytes to T")))
+            .map(|v| T::try_from(v.as_slice()).map_err(|_| serde::de::Error::custom("Failed to convert bytes to T")))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(values)
     }
@@ -115,7 +115,7 @@ pub mod option {
     pub fn deserialize<'de, D, T>(d: D) -> Result<Option<T>, D::Error>
     where
         D: Deserializer<'de>,
-        T: TryFrom<Vec<u8>>,
+        T: for<'a> TryFrom<&'a [u8]>,
     {
         let bytes = if d.is_human_readable() {
             let hex = <Option<String> as Deserialize>::deserialize(d)?;
@@ -128,7 +128,8 @@ pub mod option {
         };
 
         let value = bytes
-            .map(T::try_from)
+            .as_ref()
+            .map(|b| T::try_from(b.as_slice()))
             .transpose()
             .map_err(|_| serde::de::Error::custom("Failed to convert bytes to T"))?;
         Ok(value)

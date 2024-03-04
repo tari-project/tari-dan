@@ -21,6 +21,12 @@ use crate::{
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum Instruction {
+    CreateAccount {
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        owner_public_key: PublicKey,
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        workspace_bucket: Option<String>,
+    },
     CallFunction {
         #[serde(with = "serde_with::hex")]
         #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
@@ -65,6 +71,17 @@ pub enum Instruction {
 impl Display for Instruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::CreateAccount {
+                owner_public_key,
+                workspace_bucket,
+            } => {
+                write!(f, "CreateAccount {{ owner_public_key: {}, bucket: ", owner_public_key,)?;
+                match workspace_bucket {
+                    Some(bucket) => write!(f, "{}", bucket)?,
+                    None => write!(f, "None")?,
+                }
+                write!(f, " }}")
+            },
             Self::CallFunction {
                 template_address,
                 function,

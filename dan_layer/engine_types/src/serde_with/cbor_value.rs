@@ -25,7 +25,7 @@ where D: Deserializer<'de> {
 #[cfg(test)]
 mod tests {
     use tari_bor::cbor;
-    use tari_template_lib::models::ResourceAddress;
+    use tari_template_lib::models::{ObjectKey, ResourceAddress};
 
     use super::*;
 
@@ -37,7 +37,7 @@ mod tests {
 
     #[test]
     fn decode_encode() {
-        let addr = ResourceAddress::new([1u8; 32].into());
+        let addr = ResourceAddress::new([1u8; ObjectKey::LENGTH].into());
         let test = Test {
             value: cbor!({
                 "code" => 415,

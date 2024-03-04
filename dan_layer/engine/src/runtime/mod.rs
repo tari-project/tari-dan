@@ -24,7 +24,7 @@ mod auth;
 pub use auth::{AuthParams, AuthorizationScope};
 
 mod r#impl;
-pub use r#impl::{RuntimeInterfaceImpl, StateFinalize};
+pub use r#impl::RuntimeInterfaceImpl;
 
 mod engine_args;
 pub use crate::runtime::engine_args::EngineArgs;
@@ -56,6 +56,7 @@ use tari_bor::decode_exact;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::Epoch;
 use tari_engine_types::{
+    commit_result::FinalizeResult,
     component::ComponentHeader,
     confidential::{ConfidentialClaim, ConfidentialOutput},
     indexed_value::IndexedValue,
@@ -85,13 +86,14 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{Amount, BucketId, ComponentAddress, Metadata, NonFungibleAddress, VaultRef},
+    models::{Amount, BucketId, ComponentAddress, EntityId, Metadata, NonFungibleAddress, VaultRef},
 };
 pub use tracker::StateTracker;
 
 use crate::runtime::{locking::LockedSubstate, scope::PushCallFrame};
 
 pub trait RuntimeInterface: Send + Sync {
+    fn next_entity_id(&self) -> Result<EntityId, RuntimeError>;
     fn emit_event(&self, topic: String, payload: Metadata) -> Result<(), RuntimeError>;
 
     fn emit_log(&self, level: LogLevel, message: String) -> Result<(), RuntimeError>;
@@ -163,7 +165,7 @@ pub trait RuntimeInterface: Send + Sync {
     ) -> Result<BucketId, RuntimeError>;
     fn fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError>;
-    fn finalize(&self) -> Result<StateFinalize, RuntimeError>;
+    fn finalize(&self) -> Result<FinalizeResult, RuntimeError>;
 
     fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError>;
 

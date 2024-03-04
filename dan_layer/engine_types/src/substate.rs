@@ -46,7 +46,6 @@ use crate::{
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
     fee_claim::{FeeClaim, FeeClaimAddress},
-    hashing::{hasher32, EngineHashDomainLabel},
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
     resource::Resource,
@@ -134,22 +133,17 @@ impl SubstateId {
         }
     }
 
-    pub fn to_canonical_hash(&self) -> Hash {
+    /// Returns true for any substate that has is "versionable" i.e. can have a version > 0, otherwise false.
+    pub fn is_versioned(&self) -> bool {
         match self {
-            SubstateId::Component(address) => *address.hash(),
-            SubstateId::Resource(address) => *address.hash(),
-            SubstateId::Vault(id) => *id.hash(),
-            SubstateId::UnclaimedConfidentialOutput(address) => *address.hash(),
-            SubstateId::NonFungible(address) => hasher32(EngineHashDomainLabel::NonFungibleId)
-                .chain(address.resource_address().hash())
-                .chain(address.id())
-                .result(),
-            SubstateId::NonFungibleIndex(address) => hasher32(EngineHashDomainLabel::NonFungibleIndex)
-                .chain(address.resource_address().hash())
-                .chain(&address.index())
-                .result(),
-            SubstateId::TransactionReceipt(address) => *address.hash(),
-            SubstateId::FeeClaim(address) => *address.hash(),
+            SubstateId::Component(_) |
+            SubstateId::Resource(_) |
+            SubstateId::Vault(_) |
+            SubstateId::NonFungibleIndex(_) |
+            SubstateId::NonFungible(_) => true,
+            SubstateId::UnclaimedConfidentialOutput(_) |
+            SubstateId::TransactionReceipt(_) |
+            SubstateId::FeeClaim(_) => false,
         }
     }
 

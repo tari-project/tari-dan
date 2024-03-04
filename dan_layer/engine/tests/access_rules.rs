@@ -35,8 +35,8 @@ mod component_access_rules {
         let mut test = TemplateTest::new(["tests/templates/access_rules"]);
 
         // Create sender and receiver accounts
-        let (owner1_proof, owner1_key) = test.create_owner_proof();
-        let (owner2_proof, owner2_key) = test.create_owner_proof();
+        let (owner1_proof, _, owner1_key) = test.create_owner_proof();
+        let (owner2_proof, _, owner2_key) = test.create_owner_proof();
 
         let access_rules_template = test.get_template_address("AccessRulesTest");
 
@@ -81,7 +81,7 @@ mod component_access_rules {
             vec![owner2_proof],
         );
 
-        let (unauth_proof, unauth_key) = test.create_owner_proof();
+        let (unauth_proof, _, unauth_key) = test.create_owner_proof();
 
         let reason = test.execute_expect_failure(
             Transaction::builder()
@@ -101,8 +101,8 @@ mod component_access_rules {
         let mut test = TemplateTest::new(["tests/templates/access_rules"]);
 
         // Create sender and receiver accounts
-        let (owner_proof, owner_key) = test.create_owner_proof();
-        let (user_proof, user_key) = test.create_owner_proof();
+        let (owner_proof, _, owner_key) = test.create_owner_proof();
+        let (user_proof, _, user_key) = test.create_owner_proof();
 
         let access_rules_template = test.get_template_address("AccessRulesTest");
 
@@ -182,7 +182,7 @@ mod component_access_rules {
         let mut test = TemplateTest::new(["tests/templates/access_rules"]);
 
         // Create sender and receiver accounts
-        let (owner_proof, owner_key) = test.create_owner_proof();
+        let (owner_proof, _, owner_key) = test.create_owner_proof();
 
         let access_rules_template = test.get_template_address("AccessRulesTest");
 
@@ -233,7 +233,7 @@ mod resource_access_rules {
 
         // Create sender and receiver accounts
         let (owner_account, owner_proof, owner_key) = test.create_empty_account();
-        let (user_proof, user_key) = test.create_owner_proof();
+        let (user_proof, _, user_key) = test.create_owner_proof();
 
         let access_rules_template = test.get_template_address("AccessRulesTest");
 
@@ -313,7 +313,7 @@ mod resource_access_rules {
         let mut test = TemplateTest::new(["tests/templates/access_rules"]);
 
         // Create sender and receiver accounts
-        let (owner_proof, owner_key) = test.create_owner_proof();
+        let (owner_proof, _, owner_key) = test.create_owner_proof();
         let (user_account, user_proof, _) = test.create_empty_account();
 
         let access_rules_template = test.get_template_address("AccessRulesTest");
@@ -386,7 +386,7 @@ mod resource_access_rules {
         let mut test = TemplateTest::new(["tests/templates/access_rules"]);
 
         // Create sender and receiver accounts
-        let (owner_proof, owner_key) = test.create_owner_proof();
+        let (owner_proof, _, owner_key) = test.create_owner_proof();
         let (user_account, user_proof, user_key) = test.create_empty_account();
 
         let access_rules_template = test.get_template_address("AccessRulesTest");
@@ -507,7 +507,7 @@ mod resource_access_rules {
         let mut test = TemplateTest::new(["tests/templates/access_rules"]);
 
         // Create sender and receiver accounts
-        let (owner_proof, owner_key) = test.create_owner_proof();
+        let (owner_proof, _, owner_key) = test.create_owner_proof();
         let (user_account, user_proof, user_key) = test.create_empty_account();
 
         let access_rules_template = test.get_template_address("AccessRulesTest");
@@ -754,7 +754,7 @@ mod resource_access_rules {
         let mut test = TemplateTest::new(["tests/templates/access_rules"]);
 
         // Create sender and receiver accounts
-        let (owner_proof, owner_key) = test.create_owner_proof();
+        let (owner_proof, _, owner_key) = test.create_owner_proof();
         let (user_account, user_proof, user_key) = test.create_empty_account();
 
         let access_rules_template = test.get_template_address("AccessRulesTest");
