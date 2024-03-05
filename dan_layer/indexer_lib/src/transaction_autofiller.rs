@@ -73,14 +73,14 @@ where
         }
         for handle in handles {
             let res = handle.await??;
-            if let Some((address, substate)) = res {
-                let shard = SubstateRequirement::new(address.clone(), Some(substate.version()));
+            if let Some((id, substate)) = res {
+                let shard = SubstateRequirement::new(id.clone(), Some(substate.version()));
                 if autofilled_transaction.input_refs().contains(&shard) {
                     // Shard is already an input as a ref
                     continue;
                 }
                 input_shards.push(shard);
-                found_substates.insert(address, substate);
+                found_substates.insert(id, substate);
             }
         }
         info!(target: LOG_TARGET, "✏️️ Found {} input substates", found_substates.len());
@@ -113,7 +113,7 @@ where
             for address in related_addresses {
                 info!(target: LOG_TARGET, "✏️️️ Found {} related substates", address);
                 let handle = tokio::spawn(get_substate(substate_scanner_ref.clone(), address.clone(), None));
-                handles.insert(address.clone(), handle);
+                handles.insert(address, handle);
             }
             for (address, handle) in handles {
                 let scan_res = handle.await??;
@@ -133,7 +133,7 @@ where
                         // Shard is already an input (TODO: what a waste)
                         continue;
                     }
-                    autofilled_inputs.push(SubstateRequirement::new(id, Some(substate.version())));
+                    autofilled_inputs.push(substate_requirement);
                     found_substates.insert(address, substate);
                 //       found_this_round += 1;
                 } else {

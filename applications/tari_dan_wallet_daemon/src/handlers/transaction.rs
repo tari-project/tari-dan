@@ -75,6 +75,7 @@ pub async fn handle_submit_instruction(
         }],
         instructions,
         inputs: req.inputs,
+        input_refs: req.input_refs,
         override_inputs: req.override_inputs.unwrap_or_default(),
         is_dry_run: req.is_dry_run,
         proof_ids: vec![],
@@ -120,6 +121,7 @@ pub async fn handle_submit(
         .with_fee_instructions(req.fee_instructions)
         .with_min_epoch(req.min_epoch)
         .with_max_epoch(req.max_epoch)
+        .with_input_refs(req.input_refs)
         .sign(&key.key)
         .build();
 

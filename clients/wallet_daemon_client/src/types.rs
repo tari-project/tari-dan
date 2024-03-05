@@ -71,6 +71,8 @@ pub struct CallInstructionRequest {
     #[serde(default)]
     pub inputs: Vec<SubstateRequirement>,
     #[serde(default)]
+    pub input_refs: Vec<SubstateRequirement>,
+    #[serde(default)]
     pub override_inputs: Option<bool>,
     #[serde(default)]
     pub new_outputs: Option<u8>,
@@ -99,6 +101,7 @@ pub struct TransactionSubmitRequest {
     pub fee_instructions: Vec<Instruction>,
     pub instructions: Vec<Instruction>,
     pub inputs: Vec<SubstateRequirement>,
+    pub input_refs: Vec<SubstateRequirement>,
     pub override_inputs: bool,
     pub is_dry_run: bool,
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
