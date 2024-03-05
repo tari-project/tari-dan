@@ -16,10 +16,17 @@ use crate::resource_container::ResourceError;
 
 #[derive(Debug, Clone)]
 pub struct ValidatedConfidentialWithdrawProof {
-    pub output: ConfidentialOutput,
+    /// Optional confidential output of the withdraw. This will be created as a new output commitment.
+    pub output: Option<ConfidentialOutput>,
+    /// Optional confidential change output of the withdraw. This will replace any inputs used.
     pub change_output: Option<ConfidentialOutput>,
+    /// Range proof
     pub range_proof: BulletRangeProof,
+    /// Amount of revealed value to use as an input.
+    pub input_revealed_amount: Amount,
+    /// Amount of revealed value to include in the revealed value of the output
     pub output_revealed_amount: Amount,
+    /// Amount of revealed value to include in the revealed value of the change output
     pub change_revealed_amount: Amount,
 }
 
@@ -42,36 +49,52 @@ pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Commitment>
 ) -> Result<ValidatedConfidentialWithdrawProof, ResourceError> {
     let validated_proof = validate_confidential_proof(&withdraw_proof.output_proof)?;
 
+    let input_revealed_amount = withdraw_proof.input_revealed_amount;
     // We expect the revealed amount to be excluded from the output commitment.
-    let revealed_amount = withdraw_proof.output_proof.output_statement.revealed_amount +
-        withdraw_proof
-            .output_proof
-            .change_statement
-            .as_ref()
-            .map(|s| s.revealed_amount)
-            .unwrap_or_default();
-    let output_commitment_with_revealed = validated_proof.output.commitment.as_public_key() +
-        get_commitment_factory()
-            .commit_value(&PrivateKey::default(), revealed_amount.value() as u64)
-            .as_public_key();
+    let output_revealed_amount =
+        withdraw_proof.output_proof.output_revealed_amount + withdraw_proof.output_proof.change_revealed_amount;
+
+    // k.G + v.H or 0.G if None
+    let output_commitment = validated_proof
+        .output
+        .as_ref()
+        .map(|o| o.commitment.as_public_key().clone())
+        .unwrap_or_default();
+
+    // 0.G + v.H
+    let revealed_output_commitment =
+        get_commitment_factory().commit_value(&PrivateKey::default(), output_revealed_amount.value() as u64);
+    let output_commitment_with_revealed = output_commitment + revealed_output_commitment.as_public_key();
 
     let balance_proof =
         try_decode_to_signature(&withdraw_proof.balance_proof).ok_or_else(|| ResourceError::InvalidBalanceProof {
             details: "Malformed balance proof".to_string(),
         })?;
 
-    let public_excess = inputs
+    // 0.G + v.H - users may convert revealed funds to confidential outputs so this must be part of the balance proof
+    let revealed_input_commitment = get_commitment_factory().commit_value(
+        &PrivateKey::default(),
+        withdraw_proof.input_revealed_amount.value() as u64,
+    );
+    let total_inputs = inputs
         .into_iter()
-        .fold(PublicKey::default(), |sum, commit| sum + commit.as_public_key()) -
-        output_commitment_with_revealed -
+        .fold(PublicKey::default(), |sum, commit| sum + commit.as_public_key()) +
+        revealed_input_commitment.as_public_key();
+
+    let public_excess = total_inputs -
+        &output_commitment_with_revealed -
         validated_proof
             .change_output
             .as_ref()
             .map(|output| output.commitment.as_public_key())
             .unwrap_or(&PublicKey::default());
 
-    let challenge =
-        challenges::confidential_withdraw64(&public_excess, balance_proof.get_public_nonce(), revealed_amount);
+    let challenge = challenges::confidential_withdraw64(
+        &public_excess,
+        balance_proof.get_public_nonce(),
+        input_revealed_amount,
+        output_revealed_amount,
+    );
 
     if !balance_proof.verify_raw_uniform(&public_excess, &challenge) {
         return Err(ResourceError::InvalidBalanceProof {
@@ -83,12 +106,9 @@ pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Commitment>
         output: validated_proof.output,
         change_output: validated_proof.change_output,
         range_proof: BulletRangeProof(withdraw_proof.output_proof.range_proof),
-        output_revealed_amount: withdraw_proof.output_proof.output_statement.revealed_amount,
-        change_revealed_amount: withdraw_proof
-            .output_proof
-            .change_statement
-            .map(|s| s.revealed_amount)
-            .unwrap_or_default(),
+        input_revealed_amount: withdraw_proof.input_revealed_amount,
+        output_revealed_amount: withdraw_proof.output_proof.output_revealed_amount,
+        change_revealed_amount: withdraw_proof.output_proof.change_revealed_amount,
     })
 }
 

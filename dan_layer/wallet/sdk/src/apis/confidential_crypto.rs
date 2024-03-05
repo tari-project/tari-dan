@@ -47,6 +47,7 @@ impl ConfidentialCryptoApi {
     pub fn generate_withdraw_proof(
         &self,
         inputs: &[ConfidentialOutputWithMask],
+        input_revealed_amount: Amount,
         output_statement: &ConfidentialProofStatement,
         change_statement: Option<&ConfidentialProofStatement>,
     ) -> Result<ConfidentialWithdrawProof, ConfidentialCryptoApiError> {
@@ -60,17 +61,13 @@ impl ConfidentialCryptoApi {
             .iter()
             .fold(PrivateKey::default(), |acc, output| acc + &output.mask);
 
-        let revealed_amount = output_proof.output_statement.revealed_amount +
-            output_proof
-                .change_statement
-                .as_ref()
-                .map(|st| st.revealed_amount)
-                .unwrap_or_default();
+        let output_revealed_amount = output_proof.output_revealed_amount + output_proof.change_revealed_amount;
         let balance_proof = generate_balance_proof(
             &agg_input_mask,
+            input_revealed_amount,
             &output_statement.mask,
             change_statement.as_ref().map(|ch| &ch.mask),
-            revealed_amount,
+            output_revealed_amount,
         );
 
         let output_statement = output_proof.output_statement;
@@ -78,10 +75,13 @@ impl ConfidentialCryptoApi {
 
         Ok(ConfidentialWithdrawProof {
             inputs: input_commitments,
+            input_revealed_amount: Amount::zero(),
             output_proof: ConfidentialOutputProof {
                 output_statement,
                 change_statement,
                 range_proof: output_proof.range_proof,
+                output_revealed_amount: output_proof.output_revealed_amount,
+                change_revealed_amount: output_proof.change_revealed_amount,
             },
             balance_proof,
         })
@@ -174,14 +174,16 @@ impl ConfidentialCryptoApi {
 
 fn generate_balance_proof(
     input_mask: &PrivateKey,
+    input_revealed_amount: Amount,
     output_mask: &PrivateKey,
     change_mask: Option<&PrivateKey>,
-    reveal_amount: Amount,
+    output_reveal_amount: Amount,
 ) -> BalanceProofSignature {
     let secret_excess = input_mask - output_mask - change_mask.unwrap_or(&PrivateKey::default());
     let excess = PublicKey::from_secret_key(&secret_excess);
     let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
-    let challenge = challenges::confidential_withdraw64(&excess, &public_nonce, reveal_amount);
+    let challenge =
+        challenges::confidential_withdraw64(&excess, &public_nonce, input_revealed_amount, output_reveal_amount);
 
     let sig = Signature::sign_raw_uniform(&secret_excess, nonce, &challenge).unwrap();
     BalanceProofSignature::try_from_parts(sig.get_public_nonce().as_bytes(), sig.get_signature().as_bytes()).unwrap()

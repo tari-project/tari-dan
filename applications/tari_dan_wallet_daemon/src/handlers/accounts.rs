@@ -397,9 +397,9 @@ pub async fn handle_reveal_funds(
             .confidential_outputs_api()
             .resolve_output_masks(inputs, key_manager::TRANSACTION_BRANCH)?;
 
-        let reveal_proof = sdk
-            .confidential_crypto_api()
-            .generate_withdraw_proof(&inputs, &output_statement, None)?;
+        let reveal_proof =
+            sdk.confidential_crypto_api()
+                .generate_withdraw_proof(&inputs, Amount::zero(), &output_statement, None)?;
 
         info!(
             target: LOG_TARGET,
@@ -629,9 +629,12 @@ pub async fn handle_claim_burn(
         reveal_amount: max_fee,
     };
 
-    let reveal_proof =
-        sdk.confidential_crypto_api()
-            .generate_withdraw_proof(&[unmasked_output], &output_statement, None)?;
+    let reveal_proof = sdk.confidential_crypto_api().generate_withdraw_proof(
+        &[unmasked_output],
+        Amount::zero(),
+        &output_statement,
+        None,
+    )?;
 
     let instructions = vec![Instruction::ClaimBurn {
         claim: Box::new(ConfidentialClaim {
@@ -1174,6 +1177,8 @@ pub async fn handle_confidential_transfer(
 
         let proof = crypto_api.generate_withdraw_proof(
             &confidential_inputs,
+            // TODO: Support withdraw from revealed funds
+            Amount::zero(),
             &output_statement,
             maybe_change_statement.as_ref(),
         )?;

@@ -202,4 +202,15 @@ impl Bucket {
 
         resp.decode().expect("get_non_fungibles returned invalid non fungibles")
     }
+
+    pub fn count_confidential_commitments(&self) -> u32 {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::CountConfidentialCommitments,
+            args: invoke_args![],
+        });
+
+        resp.decode()
+            .expect("count_confidential_commitments returned invalid u32")
+    }
 }

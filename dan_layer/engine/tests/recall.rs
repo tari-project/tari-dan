@@ -20,7 +20,7 @@ fn it_recalls_all_resource_types() {
     let (account, _, _) = test.create_empty_account();
 
     let (mut initial_supply, mask, _) = generate_confidential_proof(Amount(1000), None);
-    initial_supply.output_statement.revealed_amount = Amount(1000);
+    initial_supply.output_revealed_amount = Amount(1000);
 
     let result = test.execute_expect_success(
         Transaction::builder()

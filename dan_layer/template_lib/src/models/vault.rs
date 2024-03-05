@@ -99,7 +99,7 @@ impl FromStr for VaultId {
     type Err = HashParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.strip_prefix("vault_").ok_or(HashParseError)?;
+        let s = s.strip_prefix("vault_").unwrap_or(s);
         let hash = Hash::from_hex(s)?;
         Ok(Self::new(hash))
     }

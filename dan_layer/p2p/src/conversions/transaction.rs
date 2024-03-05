@@ -405,6 +405,7 @@ impl TryFrom<proto::transaction::ConfidentialWithdrawProof> for ConfidentialWith
                     PedersonCommitmentBytes::from_bytes(&v).map_err(|e| anyhow!("Invalid input commitment bytes: {e}"))
                 })
                 .collect::<Result<_, _>>()?,
+            input_revealed_amount: val.input_revealed_amount.try_into()?,
             output_proof: val
                 .output_proof
                 .ok_or_else(|| anyhow!("output_proof is missing"))?
@@ -419,6 +420,10 @@ impl From<ConfidentialWithdrawProof> for proto::transaction::ConfidentialWithdra
     fn from(val: ConfidentialWithdrawProof) -> Self {
         Self {
             inputs: val.inputs.iter().map(|v| v.as_bytes().to_vec()).collect(),
+            input_revealed_amount: val
+                .input_revealed_amount
+                .as_u64_checked()
+                .expect("input_revealed_amount is negative or too large"),
             output_proof: Some(val.output_proof.into()),
             balance_proof: val.balance_proof.as_bytes().to_vec(),
         }
@@ -432,12 +437,11 @@ impl TryFrom<proto::transaction::ConfidentialOutputProof> for ConfidentialOutput
 
     fn try_from(val: proto::transaction::ConfidentialOutputProof) -> Result<Self, Self::Error> {
         Ok(ConfidentialOutputProof {
-            output_statement: val
-                .output_statement
-                .ok_or_else(|| anyhow!("output is missing"))?
-                .try_into()?,
+            output_statement: val.output_statement.map(TryInto::try_into).transpose()?,
             change_statement: val.change_statement.map(TryInto::try_into).transpose()?,
             range_proof: val.range_proof,
+            output_revealed_amount: val.output_revealed_amount.try_into()?,
+            change_revealed_amount: val.change_revealed_amount.try_into()?,
         })
     }
 }
@@ -445,9 +449,17 @@ impl TryFrom<proto::transaction::ConfidentialOutputProof> for ConfidentialOutput
 impl From<ConfidentialOutputProof> for proto::transaction::ConfidentialOutputProof {
     fn from(val: ConfidentialOutputProof) -> Self {
         Self {
-            output_statement: Some(val.output_statement.into()),
+            output_statement: val.output_statement.map(Into::into),
             change_statement: val.change_statement.map(Into::into),
             range_proof: val.range_proof,
+            output_revealed_amount: val
+                .output_revealed_amount
+                .as_u64_checked()
+                .expect("output_revealed_amount is negative or too large"),
+            change_revealed_amount: val
+                .change_revealed_amount
+                .as_u64_checked()
+                .expect("change_revealed_amount is negative or too large"),
         }
     }
 }
@@ -476,7 +488,6 @@ impl TryFrom<proto::transaction::ConfidentialStatement> for ConfidentialStatemen
                     .ok_or_else(|| anyhow!("Invalid length of encrypted_value bytes"))?,
             ),
             minimum_value_promise: val.minimum_value_promise,
-            revealed_amount: val.revealed_amount.try_into()?,
         })
     }
 }
@@ -488,10 +499,6 @@ impl From<ConfidentialStatement> for proto::transaction::ConfidentialStatement {
             sender_public_nonce: val.sender_public_nonce.as_bytes().to_vec(),
             encrypted_value: val.encrypted_data.as_ref().to_vec(),
             minimum_value_promise: val.minimum_value_promise,
-            revealed_amount: val
-                .revealed_amount
-                .as_u64_checked()
-                .expect("revealed_amount is negative or too large"),
         }
     }
 }
