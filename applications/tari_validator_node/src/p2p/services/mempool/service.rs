@@ -334,7 +334,7 @@ where
         }
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
-        let tx_substate_address = SubstateAddress::for_transaction_receipt(transaction.id().into_array().into());
+        let tx_substate_address = SubstateAddress::for_transaction_receipt(transaction.id().into_receipt_address());
 
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
         let transaction_inputs = transaction.all_inputs_iter().map(|i| i.to_substate_address());
@@ -676,9 +676,12 @@ where
                 .all_inputs_iter()
                 .map(|s| s.to_committee_shard(num_committees))
                 .collect::<HashSet<_>>();
+            let tx_substate_address = SubstateAddress::for_transaction_receipt(executed.id().into_receipt_address());
             let output_shards = executed
                 .resulting_outputs()
                 .iter()
+                // All involved shards commit the transaction receipt, so we exclude the shard @ tx_substate_address from propagation and consensus.
+                .filter(|s| **s != tx_substate_address)
                 .filter(|s| !input_shards.contains(&s.to_committee_shard(num_committees)))
                 .copied()
                 .collect();

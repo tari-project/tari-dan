@@ -9,7 +9,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHashSizeError;
 use tari_crypto::tari_utilities::hex::{from_hex, Hex};
-use tari_engine_types::serde_with;
+use tari_engine_types::{serde_with, transaction_receipt::TransactionReceiptAddress};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize, Default)]
 #[serde(transparent)]
@@ -39,6 +39,10 @@ impl TransactionId {
 
     pub const fn byte_size() -> usize {
         32
+    }
+
+    pub fn into_receipt_address(self) -> TransactionReceiptAddress {
+        self.into_array().into()
     }
 }
 
