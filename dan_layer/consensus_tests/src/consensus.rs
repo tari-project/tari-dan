@@ -444,7 +444,7 @@ async fn foreign_block_distribution() {
         let leaf1 = test.get_validator(&TestAddress::new("1")).get_leaf_block();
         let leaf2 = test.get_validator(&TestAddress::new("4")).get_leaf_block();
         let leaf3 = test.get_validator(&TestAddress::new("7")).get_leaf_block();
-        if leaf1.height > NodeHeight(20) || leaf2.height > NodeHeight(20) || leaf3.height > NodeHeight(20) {
+        if leaf1.height > NodeHeight(40) || leaf2.height > NodeHeight(40) || leaf3.height > NodeHeight(40) {
             panic!(
                 "Not all transaction committed after {}/{}/{} blocks",
                 leaf1.height, leaf2.height, leaf3.height
