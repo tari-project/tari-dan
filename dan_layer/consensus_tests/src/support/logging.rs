@@ -25,3 +25,25 @@ pub fn setup_logger() {
         // Apply globally
         .apply();
 }
+
+// TODO: tmp remove
+pub fn setup_logger_ci() {
+    let _ignore = fern::Dispatch::new()
+        // Perform allocation-free log formatting
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "{} [{}] {} {}",
+                humantime::format_rfc3339(std::time::SystemTime::now()),
+                record.target().strip_prefix("tari::dan::consensus::hotstuff::").unwrap_or(record.target()),
+                record.level(),
+                message
+            ))
+        })
+        // Add blanket level filter -
+        .level(log::LevelFilter::Debug)
+        // Output to stdout, files, and other Dispatch configurations
+        .chain(std::io::stdout())
+        // .chain(fern::log_file("output.log").unwrap())
+        // Apply globally
+        .apply();
+}

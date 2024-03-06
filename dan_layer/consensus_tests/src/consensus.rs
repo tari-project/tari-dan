@@ -408,9 +408,17 @@ async fn leader_failure_node_goes_down() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn foreign_block_distribution() {
-    setup_logger();
+    crate::support::logging::setup_logger_ci();
+    std::fs::create_dir_all(std::path::PathBuf::from(env!["CARGO_MANIFEST_DIR"]).join("../../data")).unwrap();
+
     let mut test = Test::builder()
         .with_test_timeout(Duration::from_secs(60))
+        .debug_sql(
+            std::path::PathBuf::from(env!["CARGO_MANIFEST_DIR"])
+                .join("../../data/test{}.db")
+                .display()
+                .to_string(),
+        )
         .with_message_filter(Box::new(move |from: &TestAddress, to: &TestAddress, _| {
             match from.0.as_str() {
                 // We filter our message from each leader to the foreign committees. So we will rely on other members of
