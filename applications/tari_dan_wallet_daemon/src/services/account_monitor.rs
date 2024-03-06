@@ -233,7 +233,7 @@ where
 
     async fn refresh_vault(
         &self,
-        account_addr: &SubstateId,
+        account_address: &SubstateId,
         vault_id: VaultId,
         vault: &Vault,
         nfts: &HashMap<&NonFungibleId, &NonFungibleContainer>,
@@ -243,25 +243,29 @@ where
 
         let balance = vault.balance();
         let vault_addr = SubstateId::Vault(vault_id);
-        if !accounts_api.exists_by_address(account_addr)? {
+        if !accounts_api.exists_by_address(account_address)? {
             // This is not our account
             return Ok(());
         }
+
+        let mut has_changed = false;
+
         if !accounts_api.has_vault(&vault_addr)? {
             info!(
                 target: LOG_TARGET,
                 "🔒️ NEW vault {} in account {}",
                 vault_id,
-                account_addr
+                account_address
             );
             accounts_api.add_vault(
-                account_addr.clone(),
+                account_address.clone(),
                 vault_addr.clone(),
                 *vault.resource_address(),
                 vault.resource_type(),
                 // TODO: fetch the token symbol from the resource
                 None,
             )?;
+            has_changed = true;
         }
 
         accounts_api.update_vault_balance(&vault_addr, balance)?;
@@ -269,7 +273,7 @@ where
             target: LOG_TARGET,
             "🔒️ vault {} in account {} has new balance {}",
             vault_id,
-            account_addr,
+            account_address,
             balance
         );
         if let Some(commitments) = vault.get_confidential_commitments() {
@@ -277,12 +281,13 @@ where
                 target: LOG_TARGET,
                 "🔒️ vault {} in account {} has {} confidential commitments",
                 vault_id,
-                account_addr,
+                account_address,
                 commitments.len()
             );
             self.wallet_sdk
                 .confidential_outputs_api()
-                .verify_and_update_confidential_outputs(account_addr, &vault_addr, commitments.values())?;
+                .verify_and_update_confidential_outputs(account_address, &vault_addr, commitments.values())?;
+            has_changed = true;
         }
 
         for id in vault.get_non_fungible_ids() {
@@ -323,7 +328,15 @@ where
             };
 
             non_fungibles_api.store_new_nft(&non_fungible)?;
+            has_changed = true;
         }
+
+        if has_changed {
+            self.notify.notify(AccountChangedEvent {
+                account_address: account_address.clone(),
+            });
+        }
+
         Ok(())
     }
 
