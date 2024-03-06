@@ -1487,10 +1487,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                             nf_id: nf_addr.id().clone(),
                         })?
                         .data()
-                        .to_vec();
+                        .clone();
                     state.unlock_substate(nft_lock)?;
-                    // TODO: nft contents should be tari_bor::Value
-                    Ok(InvokeResult::raw(contents))
+                    Ok(InvokeResult::from_value(contents))
                 })
             },
             NonFungibleAction::GetMutableData => {
@@ -1507,10 +1506,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                             nf_id: nf_addr.id().clone(),
                         })?
                         .mutable_data()
-                        .to_vec();
+                        .clone();
                     state.unlock_substate(nft_lock)?;
 
-                    Ok(InvokeResult::raw(contents))
+                    Ok(InvokeResult::from_value(contents))
                 })
             },
         }

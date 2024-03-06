@@ -235,7 +235,7 @@ pub enum MintArg {
         amount: Amount,
     },
     NonFungible {
-        tokens: BTreeMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
+        tokens: BTreeMap<NonFungibleId, (tari_bor::Value, tari_bor::Value)>,
     },
     Confidential {
         proof: Box<ConfidentialOutputProof>,
@@ -268,7 +268,7 @@ pub struct ResourceGetNonFungibleArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceUpdateNonFungibleDataArg {
     pub id: NonFungibleId,
-    pub data: Vec<u8>,
+    pub data: tari_bor::Value,
 }
 
 /// A convenience enum that allows to specify resource types
