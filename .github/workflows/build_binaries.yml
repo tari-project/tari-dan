@@ -219,6 +219,7 @@ jobs:
             "tari_indexer"
             "tari_validator_node"
             "tari_signaling_server"
+            "tari_generate"
           )
           for FILE in "${FILES[@]}"; do
             if [ -f "$GITHUB_WORKSPACE/target/${{ matrix.builds.target }}/release/${FILE}${TBN_EXT}" ]; then
