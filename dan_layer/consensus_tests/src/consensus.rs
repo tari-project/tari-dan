@@ -243,7 +243,6 @@ async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() 
     test.assert_clean_shutdown().await;
 }
 
-#[ignore = "FIXME: This test is very flaky"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn foreign_shard_decides_to_abort() {
     setup_logger();
@@ -464,7 +463,6 @@ async fn foreign_block_distribution() {
     test.assert_all_validators_at_same_height().await;
 
     log::info!("total messages sent: {}", test.network().total_messages_sent());
-    log::info!("total messages filtered: {}", test.network().total_messages_filtered());
     // Each leader sends 3 proposals to the both foreign committees, so 6 messages per leader. 18 in total.
     assert_eq!(test.network().total_messages_filtered(), 18);
     test.assert_clean_shutdown().await;

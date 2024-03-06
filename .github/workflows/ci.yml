@@ -227,12 +227,12 @@ jobs:
         run: cargo nextest run --all-features --release -E "not package(integration_tests)" --profile ci
 
       # TODO: remove
-      - name: upload test result artifact
+      - name: update test db
         uses: actions/upload-artifact@v4 # upload test results as artifact
         if: success() || failure()
         with:
-          name: cucumber-test-results
-          path: ${{ github.workspace }}/data/test1.db
+          name: testdbs
+          path: ${{ github.workspace }}/data/*.db
 
       - name: upload artifact
         uses: actions/upload-artifact@v4 # upload test results as artifact
