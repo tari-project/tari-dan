@@ -206,7 +206,6 @@ fn replace_self_in_single_value(type_path: &TypePath) -> Option<Stmt> {
                 ::tari_template_lib::auth::OwnerRule::default(),
                 ::tari_template_lib::auth::ComponentAccessRules::new(),
                 None,
-                None,
             );
         });
     }
@@ -232,7 +231,6 @@ fn replace_self_in_tuple(type_tuple: &TypeTuple) -> Stmt {
                             #field_expr,
                             ::tari_template_lib::auth::OwnerRule::default(),
                             :tari_template_lib::auth::ComponentAccessRules::new(),
-                            None,
                             None,
                         )
                     }

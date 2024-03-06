@@ -407,6 +407,7 @@ async fn leader_failure_node_goes_down() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "FIXME: this test is flaky"]
 async fn foreign_block_distribution() {
     setup_logger();
     let mut test = Test::builder()

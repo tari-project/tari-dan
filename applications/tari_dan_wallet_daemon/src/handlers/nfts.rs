@@ -111,8 +111,7 @@ pub async fn handle_mint_account_nft(
         &ACCOUNT_NFT_TEMPLATE_ADDRESS,
         &owner_token
             .to_public_key()
-            .unwrap_or_else(|| panic!("owner_token is not a valid public key: {}", owner_token))
-            .as_hash(),
+            .unwrap_or_else(|| panic!("owner_token is not a valid public key: {}", owner_token)),
     );
 
     let mut accrued_fee = Amount::new(0);

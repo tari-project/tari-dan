@@ -17,9 +17,6 @@ pub fn random_bytes(len: u32) -> Vec<u8> {
 
 /// Returns a `u32` representing a random value
 pub fn random_u32() -> u32 {
-    let resp: InvokeResult = call_engine(EngineOp::GenerateRandomInvoke, &GenerateRandomInvokeArg {
-        action: GenerateRandomAction::GetRandomBytes { len: 4 },
-    });
-    let v: Vec<u8> = resp.decode().expect("Failed to decode random u32");
+    let v = random_bytes(4);
     u32::from_le_bytes(v.as_slice().try_into().unwrap())
 }

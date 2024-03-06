@@ -3,7 +3,7 @@
 use std::ops::DerefMut;
 
 use log::*;
-use tari_dan_common_types::{committee::CommitteeShard, optional::Optional, shard::Shard, NodeHeight};
+use tari_dan_common_types::{committee::CommitteeShard, optional::Optional, shard::Shard};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -202,18 +202,18 @@ where TConsensusSpec: ConsensusSpec
         &self,
         from: &TConsensusSpec::Addr,
         candidate_block: &Block,
-        foreign_bucket: Shard,
-        local_bucket: Shard,
+        foreign_shard: Shard,
+        local_shard: Shard,
         foreign_receive_counter: &ForeignReceiveCounters,
     ) -> Result<(), ProposalValidationError> {
-        let Some(incoming_count) = candidate_block.get_foreign_counter(&local_bucket) else {
-            debug!(target:LOG_TARGET, "Our bucket {local_bucket:?} is missing reliability index in the proposed block {candidate_block:?}");
+        let Some(incoming_count) = candidate_block.get_foreign_counter(&local_shard) else {
+            debug!(target:LOG_TARGET, "Our bucket {local_shard:?} is missing reliability index in the proposed block {candidate_block:?}");
             return Err(ProposalValidationError::MissingForeignCounters {
                 proposed_by: from.to_string(),
                 hash: *candidate_block.id(),
             });
         };
-        let current_count = foreign_receive_counter.get_count(&foreign_bucket);
+        let current_count = foreign_receive_counter.get_count(&foreign_shard);
         if current_count + 1 != incoming_count {
             debug!(target:LOG_TARGET, "We were expecting the index to be {expected_count}, but the index was {incoming_count}", expected_count = current_count + 1);
             return Err(ProposalValidationError::InvalidForeignCounters {
@@ -226,7 +226,7 @@ where TConsensusSpec: ConsensusSpec
                 ),
             });
         }
-        if candidate_block.height() == NodeHeight::zero() || candidate_block.id().is_genesis() {
+        if candidate_block.height().is_zero() || candidate_block.is_genesis() {
             return Err(ProposalValidationError::ProposingGenesisBlock {
                 proposed_by: from.to_string(),
                 hash: *candidate_block.id(),
