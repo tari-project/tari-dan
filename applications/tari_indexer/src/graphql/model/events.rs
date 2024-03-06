@@ -25,7 +25,7 @@ use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use log::*;
 use serde::{Deserialize, Serialize};
-use tari_template_lib::{prelude::ComponentAddress, Hash};
+use tari_template_lib::prelude::{ComponentAddress, ResourceAddress};
 use tari_transaction::TransactionId;
 
 use crate::substate_manager::SubstateManager;
@@ -35,9 +35,9 @@ const LOG_TARGET: &str = "tari::indexer::graphql::events";
 #[derive(SimpleObject, Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Event {
-    pub component_address: Option<[u8; 32]>,
-    pub template_address: [u8; 32],
-    pub tx_hash: [u8; 32],
+    pub component_address: Option<String>,
+    pub template_address: String,
+    pub tx_hash: String,
     pub topic: String,
     pub payload: BTreeMap<String, String>,
 }
@@ -45,9 +45,9 @@ pub struct Event {
 impl Event {
     fn from_engine_event(event: tari_engine_types::events::Event) -> Result<Self, anyhow::Error> {
         Ok(Self {
-            component_address: event.component_address().map(|comp_addr| comp_addr.into_array()),
-            template_address: event.template_address().into_array(),
-            tx_hash: event.tx_hash().into_array(),
+            component_address: event.component_address().map(|comp_addr| comp_addr.to_string()),
+            template_address: event.template_address().to_string(),
+            tx_hash: event.tx_hash().to_string(),
             topic: event.topic(),
             payload: event.into_payload().into_iter().collect(),
         })
@@ -91,6 +91,7 @@ impl EventQuery {
         &self,
         ctx: &Context<'_>,
         component_address: String,
+        resource_address: Option<String>,
         version: Option<u32>,
     ) -> Result<Vec<Event>, anyhow::Error> {
         let version = version.unwrap_or_default();
@@ -100,51 +101,16 @@ impl EventQuery {
         );
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         let events = substate_manager
-            .scan_events_for_substate_from_network(ComponentAddress::from_str(&component_address)?, Some(version))
+            .scan_events_for_substate_from_network(
+                ComponentAddress::from_str(&component_address)?,
+                resource_address.map(|r| ResourceAddress::from_str(&r)).transpose()?,
+                Some(version),
+            )
             .await?
             .iter()
             .map(|e| Event::from_engine_event(e.clone()))
             .collect::<Result<Vec<Event>, anyhow::Error>>()?;
 
         Ok(events)
-    }
-
-    pub async fn save_event(
-        &self,
-        ctx: &Context<'_>,
-        component_address: String,
-        template_address: String,
-        tx_hash: String,
-        topic: String,
-        payload: String,
-        version: u64,
-    ) -> Result<Event, anyhow::Error> {
-        info!(
-            target: LOG_TARGET,
-            "Saving event for component_address = {}, tx_hash = {} and topic = {}", component_address, tx_hash, topic
-        );
-
-        let component_address = ComponentAddress::from_hex(&component_address)?;
-        let template_address = Hash::from_str(&template_address)?;
-        let tx_hash = TransactionId::from_hex(&tx_hash)?;
-
-        let payload = serde_json::from_str(&payload)?;
-        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        substate_manager.save_event_to_db(
-            component_address,
-            template_address,
-            tx_hash,
-            topic.clone(),
-            &payload,
-            version,
-        )?;
-
-        Ok(Event {
-            component_address: Some(component_address.into_array()),
-            template_address: template_address.into_array(),
-            tx_hash: tx_hash.into_array(),
-            topic,
-            payload: payload.into_iter().collect(),
-        })
     }
 }

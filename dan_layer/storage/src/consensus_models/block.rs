@@ -134,6 +134,7 @@ impl Block {
         block
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn load(
         id: BlockId,
         network: Network,
