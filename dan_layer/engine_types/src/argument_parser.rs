@@ -174,17 +174,16 @@ mod tests {
         assert_eq!(args, from_str);
 
         // Deserialize from special string representation
-        let some_args: SomeArgs = json::from_str(
-            r#"{"args": ["component_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d29006db9"] }"#,
-        )
-        .unwrap();
+        let some_args: SomeArgs =
+            json::from_str(r#"{"args": ["component_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d"] }"#)
+                .unwrap();
         match &some_args.args[0] {
             Arg::Workspace(_) => panic!(),
             Arg::Literal(a) => {
                 let a: ComponentAddress = decode_exact(a).unwrap();
                 assert_eq!(
                     a.to_string(),
-                    "component_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d29006db9"
+                    "component_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d"
                 );
             },
         }
