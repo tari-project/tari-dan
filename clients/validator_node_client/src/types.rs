@@ -112,7 +112,8 @@ pub struct TemplateRegistrationResponse {
     ts(export, export_to = "../../bindings/src/types/validator-node-client/")
 )]
 pub struct GetTemplateRequest {
-    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[serde(with = "serde_with::string")]
     pub template_address: TemplateAddress,
 }
 
@@ -136,6 +137,7 @@ pub struct GetTemplateResponse {
 pub struct TemplateAbi {
     pub template_name: String,
     pub functions: Vec<FunctionDef>,
+    pub version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -191,7 +193,8 @@ pub struct GetTemplatesResponse {
 )]
 pub struct TemplateMetadata {
     pub name: String,
-    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[serde(with = "serde_with::string")]
     pub address: TemplateAddress,
     pub url: String,
     /// SHA hash of binary

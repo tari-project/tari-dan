@@ -155,6 +155,7 @@ impl<TAddr: NodeAddressable + 'static> TemplateManagerService<TAddr> {
                     is_mut: f.is_mut,
                 })
                 .collect(),
+            version: loaded.template_def().tari_version().to_string(),
         })
     }
 
