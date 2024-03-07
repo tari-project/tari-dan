@@ -52,6 +52,7 @@ export * from "./src/types/ComponentAddress";
 export * from "./src/types/SubstateType";
 export * from "./src/types/InstructionResult";
 export * from "./src/types/ValidatorSignature";
+export * from "./src/types/NonFungibleToken";
 export * from "./src/types/JrpcPermissions";
 export * from "./src/types/Transaction";
 export * from "./src/types/Ordering";

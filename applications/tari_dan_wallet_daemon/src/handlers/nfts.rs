@@ -20,7 +20,6 @@ use tari_template_lib::{
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use tari_wallet_daemon_client::types::{
-    AccountNftInfo,
     GetAccountNftRequest,
     GetAccountNftResponse,
     ListAccountNftRequest,
@@ -52,11 +51,8 @@ pub async fn handle_get_nft(
     let non_fungible = non_fungible_api
         .non_fungible_token_get_by_nft_id(req.nft_id)
         .map_err(|e| anyhow!("Failed to get non fungible token, with error: {}", e))?;
-    let is_burned = non_fungible.is_burned;
-    let metadata = serde_json::to_value(&non_fungible.metadata)?;
-    let resp = GetAccountNftResponse { metadata, is_burned };
 
-    Ok(resp)
+    Ok(non_fungible)
 }
 
 pub async fn handle_list_nfts(
@@ -73,16 +69,6 @@ pub async fn handle_list_nfts(
     let non_fungibles = non_fungible_api
         .non_fungible_token_get_all(limit, offset)
         .map_err(|e| anyhow!("Failed to list all non fungibles, with error: {}", e))?;
-    let non_fungibles = non_fungibles
-        .iter()
-        .map(|n| {
-            let metadata = serde_json::to_value(&n.metadata).expect("failed to parse metadata to JSON format");
-            AccountNftInfo {
-                is_burned: n.is_burned,
-                metadata,
-            }
-        })
-        .collect();
     Ok(ListAccountNftResponse { nfts: non_fungibles })
 }
 

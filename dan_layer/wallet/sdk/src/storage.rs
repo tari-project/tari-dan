@@ -282,5 +282,5 @@ pub trait WalletStoreWriter {
     ) -> Result<(), WalletStorageError>;
 
     // Non fungible tokens
-    fn non_fungible_token_insert(&mut self, non_fungible_token: &NonFungibleToken) -> Result<(), WalletStorageError>;
+    fn non_fungible_token_upsert(&mut self, non_fungible_token: &NonFungibleToken) -> Result<(), WalletStorageError>;
 }

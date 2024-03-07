@@ -3,12 +3,13 @@
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tari_bor::BorError;
-use tari_template_lib::prelude::Metadata;
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct NonFungibleContainer(Option<NonFungible>);
 
 impl NonFungibleContainer {
@@ -38,7 +39,11 @@ impl NonFungibleContainer {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct NonFungible {
     #[cfg_attr(feature = "ts", ts(type = "any"))]
     data: tari_bor::Value,
@@ -63,10 +68,7 @@ impl NonFungible {
         tari_bor::from_value(&self.mutable_data)
     }
 
-    pub fn decode_data(&self) -> Result<Metadata, BorError> {
-        if self.data.is_null() {
-            return Ok(Metadata::default());
-        }
+    pub fn decode_data<T: DeserializeOwned>(&self) -> Result<T, BorError> {
         tari_bor::from_value(&self.data)
     }
 

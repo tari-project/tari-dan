@@ -720,7 +720,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Non fungible tokens -------------------------------- //
-    fn non_fungible_token_insert(
+    fn non_fungible_token_upsert(
         &mut self,
         non_fungible_token: &tari_dan_wallet_sdk::models::NonFungibleToken,
     ) -> Result<(), WalletStorageError> {
@@ -731,10 +731,16 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             "Inserting new non fungible token with id = {}", non_fungible_token.nft_id
         );
 
-        let metadata =
-            serde_json::to_string(&non_fungible_token.metadata).map_err(|e| WalletStorageError::DecodingError {
-                operation: "non_fungible_token_insert",
-                item: "non_fungible_tokens",
+        let data = serde_json::to_string(&non_fungible_token.data).map_err(|e| WalletStorageError::DecodingError {
+            operation: "non_fungible_token_upsert",
+            item: "non_fungible_tokens.data",
+            details: e.to_string(),
+        })?;
+
+        let mutable_data =
+            serde_json::to_string(&non_fungible_token.mutable_data).map_err(|e| WalletStorageError::DecodingError {
+                operation: "non_fungible_token_upsert",
+                item: "non_fungible_tokens.mutable_data",
                 details: e.to_string(),
             })?;
 
@@ -747,12 +753,21 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         diesel::insert_into(non_fungible_tokens::table)
             .values((
                 non_fungible_tokens::nft_id.eq(non_fungible_token.nft_id.to_canonical_string()),
-                non_fungible_tokens::metadata.eq(metadata),
+                non_fungible_tokens::data.eq(&data),
+                non_fungible_tokens::mutable_data.eq(&mutable_data),
+                non_fungible_tokens::vault_id.eq(vault_id),
+                non_fungible_tokens::is_burned.eq(non_fungible_token.is_burned),
+            ))
+            .on_conflict(non_fungible_tokens::nft_id)
+            .do_update()
+            .set((
+                non_fungible_tokens::data.eq(&data),
+                non_fungible_tokens::mutable_data.eq(&mutable_data),
                 non_fungible_tokens::vault_id.eq(vault_id),
                 non_fungible_tokens::is_burned.eq(non_fungible_token.is_burned),
             ))
             .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("non_fungible_token_insert", e))?;
+            .map_err(|e| WalletStorageError::general("non_fungible_token_upsert", e))?;
 
         info!(
             target: LOG_TARGET,

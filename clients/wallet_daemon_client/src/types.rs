@@ -28,7 +28,7 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_wallet_sdk::{
     apis::jwt::Claims,
-    models::{Account, ConfidentialProofId, SubstateType, TransactionStatus},
+    models::{Account, ConfidentialProofId, NonFungibleToken, SubstateType, TransactionStatus},
 };
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult},
@@ -893,20 +893,7 @@ pub struct GetAccountNftRequest {
     pub nft_id: NonFungibleId,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
-)]
-pub struct AccountNftInfo {
-    #[cfg_attr(feature = "ts", ts(type = "any"))]
-    pub metadata: serde_json::Value,
-    pub is_burned: bool,
-}
-
-// #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/"))]
-pub type GetAccountNftResponse = AccountNftInfo;
+pub type GetAccountNftResponse = NonFungibleToken;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(
@@ -928,7 +915,7 @@ pub struct ListAccountNftRequest {
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
 pub struct ListAccountNftResponse {
-    pub nfts: Vec<AccountNftInfo>,
+    pub nfts: Vec<NonFungibleToken>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
