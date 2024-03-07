@@ -23,7 +23,7 @@ use tari_dan_wallet_sdk::{
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::{
-    component::new_component_address_from_parts,
+    component::new_account_address_from_parts,
     confidential::ConfidentialClaim,
     instruction::Instruction,
     substate::{Substate, SubstateId},
@@ -32,7 +32,6 @@ use tari_key_manager::key_manager::DerivedKey;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
-    crypto::RistrettoPublicKeyBytes,
     models::{Amount, UnclaimedConfidentialOutputAddress},
     prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
 };
@@ -856,8 +855,7 @@ fn get_or_create_account<T: WalletStore>(
                 .unwrap_or_else(|| sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH))?;
             let account_pk = PublicKey::from_secret_key(&account_secret_key.key);
 
-            let account_pk_bytes = RistrettoPublicKeyBytes::from_bytes(account_pk.as_bytes())?;
-            let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &account_pk_bytes);
+            let account_address = new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &account_pk);
 
             // We have no involved substate addresses, so we need to add an output
             (account_address.into(), account_secret_key, Some(name.to_string()))
@@ -1015,8 +1013,7 @@ async fn get_or_create_account_address(
     instructions: &mut Vec<Instruction>,
 ) -> Result<ComponentAddress, anyhow::Error> {
     // calculate the account component address from the public key
-    let public_key_bytes = RistrettoPublicKeyBytes::try_from(public_key.as_bytes())?;
-    let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &public_key_bytes);
+    let account_address = new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, public_key);
 
     let account_scan = sdk
         .substate_api()
