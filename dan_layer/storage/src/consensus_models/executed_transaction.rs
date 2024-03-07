@@ -146,28 +146,37 @@ impl ExecutedTransaction {
 
     pub fn to_initial_evidence(&self) -> Evidence {
         let mut deduped_evidence = HashMap::new();
-        deduped_evidence.extend(self.transaction.inputs().iter().map(|input| {
+        deduped_evidence.extend(self.transaction
+            .inputs()
+            .iter()
+            .filter(|i| i.version().is_some())
+            .map(|input| {
             (input.to_substate_address(), ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Write,
             })
         }));
 
-        deduped_evidence.extend(self.transaction.input_refs().iter().map(|input_ref| {
+        deduped_evidence.extend(self.transaction.input_refs().iter()
+        .filter(|i| i.version().is_some())
+        .map(|input_ref| {
             (input_ref.to_substate_address(), ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Read,
             })
         }));
 
-        deduped_evidence.extend(self.transaction.filled_inputs().iter().map(|input_ref| {
+        deduped_evidence.extend(self.transaction.filled_inputs().iter()
+        .filter(|i| i.version().is_some())
+        .map(|input_ref| {
             (input_ref.to_substate_address(), ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Write,
             })
         }));
 
-        deduped_evidence.extend(self.resulting_outputs.iter().map(|output| {
+        deduped_evidence.extend(self.resulting_outputs.iter()
+        .map(|output| {
             (*output, ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Write,
