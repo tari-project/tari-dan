@@ -22,159 +22,164 @@
 
 import PageHeading from "../../Components/PageHeading";
 import Grid from "@mui/material/Grid";
-import { StyledPaper } from "../../Components/StyledComponents";
+import {StyledPaper} from "../../Components/StyledComponents";
 import TableContainer from "@mui/material/TableContainer";
 import Table from "@mui/material/Table";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TableCell from "@mui/material/TableCell";
 import TableBody from "@mui/material/TableBody";
-import { useParams } from "react-router-dom";
-import { useAccountsGetBalances, useAccountsGet, useAccountNFTsList } from "../../api/hooks/useAccounts";
-import { shortenString } from "../../utils/helpers";
-import { DataTableCell } from "../../Components/StyledComponents";
+import {useParams} from "react-router-dom";
+import {useAccountsGetBalances, useAccountsGet, useAccountNFTsList} from "../../api/hooks/useAccounts";
+import {shortenString} from "../../utils/helpers";
+import {DataTableCell} from "../../Components/StyledComponents";
 import CopyToClipboard from "../../Components/CopyToClipboard";
 import FetchStatusCheck from "../../Components/FetchStatusCheck";
-import { substateIdToString } from "@tarilabs/typescript-bindings";
-import type { AccountNftInfo, BalanceEntry } from "@tarilabs/typescript-bindings/wallet-daemon-client";
+import {NonFungibleToken, substateIdToString} from "@tarilabs/typescript-bindings";
+import type {BalanceEntry} from "@tarilabs/typescript-bindings/wallet-daemon-client";
 
 function BalanceRow(props: BalanceEntry) {
-  return (
-    <TableRow key={props.resource_address}>
-      <DataTableCell>
-        {shortenString(props.token_symbol || props.resource_address)}
-        <CopyToClipboard copy={props.token_symbol || props.resource_address} />
-      </DataTableCell>
-      <DataTableCell>{props.resource_type}</DataTableCell>
-      <DataTableCell>{props.balance}</DataTableCell>
-      <DataTableCell>{props.confidential_balance}</DataTableCell>
-    </TableRow>
-  );
+    return (
+        <TableRow key={props.resource_address}>
+            <DataTableCell>
+                {shortenString(props.token_symbol || props.resource_address)}
+                <CopyToClipboard copy={props.token_symbol || props.resource_address}/>
+            </DataTableCell>
+            <DataTableCell>{props.resource_type}</DataTableCell>
+            <DataTableCell>{props.balance}</DataTableCell>
+            <DataTableCell>{props.confidential_balance}</DataTableCell>
+        </TableRow>
+    );
 }
 
-function NftsList({ nft }: { nft: AccountNftInfo }) {
-  return (
-    <TableRow>
-      <DataTableCell>{nft.metadata}</DataTableCell>
-      <DataTableCell>{nft.is_burned}</DataTableCell>
-    </TableRow>
-  );
+function NftDetails({nft}: { nft: NonFungibleToken }) {
+    return (
+        <TableRow>
+            <DataTableCell>{JSON.stringify(nft.nft_id)}</DataTableCell>
+            <DataTableCell>{nft.vault_id}</DataTableCell>
+            <DataTableCell>{JSON.stringify(nft.data)}</DataTableCell>
+            <DataTableCell>{JSON.stringify(nft.mutable_data)}</DataTableCell>
+            <DataTableCell>{nft.is_burned ? "Yes" : "No"}</DataTableCell>
+        </TableRow>
+    );
 }
 
 function AccountDetailsLayout() {
-  const { name } = useParams();
-  const {
-    data: balancesData,
-    isLoading: balancesIsLoading,
-    isError: balancesIsError,
-    error: balancesError,
-  } = useAccountsGetBalances(name || "");
+    const {name} = useParams();
+    const {
+        data: balancesData,
+        isLoading: balancesIsLoading,
+        isError: balancesIsError,
+        error: balancesError,
+    } = useAccountsGetBalances(name || "");
 
-  const {
-    data: nftsListData,
-    isLoading: nftsListIsLoading,
-    isError: nftsListIsError,
-    error: nftsListError,
-  } = useAccountNFTsList(0, 10);
+    const {
+        data: nftsListData,
+        isLoading: nftsListIsLoading,
+        isError: nftsListIsError,
+        error: nftsListError,
+    } = useAccountNFTsList(0, 10);
 
-  const {
-    data: accountsData,
-    isLoading: accountsIsLoading,
-    isError: accountsIsError,
-    error: accountsError,
-  } = useAccountsGet(name || "");
+    const {
+        data: accountsData,
+        isLoading: accountsIsLoading,
+        isError: accountsIsError,
+        error: accountsError,
+    } = useAccountsGet(name || "");
 
-  return (
-    <>
-      <Grid item xs={12} md={12} lg={12}>
-        <PageHeading>Account Details</PageHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <FetchStatusCheck
-            isError={accountsIsError}
-            errorMessage={accountsError?.message || "Error fetching data"}
-            isLoading={accountsIsLoading}
-          />
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Address</TableCell>
-                  <TableCell>Public key</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {accountsData && (
-                  <TableRow>
-                    <DataTableCell>{accountsData.account.name}</DataTableCell>
-                    <DataTableCell>
-                      {shortenString(substateIdToString(accountsData.account.address))}
-                      <CopyToClipboard copy={substateIdToString(accountsData.account.address)} />
-                    </DataTableCell>
-                    <DataTableCell>
-                      {shortenString(accountsData.public_key)}
-                      <CopyToClipboard copy={accountsData.public_key} />
-                    </DataTableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </StyledPaper>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          Balances
-          <FetchStatusCheck
-            isError={balancesIsError}
-            errorMessage={balancesError?.message || "Error fetching data"}
-            isLoading={balancesIsLoading}
-          />
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Resource</TableCell>
-                  <TableCell>Resource Type</TableCell>
-                  <TableCell>Revealed Balance</TableCell>
-                  <TableCell>Confidential Balance</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>{balancesData?.balances.map((balance: BalanceEntry) => BalanceRow(balance))}</TableBody>
-            </Table>
-          </TableContainer>
-        </StyledPaper>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          Account NFTs
-          <FetchStatusCheck
-            isError={nftsListIsError}
-            errorMessage={nftsListError?.message || "Error fetching data"}
-            isLoading={nftsListIsLoading}
-          />
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Token Symbol</TableCell>
-                  <TableCell>Resource Type</TableCell>
-                  <TableCell>Is Burned</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {nftsListData?.nfts.map((nft: AccountNftInfo, index: number) => (
-                  <NftsList key={index} nft={nft} />
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </StyledPaper>
-      </Grid>
-    </>
-  );
+    return (
+        <>
+            <Grid item xs={12} md={12} lg={12}>
+                <PageHeading>Account Details</PageHeading>
+            </Grid>
+            <Grid item xs={12} md={12} lg={12}>
+                <StyledPaper>
+                    <FetchStatusCheck
+                        isError={accountsIsError}
+                        errorMessage={accountsError?.message || "Error fetching data"}
+                        isLoading={accountsIsLoading}
+                    />
+                    <TableContainer>
+                        <Table>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Name</TableCell>
+                                    <TableCell>Address</TableCell>
+                                    <TableCell>Public key</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {accountsData && (
+                                    <TableRow>
+                                        <DataTableCell>{accountsData.account.name}</DataTableCell>
+                                        <DataTableCell>
+                                            {shortenString(substateIdToString(accountsData.account.address))}
+                                            <CopyToClipboard copy={substateIdToString(accountsData.account.address)}/>
+                                        </DataTableCell>
+                                        <DataTableCell>
+                                            {shortenString(accountsData.public_key)}
+                                            <CopyToClipboard copy={accountsData.public_key}/>
+                                        </DataTableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </StyledPaper>
+            </Grid>
+            <Grid item xs={12} md={12} lg={12}>
+                <StyledPaper>
+                    Balances
+                    <FetchStatusCheck
+                        isError={balancesIsError}
+                        errorMessage={balancesError?.message || "Error fetching data"}
+                        isLoading={balancesIsLoading}
+                    />
+                    <TableContainer>
+                        <Table>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Resource</TableCell>
+                                    <TableCell>Resource Type</TableCell>
+                                    <TableCell>Revealed Balance</TableCell>
+                                    <TableCell>Confidential Balance</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>{balancesData?.balances.map((balance: BalanceEntry) => BalanceRow(balance))}</TableBody>
+                        </Table>
+                    </TableContainer>
+                </StyledPaper>
+            </Grid>
+            <Grid item xs={12} md={12} lg={12}>
+                <StyledPaper>
+                    Account NFTs
+                    <FetchStatusCheck
+                        isError={nftsListIsError}
+                        errorMessage={nftsListError?.message || "Error fetching data"}
+                        isLoading={nftsListIsLoading}
+                    />
+                    <TableContainer>
+                        <Table>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>ID</TableCell>
+                                    <TableCell>Vault</TableCell>
+                                    <TableCell>Data</TableCell>
+                                    <TableCell>Mutable Data</TableCell>
+                                    <TableCell>Is Burned</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {nftsListData?.nfts.map((nft: NonFungibleToken, index: number) => (
+                                    <NftDetails key={index} nft={nft}/>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </StyledPaper>
+            </Grid>
+        </>
+    );
 }
 
 export default AccountDetailsLayout;

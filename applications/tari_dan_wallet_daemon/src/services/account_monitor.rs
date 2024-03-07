@@ -118,7 +118,7 @@ where
 
     async fn on_poll(&self) {
         if let Err(err) = self.refresh_all_accounts().await {
-            error!(target: LOG_TARGET, "Error checking pending transactions: {}", err);
+            error!(target: LOG_TARGET, "Error refreshing all accounts: {}", err);
         }
     }
 

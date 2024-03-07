@@ -199,7 +199,7 @@ where
     ) -> Result<(), SubstateApiError> {
         self.store.with_write_tx(|tx| {
             let maybe_removed = tx.substates_remove(&address.substate_id).optional()?;
-            tx.substates_insert_root(
+            tx.substates_upsert_root(
                 created_by_tx,
                 address,
                 maybe_removed.as_ref().and_then(|s| s.module_name.clone()),
@@ -217,8 +217,9 @@ where
     ) -> Result<(), SubstateApiError> {
         self.store.with_write_tx(|tx| {
             tx.substates_remove(&child.substate_id).optional()?;
-            tx.substates_insert_child(created_by_tx, parent, child)
+            tx.substates_upsert_child(created_by_tx, parent, child)
         })?;
+
         Ok(())
     }
 }

@@ -309,7 +309,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Substates -------------------------------- //
-    fn substates_insert_root(
+    fn substates_upsert_root(
         &mut self,
         transaction_id: TransactionId,
         address: VersionedSubstateId,
@@ -322,17 +322,25 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             .values((
                 substates::address.eq(address.substate_id.to_string()),
                 substates::transaction_hash.eq(transaction_id.to_string()),
-                substates::module_name.eq(module_name),
+                substates::module_name.eq(&module_name),
+                substates::template_address.eq(template_addr.map(|a| a.to_string())),
+                substates::version.eq(address.version as i32),
+            ))
+            .on_conflict(substates::address)
+            .do_update()
+            .set((
+                substates::transaction_hash.eq(transaction_id.to_string()),
+                substates::module_name.eq(&module_name),
                 substates::template_address.eq(template_addr.map(|a| a.to_string())),
                 substates::version.eq(address.version as i32),
             ))
             .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("substates_insert_root", e))?;
+            .map_err(|e| WalletStorageError::general("substates_upsert_root", e))?;
 
         Ok(())
     }
 
-    fn substates_insert_child(
+    fn substates_upsert_child(
         &mut self,
         transaction_id: TransactionId,
         parent: SubstateId,
@@ -347,8 +355,15 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 substates::parent_address.eq(Some(parent.to_string())),
                 substates::version.eq(child.version as i32),
             ))
+            .on_conflict(substates::address)
+            .do_update()
+            .set((
+                substates::transaction_hash.eq(transaction_id.to_string()),
+                substates::parent_address.eq(Some(parent.to_string())),
+                substates::version.eq(child.version as i32),
+            ))
             .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("substates_insert_child", e))?;
+            .map_err(|e| WalletStorageError::general("substates_upsert_child", e))?;
 
         Ok(())
     }
