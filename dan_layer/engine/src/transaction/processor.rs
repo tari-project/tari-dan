@@ -25,9 +25,11 @@ use std::sync::Arc;
 use log::*;
 use tari_bor::to_value;
 use tari_common::configuration::Network;
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
+    entity_id_provider::EntityIdProvider,
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
     instruction::Instruction,
     instruction_result::InstructionResult,
@@ -35,13 +37,18 @@ use tari_engine_types::{
     virtual_substate::VirtualSubstates,
 };
 use tari_template_abi::{FunctionDef, Type};
+use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
+    arg,
+    args,
     args::{Arg, WorkspaceAction},
+    crypto::RistrettoPublicKeyBytes,
     invoke_args,
-    models::ComponentAddress,
+    models::{ComponentAddress, NonFungibleAddress},
     prelude::TemplateAddress,
 };
-use tari_transaction::{id_provider::IdProvider, Transaction};
+use tari_transaction::Transaction;
+use tari_utilities::ByteArray;
 
 use crate::{
     runtime::{
@@ -51,7 +58,6 @@ use crate::{
         Runtime,
         RuntimeInterfaceImpl,
         RuntimeModule,
-        StateFinalize,
         StateTracker,
     },
     state_store::memory::MemoryStateStore,
@@ -93,7 +99,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
     }
 
     pub fn execute(self, transaction: Transaction) -> Result<ExecuteResult, TransactionError> {
-        let id_provider = IdProvider::new(transaction.hash(), 1000);
+        let entity_id_provider = EntityIdProvider::new(transaction.hash(), 1000);
         let Self {
             template_provider,
             state_db,
@@ -104,11 +110,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         } = self;
 
         let initial_auth_scope = AuthorizationScope::new(auth_params.initial_ownership_proofs);
-        let tracker = StateTracker::new(state_db, id_provider, virtual_substates, initial_auth_scope);
+        let tracker = StateTracker::new(state_db, virtual_substates, initial_auth_scope, transaction.hash());
         let runtime_interface = RuntimeInterfaceImpl::initialize(
             tracker,
             template_provider.clone(),
             transaction.signer_public_key().clone(),
+            entity_id_provider,
             modules,
             MAX_CALL_DEPTH,
             network,
@@ -151,16 +158,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
 
         match instruction_result {
             Ok(execution_results) => {
-                let StateFinalize {
-                    mut finalized,
-                    fee_receipt,
-                } = runtime.interface().finalize()?;
+                let mut finalized = runtime.interface().finalize()?;
 
-                if !fee_receipt.is_paid_in_full() {
+                if !finalized.fee_receipt.is_paid_in_full() {
                     let reason = RejectReason::FeesNotPaid(format!(
                         "Required fees {} but {} paid",
-                        fee_receipt.total_fees_charged(),
-                        fee_receipt.total_fees_paid()
+                        finalized.fee_receipt.total_fees_charged(),
+                        finalized.fee_receipt.total_fees_paid()
                     ));
                     finalized.result = if let Some(accept) = finalized.result.accept() {
                         TransactionResult::AcceptFeeRejectRest(accept.clone(), reason)
@@ -168,20 +172,17 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                         TransactionResult::Reject(reason)
                     };
                     return Ok(ExecuteResult {
+                        // TODO: clean up
+                        fee_receipt: Some(finalized.fee_receipt.clone()),
                         finalize: finalized,
-                        // transaction_failure: Some(RejectReason::FeesNotPaid(format!(
-                        //     "Required fees {} but {} paid",
-                        //     fee_receipt.total_fees_charged(),
-                        //     fee_receipt.total_fees_paid()
-                        // ))),
-                        fee_receipt: Some(fee_receipt),
                     });
                 }
                 finalized.execution_results = execution_results;
 
                 Ok(ExecuteResult {
+                    // TODO: clean up
+                    fee_receipt: Some(finalized.fee_receipt.clone()),
                     finalize: finalized,
-                    fee_receipt: Some(fee_receipt),
                 })
             },
             // This can happen e.g if you have dangling buckets after running the instructions
@@ -190,10 +191,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 // successful instructions are still charged even though the transaction failed.
                 runtime.interface().reset_to_fee_checkpoint()?;
                 // Finalize will now contain the fee payments and vault refunds only
-                let StateFinalize {
-                    mut finalized,
-                    fee_receipt,
-                } = runtime.interface().finalize()?;
+                let mut finalized = runtime.interface().finalize()?;
                 finalized.execution_results = fee_exec_result;
                 finalized.result = TransactionResult::AcceptFeeRejectRest(
                     finalized
@@ -204,9 +202,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     RejectReason::ExecutionFailure(err.to_string()),
                 );
                 Ok(ExecuteResult {
+                    // TODO: clean up
+                    fee_receipt: Some(finalized.fee_receipt.clone()),
                     finalize: finalized,
-                    fee_receipt: Some(fee_receipt),
-                    // transaction_failure: Some(RejectReason::ExecutionFailure(err.to_string())),
                 })
             },
         }
@@ -230,6 +228,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
     ) -> Result<InstructionResult, TransactionError> {
         debug!(target: LOG_TARGET, "instruction = {:?}", instruction);
         match instruction {
+            Instruction::CreateAccount {
+                owner_public_key,
+                workspace_bucket,
+            } => Self::create_account(template_provider, runtime, &owner_public_key, workspace_bucket),
             Instruction::CallFunction {
                 template_address,
                 function,
@@ -297,6 +299,63 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         Ok(())
     }
 
+    pub fn create_account(
+        template_provider: &TTemplateProvider,
+        runtime: &Runtime,
+        owner_public_key: &PublicKey,
+        workspace_bucket: Option<String>,
+    ) -> Result<InstructionResult, TransactionError> {
+        let template = template_provider
+            .get_template_module(&ACCOUNT_TEMPLATE_ADDRESS)
+            .map_err(|e| TransactionError::FailedToLoadTemplate {
+                address: ACCOUNT_TEMPLATE_ADDRESS,
+                details: e.to_string(),
+            })?
+            .ok_or(TransactionError::TemplateNotFound {
+                address: ACCOUNT_TEMPLATE_ADDRESS,
+            })?;
+
+        let function = if workspace_bucket.is_some() {
+            "create_with_bucket"
+        } else {
+            "create"
+        };
+
+        let function_def = template.template_def().get_function(function).cloned().ok_or_else(|| {
+            TransactionError::FunctionNotFound {
+                name: function.to_string(),
+            }
+        })?;
+        let owner_pk = RistrettoPublicKeyBytes::from_bytes(owner_public_key.as_bytes()).unwrap();
+        let owner_token = NonFungibleAddress::from_public_key(owner_pk);
+
+        let mut args = args![owner_token];
+        if let Some(workspace_bucket) = workspace_bucket {
+            args.push(arg![Workspace(workspace_bucket)]);
+        }
+
+        let args = runtime.resolve_args(args)?;
+        let arg_scope = args
+            .iter()
+            .map(IndexedWellKnownTypes::from_value)
+            .collect::<Result<_, _>>()?;
+
+        runtime.interface().push_call_frame(PushCallFrame::Static {
+            template_address: ACCOUNT_TEMPLATE_ADDRESS,
+            module_name: template.template_name().to_string(),
+            arg_scope,
+            entity_id: owner_pk.as_hash().leading_bytes().into(),
+        })?;
+
+        let result = Self::invoke_template(template, template_provider, runtime.clone(), function_def, args)?;
+
+        runtime.interface().validate_return_value(&result.indexed)?;
+
+        runtime.interface().pop_call_frame()?;
+
+        Ok(result)
+    }
+
     pub fn call_function(
         template_provider: &TTemplateProvider,
         runtime: &Runtime,
@@ -330,6 +389,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             template_address: *template_address,
             module_name: template.template_name().to_string(),
             arg_scope,
+            entity_id: runtime.interface().next_entity_id()?,
         })?;
 
         let result = Self::invoke_template(template, template_provider, runtime.clone(), function_def, args)?;
@@ -388,6 +448,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             module_name: template.template_name().to_string(),
             component_lock: component_lock.clone(),
             arg_scope,
+            entity_id: component.entity_id,
         })?;
 
         // This must come after the call frame as that defines the authorization scope

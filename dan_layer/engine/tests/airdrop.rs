@@ -29,18 +29,17 @@ fn airdrop() {
     assert_eq!(total_supply, Amount(100));
 
     // Create 100 accounts
-    let account_template_addr = template_test.get_template_address("Account");
+    let instructions = iter::repeat_with(|| {
+        let (_, owner_public_key, _) = template_test.create_owner_proof();
+        Instruction::CreateAccount {
+            owner_public_key,
+            workspace_bucket: None,
+        }
+    })
+    .take(100)
+    .collect();
     let result = template_test
-        .execute_and_commit(
-            iter::repeat_with(|| Instruction::CallFunction {
-                template_address: account_template_addr,
-                function: "create".to_string(),
-                args: args![template_test.create_owner_proof().0], // random owner token
-            })
-            .take(100)
-            .collect(),
-            vec![template_test.get_test_proof()],
-        )
+        .execute_and_commit(instructions, vec![template_test.get_test_proof()])
         .unwrap();
 
     let addresses = result

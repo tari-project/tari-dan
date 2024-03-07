@@ -29,7 +29,7 @@ use ts_rs::TS;
 
 use crate::{
     events::Event,
-    fees::{FeeCostBreakdown, FeeReceipt},
+    fees::FeeReceipt,
     instruction_result::InstructionResult,
     logs::LogEntry,
     serde_with,
@@ -105,7 +105,7 @@ pub struct FinalizeResult {
     pub logs: Vec<LogEntry>,
     pub execution_results: Vec<InstructionResult>,
     pub result: TransactionResult,
-    pub cost_breakdown: Option<FeeCostBreakdown>,
+    pub fee_receipt: FeeReceipt,
 }
 
 impl FinalizeResult {
@@ -114,7 +114,7 @@ impl FinalizeResult {
         logs: Vec<LogEntry>,
         events: Vec<Event>,
         result: TransactionResult,
-        cost_breakdown: FeeCostBreakdown,
+        fee_receipt: FeeReceipt,
     ) -> Self {
         Self {
             transaction_hash,
@@ -122,7 +122,7 @@ impl FinalizeResult {
             events,
             execution_results: Vec::new(),
             result,
-            cost_breakdown: Some(cost_breakdown),
+            fee_receipt,
         }
     }
 
@@ -133,7 +133,7 @@ impl FinalizeResult {
             events: vec![],
             execution_results: Vec::new(),
             result: TransactionResult::Reject(reason),
-            cost_breakdown: None,
+            fee_receipt: FeeReceipt::default(),
         }
     }
 

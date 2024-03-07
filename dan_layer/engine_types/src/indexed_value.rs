@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, ops::ControlFlow};
 use serde::{Deserialize, Serialize};
 use tari_bor::{decode, BorError, FromTagAndValue, ValueVisitor};
 use tari_template_lib::{
-    models::{BinaryTag, BucketId, NonFungibleAddressContents, ProofId, ResourceAddress, VaultId},
+    models::{BinaryTag, BucketId, NonFungibleAddressContents, ObjectKey, ProofId, ResourceAddress, VaultId},
     prelude::{ComponentAddress, Metadata, NonFungibleAddress},
     Hash,
 };
@@ -287,7 +287,7 @@ impl FromTagAndValue for WellKnownTariValue {
         let tag = BinaryTag::from_u64(tag).ok_or(IndexedValueError::InvalidTag(tag))?;
         match tag {
             BinaryTag::ComponentAddress => {
-                let component_address: Hash = value.deserialized().map_err(BorError::from)?;
+                let component_address: ObjectKey = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::ComponentAddress(component_address.into()))
             },
             BinaryTag::BucketId => {
@@ -295,7 +295,7 @@ impl FromTagAndValue for WellKnownTariValue {
                 Ok(Self::BucketId(bucket_id.into()))
             },
             BinaryTag::ResourceAddress => {
-                let resource_address: Hash = value.deserialized().map_err(BorError::from)?;
+                let resource_address: ObjectKey = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::ResourceAddress(resource_address.into()))
             },
             BinaryTag::TransactionReceipt => {
@@ -311,7 +311,7 @@ impl FromTagAndValue for WellKnownTariValue {
                 Ok(Self::Metadata(metadata.into()))
             },
             BinaryTag::VaultId => {
-                let vault_id: Hash = value.deserialized().map_err(BorError::from)?;
+                let vault_id: ObjectKey = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::VaultId(vault_id.into()))
             },
             BinaryTag::FeeClaim => {
@@ -439,10 +439,12 @@ mod tests {
     use super::*;
     use crate::hashing::{hasher32, EngineHashDomainLabel};
 
-    fn new_hash() -> Hash {
+    fn new_object_key() -> ObjectKey {
         hasher32(EngineHashDomainLabel::ComponentAddress)
             .chain(&OsRng.next_u32())
             .result()
+            .trailing_bytes()
+            .into()
     }
 
     #[derive(Serialize, Deserialize)]
@@ -471,8 +473,12 @@ mod tests {
 
     #[test]
     fn it_extracts_known_types_from_binary_data() {
-        let addrs: [ComponentAddress; 3] = [new_hash().into(), new_hash().into(), new_hash().into()];
-        let resx_addr = ResourceAddress::new(new_hash());
+        let addrs: [ComponentAddress; 3] = [
+            new_object_key().into(),
+            new_object_key().into(),
+            new_object_key().into(),
+        ];
+        let resx_addr = ResourceAddress::new(new_object_key());
 
         let data = TestStruct {
             name: "John".to_string(),
@@ -494,7 +500,7 @@ mod tests {
                     buckets: vec![1.into(), 2.into()],
                 },
             ],
-            vault_ids: vec![VaultId::new(new_hash())],
+            vault_ids: vec![VaultId::new(new_object_key())],
             non_fungible_id: Some(NonFungibleAddress::new(resx_addr, NonFungibleId::Uint64(1))),
             metadata: Metadata::new(),
         };

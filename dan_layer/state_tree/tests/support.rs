@@ -12,11 +12,13 @@ use tari_state_tree::{
     TreeStore,
     Version,
 };
-use tari_template_lib::models::ComponentAddress;
+use tari_template_lib::models::{ComponentAddress, ObjectKey};
 
 pub fn change(substate_id_seed: u8, value_seed: Option<u8>) -> SubstateChange {
     change_exact(
-        SubstateId::Component(ComponentAddress::from_array([substate_id_seed; 32])),
+        SubstateId::Component(ComponentAddress::new(ObjectKey::from_array(
+            [substate_id_seed; ObjectKey::LENGTH],
+        ))),
         value_seed.map(from_seed),
     )
 }
@@ -74,6 +76,10 @@ pub struct IdentityMapper;
 
 impl DbKeyMapper for IdentityMapper {
     fn map_to_leaf_key(id: &SubstateId) -> LeafKey {
-        LeafKey::new(id.to_canonical_hash().to_vec())
+        LeafKey::new(test_hasher32().chain(&id).result().to_vec())
     }
+}
+
+pub fn test_hasher32() -> tari_engine_types::hashing::TariHasher32 {
+    tari_engine_types::hashing::hasher32(tari_engine_types::hashing::EngineHashDomainLabel::SubstateValue)
 }

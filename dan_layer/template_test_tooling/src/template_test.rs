@@ -12,12 +12,13 @@ use anyhow::anyhow;
 use serde::de::DeserializeOwned;
 use tari_bor::{decode_exact, to_value};
 use tari_common::configuration::Network;
+use tari_common_types::types::PublicKey;
 use tari_crypto::{
-    keys::PublicKey,
+    keys::PublicKey as _,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::{hex::Hex, ByteArray},
 };
-use tari_dan_common_types::crypto::create_key_pair;
+use tari_dan_common_types::crypto::create_key_pair_from_seed;
 use tari_dan_engine::{
     bootstrap_state,
     fees::{FeeModule, FeeTable},
@@ -35,6 +36,7 @@ use tari_engine_types::{
     commit_result::{ExecuteResult, RejectReason},
     component::{ComponentBody, ComponentHeader},
     fees::FeeBreakdown,
+    id_provider::{IdProvider, ObjectIds},
     instruction::Instruction,
     resource_container::ResourceContainer,
     substate::{Substate, SubstateDiff, SubstateId},
@@ -47,17 +49,17 @@ use tari_template_lib::{
     args::Arg,
     auth::OwnerRule,
     crypto::RistrettoPublicKeyBytes,
-    models::{Amount, ComponentAddress, NonFungibleAddress, TemplateAddress},
+    models::{Amount, ComponentAddress, EntityId, NonFungibleAddress, ObjectKey, TemplateAddress},
     prelude::{ComponentAccessRules, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };
-use tari_transaction::{id_provider::IdProvider, Transaction};
+use tari_transaction::Transaction;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
 use crate::{read_only_state_store::ReadOnlyStateStore, track_calls::TrackCallsModule, Package};
 
 pub fn test_faucet_component() -> ComponentAddress {
-    ComponentAddress::new(Hash::from_array([0xfau8; 32]))
+    ComponentAddress::new(ObjectKey::from_array([0xfau8; ObjectKey::LENGTH]))
 }
 
 pub struct TemplateTest {
@@ -71,6 +73,7 @@ pub struct TemplateTest {
     enable_fees: bool,
     fee_table: FeeTable,
     virtual_substates: VirtualSubstates,
+    key_seed: u8,
 }
 
 impl TemplateTest {
@@ -139,6 +142,7 @@ impl TemplateTest {
                 per_event_cost: 1,
                 per_log_cost: 1,
             },
+            key_seed: 1,
         }
     }
 
@@ -159,12 +163,15 @@ impl TemplateTest {
         initial_supply: Amount,
         test_faucet_template_address: TemplateAddress,
     ) {
-        let id_provider = IdProvider::new(Hash::default(), 10);
+        let entity_id = EntityId::default();
+        let object_ids = ObjectIds::new(10);
+        let id_provider = IdProvider::new(entity_id, Hash::default(), &object_ids);
         let vault_id = id_provider.new_vault_id().unwrap();
-        let vault = Vault::new(
-            vault_id,
-            ResourceContainer::confidential(CONFIDENTIAL_TARI_RESOURCE_ADDRESS, vec![], initial_supply),
-        );
+        let vault = Vault::new(ResourceContainer::confidential(
+            CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            vec![],
+            initial_supply,
+        ));
         tx.set_state(&SubstateId::Vault(vault_id), Substate::new(0, vault))
             .unwrap();
 
@@ -182,9 +189,10 @@ impl TemplateTest {
             Substate::new(0, ComponentHeader {
                 template_address: test_faucet_template_address,
                 module_name: "TestFaucet".to_string(),
-                owner_key: RistrettoPublicKeyBytes::from_bytes(signer_public_key.as_bytes()).unwrap(),
+                owner_key: Some(RistrettoPublicKeyBytes::from_bytes(signer_public_key.as_bytes()).unwrap()),
                 owner_rule: OwnerRule::None,
                 access_rules: ComponentAccessRules::allow_all(),
+                entity_id,
                 body: ComponentBody { state },
             }),
         )
@@ -284,6 +292,27 @@ impl TemplateTest {
             .unwrap_or_else(|| panic!("No template with name {}", name))
     }
 
+    pub fn create_account<T>(
+        &mut self,
+        owner_public_key: PublicKey,
+        workspace_bucket: Option<String>,
+        proofs: Vec<NonFungibleAddress>,
+    ) -> T
+    where
+        T: DeserializeOwned,
+    {
+        let result = self
+            .execute_and_commit(
+                vec![Instruction::CreateAccount {
+                    owner_public_key,
+                    workspace_bucket,
+                }],
+                proofs,
+            )
+            .unwrap();
+        result.finalize.execution_results[0].decode().unwrap()
+    }
+
     pub fn call_function<T>(
         &mut self,
         template_name: &str,
@@ -360,26 +389,23 @@ impl TemplateTest {
     }
 
     pub fn create_empty_account(&mut self) -> (ComponentAddress, NonFungibleAddress, RistrettoSecretKey) {
-        let (owner_proof, secret_key) = self.create_owner_proof();
+        let (owner_proof, public_key, secret_key) = self.create_owner_proof();
         let old_fail_fees = self.enable_fees;
         self.enable_fees = false;
-        let component = self.call_function("Account", "create", args![owner_proof], vec![owner_proof.clone()]);
+        let component = self.create_account(public_key, None, vec![owner_proof.clone()]);
         self.enable_fees = old_fail_fees;
         (component, owner_proof, secret_key)
     }
 
     pub fn create_owned_account(&mut self) -> (ComponentAddress, NonFungibleAddress, RistrettoSecretKey) {
-        let (owner_proof, secret_key) = self.create_owner_proof();
+        let (owner_proof, public_key, secret_key) = self.create_owner_proof();
         let old_fail_fees = self.enable_fees;
         self.enable_fees = false;
         let result = self.execute_expect_success(
             Transaction::builder()
                 .call_method(test_faucet_component(), "take_free_coins", args![])
                 .put_last_instruction_output_on_workspace("bucket")
-                .call_function(self.get_template_address("Account"), "create_with_bucket", args![
-                    &owner_proof,
-                    Workspace("bucket")
-                ])
+                .create_account_with_bucket(public_key, "bucket")
                 .sign(&secret_key)
                 .build(),
             vec![owner_proof.clone()],
@@ -393,11 +419,17 @@ impl TemplateTest {
         (component, owner_proof, secret_key)
     }
 
-    pub fn create_owner_proof(&self) -> (NonFungibleAddress, RistrettoSecretKey) {
-        let (secret_key, public_key) = create_key_pair();
-        let public_key = RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap();
-        let owner_token = NonFungibleAddress::from_public_key(public_key);
-        (owner_token, secret_key)
+    fn next_key_seed(&mut self) -> u8 {
+        let seed = self.key_seed;
+        self.key_seed += 1;
+        seed
+    }
+
+    pub fn create_owner_proof(&mut self) -> (NonFungibleAddress, RistrettoPublicKey, RistrettoSecretKey) {
+        let (secret_key, public_key) = create_key_pair_from_seed(self.next_key_seed());
+        let public_key_bytes = RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap();
+        let owner_token = NonFungibleAddress::from_public_key(public_key_bytes);
+        (owner_token, public_key, secret_key)
     }
 
     pub fn try_execute_instructions(
