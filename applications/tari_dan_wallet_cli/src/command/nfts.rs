@@ -141,6 +141,7 @@ pub async fn handle_mint_account_nft(
         metadata,
         mint_fee: mint_fee.map(|f| Amount::new(i64::from(f))),
         create_account_nft_fee: create_account_nft_fee.map(|f| Amount::new(i64::from(f))),
+        existing_nft_component: None,
     };
 
     let resp = client

@@ -1687,7 +1687,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         }
 
         self.tracker.write_with(|state| {
-            let bucket_id = state.id_provider()?.new_bucket_id();
+            let bucket_id = state.new_bucket_id();
             state.new_bucket(bucket_id, resource)?;
             state.set_last_instruction_output(IndexedValue::from_type(&bucket_id)?);
             Ok::<_, RuntimeError>(())
@@ -1699,7 +1699,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn claim_validator_fees(&self, epoch: Epoch, validator_public_key: PublicKey) -> Result<(), RuntimeError> {
         self.tracker.write_with(|state| {
             let resource = state.claim_fee(epoch, validator_public_key)?;
-            let bucket_id = state.id_provider()?.new_bucket_id();
+            let bucket_id = state.new_bucket_id();
             state.new_bucket(bucket_id, resource)?;
             state.set_last_instruction_output(IndexedValue::from_type(&bucket_id)?);
             Ok::<_, RuntimeError>(())

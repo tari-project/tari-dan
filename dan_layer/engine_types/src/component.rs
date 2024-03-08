@@ -21,12 +21,15 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::PublicKey;
 use tari_template_lib::{
     auth::{ComponentAccessRules, OwnerRule, Ownership},
     crypto::RistrettoPublicKeyBytes,
     models::{ComponentKey, EntityId, ObjectKey, TemplateAddress},
     prelude::ComponentAddress,
+    Hash,
 };
+use tari_utilities::ByteArray;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -41,16 +44,13 @@ use crate::{
 ///
 /// This can be used to derive the component address from a public key if the component sets OwnerRule::OwnedBySigner or
 /// OwnerRule::ByPublicKey
-pub fn new_component_address_from_parts(
-    template_address: &TemplateAddress,
-    public_key: &RistrettoPublicKeyBytes,
-) -> ComponentAddress {
+pub fn new_account_address_from_parts(template_address: &TemplateAddress, public_key: &PublicKey) -> ComponentAddress {
     let address = hasher32(EngineHashDomainLabel::ComponentAddress)
         .chain(template_address)
         .chain(public_key)
         .result();
     let key = ObjectKey::new(
-        EntityId::from_array(public_key.as_hash().leading_bytes()),
+        EntityId::from_array(Hash::try_from(public_key.as_bytes()).unwrap().leading_bytes()),
         ComponentKey::new(address.trailing_bytes()),
     );
     ComponentAddress::new(key)

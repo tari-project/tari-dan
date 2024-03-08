@@ -3,11 +3,11 @@
 
 use std::ops::RangeInclusive;
 
-use tari_crypto::{keys::PublicKey as _, ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
+use tari_crypto::{keys::PublicKey as _, ristretto::RistrettoPublicKey};
 use tari_dan_wallet_sdk::{apis::key_manager::TRANSACTION_BRANCH, models::Account};
-use tari_engine_types::component::new_component_address_from_parts;
+use tari_engine_types::component::new_account_address_from_parts;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::{args, crypto::RistrettoPublicKeyBytes, models::Amount};
+use tari_template_lib::{args, models::Amount};
 use tari_transaction::{Instruction, Transaction};
 
 use crate::{faucet::Faucet, runner::Runner};
@@ -16,10 +16,8 @@ impl Runner {
     pub async fn create_account_with_free_coins(&mut self) -> anyhow::Result<Account> {
         let key = self.sdk.key_manager_api().derive_key(TRANSACTION_BRANCH, 0)?;
         let owner_public_key = RistrettoPublicKey::from_secret_key(&key.key);
-        let owner_pk = RistrettoPublicKeyBytes::from_bytes(owner_public_key.as_bytes()).unwrap();
 
-        let account_address =
-            new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &owner_pk.into_array().into());
+        let account_address = new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &owner_public_key);
 
         let transaction = Transaction::builder()
             .with_fee_instructions_builder(|builder| {
