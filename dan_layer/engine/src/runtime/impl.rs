@@ -33,8 +33,8 @@ use tari_engine_types::{
     commit_result::FinalizeResult,
     component::ComponentHeader,
     confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
+    entity_id_provider::EntityIdProvider,
     events::Event,
-    fees::FeeReceipt,
     indexed_value::IndexedValue,
     lock::LockFlag,
     logs::LogEntry,
@@ -80,15 +80,25 @@ use tari_template_lib::{
         VaultWithdrawArg,
         WorkspaceAction,
     },
-    auth::{ComponentAccessRules, ResourceAccessRules, ResourceAuthAction},
+    auth::{ComponentAccessRules, OwnerRule, ResourceAccessRules, ResourceAuthAction},
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     crypto::RistrettoPublicKeyBytes,
-    models::{Amount, BucketId, ComponentAddress, Metadata, NonFungible, NonFungibleAddress, NotAuthorized, VaultRef},
+    models::{
+        Amount,
+        BucketId,
+        ComponentAddress,
+        EntityId,
+        Metadata,
+        NonFungible,
+        NonFungibleAddress,
+        NotAuthorized,
+        VaultRef,
+    },
     prelude::ResourceType,
     template::BuiltinTemplate,
 };
 
-use super::{tracker::FinalizeData, Runtime};
+use super::Runtime;
 use crate::{
     runtime::{
         engine_args::EngineArgs,
@@ -111,15 +121,11 @@ const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 pub struct RuntimeInterfaceImpl<TTemplateProvider> {
     tracker: StateTracker,
     template_provider: Arc<TTemplateProvider>,
+    entity_id_provider: EntityIdProvider,
     transaction_signer_public_key: RistrettoPublicKey,
     modules: Vec<Arc<dyn RuntimeModule>>,
     max_call_depth: usize,
     network: Network,
-}
-
-pub struct StateFinalize {
-    pub finalized: FinalizeResult,
-    pub fee_receipt: FeeReceipt,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInterfaceImpl<TTemplateProvider> {
@@ -127,6 +133,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         tracker: StateTracker,
         template_provider: Arc<TTemplateProvider>,
         signer_public_key: RistrettoPublicKey,
+        entity_id_provider: EntityIdProvider,
         modules: Vec<Arc<dyn RuntimeModule>>,
         max_call_depth: usize,
         network: Network,
@@ -134,6 +141,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         let runtime = Self {
             tracker,
             template_provider,
+            entity_id_provider,
             transaction_signer_public_key: signer_public_key,
             modules,
             max_call_depth,
@@ -224,6 +232,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInterface
     for RuntimeInterfaceImpl<TTemplateProvider>
 {
+    fn next_entity_id(&self) -> Result<EntityId, RuntimeError> {
+        let id = self.entity_id_provider.next_entity_id()?;
+        Ok(id)
+    }
+
     fn emit_event(&self, topic: String, payload: Metadata) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("emit_event")?;
 
@@ -235,7 +248,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     .and_then(|l| l.address().as_component_address()),
             )
         })?;
-        let tx_hash = self.tracker.transaction_hash();
+        let tx_hash = self.entity_id_provider.transaction_hash();
         let template_address = self.tracker.get_template_address()?;
 
         let event = Event::new(component_address, template_address, tx_hash, topic, payload);
@@ -291,7 +304,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             }),
             CallerContextAction::AllocateNewComponentAddress => self.tracker.write_with(|state| {
                 let (template, _) = state.current_template()?;
-                let address = self.tracker.id_provider().new_component_address(*template, None)?;
+                let address = state.id_provider()?.new_component_address(*template, None)?;
                 let allocation = state.new_address_allocation(address)?;
                 Ok(InvokeResult::encode(&allocation)?)
             }),
@@ -328,13 +341,21 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 let template_addr = self.tracker.get_template_address()?;
                 let template_def = self.get_template_def(&template_addr)?;
                 validate_component_access_rule_methods(&arg.access_rules, &template_def)?;
-                let owner_key = to_ristretto_public_key_bytes(&self.transaction_signer_public_key);
+
+                let owner_key = match arg.owner_rule {
+                    OwnerRule::OwnedBySigner => {
+                        Some(to_ristretto_public_key_bytes(&self.transaction_signer_public_key))
+                    },
+                    OwnerRule::None => None,
+                    OwnerRule::ByAccessRule(_) => None,
+                    OwnerRule::ByPublicKey(key) => Some(key),
+                };
+
                 let component_address = self.tracker.new_component(
                     arg.encoded_state,
                     owner_key,
                     arg.owner_rule,
                     arg.access_rules,
-                    arg.component_id,
                     arg.address_allocation,
                 )?;
                 Ok(InvokeResult::encode(&component_address)?)
@@ -508,7 +529,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         match action {
             ResourceAction::Create => {
                 let arg: CreateResourceArg = args.get(0)?;
-                let owner_key = to_ristretto_public_key_bytes(&self.transaction_signer_public_key);
+
+                let owner_key = match &arg.owner_rule {
+                    OwnerRule::OwnedBySigner => {
+                        Some(to_ristretto_public_key_bytes(&self.transaction_signer_public_key))
+                    },
+                    OwnerRule::ByPublicKey(key) => Some(*key),
+                    OwnerRule::None | OwnerRule::ByAccessRule(_) => None,
+                };
 
                 self.tracker.write_with(|state| {
                     let resource = Resource::new(
@@ -519,13 +547,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         arg.metadata,
                     );
 
-                    let resource_address = self.tracker.id_provider().new_resource_address()?;
+                    let resource_address = state.id_provider()?.new_resource_address()?;
                     state.new_substate(resource_address, resource)?;
                     let locked = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Write)?;
 
                     let mut output_bucket = None;
                     if let Some(mint_arg) = arg.mint_arg {
-                        let bucket_id = self.tracker.id_provider().new_bucket_id();
+                        let bucket_id = state.id_provider()?.new_bucket_id();
                         let container = state.mint_resource(&locked, mint_arg)?;
                         state.new_bucket(bucket_id, container)?;
                         output_bucket = Some(tari_template_lib::models::Bucket::from_id(bucket_id));
@@ -592,7 +620,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         .check_resource_access_rules(ResourceAuthAction::Mint, &resource_lock)?;
 
                     let resource = state.mint_resource(&resource_lock, mint_resource.mint_arg)?;
-                    let bucket_id = self.tracker.id_provider().new_bucket_id();
+                    let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource)?;
 
                     let bucket = tari_template_lib::models::Bucket::from_id(bucket_id);
@@ -623,7 +651,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                     let resource = state.recall_resource_from_vault(&vault_lock, arg.resource)?;
 
-                    let bucket_id = self.tracker.id_provider().new_bucket_id();
+                    let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource)?;
 
                     state.unlock_substate(vault_lock)?;
@@ -766,7 +794,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         .check_resource_access_rules(ResourceAuthAction::Deposit, &resource_lock)?;
 
                     let resource_type = state.get_resource(&resource_lock)?.resource_type();
-                    let vault_id = self.tracker.id_provider().new_vault_id()?;
+                    let vault_id = state.id_provider()?.new_vault_id()?;
                     let resource = match resource_type {
                         ResourceType::Fungible => ResourceContainer::fungible(*resource_address, 0.into()),
                         ResourceType::NonFungible => {
@@ -777,7 +805,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         },
                     };
 
-                    let vault = Vault::new(vault_id, resource);
+                    let vault = Vault::new(resource);
 
                     state.new_substate(vault_id, vault)?;
                     debug!(
@@ -855,7 +883,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         VaultWithdrawArg::Confidential { proof } => vault_mut.withdraw_confidential(*proof)?,
                     };
 
-                    let bucket_id = self.tracker.id_provider().new_bucket_id();
+                    let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource_container)?;
 
                     state.unlock_substate(vault_lock)?;
@@ -942,7 +970,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
                     let resource_container = vault_mut.reveal_confidential(arg.proof)?;
-                    let bucket_id = self.tracker.id_provider().new_bucket_id();
+                    let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource_container)?;
 
                     state.unlock_substate(vault_lock)?;
@@ -1019,9 +1047,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         .authorization()
                         .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource_lock)?;
 
+                    let proof_id = state.id_provider()?.new_proof_id();
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
-                    let proof_id = self.tracker.id_provider().new_proof_id();
-                    let locked_funds = vault_mut.lock_all()?;
+                    let locked_funds = vault_mut.lock_all(vault_id)?;
                     state.new_proof(proof_id, locked_funds)?;
 
                     state.unlock_substate(vault_lock)?;
@@ -1047,9 +1075,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         .authorization()
                         .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource_lock)?;
 
+                    let proof_id = state.id_provider()?.new_proof_id();
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
-                    let proof_id = self.tracker.id_provider().new_proof_id();
-                    let locked_funds = vault_mut.lock_by_amount(arg.amount)?;
+                    let locked_funds = vault_mut.lock_by_amount(vault_id, arg.amount)?;
                     state.new_proof(proof_id, locked_funds)?;
 
                     state.unlock_substate(vault_lock)?;
@@ -1075,9 +1103,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         .authorization()
                         .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource_lock)?;
 
+                    let proof_id = state.id_provider()?.new_proof_id();
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
-                    let proof_id = self.tracker.id_provider().new_proof_id();
-                    let locked_funds = vault_mut.lock_by_non_fungible_ids(arg.ids)?;
+                    let locked_funds = vault_mut.lock_by_non_fungible_ids(vault_id, arg.ids)?;
                     state.new_proof(proof_id, locked_funds)?;
 
                     state.unlock_substate(vault_lock)?;
@@ -1170,7 +1198,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.write_with(|state| {
                     let bucket = state.get_bucket_mut(bucket_id)?;
                     let resource = bucket.take(amount)?;
-                    let bucket_id = self.tracker.id_provider().new_bucket_id();
+                    let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource)?;
                     Ok(InvokeResult::encode(&bucket_id)?)
                 })
@@ -1185,7 +1213,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.write_with(|state| {
                     let bucket = state.get_bucket_mut(bucket_id)?;
                     let resource = bucket.take_confidential(proof)?;
-                    let bucket_id = self.tracker.id_provider().new_bucket_id();
+                    let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource)?;
                     Ok(InvokeResult::encode(&bucket_id)?)
                 })
@@ -1199,7 +1227,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.write_with(|state| {
                     let bucket = state.get_bucket_mut(bucket_id)?;
                     let resource = bucket.reveal_confidential(proof)?;
-                    let bucket_id = self.tracker.id_provider().new_bucket_id();
+                    let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource)?;
                     Ok(InvokeResult::encode(&bucket_id)?)
                 })
@@ -1248,7 +1276,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         .authorization()
                         .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource_lock)?;
 
-                    let proof_id = self.tracker.id_provider().new_proof_id();
+                    let proof_id = state.id_provider()?.new_proof_id();
                     state.new_proof(proof_id, locked_funds)?;
 
                     state.unlock_substate(resource_lock)?;
@@ -1530,7 +1558,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         self.invoke_modules_on_runtime_call("generate_random_invoke")?;
         match action {
             GenerateRandomAction::GetRandomBytes { len } => {
-                let random = self.tracker.id_provider().get_random_bytes(len)?;
+                let random = self.tracker.get_pseudorandom_bytes(len as usize)?;
                 Ok(InvokeResult::encode(&random)?)
             },
         }
@@ -1598,8 +1626,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
         self.invoke_modules_on_runtime_call("generate_uuid")?;
-        let uuid = self.tracker.id_provider().new_uuid()?;
-        Ok(uuid)
+        self.tracker.read_with(|state| {
+            let id_provider = state.id_provider()?;
+            Ok(id_provider.new_uuid()?)
+        })
     }
 
     fn set_last_instruction_output(&self, value: IndexedValue) -> Result<(), RuntimeError> {
@@ -1658,7 +1688,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         }
 
         self.tracker.write_with(|state| {
-            let bucket_id = self.tracker.id_provider().new_bucket_id();
+            let bucket_id = state.new_bucket_id();
             state.new_bucket(bucket_id, resource)?;
             state.set_last_instruction_output(IndexedValue::from_type(&bucket_id)?);
             Ok::<_, RuntimeError>(())
@@ -1670,7 +1700,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn claim_validator_fees(&self, epoch: Epoch, validator_public_key: PublicKey) -> Result<(), RuntimeError> {
         self.tracker.write_with(|state| {
             let resource = state.claim_fee(epoch, validator_public_key)?;
-            let bucket_id = self.tracker.id_provider().new_bucket_id();
+            let bucket_id = state.new_bucket_id();
             state.new_bucket(bucket_id, resource)?;
             state.set_last_instruction_output(IndexedValue::from_type(&bucket_id)?);
             Ok::<_, RuntimeError>(())
@@ -1691,7 +1721,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         );
 
         self.tracker.write_with(|state| {
-            let bucket_id = self.tracker.id_provider().new_bucket_id();
+            let bucket_id = state.new_bucket_id();
             state.new_bucket(bucket_id, resource)?;
             state.set_last_instruction_output(IndexedValue::from_type(&bucket_id)?);
             Ok::<_, RuntimeError>(bucket_id)
@@ -1713,7 +1743,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         self.tracker.reset_to_fee_checkpoint()
     }
 
-    fn finalize(&self) -> Result<StateFinalize, RuntimeError> {
+    fn finalize(&self) -> Result<FinalizeResult, RuntimeError> {
         self.invoke_modules_on_runtime_call("finalize")?;
 
         // TODO: this should not be checked here because it will silently fail
@@ -1726,22 +1756,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         let substates_to_persist = self.tracker.take_substates_to_persist();
         self.invoke_modules_on_before_finalize(&substates_to_persist)?;
 
-        let FinalizeData {
-            result,
-            fee_receipt,
-            events,
-            logs,
-        } = self.tracker.finalize(substates_to_persist)?;
+        let finalized = self.tracker.finalize(substates_to_persist)?;
 
-        let finalized = FinalizeResult::new(
-            self.tracker.transaction_hash(),
-            logs,
-            events,
-            result,
-            fee_receipt.to_cost_breakdown(),
-        );
-
-        Ok(StateFinalize { finalized, fee_receipt })
+        Ok(finalized)
     }
 
     fn check_component_access_rules(&self, method: &str, locked: &LockedSubstate) -> Result<(), RuntimeError> {

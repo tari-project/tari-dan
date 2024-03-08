@@ -166,7 +166,6 @@ impl TariHasher64 {
 #[derive(Debug)]
 pub enum EngineHashDomainLabel {
     Template,
-    SubstateAddress,
     ConfidentialProof,
     ConfidentialTransfer,
     ShardPledgeCollection,
@@ -176,10 +175,10 @@ pub enum EngineHashDomainLabel {
     NonFungibleIndex,
     UuidOutput,
     Output,
+    EntityId,
     TransactionSignature,
     ResourceAddress,
     ComponentAddress,
-    RandomBytes,
     TransactionReceipt,
     FeeClaimAddress,
     QuorumCertificate,
@@ -190,7 +189,6 @@ impl EngineHashDomainLabel {
     pub fn as_label(&self) -> &'static str {
         match self {
             Self::Template => "Template",
-            Self::SubstateAddress => "SubstateAddress",
             Self::ConfidentialProof => "ConfidentialProof",
             Self::ConfidentialTransfer => "ConfidentialTransfer",
             Self::ShardPledgeCollection => "ShardPledgeCollection",
@@ -200,10 +198,10 @@ impl EngineHashDomainLabel {
             Self::NonFungibleIndex => "NonFungibleIndex",
             Self::UuidOutput => "UuidOutput",
             Self::Output => "Output",
+            Self::EntityId => "EntityId",
             Self::TransactionSignature => "TransactionSignature",
             Self::ResourceAddress => "ResourceAddress",
             Self::ComponentAddress => "ComponentAddress",
-            Self::RandomBytes => "RandomBytes",
             Self::TransactionReceipt => "TransactionReceipt",
             Self::FeeClaimAddress => "FeeClaimAddress",
             Self::QuorumCertificate => "QuorumCertificate",

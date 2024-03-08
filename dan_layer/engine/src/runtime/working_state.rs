@@ -18,6 +18,7 @@ use tari_engine_types::{
     events::Event,
     fee_claim::{FeeClaim, FeeClaimAddress},
     fees::FeeReceipt,
+    id_provider::{IdProvider, ObjectIds},
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
     lock::LockFlag,
     logs::LogEntry,
@@ -70,12 +71,14 @@ const LOG_TARGET: &str = "dan::engine::runtime::working_state";
 
 #[derive(Debug, Clone)]
 pub(super) struct WorkingState {
+    transaction_hash: Hash,
     events: Vec<Event>,
     logs: Vec<LogEntry>,
     buckets: HashMap<BucketId, Bucket>,
     address_allocations: HashMap<u32, SubstateId>,
     address_allocation_id: u32,
     proofs: HashMap<ProofId, Proof>,
+    object_ids: ObjectIds,
 
     store: WorkingStateStore,
 
@@ -96,11 +99,13 @@ impl WorkingState {
         state_store: MemoryStateStore,
         virtual_substates: VirtualSubstates,
         initial_auth_scope: AuthorizationScope,
+        transaction_hash: Hash,
     ) -> Self {
         let mut base_call_scope = CallScope::new();
         base_call_scope.set_auth_scope(initial_auth_scope);
 
         Self {
+            transaction_hash,
             events: Vec::new(),
             logs: Vec::new(),
             buckets: HashMap::new(),
@@ -119,7 +124,12 @@ impl WorkingState {
             call_frames: Vec::new(),
             base_call_scope,
             fee_state: FeeState::new(),
+            object_ids: ObjectIds::new(1000),
         }
+    }
+
+    pub fn transaction_hash(&self) -> Hash {
+        self.transaction_hash
     }
 
     pub fn substate_exists(&self, address: &SubstateId) -> Result<bool, RuntimeError> {
@@ -324,10 +334,10 @@ impl WorkingState {
             .into());
         }
 
-        for (_, vault) in self.store.new_vaults() {
+        for (vault_id, vault) in self.store.new_vaults() {
             if !vault.locked_balance().is_zero() {
                 return Err(TransactionCommitError::DanglingLockedValueInVault {
-                    vault_id: *vault.vault_id(),
+                    vault_id,
                     locked_amount: vault.locked_balance(),
                 }
                 .into());
@@ -776,6 +786,7 @@ impl WorkingState {
 
     pub fn take_mutated_substates(&mut self) -> IndexMap<SubstateId, SubstateValue> {
         let mut up_states = self.store.take_mutated_substates();
+        // TODO: Add fee claims to store
         up_states.extend(
             self.new_fee_claims
                 .drain()
@@ -798,7 +809,6 @@ impl WorkingState {
 
     pub fn finalize_fees(
         &mut self,
-        transaction_hash: Hash,
         substates_to_persist: &mut IndexMap<SubstateId, SubstateValue>,
     ) -> Result<TransactionReceipt, RuntimeError> {
         let total_fees = self
@@ -843,7 +853,7 @@ impl WorkingState {
         }
 
         Ok(TransactionReceipt {
-            transaction_hash,
+            transaction_hash: self.transaction_hash,
             events: self.events.clone(),
             logs: self.logs.clone(),
             fee_receipt: FeeReceipt {
@@ -879,12 +889,23 @@ impl WorkingState {
         self.call_frames
             .last()
             .map(|frame| frame.current_template())
-            .ok_or(RuntimeError::NoActiveCallScope)
+            .ok_or(RuntimeError::NoActiveCallFrame)
+    }
+
+    pub fn id_provider(&self) -> Result<IdProvider<'_>, RuntimeError> {
+        self.call_frames
+            .last()
+            .map(|frame| IdProvider::new(frame.entity_id(), self.transaction_hash, &self.object_ids))
+            .ok_or(RuntimeError::NoActiveCallFrame)
+    }
+
+    pub fn new_bucket_id(&mut self) -> BucketId {
+        self.object_ids.next_bucket_id()
     }
 
     /// Returns the component that is currently in scope (if any)
     pub fn current_component(&self) -> Result<Option<ComponentAddress>, RuntimeError> {
-        let frame = self.call_frames.last().ok_or(RuntimeError::NoActiveCallScope)?;
+        let frame = self.call_frames.last().ok_or(RuntimeError::NoActiveCallFrame)?;
         Ok(frame
             .scope()
             .get_current_component_lock()
@@ -914,9 +935,9 @@ impl WorkingState {
     }
 
     pub fn pop_frame(&mut self) -> Result<(), RuntimeError> {
-        let pop = self.call_frames.pop().ok_or(RuntimeError::NoActiveCallScope)?;
+        let current_frame = self.call_frames.pop().ok_or(RuntimeError::NoActiveCallFrame)?;
 
-        let scope = pop.into_scope();
+        let scope = current_frame.into_scope();
         // Unlock the component
         if let Some(component_lock) = scope.get_current_component_lock() {
             self.unlock_substate(component_lock.clone())?;
@@ -950,6 +971,7 @@ impl WorkingState {
             self.store.state_store().clone(),
             Default::default(),
             AuthorizationScope::new(vec![]),
+            self.transaction_hash,
         );
         mem::replace(self, new_state)
     }

@@ -48,7 +48,8 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for TariStateManager {
 
         let to_up = diff.up_iter().filter_map(|(addr, substate)| {
             let address = SubstateAddress::from_address(addr, substate.version());
-            if local_committee_shard.includes_substate_address(&address) {
+            // Commit all substates included in this shard. Every involved validator commits the transaction receipt.
+            if local_committee_shard.includes_substate_address(&address) || addr.is_transaction_receipt() {
                 Some(SubstateRecord::new(
                     addr.clone(),
                     substate.version(),

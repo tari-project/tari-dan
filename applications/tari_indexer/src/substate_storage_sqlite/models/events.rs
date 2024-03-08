@@ -77,7 +77,7 @@ impl TryFrom<EventData> for crate::graphql::model::events::Event {
             .component_address
             .map(|comp_addr| ComponentAddress::from_str(comp_addr.as_str()))
             .transpose()?
-            .map(|comp_addr| comp_addr.into_array());
+            .map(|comp_addr| comp_addr.as_object_key().into_array());
 
         let template_address = Hash::from_hex(&event_data.template_address)?.into_array();
 

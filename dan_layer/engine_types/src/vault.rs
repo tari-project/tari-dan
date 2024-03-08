@@ -42,20 +42,14 @@ use crate::{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Vault {
-    vault_id: VaultId,
     resource_container: ResourceContainer,
 }
 
 impl Vault {
-    pub fn new(vault_id: VaultId, resource: ResourceContainer) -> Self {
+    pub fn new(resource: ResourceContainer) -> Self {
         Self {
-            vault_id,
             resource_container: resource,
         }
-    }
-
-    pub fn vault_id(&self) -> &VaultId {
-        &self.vault_id
     }
 
     pub fn deposit(&mut self, bucket: Bucket) -> Result<(), ResourceError> {
@@ -133,19 +127,23 @@ impl Vault {
         &mut self.resource_container
     }
 
-    pub fn lock_all(&mut self) -> Result<LockedResource, ResourceError> {
+    pub fn lock_all(&mut self, vault_id: VaultId) -> Result<LockedResource, ResourceError> {
         let locked_resource = self.resource_container.lock_all()?;
-        Ok(LockedResource::new(ContainerRef::Vault(self.vault_id), locked_resource))
+        Ok(LockedResource::new(ContainerRef::Vault(vault_id), locked_resource))
     }
 
-    pub fn lock_by_non_fungible_ids(&mut self, ids: BTreeSet<NonFungibleId>) -> Result<LockedResource, ResourceError> {
+    pub fn lock_by_non_fungible_ids(
+        &mut self,
+        vault_id: VaultId,
+        ids: BTreeSet<NonFungibleId>,
+    ) -> Result<LockedResource, ResourceError> {
         let locked_resource = self.resource_container.lock_by_non_fungible_ids(ids)?;
-        Ok(LockedResource::new(ContainerRef::Vault(self.vault_id), locked_resource))
+        Ok(LockedResource::new(ContainerRef::Vault(vault_id), locked_resource))
     }
 
-    pub fn lock_by_amount(&mut self, amount: Amount) -> Result<LockedResource, ResourceError> {
+    pub fn lock_by_amount(&mut self, vault_id: VaultId, amount: Amount) -> Result<LockedResource, ResourceError> {
         let locked_resource = self.resource_container.lock_by_amount(amount)?;
-        Ok(LockedResource::new(ContainerRef::Vault(self.vault_id), locked_resource))
+        Ok(LockedResource::new(ContainerRef::Vault(vault_id), locked_resource))
     }
 
     pub fn unlock(&mut self, proof: Proof) -> Result<(), ResourceError> {
