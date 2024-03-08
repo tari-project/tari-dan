@@ -7,7 +7,6 @@ use crate::{
     auth::{ComponentAccessRules, OwnerRule},
     engine,
     models::{AddressAllocation, ComponentAddress},
-    Hash,
 };
 
 /// Utility for building components inside templates
@@ -15,7 +14,6 @@ pub struct ComponentBuilder<T> {
     component: T,
     owner_rule: OwnerRule,
     access_rules: ComponentAccessRules,
-    component_id: Option<Hash>,
     address_allocation: Option<AddressAllocation<ComponentAddress>>,
 }
 
@@ -26,7 +24,6 @@ impl<T: serde::Serialize> ComponentBuilder<T> {
             component,
             owner_rule: OwnerRule::default(),
             access_rules: ComponentAccessRules::new(),
-            component_id: None,
             address_allocation: None,
         }
     }
@@ -50,19 +47,12 @@ impl<T: serde::Serialize> ComponentBuilder<T> {
         self
     }
 
-    /// Sets up the ID of the component, which must be unique for each component of the template
-    pub fn with_component_id(mut self, component_id: Hash) -> Self {
-        self.component_id = Some(component_id);
-        self
-    }
-
     /// Creates the new component and returns it
     pub fn create(self) -> Component<T> {
         let address = engine().create_component(
             self.component,
             self.owner_rule,
             self.access_rules,
-            self.component_id,
             self.address_allocation,
         );
         Component::from_address(address)
@@ -109,11 +99,15 @@ mod tests {
     use tari_bor::{decode, encode};
 
     use super::*;
+    use crate::models::ObjectKey;
 
     #[test]
     fn it_serializes_as_a_component_address() {
         decode::<ComponentAddress>(
-            &encode(&Component::<u32>::from_address(ComponentAddress::new(Hash::default()))).unwrap(),
+            &encode(&Component::<u32>::from_address(ComponentAddress::new(
+                ObjectKey::default(),
+            )))
+            .unwrap(),
         )
         .unwrap();
     }

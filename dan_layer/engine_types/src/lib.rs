@@ -29,6 +29,9 @@ pub mod virtual_substate;
 mod template;
 pub use template::{calculate_template_binary_hash, parse_template_address, TemplateAddress};
 
+pub mod entity_id_provider;
+pub mod id_provider;
+
 mod argument_parser;
 
 pub use argument_parser::parse_arg;

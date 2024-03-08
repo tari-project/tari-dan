@@ -35,8 +35,7 @@ use tari_engine_types::{
 use tari_template_lib::{
     args::Arg,
     crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
-    models::{ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedData},
-    Hash,
+    models::{ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedData, ObjectKey},
 };
 use tari_transaction::{SubstateRequirement, Transaction};
 
@@ -171,6 +170,11 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
         let instruction_type =
             InstructionType::try_from(request.instruction_type).map_err(|e| anyhow!("invalid instruction_type {e}"))?;
         let instruction = match instruction_type {
+            InstructionType::CreateAccount => Instruction::CreateAccount {
+                owner_public_key: PublicKey::from_canonical_bytes(&request.create_account_owner_public_key)
+                    .map_err(|e| anyhow!("create_account_owner_public_key: {}", e))?,
+                workspace_bucket: Some(request.create_account_workspace_bucket).filter(|s| !s.is_empty()),
+            },
             InstructionType::Function => {
                 let function = request.function;
                 Instruction::CallFunction {
@@ -181,7 +185,7 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
             },
             InstructionType::Method => {
                 let method = request.method;
-                let component_address = Hash::try_from(request.component_address)?.into();
+                let component_address = ObjectKey::try_from(request.component_address)?.into();
                 Instruction::CallMethod {
                     component_address,
                     method,
@@ -236,6 +240,14 @@ impl From<Instruction> for proto::transaction::Instruction {
         let mut result = proto::transaction::Instruction::default();
 
         match instruction {
+            Instruction::CreateAccount {
+                owner_public_key,
+                workspace_bucket,
+            } => {
+                result.instruction_type = InstructionType::CreateAccount as i32;
+                result.create_account_owner_public_key = owner_public_key.to_vec();
+                result.create_account_workspace_bucket = workspace_bucket.unwrap_or_default();
+            },
             Instruction::CallFunction {
                 template_address,
                 function,

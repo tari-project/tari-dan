@@ -29,11 +29,11 @@ use indexmap::IndexMap;
 use log::*;
 use tari_dan_common_types::Epoch;
 use tari_engine_types::{
-    commit_result::{RejectReason, TransactionResult},
+    commit_result::{FinalizeResult, RejectReason, TransactionResult},
     component::{ComponentBody, ComponentHeader},
     confidential::UnclaimedConfidentialOutput,
     events::Event,
-    fees::{FeeBreakdown, FeeReceipt, FeeSource},
+    fees::{FeeBreakdown, FeeSource},
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
     lock::LockFlag,
     logs::LogEntry,
@@ -47,7 +47,6 @@ use tari_template_lib::{
     models::{AddressAllocation, Amount, BucketId, ComponentAddress, Metadata, UnclaimedConfidentialOutputAddress},
     Hash,
 };
-use tari_transaction::id_provider::IdProvider;
 
 use crate::{
     runtime::{
@@ -63,40 +62,40 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::state_tracker";
 
-pub struct FinalizeData {
-    pub result: TransactionResult,
-    pub events: Vec<Event>,
-    pub fee_receipt: FeeReceipt,
-    pub logs: Vec<LogEntry>,
-}
-
 #[derive(Debug, Clone)]
 pub struct StateTracker {
     working_state: Arc<RwLock<WorkingState>>,
     fee_checkpoint: Arc<Mutex<Option<WorkingState>>>,
-    id_provider: IdProvider,
 }
 
 impl StateTracker {
     pub fn new(
         state_store: MemoryStateStore,
-        id_provider: IdProvider,
         virtual_substates: VirtualSubstates,
         initial_auth_scope: AuthorizationScope,
+        transaction_hash: Hash,
     ) -> Self {
         Self {
             working_state: Arc::new(RwLock::new(WorkingState::new(
                 state_store,
                 virtual_substates,
                 initial_auth_scope,
+                transaction_hash,
             ))),
             fee_checkpoint: Arc::new(Mutex::new(None)),
-            id_provider,
         }
     }
 
     pub fn get_current_epoch(&self) -> Result<Epoch, RuntimeError> {
         self.read_with(|state| state.get_current_epoch())
+    }
+
+    pub fn get_pseudorandom_bytes(&self, length: usize) -> Result<Vec<u8>, RuntimeError> {
+        self.read_with(|state| {
+            let id_provider = state.id_provider()?;
+            let bytes = id_provider.get_random_bytes(length)?;
+            Ok(bytes)
+        })
     }
 
     pub fn add_event(&self, event: Event) {
@@ -153,10 +152,9 @@ impl StateTracker {
     pub fn new_component(
         &self,
         component_state: tari_bor::Value,
-        owner_key: RistrettoPublicKeyBytes,
+        owner_key: Option<RistrettoPublicKeyBytes>,
         owner_rule: OwnerRule,
         access_rules: ComponentAccessRules,
-        component_id: Option<Hash>,
         address_allocation: Option<AddressAllocation<ComponentAddress>>,
     ) -> Result<ComponentAddress, RuntimeError> {
         self.write_with(|state| {
@@ -165,9 +163,9 @@ impl StateTracker {
 
             let component_address = match address_allocation {
                 Some(address_allocation) => state.take_allocated_address(address_allocation.id())?,
-                None => self
-                    .id_provider()
-                    .new_component_address(template_address, component_id)?,
+                None => state
+                    .id_provider()?
+                    .new_component_address(template_address, owner_key)?,
             };
 
             let component = ComponentBody { state: component_state };
@@ -177,10 +175,9 @@ impl StateTracker {
                 owner_key,
                 access_rules,
                 owner_rule,
+                entity_id: component_address.entity_id(),
                 body: component,
             };
-
-            let tx_hash = self.transaction_hash();
 
             // The template address/component_id combination will not necessarily be unique so we need to check this.
             if state.substate_exists(&SubstateId::Component(component_address))? {
@@ -200,7 +197,7 @@ impl StateTracker {
             state.push_event(Event::new(
                 Some(component_address),
                 template_address,
-                tx_hash,
+                state.transaction_hash(),
                 "component-created".to_string(),
                 Metadata::from([("module_name".to_string(), module_name)]),
             ));
@@ -218,7 +215,7 @@ impl StateTracker {
         self.write_with(|state| state.unlock_substate(locked))
     }
 
-    pub fn push_call_frame(&self, frame: PushCallFrame, max_call_depth: usize) -> Result<(), RuntimeError> {
+    pub fn push_call_frame(&self, push_frame: PushCallFrame, max_call_depth: usize) -> Result<(), RuntimeError> {
         self.write_with(|state| {
             // If substates used in args are in scope for the current frame, we can bring then into scope for the new
             // frame
@@ -227,9 +224,9 @@ impl StateTracker {
                 "CALL FRAME before:\n{}",
                 state.current_call_scope()?,
             );
-            state.check_all_substates_in_scope(frame.arg_scope())?;
+            state.check_all_substates_in_scope(push_frame.arg_scope())?;
 
-            let new_frame = frame.into_new_call_frame();
+            let new_frame = push_frame.into_new_call_frame();
             debug!(target: LOG_TARGET,
                 "NEW CALL FRAME:\n{}", new_frame.scope());
 
@@ -280,8 +277,7 @@ impl StateTracker {
     pub fn finalize(
         &self,
         mut substates_to_persist: IndexMap<SubstateId, SubstateValue>,
-    ) -> Result<FinalizeData, RuntimeError> {
-        let transaction_hash = self.transaction_hash();
+    ) -> Result<FinalizeResult, RuntimeError> {
         // Finalise will always reset the state
         let mut state = self.take_working_state();
         if state.call_frame_depth() > 0 {
@@ -290,7 +286,7 @@ impl StateTracker {
             });
         }
         // Resolve the transfers to the fee pool resource and vault refunds
-        let transaction_receipt = state.finalize_fees(transaction_hash, &mut substates_to_persist)?;
+        let transaction_receipt = state.finalize_fees(&mut substates_to_persist)?;
 
         let fee_receipt = transaction_receipt.fee_receipt.clone();
 
@@ -303,12 +299,15 @@ impl StateTracker {
             Err(err) => TransactionResult::Reject(RejectReason::ExecutionFailure(err.to_string())),
         };
 
-        Ok(FinalizeData {
+        let finalized = FinalizeResult::new(
+            state.transaction_hash(),
+            state.take_logs(),
+            state.take_events(),
             result,
-            events: state.take_events(),
             fee_receipt,
-            logs: state.take_logs(),
-        })
+        );
+
+        Ok(finalized)
     }
 
     pub fn fee_checkpoint(&self) -> Result<(), RuntimeError> {
@@ -366,13 +365,5 @@ impl StateTracker {
 
     pub(super) fn write_with<R, F: FnOnce(&mut WorkingState) -> R>(&self, f: F) -> R {
         f(&mut self.working_state.write().unwrap())
-    }
-
-    pub fn transaction_hash(&self) -> Hash {
-        self.id_provider.transaction_hash()
-    }
-
-    pub(crate) fn id_provider(&self) -> &IdProvider {
-        &self.id_provider
     }
 }

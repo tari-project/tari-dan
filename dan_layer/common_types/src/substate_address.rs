@@ -5,6 +5,7 @@ use std::{
     cmp::Ordering,
     fmt,
     fmt::{Display, Formatter},
+    mem,
     ops::RangeInclusive,
     str::FromStr,
 };
@@ -18,13 +19,16 @@ use tari_engine_types::{
     substate::SubstateId,
     transaction_receipt::TransactionReceiptAddress,
 };
-#[cfg(feature = "ts")]
-use ts_rs::TS;
+use tari_template_lib::{models::ObjectKey, Hash};
 
 use crate::{shard::Shard, uint::U256};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct SubstateAddress(
     #[serde(with = "serde_with::hex")]
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -33,26 +37,56 @@ pub struct SubstateAddress(
 
 impl SubstateAddress {
     /// Defines the mapping of SubstateId to SubstateAddress
-    pub fn from_address(addr: &SubstateId, version: u32) -> Self {
-        Self::from_hash(&addr.to_canonical_hash(), version)
+    pub fn from_address(id: &SubstateId, version: u32) -> Self {
+        match id {
+            SubstateId::Component(id) => Self::from_object_key(id.as_object_key(), version),
+            SubstateId::Resource(id) => Self::from_object_key(id.as_object_key(), version),
+            SubstateId::Vault(id) => Self::from_object_key(id.as_object_key(), version),
+            SubstateId::NonFungible(id) => {
+                let key = hasher32(EngineHashDomainLabel::NonFungibleId)
+                    .chain(id.resource_address())
+                    .chain(id.id())
+                    .result()
+                    .trailing_bytes()
+                    .into();
+
+                Self::from_object_key(&ObjectKey::new(id.resource_address().as_entity_id(), key), version)
+            },
+            SubstateId::NonFungibleIndex(id) => {
+                let key = hasher32(EngineHashDomainLabel::NonFungibleIndex)
+                    .chain(id.resource_address().as_object_key())
+                    .chain(&id.index())
+                    .result()
+                    .trailing_bytes()
+                    .into();
+                Self::from_object_key(&ObjectKey::new(id.resource_address().as_entity_id(), key), version)
+            },
+            // Non-versionable
+            SubstateId::UnclaimedConfidentialOutput(id) => Self::from_hash(*id.hash()),
+            SubstateId::TransactionReceipt(id) => Self::from_hash(*id.hash()),
+            SubstateId::FeeClaim(id) => Self::from_hash(*id.hash()),
+        }
     }
 
     pub fn for_transaction_receipt(tx_receipt: TransactionReceiptAddress) -> Self {
         Self::from_address(&tx_receipt.into(), 0)
     }
 
-    pub fn from_hash(hash: &[u8], version: u32) -> Self {
-        let new_addr = hasher32(EngineHashDomainLabel::SubstateAddress)
-            .chain(&hash)
-            .chain(&version)
-            .result();
-        Self(new_addr.into_array())
+    fn from_object_key(object_key: &ObjectKey, version: u32) -> Self {
+        // concatenate (entity_id, component_key), and version
+        let mut buf = [0u8; 32];
+        buf[..ObjectKey::LENGTH].copy_from_slice(object_key);
+        buf[ObjectKey::LENGTH..ObjectKey::LENGTH + mem::size_of::<u32>()].copy_from_slice(&version.to_le_bytes());
+
+        Self(buf)
     }
 
-    pub fn new(id: FixedHash) -> Self {
-        let mut v = [0u8; 32];
-        v.copy_from_slice(id.as_slice());
-        Self(v)
+    fn from_hash(hash: Hash) -> Self {
+        Self(hash.into_array())
+    }
+
+    pub fn new(id: [u8; 32]) -> Self {
+        Self(id)
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -60,7 +94,8 @@ impl SubstateAddress {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, FixedHashSizeError> {
-        FixedHash::try_from(bytes).map(Self::new)
+        let hash = FixedHash::try_from(bytes)?;
+        Ok(Self::new(hash.into_array()))
     }
 
     pub fn into_array(self) -> [u8; 32] {

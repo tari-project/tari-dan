@@ -24,8 +24,6 @@ use std::path::Path;
 
 use clap::{Args, Subcommand};
 use tari_engine_types::instruction::Instruction;
-use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::args;
 use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNodeClient};
 
 use crate::{
@@ -69,12 +67,10 @@ pub async fn handle_create(
     let key = key_manager
         .get_active_key()
         .ok_or_else(|| anyhow::anyhow!("No active key"))?;
-    let owner_token = key.to_owner_token();
 
-    let instruction = Instruction::CallFunction {
-        template_address: ACCOUNT_TEMPLATE_ADDRESS,
-        function: "create".to_string(),
-        args: args![owner_token],
+    let instruction = Instruction::CreateAccount {
+        owner_public_key: key.public_key,
+        workspace_bucket: None,
     };
 
     let common = CommonSubmitArgs {

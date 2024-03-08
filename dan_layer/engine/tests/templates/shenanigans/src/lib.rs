@@ -117,7 +117,7 @@ mod template {
 
         pub fn non_existent_id() -> Self {
             Self {
-                resource_address: Some(ResourceAddress::from([0xabu8; 32])),
+                resource_address: Some(ResourceAddress::from([0xabu8; 28])),
                 ..Default::default()
             }
         }

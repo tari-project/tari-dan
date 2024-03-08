@@ -1,13 +1,17 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_engine::runtime::ActionIdent;
+use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
+use tari_dan_engine::runtime::{ActionIdent, RuntimeError};
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress, ResourceAddress},
 };
-use tari_template_test_tooling::{support::assert_error::assert_access_denied_for_action, TemplateTest};
+use tari_template_test_tooling::{
+    support::assert_error::{assert_access_denied_for_action, assert_reject_reason},
+    TemplateTest,
+};
 use tari_transaction::Transaction;
 
 #[test]
@@ -185,25 +189,24 @@ fn withdraw_from_account_prevented() {
 fn attempt_to_overwrite_account() {
     let mut template_test = TemplateTest::new::<_, &str>([]);
 
-    // Create sender and receiver accounts
+    // Create initial account with faucet funds
     let (source_account, source_account_proof, source_account_sk) = template_test.create_owned_account();
+    let source_account_pk = RistrettoPublicKey::from_secret_key(&source_account_sk);
 
-    template_test.enable_fees();
-    let overwriting_tx = template_test.execute_expect_commit(
+    let overwriting_tx = template_test.execute_expect_failure(
         Transaction::builder()
-            .fee_transaction_pay_from_component(source_account, Amount(1000))
-            .call_function(
-                template_test.get_template_address("Account"),
-                "create",
-                args![&source_account_proof],
-            )
+            // Create component with the same ID
+            .create_account(source_account_pk)
             // Signed by source account so that it can pay the fees for the new account creation
             .sign(&source_account_sk)
             .build(),
         vec![source_account_proof],
     );
 
-    template_test.disable_fees();
+    // Check that the previous transaction failed because of an address collision.
+    assert_reject_reason(overwriting_tx, RuntimeError::ComponentAlreadyExists {
+        address: source_account,
+    });
 
     let result = template_test.execute_expect_success(
         Transaction::builder()
@@ -216,10 +219,7 @@ fn attempt_to_overwrite_account() {
     let balances = result.finalize.execution_results[0]
         .decode::<Vec<(ResourceAddress, Amount)>>()
         .unwrap();
-    // If the source account was overwritten due to the address collision, then we'd have no vaults
+    // Double check that the source account was not overwritten due to the address collision, if it was, then we'd have
+    // no vaults
     assert_eq!(balances.len(), 1);
-
-    // Now that we know that the component state was not overwritten, lets check that the previous transaction failed
-    // because of an address collision.
-    overwriting_tx.expect_transaction_failure();
 }
