@@ -44,6 +44,9 @@ pub use component::*;
 mod confidential_proof;
 pub use confidential_proof::*;
 
+mod entity_id;
+pub use entity_id::*;
+
 mod layer_one_commitment;
 pub use layer_one_commitment::UnclaimedConfidentialOutputAddress;
 

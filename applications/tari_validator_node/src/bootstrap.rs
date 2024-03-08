@@ -74,7 +74,6 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::{
     auth::ResourceAccessRules,
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
-    crypto::RistrettoPublicKeyBytes,
     models::Metadata,
     prelude::{OwnerRule, ResourceType},
     resource::TOKEN_SYMBOL,
@@ -473,7 +472,7 @@ where
             version: 0,
             substate_value: Resource::new(
                 ResourceType::NonFungible,
-                RistrettoPublicKeyBytes::default(),
+                None,
                 OwnerRule::None,
                 ResourceAccessRules::new(),
                 metadata,
@@ -500,7 +499,7 @@ where
             version: 0,
             substate_value: Resource::new(
                 ResourceType::Confidential,
-                RistrettoPublicKeyBytes::default(),
+                None,
                 OwnerRule::None,
                 ResourceAccessRules::new(),
                 metadata,

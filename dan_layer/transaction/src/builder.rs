@@ -3,7 +3,7 @@
 
 use std::borrow::Borrow;
 
-use tari_common_types::types::PrivateKey;
+use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_dan_common_types::Epoch;
 use tari_engine_types::{
     confidential::ConfidentialClaim,
@@ -64,6 +64,20 @@ impl TransactionBuilder {
             component_address,
             method: "pay_fee_confidential".to_string(),
             args: args![proof],
+        })
+    }
+
+    pub fn create_account(self, owner_public_key: PublicKey) -> Self {
+        self.add_instruction(Instruction::CreateAccount {
+            owner_public_key,
+            workspace_bucket: None,
+        })
+    }
+
+    pub fn create_account_with_bucket<T: Into<String>>(self, owner_public_key: PublicKey, workspace_bucket: T) -> Self {
+        self.add_instruction(Instruction::CreateAccount {
+            owner_public_key,
+            workspace_bucket: Some(workspace_bucket.into()),
         })
     }
 

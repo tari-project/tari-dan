@@ -27,6 +27,8 @@ use tari_bor::BorError;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{optional::IsNotFoundError, Epoch};
 use tari_engine_types::{
+    entity_id_provider::EntityIdProviderError,
+    id_provider::IdProviderError,
     indexed_value::IndexedValueError,
     lock::LockId,
     resource_container::ResourceError,
@@ -45,7 +47,6 @@ use tari_template_lib::models::{
     UnclaimedConfidentialOutputAddress,
     VaultId,
 };
-use tari_transaction::id_provider::IdProviderError;
 
 use super::workspace::WorkspaceError;
 use crate::{
@@ -133,6 +134,8 @@ pub enum RuntimeError {
     TransactionCommitError(#[from] TransactionCommitError),
     #[error("Transaction generated too many outputs: {0}")]
     TooManyOutputs(#[from] IdProviderError),
+    #[error("Transaction generated too many new entities: {0}")]
+    TooManyEntities(#[from] EntityIdProviderError),
     #[error("Duplicate NFT token id: {token_id}")]
     DuplicateNonFungibleId { token_id: NonFungibleId },
     #[error("Access Denied: {action_ident}")]
@@ -210,8 +213,8 @@ pub enum RuntimeError {
     LockError(#[from] LockError),
     #[error("{count} substate locks were still active after call")]
     DanglingSubstateLocks { count: usize },
-    #[error("No active call scope")]
-    NoActiveCallScope,
+    #[error("No active call frame")]
+    NoActiveCallFrame,
     #[error("Max call depth {max_depth} exceeded")]
     MaxCallDepthExceeded { max_depth: usize },
     #[error("{action} can only be called from within a component context")]

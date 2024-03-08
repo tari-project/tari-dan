@@ -171,16 +171,13 @@ fn fix_invalid_object_keys(value: &CborValue) -> CborValue {
 mod tests {
     use tari_common_types::types::Commitment;
     use tari_engine_types::{confidential::ConfidentialOutput, resource_container::ResourceContainer, vault::Vault};
-    use tari_template_lib::{
-        models::{Amount, ResourceAddress, VaultId},
-        Hash,
-    };
+    use tari_template_lib::models::{Amount, ResourceAddress};
 
     use super::*;
 
     #[test]
     fn it_encodes_confidential_vaults() {
-        let address = ResourceAddress::new(Hash::default());
+        let address = ResourceAddress::new(Default::default());
 
         let commitment = Commitment::default();
         let confidential_output = ConfidentialOutput {
@@ -194,8 +191,7 @@ mod tests {
         let revealed_amount = Amount::zero();
         let container = ResourceContainer::confidential(address, commitment, revealed_amount);
 
-        let vault_id = VaultId::new(Hash::default());
-        let vault = Vault::new(vault_id, container);
+        let vault = Vault::new(container);
 
         let substate_value = SubstateValue::Vault(vault);
         let substate = Substate::new(0, substate_value);

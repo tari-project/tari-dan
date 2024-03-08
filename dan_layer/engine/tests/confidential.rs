@@ -125,14 +125,14 @@ fn transfer_confidential_amounts_between_accounts() {
             r#"
         let account1 = var!["account1"];
         let account2 = var!["account2"];
-        
+
         let faucet_resx = var!["faucet_resx"];
         let withdraw_proof = var!["withdraw_proof"];
         let coins1 = account1.withdraw_confidential(faucet_resx, withdraw_proof);
-        
+
         let split_proof = var!["split_proof"];
         let coins2 = ConfidentialUtilities::split(coins1, split_proof);
-        
+
         account1.deposit(coins1);
         account2.deposit(coins2);
     "#,
@@ -221,21 +221,21 @@ fn reveal_confidential_and_transfer() {
         let reveal_proof = var!["reveal_proof"];
         let reveal_bucket_proof = var!["reveal_bucket_proof"];
         let resource = var!["resource"];
-        
+
         // Take confidential coins from faucet and deposit into account 1
         let coins = faucet.take_free_coins(proof);
         account1.deposit(coins);
-        
+
         // Reveal 90 tokens and 10 confidentially and deposit both funds into account 2
         let revealed_funds = account1.reveal_confidential(resource, reveal_proof);
         let revealed_rest_funds = ConfidentialUtilities::reveal(revealed_funds, reveal_bucket_proof);
         account2.deposit(revealed_funds);
         account2.deposit(revealed_rest_funds);
-        
+
         // Account2 can withdraw revealed funds by amount
         let small_amt = account2.withdraw(resource, Amount(10));
         account1.deposit(small_amt);
-        
+
         account1.balance(resource);
         account2.balance(resource);
     "#,
@@ -289,15 +289,15 @@ fn attempt_to_reveal_with_unbalanced_proof() {
         let proof = var!["proof"];
         let reveal_proof = var!["reveal_proof"];
         let resource = var!["resource"];
-        
+
         // Take confidential coins from faucet and deposit into account 1
         let coins = faucet.take_free_coins(proof);
         account1.deposit(coins);
-        
+
         // Reveal 100 tokens and deposit revealed funds into account 2
         let revealed_funds = account1.reveal_confidential(resource, reveal_proof);
         account2.deposit(revealed_funds);
-        
+
         account1.balance(resource);
         account2.balance(resource);
     "#,
@@ -359,21 +359,21 @@ fn multi_commitment_join() {
         let withdraw_proof2 = var!["withdraw_proof2"];
         let join_proof = var!["join_proof"];
         let resource = var!["resource"];
-        
-        // Take confidential coins from faucet and deposit into account 
+
+        // Take confidential coins from faucet and deposit into account
         let coins = faucet.take_free_coins(withdraw_proof1);
         account1.deposit(coins);
         account1.confidential_commitment_count(resource);
-        
+
         let coins = faucet.take_free_coins(withdraw_proof2);
         account1.deposit(coins);
-        
+
         // Should contain 2 commitments
         account1.confidential_commitment_count(resource);
-        
+
         /// Join the two commitments valued at 1000 each
         account1.join_confidential(resource, join_proof);
-        
+
         // Now we have one commitment valued at 2000
         account1.confidential_commitment_count(resource);
     "#,

@@ -1,17 +1,13 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, ops::RangeInclusive};
+use std::ops::RangeInclusive;
 
-use tari_crypto::{keys::PublicKey as _, ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
+use tari_crypto::{keys::PublicKey as _, ristretto::RistrettoPublicKey};
 use tari_dan_wallet_sdk::{apis::key_manager::TRANSACTION_BRANCH, models::Account};
-use tari_engine_types::component::new_component_address_from_parts;
+use tari_engine_types::component::new_account_address_from_parts;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::{
-    args,
-    crypto::RistrettoPublicKeyBytes,
-    models::{Amount, NonFungibleAddress},
-};
+use tari_template_lib::{args, models::Amount};
 use tari_transaction::{Instruction, Transaction};
 
 use crate::{faucet::Faucet, runner::Runner};
@@ -19,9 +15,9 @@ use crate::{faucet::Faucet, runner::Runner};
 impl Runner {
     pub async fn create_account_with_free_coins(&mut self) -> anyhow::Result<Account> {
         let key = self.sdk.key_manager_api().derive_key(TRANSACTION_BRANCH, 0)?;
-        let owner_pk =
-            RistrettoPublicKeyBytes::from_bytes(RistrettoPublicKey::from_secret_key(&key.key).as_bytes()).unwrap();
-        let owner = NonFungibleAddress::from_public_key(owner_pk);
+        let owner_public_key = RistrettoPublicKey::from_secret_key(&key.key);
+
+        let account_address = new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &owner_public_key);
 
         let transaction = Transaction::builder()
             .with_fee_instructions_builder(|builder| {
@@ -31,15 +27,8 @@ impl Runner {
                         output: None,
                     })
                     .put_last_instruction_output_on_workspace("coins")
-                    .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create_with_bucket", args![
-                        owner,
-                        Workspace("coins")
-                    ])
-                    .call_method(
-                        new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &owner_pk.into_array().into()),
-                        "pay_fee",
-                        args![Amount(1000)],
-                    )
+                    .create_account_with_bucket(owner_public_key, "coins")
+                    .call_method(account_address, "pay_fee", args![Amount(1000)])
             })
             .sign(&key.key)
             .build();
@@ -64,19 +53,16 @@ impl Runner {
         let owners = account_key_indexes
             .map(|idx| {
                 let key = self.sdk.key_manager_api().derive_key(TRANSACTION_BRANCH, idx)?;
-                let owner_pk =
-                    RistrettoPublicKeyBytes::from_bytes(RistrettoPublicKey::from_secret_key(&key.key).as_bytes())
-                        .unwrap();
-                Ok((NonFungibleAddress::from_public_key(owner_pk), idx))
+                Ok(RistrettoPublicKey::from_secret_key(&key.key))
             })
-            .collect::<anyhow::Result<HashMap<_, _>>>()?;
+            .collect::<anyhow::Result<Vec<_>>>()?;
 
         let mut builder = Transaction::builder().fee_transaction_pay_from_component(
             pay_fee_account.address.as_component_address().unwrap(),
             Amount(1000 * owners.len() as i64),
         );
-        for owner in owners.keys() {
-            builder = builder.call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner]);
+        for owner in owners {
+            builder = builder.create_account(owner);
         }
         let transaction = builder.sign(&key.key).build();
 

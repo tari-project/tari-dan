@@ -35,7 +35,7 @@ use tari_template_lib::{
     args,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::Amount,
-    prelude::ResourceAddress,
+    prelude::{ComponentAddress, ResourceAddress},
     resource::TOKEN_SYMBOL,
 };
 use tari_transaction::{SubstateRequirement, Transaction};
@@ -320,6 +320,7 @@ pub async fn mint_new_nft_on_account(
     _nft_name: String,
     account_name: String,
     wallet_daemon_name: String,
+    existing_nft_component: Option<ComponentAddress>,
     metadata: Option<serde_json::Value>,
 ) {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
@@ -338,6 +339,7 @@ pub async fn mint_new_nft_on_account(
         metadata,
         mint_fee: Some(Amount::new(1_000)),
         create_account_nft_fee: None,
+        existing_nft_component,
     };
     let resp = client
         .mint_account_nft(request)

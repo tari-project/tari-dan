@@ -213,7 +213,7 @@ fn test_engine_errors() {
     assert_eq!(
         reason,
         "Runtime error: Substate not found with address \
-         'resource_7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b'"
+         'resource_7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b'"
     );
 }
 
@@ -1331,7 +1331,7 @@ mod nft_indexes {
 
 // TODO: these tests can be removed when create free test coins is removed
 mod free_test_coins {
-    use tari_transaction::id_provider::IdProvider;
+    use tari_engine_types::component::new_account_address_from_parts;
 
     use super::*;
     #[test]
@@ -1339,12 +1339,11 @@ mod free_test_coins {
         let mut test = TemplateTest::new(Vec::<&str>::new());
         test.enable_fees();
         let account_template = test.get_template_address("Account");
-        let (other, _) = test.create_owner_proof();
+        let (other, _, _) = test.create_owner_proof();
 
         let owner_token = test.get_test_proof();
-        let future_account_component = IdProvider::new(Default::default(), 1)
-            .new_component_address(account_template, Some(owner_token.id().as_u256().unwrap().into()))
-            .unwrap();
+        let future_account_component =
+            new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, test.get_test_public_key());
 
         test.execute_expect_success(
             Transaction::builder()
@@ -1355,11 +1354,7 @@ mod free_test_coins {
                             output: None,
                         })
                         .put_last_instruction_output_on_workspace("free")
-                        .call_function(
-                            account_template,
-                            "create_with_bucket",
-                            args![owner_token.clone(), Workspace("free")],
-                        )
+                        .create_account_with_bucket(test.get_test_public_key().clone(), "free")
                         .call_method(future_account_component, "pay_fee", args![Amount(1000)])
                 })
                 // Checking we can create an account for another user in this transaction
