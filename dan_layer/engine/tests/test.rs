@@ -1331,7 +1331,7 @@ mod nft_indexes {
 
 // TODO: these tests can be removed when create free test coins is removed
 mod free_test_coins {
-    use tari_engine_types::component::new_component_address_from_parts;
+    use tari_engine_types::component::new_account_address_from_parts;
 
     use super::*;
     #[test]
@@ -1342,10 +1342,8 @@ mod free_test_coins {
         let (other, _, _) = test.create_owner_proof();
 
         let owner_token = test.get_test_proof();
-        let future_account_component = new_component_address_from_parts(
-            &ACCOUNT_TEMPLATE_ADDRESS,
-            &test.get_test_public_key_bytes().into_array().into(),
-        );
+        let future_account_component =
+            new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, test.get_test_public_key());
 
         test.execute_expect_success(
             Transaction::builder()
