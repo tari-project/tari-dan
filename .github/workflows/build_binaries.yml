@@ -121,7 +121,7 @@ jobs:
       - name: Install macOS dependencies
         if: startsWith(runner.os,'macOS')
         run: |
-          brew install cmake zip coreutils automake autoconf
+          brew install cmake zip coreutils automake autoconf protobuf
           rustup target add ${{ matrix.builds.target }}
 
       - name: Install Windows dependencies
@@ -133,6 +133,7 @@ jobs:
           # choco upgrade psutils -y
           # Should already be installed
           # choco upgrade strawberryperl -y
+          choco upgrade protoc -y
 
       - name: Set environment variables - Nix
         if: ${{ ! startsWith(runner.os,'Windows') }}
@@ -219,6 +220,7 @@ jobs:
             "tari_indexer"
             "tari_validator_node"
             "tari_signaling_server"
+            "tari_generate"
           )
           for FILE in "${FILES[@]}"; do
             if [ -f "$GITHUB_WORKSPACE/target/${{ matrix.builds.target }}/release/${FILE}${TBN_EXT}" ]; then

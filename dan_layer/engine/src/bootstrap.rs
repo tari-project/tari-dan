@@ -8,7 +8,6 @@ use tari_engine_types::{
 use tari_template_lib::{
     auth::{AccessRule, ResourceAccessRules},
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
-    crypto::RistrettoPublicKeyBytes,
     models::Metadata,
     prelude::{OwnerRule, ResourceType},
     resource::TOKEN_SYMBOL,
@@ -27,7 +26,7 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
             0,
             Resource::new(
                 ResourceType::NonFungible,
-                RistrettoPublicKeyBytes::default(),
+                None,
                 OwnerRule::None,
                 ResourceAccessRules::deny_all(),
                 metadata,
@@ -46,7 +45,7 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
             0,
             Resource::new(
                 ResourceType::Confidential,
-                RistrettoPublicKeyBytes::default(),
+                None,
                 OwnerRule::None,
                 ResourceAccessRules::new()
                     .withdrawable(AccessRule::AllowAll)

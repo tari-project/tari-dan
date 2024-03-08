@@ -3,6 +3,7 @@ import type { ConfidentialOutputProof } from "./ConfidentialOutputProof";
 
 export interface ConfidentialWithdrawProof {
   inputs: Array<number>;
+  input_revealed_amount: number;
   output_proof: ConfidentialOutputProof;
   balance_proof: Array<number>;
 }

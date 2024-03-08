@@ -35,7 +35,7 @@ use tari_template_abi::{
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use super::{BinaryTag, NonFungible, Proof, ProofAuth};
+use super::{BinaryTag, KeyParseError, NonFungible, ObjectKey, Proof, ProofAuth};
 use crate::{
     args::{
         ConfidentialRevealArg,
@@ -47,12 +47,10 @@ use crate::{
         VaultInvokeArg,
         VaultWithdrawArg,
     },
-    hash::HashParseError,
     models::{Amount, Bucket, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     newtype_struct_serde_impl,
     prelude::ResourceType,
     resource::ResourceManager,
-    Hash,
 };
 
 const TAG: u64 = BinaryTag::VaultId as u64;
@@ -60,26 +58,26 @@ const TAG: u64 = BinaryTag::VaultId as u64;
 /// A vault's unique identification in the Tari network
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
-pub struct VaultId(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<Hash, TAG>);
+pub struct VaultId(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<ObjectKey, TAG>);
 
 impl VaultId {
-    pub const fn new(address: Hash) -> Self {
-        Self(BorTag::new(address))
+    pub const fn new(key: ObjectKey) -> Self {
+        Self(BorTag::new(key))
     }
 
-    pub fn hash(&self) -> &Hash {
-        &self.0
+    pub fn from_hex(hex: &str) -> Result<Self, KeyParseError> {
+        let key = ObjectKey::from_hex(hex)?;
+        Ok(Self::new(key))
     }
 
-    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
-        let hash = Hash::from_hex(hex)?;
-        Ok(Self::new(hash))
+    pub fn as_object_key(&self) -> &ObjectKey {
+        self.0.inner()
     }
 }
 
-impl From<Hash> for VaultId {
-    fn from(address: Hash) -> Self {
-        Self::new(address)
+impl From<ObjectKey> for VaultId {
+    fn from(key: ObjectKey) -> Self {
+        Self::new(key)
     }
 }
 
@@ -91,30 +89,29 @@ impl Display for VaultId {
 
 impl AsRef<[u8]> for VaultId {
     fn as_ref(&self) -> &[u8] {
-        self.hash()
+        self.0.as_ref()
     }
 }
 
 impl FromStr for VaultId {
-    type Err = HashParseError;
+    type Err = KeyParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.strip_prefix("vault_").unwrap_or(s);
-        let hash = Hash::from_hex(s)?;
-        Ok(Self::new(hash))
+        Self::from_hex(s)
     }
 }
 
-impl TryFrom<Vec<u8>> for VaultId {
-    type Error = HashParseError;
+impl TryFrom<&[u8]> for VaultId {
+    type Error = KeyParseError;
 
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let hash = Hash::try_from(value)?;
-        Ok(Self::new(hash))
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let key = ObjectKey::try_from(value)?;
+        Ok(Self::new(key))
     }
 }
 
-newtype_struct_serde_impl!(VaultId, BorTag<Hash, TAG>);
+newtype_struct_serde_impl!(VaultId, BorTag<ObjectKey, TAG>);
 
 /// Encapsulates all the ways that a vault can be referenced
 #[derive(Clone, Debug, Serialize, Deserialize)]

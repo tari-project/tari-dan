@@ -23,7 +23,7 @@ use tari_dan_wallet_sdk::{
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::{
-    component::new_component_address_from_parts,
+    component::new_account_address_from_parts,
     confidential::ConfidentialClaim,
     instruction::Instruction,
     substate::{Substate, SubstateId},
@@ -32,10 +32,8 @@ use tari_key_manager::key_manager::DerivedKey;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
-    crypto::RistrettoPublicKeyBytes,
-    models::{Amount, NonFungibleAddress, UnclaimedConfidentialOutputAddress},
+    models::{Amount, UnclaimedConfidentialOutputAddress},
     prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
-    Hash,
 };
 use tari_transaction::{SubstateRequirement, Transaction};
 use tari_wallet_daemon_client::{
@@ -118,8 +116,6 @@ pub async fn handle_create(
 
     let owner_key = key_manager_api.next_key(key_manager::TRANSACTION_BRANCH)?;
     let owner_pk = PublicKey::from_secret_key(&owner_key.key);
-    let owner_token =
-        NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
     info!(
         target: LOG_TARGET,
@@ -132,7 +128,7 @@ pub async fn handle_create(
     let max_fee = req.max_fee.unwrap_or(DEFAULT_FEE);
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(default_account.address.as_component_address().unwrap(), max_fee)
-        .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
+        .create_account(owner_pk.clone())
         .with_input_refs(
             input_refs
                 .iter()
@@ -705,13 +701,9 @@ async fn finish_claiming<T: WalletStore>(
             args: args![Workspace("bucket")],
         });
     } else {
-        let owner_token = NonFungibleAddress::from_public_key(
-            RistrettoPublicKeyBytes::from_bytes(account_public_key.as_bytes()).unwrap(),
-        );
-        instructions.push(Instruction::CallFunction {
-            template_address: ACCOUNT_TEMPLATE_ADDRESS,
-            function: "create_with_bucket".to_string(),
-            args: args![owner_token, Workspace("bucket")],
+        instructions.push(Instruction::CreateAccount {
+            owner_public_key: account_public_key.clone(),
+            workspace_bucket: Some("bucket".to_string()),
         });
     }
     instructions.push(Instruction::CallMethod {
@@ -863,8 +855,7 @@ fn get_or_create_account<T: WalletStore>(
                 .unwrap_or_else(|| sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH))?;
             let account_pk = PublicKey::from_secret_key(&account_secret_key.key);
 
-            let component_id = Hash::try_from(account_pk.as_bytes())?;
-            let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
+            let account_address = new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &account_pk);
 
             // We have no involved substate addresses, so we need to add an output
             (account_address.into(), account_secret_key, Some(name.to_string()))
@@ -1022,8 +1013,7 @@ async fn get_or_create_account_address(
     instructions: &mut Vec<Instruction>,
 ) -> Result<ComponentAddress, anyhow::Error> {
     // calculate the account component address from the public key
-    let component_id = Hash::try_from(public_key.as_bytes())?;
-    let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
+    let account_address = new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, public_key);
 
     let account_scan = sdk
         .substate_api()
@@ -1040,13 +1030,9 @@ async fn get_or_create_account_address(
         None => {
             // the account does not exists, so we must add a instruction to create it, matching the public key
             debug!(target: LOG_TARGET, "Account does not exist. Adding create instruction");
-            let owner_token = NonFungibleAddress::from_public_key(
-                RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
-            );
-            instructions.insert(0, Instruction::CallFunction {
-                template_address: ACCOUNT_TEMPLATE_ADDRESS,
-                function: "create".to_string(),
-                args: args![owner_token],
+            instructions.insert(0, Instruction::CreateAccount {
+                owner_public_key: public_key.clone(),
+                workspace_bucket: None,
             });
         },
     };

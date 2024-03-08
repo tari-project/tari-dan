@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod builder;
-pub mod id_provider;
 mod signature;
 mod transaction;
 mod transaction_id;

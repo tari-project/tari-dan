@@ -21,13 +21,15 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::PublicKey;
 use tari_template_lib::{
     auth::{ComponentAccessRules, OwnerRule, Ownership},
     crypto::RistrettoPublicKeyBytes,
-    models::TemplateAddress,
+    models::{ComponentKey, EntityId, ObjectKey, TemplateAddress},
     prelude::ComponentAddress,
     Hash,
 };
+use tari_utilities::ByteArray;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -38,12 +40,20 @@ use crate::{
     substate::SubstateId,
 };
 
-pub fn new_component_address_from_parts(template_address: &TemplateAddress, component_id: &Hash) -> ComponentAddress {
+/// Derives a component address.
+///
+/// This can be used to derive the component address from a public key if the component sets OwnerRule::OwnedBySigner or
+/// OwnerRule::ByPublicKey
+pub fn new_account_address_from_parts(template_address: &TemplateAddress, public_key: &PublicKey) -> ComponentAddress {
     let address = hasher32(EngineHashDomainLabel::ComponentAddress)
         .chain(template_address)
-        .chain(component_id)
+        .chain(public_key)
         .result();
-    ComponentAddress::new(address)
+    let key = ObjectKey::new(
+        EntityId::from_array(Hash::try_from(public_key.as_bytes()).unwrap().leading_bytes()),
+        ComponentKey::new(address.trailing_bytes()),
+    );
+    ComponentAddress::new(key)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,11 +63,12 @@ pub struct ComponentHeader {
     #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
     pub template_address: TemplateAddress,
     pub module_name: String,
-    #[serde(with = "serde_with::hex")]
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub owner_key: RistrettoPublicKeyBytes,
+    #[serde(with = "serde_with::hex::option")]
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub owner_key: Option<RistrettoPublicKeyBytes>,
     pub owner_rule: OwnerRule,
     pub access_rules: ComponentAccessRules,
+    pub entity_id: EntityId,
     // TODO: Split the state from the header
     pub body: ComponentBody,
 }
@@ -77,7 +88,7 @@ impl ComponentHeader {
 
     pub fn as_ownership(&self) -> Ownership<'_> {
         Ownership {
-            owner_key: &self.owner_key,
+            owner_key: self.owner_key.as_ref(),
             owner_rule: &self.owner_rule,
         }
     }

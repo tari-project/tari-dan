@@ -26,68 +26,69 @@ use std::{
 };
 
 use tari_bor::BorTag;
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
-use super::BinaryTag;
-use crate::{hash::HashParseError, newtype_struct_serde_impl, Hash};
+use super::{BinaryTag, EntityId, KeyParseError, ObjectKey};
+use crate::newtype_struct_serde_impl;
 
 const TAG: u64 = BinaryTag::ComponentAddress.as_u64();
 
 /// A component's unique identification in the Tari network
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
-pub struct ComponentAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<Hash, TAG>);
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
+pub struct ComponentAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<ObjectKey, TAG>);
 
 impl ComponentAddress {
-    pub const fn new(address: Hash) -> Self {
-        Self(BorTag::new(address))
+    pub const fn new(substate_key: ObjectKey) -> Self {
+        Self(BorTag::new(substate_key))
     }
 
-    pub fn hash(&self) -> &Hash {
+    pub fn as_object_key(&self) -> &ObjectKey {
         &self.0
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        &self.0
+        self.0.as_ref()
     }
 
-    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
-        let hash = Hash::from_hex(hex)?;
-        Ok(Self::new(hash))
+    pub fn from_hex(hex: &str) -> Result<Self, KeyParseError> {
+        let key = ObjectKey::from_hex(hex)?;
+        Ok(Self::new(key))
     }
 
-    pub fn from_array(arr: [u8; 32]) -> Self {
-        Self::new(Hash::from_array(arr))
+    pub fn from_array(arr: [u8; ObjectKey::LENGTH]) -> Self {
+        Self::new(ObjectKey::from_array(arr))
     }
 
-    pub fn into_array(self) -> [u8; 32] {
-        self.0.into_array()
+    pub fn entity_id(&self) -> EntityId {
+        self.0.inner().as_entity_id()
     }
 }
 
 impl FromStr for ComponentAddress {
-    type Err = HashParseError;
+    type Err = KeyParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.strip_prefix("component_").unwrap_or(s);
-        let hash = Hash::from_hex(s)?;
-        Ok(Self::new(hash))
+        Self::from_hex(s)
     }
 }
 
-impl<T: Into<Hash>> From<T> for ComponentAddress {
+impl<T: Into<ObjectKey>> From<T> for ComponentAddress {
     fn from(address: T) -> Self {
         Self::new(address.into())
     }
 }
 
-impl TryFrom<Vec<u8>> for ComponentAddress {
-    type Error = HashParseError;
+impl TryFrom<&[u8]> for ComponentAddress {
+    type Error = KeyParseError;
 
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let hash = Hash::try_from(value)?;
-        Ok(Self::new(hash))
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let key = ObjectKey::try_from(value)?;
+        Ok(Self::new(key))
     }
 }
 
@@ -103,4 +104,4 @@ impl AsRef<[u8]> for ComponentAddress {
     }
 }
 
-newtype_struct_serde_impl!(ComponentAddress, BorTag<Hash, TAG>);
+newtype_struct_serde_impl!(ComponentAddress, BorTag<ObjectKey, TAG>);

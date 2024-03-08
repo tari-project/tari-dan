@@ -10,10 +10,12 @@ use tari_dan_storage::consensus_models::{Decision, ExecutedTransaction};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     component::{ComponentBody, ComponentHeader},
-    fees::{FeeCostBreakdown, FeeReceipt},
+    fees::FeeReceipt,
+    id_provider::{IdProvider, ObjectIds},
     substate::{Substate, SubstateDiff},
 };
-use tari_transaction::{id_provider::IdProvider, Transaction};
+use tari_template_lib::Hash;
+use tari_transaction::Transaction;
 
 use crate::support::helpers::random_shard_in_bucket;
 
@@ -24,7 +26,9 @@ pub fn build_transaction_from(
     resulting_outputs: Vec<SubstateAddress>,
 ) -> ExecutedTransaction {
     let tx_id = *tx.id();
-    let id_provider = IdProvider::new(tx_id.into_array().into(), 1000);
+    let object_ids = ObjectIds::new(1000);
+    let tx_hash = Hash::from(tx_id.into_array());
+    let id_provider = IdProvider::new(tx_hash.leading_bytes().into(), tx_hash, &object_ids);
     ExecutedTransaction::new(
         tx,
         ExecuteResult {
@@ -46,6 +50,7 @@ pub fn build_transaction_from(
                                 owner_key: Default::default(),
                                 owner_rule: Default::default(),
                                 access_rules: Default::default(),
+                                entity_id: obj.entity_id(),
                                 body: ComponentBody { state: random_state },
                             }),
                         )
@@ -54,9 +59,10 @@ pub fn build_transaction_from(
                 } else {
                     TransactionResult::Reject(RejectReason::ExecutionFailure("Test failure".to_string()))
                 },
-                FeeCostBreakdown {
-                    total_fees_charged: fee.try_into().unwrap(),
-                    breakdown: vec![],
+                FeeReceipt {
+                    total_fee_payment: fee.try_into().unwrap(),
+                    total_fees_paid: fee.try_into().unwrap(),
+                    cost_breakdown: vec![],
                 },
             ),
             fee_receipt: Some(FeeReceipt {

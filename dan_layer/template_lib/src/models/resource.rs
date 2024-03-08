@@ -29,44 +29,47 @@ use tari_template_abi::rust::{
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use super::BinaryTag;
-use crate::{hash::HashParseError, newtype_struct_serde_impl, Hash};
+use super::{BinaryTag, EntityId, KeyParseError, ObjectKey};
+use crate::newtype_struct_serde_impl;
 
 const TAG: u64 = BinaryTag::ResourceAddress.as_u64();
 
 /// The unique identification of a resource in the Tari network
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
-pub struct ResourceAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<Hash, TAG>);
+pub struct ResourceAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<ObjectKey, TAG>);
 
 impl ResourceAddress {
-    pub const fn new(address: Hash) -> Self {
-        Self(BorTag::new(address))
+    pub const fn new(key: ObjectKey) -> Self {
+        Self(BorTag::new(key))
     }
 
-    pub fn hash(&self) -> &Hash {
-        &self.0
+    pub fn as_object_key(&self) -> &ObjectKey {
+        self.0.inner()
     }
 
-    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
-        let hash = Hash::from_hex(hex)?;
-        Ok(Self::new(hash))
+    pub fn from_hex(hex: &str) -> Result<Self, KeyParseError> {
+        let key = ObjectKey::from_hex(hex)?;
+        Ok(Self::new(key))
+    }
+
+    pub fn as_entity_id(&self) -> EntityId {
+        self.as_object_key().as_entity_id()
     }
 }
 
 impl FromStr for ResourceAddress {
-    type Err = HashParseError;
+    type Err = KeyParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.strip_prefix("resource_").unwrap_or(s);
-        let hash = Hash::from_hex(s)?;
-        Ok(Self::new(hash))
+        Self::from_hex(s)
     }
 }
 
-impl<T: Into<Hash>> From<T> for ResourceAddress {
-    fn from(address: T) -> Self {
-        Self::new(address.into())
+impl<T: Into<ObjectKey>> From<T> for ResourceAddress {
+    fn from(key: T) -> Self {
+        Self::new(key.into())
     }
 }
 
@@ -78,20 +81,20 @@ impl Display for ResourceAddress {
 
 impl AsRef<[u8]> for ResourceAddress {
     fn as_ref(&self) -> &[u8] {
-        self.hash()
+        self.0.as_ref()
     }
 }
 
-impl TryFrom<Vec<u8>> for ResourceAddress {
-    type Error = HashParseError;
+impl TryFrom<&[u8]> for ResourceAddress {
+    type Error = KeyParseError;
 
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let hash = Hash::try_from(value)?;
-        Ok(Self::new(hash))
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let key = ObjectKey::try_from(value)?;
+        Ok(Self::new(key))
     }
 }
 
-newtype_struct_serde_impl!(ResourceAddress, BorTag<Hash, TAG>);
+newtype_struct_serde_impl!(ResourceAddress, BorTag<ObjectKey, TAG>);
 
 #[cfg(test)]
 mod tests {
@@ -102,7 +105,7 @@ mod tests {
 
         #[test]
         fn string_serialization_and_deserialization() {
-            let resx_str = "resource_0000000000000000000000000000000000000000000000000000000000000000";
+            let resx_str = "resource_00000000000000000000000000000000000000000000000000000000";
             let resource = ResourceAddress::from_str(resx_str).unwrap();
             let json = serde_json::to_string_pretty(&resource).unwrap();
             assert_eq!(json.trim_matches('"'), resx_str);

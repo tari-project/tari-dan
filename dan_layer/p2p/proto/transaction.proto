@@ -38,6 +38,7 @@ message Instruction {
     CLAIM_BURN = 4;
     CLAIM_VALIDATOR_FEES = 5;
     DROP_ALL_PROOFS_IN_WORKSPACE = 6;
+    CREATE_ACCOUNT = 7;
     CREATE_FREE_TEST_COINS = 101;
   }
   InstructionType instruction_type = 1;
@@ -67,6 +68,9 @@ message Instruction {
 
   bytes claim_validator_fees_validator_public_key = 15;
   uint64 claim_validator_fees_epoch = 16;
+
+  bytes create_account_owner_public_key = 17;
+  string create_account_workspace_bucket = 18;
 
   // DEBUGGING: Test coins
   uint64 create_free_test_coins_amount = 101;

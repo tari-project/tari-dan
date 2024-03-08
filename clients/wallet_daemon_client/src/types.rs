@@ -871,6 +871,7 @@ pub struct MintAccountNftRequest {
     pub metadata: serde_json::Value,
     pub mint_fee: Option<Amount>,
     pub create_account_nft_fee: Option<Amount>,
+    pub existing_nft_component: Option<ComponentAddress>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

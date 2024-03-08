@@ -101,8 +101,8 @@ fn hasher() -> TariHasher {
     tari_hasher::<SparseMerkleTree>("hash")
 }
 
-pub fn hash<T: AsRef<[u8]>>(data: T) -> Hash {
-    hasher().chain(data.as_ref()).result()
+pub fn hash<T: Serialize>(data: &T) -> Hash {
+    hasher().chain(data).result()
 }
 
 pub fn hash2(d1: &[u8], d2: &[u8]) -> Hash {

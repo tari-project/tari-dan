@@ -36,7 +36,7 @@ pub struct Resource {
     resource_type: ResourceType,
     owner_rule: OwnerRule,
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
-    owner_key: RistrettoPublicKeyBytes,
+    owner_key: Option<RistrettoPublicKeyBytes>,
     access_rules: ResourceAccessRules,
     metadata: Metadata,
     total_supply: Amount,
@@ -45,7 +45,7 @@ pub struct Resource {
 impl Resource {
     pub fn new(
         resource_type: ResourceType,
-        owner_key: RistrettoPublicKeyBytes,
+        owner_key: Option<RistrettoPublicKeyBytes>,
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
         metadata: Metadata,
@@ -68,13 +68,13 @@ impl Resource {
         &self.owner_rule
     }
 
-    pub fn owner_key(&self) -> &RistrettoPublicKeyBytes {
-        &self.owner_key
+    pub fn owner_key(&self) -> Option<&RistrettoPublicKeyBytes> {
+        self.owner_key.as_ref()
     }
 
     pub fn as_ownership(&self) -> Ownership<'_> {
         Ownership {
-            owner_key: &self.owner_key,
+            owner_key: self.owner_key.as_ref(),
             owner_rule: &self.owner_rule,
         }
     }
