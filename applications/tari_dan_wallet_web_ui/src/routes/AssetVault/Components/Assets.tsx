@@ -146,6 +146,7 @@ function Assets({accountName}: { accountName: string }) {
     return (
         <Box sx={{width: "100%"}}>
             <SendMoneyDialog open={resourceToSend !== null} handleClose={() => setResourceToSend(null)}
+                             onSendComplete={() => setResourceToSend(null)}
                              resource_address={resourceToSend || ""}/>
             <Box sx={{borderBottom: 1, borderColor: "divider"}}>
                 <Tabs value={value} onChange={handleChange} aria-label="account assets" variant="standard">
@@ -180,10 +181,10 @@ function Assets({accountName}: { accountName: string }) {
                                          resource_type,
                                          confidential_balance,
                                          token_symbol,
-                                     }: BalanceEntry) => {
+                                     }: BalanceEntry, i) => {
                                         return (
                                             <BalanceRow
-                                                key={resource_address}
+                                                key={i}
                                                 token_symbol={token_symbol || ""}
                                                 resource_address={resource_address}
                                                 resource_type={resource_type}
@@ -217,9 +218,9 @@ function Assets({accountName}: { accountName: string }) {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {nftsListData?.nfts.map(({metadata, is_burned}: AccountNftInfo) => {
-                                    return <NftsList metadata={metadata} is_burned={is_burned}/>;
-                                })}
+                                {nftsListData?.nfts.map(({metadata, is_burned}: AccountNftInfo, i) =>
+                                    <NftsList key={i} metadata={metadata} is_burned={is_burned}/>
+                                )}
                             </TableBody>
                         </Table>
                     </TableContainer>

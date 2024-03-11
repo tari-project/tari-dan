@@ -72,13 +72,17 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
     const [disabled, setDisabled] = useState(false);
     const [estimatedFee, setEstimatedFee] = useState(0);
     const [transferFormState, setTransferFormState] = useState(INITIAL_VALUES);
+    const [validity, setValidity] = useState<object>({
+        publicKey: false,
+        amount: false,
+    });
 
     const {accountName, setPopup} = useAccountStore();
 
     const theme = useTheme();
 
     const {data} = useAccountsGetBalances(accountName);
-    const badges = data?.balances?.filter((b) => b.resource_type === "NonFungible").map((b) => b.resource_address) as string[];
+    const badges = data?.balances?.filter((b) => b.resource_type === "NonFungible" && b.balance > 0).map((b) => b.resource_address) as string[];
 
     const {mutateAsync: sendIt} = useAccountsTransfer(
         accountName,
@@ -103,10 +107,14 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
     );
 
     function setFormValue(e: React.ChangeEvent<HTMLInputElement>) {
-        if (e.target.validity.valid) {
-            setTransferFormState({
-                ...transferFormState,
-                [e.target.name]: e.target.value,
+        setTransferFormState({
+            ...transferFormState,
+            [e.target.name]: e.target.value,
+        });
+        if (validity[e.target.name as keyof object] !== undefined) {
+            setValidity({
+                ...validity,
+                [e.target.name]: e.target.validity.valid,
             });
         }
         setEstimatedFee(0);
@@ -116,6 +124,14 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
         setTransferFormState({
             ...transferFormState,
             [e.target.name]: e.target.value,
+        });
+        setEstimatedFee(0);
+    }
+
+    function setCheckboxFormValue(e: React.ChangeEvent<HTMLInputElement>) {
+        setTransferFormState({
+            ...transferFormState,
+            [e.target.name]: e.target.checked,
         });
         setEstimatedFee(0);
     }
@@ -159,6 +175,8 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
         }
     };
 
+    const allValid = Object.values(validity).every((v) => v);
+
     return (
         <Dialog open={props.open} onClose={handleClose}>
             <DialogTitle>Send {props.resource_address}</DialogTitle>
@@ -173,7 +191,8 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
                             <Select
                                 name="badge"
                                 disabled={!useBadge || disabled}
-                                value={transferFormState.badge || badges[0] || ""}
+                                displayEmpty
+                                value={transferFormState.badge || ""}
                                 onChange={setSelectFormValue}
                             >
                                 {badges.map((b, i) => <MenuItem key={i} value={b}>{b}</MenuItem>)}
@@ -184,7 +203,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
                         name="publicKey"
                         label="Public Key"
                         value={transferFormState.publicKey}
-                        inputProps={{pattern: '/^[0-9a-fA-F]*$'}}
+                        inputProps={{pattern: '^[0-9a-fA-F]*$'}}
                         onChange={setFormValue}
                         style={{flexGrow: 1}}
                         disabled={disabled}
@@ -194,7 +213,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
                             <CheckBox
                                 name="confidential"
                                 checked={transferFormState.confidential}
-                                onChange={setFormValue}
+                                onChange={setCheckboxFormValue}
                                 disabled={disabled}
                             />
                         }
@@ -226,7 +245,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
                         <Button variant="outlined" onClick={handleClose} disabled={disabled}>
                             Cancel
                         </Button>
-                        <Button variant="contained" type="submit" disabled={disabled}>
+                        <Button variant="contained" type="submit" disabled={disabled || !allValid}>
                             {estimatedFee ? "Send" : "Estimate fee"}
                         </Button>
                     </Box>

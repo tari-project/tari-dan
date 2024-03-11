@@ -20,31 +20,29 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useAccountsList } from "../../api/hooks/useAccounts";
+import {useAccountsList} from "../../api/hooks/useAccounts";
 import useAccountStore from "../../store/accountStore";
 import Onboarding from "../Onboarding/Onboarding";
 import MyAssets from "./Components/MyAssets";
 
 function AssetVault() {
-  const { accountName, setAccountName } = useAccountStore();
+    const {accountName, setAccountName} = useAccountStore();
 
-  const { data: dataAccountsList } = useAccountsList(0, 10);
+    const {data: dataAccountsList} = useAccountsList(0, 10);
 
-  if (!accountName && dataAccountsList && dataAccountsList.accounts.length > 0) {
-    setAccountName(dataAccountsList.accounts[0].account.name || "");
-  }
+    if (!accountName && dataAccountsList && dataAccountsList.accounts.length > 0) {
+        setAccountName(dataAccountsList.accounts[0].account.name || "");
+    }
 
-  return (
-    <>
-      {accountName ? (
+    return (
         <>
-          <MyAssets />
+            {accountName ? (
+                <MyAssets/>
+            ) : (
+                <Onboarding/>
+            )}
         </>
-      ) : (
-        <Onboarding />
-      )}
-    </>
-  );
+    );
 }
 
 export default AssetVault;
