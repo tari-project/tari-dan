@@ -21,43 +21,43 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import React from "react";
-import { Table, TableContainer, TableBody, TableHead, TableRow, TableCell } from "@mui/material";
+import {Table, TableContainer, TableBody, TableHead, TableRow, TableCell} from "@mui/material";
 import StatusChip from "../../Components/StatusChip";
-import type { TransactionAtom } from "@tarilabs/typescript-bindings";
+import type {TransactionAtom} from "@tariproject/typescript-bindings";
 
-function Transaction({ transaction }: { transaction: TransactionAtom }) {
-  return (
-    <TableRow>
-      <TableCell>
-        <a href={`/transactions/${transaction.id}`}>{transaction.id}</a>
-      </TableCell>
-      <TableCell>
-        <StatusChip status={transaction.decision} />
-      </TableCell>
-      <TableCell>{transaction.leader_fee}</TableCell>
-      <TableCell>{transaction.transaction_fee}</TableCell>
-    </TableRow>
-  );
+function Transaction({transaction}: { transaction: TransactionAtom }) {
+    return (
+        <TableRow>
+            <TableCell>
+                <a href={`/transactions/${transaction.id}`}>{transaction.id}</a>
+            </TableCell>
+            <TableCell>
+                <StatusChip status={transaction.decision}/>
+            </TableCell>
+            <TableCell>{transaction.leader_fee}</TableCell>
+            <TableCell>{transaction.transaction_fee}</TableCell>
+        </TableRow>
+    );
 }
 
-export default function Transactions({ transactions }: { transactions: TransactionAtom[] }) {
-  return (
-    <TableContainer>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Transaction ID</TableCell>
-            <TableCell>Decision</TableCell>
-            <TableCell>Leader fee</TableCell>
-            <TableCell>Transaction fee</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {transactions.map((tx: TransactionAtom) => (
-            <Transaction key={tx.id} transaction={tx} />
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
+export default function Transactions({transactions}: { transactions: TransactionAtom[] }) {
+    return (
+        <TableContainer>
+            <Table>
+                <TableHead>
+                    <TableRow>
+                        <TableCell>Transaction ID</TableCell>
+                        <TableCell>Decision</TableCell>
+                        <TableCell>Leader fee</TableCell>
+                        <TableCell>Transaction fee</TableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    {transactions.map((tx: TransactionAtom) => (
+                        <Transaction key={tx.id} transaction={tx}/>
+                    ))}
+                </TableBody>
+            </Table>
+        </TableContainer>
+    );
 }

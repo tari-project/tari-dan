@@ -23,65 +23,65 @@
 import Box from "@mui/material/Box";
 import CopyToClipboard from "../../../Components/CopyToClipboard";
 import FetchStatusCheck from "../../../Components/FetchStatusCheck";
-import { GridHeadCell, GridDataCell } from "../../../Components/StyledComponents";
-import { useAccountsGet } from "../../../api/hooks/useAccounts";
-import { shortenString } from "../../../utils/helpers";
-import { styled } from "@mui/material/styles";
-import { substateIdToString } from "@tarilabs/typescript-bindings";
+import {GridHeadCell, GridDataCell} from "../../../Components/StyledComponents";
+import {useAccountsGet} from "../../../api/hooks/useAccounts";
+import {shortenString} from "../../../utils/helpers";
+import {styled} from "@mui/material/styles";
+import {substateIdToString} from "@tariproject/typescript-bindings";
 
-const GridContainer = styled(Box)(({ theme }) => ({
-  display: "grid",
-  gridTemplateColumns: "1fr 2fr",
-  gridTemplateAreas: `'head1 content1'
+const GridContainer = styled(Box)(({theme}) => ({
+    display: "grid",
+    gridTemplateColumns: "1fr 2fr",
+    gridTemplateAreas: `'head1 content1'
     'head2 content2'
     'head3 content3'`,
 
-  [theme.breakpoints.up("md")]: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr 1fr",
-    gridTemplateAreas: `'head1 head2 head3'
+    [theme.breakpoints.up("md")]: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr 1fr",
+        gridTemplateAreas: `'head1 head2 head3'
       'content1 content2 content3'`,
-  },
+    },
 }));
 
-function AccountDetails({ accountName }: { accountName: string }) {
-  const {
-    data: accountsData,
-    isError: accountsIsError,
-    error: accountsError,
-    isFetching: accountsIsFetching,
-  } = useAccountsGet(accountName);
+function AccountDetails({accountName}: { accountName: string }) {
+    const {
+        data: accountsData,
+        isError: accountsIsError,
+        error: accountsError,
+        isFetching: accountsIsFetching,
+    } = useAccountsGet(accountName);
 
-  return (
-    <>
-      {accountsIsError || accountsIsFetching ? (
-        <FetchStatusCheck
-          isError={accountsIsError}
-          errorMessage={accountsError?.message || "Error fetching data"}
-          isLoading={accountsIsFetching}
-        />
-      ) : (
+    return (
         <>
-          {accountsData && (
-            <GridContainer>
-              <GridHeadCell className="head1">Name</GridHeadCell>
-              <GridHeadCell className="head2">Address</GridHeadCell>
-              <GridHeadCell className="head3">Public Key</GridHeadCell>
-              <GridDataCell className="content1">{accountsData.account.name}</GridDataCell>
-              <GridDataCell className="content2">
-                {shortenString(substateIdToString(accountsData.account.address))}
-                <CopyToClipboard copy={substateIdToString(accountsData.account.address)} />
-              </GridDataCell>
-              <GridDataCell className="content3">
-                {shortenString(accountsData.public_key)}
-                <CopyToClipboard copy={accountsData.public_key} />
-              </GridDataCell>
-            </GridContainer>
-          )}
+            {accountsIsError || accountsIsFetching ? (
+                <FetchStatusCheck
+                    isError={accountsIsError}
+                    errorMessage={accountsError?.message || "Error fetching data"}
+                    isLoading={accountsIsFetching}
+                />
+            ) : (
+                <>
+                    {accountsData && (
+                        <GridContainer>
+                            <GridHeadCell className="head1">Name</GridHeadCell>
+                            <GridHeadCell className="head2">Address</GridHeadCell>
+                            <GridHeadCell className="head3">Public Key</GridHeadCell>
+                            <GridDataCell className="content1">{accountsData.account.name}</GridDataCell>
+                            <GridDataCell className="content2">
+                                {shortenString(substateIdToString(accountsData.account.address))}
+                                <CopyToClipboard copy={substateIdToString(accountsData.account.address)}/>
+                            </GridDataCell>
+                            <GridDataCell className="content3">
+                                {shortenString(accountsData.public_key)}
+                                <CopyToClipboard copy={accountsData.public_key}/>
+                            </GridDataCell>
+                        </GridContainer>
+                    )}
+                </>
+            )}
         </>
-      )}
-    </>
-  );
+    );
 }
 
 export default AccountDetails;

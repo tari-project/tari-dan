@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from "react";
+import {useState} from "react";
 import Committee from "./Committee";
 import Table from "@mui/material/Table";
 import TableCell from "@mui/material/TableCell";
@@ -29,74 +29,74 @@ import TableHead from "@mui/material/TableHead";
 import TableBody from "@mui/material/TableBody";
 import TableRow from "@mui/material/TableRow";
 import TablePagination from "@mui/material/TablePagination";
-import { Typography } from "@mui/material";
+import {Typography} from "@mui/material";
 import CommitteesWaterfall from "./CommitteesWaterfall";
-import { emptyRows } from "../../utils/helpers";
-import type { CommitteeShardInfo } from "@tarilabs/typescript-bindings/validator-node-client";
+import {emptyRows} from "../../utils/helpers";
+import type {CommitteeShardInfo} from "@tariproject/typescript-bindings/validator-node-client";
 
-function Committees({ committees, peerId }: { committees: CommitteeShardInfo[] | null; peerId: string }) {
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+function Committees({committees, peerId}: { committees: CommitteeShardInfo[] | null; peerId: string }) {
+    const [page, setPage] = useState(0);
+    const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  if (!committees) {
-    return <Typography>Committees are loading</Typography>;
-  }
+    if (!committees) {
+        return <Typography>Committees are loading</Typography>;
+    }
 
-  const emptyRowsCnt = emptyRows(page, rowsPerPage, committees);
+    const emptyRowsCnt = emptyRows(page, rowsPerPage, committees);
 
-  const handleChangePage = (event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
+    const handleChangePage = (event: unknown, newPage: number) => {
+        setPage(newPage);
+    };
 
-  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-  return (
-    <>
-      <CommitteesWaterfall committees={committees} />
-      <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Range</TableCell>
-              <TableCell style={{ textAlign: "center" }}>Members</TableCell>
-              <TableCell style={{ textAlign: "center" }}>Details</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {committees.map((committee) => (
-              <Committee
-                key={committee.shard}
-                begin={committee.substate_address_range.start}
-                end={committee.substate_address_range.end}
-                members={committee.validators}
-                peerId={peerId}
-              />
-            ))}
-            {emptyRowsCnt > 0 && (
-              <TableRow
-                style={{
-                  height: 67 * emptyRowsCnt,
-                }}
-              >
-                <TableCell colSpan={2} />
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        <TablePagination
-          rowsPerPageOptions={[10, 25, 50]}
-          component="div"
-          count={committees.length}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={handleChangePage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-        />
-      </TableContainer>
-    </>
-  );
+    const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+        setRowsPerPage(parseInt(event.target.value, 10));
+        setPage(0);
+    };
+    return (
+        <>
+            <CommitteesWaterfall committees={committees}/>
+            <TableContainer>
+                <Table>
+                    <TableHead>
+                        <TableRow>
+                            <TableCell>Range</TableCell>
+                            <TableCell style={{textAlign: "center"}}>Members</TableCell>
+                            <TableCell style={{textAlign: "center"}}>Details</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {committees.map((committee) => (
+                            <Committee
+                                key={committee.shard}
+                                begin={committee.substate_address_range.start}
+                                end={committee.substate_address_range.end}
+                                members={committee.validators}
+                                peerId={peerId}
+                            />
+                        ))}
+                        {emptyRowsCnt > 0 && (
+                            <TableRow
+                                style={{
+                                    height: 67 * emptyRowsCnt,
+                                }}
+                            >
+                                <TableCell colSpan={2}/>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+                <TablePagination
+                    rowsPerPageOptions={[10, 25, 50]}
+                    component="div"
+                    count={committees.length}
+                    rowsPerPage={rowsPerPage}
+                    page={page}
+                    onPageChange={handleChangePage}
+                    onRowsPerPageChange={handleChangeRowsPerPage}
+                />
+            </TableContainer>
+        </>
+    );
 }
 
 export default Committees;

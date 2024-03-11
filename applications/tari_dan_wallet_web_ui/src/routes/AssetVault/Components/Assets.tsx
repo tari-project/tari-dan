@@ -37,7 +37,7 @@ import {DataTableCell} from "../../../Components/StyledComponents";
 import {useAccountNFTsList, useAccountsGetBalances} from "../../../api/hooks/useAccounts";
 import useAccountStore from "../../../store/accountStore";
 import {shortenString} from "../../../utils/helpers";
-import type {AccountNftInfo, BalanceEntry} from "@tarilabs/typescript-bindings/wallet-daemon-client";
+import type {AccountNftInfo, BalanceEntry} from "@tariproject/typescript-bindings/wallet-daemon-client";
 import Button from "@mui/material/Button/Button";
 import {SendMoneyDialog} from "./SendMoney";
 

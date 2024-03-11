@@ -35,7 +35,7 @@ import {
 } from "../../utils/json_rpc";
 import {apiError} from "../helpers/types";
 import queryClient from "../queryClient";
-import type {Arg, ComponentAccessRules} from "@tarilabs/typescript-bindings";
+import type {Arg, ComponentAccessRules} from "@tariproject/typescript-bindings";
 
 //   Fees are passed as strings because Amount is tagged
 export const useAccountsClaimBurn = (account: string, claimProof: string, fee: number) => {

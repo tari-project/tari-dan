@@ -20,56 +20,56 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from "react";
-import { TableContainer, Table, TableRow, TableBody, Collapse } from "@mui/material";
-import { DataTableCell, AccordionIconButton } from "../../Components/StyledComponents";
-import { renderJson } from "../../utils/helpers";
+import {useState} from "react";
+import {TableContainer, Table, TableRow, TableBody, Collapse} from "@mui/material";
+import {DataTableCell, AccordionIconButton} from "../../Components/StyledComponents";
+import {renderJson} from "../../utils/helpers";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import CodeBlockExpand from "../../Components/CodeBlock";
-import type { Instruction } from "@tarilabs/typescript-bindings";
+import type {Instruction} from "@tariproject/typescript-bindings";
 
-function RowData({ title, data }: { title: string; data: Instruction }, index: number) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <TableRow key={`${index}-1`}>
-        <DataTableCell width={90} sx={{ borderBottom: "none", textAlign: "center" }}>
-          <AccordionIconButton
-            open={open}
-            aria-label="expand row"
-            size="small"
-            onClick={() => {
-              setOpen(!open);
-            }}
-          >
-            {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </AccordionIconButton>
-        </DataTableCell>
-        <DataTableCell>{title}</DataTableCell>
-      </TableRow>
-      <TableRow key={`${index}-2`}>
-        <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={2}>
-          <Collapse in={open} timeout="auto" unmountOnExit>
-            <CodeBlockExpand title={title}>{renderJson(data)}</CodeBlockExpand>
-          </Collapse>
-        </DataTableCell>
-      </TableRow>
-    </>
-  );
+function RowData({title, data}: { title: string; data: Instruction }, index: number) {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <TableRow key={`${index}-1`}>
+                <DataTableCell width={90} sx={{borderBottom: "none", textAlign: "center"}}>
+                    <AccordionIconButton
+                        open={open}
+                        aria-label="expand row"
+                        size="small"
+                        onClick={() => {
+                            setOpen(!open);
+                        }}
+                    >
+                        {open ? <KeyboardArrowUpIcon/> : <KeyboardArrowDownIcon/>}
+                    </AccordionIconButton>
+                </DataTableCell>
+                <DataTableCell>{title}</DataTableCell>
+            </TableRow>
+            <TableRow key={`${index}-2`}>
+                <DataTableCell style={{paddingBottom: 0, paddingTop: 0}} colSpan={2}>
+                    <Collapse in={open} timeout="auto" unmountOnExit>
+                        <CodeBlockExpand title={title}>{renderJson(data)}</CodeBlockExpand>
+                    </Collapse>
+                </DataTableCell>
+            </TableRow>
+        </>
+    );
 }
 
-export default function Instructions({ data }: { data: Instruction[] }, index: number) {
-  return (
-    <TableContainer>
-      <Table>
-        <TableBody>
-          {data &&
-            data.map((item: Instruction) => {
-              return <RowData title={Object.keys(item)[0]} data={item} />;
-            })}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
+export default function Instructions({data}: { data: Instruction[] }, index: number) {
+    return (
+        <TableContainer>
+            <Table>
+                <TableBody>
+                    {data &&
+                        data.map((item: Instruction) => {
+                            return <RowData title={Object.keys(item)[0]} data={item}/>;
+                        })}
+                </TableBody>
+            </Table>
+        </TableContainer>
+    );
 }

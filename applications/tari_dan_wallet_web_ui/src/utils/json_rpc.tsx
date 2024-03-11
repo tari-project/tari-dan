@@ -94,7 +94,7 @@ import type {
     TransferResponse,
     WebRtcStartRequest,
     WebRtcStartResponse,
-} from "@tarilabs/typescript-bindings/wallet-daemon-client";
+} from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 let token: String | null = null;
 let json_id = 0;
