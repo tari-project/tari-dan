@@ -20,85 +20,85 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import {useState} from "react";
-import {TableContainer, Table, TableRow, TableBody, Collapse} from "@mui/material";
-import {renderJson} from "../../utils/helpers";
-import {DataTableCell} from "../../Components/StyledComponents";
-import {AccordionIconButton} from "../../Components/StyledComponents";
+import { useState } from "react";
+import { TableContainer, Table, TableRow, TableBody, Collapse } from "@mui/material";
+import { renderJson } from "../../utils/helpers";
+import { DataTableCell } from "../../Components/StyledComponents";
+import { AccordionIconButton } from "../../Components/StyledComponents";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
-import {IoArrowDownCircle, IoArrowUpCircle} from "react-icons/io5";
+import { IoArrowDownCircle, IoArrowUpCircle } from "react-icons/io5";
 import CodeBlockDialog from "../../Components/CodeBlock";
-import type {SubstateRecord} from "@tariproject/typescript-bindings";
+import type { SubstateRecord } from "@tariproject/typescript-bindings";
 
-function RowData({info, state}: { info: SubstateRecord; state: string }, index: number) {
-    const [open, setOpen] = useState(false);
-    const itemKey = Object.keys(info.substate_id)[0];
-    const itemValue = Object.values(info.substate_id)[0];
-    return (
-        <>
-            <TableRow key={`${index}-1`}>
-                <DataTableCell sx={{borderBottom: "none", textAlign: "center"}}>
-                    <AccordionIconButton
-                        open={open}
-                        aria-label="expand row"
-                        size="small"
-                        onClick={() => {
-                            setOpen(!open);
-                        }}
-                    >
-                        {open ? <KeyboardArrowUpIcon/> : <KeyboardArrowDownIcon/>}
-                    </AccordionIconButton>
-                </DataTableCell>
-                <DataTableCell>
-                    <div
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "flex-start",
-                            gap: "0.5rem",
-                        }}
-                    >
-                        {state === "Up" ? (
-                            <IoArrowUpCircle style={{width: 22, height: 22, color: "#5F9C91"}}/>
-                        ) : (
-                            <IoArrowDownCircle style={{width: 22, height: 22, color: "#ECA86A"}}/>
-                        )}
-                        {state}
-                    </div>
-                </DataTableCell>
-                <DataTableCell>{itemKey}</DataTableCell>
-                <DataTableCell>
-                    {itemValue && typeof itemValue === "object" ? JSON.stringify(itemValue) : String(itemValue)}
-                </DataTableCell>
-            </TableRow>
-            <TableRow key={`${index}-2`}>
-                <DataTableCell style={{paddingBottom: 0, paddingTop: 0}} colSpan={4}>
-                    <Collapse in={open} timeout="auto" unmountOnExit>
-                        <CodeBlockDialog title="Substate">{renderJson(info)}</CodeBlockDialog>
-                    </Collapse>
-                </DataTableCell>
-            </TableRow>
-        </>
-    );
+function RowData({ info, state }: { info: SubstateRecord; state: string }, index: number) {
+  const [open, setOpen] = useState(false);
+  const itemKey = Object.keys(info.substate_id)[0];
+  const itemValue = Object.values(info.substate_id)[0];
+  return (
+    <>
+      <TableRow key={`${index}-1`}>
+        <DataTableCell sx={{ borderBottom: "none", textAlign: "center" }}>
+          <AccordionIconButton
+            open={open}
+            aria-label="expand row"
+            size="small"
+            onClick={() => {
+              setOpen(!open);
+            }}
+          >
+            {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+          </AccordionIconButton>
+        </DataTableCell>
+        <DataTableCell>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-start",
+              gap: "0.5rem",
+            }}
+          >
+            {state === "Up" ? (
+              <IoArrowUpCircle style={{ width: 22, height: 22, color: "#5F9C91" }} />
+            ) : (
+              <IoArrowDownCircle style={{ width: 22, height: 22, color: "#ECA86A" }} />
+            )}
+            {state}
+          </div>
+        </DataTableCell>
+        <DataTableCell>{itemKey}</DataTableCell>
+        <DataTableCell>
+          {itemValue && typeof itemValue === "object" ? JSON.stringify(itemValue) : String(itemValue)}
+        </DataTableCell>
+      </TableRow>
+      <TableRow key={`${index}-2`}>
+        <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={4}>
+          <Collapse in={open} timeout="auto" unmountOnExit>
+            <CodeBlockDialog title="Substate">{renderJson(info)}</CodeBlockDialog>
+          </Collapse>
+        </DataTableCell>
+      </TableRow>
+    </>
+  );
 }
 
-export default function Substates({upData, downData}: { upData: SubstateRecord[]; downData: SubstateRecord[] }) {
-    // const down = data.Accept.down_substates;
-    const up = upData;
-    const down = downData;
-    return (
-        <TableContainer>
-            <Table>
-                <TableBody>
-                    {up.map((item: SubstateRecord, index: number) => {
-                        return <RowData info={item} state="Up" key={index}/>;
-                    })}
-                    {down.map((item: SubstateRecord, index: number) => {
-                        return <RowData info={item} state="Down" key={index}/>;
-                    })}
-                </TableBody>
-            </Table>
-        </TableContainer>
-    );
+export default function Substates({ upData, downData }: { upData: SubstateRecord[]; downData: SubstateRecord[] }) {
+  // const down = data.Accept.down_substates;
+  const up = upData;
+  const down = downData;
+  return (
+    <TableContainer>
+      <Table>
+        <TableBody>
+          {up.map((item: SubstateRecord, index: number) => {
+            return <RowData info={item} state="Up" key={index} />;
+          })}
+          {down.map((item: SubstateRecord, index: number) => {
+            return <RowData info={item} state="Down" key={index} />;
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
 }
