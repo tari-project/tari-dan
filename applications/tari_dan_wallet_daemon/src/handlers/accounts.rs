@@ -75,8 +75,8 @@ use crate::{
         get_account_or_default,
         get_account_with_inputs,
         invalid_params,
-        wait_for_account_create_or_update,
         wait_for_result,
+        wait_for_result_and_account,
     },
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
     services::{NewAccountInfo, TransactionSubmittedEvent},
@@ -730,7 +730,10 @@ async fn finish_claiming<T: WalletStore>(
             is_default: is_first_account,
         }),
     });
-    let finalized = wait_for_result(&mut events, tx_id).await?;
+
+    // Wait for the monitor to pick up the new or updated account
+    let (finalized, _) = wait_for_result_and_account(&mut events, &tx_id, &account_address).await?;
+    // let finalized = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = finalized.finalize.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
@@ -740,9 +743,6 @@ async fn finish_claiming<T: WalletStore>(
             reason
         ));
     }
-
-    // Wait for the monitor to pick up the new or updated account
-    wait_for_account_create_or_update(&mut events, &account_address).await?;
 
     Ok((tx_id, finalized))
 }
