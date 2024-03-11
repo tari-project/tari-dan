@@ -110,7 +110,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     pub async fn update_epoch(&mut self, block_height: u64, block_hash: FixedHash) -> Result<(), EpochManagerError> {
         let base_layer_constants = self.base_node_client.get_consensus_constants(block_height).await?;
         let epoch = base_layer_constants.height_to_epoch(block_height);
-        self.update_current_block_info(block_height, block_hash.clone())?;
+        self.update_current_block_info(block_height, block_hash)?;
         if self.current_epoch >= epoch {
             // no need to update the epoch
             return Ok(());
