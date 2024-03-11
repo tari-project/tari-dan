@@ -61,10 +61,12 @@ impl SubstateAddress {
                     .into();
                 Self::from_object_key(&ObjectKey::new(id.resource_address().as_entity_id(), key), version)
             },
-            // Non-versionable
-            SubstateId::UnclaimedConfidentialOutput(id) => Self::from_hash(*id.hash()),
-            SubstateId::TransactionReceipt(id) => Self::from_hash(*id.hash()),
-            SubstateId::FeeClaim(id) => Self::from_hash(*id.hash()),
+
+            // These should only have a version of 0, however the address should account for the version argument passed
+            // in. For example, if querying one of these substates with a version > 0 then the substate will not exist.
+            SubstateId::UnclaimedConfidentialOutput(id) => Self::from_hash(id.hash(), version),
+            SubstateId::TransactionReceipt(id) => Self::from_hash(id.hash(), version),
+            SubstateId::FeeClaim(id) => Self::from_hash(id.hash(), version),
         }
     }
 
@@ -81,8 +83,12 @@ impl SubstateAddress {
         Self(buf)
     }
 
-    fn from_hash(hash: Hash) -> Self {
-        Self(hash.into_array())
+    fn from_hash(hash: &Hash, version: u32) -> Self {
+        let new_addr = hasher32(EngineHashDomainLabel::SubstateAddress)
+            .chain(hash)
+            .chain(&version)
+            .result();
+        Self(new_addr.into_array())
     }
 
     pub fn new(id: [u8; 32]) -> Self {
