@@ -34,8 +34,31 @@ import {useAccountsTransfer} from "../../../api/hooks/useAccounts";
 import {useTheme} from "@mui/material/styles";
 import useAccountStore from "../../../store/accountStore";
 
+const XTR2 = "resource_01010101010101010101010101010101010101010101010101010101";
+
 export default function SendMoney() {
     const [open, setOpen] = useState(false);
+
+    return (
+        <div>
+            <Button variant="outlined" onClick={() => setOpen(true)}>
+                Send Tari
+            </Button>
+            <SendMoneyDialog open={open} handleClose={() => setOpen(false)} onSendComplete={() => setOpen(false)}
+                             resource_address={XTR2}/>
+        </div>
+    );
+}
+
+
+export interface SendMoneyDialogProps {
+    open: boolean;
+    resource_address: string;
+    onSendComplete?: () => void;
+    handleClose: () => void;
+};
+
+export function SendMoneyDialog(props: SendMoneyDialogProps) {
     const [disabled, setDisabled] = useState(false);
     const [estimatedFee, setEstimatedFee] = useState(0);
     const [transferFormState, setTransferFormState] = useState({
@@ -51,7 +74,7 @@ export default function SendMoney() {
     const {mutateAsync: sendIt} = useAccountsTransfer(
         accountName,
         parseInt(transferFormState.amount),
-        "resource_01010101010101010101010101010101010101010101010101010101",
+        props.resource_address,
         transferFormState.publicKey,
         estimatedFee,
         transferFormState.confidential,
@@ -61,7 +84,7 @@ export default function SendMoney() {
     const {mutateAsync: calculateFeeEstimate} = useAccountsTransfer(
         accountName,
         parseInt(transferFormState.amount),
-        "resource_01010101010101010101010101010101010101010101010101010101",
+        props.resource_address,
         transferFormState.publicKey,
         1000,
         transferFormState.confidential,
@@ -107,7 +130,7 @@ export default function SendMoney() {
                             confidential: false,
                             amount: "",
                         });
-                        setOpen(false);
+                        props.onSendComplete?.();
                         setPopup({title: "Send successful", error: false});
                     })
                     .catch((e) => {
@@ -124,75 +147,67 @@ export default function SendMoney() {
         }
     };
 
-    const handleClickOpen = () => {
-        setOpen(true);
-    };
 
     const handleClose = () => {
-        setOpen(false);
+        props.handleClose?.();
     };
 
     return (
-        <div>
-            <Button variant="outlined" onClick={handleClickOpen}>
-                Send Tari
-            </Button>
-            <Dialog open={open} onClose={handleClose}>
-                <DialogTitle>Send Tari</DialogTitle>
-                <DialogContent className="dialog-content">
-                    <Form onSubmit={onTransfer} className="flex-container-vertical"
-                          style={{paddingTop: theme.spacing(1)}}>
-                        <TextField
-                            name="publicKey"
-                            label="Public Key"
-                            value={transferFormState.publicKey}
-                            onChange={onPublicKeyChange}
-                            style={{flexGrow: 1}}
-                            disabled={disabled}
-                        />
-                        <FormControlLabel
-                            control={
-                                <CheckBox
-                                    name="confidential"
-                                    checked={transferFormState.confidential}
-                                    onChange={onConfidentialChange}
-                                    disabled={disabled}
-                                />
-                            }
-                            label="Confidential"
-                        />
-                        <TextField
-                            name="amount"
-                            label="Amount"
-                            value={transferFormState.amount}
-                            onChange={onNumberChange}
-                            style={{flexGrow: 1}}
-                            disabled={disabled}
-                        />
-                        <TextField
-                            name="fee"
-                            label="Fee"
-                            value={estimatedFee || "Press fee estimate to calculate"}
-                            style={{flexGrow: 1}}
-                            disabled={disabled}
-                            InputProps={{readOnly: true}}
-                        />
-                        <Box
-                            className="flex-container"
-                            style={{
-                                justifyContent: "flex-end",
-                            }}
-                        >
-                            <Button variant="outlined" onClick={handleClose} disabled={disabled}>
-                                Cancel
-                            </Button>
-                            <Button variant="contained" type="submit" disabled={disabled}>
-                                {estimatedFee ? "Send" : "Estimate fee"}
-                            </Button>
-                        </Box>
-                    </Form>
-                </DialogContent>
-            </Dialog>
-        </div>
+        <Dialog open={props.open} onClose={handleClose}>
+            <DialogTitle>Send Tari</DialogTitle>
+            <DialogContent className="dialog-content">
+                <Form onSubmit={onTransfer} className="flex-container-vertical"
+                      style={{paddingTop: theme.spacing(1)}}>
+                    <TextField
+                        name="publicKey"
+                        label="Public Key"
+                        value={transferFormState.publicKey}
+                        onChange={onPublicKeyChange}
+                        style={{flexGrow: 1}}
+                        disabled={disabled}
+                    />
+                    <FormControlLabel
+                        control={
+                            <CheckBox
+                                name="confidential"
+                                checked={transferFormState.confidential}
+                                onChange={onConfidentialChange}
+                                disabled={disabled}
+                            />
+                        }
+                        label="Confidential"
+                    />
+                    <TextField
+                        name="amount"
+                        label="Amount"
+                        value={transferFormState.amount}
+                        onChange={onNumberChange}
+                        style={{flexGrow: 1}}
+                        disabled={disabled}
+                    />
+                    <TextField
+                        name="fee"
+                        label="Fee"
+                        value={estimatedFee || "Press fee estimate to calculate"}
+                        style={{flexGrow: 1}}
+                        disabled={disabled}
+                        InputProps={{readOnly: true}}
+                    />
+                    <Box
+                        className="flex-container"
+                        style={{
+                            justifyContent: "flex-end",
+                        }}
+                    >
+                        <Button variant="outlined" onClick={handleClose} disabled={disabled}>
+                            Cancel
+                        </Button>
+                        <Button variant="contained" type="submit" disabled={disabled}>
+                            {estimatedFee ? "Send" : "Estimate fee"}
+                        </Button>
+                    </Box>
+                </Form>
+            </DialogContent>
+        </Dialog>
     );
 }
