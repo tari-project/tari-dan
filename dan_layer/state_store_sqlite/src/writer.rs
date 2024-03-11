@@ -150,6 +150,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
             parked_blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             parked_blocks::justify.eq(serialize_json(block.justify())?),
             parked_blocks::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
+            parked_blocks::base_layer_block_hash.eq(serialize_hex(block.base_layer_block_hash())),
         );
 
         diesel::insert_into(parked_blocks::table)
@@ -198,6 +199,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             blocks::is_processed.eq(block.is_processed()),
             blocks::signature.eq(block.get_signature().map(serialize_json).transpose()?),
             blocks::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
+            blocks::base_layer_block_hash.eq(serialize_hex(block.base_layer_block_hash())),
         );
 
         diesel::insert_into(blocks::table)
