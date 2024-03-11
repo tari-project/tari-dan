@@ -520,6 +520,8 @@ pub struct TransferRequest {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub destination_public_key: PublicKey,
     pub max_fee: Option<Amount>,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub proof_from_badge_resource: Option<ResourceAddress>,
     pub dry_run: bool,
 }
 

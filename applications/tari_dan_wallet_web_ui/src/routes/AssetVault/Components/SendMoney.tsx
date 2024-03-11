@@ -30,9 +30,12 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Box from "@mui/material/Box";
-import {useAccountsTransfer} from "../../../api/hooks/useAccounts";
+import {useAccountsGetBalances, useAccountsTransfer} from "../../../api/hooks/useAccounts";
 import {useTheme} from "@mui/material/styles";
 import useAccountStore from "../../../store/accountStore";
+import Select from "@mui/material/Select";
+import {SelectChangeEvent} from "@mui/material/Select/Select";
+import MenuItem from "@mui/material/MenuItem";
 
 const XTR2 = "resource_01010101010101010101010101010101010101010101010101010101";
 
@@ -59,17 +62,23 @@ export interface SendMoneyDialogProps {
 };
 
 export function SendMoneyDialog(props: SendMoneyDialogProps) {
-    const [disabled, setDisabled] = useState(false);
-    const [estimatedFee, setEstimatedFee] = useState(0);
-    const [transferFormState, setTransferFormState] = useState({
+    const INITIAL_VALUES = {
         publicKey: "",
         confidential: false,
         amount: "",
-    });
+        badge: null
+    };
+    const [useBadge, setUseBadge] = useState(false);
+    const [disabled, setDisabled] = useState(false);
+    const [estimatedFee, setEstimatedFee] = useState(0);
+    const [transferFormState, setTransferFormState] = useState(INITIAL_VALUES);
 
     const {accountName, setPopup} = useAccountStore();
 
     const theme = useTheme();
+
+    const {data: {balances}} = useAccountsGetBalances(accountName);
+    const badges = balances.filter((b) => b.resource_type === "NonFungible").map((b) => b.resource_address) as string[];
 
     const {mutateAsync: sendIt} = useAccountsTransfer(
         accountName,
@@ -78,6 +87,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
         transferFormState.publicKey,
         estimatedFee,
         transferFormState.confidential,
+        transferFormState.badge,
         false,
     );
 
@@ -88,36 +98,27 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
         transferFormState.publicKey,
         1000,
         transferFormState.confidential,
+        transferFormState.badge,
         true,
     );
 
-    const onPublicKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (/^[0-9a-fA-F]*$/.test(e.target.value)) {
+    function setFormValue(e: React.ChangeEvent<HTMLInputElement>) {
+        if (e.target.validity.valid) {
             setTransferFormState({
                 ...transferFormState,
                 [e.target.name]: e.target.value,
             });
         }
         setEstimatedFee(0);
-    };
+    }
 
-    const onConfidentialChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    function setSelectFormValue(e: SelectChangeEvent<unknown>) {
         setTransferFormState({
             ...transferFormState,
-            [e.target.name]: e.target.checked,
+            [e.target.name]: e.target.value,
         });
         setEstimatedFee(0);
-    };
-
-    const onNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (/^[0-9]*$/.test(e.target.value)) {
-            setTransferFormState({
-                ...transferFormState,
-                [e.target.name]: e.target.value,
-            });
-        }
-        setEstimatedFee(0);
-    };
+    }
 
     const onTransfer = async () => {
         if (accountName) {
@@ -125,11 +126,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
             if (estimatedFee) {
                 sendIt()
                     .then(() => {
-                        setTransferFormState({
-                            publicKey: "",
-                            confidential: false,
-                            amount: "",
-                        });
+                        setTransferFormState(INITIAL_VALUES);
                         props.onSendComplete?.();
                         setPopup({title: "Send successful", error: false});
                     })
@@ -152,17 +149,39 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
         props.handleClose?.();
     };
 
+    const handleUseBadgeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setUseBadge(e.target.checked);
+        if (!e.target.checked) {
+            setTransferFormState({
+                ...transferFormState,
+                badge: null,
+            });
+        }
+    };
+
     return (
         <Dialog open={props.open} onClose={handleClose}>
-            <DialogTitle>Send Tari</DialogTitle>
+            <DialogTitle>Send {props.resource_address}</DialogTitle>
             <DialogContent className="dialog-content">
                 <Form onSubmit={onTransfer} className="flex-container-vertical"
                       style={{paddingTop: theme.spacing(1)}}>
+                    <FormControlLabel control={
+                        <CheckBox name="useBadge" checked={useBadge} onChange={handleUseBadgeChange}/>
+                    } label="Use Badge"/>
+                    <Select
+                        name="badge"
+                        disabled={!useBadge || disabled}
+                        value={transferFormState.badge || badges[0] || ""}
+                        onChange={setSelectFormValue}
+                    >
+                        {badges.map((b, i) => <MenuItem key={i} value={b}>{b}</MenuItem>)}
+                    </Select>
                     <TextField
                         name="publicKey"
                         label="Public Key"
                         value={transferFormState.publicKey}
-                        onChange={onPublicKeyChange}
+                        inputProps={{pattern: '/^[0-9a-fA-F]*$'}}
+                        onChange={setFormValue}
                         style={{flexGrow: 1}}
                         disabled={disabled}
                     />
@@ -171,7 +190,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
                             <CheckBox
                                 name="confidential"
                                 checked={transferFormState.confidential}
-                                onChange={onConfidentialChange}
+                                onChange={setFormValue}
                                 disabled={disabled}
                             />
                         }
@@ -181,7 +200,8 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
                         name="amount"
                         label="Amount"
                         value={transferFormState.amount}
-                        onChange={onNumberChange}
+                        type="number"
+                        onChange={setFormValue}
                         style={{flexGrow: 1}}
                         disabled={disabled}
                     />

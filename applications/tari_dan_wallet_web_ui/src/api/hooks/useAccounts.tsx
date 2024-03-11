@@ -30,7 +30,7 @@ import {
     accountsGetBalances,
     accountsInvoke,
     accountsList,
-    accountsTransfer,
+    accountsTransfer, confidentialCreateTransferProof,
     nftList,
 } from "../../utils/json_rpc";
 import {apiError} from "../helpers/types";
@@ -92,6 +92,7 @@ export const useAccountsTransfer = (
     destination_public_key: string,
     max_fee: number | null,
     confidential: boolean,
+    badge: string | null,
     dry_run: boolean,
 ) => {
     return useMutation(
@@ -102,6 +103,7 @@ export const useAccountsTransfer = (
                 resource_address,
                 destination_public_key,
                 max_fee,
+                proof_from_badge_resource: badge,
                 dry_run,
             };
             if (confidential) {

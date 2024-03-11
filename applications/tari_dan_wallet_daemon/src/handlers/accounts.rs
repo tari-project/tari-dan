@@ -906,9 +906,20 @@ pub async fn handle_transfer(
     let destination_account_address =
         get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
 
+    if let Some(ref badge) = req.proof_from_badge_resource {
+        instructions.extend([
+            Instruction::CallMethod {
+                component_address: source_account_address,
+                method: "create_proof_for_resource".to_string(),
+                args: args![badge],
+            },
+            Instruction::PutLastInstructionOutputOnWorkspace { key: b"proof".to_vec() },
+        ]);
+    }
+
     // build the transaction
     let max_fee = req.max_fee.unwrap_or(DEFAULT_FEE);
-    instructions.append(&mut vec![
+    instructions.extend([
         Instruction::CallMethod {
             component_address: source_account_address,
             method: "withdraw".to_string(),
@@ -924,7 +935,11 @@ pub async fn handle_transfer(
         },
     ]);
 
-    fee_instructions.append(&mut vec![Instruction::CallMethod {
+    if req.proof_from_badge_resource.is_some() {
+        instructions.push(Instruction::DropAllProofsInWorkspace);
+    }
+
+    fee_instructions.extend([Instruction::CallMethod {
         component_address: source_account_address,
         method: "pay_fee".to_string(),
         args: args![max_fee],
