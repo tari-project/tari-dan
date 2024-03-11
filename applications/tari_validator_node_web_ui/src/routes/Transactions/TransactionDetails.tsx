@@ -45,8 +45,8 @@ import type {
   ExecutedTransaction,
   LogEntry,
   SubstateRecord,
-} from "@tarilabs/typescript-bindings";
-import { getRejectReasonFromTransactionResult, rejectReasonToString } from "@tarilabs/typescript-bindings";
+} from "@tariproject/typescript-bindings";
+import { getRejectReasonFromTransactionResult, rejectReasonToString } from "@tariproject/typescript-bindings";
 
 export default function TransactionDetails() {
   const { transactionHash } = useParams();

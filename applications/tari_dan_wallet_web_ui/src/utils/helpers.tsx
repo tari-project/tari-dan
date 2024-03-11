@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { ChangeEvent } from "react";
-import type { FinalizeResult, SubstateId, Transaction, TransactionStatus } from "@tarilabs/typescript-bindings";
+import type { FinalizeResult, SubstateId, Transaction, TransactionStatus } from "@tariproject/typescript-bindings";
 
 const renderJson = (json: any) => {
   if (Array.isArray(json)) {

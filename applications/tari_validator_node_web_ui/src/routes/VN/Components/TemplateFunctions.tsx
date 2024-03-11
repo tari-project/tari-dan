@@ -34,7 +34,7 @@ import PageHeading from "../../../Components/PageHeading";
 import Grid from "@mui/material/Grid";
 import { StyledPaper } from "../../../Components/StyledComponents";
 import { fromHexString } from "./helpers";
-import type { ArgDef, GetTemplateResponse } from "@tarilabs/typescript-bindings/validator-node-client";
+import type { ArgDef, GetTemplateResponse } from "@tariproject/typescript-bindings/validator-node-client";
 
 function TemplateFunctions() {
   const { address } = useParams();
