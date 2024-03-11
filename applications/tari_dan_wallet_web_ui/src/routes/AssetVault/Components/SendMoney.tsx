@@ -77,8 +77,8 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
 
     const theme = useTheme();
 
-    const {data: {balances}} = useAccountsGetBalances(accountName);
-    const badges = balances.filter((b) => b.resource_type === "NonFungible").map((b) => b.resource_address) as string[];
+    const {data} = useAccountsGetBalances(accountName);
+    const badges = data?.balances?.filter((b) => b.resource_type === "NonFungible").map((b) => b.resource_address) as string[];
 
     const {mutateAsync: sendIt} = useAccountsTransfer(
         accountName,
@@ -165,17 +165,21 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
             <DialogContent className="dialog-content">
                 <Form onSubmit={onTransfer} className="flex-container-vertical"
                       style={{paddingTop: theme.spacing(1)}}>
-                    <FormControlLabel control={
-                        <CheckBox name="useBadge" checked={useBadge} onChange={handleUseBadgeChange}/>
-                    } label="Use Badge"/>
-                    <Select
-                        name="badge"
-                        disabled={!useBadge || disabled}
-                        value={transferFormState.badge || badges[0] || ""}
-                        onChange={setSelectFormValue}
-                    >
-                        {badges.map((b, i) => <MenuItem key={i} value={b}>{b}</MenuItem>)}
-                    </Select>
+                    {badges && (
+                        <>
+                            <FormControlLabel control={
+                                <CheckBox name="useBadge" checked={useBadge} onChange={handleUseBadgeChange}/>
+                            } label="Use Badge"/>
+                            <Select
+                                name="badge"
+                                disabled={!useBadge || disabled}
+                                value={transferFormState.badge || badges[0] || ""}
+                                onChange={setSelectFormValue}
+                            >
+                                {badges.map((b, i) => <MenuItem key={i} value={b}>{b}</MenuItem>)}
+                            </Select>
+                        </>
+                    )}
                     <TextField
                         name="publicKey"
                         label="Public Key"
