@@ -20,71 +20,71 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import {useState} from "react";
-import {IoAdd} from "react-icons/io5";
+import { useState } from "react";
+import { IoAdd } from "react-icons/io5";
 import Divider from "@mui/material/Divider";
 import Box from "@mui/material/Box";
-import {useTheme} from "@mui/material/styles";
+import { useTheme } from "@mui/material/styles";
 import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import FormControl from "@mui/material/FormControl";
-import Select, {SelectChangeEvent} from "@mui/material/Select";
+import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Dialog from "./AddAccount";
 import useAccountStore from "../../../store/accountStore";
-import {useAccountsList} from "../../../api/hooks/useAccounts";
-import type {AccountInfo} from "@tariproject/typescript-bindings/wallet-daemon-client";
+import { useAccountsList } from "../../../api/hooks/useAccounts";
+import type { AccountInfo } from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 function SelectAccount() {
-    const {accountName, setAccountName} = useAccountStore();
-    const {data: dataAccountsList} = useAccountsList(0, 10);
-    const [dialogOpen, setDialogOpen] = useState(false);
-    const theme = useTheme();
+  const { accountName, setAccountName } = useAccountStore();
+  const { data: dataAccountsList } = useAccountsList(0, 10);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const theme = useTheme();
 
-    const handleChange = (event: SelectChangeEvent) => {
-        const selectedValue = event.target.value as string;
-        if (selectedValue !== "addAccount") {
-            setAccountName(event.target.value as string);
-        }
-    };
+  const handleChange = (event: SelectChangeEvent) => {
+    const selectedValue = event.target.value as string;
+    if (selectedValue !== "addAccount") {
+      setAccountName(event.target.value as string);
+    }
+  };
 
-    const handleAddAccount = () => {
-        setDialogOpen(true);
-    };
-    return (
-        <Box sx={{minWidth: 250}}>
-            <Dialog open={dialogOpen} setOpen={setDialogOpen}/>
-            <FormControl fullWidth>
-                <InputLabel id="account-select-label">Account</InputLabel>
-                <Select
-                    labelId="account-select-label"
-                    id="account-select"
-                    value={
-                        dataAccountsList?.accounts.some((account: AccountInfo) => account.account.name == accountName)
-                            ? accountName
-                            : "addAccount"
-                    }
-                    label="Account"
-                    onChange={handleChange}
-                >
-                    {dataAccountsList?.accounts.map((account: AccountInfo) => {
-                        if (account.account.name === null) {
-                            return null;
-                        }
-                        return (
-                            <MenuItem key={account.public_key} value={account.account.name}>
-                                {account.account.name}
-                            </MenuItem>
-                        );
-                    })}
-                    <Divider/>
-                    <MenuItem value={"addAccount"} onClick={handleAddAccount}>
-                        <IoAdd style={{marginRight: theme.spacing(1)}}/>
-                        Add Account
-                    </MenuItem>
-                </Select>
-            </FormControl>
-        </Box>
-    );
+  const handleAddAccount = () => {
+    setDialogOpen(true);
+  };
+  return (
+    <Box sx={{ minWidth: 250 }}>
+      <Dialog open={dialogOpen} setOpen={setDialogOpen} />
+      <FormControl fullWidth>
+        <InputLabel id="account-select-label">Account</InputLabel>
+        <Select
+          labelId="account-select-label"
+          id="account-select"
+          value={
+            dataAccountsList?.accounts.some((account: AccountInfo) => account.account.name == accountName)
+              ? accountName
+              : "addAccount"
+          }
+          label="Account"
+          onChange={handleChange}
+        >
+          {dataAccountsList?.accounts.map((account: AccountInfo) => {
+            if (account.account.name === null) {
+              return null;
+            }
+            return (
+              <MenuItem key={account.public_key} value={account.account.name}>
+                {account.account.name}
+              </MenuItem>
+            );
+          })}
+          <Divider />
+          <MenuItem value={"addAccount"} onClick={handleAddAccount}>
+            <IoAdd style={{ marginRight: theme.spacing(1) }} />
+            Add Account
+          </MenuItem>
+        </Select>
+      </FormControl>
+    </Box>
+  );
 }
 
 export default SelectAccount;

@@ -20,63 +20,63 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import {useState} from "react";
-import {TableContainer, Table, TableRow, TableBody, Collapse} from "@mui/material";
-import {DataTableCell, AccordionIconButton} from "../../Components/StyledComponents";
+import { useState } from "react";
+import { TableContainer, Table, TableRow, TableBody, Collapse } from "@mui/material";
+import { DataTableCell, AccordionIconButton } from "../../Components/StyledComponents";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import CodeBlockExpand from "../../Components/CodeBlock";
-import {useTheme} from "@mui/material/styles";
-import type {Instruction} from "@tariproject/typescript-bindings";
+import { useTheme } from "@mui/material/styles";
+import type { Instruction } from "@tariproject/typescript-bindings";
 
-function RowData({title, data}: { title: string; data: Instruction }, index: number) {
-    const [open, setOpen] = useState(false);
-    const theme = useTheme();
-    return (
-        <>
-            <TableRow key={`${index}-1`}>
-                <DataTableCell width={90} sx={{borderBottom: "none", textAlign: "center"}}>
-                    <AccordionIconButton
-                        aria-label="expand row"
-                        size="small"
-                        onClick={() => {
-                            setOpen(!open);
-                        }}
-                    >
-                        {open ? <KeyboardArrowUpIcon/> : <KeyboardArrowDownIcon/>}
-                    </AccordionIconButton>
-                </DataTableCell>
-                <DataTableCell>{title}</DataTableCell>
-            </TableRow>
-            <TableRow key={`${index}-2`}>
-                <DataTableCell
-                    style={{
-                        paddingBottom: theme.spacing(1),
-                        paddingTop: 0,
-                        borderBottom: "none",
-                    }}
-                    colSpan={2}
-                >
-                    <Collapse in={open} timeout="auto" unmountOnExit>
-                        <CodeBlockExpand title={title} content={data}/>
-                    </Collapse>
-                </DataTableCell>
-            </TableRow>
-        </>
-    );
+function RowData({ title, data }: { title: string; data: Instruction }, index: number) {
+  const [open, setOpen] = useState(false);
+  const theme = useTheme();
+  return (
+    <>
+      <TableRow key={`${index}-1`}>
+        <DataTableCell width={90} sx={{ borderBottom: "none", textAlign: "center" }}>
+          <AccordionIconButton
+            aria-label="expand row"
+            size="small"
+            onClick={() => {
+              setOpen(!open);
+            }}
+          >
+            {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+          </AccordionIconButton>
+        </DataTableCell>
+        <DataTableCell>{title}</DataTableCell>
+      </TableRow>
+      <TableRow key={`${index}-2`}>
+        <DataTableCell
+          style={{
+            paddingBottom: theme.spacing(1),
+            paddingTop: 0,
+            borderBottom: "none",
+          }}
+          colSpan={2}
+        >
+          <Collapse in={open} timeout="auto" unmountOnExit>
+            <CodeBlockExpand title={title} content={data} />
+          </Collapse>
+        </DataTableCell>
+      </TableRow>
+    </>
+  );
 }
 
-export default function Instructions({data}: { data: Array<Instruction> }, index: number) {
-    return (
-        <TableContainer>
-            <Table>
-                <TableBody>
-                    {data &&
-                        data.map((item: Instruction) => {
-                            return <RowData title={Object.keys(item)[0]} data={item}/>;
-                        })}
-                </TableBody>
-            </Table>
-        </TableContainer>
-    );
+export default function Instructions({ data }: { data: Array<Instruction> }, index: number) {
+  return (
+    <TableContainer>
+      <Table>
+        <TableBody>
+          {data &&
+            data.map((item: Instruction) => {
+              return <RowData title={Object.keys(item)[0]} data={item} />;
+            })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
 }

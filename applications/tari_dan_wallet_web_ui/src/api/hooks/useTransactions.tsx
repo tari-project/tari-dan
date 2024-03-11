@@ -20,34 +20,34 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import {useQuery} from "@tanstack/react-query";
-import {transactionsGet, transactionsGetAll} from "../../utils/json_rpc";
-import {apiError} from "../helpers/types";
+import { useQuery } from "@tanstack/react-query";
+import { transactionsGet, transactionsGetAll } from "../../utils/json_rpc";
+import { apiError } from "../helpers/types";
 
-import type {TransactionStatus} from "@tariproject/typescript-bindings";
+import type { TransactionStatus } from "@tariproject/typescript-bindings";
 
 const useTransactionDetails = (hash: string) => {
-    return useQuery({
-        queryKey: ["transaction_details"],
-        queryFn: () => {
-            return transactionsGet({transaction_id: hash});
-        },
-        onError: (error: apiError) => {
-            error;
-        },
-    });
+  return useQuery({
+    queryKey: ["transaction_details"],
+    queryFn: () => {
+      return transactionsGet({ transaction_id: hash });
+    },
+    onError: (error: apiError) => {
+      error;
+    },
+  });
 };
 
 const useGetAllTransactions = (status: TransactionStatus | null, component: string | null) => {
-    return useQuery({
-        queryKey: ["transactions"],
-        queryFn: () => transactionsGetAll({status: status, component: component}),
-        onError: (error: apiError) => {
-            error;
-        },
-        refetchInterval: 5000,
-        keepPreviousData: true,
-    });
+  return useQuery({
+    queryKey: ["transactions"],
+    queryFn: () => transactionsGetAll({ status: status, component: component }),
+    onError: (error: apiError) => {
+      error;
+    },
+    refetchInterval: 5000,
+    keepPreviousData: true,
+  });
 };
 
-export {useTransactionDetails, useGetAllTransactions};
+export { useTransactionDetails, useGetAllTransactions };

@@ -20,31 +20,31 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import {TableContainer, Table, TableHead, TableRow, TableCell, TableBody} from "@mui/material";
-import {DataTableCell} from "../../Components/StyledComponents";
-import type {LogEntry} from "@tariproject/typescript-bindings";
+import { TableContainer, Table, TableHead, TableRow, TableCell, TableBody } from "@mui/material";
+import { DataTableCell } from "../../Components/StyledComponents";
+import type { LogEntry } from "@tariproject/typescript-bindings";
 
-export default function Logs({data}: { data: Array<LogEntry> }) {
-    return (
-        <TableContainer>
-            <Table>
-                <TableHead>
-                    <TableRow>
-                        <TableCell>Level</TableCell>
-                        <TableCell>Message</TableCell>
-                    </TableRow>
-                </TableHead>
-                <TableBody>
-                    {data.map(({level, message}: LogEntry, index: number) => {
-                        return (
-                            <TableRow key={index}>
-                                <DataTableCell>{level}</DataTableCell>
-                                <DataTableCell>{message}</DataTableCell>
-                            </TableRow>
-                        );
-                    })}
-                </TableBody>
-            </Table>
-        </TableContainer>
-    );
+export default function Logs({ data }: { data: Array<LogEntry> }) {
+  return (
+    <TableContainer>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Level</TableCell>
+            <TableCell>Message</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {data.map(({ level, message }: LogEntry, index: number) => {
+            return (
+              <TableRow key={index}>
+                <DataTableCell>{level}</DataTableCell>
+                <DataTableCell>{message}</DataTableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
 }
