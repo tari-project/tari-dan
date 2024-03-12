@@ -2,23 +2,24 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use tari_bor::{decode_exact, BorError};
-use tari_template_lib::prelude::Metadata;
-#[cfg(feature = "ts")]
-use ts_rs::TS;
+use tari_bor::BorError;
 
 use crate::serde_with;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct NonFungibleContainer(Option<NonFungible>);
 
 impl NonFungibleContainer {
     pub fn no_data() -> Self {
-        Self::new(Vec::new(), Vec::new())
+        Self::new(tari_bor::Value::Null, tari_bor::Value::Null)
     }
 
-    pub fn new(data: Vec<u8>, mutable_data: Vec<u8>) -> Self {
+    pub fn new(data: tari_bor::Value, mutable_data: tari_bor::Value) -> Self {
         Self(Some(NonFungible::new(data, mutable_data)))
     }
 
@@ -40,42 +41,42 @@ impl NonFungibleContainer {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct NonFungible {
-    #[serde(with = "serde_with::hex")]
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    data: Vec<u8>,
-    #[serde(with = "serde_with::hex")]
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    mutable_data: Vec<u8>,
+    #[cfg_attr(feature = "ts", ts(type = "any"))]
+    #[serde(with = "serde_with::cbor_value")]
+    data: tari_bor::Value,
+    #[cfg_attr(feature = "ts", ts(type = "any"))]
+    #[serde(with = "serde_with::cbor_value")]
+    mutable_data: tari_bor::Value,
 }
 
 impl NonFungible {
-    pub fn new(data: Vec<u8>, mutable_data: Vec<u8>) -> Self {
+    pub fn new(data: tari_bor::Value, mutable_data: tari_bor::Value) -> Self {
         Self { data, mutable_data }
     }
 
-    pub fn data(&self) -> &[u8] {
+    pub fn data(&self) -> &tari_bor::Value {
         &self.data
     }
 
-    pub fn mutable_data(&self) -> &[u8] {
+    pub fn mutable_data(&self) -> &tari_bor::Value {
         &self.mutable_data
     }
 
     pub fn decode_mutable_data<T: DeserializeOwned>(&self) -> Result<T, BorError> {
-        decode_exact(&self.mutable_data)
+        tari_bor::from_value(&self.mutable_data)
     }
 
-    pub fn decode_data(&self) -> Result<Metadata, BorError> {
-        let value = decode_exact::<tari_bor::Value>(&self.data)?;
-        if value.is_null() {
-            return Ok(Metadata::default());
-        }
-        tari_bor::from_value(&value)
+    pub fn decode_data<T: DeserializeOwned>(&self) -> Result<T, BorError> {
+        tari_bor::from_value(&self.data)
     }
 
-    pub fn set_mutable_data(&mut self, mutable_data: Vec<u8>) {
+    pub fn set_mutable_data(&mut self, mutable_data: tari_bor::Value) {
         self.mutable_data = mutable_data;
     }
 }

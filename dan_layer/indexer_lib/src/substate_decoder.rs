@@ -24,7 +24,7 @@ use std::collections::HashSet;
 
 use log::*;
 use tari_engine_types::{
-    indexed_value::{IndexedValue, IndexedValueError, IndexedWellKnownTypes},
+    indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     substate::{Substate, SubstateId, SubstateValue},
 };
 
@@ -48,8 +48,8 @@ pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateId>, In
             let mut related_substates = vec![];
 
             if let Some(non_fungible) = nonfungible_container.contents() {
-                let data = IndexedValue::from_raw(non_fungible.data())?;
-                let mutable_data = IndexedValue::from_raw(non_fungible.mutable_data())?;
+                let data = IndexedWellKnownTypes::from_value(non_fungible.data())?;
+                let mutable_data = IndexedWellKnownTypes::from_value(non_fungible.mutable_data())?;
                 related_substates.extend(
                     data.referenced_substates()
                         .chain(mutable_data.referenced_substates())
