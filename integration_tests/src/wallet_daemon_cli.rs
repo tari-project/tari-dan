@@ -38,7 +38,7 @@ use tari_template_lib::{
     prelude::{ComponentAddress, ResourceAddress},
     resource::TOKEN_SYMBOL,
 };
-use tari_transaction::SubstateRequirement;
+use tari_transaction::{SubstateRequirement, Transaction};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::command::transaction::CliArg;
 use tari_wallet_daemon_client::{
@@ -201,33 +201,24 @@ pub async fn transfer_confidential(
     let withdraw_proof = transfer_proof_resp.proof;
     let proof_id = transfer_proof_resp.proof_id;
 
-    let instructions = vec![
-        Instruction::CallMethod {
-            component_address: source_component_address,
-            method: String::from("withdraw_confidential"),
-            args: args![resource_address, withdraw_proof],
-        },
-        Instruction::PutLastInstructionOutputOnWorkspace {
-            key: b"bucket".to_vec(),
-        },
-        Instruction::CallMethod {
-            component_address: destination_account,
-            method: String::from("deposit"),
-            args: args![Variable("bucket")],
-        },
-    ];
+    let transaction = Transaction::builder()
+        .fee_transaction_pay_from_component(source_component_address, Amount(1))
+        .call_method(source_component_address, "withdraw_confidential", args![
+            resource_address,
+            withdraw_proof
+        ])
+        .put_last_instruction_output_on_workspace(b"bucket")
+        .call_method(destination_account, "deposit", args![Variable("bucket")])
+        .build_unsigned_transaction();
 
     let submit_req = TransactionSubmitRequest {
+        transaction: Some(transaction),
         signing_key_index: Some(signing_key_index),
-        fee_instructions: vec![Instruction::CallMethod {
-            component_address: source_component_address,
-            method: "pay_fee".to_string(),
-            args: args![Amount(1)],
-        }],
+        fee_instructions: vec![],
         proof_ids: vec![proof_id],
         is_dry_run: false,
         override_inputs: false,
-        instructions,
+        instructions: vec![],
         inputs: vec![source_account_addr, dest_account_addr],
         min_epoch,
         max_epoch,
@@ -451,6 +442,7 @@ pub async fn submit_manifest_with_signing_keys(
 
     let instructions = parse_manifest(&manifest_content, globals, HashMap::new()).unwrap();
     let transaction_submit_req = TransactionSubmitRequest {
+        transaction: None,
         signing_key_index: Some(account.key_index),
         instructions: instructions.instructions,
         fee_instructions: vec![],
@@ -523,6 +515,7 @@ pub async fn submit_manifest(
     let instructions = parse_manifest(&manifest_content, globals, HashMap::new()).unwrap();
 
     let transaction_submit_req = TransactionSubmitRequest {
+        transaction: None,
         signing_key_index: None,
         instructions: instructions.instructions,
         fee_instructions: vec![],
@@ -570,6 +563,7 @@ pub async fn submit_transaction(
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
     let transaction_submit_req = TransactionSubmitRequest {
+        transaction: None,
         signing_key_index: None,
         instructions,
         fee_instructions,
@@ -621,6 +615,7 @@ pub async fn create_component(
     };
 
     let transaction_submit_req = TransactionSubmitRequest {
+        transaction: None,
         signing_key_index: None,
         instructions: vec![instruction],
         fee_instructions: vec![],

@@ -45,7 +45,7 @@ use tari_template_lib::{
     models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
     prelude::{ComponentAddress, ConfidentialWithdrawProof, ResourceType},
 };
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId, UnsignedTransaction};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -87,22 +87,25 @@ pub struct CallInstructionRequest {
     pub max_epoch: Option<u64>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[cfg_attr(
     feature = "ts",
     derive(TS),
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
 pub struct TransactionSubmitRequest {
+    // TODO: make this mandatory once we remove the rest of the deprecated fields
+    pub transaction: Option<UnsignedTransaction>,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub signing_key_index: Option<u64>,
-    pub fee_instructions: Vec<Instruction>,
-    pub instructions: Vec<Instruction>,
     pub inputs: Vec<SubstateRequirement>,
     pub override_inputs: bool,
     pub is_dry_run: bool,
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub proof_ids: Vec<ConfidentialProofId>,
+    // TODO: remove the following fields
+    pub fee_instructions: Vec<Instruction>,
+    pub instructions: Vec<Instruction>,
     pub min_epoch: Option<Epoch>,
     pub max_epoch: Option<Epoch>,
 }
