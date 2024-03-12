@@ -20,81 +20,81 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
-import { getTemplate } from "../../../utils/json_rpc";
+import {useState, useEffect} from "react";
+import {useParams} from "react-router-dom";
+import {getTemplate} from "../../../utils/json_rpc";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import { DataTableCell, BoxHeading, BoxHeading2 } from "../../../Components/StyledComponents";
+import {DataTableCell, BoxHeading, BoxHeading2} from "../../../Components/StyledComponents";
 import PageHeading from "../../../Components/PageHeading";
 import Grid from "@mui/material/Grid";
-import { StyledPaper } from "../../../Components/StyledComponents";
-import { fromHexString } from "./helpers";
-import type { ArgDef, GetTemplateResponse } from "@tariproject/typescript-bindings/validator-node-client";
+import {StyledPaper} from "../../../Components/StyledComponents";
+import {fromHexString} from "./helpers";
+import type {ArgDef, GetTemplateResponse} from "@tariproject/typescript-bindings/validator-node-client";
 
 function TemplateFunctions() {
-  const { address } = useParams();
-  const [info, setInfo] = useState<GetTemplateResponse>();
+    const {address} = useParams();
+    const [info, setInfo] = useState<GetTemplateResponse>();
 
-  useEffect(() => {
-    const load = (address: Uint8Array) => {
-      getTemplate({ template_address: address }).then((response) => {
-        setInfo(response);
-      });
+    useEffect(() => {
+        const load = (address: string) => {
+            getTemplate({template_address: address}).then((response) => {
+                setInfo(response);
+            });
+        };
+        const data = address ? address.replace("0x", "") : "";
+        load(data);
+    }, [address]);
+
+    const renderFunctions = (template: GetTemplateResponse) => {
+        return (
+            <TableContainer>
+                <BoxHeading2>{template.abi.template_name} {template.abi.version}</BoxHeading2>
+                <Table>
+                    <TableHead>
+                        <TableRow>
+                            <TableCell>Function</TableCell>
+                            <TableCell>Args</TableCell>
+                            <TableCell>Returns</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {template.abi.functions.map((fn) => (
+                            <TableRow key={fn.name}>
+                                <DataTableCell style={{textAlign: "left"}}>{fn.name}</DataTableCell>
+                                <DataTableCell>
+                                    {fn.arguments
+                                        .map((a: ArgDef) => {
+                                            return a.name + ":" + a.arg_type;
+                                        })
+                                        .join(", ")}
+                                </DataTableCell>
+                                <DataTableCell>{fn.output}</DataTableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        );
     };
-    const data = address ? fromHexString(address.replace("0x", "")) : new Uint8Array();
-    load(data);
-  }, [address]);
 
-  const renderFunctions = (template: GetTemplateResponse) => {
     return (
-      <TableContainer>
-        <BoxHeading2>{template.abi.template_name}</BoxHeading2>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Function</TableCell>
-              <TableCell>Args</TableCell>
-              <TableCell>Returns</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {template.abi.functions.map((fn) => (
-              <TableRow key={fn.name}>
-                <DataTableCell style={{ textAlign: "left" }}>{fn.name}</DataTableCell>
-                <DataTableCell>
-                  {fn.arguments
-                    .map((a: ArgDef) => {
-                      return a.name + ":" + a.arg_type;
-                    })
-                    .join(", ")}
-                </DataTableCell>
-                <DataTableCell>{fn.output}</DataTableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+        <>
+            <Grid item xs={12} md={12} lg={12}>
+                <PageHeading>Template Functions</PageHeading>
+            </Grid>
+            <Grid item xs={12} md={12} lg={12}>
+                <StyledPaper>
+                    <BoxHeading>Address: {address}</BoxHeading>
+                    {info ? renderFunctions(info) : ""}
+                </StyledPaper>
+            </Grid>
+        </>
     );
-  };
-
-  return (
-    <>
-      <Grid item xs={12} md={12} lg={12}>
-        <PageHeading>Template Functions</PageHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <BoxHeading>Address: {address}</BoxHeading>
-          {info ? renderFunctions(info) : ""}
-        </StyledPaper>
-      </Grid>
-    </>
-  );
 }
 
 export default TemplateFunctions;
