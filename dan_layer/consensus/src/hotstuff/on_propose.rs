@@ -10,7 +10,7 @@ use std::{
 use indexmap::IndexMap;
 use log::*;
 use tari_common::configuration::Network;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
@@ -122,6 +122,7 @@ where TConsensusSpec: ConsensusSpec
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
+        let (_, current_base_layer_block_hash) = self.epoch_manager.current_base_layer_block_info().await?;
 
         let next_block = self.store.with_write_tx(|tx| {
             let high_qc = HighQc::get(tx.deref_mut())?;
@@ -136,6 +137,7 @@ where TConsensusSpec: ConsensusSpec
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
                 //       is a good idea.
                 is_newview_propose,
+                current_base_layer_block_hash,
             )?;
 
             next_block.as_last_proposed().set(tx)?;
@@ -192,6 +194,7 @@ where TConsensusSpec: ConsensusSpec
         proposed_by: PublicKey,
         local_committee_shard: &CommitteeShard,
         empty_block: bool,
+        current_base_layer_block_hash: FixedHash,
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
@@ -315,6 +318,7 @@ where TConsensusSpec: ConsensusSpec
             total_leader_fee,
             foreign_indexes,
             None,
+            current_base_layer_block_hash,
         );
 
         let signature = self.signing_service.sign(next_block.id());

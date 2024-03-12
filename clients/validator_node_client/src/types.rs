@@ -25,7 +25,10 @@ use std::{ops::RangeInclusive, time::Duration};
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use tari_base_node_client::types::BaseLayerValidatorNode;
-use tari_common_types::{transaction::TxId, types::PublicKey};
+use tari_common_types::{
+    transaction::TxId,
+    types::{FixedHash, PublicKey},
+};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     shard::Shard,
@@ -633,6 +636,8 @@ pub struct GetEpochManagerStatsResponse {
     pub current_epoch: Epoch,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub current_block_height: u64,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub current_block_hash: FixedHash,
     pub is_valid: bool,
     pub committee_shard: Option<CommitteeShard>,
 }

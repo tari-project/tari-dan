@@ -103,7 +103,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
     async fn handle_request(&mut self, req: EpochManagerRequest<TAddr>) {
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
-            EpochManagerRequest::CurrentBlockHeight { reply } => handle(reply, Ok(self.inner.current_block_height())),
+            EpochManagerRequest::CurrentBlockInfo { reply } => handle(reply, Ok(self.inner.current_block_info())),
             EpochManagerRequest::GetValidatorNode { epoch, addr, reply } => handle(
                 reply,
                 self.inner.get_validator_node_by_address(epoch, &addr).and_then(|x| {

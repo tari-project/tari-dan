@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use rand::{rngs::OsRng, RngCore};
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, Command, Decision, TransactionAtom, TransactionPoolStage, TransactionPoolStatusUpdate},
@@ -59,6 +60,7 @@ mod confirm_all_transitions {
             Default::default(),
             Default::default(),
             None,
+            FixedHash::zero(),
         );
         block1.insert(&mut tx).unwrap();
 

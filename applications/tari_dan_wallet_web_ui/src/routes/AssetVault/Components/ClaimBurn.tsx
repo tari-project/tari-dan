@@ -37,7 +37,7 @@ import { useTheme } from "@mui/material/styles";
 import { accountsClaimBurn } from "../../../utils/json_rpc";
 import useAccountStore from "../../../store/accountStore";
 import { useKeysList } from "../../../api/hooks/useKeys";
-import type { AccountInfo } from "@tarilabs/typescript-bindings/wallet-daemon-client";
+import type { AccountInfo } from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 export default function ClaimBurn() {
   const [open, setOpen] = useState(false);

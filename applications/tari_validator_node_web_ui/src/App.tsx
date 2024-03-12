@@ -40,7 +40,7 @@ import BlockDetails from "./routes/Blocks/BlockDetails";
 import type {
   GetEpochManagerStatsResponse,
   GetIdentityResponse,
-} from "@tarilabs/typescript-bindings/validator-node-client";
+} from "@tariproject/typescript-bindings/validator-node-client";
 
 interface IContext {
   epoch?: GetEpochManagerStatsResponse;

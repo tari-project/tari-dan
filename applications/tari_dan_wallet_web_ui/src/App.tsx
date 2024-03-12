@@ -106,7 +106,7 @@ function App() {
           <Route path="*" element={<ErrorPage />} />
         </Route>
       </Routes>
-      <Dialog open={popup.visible} onClose={handleClose}>
+      <Dialog open={popup.visible || false} onClose={handleClose}>
         <DialogTitle>
           {popup?.error ? <div style={{ color: "red" }}>{popup?.title}</div> : <div>{popup?.title}</div>}
         </DialogTitle>

@@ -8,7 +8,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
@@ -151,6 +151,10 @@ impl EpochManagerReader for TestEpochManager {
         Ok(self.inner.lock().await.current_epoch)
     }
 
+    async fn current_base_layer_block_info(&self) -> Result<(u64, FixedHash), EpochManagerError> {
+        Ok(self.inner.lock().await.current_block_info)
+    }
+
     async fn is_epoch_active(&self, _epoch: Epoch) -> Result<bool, EpochManagerError> {
         Ok(self.inner.lock().await.is_epoch_active)
     }
@@ -263,6 +267,7 @@ impl EpochManagerReader for TestEpochManager {
 #[derive(Debug, Clone)]
 pub struct TestEpochManagerState {
     pub current_epoch: Epoch,
+    pub current_block_info: (u64, FixedHash),
     pub is_epoch_active: bool,
     pub validator_shards: HashMap<TestAddress, (Shard, SubstateAddress, PublicKey)>,
     pub committees: HashMap<Shard, Committee<TestAddress>>,
@@ -273,6 +278,7 @@ impl Default for TestEpochManagerState {
     fn default() -> Self {
         Self {
             current_epoch: Epoch(0),
+            current_block_info: (0, FixedHash::default()),
             validator_shards: HashMap::new(),
             is_epoch_active: false,
             committees: HashMap::new(),

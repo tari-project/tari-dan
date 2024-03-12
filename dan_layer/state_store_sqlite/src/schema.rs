@@ -20,6 +20,7 @@ diesel::table! {
         foreign_indexes -> Text,
         signature -> Nullable<Text>,
         created_at -> Timestamp,
+        base_layer_block_hash -> Text,
     }
 }
 
@@ -157,6 +158,7 @@ diesel::table! {
         foreign_indexes -> Text,
         signature -> Nullable<Text>,
         created_at -> Timestamp,
+        base_layer_block_hash -> Text,
     }
 }
 

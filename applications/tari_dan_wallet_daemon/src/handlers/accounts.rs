@@ -75,8 +75,8 @@ use crate::{
         get_account_or_default,
         get_account_with_inputs,
         invalid_params,
-        wait_for_account_create_or_update,
         wait_for_result,
+        wait_for_result_and_account,
     },
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
     services::{NewAccountInfo, TransactionSubmittedEvent},
@@ -730,7 +730,10 @@ async fn finish_claiming<T: WalletStore>(
             is_default: is_first_account,
         }),
     });
-    let finalized = wait_for_result(&mut events, tx_id).await?;
+
+    // Wait for the monitor to pick up the new or updated account
+    let (finalized, _) = wait_for_result_and_account(&mut events, &tx_id, &account_address).await?;
+    // let finalized = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = finalized.finalize.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
@@ -740,9 +743,6 @@ async fn finish_claiming<T: WalletStore>(
             reason
         ));
     }
-
-    // Wait for the monitor to pick up the new or updated account
-    wait_for_account_create_or_update(&mut events, &account_address).await?;
 
     Ok((tx_id, finalized))
 }
@@ -906,9 +906,20 @@ pub async fn handle_transfer(
     let destination_account_address =
         get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
 
+    if let Some(ref badge) = req.proof_from_badge_resource {
+        instructions.extend([
+            Instruction::CallMethod {
+                component_address: source_account_address,
+                method: "create_proof_for_resource".to_string(),
+                args: args![badge],
+            },
+            Instruction::PutLastInstructionOutputOnWorkspace { key: b"proof".to_vec() },
+        ]);
+    }
+
     // build the transaction
     let max_fee = req.max_fee.unwrap_or(DEFAULT_FEE);
-    instructions.append(&mut vec![
+    instructions.extend([
         Instruction::CallMethod {
             component_address: source_account_address,
             method: "withdraw".to_string(),
@@ -924,7 +935,11 @@ pub async fn handle_transfer(
         },
     ]);
 
-    fee_instructions.append(&mut vec![Instruction::CallMethod {
+    if req.proof_from_badge_resource.is_some() {
+        instructions.push(Instruction::DropAllProofsInWorkspace);
+    }
+
+    fee_instructions.extend([Instruction::CallMethod {
         component_address: source_account_address,
         method: "pay_fee".to_string(),
         args: args![max_fee],

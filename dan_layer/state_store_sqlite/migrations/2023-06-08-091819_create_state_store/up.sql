@@ -12,24 +12,25 @@ create unique index quorum_certificates_uniq_idx_id on quorum_certificates (qc_i
 
 create table blocks
 (
-    id               integer   not null primary key AUTOINCREMENT,
-    block_id         text      not NULL,
-    parent_block_id  text      not NULL,
-    merkle_root      text      not NULL,
-    network          text      not NULL,
-    height           bigint    not NULL,
-    epoch            bigint    not NULL,
-    proposed_by      text      not NULL,
-    qc_id            text      not NULL,
-    command_count    bigint    not NULL,
-    commands         text      not NULL,
-    total_leader_fee bigint    not NULL,
-    is_committed     boolean   not NULL default '0',
-    is_processed     boolean   not NULL,
-    is_dummy         boolean   not NULL,
-    foreign_indexes  text      not NULL,
-    signature        text      NULL,
-    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                    integer   not null primary key AUTOINCREMENT,
+    block_id              text      not NULL,
+    parent_block_id       text      not NULL,
+    merkle_root           text      not NULL,
+    network               text      not NULL,
+    height                bigint    not NULL,
+    epoch                 bigint    not NULL,
+    proposed_by           text      not NULL,
+    qc_id                 text      not NULL,
+    command_count         bigint    not NULL,
+    commands              text      not NULL,
+    total_leader_fee      bigint    not NULL,
+    is_committed          boolean   not NULL default '0',
+    is_processed          boolean   not NULL,
+    is_dummy              boolean   not NULL,
+    foreign_indexes       text      not NULL,
+    signature             text      NULL,
+    created_at            timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    base_layer_block_hash text not NULL,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
 
@@ -37,22 +38,23 @@ create table blocks
 create unique index blocks_uniq_idx_id on blocks (block_id);
 
 create table parked_blocks
-(
-    id               integer   not null primary key AUTOINCREMENT,
-    block_id         text      not NULL,
-    parent_block_id  text      not NULL,
-    merkle_root      text      not NULL,
-    network          text      not NULL,
-    height           bigint    not NULL,
-    epoch            bigint    not NULL,
-    proposed_by      text      not NULL,
-    justify          text      not NULL,
-    command_count    bigint    not NULL,
-    commands         text      not NULL,
-    total_leader_fee bigint    not NULL,
-    foreign_indexes  text      not NULL,
-    signature        text      NULL,
-    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+(   
+    id                    integer not null primary key AUTOINCREMENT,
+    block_id              text    not NULL,
+    parent_block_id       text    not NULL,
+    merkle_root           text    not NULL,
+    network               text    not NULL,
+    height                bigint  not NULL,
+    epoch                 bigint  not NULL,
+    proposed_by           text    not NULL,
+    justify               text    not NULL,
+    command_count         bigint  not NULL,
+    commands              text    not NULL,
+    total_leader_fee      bigint  not NULL,
+    foreign_indexes       text    not NULL,
+    signature             text        NULL,
+    base_layer_block_hash text    not NULL,
+    created_at            timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- block_id must be unique. Optimise fetching by block_id

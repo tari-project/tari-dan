@@ -39,7 +39,7 @@ import HeadingMenu from "../../../Components/HeadingMenu";
 import SearchFilter from "../../../Components/SearchFilter";
 import Fade from "@mui/material/Fade";
 import StatusChip from "../../../Components/StatusChip";
-import type { Block } from "@tarilabs/typescript-bindings";
+import type { Block } from "@tariproject/typescript-bindings";
 
 export interface ITableBlock {
   id: string;
