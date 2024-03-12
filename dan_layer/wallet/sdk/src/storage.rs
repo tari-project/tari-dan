@@ -229,14 +229,14 @@ pub trait WalletStoreWriter {
     ) -> Result<(), WalletStorageError>;
 
     // Substates
-    fn substates_insert_root(
+    fn substates_upsert_root(
         &mut self,
         transaction_id: TransactionId,
         address: VersionedSubstateId,
         module_name: Option<String>,
         template_addr: Option<TemplateAddress>,
     ) -> Result<(), WalletStorageError>;
-    fn substates_insert_child(
+    fn substates_upsert_child(
         &mut self,
         transaction_id: TransactionId,
         parent: SubstateId,
@@ -282,5 +282,5 @@ pub trait WalletStoreWriter {
     ) -> Result<(), WalletStorageError>;
 
     // Non fungible tokens
-    fn non_fungible_token_insert(&mut self, non_fungible_token: &NonFungibleToken) -> Result<(), WalletStorageError>;
+    fn non_fungible_token_upsert(&mut self, non_fungible_token: &NonFungibleToken) -> Result<(), WalletStorageError>;
 }

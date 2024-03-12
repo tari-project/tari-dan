@@ -25,7 +25,7 @@ mod template {
             let fungible_resource = fungible.resource_address();
 
             let non_fungible = ResourceBuilder::non_fungible()
-                .mint_many_with(1..=10, |n| (NonFungibleId::from_u32(n), (Vec::new(), Vec::new())))
+                .mint_many_with(1..=10, |n| (NonFungibleId::from_u32(n), (&(), &())))
                 .recallable(AccessRule::AllowAll)
                 .build_bucket();
             let non_fungible_resource = non_fungible.resource_address();

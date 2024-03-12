@@ -309,7 +309,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Substates -------------------------------- //
-    fn substates_insert_root(
+    fn substates_upsert_root(
         &mut self,
         transaction_id: TransactionId,
         address: VersionedSubstateId,
@@ -322,17 +322,25 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             .values((
                 substates::address.eq(address.substate_id.to_string()),
                 substates::transaction_hash.eq(transaction_id.to_string()),
-                substates::module_name.eq(module_name),
+                substates::module_name.eq(&module_name),
+                substates::template_address.eq(template_addr.map(|a| a.to_string())),
+                substates::version.eq(address.version as i32),
+            ))
+            .on_conflict(substates::address)
+            .do_update()
+            .set((
+                substates::transaction_hash.eq(transaction_id.to_string()),
+                substates::module_name.eq(&module_name),
                 substates::template_address.eq(template_addr.map(|a| a.to_string())),
                 substates::version.eq(address.version as i32),
             ))
             .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("substates_insert_root", e))?;
+            .map_err(|e| WalletStorageError::general("substates_upsert_root", e))?;
 
         Ok(())
     }
 
-    fn substates_insert_child(
+    fn substates_upsert_child(
         &mut self,
         transaction_id: TransactionId,
         parent: SubstateId,
@@ -347,8 +355,15 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 substates::parent_address.eq(Some(parent.to_string())),
                 substates::version.eq(child.version as i32),
             ))
+            .on_conflict(substates::address)
+            .do_update()
+            .set((
+                substates::transaction_hash.eq(transaction_id.to_string()),
+                substates::parent_address.eq(Some(parent.to_string())),
+                substates::version.eq(child.version as i32),
+            ))
             .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("substates_insert_child", e))?;
+            .map_err(|e| WalletStorageError::general("substates_upsert_child", e))?;
 
         Ok(())
     }
@@ -720,7 +735,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Non fungible tokens -------------------------------- //
-    fn non_fungible_token_insert(
+    fn non_fungible_token_upsert(
         &mut self,
         non_fungible_token: &tari_dan_wallet_sdk::models::NonFungibleToken,
     ) -> Result<(), WalletStorageError> {
@@ -731,10 +746,16 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             "Inserting new non fungible token with id = {}", non_fungible_token.nft_id
         );
 
-        let metadata =
-            serde_json::to_string(&non_fungible_token.metadata).map_err(|e| WalletStorageError::DecodingError {
-                operation: "non_fungible_token_insert",
-                item: "non_fungible_tokens",
+        let data = serde_json::to_string(&non_fungible_token.data).map_err(|e| WalletStorageError::DecodingError {
+            operation: "non_fungible_token_upsert",
+            item: "non_fungible_tokens.data",
+            details: e.to_string(),
+        })?;
+
+        let mutable_data =
+            serde_json::to_string(&non_fungible_token.mutable_data).map_err(|e| WalletStorageError::DecodingError {
+                operation: "non_fungible_token_upsert",
+                item: "non_fungible_tokens.mutable_data",
                 details: e.to_string(),
             })?;
 
@@ -747,12 +768,21 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         diesel::insert_into(non_fungible_tokens::table)
             .values((
                 non_fungible_tokens::nft_id.eq(non_fungible_token.nft_id.to_canonical_string()),
-                non_fungible_tokens::metadata.eq(metadata),
+                non_fungible_tokens::data.eq(&data),
+                non_fungible_tokens::mutable_data.eq(&mutable_data),
+                non_fungible_tokens::vault_id.eq(vault_id),
+                non_fungible_tokens::is_burned.eq(non_fungible_token.is_burned),
+            ))
+            .on_conflict(non_fungible_tokens::nft_id)
+            .do_update()
+            .set((
+                non_fungible_tokens::data.eq(&data),
+                non_fungible_tokens::mutable_data.eq(&mutable_data),
                 non_fungible_tokens::vault_id.eq(vault_id),
                 non_fungible_tokens::is_burned.eq(non_fungible_token.is_burned),
             ))
             .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("non_fungible_token_insert", e))?;
+            .map_err(|e| WalletStorageError::general("non_fungible_token_upsert", e))?;
 
         info!(
             target: LOG_TARGET,
