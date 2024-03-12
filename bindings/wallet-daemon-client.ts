@@ -81,7 +81,6 @@ export * from "./src/types/wallet-daemon-client/KeysSetActiveResponse";
 export * from "./src/types/wallet-daemon-client/ComponentAddressOrName";
 export * from "./src/types/wallet-daemon-client/AuthLoginAcceptRequest";
 export * from "./src/types/wallet-daemon-client/KeysSetActiveRequest";
-export * from "./src/types/wallet-daemon-client/AccountNftInfo";
 export * from "./src/types/wallet-daemon-client/ConfidentialTransferRequest";
 export * from "./src/types/wallet-daemon-client/AccountsCreateResponse";
 export * from "./src/types/wallet-daemon-client/TransactionWaitResultResponse";

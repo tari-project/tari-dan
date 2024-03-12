@@ -29,9 +29,10 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use tari_dan_wallet_sdk::models::NonFungibleToken;
 use tari_template_lib::prelude::{Amount, NonFungibleId};
 use tari_wallet_daemon_client::{
-    types::{AccountNftInfo, GetAccountNftRequest, ListAccountNftRequest, MintAccountNftRequest},
+    types::{GetAccountNftRequest, ListAccountNftRequest, MintAccountNftRequest},
     ComponentAddressOrName,
     WalletDaemonClient,
 };
@@ -173,7 +174,7 @@ pub async fn handle_get_account_nft(
 
     println!(
         "Account NFT with metadata {} is_burned: {}",
-        resp.metadata, resp.is_burned
+        resp.nft_id, resp.is_burned
     );
     println!();
 
@@ -197,10 +198,16 @@ pub async fn handle_list_account_nfts(
 
     let mut table = Table::new();
     table.enable_row_count();
-    table.set_titles(vec!["Name", "Address", "Public Key", "Default"]);
-    println!("Accounts:");
-    for AccountNftInfo { metadata, is_burned } in resp.nfts {
-        table.add_row(table_row!(metadata, is_burned));
+    table.set_titles(vec!["NFT ID", "Vault", "Burnt"]);
+    println!("NFTs:");
+    for NonFungibleToken {
+        vault_id,
+        nft_id,
+        is_burned,
+        ..
+    } in resp.nfts
+    {
+        table.add_row(table_row!(nft_id, vault_id, is_burned));
     }
     table.print_stdout();
     Ok(())

@@ -270,7 +270,8 @@ where
         for (component_addr, substate) in components {
             let header = substate.substate_value().component().unwrap();
 
-            tx.substates_insert_root(
+            info!(target: LOG_TARGET, "Substate {} up", component_addr);
+            tx.substates_upsert_root(
                 transaction_id,
                 VersionedSubstateId {
                     substate_id: component_addr.clone(),
@@ -285,7 +286,7 @@ where
             for owned_addr in value.referenced_substates() {
                 if let Some(pos) = rest.iter().position(|(addr, _)| addr == &owned_addr) {
                     let (_, s) = rest.swap_remove(pos);
-                    tx.substates_insert_child(transaction_id, component_addr.clone(), VersionedSubstateId {
+                    tx.substates_upsert_child(transaction_id, component_addr.clone(), VersionedSubstateId {
                         substate_id: owned_addr,
                         version: s.version(),
                     })?;
@@ -294,7 +295,7 @@ where
         }
 
         for (addr, substate) in rest {
-            tx.substates_insert_root(
+            tx.substates_upsert_root(
                 transaction_id,
                 VersionedSubstateId {
                     substate_id: addr.clone(),

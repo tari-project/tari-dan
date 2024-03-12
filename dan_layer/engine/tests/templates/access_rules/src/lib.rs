@@ -9,12 +9,7 @@ pub fn create_badge_resource(recall_rule: AccessRule) -> Bucket {
     let mut metadata = Metadata::new();
     metadata.insert("colour", "blue");
     ResourceBuilder::non_fungible()
-        .mint_many_with(BADGE_NAMES, |name| {
-            (
-                NonFungibleId::from_string(name),
-                (tari_bor::encode(&metadata).unwrap(), Vec::new()),
-            )
-        })
+        .mint_many_with(BADGE_NAMES, |name| (NonFungibleId::from_string(name), (&metadata, &())))
         .recallable(recall_rule)
         .build_bucket()
 }

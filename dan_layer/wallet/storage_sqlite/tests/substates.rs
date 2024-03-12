@@ -25,7 +25,7 @@ fn get_and_insert_substates() {
     assert!(substate.is_none());
     let hash = TransactionId::default();
     let address = SubstateId::from_str("component_1f019e4d434cbf2b99c0af89ee212f422af86de7280a169d2e392dfb").unwrap();
-    tx.substates_insert_root(
+    tx.substates_upsert_root(
         hash,
         VersionedSubstateId {
             substate_id: address.clone(),
@@ -38,7 +38,7 @@ fn get_and_insert_substates() {
 
     let child_address =
         SubstateId::from_str("component_d9e4a7ce7dbaa73ce10aabf309dd702054756a813f454ef13564f298").unwrap();
-    tx.substates_insert_child(hash, address.clone(), VersionedSubstateId {
+    tx.substates_upsert_child(hash, address.clone(), VersionedSubstateId {
         substate_id: child_address.clone(),
         version: 0,
     })
