@@ -98,14 +98,7 @@ async fn fees_are_enabled(world: &mut TariWorld) {
 
 #[given(expr = "a validator node {word} connected to base node {word} and wallet {word}")]
 async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_name: String) {
-    let vn = spawn_validator_node(world, vn_name.clone(), bn_name, wallet_name, Duration::ZERO).await;
-    world.validator_nodes.insert(vn_name, vn);
-}
-
-#[given(expr = "a validator node {word} with minimum block time {int} seconds connected to base node {word} and wallet {word}")]
-async fn start_validator_node_block_time(world: &mut TariWorld, vn_name: String, min_block_time: usize, bn_name: String, wallet_name: String) {
-    let min_block_time = Duration::from_secs(min_block_time.try_into().unwrap());
-    let vn = spawn_validator_node(world, vn_name.clone(), bn_name, wallet_name, min_block_time).await;
+    let vn = spawn_validator_node(world, vn_name.clone(), bn_name, wallet_name).await;
     world.validator_nodes.insert(vn_name, vn);
 }
 

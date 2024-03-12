@@ -23,7 +23,7 @@ use tari_validator_node_client::types::{AddPeerRequest, GetStateRequest, GetTemp
 
 #[given(expr = "a seed validator node {word} connected to base node {word} and wallet {word}")]
 async fn start_seed_validator_node(world: &mut TariWorld, seed_vn_name: String, bn_name: String, wallet_name: String) {
-    let validator = spawn_validator_node(world, seed_vn_name.clone(), bn_name, wallet_name, Duration::ZERO).await;
+    let validator = spawn_validator_node(world, seed_vn_name.clone(), bn_name, wallet_name).await;
     // Ensure any existing nodes know about the new seed node
     let mut client = validator.get_client();
     let ident = client.get_identity().await.unwrap();
@@ -57,7 +57,7 @@ async fn start_seed_validator_node(world: &mut TariWorld, seed_vn_name: String, 
 async fn start_multiple_validator_nodes(world: &mut TariWorld, num_nodes: u64, bn_name: String, wallet_name: String) {
     for i in 1..=num_nodes {
         let vn_name = format!("VAL_{i}");
-        let vn = spawn_validator_node(world, vn_name.clone(), bn_name.clone(), wallet_name.clone(), Duration::ZERO).await;
+        let vn = spawn_validator_node(world, vn_name.clone(), bn_name.clone(), wallet_name.clone()).await;
         world.validator_nodes.insert(vn_name, vn);
     }
 }

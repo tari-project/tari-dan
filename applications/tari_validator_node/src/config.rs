@@ -106,8 +106,6 @@ pub struct ValidatorNodeConfig {
     pub fee_claim_public_key: RistrettoPublicKey,
     /// Create identity file if not exists
     pub dont_create_id: bool,
-    /// Minimum time between blocks
-    pub min_block_time: Duration,
 }
 
 impl ValidatorNodeConfig {
@@ -151,7 +149,6 @@ impl Default for ValidatorNodeConfig {
             // Burn your fees
             fee_claim_public_key: RistrettoPublicKey::default(),
             dont_create_id: false,
-            min_block_time: Duration::ZERO,
         }
     }
 }

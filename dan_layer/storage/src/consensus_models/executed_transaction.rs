@@ -145,7 +145,9 @@ impl ExecutedTransaction {
     }
 
     pub fn to_initial_evidence(&self) -> Evidence {
+        // Note that we only add evidence for inputs that have specific version numbers
         let mut deduped_evidence = HashMap::new();
+
         deduped_evidence.extend(self.transaction
             .inputs()
             .iter()
