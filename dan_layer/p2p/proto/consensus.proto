@@ -52,6 +52,7 @@ message Block {
   uint64 total_leader_fee = 10;
   bytes foreign_indexes = 11;
   tari.dan.common.Signature signature = 12;
+  bytes base_layer_block_hash = 14;
 }
 
 message Command {

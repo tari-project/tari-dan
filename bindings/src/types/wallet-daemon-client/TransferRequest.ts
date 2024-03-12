@@ -9,5 +9,6 @@ export interface TransferRequest {
   resource_address: ResourceAddress;
   destination_public_key: string;
   max_fee: Amount | null;
+  proof_from_badge_resource: string | null;
   dry_run: boolean;
 }
