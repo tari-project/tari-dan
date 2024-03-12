@@ -594,16 +594,17 @@ impl JsonRpcHandlers {
                 ),
             )
         })?;
-        let current_block_height = self.epoch_manager.current_block_height().await.map_err(|e| {
-            JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InternalError,
-                    format!("Could not get current block height: {}", e),
-                    json::Value::Null,
-                ),
-            )
-        })?;
+        let (current_block_height, current_block_hash) =
+            self.epoch_manager.current_block_info().await.map_err(|e| {
+                JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InternalError,
+                        format!("Could not get current block height: {}", e),
+                        json::Value::Null,
+                    ),
+                )
+            })?;
         let committee_shard = self
             .epoch_manager
             .get_local_committee_shard(current_epoch)
@@ -626,6 +627,7 @@ impl JsonRpcHandlers {
         let response = GetEpochManagerStatsResponse {
             current_epoch,
             current_block_height,
+            current_block_hash,
             is_valid: committee_shard.is_some(),
             committee_shard,
         };

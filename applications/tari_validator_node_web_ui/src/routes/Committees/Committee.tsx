@@ -31,7 +31,7 @@ import IconButton from "@mui/material/IconButton";
 import Collapse from "@mui/material/Collapse";
 import { Typography } from "@mui/material";
 import ManageSearchOutlinedIcon from "@mui/icons-material/ManageSearchOutlined";
-import type { ValidatorNode } from "@tarilabs/typescript-bindings/validator-node-client";
+import type { ValidatorNode } from "@tariproject/typescript-bindings/validator-node-client";
 
 function Committee({
   begin,

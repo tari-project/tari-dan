@@ -30,7 +30,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import CodeBlockExpand from "../../Components/CodeBlock";
 import { useTheme } from "@mui/material/styles";
-import type { Event } from "@tarilabs/typescript-bindings";
+import type { Event } from "@tariproject/typescript-bindings";
 
 function RowData({ component_address, template_address, topic, tx_hash, payload }: Event, index: number) {
   const [open, setOpen] = useState(false);

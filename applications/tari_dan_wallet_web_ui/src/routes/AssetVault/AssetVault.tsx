@@ -34,17 +34,7 @@ function AssetVault() {
     setAccountName(dataAccountsList.accounts[0].account.name || "");
   }
 
-  return (
-    <>
-      {accountName ? (
-        <>
-          <MyAssets />
-        </>
-      ) : (
-        <Onboarding />
-      )}
-    </>
-  );
+  return <>{accountName ? <MyAssets /> : <Onboarding />}</>;
 }
 
 export default AssetVault;

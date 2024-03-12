@@ -34,7 +34,7 @@ import { TextField } from "@mui/material";
 import type {
   GetEpochManagerStatsResponse,
   GetIdentityResponse,
-} from "@tarilabs/typescript-bindings/validator-node-client";
+} from "@tariproject/typescript-bindings/validator-node-client";
 
 function Info({
   epoch,
