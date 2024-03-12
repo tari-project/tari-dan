@@ -26,7 +26,7 @@ import "../../theme/echarts.css";
 import type {
   CommitteeShardInfo,
   GetNetworkCommitteeResponse,
-} from "@tarilabs/typescript-bindings/validator-node-client";
+} from "@tariproject/typescript-bindings/validator-node-client";
 
 interface IData {
   value: number;

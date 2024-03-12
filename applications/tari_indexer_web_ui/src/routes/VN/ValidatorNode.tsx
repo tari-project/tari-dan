@@ -20,84 +20,84 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from "react";
+import {useEffect, useState} from "react";
 import Connections from "./Components/Connections";
 import Info from "./Components/Info";
-import { getIdentity } from "../../utils/json_rpc";
+import {getIdentity} from "../../utils/json_rpc";
 import RecentTransactions from "./Components/RecentTransactions";
 import "./ValidatorNode.css";
-import { StyledPaper } from "../../Components/StyledComponents";
+import {StyledPaper} from "../../Components/StyledComponents";
 import Grid from "@mui/material/Grid";
 import SecondaryHeading from "../../Components/SecondaryHeading";
 import MonitoredSubstates from "./Components/MonitoredSubstates";
 import MonitoredNftCollections from "./Components/MonitoredNftCollections";
-import type { GetIdentityResponse } from "@tarilabs/typescript-bindings/tari-indexer-client";
+import type {GetIdentityResponse} from "@tariproject/typescript-bindings/tari-indexer-client";
 
 function ValidatorNode() {
-  const [identity, setIdentity] = useState<GetIdentityResponse>();
-  const [error, setError] = useState("");
-  // Initial fetch
-  useEffect(() => {
-    getIdentity()
-      .then((response) => {
-        setIdentity(response);
-      })
-      .catch((reason) => {
-        console.log(reason);
-        setError("Json RPC error, please check console");
-      });
-  }, []);
-  useEffect(() => {
-    // getRecentTransactions();
-  }, []);
-  if (error !== "") {
-    return <div className="error">{error}</div>;
-  }
-  if (identity === undefined) return <div>Loading</div>;
-  return (
-    <>
-      <Grid item sm={12} md={12} xs={12}>
-        <SecondaryHeading>Info</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <Info identity={identity} />
-        </StyledPaper>
-      </Grid>
-      <Grid item sm={12} md={12} xs={12}>
-        <SecondaryHeading>Monitored Substates</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <MonitoredSubstates />
-        </StyledPaper>
-      </Grid>
-      <Grid item sm={12} md={12} xs={12}>
-        <SecondaryHeading>Monitored NFT collections</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <MonitoredNftCollections />
-        </StyledPaper>
-      </Grid>
-      <Grid item sm={12} md={12} xs={12}>
-        <SecondaryHeading>Connections</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <Connections />
-        </StyledPaper>
-      </Grid>
-      <Grid item sm={12} md={12} xs={12}>
-        <SecondaryHeading>Recent Transactions</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <RecentTransactions />
-        </StyledPaper>
-      </Grid>
-    </>
-  );
+    const [identity, setIdentity] = useState<GetIdentityResponse>();
+    const [error, setError] = useState("");
+    // Initial fetch
+    useEffect(() => {
+        getIdentity()
+            .then((response) => {
+                setIdentity(response);
+            })
+            .catch((reason) => {
+                console.log(reason);
+                setError("Json RPC error, please check console");
+            });
+    }, []);
+    useEffect(() => {
+        // getRecentTransactions();
+    }, []);
+    if (error !== "") {
+        return <div className="error">{error}</div>;
+    }
+    if (identity === undefined) return <div>Loading</div>;
+    return (
+        <>
+            <Grid item sm={12} md={12} xs={12}>
+                <SecondaryHeading>Info</SecondaryHeading>
+            </Grid>
+            <Grid item xs={12} md={12} lg={12}>
+                <StyledPaper>
+                    <Info identity={identity}/>
+                </StyledPaper>
+            </Grid>
+            <Grid item sm={12} md={12} xs={12}>
+                <SecondaryHeading>Monitored Substates</SecondaryHeading>
+            </Grid>
+            <Grid item xs={12} md={12} lg={12}>
+                <StyledPaper>
+                    <MonitoredSubstates/>
+                </StyledPaper>
+            </Grid>
+            <Grid item sm={12} md={12} xs={12}>
+                <SecondaryHeading>Monitored NFT collections</SecondaryHeading>
+            </Grid>
+            <Grid item xs={12} md={12} lg={12}>
+                <StyledPaper>
+                    <MonitoredNftCollections/>
+                </StyledPaper>
+            </Grid>
+            <Grid item sm={12} md={12} xs={12}>
+                <SecondaryHeading>Connections</SecondaryHeading>
+            </Grid>
+            <Grid item xs={12} md={12} lg={12}>
+                <StyledPaper>
+                    <Connections/>
+                </StyledPaper>
+            </Grid>
+            <Grid item sm={12} md={12} xs={12}>
+                <SecondaryHeading>Recent Transactions</SecondaryHeading>
+            </Grid>
+            <Grid item xs={12} md={12} lg={12}>
+                <StyledPaper>
+                    <RecentTransactions/>
+                </StyledPaper>
+            </Grid>
+        </>
+    );
 }
 
 export default ValidatorNode;

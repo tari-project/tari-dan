@@ -336,6 +336,7 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
             resource_address,
             destination_public_key,
             max_fee: fee,
+            proof_from_badge_resource: None,
             dry_run: false,
         })
         .await?;
