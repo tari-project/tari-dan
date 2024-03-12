@@ -55,6 +55,11 @@ message Block {
   bytes base_layer_block_hash = 14;
 }
 
+message LeaderFee {
+  uint64 leader_fee = 1;
+  uint64 global_exhaust_burn = 2;
+}
+
 message Command {
   oneof command {
     TransactionAtom prepare = 1;
@@ -84,7 +89,7 @@ message TransactionAtom {
   Decision decision = 3;
   Evidence evidence = 4;
   uint64 fee = 5;
-  uint64 leader_fee = 6;
+  LeaderFee leader_fee = 6;
 }
 
 enum Decision {

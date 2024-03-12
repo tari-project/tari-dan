@@ -84,6 +84,7 @@ export * from "./src/types/ComponentAccessRules";
 export * from "./src/types/SubstateDiff";
 export * from "./src/types/AccessRule";
 export * from "./src/types/VersionedSubstate";
+export * from "./src/types/LeaderFee";
 export * from "./src/types/ExecuteResult";
 export * from "./src/types/OwnerRule";
 export * from "./src/types/NonFungibleIndexAddress";

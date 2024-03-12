@@ -461,6 +461,7 @@ pub struct GetCommitteeRequest {
 pub struct GetCommitteeResponse {
     pub committee: Committee<PeerAddress>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "ts",
