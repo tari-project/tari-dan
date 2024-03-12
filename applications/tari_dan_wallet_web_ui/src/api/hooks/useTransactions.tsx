@@ -24,7 +24,7 @@ import { useQuery } from "@tanstack/react-query";
 import { transactionsGet, transactionsGetAll } from "../../utils/json_rpc";
 import { apiError } from "../helpers/types";
 
-import type { TransactionStatus } from "@tarilabs/typescript-bindings";
+import type { TransactionStatus } from "@tariproject/typescript-bindings";
 
 const useTransactionDetails = (hash: string) => {
   return useQuery({

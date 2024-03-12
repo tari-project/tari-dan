@@ -261,6 +261,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             commands: value.commands().iter().map(Into::into).collect(),
             foreign_indexes: encode(value.foreign_indexes()).unwrap(),
             signature: value.get_signature().map(Into::into),
+            base_layer_block_hash: value.base_layer_block_hash().as_bytes().to_vec(),
         }
     }
 }
@@ -293,6 +294,7 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
             value.total_leader_fee,
             decode_exact(&value.foreign_indexes)?,
             value.signature.map(TryInto::try_into).transpose()?,
+            value.base_layer_block_hash.try_into()?,
         ))
     }
 }

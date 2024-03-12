@@ -49,8 +49,8 @@ import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import { AccordionIconButton, CodeBlock, DataTableCell } from "../../../Components/StyledComponents";
 import { useAuthRevokeToken, useGetAllTokens } from "../../../api/hooks/useTokens";
 import { shortenString } from "../../../utils/helpers";
-import type { Claims, JrpcPermission, JrpcPermissions } from "@tarilabs/typescript-bindings";
-import { jrpcPermissionToString } from "@tarilabs/typescript-bindings";
+import type { Claims, JrpcPermission, JrpcPermissions } from "@tariproject/typescript-bindings";
+import { jrpcPermissionToString } from "@tariproject/typescript-bindings";
 
 function AlertDialog({ fn, row }: any) {
   const [open, setOpen] = useState(false);

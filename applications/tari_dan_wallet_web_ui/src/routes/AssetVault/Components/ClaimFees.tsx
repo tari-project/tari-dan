@@ -36,7 +36,7 @@ import useAccountStore from "../../../store/accountStore";
 import { FormControl, InputLabel, MenuItem, Select, SelectChangeEvent } from "@mui/material";
 import { useKeysList } from "../../../api/hooks/useKeys";
 import { validatorsClaimFees } from "../../../utils/json_rpc";
-import type { AccountInfo } from "@tarilabs/typescript-bindings/wallet-daemon-client";
+import type { AccountInfo } from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 export default function ClaimFees() {
   const [open, setOpen] = useState(false);

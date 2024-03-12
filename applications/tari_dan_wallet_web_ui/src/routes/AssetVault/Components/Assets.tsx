@@ -36,9 +36,11 @@ import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import {DataTableCell} from "../../../Components/StyledComponents";
 import {useAccountNFTsList, useAccountsGetBalances} from "../../../api/hooks/useAccounts";
 import useAccountStore from "../../../store/accountStore";
+import type {BalanceEntry} from "@tariproject/typescript-bindings/wallet-daemon-client";
+import Button from "@mui/material/Button/Button";
+import {SendMoneyDialog} from "./SendMoney";
 import {shortenString} from "../../../utils/helpers";
-import type {BalanceEntry} from "@tarilabs/typescript-bindings/wallet-daemon-client";
-import type {NonFungibleToken} from "@tarilabs/typescript-bindings";
+import type {NonFungibleToken} from "@tariproject/typescript-bindings";
 
 interface TabPanelProps {
     children?: React.ReactNode;
@@ -52,9 +54,13 @@ interface BalanceRowProps {
     resource_type: string;
     balance: number;
     confidential_balance: number;
+    onSendClicked?: (resource_address: string) => void;
 }
 
-function BalanceRow({token_symbol, resource_address, resource_type, balance, confidential_balance}: BalanceRowProps) {
+function BalanceRow({
+                        token_symbol, resource_address, resource_type, balance, confidential_balance,
+                        onSendClicked,
+                    }: BalanceRowProps) {
     const {showBalance} = useAccountStore();
     return (
         <TableRow key={token_symbol || resource_address}>
@@ -65,6 +71,11 @@ function BalanceRow({token_symbol, resource_address, resource_type, balance, con
             <DataTableCell>{resource_type}</DataTableCell>
             <DataTableCell>{showBalance ? balance : "*************"}</DataTableCell>
             <DataTableCell>{showBalance ? confidential_balance : "**************"}</DataTableCell>
+            <DataTableCell>
+                <Button variant="outlined" onClick={() => onSendClicked?.(resource_address)}>
+                    Send
+                </Button>
+            </DataTableCell>
         </TableRow>
     );
 }
@@ -109,6 +120,7 @@ function tabProps(index: number) {
 }
 
 function Assets({accountName}: { accountName: string }) {
+    const [resourceToSend, setResourceToSend] = useState<string | null>(null);
     const [value, setValue] = useState(0);
     const {showBalance} = useAccountStore();
 
@@ -130,8 +142,18 @@ function Assets({accountName}: { accountName: string }) {
         setValue(newValue);
     };
 
+    const handleSendResourceClicked = (resource: string) => {
+        setResourceToSend(resource);
+    };
+
     return (
         <Box sx={{width: "100%"}}>
+            <SendMoneyDialog
+                open={resourceToSend !== null}
+                handleClose={() => setResourceToSend(null)}
+                onSendComplete={() => setResourceToSend(null)}
+                resource_address={resourceToSend || ""}
+            />
             <Box sx={{borderBottom: 1, borderColor: "divider"}}>
                 <Tabs value={value} onChange={handleChange} aria-label="account assets" variant="standard">
                     <Tab label="Tokens" {...tabProps(0)} style={{width: 150}}/>
@@ -154,32 +176,30 @@ function Assets({accountName}: { accountName: string }) {
                                     <TableCell>Resource Type</TableCell>
                                     <TableCell>Revealed Balance</TableCell>
                                     <TableCell>Confidential Balance</TableCell>
+                                    <TableCell></TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {/* {balancesData?.balances.map((balance: number, index: number) =>
-                  BalanceRow(balance)
-                )} */}
                                 {balancesData?.balances.map(
-                                    ({
-                                         vault_address,
-                                         resource_address,
-                                         balance,
-                                         resource_type,
-                                         confidential_balance,
-                                         token_symbol,
-                                     }: BalanceEntry) => {
-                                        return (
-                                            <BalanceRow
-                                                key={resource_address}
-                                                token_symbol={token_symbol || ""}
-                                                resource_address={resource_address}
-                                                resource_type={resource_type}
-                                                balance={balance}
-                                                confidential_balance={confidential_balance}
-                                            />
-                                        );
-                                    },
+                                    (
+                                        {
+                                            resource_address,
+                                            balance,
+                                            resource_type,
+                                            confidential_balance,
+                                            token_symbol
+                                        }: BalanceEntry,
+                                        i,
+                                    ) =>
+                                        <BalanceRow
+                                            key={i}
+                                            token_symbol={token_symbol || ""}
+                                            resource_address={resource_address}
+                                            resource_type={resource_type}
+                                            balance={balance}
+                                            confidential_balance={confidential_balance}
+                                            onSendClicked={handleSendResourceClicked}
+                                        />
                                 )}
                             </TableBody>
                         </Table>
@@ -206,9 +226,9 @@ function Assets({accountName}: { accountName: string }) {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {nftsListData?.nfts.map((nft: NonFungibleToken, i) => {
-                                    return <NftDetails key={i} {...nft}/>;
-                                })}
+                                {nftsListData?.nfts.map((nft: NonFungibleToken, i) =>
+                                    <NftDetails key={i} {...nft}/>
+                                )}
                             </TableBody>
                         </Table>
                     </TableContainer>

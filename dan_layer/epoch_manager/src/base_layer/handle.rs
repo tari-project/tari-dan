@@ -106,10 +106,10 @@ impl<TAddr: NodeAddressable> EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    pub async fn current_block_height(&self) -> Result<u64, EpochManagerError> {
+    pub async fn current_block_info(&self) -> Result<(u64, FixedHash), EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(EpochManagerRequest::CurrentBlockHeight { reply: tx })
+            .send(EpochManagerRequest::CurrentBlockInfo { reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 
@@ -342,6 +342,16 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::CurrentEpoch { reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    async fn current_base_layer_block_info(&self) -> Result<(u64, FixedHash), EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::CurrentBlockInfo { reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 

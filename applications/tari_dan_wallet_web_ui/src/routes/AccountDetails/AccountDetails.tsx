@@ -35,8 +35,8 @@ import {shortenString} from "../../utils/helpers";
 import {DataTableCell} from "../../Components/StyledComponents";
 import CopyToClipboard from "../../Components/CopyToClipboard";
 import FetchStatusCheck from "../../Components/FetchStatusCheck";
-import {NonFungibleToken, substateIdToString} from "@tarilabs/typescript-bindings";
-import type {BalanceEntry} from "@tarilabs/typescript-bindings/wallet-daemon-client";
+import {NonFungibleToken, substateIdToString} from "@tariproject/typescript-bindings";
+import type {BalanceEntry} from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 function BalanceRow(props: BalanceEntry) {
     return (
@@ -170,9 +170,9 @@ function AccountDetailsLayout() {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {nftsListData?.nfts.map((nft: NonFungibleToken, index: number) => (
+                                {nftsListData?.nfts.map((nft: NonFungibleToken, index: number) =>
                                     <NftDetails key={index} nft={nft}/>
-                                ))}
+                                )}
                             </TableBody>
                         </Table>
                     </TableContainer>

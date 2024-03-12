@@ -31,23 +31,23 @@ import {
   accountsInvoke,
   accountsList,
   accountsTransfer,
+  confidentialCreateTransferProof,
   nftList,
 } from "../../utils/json_rpc";
 import { apiError } from "../helpers/types";
 import queryClient from "../queryClient";
-import type { Arg, ComponentAccessRules } from "@tarilabs/typescript-bindings";
+import type { Arg, ComponentAccessRules } from "@tariproject/typescript-bindings";
 
 //   Fees are passed as strings because Amount is tagged
 export const useAccountsClaimBurn = (account: string, claimProof: string, fee: number) => {
   return useMutation(
-    async () => {
-      return await accountsClaimBurn({
+    () =>
+      accountsClaimBurn({
         account: { Name: account },
         claim_proof: claimProof,
         max_fee: fee,
         key_id: null,
-      });
-    },
+      }),
     {
       onError: (error: apiError) => {
         error;
@@ -93,6 +93,7 @@ export const useAccountsTransfer = (
   destination_public_key: string,
   max_fee: number | null,
   confidential: boolean,
+  badge: string | null,
   dry_run: boolean,
 ) => {
   return useMutation(
@@ -103,6 +104,7 @@ export const useAccountsTransfer = (
         resource_address,
         destination_public_key,
         max_fee,
+        proof_from_badge_resource: badge,
         dry_run,
       };
       if (confidential) {
