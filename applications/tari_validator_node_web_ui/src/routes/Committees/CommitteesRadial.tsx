@@ -29,7 +29,7 @@ import type {
   CommitteeShardInfo,
   GetNetworkCommitteeResponse,
   ValidatorNode,
-} from "@tarilabs/typescript-bindings/validator-node-client";
+} from "@tariproject/typescript-bindings/validator-node-client";
 
 export default function CommitteesRadial({ committees }: { committees: GetNetworkCommitteeResponse }) {
   const [chartData, setChartData] = useState<ICommitteeChart>({

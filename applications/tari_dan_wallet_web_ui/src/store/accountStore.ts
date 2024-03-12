@@ -43,7 +43,7 @@ const useAccountStore = create<Store>()(
       setAccountName: (name) => set({ accountName: name }),
       indexer: "",
       setIndexer: (indexer) => set({ indexer: indexer }),
-      popup: {},
+      popup: { visible: false },
       setPopup: (popup) => set({ popup: { visible: true, ...popup } }),
     }),
     {

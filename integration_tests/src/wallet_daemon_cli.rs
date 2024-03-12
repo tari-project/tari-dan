@@ -669,6 +669,7 @@ pub async fn transfer(
         resource_address,
         destination_public_key,
         max_fee,
+        proof_from_badge_resource: None,
         dry_run: false,
     };
 

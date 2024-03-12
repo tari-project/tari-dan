@@ -44,20 +44,43 @@ pub async fn wait_for_result(
     }
 }
 
-pub async fn wait_for_account_create_or_update(
+pub async fn wait_for_result_and_account(
     events: &mut broadcast::Receiver<WalletEvent>,
+    transaction_id: &TransactionId,
     account_address: &SubstateId,
-) -> Result<SubstateId, anyhow::Error> {
+) -> Result<(TransactionFinalizedEvent, Option<SubstateId>), anyhow::Error> {
+    let mut maybe_account = None;
+    let mut maybe_result = None;
     loop {
         let wallet_event = events.recv().await?;
         match wallet_event {
+            WalletEvent::TransactionFinalized(event) if event.transaction_id == *transaction_id => {
+                maybe_result = Some(event);
+            },
+            WalletEvent::TransactionInvalid(event) if event.transaction_id == *transaction_id => {
+                return Err(anyhow::anyhow!(
+                    "Transaction invalid: {} [status: {}]",
+                    event
+                        .finalize
+                        .and_then(|finalize| finalize.reject().cloned())
+                        .map(|f| f.to_string())
+                        .unwrap_or_else(|| "Unknown".to_string()),
+                    event.status,
+                ));
+            },
             WalletEvent::AccountCreated(event) if event.account.address == *account_address => {
-                return Ok(event.account.address);
+                maybe_account = Some(event.account.address);
             },
             WalletEvent::AccountChanged(event) if event.account_address == *account_address => {
-                return Ok(event.account_address);
+                maybe_account = Some(event.account_address);
             },
             _ => {},
+        }
+        if let Some(ref result) = maybe_result {
+            // If accept, we wait for the account. If reject we return immediately
+            if (result.finalize.result.is_accept() && maybe_account.is_some()) || result.finalize.result.is_reject() {
+                return Ok((maybe_result.unwrap(), maybe_account));
+            }
         }
     }
 }
