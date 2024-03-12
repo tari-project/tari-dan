@@ -230,7 +230,18 @@ where TConsensusSpec: ConsensusSpec
                 // prepared. We can now propose to Accept it. We also propose the decision change which everyone
                 // should agree with if they received the same foreign LocalPrepare.
                 TransactionPoolStage::LocalPrepared => {
-                    let involved = local_committee_shard.count_distinct_shards(t.transaction().evidence.shards_iter());
+                    // For now we need to treat transactions without versions in a special case
+                    // TODO: update the evidence after execution so all transactions are treated equally here
+                    let db_transaction = t.get_transaction(tx)?;
+                    let involved = if db_transaction.transaction().has_inputs_without_version() {
+                        db_transaction
+                            .transaction()
+                            .all_inputs_iter()
+                            .count()
+                    } else {
+                        local_committee_shard.count_distinct_shards(t.transaction().evidence.shards_iter())
+                    };
+
                     let involved = NonZeroU64::new(involved as u64).ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
                             "Number of involved shards is zero for transaction {}",

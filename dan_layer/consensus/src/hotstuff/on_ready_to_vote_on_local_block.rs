@@ -630,8 +630,15 @@ where TConsensusSpec: ConsensusSpec
                             return Ok(None);
                         }
 
-                        let distinct_shards =
-                            local_committee_shard.count_distinct_shards(tx_rec.transaction().evidence.shards_iter());
+                        // For now we need to treat transactions without versions in a special case
+                        // TODO: update the evidence after execution so all transactions are treated equally here
+                        let executed = self.get_executed_transaction(tx, &t.id, &mut executor)?;
+                        let transaction = executed.transaction();
+                        let distinct_shards = if transaction.has_inputs_without_version() {
+                            transaction.all_inputs_iter().count()
+                        } else {
+                            local_committee_shard.count_distinct_shards(tx_rec.transaction().evidence.shards_iter())
+                        };
                         let distinct_shards = NonZeroU64::new(distinct_shards as u64).ok_or_else(|| {
                             HotStuffError::InvariantError(format!(
                                 "Distinct shards is zero for transaction {} in block {}",
