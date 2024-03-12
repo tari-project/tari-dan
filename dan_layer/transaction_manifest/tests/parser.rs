@@ -25,7 +25,7 @@ use std::{collections::HashMap, fs};
 use tari_engine_types::{instruction::Instruction, substate::SubstateId};
 use tari_template_lib::{
     args,
-    models::{Amount, ComponentAddress, ResourceAddress, TemplateAddress},
+    models::{Amount, ComponentAddress, ObjectKey, ResourceAddress, TemplateAddress},
 };
 use tari_transaction_manifest::{parse_manifest, ManifestInstructions};
 
@@ -33,10 +33,10 @@ use tari_transaction_manifest::{parse_manifest, ManifestInstructions};
 #[allow(clippy::too_many_lines)]
 fn manifest_smoke_test() {
     let input = fs::read_to_string("tests/examples/picture_seller.rs").unwrap();
-    let account_component = ComponentAddress::new([0u8; 32].into());
-    let picture_seller_component = ComponentAddress::new([1u8; 32].into());
-    let test_faucet_component = ComponentAddress::new([2u8; 32].into());
-    let xtr_resource = ResourceAddress::from([3u8; 32]);
+    let account_component = ComponentAddress::new([0u8; ObjectKey::LENGTH].into());
+    let picture_seller_component = ComponentAddress::new([1u8; ObjectKey::LENGTH].into());
+    let test_faucet_component = ComponentAddress::new([2u8; ObjectKey::LENGTH].into());
+    let xtr_resource = ResourceAddress::from([3u8; ObjectKey::LENGTH]);
     let picture_seller_template =
         TemplateAddress::from_hex("c2b621869ec2929d3b9503ea41054f01b468ce99e50254b58e460f608ae377f7").unwrap();
 

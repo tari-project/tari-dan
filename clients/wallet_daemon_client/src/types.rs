@@ -28,7 +28,7 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_wallet_sdk::{
     apis::jwt::Claims,
-    models::{Account, ConfidentialProofId, SubstateType, TransactionStatus},
+    models::{Account, ConfidentialProofId, NonFungibleToken, SubstateType, TransactionStatus},
 };
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult},
@@ -45,7 +45,7 @@ use tari_template_lib::{
     models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
     prelude::{ComponentAddress, ConfidentialWithdrawProof, ResourceType},
 };
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId, UnsignedTransaction};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -87,22 +87,25 @@ pub struct CallInstructionRequest {
     pub max_epoch: Option<u64>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[cfg_attr(
     feature = "ts",
     derive(TS),
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
 pub struct TransactionSubmitRequest {
+    // TODO: make this mandatory once we remove the rest of the deprecated fields
+    pub transaction: Option<UnsignedTransaction>,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub signing_key_index: Option<u64>,
-    pub fee_instructions: Vec<Instruction>,
-    pub instructions: Vec<Instruction>,
     pub inputs: Vec<SubstateRequirement>,
     pub override_inputs: bool,
     pub is_dry_run: bool,
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub proof_ids: Vec<ConfidentialProofId>,
+    // TODO: remove the following fields
+    pub fee_instructions: Vec<Instruction>,
+    pub instructions: Vec<Instruction>,
     pub min_epoch: Option<Epoch>,
     pub max_epoch: Option<Epoch>,
 }
@@ -520,6 +523,8 @@ pub struct TransferRequest {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub destination_public_key: PublicKey,
     pub max_fee: Option<Amount>,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub proof_from_badge_resource: Option<ResourceAddress>,
     pub dry_run: bool,
 }
 
@@ -868,6 +873,7 @@ pub struct MintAccountNftRequest {
     pub metadata: serde_json::Value,
     pub mint_fee: Option<Amount>,
     pub create_account_nft_fee: Option<Amount>,
+    pub existing_nft_component: Option<ComponentAddress>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -893,20 +899,7 @@ pub struct GetAccountNftRequest {
     pub nft_id: NonFungibleId,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
-)]
-pub struct AccountNftInfo {
-    #[cfg_attr(feature = "ts", ts(type = "any"))]
-    pub metadata: serde_json::Value,
-    pub is_burned: bool,
-}
-
-// #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/"))]
-pub type GetAccountNftResponse = AccountNftInfo;
+pub type GetAccountNftResponse = NonFungibleToken;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(
@@ -928,7 +921,7 @@ pub struct ListAccountNftRequest {
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
 pub struct ListAccountNftResponse {
-    pub nfts: Vec<AccountNftInfo>,
+    pub nfts: Vec<NonFungibleToken>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_with::{serde_as, Bytes};
+use serde_with::serde_as;
 use tari_bor::BorTag;
 use tari_template_abi::{
     call_engine,
@@ -29,7 +29,7 @@ const DELIM: char = ':';
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum NonFungibleId {
-    U256(#[serde_as(as = "Bytes")] [u8; 32]),
+    U256(#[serde_as(as = "serde_with::Bytes")] [u8; 32]),
     String(String),
     Uint32(u32),
     Uint64(#[cfg_attr(feature = "ts", ts(type = "number"))] u64),
@@ -471,7 +471,7 @@ mod tests {
 
         #[test]
         fn string_serialization_and_deserialization() {
-            let resx_str = "resource_0000000000000000000000000000000000000000000000000000000000000000";
+            let resx_str = "resource_00000000000000000000000000000000000000000000000000000000";
             let resource = ResourceAddress::from_str(resx_str).unwrap();
             let v = NonFungibleAddress::new(resource, NonFungibleId::String("hello".to_string()));
             let json = serde_json::to_string_pretty(&v).unwrap();
@@ -500,11 +500,11 @@ mod tests {
         #[test]
         fn it_parses_valid_strings() {
             NonFungibleAddress::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 nft_str:SpecialNft",
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5 nft_str:SpecialNft",
             )
             .unwrap();
             NonFungibleAddress::from_str(
-                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fa14dfe2b \
+                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907f \
                  nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
             )
             .unwrap();
@@ -513,18 +513,16 @@ mod tests {
         #[test]
         fn it_rejects_invalid_strings() {
             NonFungibleAddress::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 nft_xxxxx:SpecialNft",
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5 nft_xxxxx:SpecialNft",
             )
             .unwrap_err();
             NonFungibleAddress::from_str("nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32")
                 .unwrap_err();
             NonFungibleAddress::from_str("resource_x nft_str:SpecialNft").unwrap_err();
+            NonFungibleAddress::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5 nft_str:")
+                .unwrap_err();
             NonFungibleAddress::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 nft_str:",
-            )
-            .unwrap_err();
-            NonFungibleAddress::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 nftx_str:SpecialNft",
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5 nftx_str:SpecialNft",
             )
             .unwrap_err();
         }

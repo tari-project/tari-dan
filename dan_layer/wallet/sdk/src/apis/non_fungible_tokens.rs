@@ -20,9 +20,9 @@ where TStore: WalletStore
         Self { store }
     }
 
-    pub fn store_new_nft(&self, non_fungible: &NonFungibleToken) -> Result<(), NonFungibleTokensApiError> {
+    pub fn save_nft(&self, non_fungible: &NonFungibleToken) -> Result<(), NonFungibleTokensApiError> {
         let mut tx = self.store.create_write_tx()?;
-        tx.non_fungible_token_insert(non_fungible)?;
+        tx.non_fungible_token_upsert(non_fungible)?;
         tx.commit()?;
         Ok(())
     }

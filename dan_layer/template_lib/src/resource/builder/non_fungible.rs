@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use serde::Serialize;
-use tari_bor::encode;
+use tari_bor::to_value;
 
 use super::TOKEN_SYMBOL;
 use crate::{
@@ -19,7 +19,7 @@ pub struct NonFungibleResourceBuilder {
     owner_rule: OwnerRule,
     metadata: Metadata,
     access_rules: ResourceAccessRules,
-    tokens_ids: BTreeMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
+    tokens_ids: BTreeMap<NonFungibleId, (tari_bor::Value, tari_bor::Value)>,
 }
 
 impl NonFungibleResourceBuilder {
@@ -108,7 +108,7 @@ impl NonFungibleResourceBuilder {
         U: Serialize,
     {
         self.tokens_ids
-            .insert(id, (encode(data).unwrap(), encode(mutable).unwrap()));
+            .insert(id, (to_value(data).unwrap(), to_value(mutable).unwrap()));
         self
     }
 
@@ -122,19 +122,25 @@ impl NonFungibleResourceBuilder {
         self.tokens_ids.extend(
             tokens
                 .into_iter()
-                .map(|(id, (data, mutable))| (id, (encode(data).unwrap(), encode(mutable).unwrap()))),
+                .map(|(id, (data, mutable))| (id, (to_value(data).unwrap(), to_value(mutable).unwrap()))),
         );
         self
     }
 
     /// Sets up multiple initial non-fungible tokens to be minted on resource creation by applying the provided function
     /// N times
-    pub fn mint_many_with<F, I, V>(mut self, iter: I, f: F) -> Self
+    pub fn mint_many_with<'a, F, I, V, T, U>(mut self, iter: I, f: F) -> Self
     where
-        F: FnMut(V) -> (NonFungibleId, (Vec<u8>, Vec<u8>)),
+        F: FnMut(V) -> (NonFungibleId, (&'a T, &'a U)),
         I: IntoIterator<Item = V>,
+        T: Serialize + ?Sized + 'a,
+        U: Serialize + ?Sized + 'a,
     {
-        self.tokens_ids.extend(iter.into_iter().map(f));
+        let values = iter
+            .into_iter()
+            .map(f)
+            .map(|(id, (data, mutable))| (id, (to_value(data).unwrap(), to_value(mutable).unwrap())));
+        self.tokens_ids.extend(values);
         self
     }
 

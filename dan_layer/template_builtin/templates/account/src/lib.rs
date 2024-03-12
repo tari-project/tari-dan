@@ -48,9 +48,6 @@ mod account_template {
                 .to_public_key()
                 .unwrap_or_else(|| panic!("owner_token is not a valid public key: {}", owner_token));
 
-            // the account component will be addressed using the public key
-            let component_id = public_key.as_hash();
-
             // only the owner of the token will be able to withdraw funds from the account
             let withdraw_rule =
                 AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(owner_token.into())));
@@ -70,7 +67,7 @@ mod account_template {
 
             Component::new(Self { vaults })
                 .with_access_rules(rules)
-                .with_component_id(component_id)
+                .with_owner_rule(OwnerRule::ByPublicKey(public_key))
                 .create()
         }
 

@@ -14,13 +14,15 @@ use tari_engine_types::{
     substate::SubstateId,
 };
 use tari_template_lib::{models::ComponentAddress, Hash};
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
 use crate::{builder::TransactionBuilder, transaction_id::TransactionId, TransactionSignature};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct Transaction {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     id: TransactionId,
@@ -119,22 +121,20 @@ impl Transaction {
         &self.input_refs
     }
 
-    pub fn input_address_refs(&self) -> Vec<SubstateAddress> {
+    pub fn input_address_refs_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
         self.input_refs
             .iter()
             .map(|i: &SubstateRequirement| i.to_substate_address())
-            .collect()
     }
 
     pub fn inputs(&self) -> &[SubstateRequirement] {
         &self.inputs
     }
 
-    pub fn input_addresses(&self) -> Vec<SubstateAddress> {
+    fn input_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
         self.inputs
             .iter()
             .map(|i: &SubstateRequirement| i.to_substate_address())
-            .collect()
     }
 
     /// Returns (fee instructions, instructions)
@@ -150,21 +150,19 @@ impl Transaction {
     }
 
     pub fn all_input_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
-        self.input_addresses()
-            .into_iter()
-            .chain(self.input_address_refs())
-            .chain(self.filled_input_addresses())
+        self.input_addresses_iter()
+            .chain(self.input_address_refs_iter())
+            .chain(self.filled_input_addresses_iter())
     }
 
     pub fn filled_inputs(&self) -> &[SubstateRequirement] {
         &self.filled_inputs
     }
 
-    pub fn filled_input_addresses(&self) -> Vec<SubstateAddress> {
+    fn filled_input_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
         self.filled_inputs
             .iter()
             .map(|i: &SubstateRequirement| i.to_substate_address())
-            .collect()
     }
 
     pub fn filled_inputs_mut(&mut self) -> &mut Vec<SubstateRequirement> {
@@ -248,7 +246,11 @@ impl Transaction {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq, Hash)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct SubstateRequirement {
     #[serde(with = "serde_with::string")]
     pub substate_id: SubstateId,
@@ -323,3 +325,70 @@ impl Display for SubstateRequirement {
 #[derive(Debug, thiserror::Error)]
 #[error("Failed to parse substate requirement {0}")]
 pub struct SubstateRequirementParseError(String);
+
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq, Hash)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
+pub struct VersionedSubstate {
+    #[serde(with = "serde_with::string")]
+    pub substate_id: SubstateId,
+    pub version: u32,
+}
+
+impl VersionedSubstate {
+    pub fn new(substate_id: SubstateId, version: u32) -> Self {
+        Self { substate_id, version }
+    }
+
+    pub fn substate_id(&self) -> &SubstateId {
+        &self.substate_id
+    }
+
+    pub fn version(&self) -> u32 {
+        self.version
+    }
+
+    pub fn to_substate_address(&self) -> SubstateAddress {
+        SubstateAddress::from_address(self.substate_id(), self.version())
+    }
+
+    /// Calculates and returns the shard number that this SubstateAddress belongs.
+    /// A shard is an equal division of the 256-bit shard space.
+    pub fn to_committee_shard(&self, num_committees: u32) -> Shard {
+        self.to_substate_address().to_committee_shard(num_committees)
+    }
+}
+
+impl FromStr for VersionedSubstate {
+    type Err = SubstateRequirementParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.split(':');
+
+        // parse the substate id
+        let address = parts
+            .next()
+            .ok_or_else(|| SubstateRequirementParseError(s.to_string()))?;
+        let address = SubstateId::from_str(address).map_err(|_| SubstateRequirementParseError(s.to_string()))?;
+
+        // parse the version
+        let version = parts
+            .next()
+            .ok_or_else(|| SubstateRequirementParseError(s.to_string()))
+            .and_then(|v| v.parse().map_err(|_| SubstateRequirementParseError(s.to_string())))?;
+
+        Ok(Self {
+            substate_id: address,
+            version,
+        })
+    }
+}
+
+impl Display for VersionedSubstate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.substate_id, self.version)
+    }
+}

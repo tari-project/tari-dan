@@ -21,13 +21,14 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod builder;
-pub mod id_provider;
 mod signature;
 mod transaction;
 mod transaction_id;
+mod unsigned_transaction;
 
 pub use builder::TransactionBuilder;
-pub use signature::{TransactionSignature, TransactionSignatureFields};
+pub use signature::TransactionSignature;
 pub use tari_engine_types::instruction::Instruction;
 pub use transaction::*;
 pub use transaction_id::*;
+pub use unsigned_transaction::UnsignedTransaction;

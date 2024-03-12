@@ -82,13 +82,16 @@ pub async fn run_tari_dan_wallet_daemon(
 
     // Run the http ui
     if let Some(http_address) = config.dan_wallet_daemon.http_ui_address {
-        task::spawn(run_http_ui_server(
-            http_address,
-            config
-                .dan_wallet_daemon
-                .ui_connect_address
-                .unwrap_or_else(|| jrpc_address.to_string()),
-        ));
+        let mut public_jrpc_address = config
+            .dan_wallet_daemon
+            .ui_connect_address
+            .unwrap_or_else(|| jrpc_address.to_string());
+        if !public_jrpc_address.starts_with("http://") && !public_jrpc_address.starts_with("https://") {
+            public_jrpc_address = format!("http://{}", public_jrpc_address);
+        }
+
+        let public_jrpc_address = url::Url::parse(&public_jrpc_address)?;
+        task::spawn(run_http_ui_server(http_address, public_jrpc_address));
     }
 
     if let Err(e) = fs::write(config.common.base_path.join("pid"), process::id().to_string()) {

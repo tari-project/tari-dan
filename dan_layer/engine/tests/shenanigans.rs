@@ -112,7 +112,7 @@ fn it_rejects_unknown_substate_addresses() {
     );
 
     assert_reject_reason(reason, RuntimeError::SubstateOutOfScope {
-        address: ResourceAddress::from_hex("abababababababababababababababababababababababababababababababab")
+        address: ResourceAddress::from_hex("abababababababababababababababababababababababababababab")
             .unwrap()
             .into(),
     })

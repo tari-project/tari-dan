@@ -30,186 +30,212 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import {useState} from "react";
 import CopyToClipboard from "../../../Components/CopyToClipboard";
 import FetchStatusCheck from "../../../Components/FetchStatusCheck";
-import { DataTableCell } from "../../../Components/StyledComponents";
-import { useAccountNFTsList, useAccountsGetBalances } from "../../../api/hooks/useAccounts";
+import {DataTableCell} from "../../../Components/StyledComponents";
+import {useAccountNFTsList, useAccountsGetBalances} from "../../../api/hooks/useAccounts";
 import useAccountStore from "../../../store/accountStore";
-import { shortenString } from "../../../utils/helpers";
-import type { AccountNftInfo, BalanceEntry } from "@tarilabs/typescript-bindings/wallet-daemon-client";
+import type {BalanceEntry} from "@tariproject/typescript-bindings/wallet-daemon-client";
+import Button from "@mui/material/Button/Button";
+import {SendMoneyDialog} from "./SendMoney";
+import {shortenString} from "../../../utils/helpers";
+import type {NonFungibleToken} from "@tariproject/typescript-bindings";
 
 interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
+    children?: React.ReactNode;
+    index: number;
+    value: number;
 }
 
 interface BalanceRowProps {
-  token_symbol: string;
-  resource_address: string;
-  resource_type: string;
-  balance: number;
-  confidential_balance: number;
+    token_symbol: string;
+    resource_address: string;
+    resource_type: string;
+    balance: number;
+    confidential_balance: number;
+    onSendClicked?: (resource_address: string) => void;
 }
 
-function BalanceRow({ token_symbol, resource_address, resource_type, balance, confidential_balance }: BalanceRowProps) {
-  const { showBalance } = useAccountStore();
-  return (
-    <TableRow key={token_symbol || resource_address}>
-      <DataTableCell>
-        {shortenString(token_symbol || resource_address)}
-        <CopyToClipboard copy={token_symbol || resource_address} />
-      </DataTableCell>
-      <DataTableCell>{resource_type}</DataTableCell>
-      <DataTableCell>{showBalance ? balance : "*************"}</DataTableCell>
-      <DataTableCell>{showBalance ? confidential_balance : "**************"}</DataTableCell>
-    </TableRow>
-  );
+function BalanceRow({
+                        token_symbol, resource_address, resource_type, balance, confidential_balance,
+                        onSendClicked,
+                    }: BalanceRowProps) {
+    const {showBalance} = useAccountStore();
+    return (
+        <TableRow key={token_symbol || resource_address}>
+            <DataTableCell>
+                {shortenString(token_symbol || resource_address)}
+                <CopyToClipboard copy={token_symbol || resource_address}/>
+            </DataTableCell>
+            <DataTableCell>{resource_type}</DataTableCell>
+            <DataTableCell>{showBalance ? balance : "*************"}</DataTableCell>
+            <DataTableCell>{showBalance ? confidential_balance : "**************"}</DataTableCell>
+            <DataTableCell>
+                <Button variant="outlined" onClick={() => onSendClicked?.(resource_address)}>
+                    Send
+                </Button>
+            </DataTableCell>
+        </TableRow>
+    );
 }
 
-function NftsList({ metadata, is_burned }: AccountNftInfo) {
-  return (
-    <TableRow key={metadata}>
-      <DataTableCell>{metadata}</DataTableCell>
-      <DataTableCell>{is_burned}</DataTableCell>
-    </TableRow>
-  );
+function NftDetails(nft: NonFungibleToken) {
+    return (
+        <TableRow>
+            <DataTableCell>{JSON.stringify(nft.nft_id)}</DataTableCell>
+            <DataTableCell>{nft.vault_id}</DataTableCell>
+            <DataTableCell>{JSON.stringify(nft.data)}</DataTableCell>
+            <DataTableCell>{JSON.stringify(nft.mutable_data)}</DataTableCell>
+            <DataTableCell>{nft.is_burned ? "Yes" : "No"}</DataTableCell>
+        </TableRow>
+    );
 }
 
 function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
+    const {children, value, index, ...other} = props;
 
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`simple-tabpanel-${index}`}
-      aria-labelledby={`simple-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          <Typography component="div">{children}</Typography>
-        </Box>
-      )}
-    </div>
-  );
+    return (
+        <div
+            role="tabpanel"
+            hidden={value !== index}
+            id={`simple-tabpanel-${index}`}
+            aria-labelledby={`simple-tab-${index}`}
+            {...other}
+        >
+            {value === index && (
+                <Box sx={{p: 3}}>
+                    <Typography component="div">{children}</Typography>
+                </Box>
+            )}
+        </div>
+    );
 }
 
 function tabProps(index: number) {
-  return {
-    id: `asset-tab-${index}`,
-    "aria-controls": `asset-tabpanel-${index}`,
-  };
+    return {
+        id: `asset-tab-${index}`,
+        "aria-controls": `asset-tabpanel-${index}`,
+    };
 }
 
-function Assets({ accountName }: { accountName: string }) {
-  const [value, setValue] = useState(0);
-  const { showBalance } = useAccountStore();
+function Assets({accountName}: { accountName: string }) {
+    const [resourceToSend, setResourceToSend] = useState<string | null>(null);
+    const [value, setValue] = useState(0);
+    const {showBalance} = useAccountStore();
 
-  const {
-    data: balancesData,
-    isError: balancesIsError,
-    error: balancesError,
-    isFetching: balancesIsFetching,
-  } = useAccountsGetBalances(accountName);
+    const {
+        data: balancesData,
+        isError: balancesIsError,
+        error: balancesError,
+        isFetching: balancesIsFetching,
+    } = useAccountsGetBalances(accountName);
 
-  const {
-    data: nftsListData,
-    isError: nftsListIsError,
-    error: nftsListError,
-    isFetching: nftsListIsFetching,
-  } = useAccountNFTsList(0, 10);
+    const {
+        data: nftsListData,
+        isError: nftsListIsError,
+        error: nftsListError,
+        isFetching: nftsListIsFetching,
+    } = useAccountNFTsList(0, 10);
 
-  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
-    setValue(newValue);
-  };
+    const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+        setValue(newValue);
+    };
 
-  return (
-    <Box sx={{ width: "100%" }}>
-      <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
-        <Tabs value={value} onChange={handleChange} aria-label="account assets" variant="standard">
-          <Tab label="Tokens" {...tabProps(0)} style={{ width: 150 }} />
-          <Tab label="NFTs" {...tabProps(1)} style={{ width: 150 }} />
-        </Tabs>
-      </Box>
-      <TabPanel value={value} index={0}>
-        {balancesIsError || balancesIsFetching ? (
-          <FetchStatusCheck
-            isError={balancesIsError}
-            errorMessage={balancesError?.message || "Error fetching data"}
-            isLoading={balancesIsFetching}
-          />
-        ) : (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Resource</TableCell>
-                  <TableCell>Resource Type</TableCell>
-                  <TableCell>Revealed Balance</TableCell>
-                  <TableCell>Confidential Balance</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {/* {balancesData?.balances.map((balance: number, index: number) =>
-                  BalanceRow(balance)
-                )} */}
-                {balancesData?.balances.map(
-                  ({
-                    vault_address,
-                    resource_address,
-                    balance,
-                    resource_type,
-                    confidential_balance,
-                    token_symbol,
-                  }: BalanceEntry) => {
-                    return (
-                      <BalanceRow
-                        key={resource_address}
-                        token_symbol={token_symbol || ""}
-                        resource_address={resource_address}
-                        resource_type={resource_type}
-                        balance={balance}
-                        confidential_balance={confidential_balance}
-                      />
-                    );
-                  },
+    const handleSendResourceClicked = (resource: string) => {
+        setResourceToSend(resource);
+    };
+
+    return (
+        <Box sx={{width: "100%"}}>
+            <SendMoneyDialog
+                open={resourceToSend !== null}
+                handleClose={() => setResourceToSend(null)}
+                onSendComplete={() => setResourceToSend(null)}
+                resource_address={resourceToSend || ""}
+            />
+            <Box sx={{borderBottom: 1, borderColor: "divider"}}>
+                <Tabs value={value} onChange={handleChange} aria-label="account assets" variant="standard">
+                    <Tab label="Tokens" {...tabProps(0)} style={{width: 150}}/>
+                    <Tab label="NFTs" {...tabProps(1)} style={{width: 150}}/>
+                </Tabs>
+            </Box>
+            <TabPanel value={value} index={0}>
+                {balancesIsError || balancesIsFetching ? (
+                    <FetchStatusCheck
+                        isError={balancesIsError}
+                        errorMessage={balancesError?.message || "Error fetching data"}
+                        isLoading={balancesIsFetching}
+                    />
+                ) : (
+                    <TableContainer>
+                        <Table>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Resource</TableCell>
+                                    <TableCell>Resource Type</TableCell>
+                                    <TableCell>Revealed Balance</TableCell>
+                                    <TableCell>Confidential Balance</TableCell>
+                                    <TableCell></TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {balancesData?.balances.map(
+                                    (
+                                        {
+                                            resource_address,
+                                            balance,
+                                            resource_type,
+                                            confidential_balance,
+                                            token_symbol
+                                        }: BalanceEntry,
+                                        i,
+                                    ) =>
+                                        <BalanceRow
+                                            key={i}
+                                            token_symbol={token_symbol || ""}
+                                            resource_address={resource_address}
+                                            resource_type={resource_type}
+                                            balance={balance}
+                                            confidential_balance={confidential_balance}
+                                            onSendClicked={handleSendResourceClicked}
+                                        />
+                                )}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
                 )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-      </TabPanel>
-      <TabPanel value={value} index={1}>
-        {nftsListIsError || nftsListIsFetching ? (
-          <FetchStatusCheck
-            isError={nftsListIsError}
-            errorMessage={nftsListError?.message || "Error fetching data"}
-            isLoading={nftsListIsFetching}
-          />
-        ) : (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Token Symbol</TableCell>
-                  <TableCell>Resource Type</TableCell>
-                  <TableCell>Is Burned</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {nftsListData?.nfts.map(({ metadata, is_burned }: AccountNftInfo) => {
-                  return <NftsList metadata={metadata} is_burned={is_burned} />;
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-      </TabPanel>
-    </Box>
-  );
+            </TabPanel>
+            <TabPanel value={value} index={1}>
+                {nftsListIsError || nftsListIsFetching ? (
+                    <FetchStatusCheck
+                        isError={nftsListIsError}
+                        errorMessage={nftsListError?.message || "Error fetching data"}
+                        isLoading={nftsListIsFetching}
+                    />
+                ) : (
+                    <TableContainer>
+                        <Table>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>ID</TableCell>
+                                    <TableCell>Vault</TableCell>
+                                    <TableCell>Data</TableCell>
+                                    <TableCell>Mutable Data</TableCell>
+                                    <TableCell>Is Burned</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {nftsListData?.nfts.map((nft: NonFungibleToken, i) =>
+                                    <NftDetails key={i} {...nft}/>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                )}
+            </TabPanel>
+        </Box>
+    );
 }
 
 export default Assets;

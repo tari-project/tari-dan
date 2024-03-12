@@ -27,7 +27,7 @@ import { GridHeadCell, GridDataCell } from "../../../Components/StyledComponents
 import { useAccountsGet } from "../../../api/hooks/useAccounts";
 import { shortenString } from "../../../utils/helpers";
 import { styled } from "@mui/material/styles";
-import { substateIdToString } from "@tarilabs/typescript-bindings";
+import { substateIdToString } from "@tariproject/typescript-bindings";
 
 const GridContainer = styled(Box)(({ theme }) => ({
   display: "grid",

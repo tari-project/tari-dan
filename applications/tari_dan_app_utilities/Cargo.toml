@@ -26,7 +26,7 @@ tari_transaction = { workspace = true }
 tari_validator_node_client = { workspace = true }
 tari_bor = { workspace = true, default-features = true }
 tari_indexer_lib = { workspace = true }
-tari_networking = { path = "../../networking/core" }
+tari_networking = { workspace = true}
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }

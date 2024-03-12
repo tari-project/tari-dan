@@ -9,7 +9,10 @@ use tari_consensus::traits::{
     BlockTransactionExecutorError,
 };
 use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
-use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult};
+use tari_engine_types::{
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
+    fees::FeeReceipt,
+};
 use tari_template_lib::Hash;
 use tari_transaction::Transaction;
 
@@ -57,7 +60,7 @@ where TStateStore: StateStore
                 result: TransactionResult::Reject(RejectReason::ExecutionFailure(
                     "TestBlockTransactionProcessor is just a mock".to_owned(),
                 )),
-                cost_breakdown: None,
+                fee_receipt: FeeReceipt::default(),
             },
             fee_receipt: None,
         };

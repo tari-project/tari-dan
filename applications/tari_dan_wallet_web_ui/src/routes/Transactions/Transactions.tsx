@@ -41,7 +41,7 @@ import { DataTableCell } from "../../Components/StyledComponents";
 import { useGetAllTransactions } from "../../api/hooks/useTransactions";
 import { emptyRows, handleChangePage, handleChangeRowsPerPage } from "../../utils/helpers";
 import { useAccountsGet } from "../../api/hooks/useAccounts";
-import type { FinalizeResult, Transaction, TransactionStatus } from "@tarilabs/typescript-bindings";
+import type { FinalizeResult, Transaction, TransactionStatus } from "@tariproject/typescript-bindings";
 
 export default function Transactions({ accountName }: { accountName: string }) {
   const { data: accountsData } = useAccountsGet(accountName);
@@ -96,7 +96,7 @@ export default function Transactions({ accountName }: { accountName: string }) {
                         <DataTableCell>
                           <StatusChip status={t[2]} showTitle />
                         </DataTableCell>
-                        <DataTableCell>{t?.[1]?.cost_breakdown?.total_fees_charged || 0}</DataTableCell>
+                        <DataTableCell>{t?.[1]?.fee_receipt.total_fees_paid || 0}</DataTableCell>
                         <DataTableCell>
                           <IconButton
                             component={Link}

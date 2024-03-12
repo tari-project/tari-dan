@@ -263,6 +263,7 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
     }];
 
     let request = TransactionSubmitRequest {
+        transaction: None,
         signing_key_index: None,
         fee_instructions,
         instructions,
@@ -293,6 +294,7 @@ async fn handle_submit_manifest(
     }
 
     let request = TransactionSubmitRequest {
+        transaction: None,
         signing_key_index: None,
         fee_instructions: instructions
             .fee_instructions
@@ -336,6 +338,7 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
             resource_address,
             destination_public_key,
             max_fee: fee,
+            proof_from_badge_resource: None,
             dry_run: false,
         })
         .await?;

@@ -7,18 +7,19 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+tari_bor = { workspace = true, default-features = true }
+tari_template_lib = { workspace = true }
 tari_common = { workspace = true }
 tari_common_types = { workspace = true }
 tari_crypto = { workspace = true, features = ["borsh"] }
 tari_engine_types = { workspace = true }
 tari_hash_domains = { workspace = true }
-tari_bor = { workspace = true, default-features = true }
 tari_mmr = { workspace = true }
 
 libp2p-identity = { workspace = true, features = [
-  "sr25519",
-  "serde",
-  "peerid",
+    "sr25519",
+    "serde",
+    "peerid",
 ] }
 
 blake2 = { workspace = true }

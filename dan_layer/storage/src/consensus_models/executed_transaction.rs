@@ -187,12 +187,19 @@ impl ExecutedTransaction {
                 }),
         );
 
-        deduped_evidence.extend(self.resulting_outputs.iter().map(|output| {
-            (*output, ShardEvidence {
-                qc_ids: IndexSet::new(),
-                lock: LockFlag::Write,
-            })
-        }));
+        let tx_reciept_address = SubstateAddress::for_transaction_receipt(self.id().into_receipt_address());
+        deduped_evidence.extend(
+            self.resulting_outputs
+                .iter()
+                // Exclude transaction receipt address from evidence since all involved shards will commit it
+                .filter(|output| **output != tx_reciept_address)
+                .map(|output| {
+                    (*output, ShardEvidence {
+                        qc_ids: IndexSet::new(),
+                        lock: LockFlag::Write,
+                    })
+                }),
+        );
 
         deduped_evidence.into_iter().collect()
     }
@@ -246,7 +253,7 @@ impl ExecutedTransaction {
                 .and_then(|f| f.total_fees_paid().as_u64_checked())
                 .unwrap_or(0),
             // We calculate the leader fee later depending on the epoch of the block
-            leader_fee: 0,
+            leader_fee: None,
         }
     }
 }

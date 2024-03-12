@@ -63,7 +63,7 @@ import type {
   TemplateRegistrationResponse,
   VNGetValidatorFeesRequest,
   VNGetValidatorFeesResponse,
-} from "@tarilabs/typescript-bindings/validator-node-client";
+} from "@tariproject/typescript-bindings/validator-node-client";
 
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;

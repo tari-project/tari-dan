@@ -41,6 +41,7 @@ use tari_indexer_client::{
 };
 use tari_p2p::Network;
 use tari_shutdown::Shutdown;
+use tari_template_lib::models::ObjectKey;
 use tokio::task;
 
 use crate::{
@@ -107,7 +108,7 @@ impl IndexerProcess {
 
     pub async fn insert_event_mock_data(&mut self) {
         let mut graphql_client = self.get_graphql_indexer_client().await;
-        let component_address = [0u8; 32].to_hex();
+        let component_address = ObjectKey::default().to_string();
         let template_address = [0u8; 32].to_hex();
         let tx_hash = [0u8; 32].to_hex();
         let topic = "my_event".to_string();
@@ -126,7 +127,7 @@ impl IndexerProcess {
             .unwrap_or_else(|e| panic!("Failed to save event via graphql client: {}", e));
         let res = res.get("saveEvent").unwrap();
 
-        assert_eq!(res.component_address, Some([0u8; 32]));
+        assert_eq!(res.component_address, Some([0u8; ObjectKey::LENGTH]));
     }
 
     pub fn get_jrpc_indexer_client(&self) -> IndexerJsonRpcClient {

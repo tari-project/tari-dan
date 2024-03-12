@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer};
 use serde_json as json;
+use tari_bor::{cbor, to_value};
 use tari_template_lib::{
     arg,
     args::Arg,
@@ -21,38 +22,69 @@ where D: Deserializer<'de> {
         match value {
             json::Value::Array(args) => args
                 .into_iter()
-                .map(|arg| {
-                    if let Some(s) = arg.as_str() {
-                        parse_arg(s).map_err(serde::de::Error::custom)
-                    } else {
-                        let parsed = json::from_value(arg).map_err(serde::de::Error::custom)?;
-                        Ok(parsed)
-                    }
-                })
+                .map(|arg| convert_value_to_arg(arg).map_err(serde::de::Error::custom))
                 .collect(),
-            _ => json::from_value(value).map_err(serde::de::Error::custom),
+            // Vec<Arg> should always be a json::Value::Array
+            v => Err(serde::de::Error::custom(format!(
+                "Unexpected value: {}. Expeected JSON array.",
+                v
+            ))),
         }
     } else {
         Vec::<Arg>::deserialize(d)
     }
 }
 
+fn convert_value_to_arg(arg: json::Value) -> Result<Arg, ArgParseError> {
+    if let Some(s) = arg.as_str() {
+        parse_arg(s)
+    } else if is_arg_json(&arg) {
+        let parsed = json::from_value(arg)?;
+        Ok(parsed)
+    } else {
+        let value = convert_to_cbor(arg);
+        let arg = Arg::literal(value)?;
+        Ok(arg)
+    }
+}
+
+/// Checks if the value provided is in the form {"Literal": \[bytes...]} or {"Workspace": \[bytes...]}
+fn is_arg_json(arg: &json::Value) -> bool {
+    let Some(obj) = arg.as_object() else {
+        return false;
+    };
+
+    if !obj.contains_key("Literal") && !obj.contains_key("Workspace") {
+        return false;
+    }
+
+    let v = obj
+        .get("Literal")
+        .or_else(|| obj.get("Workspace"))
+        .expect("Already checked");
+    v.is_array()
+}
+
+/// Parses a custom string syntax that represents common argument types.
+///
+/// e.g. Amount(123) becomes an Amount type
+/// component_xxxx.. becomes a ComponentAddress type etc
 pub fn parse_arg(s: &str) -> Result<Arg, ArgParseError> {
     let ty = try_parse_special_string_arg(s)?;
     Ok(ty.into())
 }
 
-fn try_parse_special_string_arg(s: &str) -> Result<StringArg<'_>, ArgParseError> {
+fn try_parse_special_string_arg(s: &str) -> Result<ParsedArg<'_>, ArgParseError> {
     let s = s.trim();
     if s.is_empty() {
-        return Ok(StringArg::String(""));
+        return Ok(ParsedArg::String(""));
     }
 
     if s.chars().all(|c| c.is_ascii_digit() || c == '-') {
         if let Ok(ty) = s
             .parse()
-            .map(StringArg::UnsignedInteger)
-            .or_else(|_| s.parse().map(StringArg::SignedInteger))
+            .map(ParsedArg::UnsignedInteger)
+            .or_else(|_| s.parse().map(ParsedArg::SignedInteger))
         {
             return Ok(ty);
         }
@@ -65,32 +97,32 @@ fn try_parse_special_string_arg(s: &str) -> Result<StringArg<'_>, ArgParseError>
             .map_err(|_| ArgParseError::ExpectedAmount {
                 got: contents.to_string(),
             })?;
-        return Ok(StringArg::Amount(amt));
+        return Ok(ParsedArg::Amount(amt));
     }
 
     if let Some(contents) = strip_cast_func(s, "Workspace") {
-        return Ok(StringArg::Workspace(contents.as_bytes().to_vec()));
+        return Ok(ParsedArg::Workspace(contents.as_bytes().to_vec()));
     }
 
     if let Ok(address) = SubstateId::from_str(s) {
-        return Ok(StringArg::SubstateId(address));
+        return Ok(ParsedArg::SubstateId(address));
     }
 
     if let Some(address) = parse_template_address(s.to_owned()) {
-        return Ok(StringArg::TemplateAddress(address));
+        return Ok(ParsedArg::TemplateAddress(address));
     }
 
     if let Ok(metadata) = Metadata::from_str(s) {
-        return Ok(StringArg::Metadata(metadata));
+        return Ok(ParsedArg::Metadata(metadata));
     }
 
     match s {
-        "true" => return Ok(StringArg::Bool(true)),
-        "false" => return Ok(StringArg::Bool(false)),
+        "true" => return Ok(ParsedArg::Bool(true)),
+        "false" => return Ok(ParsedArg::Bool(false)),
         _ => (),
     }
 
-    Ok(StringArg::String(s))
+    Ok(ParsedArg::String(s))
 }
 
 /// Strips off "casting" syntax and returns the contents e.g. Foo(bar baz) returns "bar baz". Or None if there is no
@@ -101,7 +133,7 @@ fn strip_cast_func<'a>(s: &'a str, cast: &str) -> Option<&'a str> {
         .and_then(|s| s.strip_suffix(')'))
 }
 
-pub enum StringArg<'a> {
+pub enum ParsedArg<'a> {
     Amount(Amount),
     String(&'a str),
     Workspace(Vec<u8>),
@@ -113,12 +145,12 @@ pub enum StringArg<'a> {
     Metadata(Metadata),
 }
 
-impl From<StringArg<'_>> for Arg {
-    fn from(value: StringArg<'_>) -> Self {
+impl From<ParsedArg<'_>> for Arg {
+    fn from(value: ParsedArg<'_>) -> Self {
         match value {
-            StringArg::Amount(v) => arg!(v),
-            StringArg::String(v) => arg!(v),
-            StringArg::SubstateId(v) => match v {
+            ParsedArg::Amount(v) => arg!(v),
+            ParsedArg::String(v) => arg!(v),
+            ParsedArg::SubstateId(v) => match v {
                 SubstateId::Component(v) => arg!(v),
                 SubstateId::Resource(v) => arg!(v),
                 SubstateId::Vault(v) => arg!(v),
@@ -128,13 +160,55 @@ impl From<StringArg<'_>> for Arg {
                 SubstateId::TransactionReceipt(v) => arg!(v),
                 SubstateId::FeeClaim(v) => arg!(v),
             },
-            StringArg::TemplateAddress(v) => arg!(v),
-            StringArg::UnsignedInteger(v) => arg!(v),
-            StringArg::SignedInteger(v) => arg!(v),
-            StringArg::Bool(v) => arg!(v),
-            StringArg::Workspace(s) => arg!(Workspace(s)),
-            StringArg::Metadata(m) => arg!(m),
+            ParsedArg::TemplateAddress(v) => arg!(v),
+            ParsedArg::UnsignedInteger(v) => arg!(v),
+            ParsedArg::SignedInteger(v) => arg!(v),
+            ParsedArg::Bool(v) => arg!(v),
+            ParsedArg::Workspace(s) => arg!(Workspace(s)),
+            ParsedArg::Metadata(m) => arg!(m),
         }
+    }
+}
+
+fn convert_to_cbor(value: json::Value) -> tari_bor::Value {
+    match value {
+        json::Value::Null => tari_bor::Value::Null,
+        json::Value::Bool(v) => tari_bor::Value::Bool(v),
+        json::Value::Number(n) => n
+            .as_i64()
+            .map(|v| tari_bor::Value::Integer(v.into()))
+            .or_else(|| n.as_f64().map(tari_bor::Value::Float))
+            .expect("A JSON number is always convertable to an integer or a float"),
+        // Allow special string parsing within nested arrays and objects
+        json::Value::String(s) => match try_parse_special_string_arg(&s) {
+            Ok(parsed) => match parsed {
+                ParsedArg::Amount(amount) => tari_bor::Value::Integer(amount.value().into()),
+                ParsedArg::String(s) => tari_bor::Value::Text(s.to_string()),
+                ParsedArg::Workspace(key) => cbor!({"Workspace" => key}).unwrap(),
+                ParsedArg::SubstateId(s) => match s {
+                    SubstateId::Component(id) => to_value(&id).unwrap(),
+                    SubstateId::Resource(id) => to_value(&id).unwrap(),
+                    SubstateId::Vault(id) => to_value(&id).unwrap(),
+                    SubstateId::UnclaimedConfidentialOutput(id) => to_value(&id).unwrap(),
+                    SubstateId::NonFungible(id) => to_value(&id).unwrap(),
+                    SubstateId::NonFungibleIndex(id) => to_value(&id).unwrap(),
+                    SubstateId::TransactionReceipt(id) => to_value(&id).unwrap(),
+                    SubstateId::FeeClaim(id) => to_value(&id).unwrap(),
+                },
+                ParsedArg::TemplateAddress(address) => to_value(&address).unwrap(),
+                ParsedArg::UnsignedInteger(i) => tari_bor::Value::Integer(i.into()),
+                ParsedArg::SignedInteger(i) => tari_bor::Value::Integer(i.into()),
+                ParsedArg::Bool(b) => tari_bor::Value::Bool(b),
+                ParsedArg::Metadata(metadata) => to_value(&metadata).unwrap(),
+            },
+            Err(_) => tari_bor::Value::Text(s),
+        },
+        json::Value::Array(arr) => tari_bor::Value::Array(arr.into_iter().map(convert_to_cbor).collect::<Vec<_>>()),
+        json::Value::Object(map) => tari_bor::Value::Map(
+            map.into_iter()
+                .map(|(k, v)| (tari_bor::Value::Text(k), convert_to_cbor(v)))
+                .collect(),
+        ),
     }
 }
 
@@ -144,6 +218,8 @@ pub enum ArgParseError {
     ExpectedAmount { got: String },
     #[error("JSON error: {0}")]
     JsonError(#[from] json::Error),
+    #[error("CBOR error: {0}")]
+    BorError(#[from] tari_bor::BorError),
 }
 
 #[cfg(test)]
@@ -156,6 +232,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::serde_with;
 
     #[test]
     fn struct_test() {
@@ -174,20 +251,74 @@ mod tests {
         assert_eq!(args, from_str);
 
         // Deserialize from special string representation
-        let some_args: SomeArgs = json::from_str(
-            r#"{"args": ["component_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d29006db9"] }"#,
-        )
-        .unwrap();
+        let some_args: SomeArgs =
+            json::from_str(r#"{"args": ["component_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d"] }"#)
+                .unwrap();
         match &some_args.args[0] {
             Arg::Workspace(_) => panic!(),
             Arg::Literal(a) => {
                 let a: ComponentAddress = decode_exact(a).unwrap();
                 assert_eq!(
                     a.to_string(),
-                    "component_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d29006db9"
+                    "component_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d"
                 );
             },
         }
+    }
+
+    #[test]
+    fn it_parses_args_into_bor() {
+        #[derive(PartialEq, Deserialize, Debug, Serialize)]
+        struct SomeArgs {
+            #[serde(deserialize_with = "json_deserialize")]
+            args: Vec<Arg>,
+        }
+
+        #[derive(PartialEq, Deserialize, Debug, Serialize)]
+        struct StructInWasm {
+            name: String,
+            number: u64,
+            float: f64,
+            boolean: bool,
+            array: Vec<String>,
+            map: std::collections::HashMap<String, String>,
+            #[serde(with = "serde_with::string::option")]
+            opt: Option<ComponentAddress>,
+        }
+
+        let struct_sample = StructInWasm {
+            name: "John".to_string(),
+            number: 123,
+            float: 1.2,
+            boolean: true,
+            array: vec!["a".to_string(), "b".to_string()],
+            map: [("c", "d"), ("e", "f")]
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            opt: Some(
+                ComponentAddress::from_str("component_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d")
+                    .unwrap(),
+            ),
+        };
+
+        let args = SomeArgs {
+            args: args!(struct_sample),
+        };
+        // Serialize and deserialize from JSON representation
+        let s = json::to_string(&args).unwrap();
+        let from_str: SomeArgs = json::from_str(&s).unwrap();
+        assert_eq!(args, from_str);
+
+        // Deserialize from special string representation
+        let some_args: SomeArgs = json::from_str(&format!(
+            r#"{{"args": [{}]}}"#,
+            json::to_string(&struct_sample).unwrap()
+        ))
+        .unwrap();
+        let bytes = some_args.args[0].as_literal_bytes().unwrap();
+        let a: StructInWasm = decode_exact(bytes).unwrap();
+        assert_eq!(a, struct_sample);
     }
 
     #[test]
@@ -227,9 +358,9 @@ mod tests {
     #[test]
     fn it_parses_addresses() {
         let cases = &[
-            "component_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d29006db9",
-            "resource_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d29006db9",
-            "vault_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d29006db9",
+            "component_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d",
+            "resource_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d",
+            "vault_4e146f73f764ddc21a89c315bd00c939cfaae7d86df082a36e47028d",
         ];
 
         for case in cases {

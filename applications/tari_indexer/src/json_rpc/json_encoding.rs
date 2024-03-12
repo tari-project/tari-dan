@@ -85,20 +85,11 @@ fn encode_non_fungible_into_json(
         let non_fungible_field = get_mut_json_field(substate_json_field, "NonFungible")?;
         let non_fungible_object = json_value_as_object(non_fungible_field)?;
 
-        decode_cbor_field_into_json(nf.data(), non_fungible_object, "data")?;
-        decode_cbor_field_into_json(nf.mutable_data(), non_fungible_object, "mutable_data")?;
+        fix_cbor_value_for_json(nf.data(), non_fungible_object, "data")?;
+        fix_cbor_value_for_json(nf.mutable_data(), non_fungible_object, "mutable_data")?;
     }
 
     Ok(())
-}
-
-fn decode_cbor_field_into_json(
-    bytes: &[u8],
-    parent_object: &mut JsonObject,
-    field_name: &str,
-) -> Result<(), JsonEncodingError> {
-    let cbor_value = tari_bor::decode(bytes)?;
-    fix_cbor_value_for_json(&cbor_value, parent_object, field_name)
 }
 
 fn fix_cbor_value_for_json(
@@ -171,16 +162,13 @@ fn fix_invalid_object_keys(value: &CborValue) -> CborValue {
 mod tests {
     use tari_common_types::types::Commitment;
     use tari_engine_types::{confidential::ConfidentialOutput, resource_container::ResourceContainer, vault::Vault};
-    use tari_template_lib::{
-        models::{Amount, ResourceAddress, VaultId},
-        Hash,
-    };
+    use tari_template_lib::models::{Amount, ResourceAddress};
 
     use super::*;
 
     #[test]
     fn it_encodes_confidential_vaults() {
-        let address = ResourceAddress::new(Hash::default());
+        let address = ResourceAddress::new(Default::default());
 
         let commitment = Commitment::default();
         let confidential_output = ConfidentialOutput {
@@ -194,8 +182,7 @@ mod tests {
         let revealed_amount = Amount::zero();
         let container = ResourceContainer::confidential(address, commitment, revealed_amount);
 
-        let vault_id = VaultId::new(Hash::default());
-        let vault = Vault::new(vault_id, container);
+        let vault = Vault::new(container);
 
         let substate_value = SubstateValue::Vault(vault);
         let substate = Substate::new(0, substate_value);

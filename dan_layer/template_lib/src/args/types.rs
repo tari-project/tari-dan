@@ -51,7 +51,6 @@ use crate::{
     prelude::{ComponentAccessRules, ConfidentialOutputProof, TemplateAddress},
     resource::ResourceType,
     template::BuiltinTemplate,
-    Hash,
 };
 
 // -------------------------------- LOGS -------------------------------- //
@@ -161,7 +160,6 @@ pub struct CreateComponentArg {
     pub encoded_state: tari_bor::Value,
     pub owner_rule: OwnerRule,
     pub access_rules: ComponentAccessRules,
-    pub component_id: Option<Hash>,
     pub address_allocation: Option<AddressAllocation<ComponentAddress>>,
 }
 
@@ -235,7 +233,7 @@ pub enum MintArg {
         amount: Amount,
     },
     NonFungible {
-        tokens: BTreeMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
+        tokens: BTreeMap<NonFungibleId, (tari_bor::Value, tari_bor::Value)>,
     },
     Confidential {
         proof: Box<ConfidentialOutputProof>,
@@ -268,7 +266,7 @@ pub struct ResourceGetNonFungibleArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceUpdateNonFungibleDataArg {
     pub id: NonFungibleId,
-    pub data: Vec<u8>,
+    pub data: tari_bor::Value,
 }
 
 /// A convenience enum that allows to specify resource types

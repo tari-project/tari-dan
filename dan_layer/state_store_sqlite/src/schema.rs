@@ -20,6 +20,7 @@ diesel::table! {
         foreign_indexes -> Text,
         signature -> Nullable<Text>,
         created_at -> Timestamp,
+        base_layer_block_hash -> Text,
     }
 }
 
@@ -157,6 +158,7 @@ diesel::table! {
         foreign_indexes -> Text,
         signature -> Nullable<Text>,
         created_at -> Timestamp,
+        base_layer_block_hash -> Text,
     }
 }
 
@@ -224,7 +226,8 @@ diesel::table! {
         evidence -> Text,
         remote_evidence -> Nullable<Text>,
         transaction_fee -> BigInt,
-        leader_fee -> BigInt,
+        leader_fee -> Nullable<BigInt>,
+        global_exhaust_burn -> Nullable<BigInt>,
         stage -> Text,
         pending_stage -> Nullable<Text>,
         is_ready -> Bool,
@@ -243,7 +246,8 @@ diesel::table! {
         remote_decision -> Nullable<Text>,
         evidence -> Text,
         transaction_fee -> BigInt,
-        leader_fee -> BigInt,
+        leader_fee -> Nullable<BigInt>,
+        global_exhaust_burn -> Nullable<BigInt>,
         stage -> Text,
         new_stage -> Text,
         is_ready -> Bool,

@@ -35,7 +35,7 @@ import Grid from "@mui/material/Grid";
 import SecondaryHeading from "../../Components/SecondaryHeading";
 import { VNContext } from "../../App";
 import { getNetworkCommittees } from "../../utils/json_rpc";
-import type { GetNetworkCommitteeResponse } from "@tarilabs/typescript-bindings/validator-node-client";
+import type { GetNetworkCommitteeResponse } from "@tariproject/typescript-bindings/validator-node-client";
 
 function ValidatorNode() {
   const [committees, setCommittees] = useState<GetNetworkCommitteeResponse | null>(null);

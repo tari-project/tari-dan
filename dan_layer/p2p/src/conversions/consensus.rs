@@ -46,6 +46,7 @@ use tari_dan_storage::consensus_models::{
     ForeignProposal,
     ForeignProposalState,
     HighQc,
+    LeaderFee,
     QcId,
     QuorumCertificate,
     QuorumDecision,
@@ -261,6 +262,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             commands: value.commands().iter().map(Into::into).collect(),
             foreign_indexes: encode(value.foreign_indexes()).unwrap(),
             signature: value.get_signature().map(Into::into),
+            base_layer_block_hash: value.base_layer_block_hash().as_bytes().to_vec(),
         }
     }
 }
@@ -293,6 +295,7 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
             value.total_leader_fee,
             decode_exact(&value.foreign_indexes)?,
             value.signature.map(TryInto::try_into).transpose()?,
+            value.base_layer_block_hash.try_into()?,
         ))
     }
 }
@@ -339,7 +342,7 @@ impl From<&TransactionAtom> for proto::consensus::TransactionAtom {
             decision: proto::consensus::Decision::from(value.decision) as i32,
             evidence: Some((&value.evidence).into()),
             fee: value.transaction_fee,
-            leader_fee: value.leader_fee,
+            leader_fee: value.leader_fee.as_ref().map(|a| a.into()),
         }
     }
 }
@@ -358,7 +361,28 @@ impl TryFrom<proto::consensus::TransactionAtom> for TransactionAtom {
                 .ok_or_else(|| anyhow!("evidence not provided"))?
                 .try_into()?,
             transaction_fee: value.fee,
-            leader_fee: value.leader_fee,
+            leader_fee: value.leader_fee.map(TryInto::try_into).transpose()?,
+        })
+    }
+}
+// -------------------------------- BlockFee -------------------------------- //
+
+impl From<&LeaderFee> for proto::consensus::LeaderFee {
+    fn from(value: &LeaderFee) -> Self {
+        Self {
+            leader_fee: value.fee,
+            global_exhaust_burn: value.global_exhaust_burn,
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::LeaderFee> for LeaderFee {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::LeaderFee) -> Result<Self, Self::Error> {
+        Ok(Self {
+            fee: value.leader_fee,
+            global_exhaust_burn: value.global_exhaust_burn,
         })
     }
 }

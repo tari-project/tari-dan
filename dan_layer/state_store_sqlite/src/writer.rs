@@ -150,6 +150,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
             parked_blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             parked_blocks::justify.eq(serialize_json(block.justify())?),
             parked_blocks::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
+            parked_blocks::base_layer_block_hash.eq(serialize_hex(block.base_layer_block_hash())),
         );
 
         diesel::insert_into(parked_blocks::table)
@@ -198,6 +199,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             blocks::is_processed.eq(block.is_processed()),
             blocks::signature.eq(block.get_signature().map(serialize_json).transpose()?),
             blocks::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
+            blocks::base_layer_block_hash.eq(serialize_hex(block.base_layer_block_hash())),
         );
 
         diesel::insert_into(blocks::table)
@@ -646,8 +648,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             transaction_pool::transaction_id.eq(serialize_hex(transaction.id)),
             transaction_pool::original_decision.eq(transaction.decision.to_string()),
             transaction_pool::transaction_fee.eq(transaction.transaction_fee as i64),
-            transaction_pool::leader_fee.eq(transaction.leader_fee as i64),
             transaction_pool::evidence.eq(serialize_json(&transaction.evidence)?),
+            transaction_pool::leader_fee.eq(transaction.leader_fee.as_ref().map(|f| f.fee as i64)),
+            transaction_pool::global_exhaust_burn
+                .eq(transaction.leader_fee.as_ref().map(|f| f.global_exhaust_burn as i64)),
             transaction_pool::stage.eq(stage.to_string()),
             transaction_pool::is_ready.eq(is_ready),
         );
@@ -738,7 +742,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let transaction_id = serialize_hex(transaction_id);
 
         #[derive(AsChangeset)]
-        #[diesel(table_name=transaction_pool)]
+        #[diesel(table_name = transaction_pool)]
         struct Changes {
             remote_evidence: Option<String>,
             local_decision: Option<Option<String>>,

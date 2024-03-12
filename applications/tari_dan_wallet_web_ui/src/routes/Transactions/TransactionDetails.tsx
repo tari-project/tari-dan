@@ -39,8 +39,8 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Loading from "../../Components/Loading";
 import Error from "../../Components/Error";
-import type { FinalizeResult, RejectReason, TransactionResult } from "@tarilabs/typescript-bindings";
-import { getRejectReasonFromTransactionResult, rejectReasonToString } from "@tarilabs/typescript-bindings";
+import type { FinalizeResult, RejectReason, TransactionResult } from "@tariproject/typescript-bindings";
+import { getRejectReasonFromTransactionResult, rejectReasonToString } from "@tariproject/typescript-bindings";
 
 export default function TransactionDetails() {
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
@@ -192,7 +192,7 @@ export default function TransactionDetails() {
                   </TableRow>
                   <TableRow>
                     <TableCell>Total Fees</TableCell>
-                    <DataTableCell>{data?.result?.cost_breakdown?.total_fees_charged || 0}</DataTableCell>
+                    <DataTableCell>{data?.result?.fee_receipt.total_fees_paid || 0}</DataTableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell>Status</TableCell>
