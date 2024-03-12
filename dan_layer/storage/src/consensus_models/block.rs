@@ -96,6 +96,8 @@ pub struct Block {
     /// Signature of block by the proposer.
     #[cfg_attr(feature = "ts", ts(type = "{public_nonce : string, signature: string} | null"))]
     signature: Option<ValidatorSchnorrSignature>,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    base_layer_block_hash: FixedHash,
 }
 
 impl Block {
@@ -111,6 +113,7 @@ impl Block {
         total_leader_fee: u64,
         sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
+        base_layer_block_hash: FixedHash,
     ) -> Self {
         let mut block = Self {
             id: BlockId::genesis(),
@@ -129,6 +132,7 @@ impl Block {
             foreign_indexes: sorted_foreign_indexes,
             stored_at: None,
             signature,
+            base_layer_block_hash,
         };
         block.id = block.calculate_hash().into();
         block
@@ -151,6 +155,7 @@ impl Block {
         sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
         created_at: PrimitiveDateTime,
+        base_layer_block_hash: FixedHash,
     ) -> Self {
         Self {
             id,
@@ -169,6 +174,7 @@ impl Block {
             foreign_indexes: sorted_foreign_indexes,
             stored_at: Some(created_at),
             signature,
+            base_layer_block_hash,
         }
     }
 
@@ -185,6 +191,7 @@ impl Block {
             0,
             IndexMap::new(),
             None,
+            FixedHash::zero(),
         )
     }
 
@@ -207,6 +214,7 @@ impl Block {
             foreign_indexes: IndexMap::new(),
             stored_at: None,
             signature: None,
+            base_layer_block_hash: FixedHash::zero(),
         }
     }
 
@@ -218,6 +226,7 @@ impl Block {
         high_qc: QuorumCertificate,
         epoch: Epoch,
         parent_merkle_root: FixedHash,
+        parent_base_layer_block_hash: FixedHash,
     ) -> Self {
         let mut block = Self::new(
             network,
@@ -231,6 +240,7 @@ impl Block {
             0,
             IndexMap::new(),
             None,
+            parent_base_layer_block_hash,
         );
         block.is_dummy = true;
         block.is_processed = false;
@@ -248,6 +258,7 @@ impl Block {
             .chain(&self.merkle_root)
             .chain(&self.commands)
             .chain(&self.foreign_indexes)
+            .chain(&self.base_layer_block_hash)
             .result()
     }
 }
@@ -382,6 +393,10 @@ impl Block {
 
     pub fn is_proposed_by_addr<A: NodeAddressable + PartialEq<A>>(&self, address: &A) -> Option<bool> {
         Some(A::try_from_public_key(&self.proposed_by)? == *address)
+    }
+
+    pub fn base_layer_block_hash(&self) -> &FixedHash {
+        &self.base_layer_block_hash
     }
 }
 

@@ -50,7 +50,7 @@ import {
 } from "../../../api/hooks/useAccounts";
 import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import queryClient from "../../../api/queryClient";
-import type { AccountInfo } from "@tarilabs/typescript-bindings/wallet-daemon-client";
+import type { AccountInfo } from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 function Account(account: AccountInfo, index: number) {
   const { pathname } = useLocation();

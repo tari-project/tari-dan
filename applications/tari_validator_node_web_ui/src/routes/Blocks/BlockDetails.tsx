@@ -35,8 +35,8 @@ import Loading from "../../Components/Loading";
 import { getBlock, getIdentity } from "../../utils/json_rpc";
 import Transactions from "./Transactions";
 import { primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../utils/helpers";
-import type { Block, TransactionAtom } from "@tarilabs/typescript-bindings";
-import type { GetIdentityResponse } from "@tarilabs/typescript-bindings/validator-node-client";
+import type { Block, TransactionAtom } from "@tariproject/typescript-bindings";
+import type { GetIdentityResponse } from "@tariproject/typescript-bindings/validator-node-client";
 
 export default function BlockDetails() {
   const { blockId } = useParams();

@@ -94,10 +94,12 @@ import type {
   TransferResponse,
   WebRtcStartRequest,
   WebRtcStartResponse,
-} from "@tarilabs/typescript-bindings/wallet-daemon-client";
+} from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 let token: String | null = null;
 let json_id = 0;
+let address = new URL("http://localhost:9000");
+let isAddressSet = false;
 const mutex_token = new Mutex();
 const mutex_id = new Mutex();
 
@@ -107,13 +109,17 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
     id = json_id;
     json_id += 1;
   });
-  let address = "http://localhost:9000";
-  try {
-    address = await (await fetch("/json_rpc_address")).text();
-    if (!address.startsWith("http")) {
-      address = "http://" + address;
+  if (!isAddressSet) {
+    try {
+      let resp = await fetch("/json_rpc_address");
+      if (resp.status === 200) {
+        address = new URL(await resp.text());
+      }
+    } catch (e) {
+      console.warn(e);
     }
-  } catch {}
+  }
+  isAddressSet = true;
   let headers: { [key: string]: string } = {
     "Content-Type": "application/json",
   };

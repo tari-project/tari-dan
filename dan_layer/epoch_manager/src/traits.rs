@@ -26,7 +26,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::MergedValidatorNodeMerkleProof,
@@ -109,6 +109,7 @@ pub trait EpochManagerReader: Send + Sync {
     }
 
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError>;
+    async fn current_base_layer_block_info(&self) -> Result<(u64, FixedHash), EpochManagerError>;
     async fn is_epoch_active(&self, epoch: Epoch) -> Result<bool, EpochManagerError>;
 
     async fn get_num_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError>;
