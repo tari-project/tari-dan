@@ -710,14 +710,14 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             SELECT count(1) as "count" FROM tree WHERE bid = ? LIMIT 1
         "#,
         )
-        .bind::<Text, _>(serialize_hex(descendant))
-        // .bind::<Text, _>(serialize_hex(BlockId::genesis())) // stop recursing at zero block
-        .bind::<Text, _>(serialize_hex(ancestor))
-        .get_result::<Count>(self.connection())
-        .map_err(|e| SqliteStorageError::DieselError {
-            operation: "blocks_is_ancestor",
-            source: e,
-        })?;
+            .bind::<Text, _>(serialize_hex(descendant))
+            // .bind::<Text, _>(serialize_hex(BlockId::genesis())) // stop recursing at zero block
+            .bind::<Text, _>(serialize_hex(ancestor))
+            .get_result::<Count>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_is_ancestor",
+                source: e,
+            })?;
 
         debug!(target: LOG_TARGET, "blocks_is_ancestor: is_ancestor: {}", is_ancestor.count);
 
@@ -1175,20 +1175,20 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                         // Are there any conflicts between this transaction and other transactions to be included in the
                         // block?
                         if processed_substates
-                                .iter()
-                                // Check other transactions
-                                .filter(|(tx_id, _)| *tx_id != rec.transaction_id())
-                                .all(|(_, evidence)| {
-                                    evidence.iter().all(|(shard, lock)| {
-                                        if lock.is_write() {
-                                            // Write lock must have no conflicts
-                                            !tx_substates.contains_key(shard)
-                                        } else {
-                                            // If there is a Shard conflict, then it must be a read lock
-                                            tx_substates.get(shard).map(|tx_lock| tx_lock.is_read()).unwrap_or(true)
-                                        }
-                                    })
+                            .iter()
+                            // Check other transactions
+                            .filter(|(tx_id, _)| *tx_id != rec.transaction_id())
+                            .all(|(_, evidence)| {
+                                evidence.iter().all(|(shard, lock)| {
+                                    if lock.is_write() {
+                                        // Write lock must have no conflicts
+                                        !tx_substates.contains_key(shard)
+                                    } else {
+                                        // If there is a Shard conflict, then it must be a read lock
+                                        tx_substates.get(shard).map(|tx_lock| tx_lock.is_read()).unwrap_or(true)
+                                    }
                                 })
+                            })
                         {
                             used_substates.extend(tx_substates);
                             Some(Ok(rec))

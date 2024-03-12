@@ -73,7 +73,6 @@ pub struct Block {
     epoch: Epoch,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     proposed_by: PublicKey,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
     total_leader_fee: u64,
 
     // Body
@@ -253,6 +252,7 @@ impl Block {
             .chain(&self.parent)
             .chain(&self.justify)
             .chain(&self.height)
+            .chain(&self.total_leader_fee)
             .chain(&self.epoch)
             .chain(&self.proposed_by)
             .chain(&self.merkle_root)

@@ -94,7 +94,7 @@ function Blocks() {
               epoch: block.epoch,
               height: block.height,
               decision: block.justify.decision,
-              total_leader_fee: block.total_leader_fee,
+              total_leader_fee: block.block_fee.leader_fee,
               proposed_by_me: block.proposed_by === identity.public_key,
               transactions_cnt: block.commands.length,
               block_time: times[block.id] - times[block.justify.block_id],

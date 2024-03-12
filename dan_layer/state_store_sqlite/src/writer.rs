@@ -648,8 +648,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             transaction_pool::transaction_id.eq(serialize_hex(transaction.id)),
             transaction_pool::original_decision.eq(transaction.decision.to_string()),
             transaction_pool::transaction_fee.eq(transaction.transaction_fee as i64),
-            transaction_pool::leader_fee.eq(transaction.leader_fee as i64),
             transaction_pool::evidence.eq(serialize_json(&transaction.evidence)?),
+            transaction_pool::leader_fee.eq(transaction.leader_fee.as_ref().map(|f| f.fee as i64)),
+            transaction_pool::global_exhaust_burn
+                .eq(transaction.leader_fee.as_ref().map(|f| f.global_exhaust_burn as i64)),
             transaction_pool::stage.eq(stage.to_string()),
             transaction_pool::is_ready.eq(is_ready),
         );
@@ -740,7 +742,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let transaction_id = serialize_hex(transaction_id);
 
         #[derive(AsChangeset)]
-        #[diesel(table_name=transaction_pool)]
+        #[diesel(table_name = transaction_pool)]
         struct Changes {
             remote_evidence: Option<String>,
             local_decision: Option<Option<String>>,

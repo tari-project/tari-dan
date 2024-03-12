@@ -39,10 +39,10 @@ use tari_epoch_manager::EpochManagerReader;
 use crate::{
     hotstuff::{
         calculate_state_merkle_diff,
-        common::EXHAUST_DIVISOR,
         diff_to_substate_changes,
         error::HotStuffError,
         proposer,
+        EXHAUST_DIVISOR,
     },
     messages::{HotstuffMessage, ProposalMessage},
     traits::{ConsensusSpec, OutboundMessaging, ValidatorSignatureService},
@@ -241,7 +241,7 @@ where TConsensusSpec: ConsensusSpec
                         ))
                     })?;
                     let leader_fee = t.calculate_leader_fee(involved, EXHAUST_DIVISOR);
-                    total_leader_fee += leader_fee;
+                    total_leader_fee += leader_fee.fee();
                     let tx_atom = t.get_final_transaction_atom(leader_fee);
                     if tx_atom.decision.is_commit() {
                         let transaction = t.get_transaction(tx)?;
