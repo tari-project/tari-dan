@@ -38,18 +38,25 @@ impl<TAddr: NodeAddressable> EpochManagerHandle<TAddr> {
         Self { tx_request }
     }
 
-    pub async fn update_epoch(
-        &self,
-        block_height: u64,
-        block_hash: FixedHash,
-        confirmed: bool,
-    ) -> Result<(), EpochManagerError> {
+    pub async fn add_block_hash(&self, block_height: u64, block_hash: FixedHash) -> Result<(), EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::AddBlockHash {
+                block_height,
+                block_hash,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    pub async fn update_epoch(&self, block_height: u64, block_hash: FixedHash) -> Result<(), EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::UpdateEpoch {
                 block_height,
                 block_hash,
-                confirmed,
                 reply: tx,
             })
             .await

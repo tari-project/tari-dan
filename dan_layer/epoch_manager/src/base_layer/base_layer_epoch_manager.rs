@@ -107,19 +107,10 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(())
     }
 
-    pub async fn update_epoch(
-        &mut self,
-        block_height: u64,
-        block_hash: FixedHash,
-        confirmed: bool,
-    ) -> Result<(), EpochManagerError> {
+    pub async fn update_epoch(&mut self, block_height: u64, block_hash: FixedHash) -> Result<(), EpochManagerError> {
         let base_layer_constants = self.base_node_client.get_consensus_constants(block_height).await?;
         let epoch = base_layer_constants.height_to_epoch(block_height);
         self.add_base_layer_block_info(block_height, block_hash)?;
-        if !confirmed {
-            // This is not a confirmed block, so we don't need to update the epoch
-            return Ok(());
-        }
         self.update_current_block_info(block_height, block_hash)?;
         if self.current_epoch >= epoch {
             // no need to update the epoch
@@ -273,7 +264,11 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(())
     }
 
-    fn add_base_layer_block_info(&mut self, block_height: u64, block_hash: FixedHash) -> Result<(), EpochManagerError> {
+    pub fn add_base_layer_block_info(
+        &mut self,
+        block_height: u64,
+        block_hash: FixedHash,
+    ) -> Result<(), EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         self.global_db
             .base_layer_hashes(&mut tx)

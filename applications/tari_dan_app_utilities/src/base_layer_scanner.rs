@@ -277,7 +277,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
                 // This will be processed down below.
                 break;
             }
-            self.epoch_manager.update_epoch(header.height, scan, false).await?;
+            self.epoch_manager.add_block_hash(header.height, scan).await?;
             scan = header.prev_hash;
         }
         for current_height in start_scan_height..=end_height {
@@ -352,7 +352,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
 
             // Once we have all the UTXO data, we "activate" the new epoch if applicable.
             self.epoch_manager
-                .update_epoch(block_info.height, block_info.hash, true)
+                .update_epoch(block_info.height, block_info.hash)
                 .await?;
 
             self.set_last_scanned_block(tip.tip_hash, &block_info)?;
