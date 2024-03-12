@@ -4,4 +4,5 @@ import type { FunctionDef } from "./FunctionDef";
 export interface TemplateAbi {
   template_name: string;
   functions: Array<FunctionDef>;
+  version: string;
 }

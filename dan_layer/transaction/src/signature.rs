@@ -16,17 +16,7 @@ use tari_engine_types::{
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use crate::SubstateRequirement;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransactionSignatureFields {
-    pub fee_instructions: Vec<Instruction>,
-    pub instructions: Vec<Instruction>,
-    pub inputs: Vec<SubstateRequirement>,
-    pub input_refs: Vec<SubstateRequirement>,
-    pub min_epoch: Option<Epoch>,
-    pub max_epoch: Option<Epoch>,
-}
+use crate::{unsigned_transaction::UnsignedTransaction, SubstateRequirement};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
@@ -42,9 +32,9 @@ impl TransactionSignature {
         Self { public_key, signature }
     }
 
-    pub fn sign(secret_key: &RistrettoSecretKey, fields: TransactionSignatureFields) -> Self {
+    pub fn sign(secret_key: &RistrettoSecretKey, transaction: &UnsignedTransaction) -> Self {
         let public_key = RistrettoPublicKey::from_secret_key(secret_key);
-        let challenge = Self::create_challenge(fields);
+        let challenge = Self::create_challenge(transaction);
 
         Self {
             signature: Signature::sign(secret_key, challenge, &mut OsRng).unwrap(),
@@ -52,8 +42,8 @@ impl TransactionSignature {
         }
     }
 
-    pub fn verify(&self, fields: TransactionSignatureFields) -> bool {
-        let challenge = Self::create_challenge(fields);
+    pub fn verify(&self, transaction: &UnsignedTransaction) -> bool {
+        let challenge = Self::create_challenge(transaction);
         self.signature.verify(&self.public_key, challenge)
     }
 
@@ -65,9 +55,33 @@ impl TransactionSignature {
         &self.public_key
     }
 
-    fn create_challenge(fields: TransactionSignatureFields) -> [u8; 64] {
+    fn create_challenge(transaction: &UnsignedTransaction) -> [u8; 64] {
+        let signature_fields = TransactionSignatureFields::from(transaction);
         hasher64(EngineHashDomainLabel::TransactionSignature)
-            .chain(&fields)
+            .chain(&signature_fields)
             .result()
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TransactionSignatureFields<'a> {
+    fee_instructions: &'a [Instruction],
+    instructions: &'a [Instruction],
+    inputs: &'a [SubstateRequirement],
+    input_refs: &'a [SubstateRequirement],
+    min_epoch: Option<Epoch>,
+    max_epoch: Option<Epoch>,
+}
+
+impl<'a> From<&'a UnsignedTransaction> for TransactionSignatureFields<'a> {
+    fn from(transaction: &'a UnsignedTransaction) -> Self {
+        Self {
+            fee_instructions: &transaction.fee_instructions,
+            instructions: &transaction.instructions,
+            inputs: &transaction.inputs,
+            input_refs: &transaction.input_refs,
+            min_epoch: transaction.min_epoch,
+            max_epoch: transaction.max_epoch,
+        }
     }
 }
