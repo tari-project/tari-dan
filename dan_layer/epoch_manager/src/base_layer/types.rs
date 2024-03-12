@@ -53,6 +53,7 @@ pub enum EpochManagerRequest<TAddr> {
     UpdateEpoch {
         block_height: u64,
         block_hash: FixedHash,
+        confirmed: bool,
         reply: Reply<()>,
     },
     LastRegistrationEpoch {

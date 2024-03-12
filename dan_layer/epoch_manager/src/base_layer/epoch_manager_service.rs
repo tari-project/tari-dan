@@ -134,9 +134,13 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::UpdateEpoch {
                 block_height,
                 block_hash,
+                confirmed,
                 reply,
             } => {
-                handle(reply, self.inner.update_epoch(block_height, block_hash).await);
+                handle(
+                    reply,
+                    self.inner.update_epoch(block_height, block_hash, confirmed).await,
+                );
             },
             EpochManagerRequest::LastRegistrationEpoch { reply } => handle(reply, self.inner.last_registration_epoch()),
 

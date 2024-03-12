@@ -264,7 +264,22 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
             },
             Some(end_height) => end_height,
         };
-
+        let mut scan = tip.tip_hash;
+        loop {
+            let header = self.base_node_client.get_header_by_hash(scan).await?;
+            if let Some(last_tip) = self.last_scanned_tip {
+                if last_tip == scan {
+                    // This was processed on the previous call to this function.
+                    break;
+                }
+            }
+            if header.height == end_height {
+                // This will be processed down below.
+                break;
+            }
+            self.epoch_manager.update_epoch(header.height, scan, false).await?;
+            scan = header.prev_hash;
+        }
         for current_height in start_scan_height..=end_height {
             let utxos = self
                 .base_node_client
@@ -337,7 +352,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
 
             // Once we have all the UTXO data, we "activate" the new epoch if applicable.
             self.epoch_manager
-                .update_epoch(block_info.height, block_info.hash)
+                .update_epoch(block_info.height, block_info.hash, true)
                 .await?;
 
             self.set_last_scanned_block(tip.tip_hash, &block_info)?;
