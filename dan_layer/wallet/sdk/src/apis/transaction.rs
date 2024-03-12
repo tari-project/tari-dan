@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::collections::HashMap;
+
 use log::*;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
@@ -254,14 +256,20 @@ where
         transaction_id: TransactionId,
         diff: &SubstateDiff,
     ) -> Result<(), TransactionApiError> {
+        let mut downed_substates_with_parents = HashMap::with_capacity(diff.down_len());
         for (addr, _) in diff.down_iter() {
             if addr.is_layer1_commitment() {
                 info!(target: LOG_TARGET, "Layer 1 commitment {} downed", addr);
                 continue;
             }
 
-            if tx.substates_remove(addr).optional()?.is_none() {
+            let Some(downed) = tx.substates_remove(addr).optional()? else {
                 warn!(target: LOG_TARGET, "Downed substate {} not found", addr);
+                continue;
+            };
+
+            if let Some(parent) = downed.parent_address {
+                downed_substates_with_parents.insert(downed.address.substate_id, parent);
             }
         }
 
@@ -286,7 +294,12 @@ where
             for owned_addr in value.referenced_substates() {
                 if let Some(pos) = rest.iter().position(|(addr, _)| addr == &owned_addr) {
                     let (_, s) = rest.swap_remove(pos);
-                    tx.substates_upsert_child(transaction_id, component_addr.clone(), VersionedSubstateId {
+                    // If there was a previous parent for this substate, we keep it as is.
+                    let parent = downed_substates_with_parents
+                        .get(&owned_addr)
+                        .cloned()
+                        .unwrap_or_else(|| component_addr.clone());
+                    tx.substates_upsert_child(transaction_id, parent, VersionedSubstateId {
                         substate_id: owned_addr,
                         version: s.version(),
                     })?;
