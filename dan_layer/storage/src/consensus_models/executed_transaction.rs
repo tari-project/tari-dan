@@ -148,37 +148,46 @@ impl ExecutedTransaction {
         // Note that we only add evidence for inputs that have specific version numbers
         let mut deduped_evidence = HashMap::new();
 
-        deduped_evidence.extend(self.transaction
-            .inputs()
-            .iter()
-            .filter(|i| i.version().is_some())
-            .map(|input| {
-            (input.to_substate_address(), ShardEvidence {
-                qc_ids: IndexSet::new(),
-                lock: LockFlag::Write,
-            })
-        }));
+        deduped_evidence.extend(
+            self.transaction
+                .inputs()
+                .iter()
+                .filter(|i| i.version().is_some())
+                .map(|input| {
+                    (input.to_substate_address(), ShardEvidence {
+                        qc_ids: IndexSet::new(),
+                        lock: LockFlag::Write,
+                    })
+                }),
+        );
 
-        deduped_evidence.extend(self.transaction.input_refs().iter()
-        .filter(|i| i.version().is_some())
-        .map(|input_ref| {
-            (input_ref.to_substate_address(), ShardEvidence {
-                qc_ids: IndexSet::new(),
-                lock: LockFlag::Read,
-            })
-        }));
+        deduped_evidence.extend(
+            self.transaction
+                .input_refs()
+                .iter()
+                .filter(|i| i.version().is_some())
+                .map(|input_ref| {
+                    (input_ref.to_substate_address(), ShardEvidence {
+                        qc_ids: IndexSet::new(),
+                        lock: LockFlag::Read,
+                    })
+                }),
+        );
 
-        deduped_evidence.extend(self.transaction.filled_inputs().iter()
-        .filter(|i| i.version().is_some())
-        .map(|input_ref| {
-            (input_ref.to_substate_address(), ShardEvidence {
-                qc_ids: IndexSet::new(),
-                lock: LockFlag::Write,
-            })
-        }));
+        deduped_evidence.extend(
+            self.transaction
+                .filled_inputs()
+                .iter()
+                .filter(|i| i.version().is_some())
+                .map(|input_ref| {
+                    (input_ref.to_substate_address(), ShardEvidence {
+                        qc_ids: IndexSet::new(),
+                        lock: LockFlag::Write,
+                    })
+                }),
+        );
 
-        deduped_evidence.extend(self.resulting_outputs.iter()
-        .map(|output| {
+        deduped_evidence.extend(self.resulting_outputs.iter().map(|output| {
             (*output, ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: LockFlag::Write,

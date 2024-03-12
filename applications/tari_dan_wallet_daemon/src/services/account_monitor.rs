@@ -185,14 +185,14 @@ where
                 .await
                 .optional()?;
             let Some(ValidatorScanResult {
-                         address: versioned_addr,
-                         substate,
-                         created_by_tx,
-                     }) = scan_result
-                else {
-                    warn!(target: LOG_TARGET, "Vault {} for account {} does not exist according to validator node", vault_addr, versioned_account_address);
-                    continue;
-                };
+                address: versioned_addr,
+                substate,
+                created_by_tx,
+            }) = scan_result
+            else {
+                warn!(target: LOG_TARGET, "Vault {} for account {} does not exist according to validator node", vault_addr, versioned_account_address);
+                continue;
+            };
 
             if let Some(vault_version) = maybe_vault_version {
                 // The first time a vault is found, know about the vault substate from the tx result but never added

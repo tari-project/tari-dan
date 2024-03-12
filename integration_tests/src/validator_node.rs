@@ -24,6 +24,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+
 use reqwest::Url;
 use tari_common::{
     configuration::{CommonConfig, StringList},

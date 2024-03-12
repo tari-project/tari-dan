@@ -5,6 +5,7 @@ use std::{
     str::FromStr,
     time::{Duration, Instant},
 };
+
 use cucumber::{given, then, when};
 use integration_tests::{
     base_node::get_base_node_client,

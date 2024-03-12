@@ -234,10 +234,7 @@ where TConsensusSpec: ConsensusSpec
                     // TODO: update the evidence after execution so all transactions are treated equally here
                     let db_transaction = t.get_transaction(tx)?;
                     let involved = if db_transaction.transaction().has_inputs_without_version() {
-                        db_transaction
-                            .transaction()
-                            .all_inputs_iter()
-                            .count()
+                        db_transaction.transaction().all_inputs_iter().count()
                     } else {
                         local_committee_shard.count_distinct_shards(t.transaction().evidence.shards_iter())
                     };
