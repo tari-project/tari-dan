@@ -257,7 +257,15 @@ impl WalletStoreReader for ReadTransaction<'_> {
             query = query.filter(substates::template_address.eq(template_address.to_string()));
         }
         if let Some(substate_type) = by_type {
-            query = query.filter(substates::address.like(format!("{}_%", substate_type.as_prefix_str())));
+            match substate_type {
+                SubstateType::NonFungible => {
+                    query = query
+                        .filter(substates::address.like(format!("resource_% {}_%", substate_type.as_prefix_str())));
+                },
+                _ => {
+                    query = query.filter(substates::address.like(format!("{}_%", substate_type.as_prefix_str())));
+                },
+            }
         }
         if let Some(limit) = limit {
             query = query.limit(limit as i64);
