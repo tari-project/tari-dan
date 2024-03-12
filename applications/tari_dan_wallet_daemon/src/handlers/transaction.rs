@@ -144,7 +144,7 @@ pub async fn handle_submit(
             .with_min_epoch(req.min_epoch)
             .with_max_epoch(req.max_epoch)
             .with_input_refs(req.input_refs)
-        .sign(&key.key)
+            .sign(&key.key)
             .build()
     };
 
