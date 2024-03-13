@@ -19,28 +19,43 @@
 //  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-mod global_db;
-pub use global_db::{DbFactory, GlobalDb};
 
-mod backend_adapter;
-pub use backend_adapter::GlobalDbAdapter;
+use tari_common_types::types::FixedHash;
+use tari_dan_storage::global::DbBaseLayerBlockInfo;
 
-mod metadata_db;
-pub use metadata_db::{MetadataDb, MetadataKey};
+use crate::{error::SqliteStorageError, global::schema::*};
 
-mod template_db;
-pub use template_db::{DbTemplate, DbTemplateType, DbTemplateUpdate, TemplateDb, TemplateStatus};
+#[derive(Queryable)]
+pub struct BaseLayerBlockInfo {
+    pub hash: Vec<u8>,
+    pub height: i64,
+}
 
-mod validator_node_db;
-pub use validator_node_db::ValidatorNodeDb;
+impl TryFrom<BaseLayerBlockInfo> for DbBaseLayerBlockInfo {
+    type Error = SqliteStorageError;
 
-mod epoch_db;
-pub use epoch_db::{DbEpoch, EpochDb};
+    fn try_from(e: BaseLayerBlockInfo) -> Result<Self, Self::Error> {
+        Ok(Self {
+            hash: FixedHash::try_from(e.hash.clone()).map_err(|_| {
+                SqliteStorageError::MalformedDbData(format!("Invalid hash={:?} in base layer block info", e.hash))
+            })?,
+            height: e.height as u64,
+        })
+    }
+}
 
-mod base_layer_hashes_db;
-pub use base_layer_hashes_db::{BaseLayerHashesDb, DbBaseLayerBlockInfo};
+#[derive(Insertable)]
+#[diesel(table_name = base_layer_block_info)]
+pub struct NewBaseLayerBlockInfo {
+    pub hash: Vec<u8>,
+    pub height: i64,
+}
 
-mod bmt_db;
-pub use bmt_db::{BmtDb, DbBmt};
-
-pub mod models;
+impl From<DbBaseLayerBlockInfo> for NewBaseLayerBlockInfo {
+    fn from(e: DbBaseLayerBlockInfo) -> Self {
+        Self {
+            hash: e.hash.into_array().to_vec(),
+            height: e.height as i64,
+        }
+    }
+}

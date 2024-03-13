@@ -15,6 +15,13 @@ diesel::table! {
 }
 
 diesel::table! {
+    base_layer_block_info (hash) {
+        hash -> Binary,
+        height -> BigInt,
+    }
+}
+
+diesel::table! {
     metadata (key_name) {
         key_name -> Binary,
         value -> Binary,

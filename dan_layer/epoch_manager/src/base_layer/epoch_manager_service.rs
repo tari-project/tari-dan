@@ -131,6 +131,13 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::GetManyValidatorNodes { query, reply } => {
                 handle(reply, self.inner.get_many_validator_nodes(query));
             },
+            EpochManagerRequest::AddBlockHash {
+                block_height,
+                block_hash,
+                reply,
+            } => {
+                handle(reply, self.inner.add_base_layer_block_info(block_height, block_hash));
+            },
             EpochManagerRequest::UpdateEpoch {
                 block_height,
                 block_hash,
