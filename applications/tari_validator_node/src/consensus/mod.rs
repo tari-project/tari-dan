@@ -2,7 +2,7 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common::configuration::Network;
-use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker};
+use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffConfig, HotstuffWorker};
 use tari_dan_storage::consensus_models::TransactionPool;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_shutdown::ShutdownSignal;
@@ -38,6 +38,7 @@ pub use handle::*;
 use sqlite_message_logger::SqliteMessageLogger;
 use tari_consensus::traits::ConsensusSpec;
 use tari_dan_app_utilities::{
+    consensus_constants::ConsensusConstants,
     keypair::RistrettoKeypair,
     template_manager::implementation::TemplateManager,
     transaction_executor::TariDanTransactionProcessor,
@@ -62,6 +63,7 @@ pub async fn spawn(
         EpochManagerHandle<PeerAddress>,
         TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
     >,
+    consensus_constants: ConsensusConstants,
 ) -> (
     JoinHandle<Result<(), anyhow::Error>>,
     ConsensusHandle,
@@ -93,6 +95,10 @@ pub async fn spawn(
         tx_mempool,
         hooks,
         shutdown_signal.clone(),
+        HotstuffConfig {
+            max_base_layer_blocks_behind: consensus_constants.max_base_layer_blocks_behind,
+            max_base_layer_blocks_ahead: consensus_constants.max_base_layer_blocks_ahead,
+        },
     );
 
     let (tx_current_state, rx_current_state) = watch::channel(Default::default());

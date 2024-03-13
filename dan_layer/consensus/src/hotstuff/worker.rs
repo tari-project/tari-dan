@@ -19,7 +19,11 @@ use tari_shutdown::ShutdownSignal;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{broadcast, mpsc};
 
-use super::{on_receive_requested_transactions::OnReceiveRequestedTransactions, proposer::Proposer};
+use super::{
+    config::HotstuffConfig,
+    on_receive_requested_transactions::OnReceiveRequestedTransactions,
+    proposer::Proposer,
+};
 use crate::{
     hotstuff::{
         error::HotStuffError,
@@ -92,6 +96,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         tx_mempool: mpsc::UnboundedSender<Transaction>,
         hooks: TConsensusSpec::Hooks,
         shutdown: ShutdownSignal,
+        config: HotstuffConfig,
     ) -> Self {
         let pacemaker = PaceMaker::new();
         let vote_receiver = VoteReceiver::new(
@@ -114,6 +119,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
             on_inbound_message: OnInboundMessage::new(
                 network,
+                config,
                 state_store.clone(),
                 epoch_manager.clone(),
                 leader_strategy.clone(),

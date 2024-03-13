@@ -3,7 +3,7 @@
 
 use tari_common_types::types::PublicKey;
 use tari_consensus::{
-    hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker},
+    hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffConfig, HotstuffWorker},
     traits::hooks::NoopHooks,
 };
 use tari_dan_common_types::{shard::Shard, SubstateAddress};
@@ -121,6 +121,10 @@ impl ValidatorBuilder {
             tx_mempool,
             NoopHooks,
             shutdown_signal.clone(),
+            HotstuffConfig {
+                max_base_layer_blocks_ahead: 5,
+                max_base_layer_blocks_behind: 5,
+            },
         );
 
         let (tx_current_state, _) = watch::channel(Default::default());

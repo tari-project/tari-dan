@@ -109,7 +109,16 @@ where TConsensusSpec: ConsensusSpec
             })
             .collect::<Vec<TransactionId>>();
 
-        let foreign_proposal = ForeignProposal::new(committee_shard.shard(), *block.id(), tx_ids);
+        let base_layer_block_height = self
+            .epoch_manager
+            .get_base_layer_block_height(*block.base_layer_block_hash())
+            .await?
+            .ok_or_else(|| ProposalValidationError::BlockHashNotFound {
+                hash: *block.base_layer_block_hash(),
+            })?;
+
+        let foreign_proposal =
+            ForeignProposal::new(committee_shard.shard(), *block.id(), tx_ids, base_layer_block_height);
         if self
             .store
             .with_read_tx(|tx| ForeignProposal::exists(tx, &foreign_proposal))?
