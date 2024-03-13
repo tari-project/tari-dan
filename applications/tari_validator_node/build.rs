@@ -20,13 +20,19 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{env, process::Command};
+use std::process::Command;
+
+fn exit_on_ci() {
+    if option_env!("CI").is_some() {
+        std::process::exit(1);
+    }
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../tari_validator_node_web_ui/src");
     println!("cargo:rerun-if-changed=../tari_validator_node_web_ui/public");
 
-    if env::var_os("CARGO_FEATURE_TS").is_some() {
+    if option_env!("CARGO_FEATURE_TS").is_some() {
         println!("cargo:warning=The web ui is not being compiled when we are generating typescript types/interfaces.");
         return Ok(());
     }
@@ -39,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .status()
     {
         println!("cargo:warning='npm ci' error : {:?}", error);
-        std::process::exit(1);
+        exit_on_ci();
     }
     match Command::new(npm)
         .args(["run", "build"])
@@ -50,12 +56,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("cargo:warning='npm run build' exited with non-zero status code");
             println!("cargo:warning=Output: {}", String::from_utf8_lossy(&output.stdout));
             println!("cargo:warning=Error: {}", String::from_utf8_lossy(&output.stderr));
-            std::process::exit(1);
+            exit_on_ci();
         },
         Err(error) => {
             println!("cargo:warning='npm run build' error : {:?}", error);
             println!("cargo:warning=The web ui will not be included!");
-            std::process::exit(1);
+            exit_on_ci();
         },
         _ => {},
     }
