@@ -13,7 +13,7 @@ export interface Block {
   height: NodeHeight;
   epoch: Epoch;
   proposed_by: string;
-  total_leader_fee: bigint;
+  total_leader_fee: number;
   merkle_root: string;
   commands: Array<Command>;
   is_dummy: boolean;
