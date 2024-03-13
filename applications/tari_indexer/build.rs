@@ -39,14 +39,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .status()
     {
         println!("cargo:warning='npm ci' error : {:?}", error);
+        std::process::exit(1);
     }
-    if let Err(error) = Command::new(npm)
+    match Command::new(npm)
         .args(["run", "build"])
         .current_dir("../tari_indexer_web_ui")
-        .status()
+        .output()
     {
-        println!("cargo:warning='npm run build' error : {:?}", error);
-        println!("cargo:warning=The web ui will not be included!");
+        Ok(output) if !output.status.success() => {
+            println!("cargo:warning='npm run build' exited with non-zero status code");
+            println!("cargo:warning=Output: {}", String::from_utf8_lossy(&output.stdout));
+            println!("cargo:warning=Error: {}", String::from_utf8_lossy(&output.stderr));
+            std::process::exit(1);
+        },
+        Err(error) => {
+            println!("cargo:warning='npm run build' error : {:?}", error);
+            println!("cargo:warning=The web ui will not be included!");
+            std::process::exit(1);
+        },
+        _ => {},
     }
     Ok(())
 }
