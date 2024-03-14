@@ -41,7 +41,7 @@ use crate::{
         ResourceUpdateNonFungibleDataArg,
     },
     auth::{OwnerRule, ResourceAccessRules},
-    crypto::PedersonCommitmentBytes,
+    crypto::{PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{Amount, Bucket, ConfidentialOutputProof, Metadata, NonFungible, NonFungibleId, ResourceAddress, VaultId},
     prelude::ResourceType,
 };
@@ -102,6 +102,7 @@ impl ResourceManager {
         access_rules: ResourceAccessRules,
         metadata: Metadata,
         mint_arg: Option<MintArg>,
+        view_key: Option<RistrettoPublicKeyBytes>,
     ) -> (ResourceAddress, Option<Bucket>) {
         let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
             resource_ref: ResourceRef::Resource,
@@ -111,7 +112,8 @@ impl ResourceManager {
                 owner_rule,
                 access_rules,
                 metadata,
-                mint_arg
+                mint_arg,
+                view_key,
             }],
         });
 

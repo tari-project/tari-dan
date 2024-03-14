@@ -531,11 +531,12 @@ impl WorkingState {
                 ResourceContainer::non_fungible(resource_address, token_ids)
             },
             MintArg::Confidential { proof } => {
+                let resource = self.get_resource(locked_resource)?;
                 debug!(
                     target: LOG_TARGET,
                     "Minting confidential tokens on resource: {}", resource_address
                 );
-                ResourceContainer::mint_confidential(resource_address, *proof)?
+                ResourceContainer::mint_confidential(resource_address, *proof, resource.view_key())?
             },
         };
 

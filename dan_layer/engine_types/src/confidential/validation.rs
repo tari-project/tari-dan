@@ -1,16 +1,21 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::{Commitment, PublicKey};
+use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{
+    commitment::HomomorphicCommitmentFactory,
     extended_range_proof::{ExtendedRangeProofService, Statement},
-    ristretto::bulletproofs_plus::RistrettoAggregatedPublicStatement,
+    keys::{PublicKey as _, SecretKey},
+    ristretto::{bulletproofs_plus::RistrettoAggregatedPublicStatement, RistrettoSecretKey},
     tari_utilities::ByteArray,
 };
-use tari_template_lib::models::{Amount, ConfidentialOutputProof};
+use tari_template_lib::models::{Amount, ConfidentialOutputProof, ViewableBalanceProof};
 
-use super::get_range_proof_service;
-use crate::{confidential::ConfidentialOutput, resource_container::ResourceError};
+use super::{challenges, get_commitment_factory, get_range_proof_service};
+use crate::{
+    confidential::{elgamal::ElgamalVerifiableBalance, ConfidentialOutput},
+    resource_container::ResourceError,
+};
 
 #[derive(Debug)]
 pub struct ValidatedConfidentialProof {
@@ -22,6 +27,7 @@ pub struct ValidatedConfidentialProof {
 
 pub fn validate_confidential_proof(
     proof: &ConfidentialOutputProof,
+    view_key: Option<&PublicKey>,
 ) -> Result<ValidatedConfidentialProof, ResourceError> {
     if proof.output_revealed_amount.is_negative() || proof.change_revealed_amount.is_negative() {
         return Err(ResourceError::InvalidConfidentialProof {
@@ -33,50 +39,62 @@ pub fn validate_confidential_proof(
         .output_statement
         .as_ref()
         .map(|statement| {
-            let output_commitment = Commitment::from_canonical_bytes(&statement.commitment).map_err(|_| {
-                ResourceError::InvalidConfidentialProof {
-                    details: "Invalid commitment".to_string(),
-                }
-            })?;
+            let output_commitment =
+                Commitment::from_canonical_bytes(statement.commitment.as_bytes()).map_err(|_| {
+                    ResourceError::InvalidConfidentialProof {
+                        details: "Invalid commitment".to_string(),
+                    }
+                })?;
 
             let output_public_nonce = PublicKey::from_canonical_bytes(statement.sender_public_nonce.as_bytes())
                 .map_err(|_| ResourceError::InvalidConfidentialProof {
                     details: "Invalid sender public nonce".to_string(),
                 })?;
 
+            let viewable_balance = validate_elgamal_verifiable_balance_proof(
+                &output_commitment,
+                view_key,
+                statement.viewable_balance_proof.as_ref(),
+            )?;
+
             Ok(ConfidentialOutput {
                 commitment: output_commitment,
                 stealth_public_nonce: output_public_nonce,
                 encrypted_data: statement.encrypted_data.clone(),
                 minimum_value_promise: statement.minimum_value_promise,
+                viewable_balance,
             })
         })
         .transpose()?;
 
-    let change =
-        proof
-            .change_statement
-            .as_ref()
-            .map(|stmt| {
-                let commitment = Commitment::from_canonical_bytes(&stmt.commitment).map_err(|_| {
-                    ResourceError::InvalidConfidentialProof {
-                        details: "Invalid commitment".to_string(),
-                    }
-                })?;
+    let change = proof
+        .change_statement
+        .as_ref()
+        .map(|stmt| {
+            let commitment = Commitment::from_canonical_bytes(&*stmt.commitment).map_err(|_| {
+                ResourceError::InvalidConfidentialProof {
+                    details: "Invalid commitment".to_string(),
+                }
+            })?;
 
-                let stealth_public_nonce = PublicKey::from_canonical_bytes(stmt.sender_public_nonce.as_bytes())
-                    .map_err(|_| ResourceError::InvalidConfidentialProof {
-                        details: "Invalid sender public nonce".to_string(),
-                    })?;
+            let stealth_public_nonce = PublicKey::from_canonical_bytes(&*stmt.sender_public_nonce).map_err(|_| {
+                ResourceError::InvalidConfidentialProof {
+                    details: "Invalid sender public nonce".to_string(),
+                }
+            })?;
 
-                Ok(ConfidentialOutput {
-                    commitment,
-                    stealth_public_nonce,
-                    encrypted_data: stmt.encrypted_data.clone(),
-                    minimum_value_promise: stmt.minimum_value_promise,
-                })
+            let viewable_balance =
+                validate_elgamal_verifiable_balance_proof(&commitment, view_key, stmt.viewable_balance_proof.as_ref())?;
+
+            Ok(ConfidentialOutput {
+                commitment,
+                stealth_public_nonce,
+                encrypted_data: stmt.encrypted_data.clone(),
+                minimum_value_promise: stmt.minimum_value_promise,
+                viewable_balance,
             })
-            .transpose()?;
+        })
+        .transpose()?;
 
     validate_bullet_proof(proof)?;
 
@@ -88,13 +106,116 @@ pub fn validate_confidential_proof(
     })
 }
 
+pub fn validate_elgamal_verifiable_balance_proof(
+    commitment: &Commitment,
+    view_key: Option<&PublicKey>,
+    viewable_balance_proof: Option<&ViewableBalanceProof>,
+) -> Result<Option<ElgamalVerifiableBalance>, ResourceError> {
+    // Check that if a view key is provided, then a viewable balance proof is also provided and vice versa
+    let Some(view_key) = view_key else {
+        if viewable_balance_proof.is_none() {
+            return Ok(None);
+        }
+        return Err(ResourceError::InvalidConfidentialProof {
+            details: "ViewableBalanceProof provided for a resource that is not viewable".to_string(),
+        });
+    };
+
+    let Some(proof) = viewable_balance_proof else {
+        return Err(ResourceError::InvalidConfidentialProof {
+            details: "ViewableBalanceProof is required for a viewable resource".to_string(),
+        });
+    };
+
+    // Decode and check that each field is well-formed
+    let encrypted = PublicKey::from_canonical_bytes(&*proof.elgamal_encrypted).map_err(|_| {
+        ResourceError::InvalidConfidentialProof {
+            details: "Invalid value for E".to_string(),
+        }
+    })?;
+
+    let elgamal_public_nonce = PublicKey::from_canonical_bytes(&*proof.elgamal_public_nonce).map_err(|_| {
+        ResourceError::InvalidConfidentialProof {
+            details: "Invalid public key for R".to_string(),
+        }
+    })?;
+
+    let c_prime =
+        Commitment::from_canonical_bytes(&*proof.c_prime).map_err(|_| ResourceError::InvalidConfidentialProof {
+            details: "Invalid commitment for C'".to_string(),
+        })?;
+
+    let e_prime =
+        Commitment::from_canonical_bytes(&*proof.e_prime).map_err(|_| ResourceError::InvalidConfidentialProof {
+            details: "Invalid commitment for E'".to_string(),
+        })?;
+
+    let r_prime =
+        PublicKey::from_canonical_bytes(&*proof.r_prime).map_err(|_| ResourceError::InvalidConfidentialProof {
+            details: "Invalid public key for R'".to_string(),
+        })?;
+
+    let s_v = PrivateKey::from_canonical_bytes(&*proof.s_v).map_err(|_| ResourceError::InvalidConfidentialProof {
+        details: "Invalid private key for s_v".to_string(),
+    })?;
+
+    let s_m = PrivateKey::from_canonical_bytes(&*proof.s_m).map_err(|_| ResourceError::InvalidConfidentialProof {
+        details: "Invalid private key for s_m".to_string(),
+    })?;
+
+    let s_r = &PrivateKey::from_canonical_bytes(&*proof.s_r).map_err(|_| ResourceError::InvalidConfidentialProof {
+        details: "Invalid private key for s_r".to_string(),
+    })?;
+
+    // Fiat-Shamir challenge
+    let e = &RistrettoSecretKey::from_uniform_bytes(&challenges::viewable_balance_proof_challenge64(
+        commitment,
+        view_key,
+        proof.as_challenge_fields(),
+    ))
+    // TODO: it would be better if from_uniform_bytes took a [u8; 64]
+    .expect("INVARIANT VIOLATION: RistrettoSecretKey::from_uniform_bytes and hash output length mismatch");
+
+    // Check eC + C' ?= s_m.G + sv.H
+    let left = e * commitment.as_public_key() + c_prime.as_public_key();
+    let right = get_commitment_factory().commit(&s_m, &s_v);
+    if left != *right.as_public_key() {
+        return Err(ResourceError::InvalidConfidentialProof {
+            details: "Invalid viewable balance proof (eC + C' != s_m.G + s_v.H)".to_string(),
+        });
+    }
+
+    // Check eE + E' ?= s_v.G + s_r.P
+    let left = e * &encrypted + e_prime.as_public_key();
+    let right = PublicKey::from_secret_key(&s_v) + s_r * view_key;
+    if left != right {
+        return Err(ResourceError::InvalidConfidentialProof {
+            details: "Invalid viewable balance proof (eE + E' != s_v.G + s_r.P)".to_string(),
+        });
+    }
+
+    // Check eR + R' ?= s_r.G
+    let left = e * &elgamal_public_nonce + r_prime;
+    let right = PublicKey::from_secret_key(s_r);
+    if left != right {
+        return Err(ResourceError::InvalidConfidentialProof {
+            details: "Invalid viewable balance proof (eR + R' != s_r.G)".to_string(),
+        });
+    }
+
+    Ok(Some(ElgamalVerifiableBalance {
+        encrypted,
+        public_nonce: elgamal_public_nonce,
+    }))
+}
+
 fn validate_bullet_proof(proof: &ConfidentialOutputProof) -> Result<(), ResourceError> {
     let statements = proof
         .output_statement
         .iter()
         .chain(proof.change_statement.iter())
         .map(|stmt| {
-            let commitment = Commitment::from_canonical_bytes(&stmt.commitment).map_err(|_| {
+            let commitment = Commitment::from_canonical_bytes(&*stmt.commitment).map_err(|_| {
                 ResourceError::InvalidConfidentialProof {
                     details: "Invalid commitment".to_string(),
                 }

@@ -35,7 +35,14 @@ use tari_engine_types::{
 use tari_template_lib::{
     args::Arg,
     crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
-    models::{ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedData, ObjectKey},
+    models::{
+        ConfidentialOutputProof,
+        ConfidentialStatement,
+        ConfidentialWithdrawProof,
+        EncryptedData,
+        ObjectKey,
+        ViewableBalanceProof,
+    },
 };
 use tari_transaction::{SubstateRequirement, Transaction};
 
@@ -500,6 +507,7 @@ impl TryFrom<proto::transaction::ConfidentialStatement> for ConfidentialStatemen
                     .ok_or_else(|| anyhow!("Invalid length of encrypted_value bytes"))?,
             ),
             minimum_value_promise: val.minimum_value_promise,
+            viewable_balance_proof: val.viewable_balance_proof.map(TryInto::try_into).transpose()?,
         })
     }
 }
@@ -511,6 +519,41 @@ impl From<ConfidentialStatement> for proto::transaction::ConfidentialStatement {
             sender_public_nonce: val.sender_public_nonce.as_bytes().to_vec(),
             encrypted_value: val.encrypted_data.as_ref().to_vec(),
             minimum_value_promise: val.minimum_value_promise,
+            viewable_balance_proof: val.viewable_balance_proof.map(Into::into),
+        }
+    }
+}
+
+// -------------------------------- ViewableBalanceProof -------------------------------- //
+
+impl TryFrom<proto::transaction::ViewableBalanceProof> for ViewableBalanceProof {
+    type Error = anyhow::Error;
+
+    fn try_from(val: proto::transaction::ViewableBalanceProof) -> Result<Self, Self::Error> {
+        Ok(ViewableBalanceProof {
+            elgamal_encrypted: val.elgamal_encrypted.as_slice().try_into()?,
+            elgamal_public_nonce: val.elgamal_public_nonce.as_slice().try_into()?,
+            c_prime: val.c_prime.as_slice().try_into()?,
+            e_prime: val.e_prime.as_slice().try_into()?,
+            r_prime: val.r_prime.as_slice().try_into()?,
+            s_v: val.s_v.as_slice().try_into()?,
+            s_m: val.s_m.as_slice().try_into()?,
+            s_r: val.s_r.as_slice().try_into()?,
+        })
+    }
+}
+
+impl From<ViewableBalanceProof> for proto::transaction::ViewableBalanceProof {
+    fn from(val: ViewableBalanceProof) -> Self {
+        Self {
+            elgamal_encrypted: val.elgamal_encrypted.as_bytes().to_vec(),
+            elgamal_public_nonce: val.elgamal_public_nonce.as_bytes().to_vec(),
+            c_prime: val.c_prime.as_bytes().to_vec(),
+            e_prime: val.e_prime.as_bytes().to_vec(),
+            r_prime: val.r_prime.as_bytes().to_vec(),
+            s_v: val.s_v.as_bytes().to_vec(),
+            s_m: val.s_m.as_bytes().to_vec(),
+            s_r: val.s_r.as_bytes().to_vec(),
         }
     }
 }
