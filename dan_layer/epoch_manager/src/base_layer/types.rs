@@ -50,6 +50,11 @@ pub enum EpochManagerRequest<TAddr> {
         registration: ValidatorNodeRegistration,
         reply: Reply<()>,
     },
+    AddBlockHash {
+        block_height: u64,
+        block_hash: FixedHash,
+        reply: Reply<()>,
+    },
     UpdateEpoch {
         block_height: u64,
         block_hash: FixedHash,

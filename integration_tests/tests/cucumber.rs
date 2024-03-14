@@ -585,8 +585,10 @@ async fn print_world(world: &mut TariWorld) {
 
     // wallet daemons
     for (name, daemon) in &world.wallet_daemons {
-        eprintln!("Wallet daemons \"{}\"", name);
-        eprintln!("  - {}: {}", name, daemon.name);
+        eprintln!(
+            "Wallet daemon \"{}\": json rpc port \"{}\", indexer jrpc port \"{}\", temp dir path \"{:?}\"",
+            name, daemon.json_rpc_port, daemon.indexer_jrpc_port, daemon.temp_path_dir
+        );
     }
 
     eprintln!();

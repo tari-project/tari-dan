@@ -41,7 +41,7 @@ use tari_dan_common_types::{
     NodeAddressable,
     SubstateAddress,
 };
-use tari_dan_storage::global::{models::ValidatorNode, DbEpoch, GlobalDb, MetadataKey};
+use tari_dan_storage::global::{models::ValidatorNode, DbBaseLayerBlockInfo, DbEpoch, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 use tokio::sync::broadcast;
@@ -110,6 +110,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     pub async fn update_epoch(&mut self, block_height: u64, block_hash: FixedHash) -> Result<(), EpochManagerError> {
         let base_layer_constants = self.base_node_client.get_consensus_constants(block_height).await?;
         let epoch = base_layer_constants.height_to_epoch(block_height);
+        self.add_base_layer_block_info(block_height, block_hash)?;
         self.update_current_block_info(block_height, block_hash)?;
         if self.current_epoch >= epoch {
             // no need to update the epoch
@@ -260,6 +261,22 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             .set_metadata(MetadataKey::BaseLayerConsensusConstants, &base_layer_constants)?;
         tx.commit()?;
         self.base_layer_consensus_constants = Some(base_layer_constants);
+        Ok(())
+    }
+
+    pub fn add_base_layer_block_info(
+        &mut self,
+        block_height: u64,
+        block_hash: FixedHash,
+    ) -> Result<(), EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        self.global_db
+            .base_layer_hashes(&mut tx)
+            .insert_base_layer_block_info(DbBaseLayerBlockInfo {
+                hash: block_hash,
+                height: block_height,
+            })?;
+        tx.commit()?;
         Ok(())
     }
 
