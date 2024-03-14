@@ -20,7 +20,7 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::process::Command;
+use std::{env, process::Command};
 
 fn exit_on_ci() {
     if option_env!("CI").is_some() {
@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../tari_indexer_web_ui/src");
     println!("cargo:rerun-if-changed=../tari_indexer_web_ui/public");
 
-    if option_env!("CARGO_FEATURE_TS").is_some() {
+    if env::var("CARGO_FEATURE_TS").is_ok() {
         println!("cargo:warning=The web ui is not being compiled when we are generating typescript types/interfaces.");
         return Ok(());
     }

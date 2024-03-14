@@ -10,6 +10,7 @@ license.workspace = true
 [features]
 default = ["metrics"]
 metrics = ["prometheus"]
+ts = []                  # this is just for the build script to skip the build
 
 [dependencies]
 minotari_app_grpc = { workspace = true }
@@ -93,4 +94,3 @@ ignored = [
     # Want to enable some log4rs features
     "log4rs",
 ]
-
