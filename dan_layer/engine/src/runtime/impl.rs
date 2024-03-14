@@ -84,7 +84,7 @@ use tari_template_lib::{
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     crypto::RistrettoPublicKeyBytes,
     models::{
-        Amount, BucketId, ComponentAddress, EntityId, Metadata, NonFungible, NonFungibleAddress, NotAuthorized, ResourceAddress, VaultId, VaultRef
+        Amount, BucketId, ComponentAddress, EntityId, Metadata, NonFungible, NonFungibleAddress, NotAuthorized, VaultId, VaultRef
     },
     prelude::ResourceType,
     template::BuiltinTemplate,
@@ -225,7 +225,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         })
     }
 
-    fn emit_vault_event(&self, topic: String, vault_id: VaultId, vault_lock: &LockedSubstate, state: &mut WorkingState) -> Result<(), RuntimeError> {      
+    fn emit_vault_event(&self, topic: String, vault_id: VaultId, vault_lock: &LockedSubstate, state: &mut WorkingState) -> Result<(), RuntimeError> {     
         self.invoke_modules_on_runtime_call("emit_event")?;
         
         let component_address = 
@@ -262,6 +262,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     }
 
     fn emit_event(&self, topic: String, payload: Metadata) -> Result<(), RuntimeError> {
+        // forbid template users to emit events that can be confused with the ones emitted by the engine 
+        if topic.starts_with(STANDARD_TOPIC_PREFIX) {
+            return Err(RuntimeError::InvalidEventTopic { topic });
+        }
+
         self.invoke_modules_on_runtime_call("emit_event")?;
 
         let component_address = self.tracker.read_with(|state| {

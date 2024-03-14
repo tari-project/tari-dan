@@ -31,9 +31,8 @@ mod event {
     pub struct EventEmitter {}
 
     impl EventEmitter {
-        pub fn test_function() {
+        pub fn test_function(topic: String) {
             println!("Emitting a new event");
-            let topic = "Hello world !";
             let payload = [("my", "event")];
             emit_event(topic, payload);
         }

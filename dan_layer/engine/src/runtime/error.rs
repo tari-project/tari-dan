@@ -228,6 +228,9 @@ pub enum RuntimeError {
     AddressAllocationNotFound { id: u32 },
     #[error("Address allocation type mismatch: {address}")]
     AddressAllocationTypeMismatch { address: SubstateId },
+
+    #[error("Invalid event topic {topic}")]
+    InvalidEventTopic { topic: String },
 }
 
 impl RuntimeError {
