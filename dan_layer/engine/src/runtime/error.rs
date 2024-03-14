@@ -231,6 +231,9 @@ pub enum RuntimeError {
 
     #[error("Invalid event topic {topic}")]
     InvalidEventTopic { topic: String },
+
+    #[error("Numeric conversion error: {details}")]
+    NumericConversionError { details: String },
 }
 
 impl RuntimeError {

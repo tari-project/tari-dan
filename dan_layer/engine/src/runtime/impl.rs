@@ -30,7 +30,6 @@ use tari_crypto::{range_proof::RangeProofService, ristretto::RistrettoPublicKey,
 use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
     base_layer_hashing::ownership_proof_hasher64,
-    bucket,
     commit_result::FinalizeResult,
     component::ComponentHeader,
     confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
@@ -240,31 +239,29 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         topic: String,
         vault_id: VaultId,
         vault_lock: &LockedSubstate,
-        amount: Option<Amount>,
+        amount: Amount,
+        resource_type: ResourceType,
         state: &mut WorkingState,
     ) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("emit_event")?;
 
-        let component_address = Ok::<_, RuntimeError>(
-            state
-                .current_call_scope()?
-                .get_current_component_lock()
-                .and_then(|l| l.address().as_component_address()),
-        )?;
+        let component_address = state
+            .current_call_scope()?
+            .get_current_component_lock()
+            .and_then(|l| l.address().as_component_address());
 
         let tx_hash = self.entity_id_provider.transaction_hash();
         let (template_address, _) = state.current_template()?;
-        let resource_address = state.get_vault(&vault_lock)?.resource_address();
+        let resource_address = state.get_vault(vault_lock)?.resource_address();
 
         let mut payload = Metadata::new();
         payload.insert("vault_id", vault_id.to_string());
         payload.insert("resource_address", resource_address.to_string());
-        if let Some(amount) = amount {
-            payload.insert("amount", amount.to_string());
-        }
+        payload.insert("resource_type", resource_type.to_string());
+        payload.insert("amount", amount.to_string());
 
         let event = Event::new(component_address, *template_address, tx_hash, topic, payload);
-        log::log!(target: "tari::dan::engine::runtime", log::Level::Debug, "{}", event.to_string());
+        debug!(target: LOG_TARGET, "Emitted vault event {}", event);
         state.push_event(event);
 
         Ok(())
@@ -882,11 +879,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     let bucket = state.take_bucket(bucket_id)?;
 
                     // Emit a builtin event for the deposit
-                    let amount = match bucket.resource_type() {
-                        ResourceType::Fungible => Some(bucket.amount()),
-                        _ => None,
-                    };
-                    self.emit_vault_event(VAULT_DEPOSIT_TOPIC.to_owned(), vault_id, &vault_lock, amount, state)?;
+                    self.emit_vault_event(
+                        VAULT_DEPOSIT_TOPIC.to_owned(),
+                        vault_id,
+                        &vault_lock,
+                        bucket.amount(),
+                        bucket.resource_type(),
+                        state,
+                    )?;
 
                     let resource_address = state.get_vault(&vault_lock)?.resource_address();
                     let resource_lock =
@@ -933,13 +933,34 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
                     let (resource_container, amount) = match arg {
-                        VaultWithdrawArg::Fungible { amount } => (vault_mut.withdraw(amount)?, Some(amount)),
-                        VaultWithdrawArg::NonFungible { ids } => (vault_mut.withdraw_non_fungibles(&ids)?, None),
-                        VaultWithdrawArg::Confidential { proof } => (vault_mut.withdraw_confidential(*proof)?, None),
+                        VaultWithdrawArg::Fungible { amount } => {
+                            let container = vault_mut.withdraw(amount)?;
+                            (container, amount)
+                        },
+                        VaultWithdrawArg::NonFungible { ids } => {
+                            let container = vault_mut.withdraw_non_fungibles(&ids)?;
+                            let amount =
+                                Amount(ids.len().try_into().map_err(|_| RuntimeError::NumericConversionError {
+                                    details: "Could not convert to i64".to_owned(),
+                                })?);
+                            (container, amount)
+                        },
+                        VaultWithdrawArg::Confidential { proof } => {
+                            let amount = proof.revealed_input_amount();
+                            let container = vault_mut.withdraw_confidential(*proof)?;
+                            (container, amount)
+                        },
                     };
 
                     // Emit a builtin event for the withdraw
-                    self.emit_vault_event(VAULT_WITHDRAW_TOPIC.to_owned(), vault_id, &vault_lock, amount, state)?;
+                    self.emit_vault_event(
+                        VAULT_WITHDRAW_TOPIC.to_owned(),
+                        vault_id,
+                        &vault_lock,
+                        amount,
+                        resource_container.resource_type(),
+                        state,
+                    )?;
 
                     let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource_container)?;

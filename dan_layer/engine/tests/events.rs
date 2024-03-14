@@ -132,20 +132,34 @@ fn builtin_vault_events() {
     assert!(result.finalize.is_accept());
 
     // a standard event for the withdraw must have been emmitted
-    assert!(result.finalize.events.iter().any(|e| {
-        e.topic() == "std.vault.withdraw".to_owned() &&
-            e.template_address() == ACCOUNT_TEMPLATE_ADDRESS &&
-            e.component_address().unwrap() == sender_address &&
-            *e.payload().get("resource_address").unwrap() == faucet_resource.to_string() &&
-            *e.payload().get("amount").unwrap() == amount.to_string()
-    }));
+    let event = result
+        .finalize
+        .events
+        .iter()
+        .find(|e| e.topic() == "std.vault.withdraw")
+        .unwrap();
+    assert_eq!(event.template_address(), ACCOUNT_TEMPLATE_ADDRESS);
+    assert_eq!(event.component_address().unwrap(), sender_address);
+    assert_eq!(
+        *event.payload().get("resource_address").unwrap(),
+        faucet_resource.to_string()
+    );
+    assert_eq!(*event.payload().get("resource_type").unwrap(), "Fungible");
+    assert_eq!(*event.payload().get("amount").unwrap(), amount.to_string());
 
     // a standard event for the deposit must have been emmitted
-    assert!(result.finalize.events.iter().any(|e| {
-        e.topic() == "std.vault.deposit".to_owned() &&
-            e.template_address() == ACCOUNT_TEMPLATE_ADDRESS &&
-            e.component_address().unwrap() == receiver_address &&
-            *e.payload().get("resource_address").unwrap() == faucet_resource.to_string() &&
-            *e.payload().get("amount").unwrap() == amount.to_string()
-    }));
+    let event = result
+        .finalize
+        .events
+        .iter()
+        .find(|e| e.topic() == "std.vault.deposit")
+        .unwrap();
+    assert_eq!(event.template_address(), ACCOUNT_TEMPLATE_ADDRESS);
+    assert_eq!(event.component_address().unwrap(), receiver_address);
+    assert_eq!(
+        *event.payload().get("resource_address").unwrap(),
+        faucet_resource.to_string()
+    );
+    assert_eq!(*event.payload().get("resource_type").unwrap(), "Fungible");
+    assert_eq!(*event.payload().get("amount").unwrap(), amount.to_string());
 }
