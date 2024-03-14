@@ -4,7 +4,10 @@
 use tari_dan_engine::runtime::RuntimeError;
 use tari_engine_types::instruction::Instruction;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::{args, models::{Amount, ComponentAddress}};
+use tari_template_lib::{
+    args,
+    models::{Amount, ComponentAddress},
+};
 use tari_template_test_tooling::{support::assert_error::assert_reject_reason, TemplateTest};
 use tari_transaction::Transaction;
 
@@ -40,15 +43,16 @@ fn cannot_use_standard_topic() {
     let event_emitter_template = template_test.get_template_address("EventEmitter");
     let (_, _, private_key) = template_test.create_owned_account();
     let invalid_topic = "std.mytopic";
-    let reason = template_test
-        .execute_expect_failure(
-            Transaction::builder()
-                .call_function(event_emitter_template, "test_function", args![invalid_topic])
-                .sign(&private_key)
-            .build(), [].into());
-        assert_reject_reason(reason, RuntimeError::InvalidEventTopic {
-            topic: invalid_topic.to_owned(),
-        });
+    let reason = template_test.execute_expect_failure(
+        Transaction::builder()
+            .call_function(event_emitter_template, "test_function", args![invalid_topic])
+            .sign(&private_key)
+            .build(),
+        [].into(),
+    );
+    assert_reject_reason(reason, RuntimeError::InvalidEventTopic {
+        topic: invalid_topic.to_owned(),
+    });
 }
 
 #[test]
@@ -117,28 +121,28 @@ fn builtin_vault_events() {
                     component_address: receiver_address,
                     method: "deposit".to_string(),
                     args: args![Variable("foo_bucket")],
-                }
+                },
             ],
             // Sender proof needed to withdraw
             vec![sender_proof],
         )
         .unwrap();
 
-        assert!(result.finalize.is_accept());
+    assert!(result.finalize.is_accept());
 
-        // a standard event for the withdraw must have been emmitted
-        assert!(result.finalize.events.iter().any(|e| {
-            e.topic() == "std.vault.withdraw".to_owned() &&
+    // a standard event for the withdraw must have been emmitted
+    assert!(result.finalize.events.iter().any(|e| {
+        e.topic() == "std.vault.withdraw".to_owned() &&
             e.template_address() == ACCOUNT_TEMPLATE_ADDRESS &&
             e.component_address().unwrap() == sender_address &&
             *e.payload().get("resource_address").unwrap() == faucet_resource.to_string()
-        }));
+    }));
 
-        // a standard event for the deposit must have been emmitted
-        assert!(result.finalize.events.iter().any(|e| {
-            e.topic() == "std.vault.deposit".to_owned() &&
+    // a standard event for the deposit must have been emmitted
+    assert!(result.finalize.events.iter().any(|e| {
+        e.topic() == "std.vault.deposit".to_owned() &&
             e.template_address() == ACCOUNT_TEMPLATE_ADDRESS &&
             e.component_address().unwrap() == receiver_address &&
             *e.payload().get("resource_address").unwrap() == faucet_resource.to_string()
-        }));
+    }));
 }
