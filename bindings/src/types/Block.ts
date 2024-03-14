@@ -22,4 +22,5 @@ export interface Block {
   foreign_indexes: Record<Shard, bigint>;
   stored_at: Array<number> | null;
   signature: { public_nonce: string; signature: string } | null;
+  base_layer_block_hash: string;
 }
