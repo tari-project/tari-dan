@@ -30,6 +30,7 @@ use tari_crypto::{range_proof::RangeProofService, ristretto::RistrettoPublicKey,
 use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
     base_layer_hashing::ownership_proof_hasher64,
+    bucket,
     commit_result::FinalizeResult,
     component::ComponentHeader,
     confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
@@ -239,6 +240,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         topic: String,
         vault_id: VaultId,
         vault_lock: &LockedSubstate,
+        amount: Option<Amount>,
         state: &mut WorkingState,
     ) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("emit_event")?;
@@ -257,6 +259,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         let mut payload = Metadata::new();
         payload.insert("vault_id", vault_id.to_string());
         payload.insert("resource_address", resource_address.to_string());
+        if let Some(amount) = amount {
+            payload.insert("amount", amount.to_string());
+        }
 
         let event = Event::new(component_address, *template_address, tx_hash, topic, payload);
         log::log!(target: "tari::dan::engine::runtime", log::Level::Debug, "{}", event.to_string());
@@ -874,9 +879,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 self.tracker.write_with(|state| {
                     let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
+                    let bucket = state.take_bucket(bucket_id)?;
 
                     // Emit a builtin event for the deposit
-                    self.emit_vault_event(VAULT_DEPOSIT_TOPIC.to_owned(), vault_id, &vault_lock, state)?;
+                    let amount = match bucket.resource_type() {
+                        ResourceType::Fungible => Some(bucket.amount()),
+                        _ => None,
+                    };
+                    self.emit_vault_event(VAULT_DEPOSIT_TOPIC.to_owned(), vault_id, &vault_lock, amount, state)?;
 
                     let resource_address = state.get_vault(&vault_lock)?.resource_address();
                     let resource_lock =
@@ -887,7 +897,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         .check_resource_access_rules(ResourceAuthAction::Deposit, &resource_lock)?;
 
                     // It is invalid to deposit a bucket that has locked funds
-                    let bucket = state.take_bucket(bucket_id)?;
                     if !bucket.locked_amount().is_zero() {
                         return Err(RuntimeError::InvalidOpDepositLockedBucket {
                             bucket_id,
@@ -914,9 +923,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.write_with(|state| {
                     let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
 
-                    // Emit a builtin event for the withdraw
-                    self.emit_vault_event(VAULT_WITHDRAW_TOPIC.to_owned(), vault_id, &vault_lock, state)?;
-
                     let vault = state.get_vault(&vault_lock)?;
                     let resource_address = *vault.resource_address();
                     let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
@@ -926,11 +932,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource_lock)?;
 
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
-                    let resource_container = match arg {
-                        VaultWithdrawArg::Fungible { amount } => vault_mut.withdraw(amount)?,
-                        VaultWithdrawArg::NonFungible { ids } => vault_mut.withdraw_non_fungibles(&ids)?,
-                        VaultWithdrawArg::Confidential { proof } => vault_mut.withdraw_confidential(*proof)?,
+                    let (resource_container, amount) = match arg {
+                        VaultWithdrawArg::Fungible { amount } => (vault_mut.withdraw(amount)?, Some(amount)),
+                        VaultWithdrawArg::NonFungible { ids } => (vault_mut.withdraw_non_fungibles(&ids)?, None),
+                        VaultWithdrawArg::Confidential { proof } => (vault_mut.withdraw_confidential(*proof)?, None),
                     };
+
+                    // Emit a builtin event for the withdraw
+                    self.emit_vault_event(VAULT_WITHDRAW_TOPIC.to_owned(), vault_id, &vault_lock, amount, state)?;
 
                     let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource_container)?;

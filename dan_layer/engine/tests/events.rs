@@ -106,13 +106,14 @@ fn builtin_vault_events() {
         .unwrap();
 
     // transfer some tokens between accounts
+    let amount = Amount(100);
     let result = template_test
         .execute_and_commit(
             vec![
                 Instruction::CallMethod {
                     component_address: sender_address,
                     method: "withdraw".to_string(),
-                    args: args![faucet_resource, Amount(100)],
+                    args: args![faucet_resource, amount],
                 },
                 Instruction::PutLastInstructionOutputOnWorkspace {
                     key: b"foo_bucket".to_vec(),
@@ -135,7 +136,8 @@ fn builtin_vault_events() {
         e.topic() == "std.vault.withdraw".to_owned() &&
             e.template_address() == ACCOUNT_TEMPLATE_ADDRESS &&
             e.component_address().unwrap() == sender_address &&
-            *e.payload().get("resource_address").unwrap() == faucet_resource.to_string()
+            *e.payload().get("resource_address").unwrap() == faucet_resource.to_string() &&
+            *e.payload().get("amount").unwrap() == amount.to_string()
     }));
 
     // a standard event for the deposit must have been emmitted
@@ -143,6 +145,7 @@ fn builtin_vault_events() {
         e.topic() == "std.vault.deposit".to_owned() &&
             e.template_address() == ACCOUNT_TEMPLATE_ADDRESS &&
             e.component_address().unwrap() == receiver_address &&
-            *e.payload().get("resource_address").unwrap() == faucet_resource.to_string()
+            *e.payload().get("resource_address").unwrap() == faucet_resource.to_string() &&
+            *e.payload().get("amount").unwrap() == amount.to_string()
     }));
 }
