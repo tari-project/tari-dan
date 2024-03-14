@@ -109,6 +109,11 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 
+// Topics for builtin events emmitted by the engine
+const STANDARD_TOPIC_PREFIX: &str  = "std.";
+const VAULT_DEPOSIT_TOPIC: &str  = "std.vault.deposit";
+const VAULT_WITHDRAW_TOPIC: &str  = "std.vault.withdraw";
+
 #[derive(Clone)]
 pub struct RuntimeInterfaceImpl<TTemplateProvider> {
     tracker: StateTracker,
@@ -853,7 +858,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
                     
                     // Emit a builtin event for the deposit
-                    self.emit_vault_event("std.vault.deposit".to_owned(), vault_id, &vault_lock, state)?;
+                    self.emit_vault_event(VAULT_DEPOSIT_TOPIC.to_owned(), vault_id, &vault_lock, state)?;
 
                     let resource_address = state.get_vault(&vault_lock)?.resource_address();
                     let resource_lock =
@@ -890,6 +895,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 self.tracker.write_with(|state| {
                     let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
+
+                    // Emit a builtin event for the withdraw
+                    self.emit_vault_event(VAULT_WITHDRAW_TOPIC.to_owned(), vault_id, &vault_lock, state)?;
+
                     let vault = state.get_vault(&vault_lock)?;
                     let resource_address = *vault.resource_address();
                     let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;

@@ -106,6 +106,14 @@ fn builtin_vault_events() {
 
         assert!(result.finalize.is_accept());
 
+        // a standard event for the withdraw must have been emmitted
+        assert!(result.finalize.events.iter().any(|e| {
+            e.topic() == "std.vault.withdraw".to_owned() &&
+            e.template_address() == ACCOUNT_TEMPLATE_ADDRESS &&
+            e.component_address().unwrap() == sender_address &&
+            *e.payload().get("resource_address").unwrap() == faucet_resource.to_string()
+        }));
+
         // a standard event for the deposit must have been emmitted
         assert!(result.finalize.events.iter().any(|e| {
             e.topic() == "std.vault.deposit".to_owned() &&
