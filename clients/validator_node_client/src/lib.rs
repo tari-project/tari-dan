@@ -21,6 +21,8 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 mod error;
 pub use error::ValidatorNodeClientError;
+use tari_common_types::types::PrivateKey;
+
 pub mod types;
 
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
@@ -66,10 +68,12 @@ impl ValidatorNodeClient {
     pub async fn register_validator_node(
         &mut self,
         claim_public_key: PublicKey,
+        validator_network_key: Option<PrivateKey>
     ) -> Result<TxId, ValidatorNodeClientError> {
         let resp: RegisterValidatorNodeResponse = self
             .send_request("register_validator_node", RegisterValidatorNodeRequest {
                 fee_claim_public_key: claim_public_key,
+                validator_network_key,
             })
             .await?;
         Ok(resp.transaction_id)

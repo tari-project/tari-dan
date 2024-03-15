@@ -23,6 +23,7 @@
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_common_types::types::PublicKey;
+use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::Epoch;
 use tari_template_lib::crypto::RistrettoPublicKeyBytes;
@@ -43,7 +44,12 @@ impl VnSubcommand {
             VnSubcommand::Register(args) => {
                 let claim_public_key = PublicKey::from_canonical_bytes(args.claim_public_key.into_inner().as_bytes())
                     .map_err(|e| anyhow!("{}", e))?;
-                let tx_id = client.register_validator_node(claim_public_key).await?;
+                let validator_network_key = args
+                    .validator_network_key
+                    .map(|k| RistrettoSecretKey::from_canonical_bytes(k.into_inner().as_bytes()))
+                    .transpose()
+                    .map_err(|e| anyhow!("{}", e))?;
+                let tx_id = client.register_validator_node(claim_public_key, validator_network_key).await?;
                 println!("✅ Validator node registration submitted (tx_id: {})", tx_id);
             },
             VnSubcommand::GetFeeInfo(args) => {
@@ -57,6 +63,7 @@ impl VnSubcommand {
 #[derive(Debug, Args, Clone)]
 pub struct RegisterArgs {
     claim_public_key: FromHex<RistrettoPublicKeyBytes>,
+    validator_network_key: Option<FromHex<Vec<u8>>>
 }
 
 #[derive(Debug, Args, Clone)]

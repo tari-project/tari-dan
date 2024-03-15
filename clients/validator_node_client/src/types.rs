@@ -56,6 +56,8 @@ use tari_engine_types::{
 use tari_transaction::{Transaction, TransactionId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
+use tari_common_types::types::PrivateKey;
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
@@ -645,6 +647,8 @@ pub struct GetEpochManagerStatsResponse {
 pub struct RegisterValidatorNodeRequest {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub fee_claim_public_key: PublicKey,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub validator_network_key: Option<PrivateKey>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
