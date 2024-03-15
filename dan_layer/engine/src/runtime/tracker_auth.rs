@@ -6,6 +6,7 @@ use tari_template_lib::auth::{
     OwnerRule,
     Ownership,
     RequireRule,
+    ResourceAccessRules,
     ResourceAuthAction,
     RestrictedAccessRule,
     RuleRequirement,
@@ -61,19 +62,19 @@ impl<'a> Authorization<'a> {
     pub fn check_resource_access_rules(
         &self,
         action: ResourceAuthAction,
-        locked: &LockedSubstate,
+        resource_ownership: Ownership<'_>,
+        resource_access_rules: &ResourceAccessRules,
     ) -> Result<(), RuntimeError> {
-        let resource = self.state.get_resource(locked)?;
         let scope = self.state.current_call_scope()?.auth_scope();
 
         // Check ownership.
         // A resource is only recallable by explicit access rules
-        if !action.is_recall() && check_ownership(self.state, scope, resource.as_ownership())? {
+        if !action.is_recall() && check_ownership(self.state, scope, resource_ownership)? {
             // Owner can invoke any resource method
             return Ok(());
         }
 
-        let rule = resource.access_rules().get_access_rule(&action);
+        let rule = resource_access_rules.get_access_rule(&action);
         if !check_access_rule(self.state, scope, rule)? {
             return Err(RuntimeError::AccessDenied {
                 action_ident: action.into(),

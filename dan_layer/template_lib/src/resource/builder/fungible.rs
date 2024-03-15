@@ -123,6 +123,13 @@ impl FungibleResourceBuilder {
         metadata: Metadata,
         mint_arg: Option<MintArg>,
     ) -> (ResourceAddress, Option<Bucket>) {
-        ResourceManager::new().create(ResourceType::Fungible, owner_rule, access_rules, metadata, mint_arg)
+        ResourceManager::new().create(
+            ResourceType::Fungible,
+            owner_rule,
+            access_rules,
+            metadata,
+            mint_arg,
+            None,
+        )
     }
 }

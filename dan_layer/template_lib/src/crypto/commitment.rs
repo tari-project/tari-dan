@@ -3,7 +3,10 @@
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
-use tari_template_abi::rust::fmt::{Display, Formatter};
+use tari_template_abi::rust::{
+    fmt::{Display, Formatter},
+    ops::Deref,
+};
 
 use crate::{crypto::InvalidByteLengthError, Hash};
 
@@ -54,7 +57,7 @@ impl TryFrom<&[u8]> for PedersonCommitmentBytes {
 
 impl AsRef<[u8]> for PedersonCommitmentBytes {
     fn as_ref(&self) -> &[u8] {
-        self.as_bytes()
+        self.deref().as_ref()
     }
 }
 
@@ -67,5 +70,13 @@ impl From<[u8; 32]> for PedersonCommitmentBytes {
 impl Display for PedersonCommitmentBytes {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_hash())
+    }
+}
+
+impl Deref for PedersonCommitmentBytes {
+    type Target = [u8; 32];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }

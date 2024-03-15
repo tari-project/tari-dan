@@ -115,4 +115,16 @@ message ConfidentialStatement {
   bytes sender_public_nonce = 2;
   bytes encrypted_value = 3;
   uint64 minimum_value_promise = 4;
+  ViewableBalanceProof viewable_balance_proof = 5;
+}
+
+message ViewableBalanceProof {
+  bytes elgamal_encrypted = 1;
+  bytes elgamal_public_nonce = 2;
+  bytes c_prime = 3;
+  bytes e_prime = 4;
+  bytes r_prime = 5;
+  bytes s_v = 6;
+  bytes s_m = 7;
+  bytes s_r = 8;
 }
