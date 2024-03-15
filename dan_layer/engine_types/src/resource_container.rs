@@ -8,7 +8,7 @@
 use std::{collections::BTreeMap, mem};
 
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::Commitment;
+use tari_common_types::types::{Commitment, PublicKey};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_template_abi::rust::collections::BTreeSet;
 use tari_template_lib::{
@@ -92,6 +92,7 @@ impl ResourceContainer {
     pub fn mint_confidential(
         address: ResourceAddress,
         proof: ConfidentialOutputProof,
+        view_key: Option<&PublicKey>,
     ) -> Result<ResourceContainer, ResourceError> {
         if proof.change_statement.is_some() {
             return Err(ResourceError::InvalidConfidentialMintWithChange);
@@ -101,7 +102,7 @@ impl ResourceContainer {
                 details: "Change revealed amount must be zero for minting".to_string(),
             });
         }
-        let validated_proof = validate_confidential_proof(&proof)?;
+        let validated_proof = validate_confidential_proof(&proof, view_key)?;
         assert!(
             validated_proof.change_output.is_none(),
             "invariant failed: validate_confidential_proof returned change with no change in input proof"
@@ -352,6 +353,7 @@ impl ResourceContainer {
     pub fn withdraw_confidential(
         &mut self,
         proof: ConfidentialWithdrawProof,
+        view_key: Option<&PublicKey>,
     ) -> Result<ResourceContainer, ResourceError> {
         match self {
             ResourceContainer::Fungible { .. } => Err(ResourceError::OperationNotAllowed(
@@ -386,7 +388,7 @@ impl ResourceContainer {
                     })
                     .collect::<Result<Vec<_>, ResourceError>>()?;
 
-                let validated_proof = validate_confidential_withdraw(&inputs, proof)?;
+                let validated_proof = validate_confidential_withdraw(&inputs, view_key, proof)?;
 
                 // Withdraw revealed amount
                 if validated_proof.input_revealed_amount > *revealed_amount {
@@ -486,12 +488,12 @@ impl ResourceContainer {
         }
     }
 
-    // TODO: remove this as it is exactly the same as withdraw_confidential
     pub fn reveal_confidential(
         &mut self,
         proof: ConfidentialWithdrawProof,
+        view_key: Option<&PublicKey>,
     ) -> Result<ResourceContainer, ResourceError> {
-        self.withdraw_confidential(proof)
+        self.withdraw_confidential(proof, view_key)
     }
 
     /// Returns all confidential commitments. If the resource is not confidential, None is returned.

@@ -8,11 +8,9 @@ use tari_template_lib::{
     crypto::BalanceProofSignature,
     models::{Amount, ConfidentialWithdrawProof, EncryptedData},
 };
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
 use super::{challenges, get_commitment_factory, validate_confidential_proof};
-use crate::resource_container::ResourceError;
+use crate::{confidential::elgamal::ElgamalVerifiableBalance, resource_container::ResourceError};
 
 #[derive(Debug, Clone)]
 pub struct ValidatedConfidentialWithdrawProof {
@@ -31,7 +29,11 @@ pub struct ValidatedConfidentialWithdrawProof {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct ConfidentialOutput {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub commitment: Commitment,
@@ -41,13 +43,15 @@ pub struct ConfidentialOutput {
     pub encrypted_data: EncryptedData,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub minimum_value_promise: u64,
+    pub viewable_balance: Option<ElgamalVerifiableBalance>,
 }
 
-pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Commitment>>(
+pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Commitment>>(
     inputs: I,
+    view_key: Option<&PublicKey>,
     withdraw_proof: ConfidentialWithdrawProof,
 ) -> Result<ValidatedConfidentialWithdrawProof, ResourceError> {
-    let validated_proof = validate_confidential_proof(&withdraw_proof.output_proof)?;
+    let validated_proof = validate_confidential_proof(&withdraw_proof.output_proof, view_key)?;
 
     let input_revealed_amount = withdraw_proof.input_revealed_amount;
     // We expect the revealed amount to be excluded from the output commitment.

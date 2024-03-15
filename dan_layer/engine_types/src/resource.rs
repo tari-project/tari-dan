@@ -21,17 +21,20 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::PublicKey;
 use tari_template_lib::{
     auth::{OwnerRule, Ownership, ResourceAccessRules},
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, Metadata},
     resource::{ResourceType, TOKEN_SYMBOL},
 };
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct Resource {
     resource_type: ResourceType,
     owner_rule: OwnerRule,
@@ -40,6 +43,8 @@ pub struct Resource {
     access_rules: ResourceAccessRules,
     metadata: Metadata,
     total_supply: Amount,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    view_key: Option<PublicKey>,
 }
 
 impl Resource {
@@ -49,6 +54,7 @@ impl Resource {
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
         metadata: Metadata,
+        view_key: Option<PublicKey>,
     ) -> Self {
         Self {
             resource_type,
@@ -57,6 +63,7 @@ impl Resource {
             access_rules,
             metadata,
             total_supply: 0.into(),
+            view_key,
         }
     }
 
@@ -77,6 +84,10 @@ impl Resource {
             owner_key: self.owner_key.as_ref(),
             owner_rule: &self.owner_rule,
         }
+    }
+
+    pub fn view_key(&self) -> Option<&PublicKey> {
+        self.view_key.as_ref()
     }
 
     pub fn access_rules(&self) -> &ResourceAccessRules {

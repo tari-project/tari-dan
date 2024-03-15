@@ -32,7 +32,10 @@ pub fn get_commitment_factory() -> &'static CommitmentFactory {
 
 pub mod challenges {
     use tari_common_types::types::{Commitment, PublicKey};
-    use tari_template_lib::{models::Amount, Hash};
+    use tari_template_lib::{
+        models::{Amount, ViewableBalanceProofChallengeFields},
+        Hash,
+    };
 
     use crate::hashing::{hasher32, hasher64, EngineHashDomainLabel};
 
@@ -59,6 +62,18 @@ pub mod challenges {
             .chain(public_nonce)
             .chain(&input_revealed_amount)
             .chain(&output_revealed_amount)
+            .result()
+    }
+
+    pub fn viewable_balance_proof_challenge64(
+        commitment: &Commitment,
+        view_key: &PublicKey,
+        challenge_fields: ViewableBalanceProofChallengeFields<'_>,
+    ) -> [u8; 64] {
+        hasher64(EngineHashDomainLabel::ViewKey)
+            .chain(commitment)
+            .chain(view_key)
+            .chain(&challenge_fields)
             .result()
     }
 

@@ -14,9 +14,9 @@ use tari_crypto::{
     tari_utilities::ByteArray,
 };
 use tari_dan_common_types::optional::Optional;
+use tari_dan_wallet_crypto::ConfidentialProofStatement;
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
-    confidential::{get_commitment_factory, ConfidentialProofStatement},
     models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateId},
     storage::WalletStore,
     DanWalletSdk,
@@ -24,7 +24,7 @@ use tari_dan_wallet_sdk::{
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::{
     component::new_account_address_from_parts,
-    confidential::ConfidentialClaim,
+    confidential::{get_commitment_factory, ConfidentialClaim},
     instruction::Instruction,
     substate::{Substate, SubstateId},
 };
@@ -387,6 +387,7 @@ pub async fn handle_reveal_funds(
             minimum_value_promise: 0,
             encrypted_data,
             reveal_amount: amount_to_reveal,
+            resource_view_key: None,
         };
 
         let inputs = sdk
@@ -623,6 +624,7 @@ pub async fn handle_claim_burn(
         minimum_value_promise: 0,
         encrypted_data,
         reveal_amount: max_fee,
+        resource_view_key: None,
     };
 
     let reveal_proof = sdk.confidential_crypto_api().generate_withdraw_proof(
@@ -1104,6 +1106,12 @@ pub async fn handle_confidential_transfer(
             .scan_for_substate(&SubstateId::Resource(req.resource_address), None)
             .await?;
         inputs.push(resource_substate.address);
+        let resource_view_key = resource_substate
+            .substate
+            .as_resource()
+            .ok_or_else(|| anyhow!("Indexer returned a non-resource substate when requesting a resource address"))?
+            .view_key()
+            .cloned();
 
         // get destination account information
         let destination_account_address =
@@ -1132,6 +1140,7 @@ pub async fn handle_confidential_transfer(
             encrypted_data,
             minimum_value_promise: 0,
             reveal_amount: Amount::zero(),
+            resource_view_key: resource_view_key.clone(),
         };
 
         let change_amount = total_input_value - req.amount.as_u64_checked().unwrap();
@@ -1168,6 +1177,7 @@ pub async fn handle_confidential_transfer(
                 minimum_value_promise: 0,
                 encrypted_data,
                 reveal_amount: Amount::zero(),
+                resource_view_key,
             })
         } else {
             None

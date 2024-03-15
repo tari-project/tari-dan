@@ -4,8 +4,6 @@
 pub mod storage;
 
 pub mod apis;
-mod byte_utils;
-pub mod confidential;
 pub mod models;
 mod sdk;
 

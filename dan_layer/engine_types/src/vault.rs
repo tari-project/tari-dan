@@ -23,7 +23,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::Commitment;
+use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_template_lib::{
     crypto::PedersonCommitmentBytes,
     models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress, VaultId},
@@ -34,7 +34,7 @@ use ts_rs::TS;
 
 use crate::{
     bucket::Bucket,
-    confidential::ConfidentialOutput,
+    confidential::{ConfidentialOutput, ValueLookupTable},
     proof::{ContainerRef, LockedResource, Proof},
     resource_container::{ResourceContainer, ResourceError},
 };
@@ -71,8 +71,9 @@ impl Vault {
     pub fn withdraw_confidential(
         &mut self,
         proof: ConfidentialWithdrawProof,
+        view_key: Option<&PublicKey>,
     ) -> Result<ResourceContainer, ResourceError> {
-        self.resource_container.withdraw_confidential(proof)
+        self.resource_container.withdraw_confidential(proof, view_key)
     }
 
     pub fn recall_all(&mut self) -> Result<ResourceContainer, ResourceError> {
@@ -104,6 +105,39 @@ impl Vault {
         self.resource_container.get_confidential_commitments()
     }
 
+    pub fn try_brute_force_confidential_balance<I, TValueLookup>(
+        &self,
+        secret_view_key: &PrivateKey,
+        value_range: I,
+        value_lookup: TValueLookup,
+    ) -> Result<Option<u64>, TValueLookup::Error>
+    where
+        I: IntoIterator<Item = u64> + Clone,
+        TValueLookup: ValueLookupTable + Clone,
+    {
+        let Some(commitments) = self.get_confidential_commitments() else {
+            return Ok(None);
+        };
+
+        let mut total = 0;
+        for output in commitments.values() {
+            let Some(balance) = output.viewable_balance.as_ref() else {
+                // We assume that if there is no viewable_balance in any (presumably the first) commitment, then this
+                // resource does not have a view key
+                return Ok(None);
+            };
+
+            let value = balance.brute_force_balance(secret_view_key, value_range.clone(), value_lookup.clone())?;
+
+            match value {
+                Some(v) => total += v,
+                // If any of the commitments cannot be brute forced, then we return None
+                None => return Ok(None),
+            }
+        }
+        Ok(Some(total))
+    }
+
     pub fn resource_address(&self) -> &ResourceAddress {
         self.resource_container.resource_address()
     }
@@ -119,8 +153,9 @@ impl Vault {
     pub fn reveal_confidential(
         &mut self,
         proof: ConfidentialWithdrawProof,
+        view_key: Option<&PublicKey>,
     ) -> Result<ResourceContainer, ResourceError> {
-        self.resource_container.reveal_confidential(proof)
+        self.resource_container.reveal_confidential(proof, view_key)
     }
 
     pub fn resource_container_mut(&mut self) -> &mut ResourceContainer {

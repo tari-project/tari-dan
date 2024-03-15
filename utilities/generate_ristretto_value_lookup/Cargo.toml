@@ -1,0 +1,13 @@
+[package]
+name = "generate_ristretto_value_lookup"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+tari_crypto = { workspace = true }
+
+clap = { workspace = true, features = ["derive"] }
+human_bytes = { version = "0.4.3", default-features = false }

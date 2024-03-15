@@ -44,6 +44,23 @@ mod faucet_template {
             .create()
         }
 
+        pub fn mint_with_view_key(
+            confidential_proof: ConfidentialOutputProof,
+            view_key: RistrettoPublicKeyBytes,
+        ) -> Component<Self> {
+            let coins = ResourceBuilder::confidential()
+                .mintable(AccessRule::AllowAll)
+                .initial_supply(confidential_proof)
+                .with_view_key(view_key)
+                .build_bucket();
+
+            Component::new(Self {
+                vault: Vault::from_bucket(coins),
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .create()
+        }
+
         pub fn mint_revealed(&mut self, amount: Amount) {
             let proof = ConfidentialOutputProof::mint_revealed(amount);
             let bucket = ResourceManager::get(self.vault.resource_address()).mint_confidential(proof);

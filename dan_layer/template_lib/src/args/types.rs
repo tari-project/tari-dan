@@ -33,7 +33,7 @@ use ts_rs::TS;
 use crate::{
     args::Arg,
     auth::{OwnerRule, ResourceAccessRules},
-    crypto::PedersonCommitmentBytes,
+    crypto::{PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{
         AddressAllocation,
         Amount,
@@ -240,6 +240,16 @@ pub enum MintArg {
     },
 }
 
+impl MintArg {
+    pub fn as_resource_type(&self) -> ResourceType {
+        match self {
+            MintArg::Fungible { .. } => ResourceType::Fungible,
+            MintArg::NonFungible { .. } => ResourceType::NonFungible,
+            MintArg::Confidential { .. } => ResourceType::Confidential,
+        }
+    }
+}
+
 /// A resource creation operation
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateResourceArg {
@@ -248,6 +258,7 @@ pub struct CreateResourceArg {
     pub access_rules: ResourceAccessRules,
     pub metadata: Metadata,
     pub mint_arg: Option<MintArg>,
+    pub view_key: Option<RistrettoPublicKeyBytes>,
 }
 
 /// A resource minting operation argument

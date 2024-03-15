@@ -176,6 +176,7 @@ mod tests {
             stealth_public_nonce: commitment.as_public_key().clone(),
             encrypted_data: Default::default(),
             minimum_value_promise: 0,
+            viewable_balance: None,
         };
         let commitment = Some((commitment, confidential_output));
 
