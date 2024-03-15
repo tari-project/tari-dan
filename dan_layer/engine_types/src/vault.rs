@@ -109,11 +109,11 @@ impl Vault {
         &self,
         secret_view_key: &PrivateKey,
         value_range: I,
-        value_lookup: TValueLookup,
+        value_lookup: &mut TValueLookup,
     ) -> Result<Option<u64>, TValueLookup::Error>
     where
         I: IntoIterator<Item = u64> + Clone,
-        TValueLookup: ValueLookupTable + Clone,
+        TValueLookup: ValueLookupTable,
     {
         let Some(commitments) = self.get_confidential_commitments() else {
             return Ok(None);
@@ -127,7 +127,7 @@ impl Vault {
                 return Ok(None);
             };
 
-            let value = balance.brute_force_balance(secret_view_key, value_range.clone(), value_lookup.clone())?;
+            let value = balance.brute_force_balance(secret_view_key, value_range.clone(), value_lookup)?;
 
             match value {
                 Some(v) => total += v,

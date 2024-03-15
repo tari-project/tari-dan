@@ -26,7 +26,7 @@ impl ElgamalVerifiableBalance {
         &self,
         view_private_key: &PrivateKey,
         value_range: I,
-        mut lookup_table: TLookup,
+        lookup_table: &mut TLookup,
     ) -> Result<Option<u64>, TLookup::Error> {
         // V = E - pR
         let balance = &self.encrypted - view_private_key * &self.public_nonce;
@@ -92,7 +92,7 @@ mod tests {
             };
 
             let balance = subject
-                .brute_force_balance(view_sk, 0..=10000, TestLookupTable)
+                .brute_force_balance(view_sk, 0..=10000, &mut TestLookupTable)
                 .unwrap();
             assert_eq!(balance, Some(VALUE));
         }
@@ -109,10 +109,14 @@ mod tests {
                 public_nonce: nonce_pk,
             };
 
-            let balance = subject.brute_force_balance(view_sk, 0..=10, TestLookupTable).unwrap();
+            let balance = subject
+                .brute_force_balance(view_sk, 0..=10, &mut TestLookupTable)
+                .unwrap();
             assert_eq!(balance, Some(10));
 
-            let balance = subject.brute_force_balance(view_sk, 10..=12, TestLookupTable).unwrap();
+            let balance = subject
+                .brute_force_balance(view_sk, 10..=12, &mut TestLookupTable)
+                .unwrap();
             assert_eq!(balance, Some(10));
         }
 
@@ -124,12 +128,12 @@ mod tests {
             };
 
             let balance = subject
-                .brute_force_balance(&PrivateKey::default(), 0..=100, TestLookupTable)
+                .brute_force_balance(&PrivateKey::default(), 0..=100, &mut TestLookupTable)
                 .unwrap();
             assert_eq!(balance, None);
 
             let balance = subject
-                .brute_force_balance(&PrivateKey::default(), 102..=103, TestLookupTable)
+                .brute_force_balance(&PrivateKey::default(), 102..=103, &mut TestLookupTable)
                 .unwrap();
             assert_eq!(balance, None);
         }

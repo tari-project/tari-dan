@@ -23,6 +23,8 @@ import {
     TransactionWaitResultResponse,
     AccountsCreateFreeTestCoinsRequest,
     AccountsCreateFreeTestCoinsResponse,
+    ConfidentialViewVaultBalanceRequest,
+    ConfidentialViewVaultBalanceResponse,
     ComponentAddressOrName,
 } from '@tariproject/typescript-bindings/wallet-daemon-client';
 
@@ -52,36 +54,38 @@ export {
 };
 
 export type {
-    ComponentAddressOrName,
-    AccountsCreateFreeTestCoinsRequest,
-    AccountsCreateFreeTestCoinsResponse,
     AccountGetDefaultRequest,
     AccountGetRequest,
     AccountGetResponse,
+    AccountsCreateFreeTestCoinsRequest,
+    AccountsCreateFreeTestCoinsResponse,
     AccountsGetBalancesRequest,
     AccountsGetBalancesResponse,
-    TemplateDef,
-    FunctionDef,
-    Type,
-    ArgDef,
-    TransactionGetResultRequest,
-    TransactionGetResultResponse,
-    TemplatesGetResponse,
-    TemplatesGetRequest,
-    TransactionStatus,
-    SubstatesGetResponse,
-    SubstatesGetRequest,
-    SubstateId,
-    FinalizeResult,
     Arg,
-    SubstateType,
+    ArgDef,
+    ComponentAddressOrName,
+    ConfidentialViewVaultBalanceRequest,
+    ConfidentialViewVaultBalanceResponse,
+    FinalizeResult,
+    FunctionDef,
     Instruction,
+    SubstateId,
+    SubstateType,
+    SubstatesGetRequest,
+    SubstatesGetResponse,
     SubstatesListRequest,
     SubstatesListResponse,
+    TemplateDef,
+    TemplatesGetRequest,
+    TemplatesGetResponse,
+    TransactionGetResultRequest,
+    TransactionGetResultResponse,
+    TransactionStatus,
     TransactionSubmitRequest,
     TransactionSubmitResponse,
     TransactionWaitResultRequest,
-    TransactionWaitResultResponse
+    TransactionWaitResultResponse,
+    Type,
 };
 
 
@@ -162,6 +166,10 @@ export class WalletDaemonClient {
 
     createFreeTestCoins(params: AccountsCreateFreeTestCoinsRequest): Promise<AccountsCreateFreeTestCoinsResponse> {
         return this.__invokeRpc("accounts.create_free_test_coins", params);
+    }
+
+    viewVaultBalance(params: ConfidentialViewVaultBalanceRequest): Promise<ConfidentialViewVaultBalanceResponse> {
+        return this.__invokeRpc("confidential.view_vault_balance", params);
     }
 
     async __invokeRpc(method: string, params: object = null) {

@@ -91,7 +91,7 @@ import type {
     TransferRequest,
     TransferResponse,
     WebRtcStartRequest,
-    WebRtcStartResponse,
+    WebRtcStartResponse, ConfidentialViewBalanceRequest, ConfidentialViewBalanceResponse,
 } from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 import {
@@ -174,6 +174,7 @@ export const settingsGet = (): Promise<SettingsGetResponse> => jsonRpc("settings
 export const settingsSet = (request: SettingsSetRequest): Promise<SettingsSetResponse> =>
     jsonRpc("settings.set", request);
 
+
 // webrtc
 export const webrtcStart = (request: WebRtcStartRequest): Promise<WebRtcStartResponse> =>
     jsonRpc("webrtc.start", request);
@@ -239,6 +240,10 @@ export const confidentialCancel = (request: ProofsCancelRequest): Promise<Proofs
 export const confidentialCreateOutputProof = (
     request: ConfidentialCreateOutputProofRequest,
 ): Promise<ConfidentialCreateOutputProofResponse> => jsonRpc("confidential.create_output_proof", request);
+
+export const confidentialViewVaultBalance = (request: ConfidentialViewBalanceRequest): Promise<ConfidentialViewBalanceResponse> =>
+    jsonRpc("confidential.view_vault_balance", request);
+
 
 // nfts
 export const nftMintAccountNft = (request: MintAccountNftRequest): Promise<MintAccountNftResponse> =>
