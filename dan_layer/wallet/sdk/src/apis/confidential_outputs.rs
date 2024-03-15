@@ -4,6 +4,7 @@
 use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
+use tari_dan_wallet_crypto::{kdfs, ConfidentialOutputMaskAndValue};
 use tari_engine_types::{confidential::ConfidentialOutput, substate::SubstateId};
 use tari_key_manager::key_manager::DerivedKey;
 use tari_template_lib::models::Amount;
@@ -16,8 +17,7 @@ use crate::{
         key_manager,
         key_manager::{KeyManagerApi, KeyManagerApiError},
     },
-    confidential::{kdfs, ConfidentialProofError},
-    models::{Account, ConfidentialOutputModel, ConfidentialOutputWithMask, ConfidentialProofId, OutputStatus},
+    models::{Account, ConfidentialOutputModel, ConfidentialProofId, OutputStatus},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
 
@@ -119,7 +119,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         &self,
         outputs: Vec<ConfidentialOutputModel>,
         key_branch: &str,
-    ) -> Result<Vec<ConfidentialOutputWithMask>, ConfidentialOutputsApiError> {
+    ) -> Result<Vec<ConfidentialOutputMaskAndValue>, ConfidentialOutputsApiError> {
         let mut outputs_with_masks = Vec::with_capacity(outputs.len());
         for output in outputs {
             let output_key = self
@@ -146,11 +146,9 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
                 &output.encrypted_data,
             )?;
 
-            outputs_with_masks.push(ConfidentialOutputWithMask {
-                commitment: output.commitment,
+            outputs_with_masks.push(ConfidentialOutputMaskAndValue {
                 value: output.value,
                 mask,
-                public_asset_tag: None,
             });
         }
         Ok(outputs_with_masks)
@@ -263,8 +261,6 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
 pub enum ConfidentialOutputsApiError {
     #[error("Store error: {0}")]
     StoreError(#[from] WalletStorageError),
-    #[error("Confidential proof error: {0}")]
-    ConfidentialProof(#[from] ConfidentialProofError),
     #[error("Confidential crypto error: {0}")]
     ConfidentialCrypto(#[from] ConfidentialCryptoApiError),
     #[error("Insufficient funds")]

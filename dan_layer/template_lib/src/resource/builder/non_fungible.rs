@@ -168,6 +168,13 @@ impl NonFungibleResourceBuilder {
         metadata: Metadata,
         resource: Option<MintArg>,
     ) -> (ResourceAddress, Option<Bucket>) {
-        ResourceManager::new().create(ResourceType::NonFungible, owner_rule, access_rules, metadata, resource)
+        ResourceManager::new().create(
+            ResourceType::NonFungible,
+            owner_rule,
+            access_rules,
+            metadata,
+            resource,
+            None,
+        )
     }
 }

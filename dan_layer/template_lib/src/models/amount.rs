@@ -106,6 +106,8 @@ impl Amount {
         Amount(self.0.saturating_div(other.0))
     }
 
+    /// Returns the value as a u64 if possible, otherwise returns None.
+    /// Since the internal representation is i64, this will return None if the value is negative.
     pub fn as_u64_checked(&self) -> Option<u64> {
         self.0.try_into().ok()
     }

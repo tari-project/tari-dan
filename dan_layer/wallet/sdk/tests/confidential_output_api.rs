@@ -8,7 +8,6 @@ use tari_common_types::types::Commitment;
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
 use tari_dan_common_types::optional::Optional;
 use tari_dan_wallet_sdk::{
-    confidential::get_commitment_factory,
     models::{ConfidentialOutputModel, ConfidentialProofId, OutputStatus},
     network::{SubstateQueryResult, TransactionQueryResult, WalletNetworkInterface},
     storage::{WalletStore, WalletStoreReader},
@@ -16,7 +15,7 @@ use tari_dan_wallet_sdk::{
     WalletSdkConfig,
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
-use tari_engine_types::substate::SubstateId;
+use tari_engine_types::{confidential::get_commitment_factory, substate::SubstateId};
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,

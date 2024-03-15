@@ -7,8 +7,10 @@ mod balance_proof;
 mod commitment;
 mod error;
 mod ristretto;
+mod schnorr;
 
 pub use balance_proof::*;
 pub use commitment::*;
 pub use error::*;
 pub use ristretto::*;
+pub use schnorr::*;

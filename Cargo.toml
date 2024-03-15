@@ -40,6 +40,7 @@ members = [
     "dan_layer/transaction_manifest",
     "dan_layer/transaction",
     "dan_layer/validator_node_rpc",
+    "dan_layer/wallet/crypto",
     "dan_layer/wallet/sdk",
     "dan_layer/wallet/storage_sqlite",
     "integration_tests",
@@ -53,6 +54,7 @@ members = [
     "utilities/tariswap_test_bench",
     "utilities/transaction_submitter",
     "utilities/transaction_submitter",
+    "utilities/generate_ristretto_value_lookup",
 ]
 resolver = "2"
 
@@ -78,6 +80,7 @@ tari_dan_storage = { path = "dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "dan_layer/storage_sqlite" }
 tari_dan_wallet_daemon = { path = "applications/tari_dan_wallet_daemon" }
 tari_dan_wallet_sdk = { path = "dan_layer/wallet/sdk" }
+tari_dan_wallet_crypto = { path = "dan_layer/wallet/crypto" }
 tari_dan_wallet_storage_sqlite = { path = "dan_layer/wallet/storage_sqlite" }
 tari_dan_p2p = { path = "dan_layer/p2p" }
 tari_engine_types = { path = "dan_layer/engine_types" }

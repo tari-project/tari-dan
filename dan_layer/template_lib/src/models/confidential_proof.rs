@@ -7,7 +7,7 @@ use serde_with::{serde_as, Bytes};
 use ts_rs::TS;
 
 use crate::{
-    crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
+    crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes, SchnorrSignatureBytes},
     models::Amount,
 };
 
@@ -40,12 +40,11 @@ impl ConfidentialOutputProof {
 }
 
 /// A zero-knowledge proof that a confidential resource amount is valid
-#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialStatement {
-    #[serde_as(as = "Bytes")]
-    pub commitment: [u8; 32],
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
+    pub commitment: PedersonCommitmentBytes,
     /// Public nonce (R) that was used to generate the commitment mask
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub sender_public_nonce: RistrettoPublicKeyBytes,
@@ -54,14 +53,58 @@ pub struct ConfidentialStatement {
     pub encrypted_data: EncryptedData,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub minimum_value_promise: u64,
+    pub viewable_balance_proof: Option<ViewableBalanceProof>,
+}
+
+/// A zero-knowledge proof that a confidential resource amount is valid
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct ViewableBalanceProof {
+    /// E = v.G + r.P
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub elgamal_encrypted: RistrettoPublicKeyBytes,
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub elgamal_public_nonce: RistrettoPublicKeyBytes,
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub c_prime: PedersonCommitmentBytes,
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub e_prime: PedersonCommitmentBytes,
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub r_prime: RistrettoPublicKeyBytes,
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub s_v: SchnorrSignatureBytes,
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub s_m: SchnorrSignatureBytes,
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub s_r: SchnorrSignatureBytes,
+}
+
+impl ViewableBalanceProof {
+    pub fn as_challenge_fields(&self) -> ViewableBalanceProofChallengeFields<'_> {
+        ViewableBalanceProofChallengeFields {
+            elgamal_encrypted: &self.elgamal_encrypted,
+            elgamal_public_nonce: &self.elgamal_public_nonce,
+            c_prime: &self.c_prime,
+            e_prime: &self.e_prime,
+            r_prime: &self.r_prime,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Serialize)]
+pub struct ViewableBalanceProofChallengeFields<'a> {
+    pub elgamal_encrypted: &'a RistrettoPublicKeyBytes,
+    pub elgamal_public_nonce: &'a RistrettoPublicKeyBytes,
+    pub c_prime: &'a PedersonCommitmentBytes,
+    pub e_prime: &'a PedersonCommitmentBytes,
+    pub r_prime: &'a RistrettoPublicKeyBytes,
 }
 
 /// A zero-knowledge proof that a withdrawal of confidential resources from a vault is valid
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialWithdrawProof {
-    // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
-    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
+    #[cfg_attr(feature = "ts", ts(type = "Array<Uint8Array>"))]
     pub inputs: Vec<PedersonCommitmentBytes>,
     /// The amount to withdraw from revealed funds i.e. the revealed funds as inputs
     #[cfg_attr(feature = "ts", ts(type = "number"))]

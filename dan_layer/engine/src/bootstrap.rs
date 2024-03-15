@@ -30,6 +30,7 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
                 OwnerRule::None,
                 ResourceAccessRules::deny_all(),
                 metadata,
+                None,
             ),
         ),
     )?;
@@ -51,6 +52,7 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
                     .withdrawable(AccessRule::AllowAll)
                     .depositable(AccessRule::AllowAll),
                 metadata,
+                None,
             ),
         ),
     )?;

@@ -3,7 +3,7 @@
 
 use std::str::FromStr;
 
-use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
+use tari_common_types::types::{Commitment, PublicKey};
 use tari_engine_types::substate::SubstateId;
 use tari_template_lib::models::EncryptedData;
 
@@ -21,15 +21,6 @@ pub struct ConfidentialOutputModel {
     pub public_asset_tag: Option<PublicKey>,
     pub status: OutputStatus,
     pub locked_by_proof: Option<ConfidentialProofId>,
-}
-
-// TODO: Better name?
-#[derive(Debug, Clone)]
-pub struct ConfidentialOutputWithMask {
-    pub commitment: Commitment,
-    pub value: u64,
-    pub mask: PrivateKey,
-    pub public_asset_tag: Option<PublicKey>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

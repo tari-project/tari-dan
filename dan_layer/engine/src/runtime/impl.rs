@@ -572,7 +572,26 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
         match action {
             ResourceAction::Create => {
-                let arg: CreateResourceArg = args.get(0)?;
+                let arg: CreateResourceArg = args.assert_one_arg()?;
+
+                if arg
+                    .mint_arg
+                    .as_ref()
+                    .map(|mint| mint.as_resource_type() != arg.resource_type)
+                    .unwrap_or(false)
+                {
+                    return Err(RuntimeError::InvalidArgument {
+                        argument: "CreateResourceArg",
+                        reason: "Mint argument type does not match resource type".to_string(),
+                    });
+                }
+
+                if arg.view_key.is_some() && !arg.resource_type.is_confidential() {
+                    return Err(RuntimeError::InvalidArgument {
+                        argument: "CreateResourceArg",
+                        reason: "View key can only be set for confidential resources".to_string(),
+                    });
+                }
 
                 let owner_key = match &arg.owner_rule {
                     OwnerRule::OwnedBySigner => {
@@ -582,6 +601,15 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     OwnerRule::None | OwnerRule::ByAccessRule(_) => None,
                 };
 
+                let maybe_view_key = arg
+                    .view_key
+                    .map(|k| RistrettoPublicKey::from_canonical_bytes(k.as_ref()))
+                    .transpose()
+                    .map_err(|e| RuntimeError::InvalidArgument {
+                        argument: "CreateResourceArg",
+                        reason: format!("Invalid view key: {}", e),
+                    })?;
+
                 self.tracker.write_with(|state| {
                     let resource = Resource::new(
                         arg.resource_type,
@@ -589,6 +617,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         arg.owner_rule,
                         arg.access_rules,
                         arg.metadata,
+                        maybe_view_key,
                     );
 
                     let resource_address = state.id_provider()?.new_resource_address()?;
@@ -658,10 +687,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.write_with(|state| {
                     let resource_lock =
                         state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Write)?;
+                    let resource = state.get_resource(&resource_lock)?;
 
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::Mint, &resource_lock)?;
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::Mint,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
 
                     let resource = state.mint_resource(&resource_lock, mint_resource.mint_arg)?;
                     let bucket_id = state.id_provider()?.new_bucket_id();
@@ -686,10 +718,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.write_with(|state| {
                     let resource_lock =
                         state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Write)?;
+                    let resource = state.get_resource(&resource_lock)?;
 
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::Recall, &resource_lock)?;
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::Recall,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
 
                     let vault_lock = state.lock_substate(&arg.vault_id.into(), LockFlag::Write)?;
 
@@ -747,10 +782,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 self.tracker.write_with(|state| {
                     let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
+                    let resource = state.get_resource(&resource_lock)?;
 
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::UpdateNonFungibleData, &resource_lock)?;
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::UpdateNonFungibleData,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
 
                     let addr = NonFungibleAddress::new(resource_address, arg.id);
                     let locked = state.lock_substate(&SubstateId::NonFungible(addr.clone()), LockFlag::Write)?;
@@ -831,11 +869,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.write_with(|state| {
                     let substate_id = SubstateId::Resource(*resource_address);
                     let resource_lock = state.lock_substate(&substate_id, LockFlag::Read)?;
+                    let resource = state.get_resource(&resource_lock)?;
 
                     // Require deposit permissions on the resource to create the vault (even if empty)
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::Deposit, &resource_lock)?;
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::Deposit,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
 
                     let resource_type = state.get_resource(&resource_lock)?.resource_type();
                     let vault_id = state.id_provider()?.new_vault_id()?;
@@ -892,9 +933,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     let resource_lock =
                         state.lock_substate(&SubstateId::Resource(*resource_address), LockFlag::Read)?;
 
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::Deposit, &resource_lock)?;
+                    let resource = state.get_resource(&resource_lock)?;
+
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::Deposit,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
 
                     // It is invalid to deposit a bucket that has locked funds
                     if !bucket.locked_amount().is_zero() {
@@ -927,9 +972,16 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     let resource_address = *vault.resource_address();
                     let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
 
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource_lock)?;
+                    let resource = state.get_resource(&resource_lock)?;
+
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::Withdraw,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
+
+                    let resource = state.get_resource(&resource_lock)?;
+                    let maybe_view_key = resource.view_key().cloned();
 
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
                     let (resource_container, amount) = match arg {
@@ -947,7 +999,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         },
                         VaultWithdrawArg::Confidential { proof } => {
                             let amount = proof.revealed_input_amount();
-                            let container = vault_mut.withdraw_confidential(*proof)?;
+                            let container = vault_mut.withdraw_confidential(*proof, maybe_view_key.as_ref())?;
                             (container, amount)
                         },
                     };
@@ -1043,12 +1095,17 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     let resource_address = state.get_vault(&vault_lock)?.resource_address();
                     let resource_lock =
                         state.lock_substate(&SubstateId::Resource(*resource_address), LockFlag::Read)?;
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource_lock)?;
+                    let resource = state.get_resource(&resource_lock)?;
+
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::Withdraw,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
+                    let view_key = resource.view_key().cloned();
 
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
-                    let resource_container = vault_mut.reveal_confidential(arg.proof)?;
+                    let resource_container = vault_mut.reveal_confidential(arg.proof, view_key.as_ref())?;
                     let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource_container)?;
 
@@ -1077,31 +1134,35 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
                     let resource_address = *state.get_vault(&vault_lock)?.resource_address();
                     let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
+                    let resource = state.get_resource(&resource_lock)?;
 
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource_lock)?;
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::Withdraw,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
+                    let view_key = resource.view_key().cloned();
 
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
 
-                    let mut resource =
+                    let mut container =
                         ResourceContainer::confidential(*vault_mut.resource_address(), None, Amount::zero());
                     if !arg.amount.is_zero() {
                         let withdrawn = vault_mut.withdraw(arg.amount)?;
-                        resource.deposit(withdrawn)?;
+                        container.deposit(withdrawn)?;
                     }
                     if let Some(proof) = arg.proof {
-                        let revealed = vault_mut.reveal_confidential(proof)?;
-                        resource.deposit(revealed)?;
+                        let revealed = vault_mut.reveal_confidential(proof, view_key.as_ref())?;
+                        container.deposit(revealed)?;
                     }
-                    if resource.amount().is_zero() {
+                    if container.amount().is_zero() {
                         return Err(RuntimeError::InvalidArgument {
                             argument: "TakeFeesArg",
                             reason: "Fee payment has zero value".to_string(),
                         });
                     }
 
-                    state.pay_fee(resource, vault_id)?;
+                    state.pay_fee(container, vault_id)?;
 
                     state.unlock_substate(resource_lock)?;
                     state.unlock_substate(vault_lock)?;
@@ -1121,10 +1182,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     let vault = state.get_vault(&vault_lock)?;
                     let resource_address = *vault.resource_address();
                     let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
+                    let resource = state.get_resource(&resource_lock)?;
 
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource_lock)?;
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::Withdraw,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
 
                     let proof_id = state.id_provider()?.new_proof_id();
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
@@ -1149,10 +1213,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     let vault = state.get_vault(&vault_lock)?;
                     let resource_address = *vault.resource_address();
                     let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
+                    let resource = state.get_resource(&resource_lock)?;
 
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource_lock)?;
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::Withdraw,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
 
                     let proof_id = state.id_provider()?.new_proof_id();
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
@@ -1177,10 +1244,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     let vault = state.get_vault(&vault_lock)?;
                     let resource_address = *vault.resource_address();
                     let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
+                    let resource = state.get_resource(&resource_lock)?;
 
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource_lock)?;
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::Withdraw,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
 
                     let proof_id = state.id_provider()?.new_proof_id();
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
@@ -1290,10 +1360,15 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 let proof = args.assert_one_arg()?;
 
                 self.tracker.write_with(|state| {
-                    let bucket = state.get_bucket_mut(bucket_id)?;
-                    let resource = bucket.take_confidential(proof)?;
+                    let bucket = state.get_bucket(bucket_id)?;
+                    let resource_lock = state.lock_substate(&(*bucket.resource_address()).into(), LockFlag::Read)?;
+                    let resource = state.get_resource(&resource_lock)?;
+                    let view_key = resource.view_key().cloned();
+                    let bucket_mut = state.get_bucket_mut(bucket_id)?;
+                    let resource = bucket_mut.take_confidential(proof, view_key.as_ref())?;
                     let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource)?;
+                    state.unlock_substate(resource_lock)?;
                     Ok(InvokeResult::encode(&bucket_id)?)
                 })
             },
@@ -1304,10 +1379,15 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 })?;
                 let proof = args.assert_one_arg()?;
                 self.tracker.write_with(|state| {
+                    let bucket = state.get_bucket(bucket_id)?;
+                    let resource_lock = state.lock_substate(&(*bucket.resource_address()).into(), LockFlag::Read)?;
+                    let resource = state.get_resource(&resource_lock)?;
+                    let view_key = resource.view_key().cloned();
                     let bucket = state.get_bucket_mut(bucket_id)?;
-                    let resource = bucket.reveal_confidential(proof)?;
+                    let resource = bucket.reveal_confidential(proof, view_key.as_ref())?;
                     let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource)?;
+                    state.unlock_substate(resource_lock)?;
                     Ok(InvokeResult::encode(&bucket_id)?)
                 })
             },
@@ -1323,15 +1403,19 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                     let resource_lock =
                         state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Write)?;
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::Burn, &resource_lock)?;
+                    let resource = state.get_resource(&resource_lock)?;
+
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::Burn,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
 
                     let burnt_amount = bucket.amount();
                     state.burn_bucket(bucket)?;
 
-                    let resource = state.get_resource_mut(&resource_lock)?;
-                    resource.decrease_total_supply(burnt_amount);
+                    let resource_mut = state.get_resource_mut(&resource_lock)?;
+                    resource_mut.decrease_total_supply(burnt_amount);
 
                     state.unlock_substate(resource_lock)?;
 
@@ -1349,11 +1433,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.write_with(|state| {
                     let locked_funds = state.get_bucket_mut(bucket_id)?.lock_all()?;
                     let resource_address = *locked_funds.resource_address();
-
                     let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
-                    state
-                        .authorization()
-                        .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource_lock)?;
+                    let resource = state.get_resource(&resource_lock)?;
+
+                    state.authorization().check_resource_access_rules(
+                        ResourceAuthAction::Withdraw,
+                        resource.as_ownership(),
+                        resource.access_rules(),
+                    )?;
 
                     let proof_id = state.id_provider()?.new_proof_id();
                     state.new_proof(proof_id, locked_funds)?;
@@ -1754,6 +1841,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 stealth_public_nonce: diffie_hellman_public_key,
                 encrypted_data: unclaimed_output.encrypted_data,
                 minimum_value_promise: 0,
+                viewable_balance: None,
             })),
             Amount::zero(),
         );
@@ -1761,7 +1849,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         // If a withdraw proof is provided, we execute it and deposit back into the resource
         // This allows some funds to be revealed and/or reblinded within a single instruction
         if let Some(proof) = withdraw_proof {
-            let withdraw = resource.withdraw_confidential(proof)?;
+            let withdraw = resource.withdraw_confidential(proof, None)?;
             resource.deposit(withdraw)?;
         }
 

@@ -33,7 +33,7 @@ impl BalanceProofSignature {
         let mut key = [0u8; Self::length()];
         key[..32].copy_from_slice(public_nonce);
         key[32..].copy_from_slice(signature);
-        Ok(BalanceProofSignature(key))
+        Ok(Self(key))
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, InvalidByteLengthError> {
@@ -46,7 +46,7 @@ impl BalanceProofSignature {
 
         let mut key = [0u8; Self::length()];
         key.copy_from_slice(bytes);
-        Ok(BalanceProofSignature(key))
+        Ok(Self(key))
     }
 
     pub fn as_public_nonce(&self) -> &[u8] {
@@ -71,5 +71,11 @@ impl TryFrom<&[u8]> for BalanceProofSignature {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Self::from_bytes(value)
+    }
+}
+
+impl AsRef<[u8]> for BalanceProofSignature {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }

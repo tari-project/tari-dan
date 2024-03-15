@@ -4,3 +4,4 @@
 pub mod assert_error;
 pub mod confidential;
 pub mod crypto;
+pub mod value_lookup_tables;
