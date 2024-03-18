@@ -22,11 +22,17 @@
 
 use std::{env, process::Command};
 
+fn exit_on_ci() {
+    if option_env!("CI").is_some() {
+        std::process::exit(1);
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../tari_indexer_web_ui/src");
     println!("cargo:rerun-if-changed=../tari_indexer_web_ui/public");
 
-    if env::var_os("CARGO_FEATURE_TS").is_some() {
+    if env::var("CARGO_FEATURE_TS").is_ok() {
         println!("cargo:warning=The web ui is not being compiled when we are generating typescript types/interfaces.");
         return Ok(());
     }
@@ -39,14 +45,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .status()
     {
         println!("cargo:warning='npm ci' error : {:?}", error);
+        exit_on_ci();
     }
-    if let Err(error) = Command::new(npm)
+    match Command::new(npm)
         .args(["run", "build"])
         .current_dir("../tari_indexer_web_ui")
-        .status()
+        .output()
     {
-        println!("cargo:warning='npm run build' error : {:?}", error);
-        println!("cargo:warning=The web ui will not be included!");
+        Ok(output) if !output.status.success() => {
+            println!("cargo:warning='npm run build' exited with non-zero status code");
+            println!("cargo:warning=Output: {}", String::from_utf8_lossy(&output.stdout));
+            println!("cargo:warning=Error: {}", String::from_utf8_lossy(&output.stderr));
+            exit_on_ci();
+        },
+        Err(error) => {
+            println!("cargo:warning='npm run build' error : {:?}", error);
+            println!("cargo:warning=The web ui will not be included!");
+            exit_on_ci();
+        },
+        _ => {},
     }
     Ok(())
 }

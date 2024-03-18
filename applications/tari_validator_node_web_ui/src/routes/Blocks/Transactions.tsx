@@ -34,7 +34,7 @@ function Transaction({ transaction }: { transaction: TransactionAtom }) {
       <TableCell>
         <StatusChip status={transaction.decision} />
       </TableCell>
-      <TableCell>{transaction.leader_fee}</TableCell>
+      <TableCell>{transaction.leader_fee?.fee}</TableCell>
       <TableCell>{transaction.transaction_fee}</TableCell>
     </TableRow>
   );

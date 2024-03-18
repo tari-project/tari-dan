@@ -148,7 +148,7 @@ export default function BlockDetails() {
                             <TableCell>Total Fees</TableCell>
                             <DataTableCell>
                               <div className={block!.proposed_by === identity!.public_key ? "my_money" : ""}>
-                                {block!.block_fee.leader_fee}
+                                {block!.total_leader_fee}
                               </div>
                             </DataTableCell>
                           </TableRow>
