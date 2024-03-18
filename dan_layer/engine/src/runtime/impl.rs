@@ -243,8 +243,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         resource_type: ResourceType,
         state: &mut WorkingState,
     ) -> Result<(), RuntimeError> {
-        self.invoke_modules_on_runtime_call("emit_event")?;
-
         let component_address = state
             .current_call_scope()?
             .get_current_component_lock()
