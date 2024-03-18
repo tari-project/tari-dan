@@ -111,6 +111,22 @@ impl EventQuery {
         Ok(events)
     }
 
+    pub async fn get_events(
+        &self,
+        ctx: &Context<'_>,
+    ) -> Result<Vec<Event>, anyhow::Error> {
+        info!(
+            target: LOG_TARGET,
+            "Querying events"
+        );
+        let _substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
+        let events = vec![
+            Event { component_address: None, template_address: [0; 32], tx_hash: [0; 32], topic: "Hello World!".to_owned(), payload: BTreeMap::new() },
+        ];
+
+        Ok(events)
+    }
+
     pub async fn save_event(
         &self,
         ctx: &Context<'_>,

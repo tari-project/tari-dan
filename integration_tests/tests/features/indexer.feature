@@ -212,10 +212,11 @@ Feature: Indexer node
       let bucket1 = acc1.withdraw(faucet_resource, Amount(50));
       acc2.deposit(bucket1);
 
-      // transfer some tokens back from ACC_2 to ACC_2
+      // transfer some tokens back from ACC_2 to ACC_1
       let bucket2 = acc2.withdraw(faucet_resource, Amount(20));
       acc1.deposit(bucket2);
     ```
 
-    When I print the cucumber world
+    # Scan the network for events
+    When indexer IDX scans the network for events of resource FAUCET/resources/0
 
