@@ -56,7 +56,7 @@ create table parked_blocks
     foreign_indexes       text    not NULL,
     signature             text        NULL,
     block_time            bigint      NULL,
-    timestamp             bigint  not NULL
+    timestamp             bigint  not NULL,
     base_layer_block_hash text    not NULL,
     created_at            timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
