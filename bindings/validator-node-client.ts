@@ -21,6 +21,7 @@ export * from "./src/types/validator-node-client/GetCommitteeResponse";
 export * from "./src/types/validator-node-client/GetCommsStatsResponse";
 export * from "./src/types/validator-node-client/GetConnectionsResponse";
 export * from "./src/types/validator-node-client/GetEpochManagerStatsResponse";
+export * from "./src/types/validator-node-client/GetFilteredBlocksCountRequest";
 export * from "./src/types/validator-node-client/GetIdentityResponse";
 export * from "./src/types/validator-node-client/GetMempoolStatsResponse";
 export * from "./src/types/validator-node-client/GetNetworkCommitteeResponse";
