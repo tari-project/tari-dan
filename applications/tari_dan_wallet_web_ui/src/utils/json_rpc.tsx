@@ -25,7 +25,6 @@ import type {
   AccountGetDefaultRequest,
   AccountGetRequest,
   AccountGetResponse,
-  AccountNftInfo,
   AccountSetDefaultRequest,
   AccountSetDefaultResponse,
   AccountsCreateFreeTestCoinsRequest,

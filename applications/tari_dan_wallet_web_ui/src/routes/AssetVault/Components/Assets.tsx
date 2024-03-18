@@ -37,7 +37,7 @@ import { DataTableCell } from "../../../Components/StyledComponents";
 import { useAccountNFTsList, useAccountsGetBalances } from "../../../api/hooks/useAccounts";
 import useAccountStore from "../../../store/accountStore";
 import { renderJson, shortenString } from "../../../utils/helpers";
-import type { AccountNftInfo, BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemon-client";
+import type { BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemon-client";
 import { IoCheckmarkOutline, IoCloseOutline } from "react-icons/io5";
 import NFTList from "../../../Components/NFTList";
 import { Button } from "@mui/material";
