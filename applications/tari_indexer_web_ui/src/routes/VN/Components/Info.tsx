@@ -26,32 +26,32 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableRow from "@mui/material/TableRow";
-import {DataTableCell} from "../../../Components/StyledComponents";
-import type {GetIdentityResponse} from "@tariproject/typescript-bindings/tari-indexer-client";
+import { DataTableCell } from "../../../Components/StyledComponents";
+import type { GetIdentityResponse } from "@tariproject/typescript-bindings/tari-indexer-client";
 
-function Info({identity}: { identity: GetIdentityResponse }) {
-    return (
-        <div>
-            <TableContainer>
-                <Table>
-                    <TableBody>
-                        <TableRow>
-                            <TableCell>Peer id</TableCell>
-                            <DataTableCell>{identity.peer_id}</DataTableCell>
-                        </TableRow>
-                        <TableRow>
-                            <TableCell>Listen addresses</TableCell>
-                            <DataTableCell>{identity.public_addresses?.join(", ")}</DataTableCell>
-                        </TableRow>
-                        <TableRow>
-                            <TableCell>Public key</TableCell>
-                            <DataTableCell>{identity.public_key}</DataTableCell>
-                        </TableRow>
-                    </TableBody>
-                </Table>
-            </TableContainer>
-        </div>
-    );
+function Info({ identity }: { identity: GetIdentityResponse }) {
+  return (
+    <div>
+      <TableContainer>
+        <Table>
+          <TableBody>
+            <TableRow>
+              <TableCell>Peer id</TableCell>
+              <DataTableCell>{identity.peer_id}</DataTableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell>Listen addresses</TableCell>
+              <DataTableCell>{identity.public_addresses?.join(", ")}</DataTableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell>Public key</TableCell>
+              <DataTableCell>{identity.public_key}</DataTableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </div>
+  );
 }
 
 export default Info;
