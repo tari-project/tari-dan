@@ -39,8 +39,8 @@ import HeadingMenu from "../../../Components/HeadingMenu";
 import Filter from "../../../Components/Filter";
 import Fade from "@mui/material/Fade";
 import StatusChip from "../../../Components/StatusChip";
-import { Ordering, type Block } from "@tarilabs/typescript-bindings";
-import type { GetIdentityResponse } from "@tarilabs/typescript-bindings/validator-node-client";
+import { Ordering, type Block } from "@tariproject/typescript-bindings";
+import type { GetIdentityResponse } from "@tariproject/typescript-bindings/validator-node-client";
 
 function Blocks() {
   const [blocks, setBlocks] = useState<Block[]>([]);
