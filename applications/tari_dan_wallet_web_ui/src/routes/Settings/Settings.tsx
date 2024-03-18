@@ -22,7 +22,7 @@
 
 import PageHeading from "../../Components/PageHeading";
 import Grid from "@mui/material/Grid";
-import {StyledPaper} from "../../Components/StyledComponents";
+import { StyledPaper } from "../../Components/StyledComponents";
 import Accounts from "../Wallet/Components/Accounts";
 import Keys from "../Wallet/Components/Keys";
 import AccessTokens from "../Wallet/Components/AccessTokens";
@@ -31,52 +31,52 @@ import GeneralSettings from "./Components/GeneralSettings";
 import ViewVaultBalance from "./Components/ViewVaultBalance";
 
 export interface ISettingsMenu {
-    label: string;
-    title: string;
-    content: React.ReactNode;
+  label: string;
+  title: string;
+  content: React.ReactNode;
 }
 
 function SettingsPage() {
-    const menuItems = [
-        {
-            label: "General",
-            title: "General Settings",
-            content: <GeneralSettings/>,
-        },
-        {
-            label: "Accounts",
-            title: "Manage Accounts",
-            content: <Accounts/>,
-        },
-        {
-            label: "Keys",
-            title: "Manage Keys",
-            content: <Keys/>,
-        },
-        {
-            label: "Access Tokens",
-            title: "Manage Access Tokens",
-            content: <AccessTokens/>,
-        },
-        {
-            label: "View Vault Balance",
-            title: "View Vault Balance",
-            content: <ViewVaultBalance/>,
-        }
-    ];
+  const menuItems = [
+    {
+      label: "General",
+      title: "General Settings",
+      content: <GeneralSettings />,
+    },
+    {
+      label: "Accounts",
+      title: "Manage Accounts",
+      content: <Accounts />,
+    },
+    {
+      label: "Keys",
+      title: "Manage Keys",
+      content: <Keys />,
+    },
+    {
+      label: "Access Tokens",
+      title: "Manage Access Tokens",
+      content: <AccessTokens />,
+    },
+    {
+      label: "View Vault Balance",
+      title: "View Vault Balance",
+      content: <ViewVaultBalance />,
+    },
+  ];
 
-    return (
-        <>
-            <Grid item xs={12} md={12} lg={12}>
-                <PageHeading>Settings</PageHeading>
-            </Grid>
-            <Grid item xs={12} md={12} lg={12}>
-                <StyledPaper>
-                    <SettingsTabs menuItems={menuItems}/>
-                </StyledPaper>
-            </Grid>
-        </>
-    );
+  return (
+    <>
+      <Grid item xs={12} md={12} lg={12}>
+        <PageHeading>Settings</PageHeading>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <SettingsTabs menuItems={menuItems} />
+        </StyledPaper>
+      </Grid>
+    </>
+  );
 }
 
 export default SettingsPage;

@@ -22,102 +22,94 @@
 
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
-import {useState} from "react";
-import {Form} from "react-router-dom";
-import Alert from "@mui/material/Alert";
+import { useState } from "react";
 import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";
-import {useTheme} from "@mui/material/styles";
-import {Divider} from "@mui/material";
-import {useEffect} from "react";
-import {confidentialViewVaultBalance, settingsGet, settingsSet} from "../../../utils/json_rpc";
-import {VaultId} from "@tariproject/typescript-bindings";
-import {
-    ConfidentialViewBalanceRequest
-} from "@tariproject/typescript-bindings/dist/types/wallet-daemon-client/ConfidentialViewBalanceRequest";
-
+import { useTheme } from "@mui/material/styles";
+import { Divider } from "@mui/material";
+import { confidentialViewVaultBalance } from "../../../utils/json_rpc";
+import { ConfidentialViewBalanceRequest } from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 function ViewVaultBalanceForm() {
-    const [formState, setFormState] = useState({
-        vaultId: null,
-        keyId: 0,
+  const [formState, setFormState] = useState({
+    vaultId: null,
+    keyId: 0,
+  });
+  const [vaultBalance, setVaultBalance] = useState<any>(null);
+
+  const onViewBalanceClicked = async () => {
+    const resp = await confidentialViewVaultBalance({
+      vault_id: formState.vaultId!,
+      minimum_expected_value: null,
+      maximum_expected_value: null,
+      view_key_id: formState.keyId,
+    } as ConfidentialViewBalanceRequest);
+
+    setVaultBalance(resp);
+  };
+
+  const balances =
+    vaultBalance &&
+    Object.keys(vaultBalance?.balances).map((key) => {
+      return (
+        <Box key={key}>
+          <Typography>
+            {key}: {vaultBalance.balances[key] || "Failed not decrypt value"}
+          </Typography>
+        </Box>
+      );
     });
-    const [vaultBalance, setVaultBalance] = useState<any>(null);
 
-    const onViewBalanceClicked = async () => {
-        const resp = await confidentialViewVaultBalance({
-            vault_id: formState.vaultId!,
-            minimum_expected_value: null,
-            maximum_expected_value: null,
-            view_key_id: formState.keyId,
-        } as ConfidentialViewBalanceRequest);
-
-        setVaultBalance(resp);
-    };
-
-    const balances = vaultBalance && Object.keys(vaultBalance?.balances).map((key) => {
-        return (
-            <Box key={key}>
-                <Typography>{key}: {vaultBalance.balances[key] || "Failed not decrypt value"}</Typography>
-            </Box>
-        );
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormState({
+      ...formState,
+      [e.target.name]: e.target.value,
     });
+  };
 
-    const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setFormState({
-            ...formState,
-            [e.target.name]: e.target.value,
-        });
-    }
-
-    return (
+  return (
+    <>
+      <Box className="flex-container" sx={{ marginBottom: 4 }}>
+        <TextField name="keyId" label="Key ID" value={formState.keyId} onChange={onChange} style={{ flexGrow: 1 }} />
+        <TextField
+          name="vaultId"
+          label="Vault Id"
+          value={formState.vaultId}
+          onChange={onChange}
+          style={{ flexGrow: 1 }}
+        />
+        <Button variant="contained" onClick={onViewBalanceClicked} disabled={!formState.vaultId}>
+          Fetch Balance
+        </Button>
+      </Box>
+      {balances && (
         <>
-            <Box className="flex-container" sx={{marginBottom: 4}}>
-                <TextField
-                    name="keyId"
-                    label="Key ID"
-                    value={formState.keyId}
-                    onChange={onChange}
-                    style={{flexGrow: 1}}
-                />
-                <TextField
-                    name="vaultId"
-                    label="Vault Id"
-                    value={formState.vaultId}
-                    onChange={onChange}
-                    style={{flexGrow: 1}}
-                />
-                <Button variant="contained" onClick={onViewBalanceClicked} disabled={!formState.vaultId}>
-                    Fetch Balance
-                </Button>
-            </Box>
-            {balances && (
-                <>
-                    <Typography variant="h3">Balances</Typography>
-                    {balances}
-                </>
-            )}
+          <Typography variant="h3">Balances</Typography>
+          {balances}
         </>
-    );
+      )}
+    </>
+  );
 }
 
 function ViewVaultBalance() {
-    const theme = useTheme();
-    return (
-        <Box
-            style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: theme.spacing(3),
-                paddingTop: theme.spacing(3),
-            }}
-        >
-            <p>Brute force a vault balance using a secret view key</p>
-            <Box><ViewVaultBalanceForm/></Box>
-            <Divider/>
-        </Box>
-    );
+  const theme = useTheme();
+  return (
+    <Box
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: theme.spacing(3),
+        paddingTop: theme.spacing(3),
+      }}
+    >
+      <p>Brute force a vault balance using a secret view key</p>
+      <Box>
+        <ViewVaultBalanceForm />
+      </Box>
+      <Divider />
+    </Box>
+  );
 }
-
 
 export default ViewVaultBalance;
