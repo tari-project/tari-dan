@@ -14,13 +14,14 @@ use tari_template_lib::{
     models::Amount,
     prelude::{ComponentAddress, NonFungibleId, ResourceAddress},
 };
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 use crate::models::{
     Account,
     ConfidentialOutputModel,
     ConfidentialProofId,
     Config,
+    NewAccountInfo,
     NonFungibleToken,
     OutputStatus,
     SubstateModel,
@@ -87,6 +88,8 @@ pub enum WalletStorageError {
         entity: String,
         key: String,
     },
+    #[error("Operation error {operation}: {details}")]
+    OperationError { operation: &'static str, details: String },
 }
 
 impl IsNotFoundError for WalletStorageError {
@@ -216,7 +219,13 @@ pub trait WalletStoreWriter {
     ) -> Result<(), WalletStorageError>;
 
     // Transactions
-    fn transactions_insert(&mut self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError>;
+    fn transactions_insert(
+        &mut self,
+        transaction: &Transaction,
+        required_substates: &[SubstateRequirement],
+        new_account_info: Option<&NewAccountInfo>,
+        is_dry_run: bool,
+    ) -> Result<(), WalletStorageError>;
     fn transactions_set_result_and_status(
         &mut self,
         transaction_id: TransactionId,

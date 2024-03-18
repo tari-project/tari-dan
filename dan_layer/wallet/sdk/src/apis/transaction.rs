@@ -13,8 +13,8 @@ use tari_template_lib::prelude::ComponentAddress;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 use crate::{
-    models::{TransactionStatus, VersionedSubstateId, WalletTransaction},
-    network::{TransactionFinalizedResult, TransactionQueryResult, WalletNetworkInterface},
+    models::{NewAccountInfo, TransactionStatus, VersionedSubstateId, WalletTransaction},
+    network::{TransactionFinalizedResult, WalletNetworkInterface},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
 
@@ -44,17 +44,71 @@ where
         Ok(transaction)
     }
 
-    pub async fn submit_transaction(
+    pub async fn insert_new_transaction(
         &self,
         transaction: Transaction,
         required_substates: Vec<SubstateRequirement>,
+        new_account_info: Option<NewAccountInfo>,
+        is_dry_run: bool,
     ) -> Result<TransactionId, TransactionApiError> {
-        self.store
-            .with_write_tx(|tx| tx.transactions_insert(&transaction, false))?;
+        let tx_id = *transaction.id();
+        self.store.with_write_tx(|tx| {
+            tx.transactions_insert(&transaction, &required_substates, new_account_info.as_ref(), is_dry_run)
+        })?;
 
-        let transaction_id = *transaction.id();
+        Ok(tx_id)
+    }
+
+    pub async fn submit_transaction(&self, transaction_id: TransactionId) -> Result<(), TransactionApiError> {
+        let transaction = self.store.with_read_tx(|tx| tx.transactions_get(transaction_id))?;
+
+        if !matches!(transaction.status, TransactionStatus::New) {
+            return Err(TransactionApiError::StoreError(WalletStorageError::OperationError {
+                operation: "submit_transaction",
+                details: format!("Transaction {} is not in New status", transaction_id),
+            }));
+        }
+
+        if transaction.is_dry_run {
+            let query = self
+                .network_interface
+                .submit_dry_run_transaction(transaction.transaction, transaction.required_substates)
+                .await
+                .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
+
+            match &query.result {
+                TransactionFinalizedResult::Pending => {
+                    return Err(TransactionApiError::NetworkInterfaceError(
+                        "Pending execution result returned from dry run".to_string(),
+                    ));
+                },
+                TransactionFinalizedResult::Finalized {
+                    execution_result,
+                    finalized_time,
+                    execution_time,
+                    ..
+                } => {
+                    self.store.with_write_tx(|tx| {
+                        tx.transactions_set_result_and_status(
+                            query.transaction_id,
+                            execution_result.as_ref().map(|e| &e.finalize),
+                            execution_result
+                                .as_ref()
+                                .map(|e| e.finalize.fee_receipt.total_fees_charged()),
+                            None,
+                            TransactionStatus::DryRun,
+                            Some(*execution_time),
+                            Some(*finalized_time),
+                        )
+                    })?;
+                },
+            }
+
+            return Ok(());
+        }
+
         self.network_interface
-            .submit_transaction(transaction, required_substates)
+            .submit_transaction(transaction.transaction, transaction.required_substates)
             .await
             .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
 
@@ -70,53 +124,56 @@ where
             )
         })?;
 
-        Ok(transaction_id)
+        Ok(())
     }
 
     pub async fn submit_dry_run_transaction(
         &self,
         transaction: Transaction,
         required_substates: Vec<SubstateRequirement>,
-    ) -> Result<TransactionQueryResult, TransactionApiError> {
+    ) -> Result<WalletTransaction, TransactionApiError> {
         self.store
-            .with_write_tx(|tx| tx.transactions_insert(&transaction, true))?;
+            .with_write_tx(|tx| tx.transactions_insert(&transaction, &required_substates, None, true))?;
 
-        let query = self
-            .network_interface
-            .submit_dry_run_transaction(transaction, required_substates)
-            .await
-            .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
+        let tx_id = *transaction.id();
+        self.submit_transaction(tx_id).await?;
+        let transaction = self.store.with_read_tx(|tx| tx.transactions_get(tx_id))?;
+        // let query = self
+        //     .network_interface
+        //     .submit_dry_run_transaction(transaction, required_substates)
+        //     .await
+        //     .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
+        //
+        // match &query.result {
+        //     TransactionFinalizedResult::Pending => {
+        //         return Err(TransactionApiError::NetworkInterfaceError(
+        //             "Pending execution result returned from dry run".to_string(),
+        //         ));
+        //     },
+        //     TransactionFinalizedResult::Finalized {
+        //         execution_result,
+        //         finalized_time,
+        //         execution_time,
+        //         ..
+        //     } => {
+        //         self.store.with_write_tx(|tx| {
+        //             tx.transactions_set_result_and_status(
+        //                 query.transaction_id,
+        //                 execution_result.as_ref().map(|e| &e.finalize),
+        //                 execution_result
+        //                     .as_ref()
+        //                     .and_then(|e| e.fee_receipt.as_ref())
+        //                     .map(|f| f.total_fees_charged()),
+        //                 None,
+        //                 TransactionStatus::DryRun,
+        //                 Some(*execution_time),
+        //                 Some(*finalized_time),
+        //             )
+        //         })?;
+        //     },
+        // }
 
-        match &query.result {
-            TransactionFinalizedResult::Pending => {
-                return Err(TransactionApiError::NetworkInterfaceError(
-                    "Pending execution result returned from dry run".to_string(),
-                ));
-            },
-            TransactionFinalizedResult::Finalized {
-                execution_result,
-                finalized_time,
-                execution_time,
-                ..
-            } => {
-                self.store.with_write_tx(|tx| {
-                    tx.transactions_set_result_and_status(
-                        query.transaction_id,
-                        execution_result.as_ref().map(|e| &e.finalize),
-                        execution_result
-                            .as_ref()
-                            .and_then(|e| e.fee_receipt.as_ref())
-                            .map(|f| f.total_fees_charged()),
-                        None,
-                        TransactionStatus::DryRun,
-                        Some(*execution_time),
-                        Some(*finalized_time),
-                    )
-                })?;
-            },
-        }
-
-        Ok(query)
+        Ok(transaction)
     }
 
     pub fn fetch_all(
@@ -161,7 +218,7 @@ where
                 execution_time,
                 finalized_time,
                 abort_details: _,
-                json_results,
+                ..
             } => {
                 let new_status = if final_decision.is_commit() {
                     match execution_result.as_ref() {
@@ -183,7 +240,7 @@ where
                 //     .await
                 //     .map_err(TransactionApiError::ValidatorNodeClientError)?;
 
-                self.store.with_write_tx(|tx| {
+                let transaction = self.store.with_write_tx(|tx| {
                     if !transaction.is_dry_run && final_decision.is_commit() {
                         let diff = execution_result
                             .as_ref()
@@ -203,8 +260,7 @@ where
                         execution_result.as_ref().map(|e| &e.finalize),
                         execution_result
                             .as_ref()
-                            .and_then(|e| e.fee_receipt.as_ref())
-                            .map(|f| f.total_fees_charged()),
+                            .map(|e| e.finalize.fee_receipt.total_fees_charged()),
                         // TODO: readd qcs
                         None,
                         // Some(&qc_resp.qcs),
@@ -226,26 +282,11 @@ where
                         }
                     }
 
-                    Ok::<_, TransactionApiError>(())
+                    let transaction = tx.transactions_get(transaction_id)?;
+                    Ok::<_, TransactionApiError>(transaction)
                 })?;
-                Ok(Some(WalletTransaction {
-                    transaction: transaction.transaction,
-                    status: new_status,
-                    finalize: execution_result.as_ref().map(|e| e.finalize.clone()),
-                    final_fee: execution_result
-                        .as_ref()
-                        .and_then(|e| e.fee_receipt.as_ref())
-                        .map(|f| f.total_fees_charged()),
-                    // TODO: re-add QCs
-                    // qcs: qc_resp.qcs,
-                    qcs: vec![],
-                    is_dry_run: transaction.is_dry_run,
-                    execution_time: Some(execution_time),
-                    finalized_time: Some(finalized_time),
-                    json_result: Some(json_results),
-                    // This is not precise, we should read it back from DB, but it's not critical
-                    last_update_time: chrono::Utc::now().naive_utc(),
-                }))
+
+                Ok(Some(transaction))
             },
         }
     }

@@ -32,7 +32,7 @@ use tokio::sync::broadcast;
 use super::context::HandlerContext;
 use crate::{
     handlers::helpers::get_account,
-    services::{TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
+    services::{TransactionFinalizedEvent, WalletEvent},
     DEFAULT_FEE,
 };
 
@@ -214,14 +214,13 @@ async fn mint_account_nft(
         .sign(owner_sk)
         .build();
 
-    let tx_hash = sdk.transaction_api().submit_transaction(transaction, inputs).await?;
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent {
-        transaction_id: tx_hash,
-        new_account: None,
-    });
+    let tx_id = context
+        .transaction_service()
+        .submit_transaction(transaction, inputs)
+        .await?;
 
-    let event = wait_for_result(&mut events, tx_hash).await?;
+    let event = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = event.finalize.result.reject() {
         return Err(anyhow!(
             "Mint new NFT using account {} was rejected: {}",
@@ -262,12 +261,12 @@ async fn create_account_nft(
         .sign(owner_sk)
         .build();
 
-    let tx_id = sdk.transaction_api().submit_transaction(transaction, vec![]).await?;
+    let tx_id = sdk
+        .transaction_api()
+        .insert_new_transaction(transaction, vec![], None, false)
+        .await?;
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent {
-        transaction_id: tx_id,
-        new_account: None,
-    });
+    sdk.transaction_api().submit_transaction(tx_id).await?;
 
     let event = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = event.finalize.result.reject() {

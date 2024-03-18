@@ -18,6 +18,7 @@ use tari_dan_wallet_sdk::{
     models::{
         ConfidentialOutputModel,
         ConfidentialProofId,
+        NewAccountInfo,
         OutputStatus,
         SubstateModel,
         TransactionStatus,
@@ -28,7 +29,7 @@ use tari_dan_wallet_sdk::{
 };
 use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateId, TemplateAddress};
 use tari_template_lib::models::{Amount, EncryptedData};
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use tari_utilities::hex::Hex;
 
 use crate::{
@@ -246,7 +247,13 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Transactions -------------------------------- //
-    fn transactions_insert(&mut self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError> {
+    fn transactions_insert(
+        &mut self,
+        transaction: &Transaction,
+        required_substates: &[SubstateRequirement],
+        new_account_info: Option<&NewAccountInfo>,
+        is_dry_run: bool,
+    ) -> Result<(), WalletStorageError> {
         use crate::schema::transactions;
 
         diesel::insert_into(transactions::table)
@@ -260,7 +267,9 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                     inputs: transaction.inputs().to_vec(),
                     input_refs: transaction.input_refs().to_vec(),
                 })?),
-                transactions::status.eq(TransactionStatus::default().as_key_str()),
+                transactions::status.eq(TransactionStatus::New.as_key_str()),
+                transactions::required_substates.eq(serialize_json(&required_substates)?),
+                transactions::new_account_info.eq(new_account_info.map(serialize_json).transpose()?),
                 transactions::dry_run.eq(is_dry_run),
             ))
             .execute(self.connection())

@@ -3,7 +3,7 @@
 
 use serde_json as json;
 use tari_engine_types::{
-    commit_result::ExecuteResult,
+    commit_result::FinalizeResult,
     component::ComponentHeader,
     non_fungible::NonFungibleContainer,
     substate::{Substate, SubstateValue},
@@ -25,14 +25,13 @@ pub enum JsonEncodingError {
 
 pub fn encode_finalized_result_into_json(result: &FinalizedResult) -> Result<Vec<json::Value>, JsonEncodingError> {
     match &result.execute_result {
-        Some(res) => encode_execute_result_into_json(res),
+        Some(res) => encode_finalize_result_into_json(&res.finalize),
         None => Ok(vec![]),
     }
 }
 
-pub fn encode_execute_result_into_json(result: &ExecuteResult) -> Result<Vec<json::Value>, JsonEncodingError> {
-    result
-        .finalize
+pub fn encode_finalize_result_into_json(finalize: &FinalizeResult) -> Result<Vec<json::Value>, JsonEncodingError> {
+    finalize
         .execution_results
         .iter()
         .map(|r| serde_json::to_value(r.indexed.value()).map_err(JsonEncodingError::Serde))

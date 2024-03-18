@@ -34,9 +34,10 @@ pub struct Transaction {
     pub max_epoch: Option<i64>,
     pub updated_at: NaiveDateTime,
     pub created_at: NaiveDateTime,
-    pub json_result: Option<String>,
     pub executed_time_ms: Option<i64>,
     pub finalized_time_ms: Option<i64>,
+    pub required_substates: String,
+    pub new_account_info: Option<String>,
 }
 
 /// Struct used to keep inputs and outputs in a single field as json
@@ -77,6 +78,8 @@ impl Transaction {
             finalize: self.result.as_deref().map(deserialize_json).transpose()?,
             final_fee: self.final_fee.map(|f| f.into()),
             qcs: self.qcs.map(|q| deserialize_json(&q)).transpose()?.unwrap_or_default(),
+            required_substates: deserialize_json(&self.required_substates)?,
+            new_account_info: self.new_account_info.as_deref().map(deserialize_json).transpose()?,
             is_dry_run: self.is_dry_run,
             execution_time: self
                 .executed_time_ms
@@ -84,12 +87,6 @@ impl Transaction {
             finalized_time: self
                 .finalized_time_ms
                 .map(|t| u64::try_from(t).map(Duration::from_millis).unwrap_or_default()),
-            // TODO: This is always None
-            json_result: self
-                .json_result
-                .map(|r| deserialize_json(&r))
-                .transpose()?
-                .unwrap_or_default(),
             last_update_time: self.updated_at,
         })
     }

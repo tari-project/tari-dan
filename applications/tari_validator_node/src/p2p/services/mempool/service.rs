@@ -471,15 +471,8 @@ where
             TransactionResult::Accept(SubstateDiff::new()),
             FeeReceipt::default(),
         );
-        let executed_transaction = ExecutedTransaction::new(
-            transaction.clone(),
-            ExecuteResult {
-                finalize,
-                fee_receipt: None,
-            },
-            vec![],
-            Duration::ZERO,
-        );
+        let executed_transaction =
+            ExecutedTransaction::new(transaction.clone(), ExecuteResult { finalize }, vec![], Duration::ZERO);
         let execution_result = (*transaction.id(), Ok(executed_transaction));
         let result = MempoolTransactionExecution {
             result: Ok(execution_result),
