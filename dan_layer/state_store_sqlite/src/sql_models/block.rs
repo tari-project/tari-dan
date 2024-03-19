@@ -70,8 +70,8 @@ impl Block {
             deserialize_json(&self.foreign_indexes)?,
             self.signature.map(|val| deserialize_json(&val)).transpose()?,
             self.created_at,
-            self.timestamp as u64,
             self.block_time.map(|v| v as u64),
+            self.timestamp as u64,
             self.base_layer_block_height as u64,
             deserialize_hex_try_from(&self.base_layer_block_hash)?,
         ))
