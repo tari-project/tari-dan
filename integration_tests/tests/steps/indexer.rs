@@ -180,19 +180,22 @@ async fn indexer_scans_network_events_for_resource(
             resource_path
         )
     });
-    let _resource_address = world
+    let resource_address = world
         .outputs
         .get(input_group)
         .unwrap_or_else(|| panic!("No outputs found with name {}", input_group))
         .iter()
         .find(|(i, _)| **i == index)
         .map(|(_, data)| data.clone())
-        .unwrap_or_else(|| panic!("No resource with index {}", index));
-
+        .unwrap_or_else(|| panic!("No resource with index {}", index))
+        .substate_id()
+        .as_resource_address()
+        .unwrap_or_else(|| panic!("The output is not a resource {}", index));
 
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
     let query = format!(
-        r#"{{ getEvents {{ componentAddress, templateAddress, txHash, topic, payload }} }}"#,
+        r#"{{ getEvents(offset:0, limit:2, payloadFilter: {{ resource_address: "{}" }}) {{ componentAddress, templateAddress, txHash, topic, payload }} }}"#,
+        resource_address
     );
     let res = graphql_client
         .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)

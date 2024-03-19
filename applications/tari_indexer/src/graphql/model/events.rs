@@ -114,10 +114,13 @@ impl EventQuery {
     pub async fn get_events(
         &self,
         ctx: &Context<'_>,
+        offset: u64,
+        limit: u64,
+        payload_filter: Option<BTreeMap<String, String>>,
     ) -> Result<Vec<Event>, anyhow::Error> {
         info!(
             target: LOG_TARGET,
-            "Querying events"
+            "Querying events, offset: {}, limit: {}, payload_filter: {:?}", offset, limit, payload_filter
         );
         let _substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         let events = vec![
