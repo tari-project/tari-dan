@@ -36,8 +36,7 @@ import useAccountStore from "../../../store/accountStore";
 import Select from "@mui/material/Select";
 import { SelectChangeEvent } from "@mui/material/Select/Select";
 import MenuItem from "@mui/material/MenuItem";
-import { ResourceType } from "@tariproject/typescript-bindings/dist/types/ResourceType";
-import { ResourceAddress } from "@tariproject/typescript-bindings";
+import { ResourceAddress, ResourceType } from "@tariproject/typescript-bindings";
 
 const XTR2 = "resource_01010101010101010101010101010101010101010101010101010101";
 

@@ -41,8 +41,7 @@ import type { BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemo
 import NFTList from "../../../Components/NFTList";
 import { Button } from "@mui/material";
 import { SendMoneyDialog } from "./SendMoney";
-import { ResourceType } from "@tariproject/typescript-bindings/dist/types/ResourceType";
-import { ResourceAddress } from "@tariproject/typescript-bindings";
+import { ResourceAddress, ResourceType } from "@tariproject/typescript-bindings";
 
 interface TabPanelProps {
   children?: React.ReactNode;
