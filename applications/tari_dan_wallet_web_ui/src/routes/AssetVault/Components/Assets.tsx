@@ -36,14 +36,11 @@ import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import { DataTableCell } from "../../../Components/StyledComponents";
 import { useAccountNFTsList, useAccountsGetBalances } from "../../../api/hooks/useAccounts";
 import useAccountStore from "../../../store/accountStore";
-import { renderJson, shortenString } from "../../../utils/helpers";
+import { shortenString } from "../../../utils/helpers";
 import type { BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemon-client";
-import { IoCheckmarkOutline, IoCloseOutline } from "react-icons/io5";
 import NFTList from "../../../Components/NFTList";
 import { Button } from "@mui/material";
 import { SendMoneyDialog } from "./SendMoney";
-import type { NonFungibleToken } from "@tariproject/typescript-bindings";
-import { convertCborValue } from "../../../utils/cbor";
 
 interface TabPanelProps {
   children?: React.ReactNode;
