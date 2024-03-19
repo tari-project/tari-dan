@@ -78,7 +78,13 @@ function BalanceRow(props: BalanceRowProps) {
       </DataTableCell>
       <DataTableCell>{resource_type}</DataTableCell>
       <DataTableCell>{showBalance ? balance : "*************"}</DataTableCell>
-      <DataTableCell>{showBalance ? confidential_balance : "**************"}</DataTableCell>
+      <DataTableCell>
+        <ConfidentialBalance
+          show={showBalance}
+          resourceType={resource_type}
+          balance={confidential_balance}
+        />
+      </DataTableCell>
       <DataTableCell>
         <Button variant="outlined" onClick={() => onSendClicked?.(resource_address)}>
           Send
@@ -86,6 +92,15 @@ function BalanceRow(props: BalanceRowProps) {
       </DataTableCell>
     </TableRow>
   );
+}
+
+function ConfidentialBalance(props: { show: boolean, balance: number, resourceType: string }) {
+  switch (props.resourceType) {
+    case "Confidential":
+      return <>{props.show ? props.balance : "**************"}</>;
+    default:
+      return <>--</>;
+  }
 }
 
 function TabPanel(props: TabPanelProps) {
