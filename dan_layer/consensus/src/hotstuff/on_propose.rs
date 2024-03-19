@@ -125,10 +125,12 @@ where TConsensusSpec: ConsensusSpec
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
         let (current_base_layer_block_height, current_base_layer_block_hash) =
             self.epoch_manager.current_base_layer_block_info().await?;
-        let parent_block = self.store.with_read_tx(|tx| Block::get(tx, leaf_block.block_id()))?;
-        let parent_base_layer_block_hash = parent_block.base_layer_block_hash();
+        let high_qc = self.store.with_read_tx(|tx| HighQc::get(tx))?;
+        let qc_block = self.store.with_read_tx(|tx| Block::get(tx, high_qc.block_id()))?;
 
-        let base_layer_block_hash = if parent_block.base_layer_block_height() >= current_base_layer_block_height {
+        let parent_base_layer_block_hash = qc_block.base_layer_block_hash();
+
+        let base_layer_block_hash = if qc_block.base_layer_block_height() >= current_base_layer_block_height {
             *parent_base_layer_block_hash
         } else {
             // We select our current base layer block hash as the base layer block hash for the next block if
@@ -137,10 +139,9 @@ where TConsensusSpec: ConsensusSpec
         };
 
         let base_layer_block_height =
-            std::cmp::max(parent_block.base_layer_block_height(), current_base_layer_block_height);
+            std::cmp::max(qc_block.base_layer_block_height(), current_base_layer_block_height);
 
         let next_block = self.store.with_write_tx(|tx| {
-            let high_qc = HighQc::get(tx.deref_mut())?;
             let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
             let next_block = self.build_next_block(
                 tx,
