@@ -35,7 +35,7 @@ use tari_dan_common_types::{
     NodeAddressable,
     SubstateAddress,
 };
-use tari_dan_storage::global::{models::ValidatorNode};
+use tari_dan_storage::global::models::ValidatorNode;
 use tokio::sync::broadcast;
 
 use crate::{EpochManagerError, EpochManagerEvent};
