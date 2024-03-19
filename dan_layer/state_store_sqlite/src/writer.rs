@@ -160,6 +160,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
             parked_blocks::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
             parked_blocks::block_time.eq(block.block_time().map(|v| v as i64)),
             parked_blocks::timestamp.eq(block.timestamp() as i64),
+            parked_blocks::base_layer_block_height.eq(block.base_layer_block_height() as i64),
             parked_blocks::base_layer_block_hash.eq(serialize_hex(block.base_layer_block_hash())),
         );
 
