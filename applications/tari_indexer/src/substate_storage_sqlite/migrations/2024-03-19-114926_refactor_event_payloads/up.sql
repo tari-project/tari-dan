@@ -17,7 +17,3 @@ create index event_payloads_index on event_payloads (event_id);
 
 -- Index for faster scan queries by key and value
 create index event_payloads_key_value_index on event_payloads (payload_key, payload_value);
-
--- Drop the old payload column in events as it has now its own table
-alter table events
-    drop column payload;

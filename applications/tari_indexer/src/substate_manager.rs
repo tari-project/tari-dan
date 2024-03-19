@@ -318,6 +318,7 @@ impl SubstateManager {
             template_address: template_address.to_string(),
             tx_hash: tx_hash.to_string(),
             topic,
+            payload: payload.to_json().expect("Failed to convert to JSON"),
             version: version as i32,
         };
         tx.save_event(new_event)?;
@@ -420,6 +421,25 @@ impl SubstateManager {
             )?;
             events.push(event);
         }
+
+        Ok(events)
+    }
+
+    pub async fn scan_events_by_payload(&self,
+        payload_key: String,
+        payload_value: String,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Event>, anyhow::Error> {
+        let events = {
+            let mut tx = self.substate_store.create_read_tx()?;
+            tx.get_events_by_payload(payload_key, payload_value, offset, limit)?
+        };
+
+        let events = events
+            .iter()
+            .map(|e| Event::try_from(e.clone()))
+            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
 
         Ok(events)
     }

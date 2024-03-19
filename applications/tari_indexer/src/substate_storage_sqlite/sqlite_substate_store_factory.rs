@@ -21,10 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    fs::create_dir_all,
-    ops::{Deref, DerefMut},
-    path::PathBuf,
-    sync::{Arc, Mutex},
+    fs::create_dir_all, ops::{Deref, DerefMut}, path::PathBuf, sync::{Arc, Mutex}
 };
 
 use diesel::{
@@ -199,6 +196,7 @@ pub trait SubstateStoreReadTransaction {
         version: u32,
     ) -> Result<Vec<EventData>, StorageError>;
     fn get_all_events(&mut self, component_address: &ComponentAddress) -> Result<Vec<EventData>, StorageError>;
+    fn get_events_by_payload(&mut self, payload_key: String, payload_value: String, offset: u32, limit: u32) -> Result<Vec<EventData>, StorageError>;
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
@@ -399,6 +397,32 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         .get_results::<EventData>(self.connection())
         .map_err(|e| StorageError::QueryError {
             reason: format!("get_events_by_version: {}", e),
+        })?;
+
+        Ok(res)
+    }
+
+    fn get_events_by_payload(&mut self, payload_key: String, payload_value: String, offset: u32, limit: u32) -> Result<Vec<EventData>, StorageError> {
+        info!(
+            target: LOG_TARGET,
+            "Querying substate scanner database: get_events_by_payload with payload_key = {} and payload_value = {}",
+            payload_key,
+            payload_value
+        );
+        let res = sql_query(
+            "SELECT component_address, template_address, tx_hash, topic, payload \
+            FROM events e \
+            INNER JOIN event_payloads p ON p.event_id = e.id \
+            WHERE p.payload_key = ? AND p.payload_value = ? \
+            LIMIT ?,?",
+        )
+        .bind::<Text, _>(payload_key)
+        .bind::<Text, _>(payload_value)
+        .bind::<Integer, _>(offset as i32)
+        .bind::<Integer, _>(limit as i32)
+        .get_results::<EventData>(self.connection())
+        .map_err(|e| StorageError::QueryError {
+            reason: format!("get_events_by_payload: {}", e),
         })?;
 
         Ok(res)

@@ -194,15 +194,15 @@ async fn indexer_scans_network_events_for_resource(
 
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
     let query = format!(
-        r#"{{ getEvents(offset:0, limit:2, payload: {{ resource_address: "{}" }}) {{ componentAddress, templateAddress, txHash, topic, payload }} }}"#,
+        r#"{{ getEventsByPayload(payloadKey: "resource_address", payloadValue: "{}", offset:0, limit:2) {{ componentAddress, templateAddress, txHash, topic, payload }} }}"#,
         resource_address
     );
     let res = graphql_client
         .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
         .await
-        .expect("Failed to obtain getEvents query result");
+        .expect("Failed to obtain getEventsByPayload query result");
 
-    let events = res.get("getEvents").unwrap();
+    let events = res.get("getEventsByPayload").unwrap();
     eprintln!("{:?}", events);
 }
 

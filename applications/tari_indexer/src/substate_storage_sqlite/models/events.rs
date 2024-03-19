@@ -21,11 +21,11 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-use std::{collections::BTreeMap, convert::TryFrom, str::FromStr};
+use std::{convert::TryFrom, str::FromStr};
 
 use diesel::sql_types::{Integer, Nullable, Text};
 use serde::{Deserialize, Serialize};
-use tari_template_lib::{models::Metadata, prelude::ComponentAddress, Hash};
+use tari_template_lib::{prelude::ComponentAddress, Hash};
 
 use crate::substate_storage_sqlite::schema::*;
 
@@ -36,18 +36,9 @@ pub struct Event {
     pub template_address: String,
     pub tx_hash: String,
     pub topic: String,
+    pub payload: String,
     pub version: i32,
     pub component_address: Option<String>,
-}
-
-#[derive(Debug, Identifiable, Queryable, Associations)]
-#[diesel(belongs_to(Event))]
-#[diesel(table_name = event_payloads)]
-pub struct EventPayload {
-    pub id: i32,
-    pub payload_key: String,
-    pub payload_value: String,
-    pub event_id: i32,
 }
 
 #[derive(Debug, Clone, Insertable, AsChangeset)]
@@ -57,6 +48,7 @@ pub struct NewEvent {
     pub template_address: String,
     pub tx_hash: String,
     pub topic: String,
+    pub payload: String,
     pub version: i32,
     pub component_address: Option<String>,
 }
@@ -69,6 +61,8 @@ pub struct EventData {
     pub tx_hash: String,
     #[diesel(sql_type = Text)]
     pub topic: String,
+    #[diesel(sql_type = Text)]
+    pub payload: String,
     #[diesel(sql_type = Integer)]
     pub version: i32,
     #[diesel(sql_type = Nullable<Text>)]
@@ -89,7 +83,7 @@ impl TryFrom<EventData> for crate::graphql::model::events::Event {
 
         let tx_hash = Hash::from_hex(&event_data.tx_hash)?.into_array();
 
-        let payload = BTreeMap::new();
+        let payload = serde_json::from_str(event_data.payload.as_str())?;
 
         Ok(Self {
             component_address,
@@ -112,7 +106,7 @@ impl TryFrom<EventData> for tari_engine_types::events::Event {
             .transpose()?;
         let template_address = Hash::from_hex(&event_data.template_address)?;
         let tx_hash = Hash::from_hex(&event_data.tx_hash)?;
-        let payload = Metadata::new();
+        let payload = serde_json::from_str(event_data.payload.as_str())?;
 
         Ok(Self::new(
             component_address,

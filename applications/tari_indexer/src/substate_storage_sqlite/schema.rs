@@ -25,6 +25,7 @@ diesel::table! {
         template_address -> Text,
         tx_hash -> Text,
         topic -> Text,
+        payload -> Text,
         version -> Integer,
         component_address -> Nullable<Text>,
     }
