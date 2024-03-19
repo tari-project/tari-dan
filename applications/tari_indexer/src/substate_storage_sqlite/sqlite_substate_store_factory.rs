@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    fs::create_dir_all, ops::{Deref, DerefMut}, path::PathBuf, sync::{Arc, Mutex}
+    collections::BTreeMap, fs::create_dir_all, ops::{Deref, DerefMut}, path::PathBuf, sync::{Arc, Mutex}
 };
 
 use diesel::{
@@ -46,7 +46,7 @@ use super::models::{
 };
 use crate::{
     diesel_migrations::MigrationHarness,
-    substate_storage_sqlite::models::substate::{NewSubstate, Substate},
+    substate_storage_sqlite::models::{events::{Event, NewEventPayloadField}, substate::{NewSubstate, Substate}},
 };
 
 const LOG_TARGET: &str = "tari::indexer::substate_storage_sqlite";
@@ -464,8 +464,8 @@ pub trait SubstateStoreWriteTransaction {
     fn delete_substate(&mut self, address: String) -> Result<(), StorageError>;
     fn clear_substates(&mut self) -> Result<(), StorageError>;
     fn add_non_fungible_index(&mut self, new_nft_index: NewNonFungibleIndex) -> Result<(), StorageError>;
-    fn save_event(&mut self, new_event: NewEvent) -> Result<(), StorageError>;
-    fn save_events(&mut self, new_events: Vec<NewEvent>) -> Result<(), StorageError>;
+    fn save_event(&mut self, new_event: NewEvent) -> Result<Event, StorageError>;
+    fn save_event_payload(&mut self, event: Event) -> Result<(), StorageError>;
 }
 
 impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
@@ -560,7 +560,7 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn save_event(&mut self, new_event: NewEvent) -> Result<(), StorageError> {
+    fn save_event(&mut self, new_event: NewEvent) -> Result<Event, StorageError> {
         use crate::substate_storage_sqlite::schema::events;
         warn!(
             target: LOG_TARGET,
@@ -571,11 +571,12 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
             new_event.tx_hash,
             new_event.version,
         );
-        diesel::insert_into(events::table)
+
+        let event_row: Event = diesel::insert_into(events::table)
             .values(&new_event)
-            .execute(&mut *self.connection())
+            .get_result::<Event>(self.connection())
             .map_err(|e| StorageError::QueryError {
-                reason: format!("save_events: {}", e),
+                reason: format!("save_event: {}", e),
             })?;
 
         info!(
@@ -587,22 +588,41 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
             new_event.tx_hash
         );
 
-        Ok(())
+        Ok(event_row)
     }
 
-    fn save_events(&mut self, new_events: Vec<NewEvent>) -> Result<(), StorageError> {
-        use crate::substate_storage_sqlite::schema::events;
+    fn save_event_payload(&mut self, event: Event) -> Result<(), StorageError> {
+        use crate::substate_storage_sqlite::schema::event_payloads;
 
-        info!(target: LOG_TARGET, "Inserting events on the substate manager database");
-        diesel::insert_into(events::table)
-            .values(&new_events)
-            .execute(&mut *self.connection())
+        let payload: BTreeMap<String, String> = serde_json::from_str(event.payload.as_str())
             .map_err(|e| StorageError::QueryError {
-                reason: format!("events: {}", e),
+                reason: format!("save_event_payload: {}", e),
+            })?;
+            warn!(
+                target: LOG_TARGET,
+                "Added new event payload to the database: {:?}",
+                payload
+            );
+
+        let new_payload_fields = payload
+            .into_iter()
+            .map(|(key, value)| NewEventPayloadField {
+                payload_key: key,
+                payload_value: value,
+                event_id: event.id,
+            })
+            .collect::<Vec<_>>();
+
+        diesel::insert_into(event_payloads::table)
+            .values(&new_payload_fields)
+            .execute(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("save_event_payload: {}", e),
             })?;
 
         Ok(())
     }
+
 }
 
 impl<'a> Deref for SqliteSubstateStoreWriteTransaction<'a> {

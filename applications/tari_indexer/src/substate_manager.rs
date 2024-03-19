@@ -321,7 +321,8 @@ impl SubstateManager {
             payload: payload.to_json().expect("Failed to convert to JSON"),
             version: version as i32,
         };
-        tx.save_event(new_event)?;
+        let event_row = tx.save_event(new_event)?;
+        tx.save_event_payload(event_row)?;
         tx.commit()?;
         Ok(())
     }
@@ -431,6 +432,27 @@ impl SubstateManager {
         offset: u32,
         limit: u32,
     ) -> Result<Vec<Event>, anyhow::Error> {
+        let mut payload = Metadata::new();
+        payload.insert(payload_key.clone(), payload_value.clone());
+        let new_event = NewEvent {
+            component_address: None,
+            template_address: "template_address".to_owned(),
+            tx_hash: "tx_hash".to_owned(),
+            topic: "foo".to_owned(),
+            payload: payload.to_json().expect("Failed to convert to JSON"),
+            version: 0,
+        };
+        let event_row = {
+            let mut tx = self.substate_store.create_write_tx()?;
+            let event_row = tx.save_event(new_event)?;
+            tx.commit()?;
+            event_row
+        };
+        {
+            let mut tx = self.substate_store.create_write_tx()?;
+            tx.save_event_payload(event_row)?;
+            tx.commit()?;
+        }
         let events = {
             let mut tx = self.substate_store.create_read_tx()?;
             tx.get_events_by_payload(payload_key, payload_value, offset, limit)?
