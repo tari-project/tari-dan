@@ -36,15 +36,16 @@ import useAccountStore from "../../../store/accountStore";
 import Select from "@mui/material/Select";
 import { SelectChangeEvent } from "@mui/material/Select/Select";
 import MenuItem from "@mui/material/MenuItem";
+import { ResourceType } from "@tariproject/typescript-bindings/dist/types/ResourceType";
+import { ResourceAddress } from "@tariproject/typescript-bindings";
 
 const XTR2 = "resource_01010101010101010101010101010101010101010101010101010101";
 
 export default function SendMoney() {
   const [open, setOpen] = useState(false);
 
-
   return (
-    <div>
+    <>
       <Button variant="outlined" onClick={() => setOpen(true)}>
         Send Tari
       </Button>
@@ -52,15 +53,17 @@ export default function SendMoney() {
         open={open}
         handleClose={() => setOpen(false)}
         onSendComplete={() => setOpen(false)}
+        resource_type="Confidential"
         resource_address={XTR2}
       />
-    </div>
+    </>
   );
 }
 
 export interface SendMoneyDialogProps {
   open: boolean;
-  resource_address: string;
+  resource_address?: ResourceAddress;
+  resource_type?: ResourceType,
   onSendComplete?: () => void;
   handleClose: () => void;
 }
@@ -72,6 +75,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
     amount: "",
     badge: null,
   };
+  const isConfidential = props.resource_type === "Confidential";
   const [useBadge, setUseBadge] = useState(false);
   const [disabled, setDisabled] = useState(false);
   const [estimatedFee, setEstimatedFee] = useState(0);
@@ -93,7 +97,8 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
   const { mutateAsync: sendIt } = useAccountsTransfer(
     accountName,
     parseInt(transferFormState.amount),
-    props.resource_address,
+    // HACK: default to XTR2 because the resource is only set when open==true, and we cannot conditionally call hooks i.e. when props.resource_address is set
+    props.resource_address || XTR2,
     transferFormState.publicKey,
     estimatedFee,
     transferFormState.confidential,
@@ -104,7 +109,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
   const { mutateAsync: calculateFeeEstimate } = useAccountsTransfer(
     accountName,
     parseInt(transferFormState.amount),
-    props.resource_address,
+    props.resource_address || XTR2,
     transferFormState.publicKey,
     1000,
     transferFormState.confidential,
@@ -146,7 +151,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
     if (accountName) {
       setDisabled(true);
       if (estimatedFee) {
-        sendIt()
+        sendIt?.()
           .then(() => {
             setTransferFormState(INITIAL_VALUES);
             props.onSendComplete?.();
@@ -159,9 +164,16 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
             setDisabled(false);
           });
       } else {
-        let result = await calculateFeeEstimate();
-        setEstimatedFee(result.fee);
-        setDisabled(false);
+        calculateFeeEstimate?.()
+          .then((result) => {
+            setEstimatedFee(result.fee);
+          })
+          .catch((e) => {
+            setPopup({ title: "Fee estimate failed", error: true, message: e.message });
+          })
+          .finally(() => {
+            setDisabled(false);
+          });
       }
     }
   };
@@ -217,17 +229,19 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
             style={{ flexGrow: 1 }}
             disabled={disabled}
           />
-          <FormControlLabel
-            control={
-              <CheckBox
-                name="confidential"
-                checked={transferFormState.confidential}
-                onChange={setCheckboxFormValue}
-                disabled={disabled}
-              />
-            }
-            label="Confidential"
-          />
+          {isConfidential && (
+            <FormControlLabel
+              control={
+                <CheckBox
+                  name="confidential"
+                  checked={transferFormState.confidential}
+                  onChange={setCheckboxFormValue}
+                  disabled={disabled}
+                />
+              }
+              label="Confidential"
+            />
+          )}
           <TextField
             name="amount"
             label="Amount"

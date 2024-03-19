@@ -92,7 +92,7 @@ export const useAccountsTransfer = (
   resource_address: string,
   destination_public_key: string,
   max_fee: number | null,
-  confidential: boolean,
+  isConfidential: boolean,
   badge: string | null,
   dry_run: boolean,
 ) => {
@@ -107,7 +107,7 @@ export const useAccountsTransfer = (
         proof_from_badge_resource: badge,
         dry_run,
       };
-      if (confidential) {
+      if (isConfidential) {
         return accountsConfidentialTransfer(transferRequest);
       } else {
         return accountsTransfer(transferRequest);

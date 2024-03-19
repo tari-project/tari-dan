@@ -41,6 +41,8 @@ import type { BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemo
 import NFTList from "../../../Components/NFTList";
 import { Button } from "@mui/material";
 import { SendMoneyDialog } from "./SendMoney";
+import { ResourceType } from "@tariproject/typescript-bindings/dist/types/ResourceType";
+import { ResourceAddress } from "@tariproject/typescript-bindings";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -50,11 +52,11 @@ interface TabPanelProps {
 
 interface BalanceRowProps {
   token_symbol: string;
-  resource_address: string;
-  resource_type: string;
+  resource_address: ResourceAddress;
+  resource_type: ResourceType;
   balance: number;
   confidential_balance: number;
-  onSendClicked?: (resource_address: string) => void;
+  onSendClicked?: (resource_address: ResourceAddress, resource_type: ResourceType) => void;
 }
 
 function BalanceRow(props: BalanceRowProps) {
@@ -83,7 +85,7 @@ function BalanceRow(props: BalanceRowProps) {
         />
       </DataTableCell>
       <DataTableCell>
-        <Button variant="outlined" onClick={() => onSendClicked?.(resource_address)}>
+        <Button variant="outlined" onClick={() => onSendClicked?.(resource_address, resource_type)}>
           Send
         </Button>
       </DataTableCell>
@@ -128,7 +130,10 @@ function tabProps(index: number) {
 }
 
 function Assets({ accountName }: { accountName: string }) {
-  const [resourceToSend, setResourceToSend] = useState<string | null>(null);
+  const [resourceToSend, setResourceToSend] = useState<{
+    address: ResourceAddress,
+    resource_type: ResourceType
+  } | null>(null);
   const [value, setValue] = useState(0);
 
   const {
@@ -149,8 +154,8 @@ function Assets({ accountName }: { accountName: string }) {
     setValue(newValue);
   };
 
-  const handleSendResourceClicked = (resource: string) => {
-    setResourceToSend(resource);
+  const handleSendResourceClicked = (address: ResourceAddress, resource_type: ResourceType) => {
+    setResourceToSend({ address, resource_type });
   };
 
   return (
@@ -159,7 +164,8 @@ function Assets({ accountName }: { accountName: string }) {
         open={resourceToSend !== null}
         handleClose={() => setResourceToSend(null)}
         onSendComplete={() => setResourceToSend(null)}
-        resource_address={resourceToSend || ""}
+        resource_address={resourceToSend?.address}
+        resource_type={resourceToSend?.resource_type}
       />
       <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Tabs value={value} onChange={handleChange} aria-label="account assets" variant="standard">
