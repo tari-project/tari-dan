@@ -46,12 +46,13 @@ pub async fn check_base_layer_block_hash<TConsensusSpec: ConsensusSpec>(
     }
     // Check if the base layer block height is within the acceptable range
     let current_height = epoch_manager.current_base_layer_block_info().await?.0;
-    if base_layer_block_height + config.max_base_layer_blocks_behind < current_height {
-        Err(ProposalValidationError::BlockHeightTooSmall {
-            proposed: base_layer_block_height,
-            current: current_height,
-        })?;
-    }
+    // TODO: uncomment this when the sync information is available here, otherwise during sync this will fail
+    // if base_layer_block_height + config.max_base_layer_blocks_behind < current_height {
+    //     Err(ProposalValidationError::BlockHeightTooSmall {
+    //         proposed: base_layer_block_height,
+    //         current: current_height,
+    //     })?;
+    // }
     if base_layer_block_height > current_height + config.max_base_layer_blocks_ahead {
         Err(ProposalValidationError::BlockHeightTooHigh {
             proposed: base_layer_block_height,
