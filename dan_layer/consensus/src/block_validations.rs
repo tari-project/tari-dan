@@ -31,30 +31,30 @@ pub async fn check_base_layer_block_hash<TConsensusSpec: ConsensusSpec>(
         return Ok(());
     }
     // Check if know the base layer block hash
-    let base_layer_height = epoch_manager
+    let base_layer_block_height = epoch_manager
         .get_base_layer_block_height(*block.base_layer_block_hash())
         .await?
         .ok_or_else(|| ProposalValidationError::BlockHashNotFound {
             hash: *block.base_layer_block_hash(),
         })?;
     // Check if the base layer block height is matching the base layer block hash
-    if base_layer_height != block.base_layer_block_height() {
+    if base_layer_block_height != block.base_layer_block_height() {
         Err(ProposalValidationError::BlockHeightMismatch {
             height: block.base_layer_block_height(),
-            real_height: base_layer_height,
+            real_height: base_layer_block_height,
         })?;
     }
     // Check if the base layer block height is within the acceptable range
     let current_height = epoch_manager.current_base_layer_block_info().await?.0;
-    if base_layer_height + config.max_base_layer_blocks_behind < current_height {
+    if base_layer_block_height + config.max_base_layer_blocks_behind < current_height {
         Err(ProposalValidationError::BlockHeightTooSmall {
-            proposed: base_layer_height,
+            proposed: base_layer_block_height,
             current: current_height,
         })?;
     }
-    if base_layer_height > current_height + config.max_base_layer_blocks_ahead {
+    if base_layer_block_height > current_height + config.max_base_layer_blocks_ahead {
         Err(ProposalValidationError::BlockHeightTooHigh {
-            proposed: base_layer_height,
+            proposed: base_layer_block_height,
             current: current_height,
         })?;
     }
