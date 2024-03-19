@@ -61,6 +61,7 @@ pub enum MetadataKey {
     EpochManagerLastEpochRegistration,
     EpochManagerLastSyncedEpoch,
     EpochManagerFeeClaimPublicKey,
+    EpochManagerLastBlockOfCurrentEpoch,
 }
 
 impl MetadataKey {
@@ -77,6 +78,7 @@ impl MetadataKey {
             MetadataKey::EpochManagerCurrentShardKey => b"epoch_manager.current_shard_key",
             MetadataKey::EpochManagerLastSyncedEpoch => b"epoch_manager.last_synced_epoch",
             MetadataKey::EpochManagerFeeClaimPublicKey => b"epoch_manager.fee_claim_public_key",
+            MetadataKey::EpochManagerLastBlockOfCurrentEpoch => b"epoch_manager.last_block_of_current_epoch",
         }
     }
 }

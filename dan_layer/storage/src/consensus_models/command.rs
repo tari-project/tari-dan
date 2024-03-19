@@ -176,12 +176,20 @@ pub enum Command {
     LocalPrepared(TransactionAtom),
     Accept(TransactionAtom),
     ForeignProposal(ForeignProposal),
+    EpochEvent(EpochEvent),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Ord, PartialOrd)]
+pub enum EpochEvent {
+    Start,
+    End,
 }
 
 #[derive(PartialEq, Eq, Ord, PartialOrd)]
 pub enum CommandId {
     TransactionId(TransactionId),
     ForeignProposal(ForeignProposal),
+    EpochEvent(EpochEvent),
 }
 
 impl Display for CommandId {
@@ -189,6 +197,7 @@ impl Display for CommandId {
         match self {
             CommandId::TransactionId(id) => write!(f, "Transaction({})", id),
             CommandId::ForeignProposal(fp) => write!(f, "ForeignProposal({})", fp.block_id),
+            CommandId::EpochEvent(event) => write!(f, "EpochEvent({:?})", event),
         }
     }
 }
@@ -200,6 +209,7 @@ impl Command {
             Command::LocalPrepared(tx) => Some(tx),
             Command::Accept(tx) => Some(tx),
             Command::ForeignProposal(_) => None,
+            Command::EpochEvent(_) => None,
         }
     }
 
@@ -209,6 +219,7 @@ impl Command {
             Command::LocalPrepared(tx) => CommandId::TransactionId(tx.id),
             Command::Accept(tx) => CommandId::TransactionId(tx.id),
             Command::ForeignProposal(foreign_proposal) => CommandId::ForeignProposal(foreign_proposal.clone()),
+            Command::EpochEvent(event) => CommandId::EpochEvent(event.clone()),
         }
     }
 
@@ -218,6 +229,7 @@ impl Command {
             Command::LocalPrepared(tx) => tx.decision,
             Command::Accept(tx) => tx.decision,
             Command::ForeignProposal(_) => panic!("ForeignProposal does not have a decision"),
+            Command::EpochEvent(_) => panic!("EpochEvent does not have a decision"),
         }
     }
 
@@ -249,12 +261,21 @@ impl Command {
         }
     }
 
+    pub fn is_epoch_start(&self) -> bool {
+        matches!(self, Command::EpochEvent(EpochEvent::Start))
+    }
+
+    pub fn is_epoch_end(&self) -> bool {
+        matches!(self, Command::EpochEvent(EpochEvent::End))
+    }
+
     pub fn involved_shards(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
         match self {
             Command::Prepare(tx) => tx.evidence.shards_iter(),
             Command::LocalPrepared(tx) => tx.evidence.shards_iter(),
             Command::Accept(tx) => tx.evidence.shards_iter(),
             Command::ForeignProposal(_) => panic!("ForeignProposal does not have involved shards"),
+            Command::EpochEvent(_) => panic!("EpochEvent does not have involved shards"),
         }
     }
 
@@ -264,6 +285,7 @@ impl Command {
             Command::LocalPrepared(tx) => &tx.evidence,
             Command::Accept(tx) => &tx.evidence,
             Command::ForeignProposal(_) => panic!("ForeignProposal does not have evidence"),
+            Command::EpochEvent(_) => panic!("EpochEvent does not have evidence"),
         }
     }
 }
@@ -287,6 +309,7 @@ impl Display for Command {
             Command::LocalPrepared(tx) => write!(f, "LocalPrepared({}, {})", tx.id, tx.decision),
             Command::Accept(tx) => write!(f, "Accept({}, {})", tx.id, tx.decision),
             Command::ForeignProposal(fp) => write!(f, "ForeignProposal {}", fp.block_id),
+            Command::EpochEvent(event) => write!(f, "EpochEvent {:?}", event),
         }
     }
 }

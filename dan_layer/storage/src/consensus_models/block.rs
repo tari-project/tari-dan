@@ -297,6 +297,14 @@ impl Block {
         self.id.is_genesis()
     }
 
+    pub fn is_epoch_start(&self) -> bool {
+        self.commands.iter().any(|c| c.is_epoch_start())
+    }
+
+    pub fn is_epoch_end(&self) -> bool {
+        self.commands.iter().any(|c| c.is_epoch_end())
+    }
+
     pub fn all_transaction_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
         self.commands.iter().filter_map(|d| d.transaction().map(|t| t.id()))
     }

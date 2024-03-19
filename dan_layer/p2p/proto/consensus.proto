@@ -68,7 +68,14 @@ message Command {
     TransactionAtom local_prepared = 2;
     TransactionAtom accept = 3;
     ForeignProposal foreign_proposal = 4;
+    EpochEvent epoch_event = 5;
   }
+}
+
+enum EpochEvent {
+  UNKNOWN_EVENT = 0;
+  START = 1;
+  END = 2;
 }
 
 enum ForeignProposalState {

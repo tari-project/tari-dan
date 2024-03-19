@@ -35,7 +35,7 @@ use tari_dan_common_types::{
     NodeAddressable,
     SubstateAddress,
 };
-use tari_dan_storage::global::models::ValidatorNode;
+use tari_dan_storage::global::{models::ValidatorNode};
 use tokio::sync::broadcast;
 
 use crate::{EpochManagerError, EpochManagerEvent};
@@ -110,6 +110,8 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError>;
     async fn current_base_layer_block_info(&self) -> Result<(u64, FixedHash), EpochManagerError>;
+    async fn get_last_block_of_current_epoch(&self) -> Result<FixedHash, EpochManagerError>;
+    async fn is_last_block_of_epoch(&self, block_height: u64) -> Result<bool, EpochManagerError>;
     async fn is_epoch_active(&self, epoch: Epoch) -> Result<bool, EpochManagerError>;
 
     async fn get_num_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError>;
