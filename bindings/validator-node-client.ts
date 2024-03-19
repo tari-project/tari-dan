@@ -6,6 +6,7 @@ export * from "./src/types/validator-node-client/GetSubstateRequest";
 export * from "./src/types/validator-node-client/TemplateMetadata";
 export * from "./src/types/validator-node-client/AddPeerResponse";
 export * from "./src/types/validator-node-client/ArgDef";
+export * from "./src/types/validator-node-client/GetFilteredBlocksCountRequest";
 export * from "./src/types/validator-node-client/GetShardKeyRequest";
 export * from "./src/types/validator-node-client/AddPeerRequest";
 export * from "./src/types/validator-node-client/GetCommsStatsResponse";

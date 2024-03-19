@@ -38,6 +38,7 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
     new_height: NodeHeight,
     leader_strategy: &TLeaderStrategy,
     local_committee: &Committee<TAddr>,
+    parent_timestamp: u64,
     parent_base_layer_block_hash: FixedHash,
 ) -> Option<LeafBlock> {
     let mut parent_block = high_qc.as_leaf_block();
@@ -68,6 +69,7 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
             high_qc.clone(),
             epoch,
             parent_merkle_root,
+            parent_timestamp,
             parent_base_layer_block_hash,
         );
         debug!(

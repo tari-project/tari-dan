@@ -95,8 +95,7 @@ import type {
   ConfidentialViewBalanceRequest,
   ConfidentialViewBalanceResponse,
 } from "@tariproject/typescript-bindings/wallet-daemon-client";
-
-import { NonFungibleToken } from "@tariproject/typescript-bindings";
+import type { NonFungibleToken } from "@tariproject/typescript-bindings";
 
 let token: String | null = null;
 let json_id = 0;

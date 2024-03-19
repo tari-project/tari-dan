@@ -939,6 +939,8 @@ pub type GetAccountNftResponse = NonFungibleToken;
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
 pub struct ListAccountNftRequest {
+    #[serde(deserialize_with = "opt_string_or_struct")]
+    pub account: Option<ComponentAddressOrName>,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub limit: u64,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
