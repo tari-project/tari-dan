@@ -71,6 +71,8 @@ pub struct GetAccountNftArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct ListAccountNftArgs {
+    #[clap(long, short = 'a')]
+    pub account: Option<ComponentAddressOrName>,
     #[clap(long, short = 'l')]
     pub limit: Option<u64>,
     #[clap(long, short = 'o')]
@@ -185,12 +187,11 @@ pub async fn handle_list_account_nfts(
     args: ListAccountNftArgs,
     client: &mut WalletDaemonClient,
 ) -> Result<(), anyhow::Error> {
-    let ListAccountNftArgs { limit, offset } = args;
+    let ListAccountNftArgs { account, limit, offset } = args;
     let limit = limit.unwrap_or(100);
     let offset = offset.unwrap_or(0);
 
-    let req = ListAccountNftRequest { limit, offset };
-    println!("✅ List account NFTs submitted");
+    let req = ListAccountNftRequest { account, limit, offset };
     let resp = client
         .list_account_nfts(req)
         .await

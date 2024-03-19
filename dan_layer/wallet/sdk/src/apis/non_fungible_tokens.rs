@@ -5,7 +5,7 @@ use tari_template_lib::{models::ResourceAddress, prelude::NonFungibleId};
 use thiserror::Error;
 
 use crate::{
-    models::NonFungibleToken,
+    models::{Account, NonFungibleToken},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
 
@@ -38,11 +38,12 @@ where TStore: WalletStore
 
     pub fn non_fungible_token_get_all(
         &self,
+        account: Account,
         limit: u64,
         offset: u64,
     ) -> Result<Vec<NonFungibleToken>, NonFungibleTokensApiError> {
         let mut tx = self.store.create_read_tx()?;
-        let non_fungibles = tx.non_fungible_token_get_all(limit, offset)?;
+        let non_fungibles = tx.non_fungible_token_get_all(account, limit, offset)?;
         Ok(non_fungibles)
     }
 

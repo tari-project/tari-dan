@@ -39,7 +39,7 @@ import SelectAccount from "./SelectAccount";
 function MyAssets() {
   const accountName = useAccountStore((state) => state.accountName);
   const { refetch: balancesRefetch } = useAccountsGetBalances(accountName);
-  const { refetch: nftsListRefetch } = useAccountNFTsList(0, 10);
+  const { refetch: nftsListRefetch } = useAccountNFTsList({ Name: accountName }, 0, 10);
   const { refetch: accountsRefetch } = useAccountsGet(accountName);
   const theme = useTheme();
 
