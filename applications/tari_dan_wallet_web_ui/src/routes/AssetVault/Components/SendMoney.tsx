@@ -43,6 +43,7 @@ const XTR2 = "resource_01010101010101010101010101010101010101010101010101010101"
 export default function SendMoney() {
   const [open, setOpen] = useState(false);
 
+
   return (
     <>
       <Button variant="outlined" onClick={() => setOpen(true)}>
