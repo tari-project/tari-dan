@@ -87,6 +87,8 @@ pub enum WalletStorageError {
         entity: String,
         key: String,
     },
+    #[error("Data inconsistency for operation {operation}: {details}")]
+    DataInconsistent { operation: &'static str, details: String },
 }
 
 impl IsNotFoundError for WalletStorageError {
@@ -183,7 +185,7 @@ pub trait WalletStoreReader {
 
     fn non_fungible_token_get_all(
         &mut self,
-        account: Account,
+        account: ComponentAddress,
         limit: u64,
         offset: u64,
     ) -> Result<Vec<NonFungibleToken>, WalletStorageError>;

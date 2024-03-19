@@ -60,9 +60,7 @@ pub async fn handle_list_nfts(
     token: Option<String>,
     req: ListAccountNftRequest,
 ) -> Result<ListAccountNftResponse, anyhow::Error> {
-    let ListAccountNftRequest {
-        account, limit, offset, ..
-    } = req;
+    let ListAccountNftRequest { account, limit, offset } = req;
     let sdk = context.wallet_sdk();
     let account = get_account_or_default(account, &sdk.accounts_api())?;
     let sdk = context.wallet_sdk();
@@ -71,7 +69,7 @@ pub async fn handle_list_nfts(
     let non_fungible_api = sdk.non_fungible_api();
 
     let non_fungibles = non_fungible_api
-        .non_fungible_token_get_all(account, limit, offset)
+        .non_fungible_token_get_all(account.address.as_component_address().unwrap(), limit, offset)
         .map_err(|e| anyhow!("Failed to list all non fungibles, with error: {}", e))?;
     Ok(ListAccountNftResponse { nfts: non_fungibles })
 }

@@ -31,7 +31,6 @@ import {
   accountsInvoke,
   accountsList,
   accountsTransfer,
-  confidentialCreateTransferProof,
   nftList,
 } from "../../utils/json_rpc";
 import { apiError } from "../helpers/types";
@@ -126,15 +125,16 @@ export const useAccountsTransfer = (
 };
 
 export const useAccountsCreateFreeTestCoins = () => {
-  const createFreeTestCoins = async ({
-    accountName,
-    amount,
-    fee,
-  }: {
-    accountName: string | null;
-    amount: number;
-    fee: number | null;
-  }) => {
+  const createFreeTestCoins = async (
+    {
+      accountName,
+      amount,
+      fee,
+    }: {
+      accountName: string | null;
+      amount: number;
+      fee: number | null;
+    }) => {
     const result = await accountsCreateFreeTestCoins({
       account: (accountName && { Name: accountName }) || null,
       amount,

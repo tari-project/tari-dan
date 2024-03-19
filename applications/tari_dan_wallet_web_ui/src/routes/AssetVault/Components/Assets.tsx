@@ -42,6 +42,8 @@ import { IoCheckmarkOutline, IoCloseOutline } from "react-icons/io5";
 import NFTList from "../../../Components/NFTList";
 import { Button } from "@mui/material";
 import { SendMoneyDialog } from "./SendMoney";
+import type { NonFungibleToken } from "@tariproject/typescript-bindings";
+import { convertCborValue } from "../../../utils/cbor";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -58,14 +60,15 @@ interface BalanceRowProps {
   onSendClicked?: (resource_address: string) => void;
 }
 
-function BalanceRow({
-  token_symbol,
-  resource_address,
-  resource_type,
-  balance,
-  confidential_balance,
-  onSendClicked,
-}: BalanceRowProps) {
+function BalanceRow(props: BalanceRowProps) {
+  const {
+    token_symbol,
+    resource_address,
+    resource_type,
+    balance,
+    confidential_balance,
+    onSendClicked,
+  } = props;
   const { showBalance } = useAccountStore();
   return (
     <TableRow key={token_symbol || resource_address}>
@@ -115,7 +118,6 @@ function tabProps(index: number) {
 function Assets({ accountName }: { accountName: string }) {
   const [resourceToSend, setResourceToSend] = useState<string | null>(null);
   const [value, setValue] = useState(0);
-  const { showBalance } = useAccountStore();
 
   const {
     data: balancesData,
@@ -131,7 +133,7 @@ function Assets({ accountName }: { accountName: string }) {
     isFetching: nftsListIsFetching,
   } = useAccountNFTsList({ Name: accountName }, 0, 10);
 
-  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);
   };
 
