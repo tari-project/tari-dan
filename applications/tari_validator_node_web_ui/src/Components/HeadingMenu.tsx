@@ -41,7 +41,7 @@ interface IMenuItem {
 
 interface Props {
   menuTitle: string;
-  menuItems: IMenuItem[];
+  menuItems?: IMenuItem[];
   showArrow?: boolean;
   lastSort?: any;
   columnName?: string;
@@ -69,11 +69,12 @@ function HeadingMenu({ menuTitle, menuItems, showArrow, lastSort, columnName, so
           aria-haspopup="true"
           onClick={handleClick}
           // onMouseOver={handleClick}
-          startIcon={<UnfoldMoreIcon />}
+          startIcon={showArrow && <UnfoldMoreIcon />}
           style={{
             textTransform: "none",
             color: "#000000",
           }}
+          disabled={!showArrow}
         >
           {menuTitle}
         </Button>
@@ -94,7 +95,7 @@ function HeadingMenu({ menuTitle, menuItems, showArrow, lastSort, columnName, so
           </MenuList>
         </Menu>
       </>
-      {showArrow && (
+      {lastSort && (
         <IconButton>
           {lastSort.column === columnName ? (
             lastSort.order === 1 ? (
