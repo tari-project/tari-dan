@@ -194,7 +194,7 @@ async fn indexer_scans_network_events_for_resource(
 
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
     let query = format!(
-        r#"{{ getEvents(offset:0, limit:2, payloadFilter: {{ resource_address: "{}" }}) {{ componentAddress, templateAddress, txHash, topic, payload }} }}"#,
+        r#"{{ getEvents(offset:0, limit:2, payload: {{ resource_address: "{}" }}) {{ componentAddress, templateAddress, txHash, topic, payload }} }}"#,
         resource_address
     );
     let res = graphql_client
