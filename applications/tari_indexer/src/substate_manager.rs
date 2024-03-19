@@ -41,7 +41,7 @@ use tari_indexer_lib::{
 };
 use tari_template_lib::{
     models::TemplateAddress,
-    prelude::{ComponentAddress, Metadata},
+    prelude::{ComponentAddress, Metadata}, Hash,
 };
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, TariValidatorNodeRpcClientFactory};
@@ -436,8 +436,8 @@ impl SubstateManager {
         payload.insert(payload_key.clone(), payload_value.clone());
         let new_event = NewEvent {
             component_address: None,
-            template_address: "template_address".to_owned(),
-            tx_hash: "tx_hash".to_owned(),
+            template_address: Hash::default().to_string(),
+            tx_hash: Hash::default().to_string(),
             topic: "foo".to_owned(),
             payload: payload.to_json().expect("Failed to convert to JSON"),
             version: 0,

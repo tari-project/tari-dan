@@ -410,7 +410,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             payload_value
         );
         let res = sql_query(
-            "SELECT component_address, template_address, tx_hash, topic, payload \
+            "SELECT component_address, template_address, tx_hash, topic, payload, version \
             FROM events e \
             INNER JOIN event_payloads p ON p.event_id = e.id \
             WHERE p.payload_key = ? AND p.payload_value = ? \
@@ -598,11 +598,6 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
             .map_err(|e| StorageError::QueryError {
                 reason: format!("save_event_payload: {}", e),
             })?;
-            warn!(
-                target: LOG_TARGET,
-                "Added new event payload to the database: {:?}",
-                payload
-            );
 
         let new_payload_fields = payload
             .into_iter()
@@ -613,12 +608,17 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
             })
             .collect::<Vec<_>>();
 
-        diesel::insert_into(event_payloads::table)
-            .values(&new_payload_fields)
-            .execute(self.connection())
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("save_event_payload: {}", e),
+        // diesel fails if we try to pass all the new rows in a single insert
+        // so the workaround is to loop over them
+        // TODO: use a single insert instruction instead of looping
+        for field in new_payload_fields {
+            diesel::insert_into(event_payloads::table)
+                .values(&field)
+                .execute(self.connection())
+                .map_err(|e| StorageError::QueryError {
+                    reason: format!("save_event_payload: {}", e),
             })?;
+        }
 
         Ok(())
     }
