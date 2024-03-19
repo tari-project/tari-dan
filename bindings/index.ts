@@ -21,6 +21,7 @@ export * from "./src/types/ConfidentialClaim";
 export * from "./src/types/ConfidentialOutputProof";
 export * from "./src/types/ConfidentialOutput";
 export * from "./src/types/ConfidentialStatement";
+export * from "./src/types/ConfidentialTransferInputSelection";
 export * from "./src/types/ConfidentialWithdrawProof";
 export * from "./src/types/Decision";
 export * from "./src/types/ElgamalVerifiableBalance";

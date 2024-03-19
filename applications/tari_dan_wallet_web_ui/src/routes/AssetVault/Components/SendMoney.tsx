@@ -30,13 +30,14 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Box from "@mui/material/Box";
-import { useAccountsGetBalances, useAccountsTransfer } from "../../../api/hooks/useAccounts";
+import { useAccountsGet, useAccountsGetBalances, useAccountsTransfer } from "../../../api/hooks/useAccounts";
 import { useTheme } from "@mui/material/styles";
 import useAccountStore from "../../../store/accountStore";
 import Select from "@mui/material/Select";
 import { SelectChangeEvent } from "@mui/material/Select/Select";
 import MenuItem from "@mui/material/MenuItem";
-import { ResourceAddress, ResourceType } from "@tariproject/typescript-bindings";
+import { ResourceAddress, ResourceType, ConfidentialTransferInputSelection } from "@tariproject/typescript-bindings";
+import InputLabel from "@mui/material/InputLabel";
 
 const XTR2 = "resource_01010101010101010101010101010101010101010101010101010101";
 
@@ -70,7 +71,8 @@ export interface SendMoneyDialogProps {
 export function SendMoneyDialog(props: SendMoneyDialogProps) {
   const INITIAL_VALUES = {
     publicKey: "",
-    confidential: false,
+    outputToConfidential: false,
+    inputSelection: "PreferRevealed",
     amount: "",
     badge: null,
   };
@@ -93,6 +95,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
     ?.filter((b) => b.resource_type === "NonFungible" && b.balance > 0)
     .map((b) => b.resource_address) as string[];
 
+  // TODO: we should have separate calls for confidential and non-confidential transfers
   const { mutateAsync: sendIt } = useAccountsTransfer(
     accountName,
     parseInt(transferFormState.amount),
@@ -100,7 +103,9 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
     props.resource_address || XTR2,
     transferFormState.publicKey,
     estimatedFee,
-    transferFormState.confidential,
+    props.resource_type === "Confidential",
+    !transferFormState.outputToConfidential,
+    transferFormState.inputSelection as ConfidentialTransferInputSelection,
     transferFormState.badge,
     false,
   );
@@ -110,8 +115,10 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
     parseInt(transferFormState.amount),
     props.resource_address || XTR2,
     transferFormState.publicKey,
-    1000,
-    transferFormState.confidential,
+    3000,
+    props.resource_type === "Confidential",
+    !transferFormState.outputToConfidential,
+    transferFormState.inputSelection as ConfidentialTransferInputSelection,
     transferFormState.badge,
     true,
   );
@@ -165,6 +172,15 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
       } else {
         calculateFeeEstimate?.()
           .then((result) => {
+            if (!("Accept" in result.result.result)) {
+              setPopup({
+                title: "Fee estimate failed",
+                error: true,
+                // TODO: fix this
+                message: JSON.stringify(result.result.result.Reject || result.result.result.AcceptFeeRejectRest[1]),
+              });
+              return;
+            }
             setEstimatedFee(result.fee);
           })
           .catch((e) => {
@@ -204,7 +220,9 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
                 control={<CheckBox name="useBadge" checked={useBadge} onChange={handleUseBadgeChange} />}
                 label="Use Badge"
               />
+              <InputLabel id="select-badge">Badge</InputLabel>
               <Select
+                id="select-badge"
                 name="badge"
                 disabled={!useBadge || disabled}
                 displayEmpty
@@ -229,17 +247,40 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
             disabled={disabled}
           />
           {isConfidential && (
-            <FormControlLabel
-              control={
-                <CheckBox
-                  name="confidential"
-                  checked={transferFormState.confidential}
-                  onChange={setCheckboxFormValue}
-                  disabled={disabled}
-                />
-              }
-              label="Confidential"
-            />
+            <>
+              <FormControlLabel
+                control={
+                  <CheckBox
+                    name="outputToConfidential"
+                    checked={transferFormState.outputToConfidential}
+                    onChange={setCheckboxFormValue}
+                    disabled={disabled}
+                  />
+                }
+                label="Send Confidential Outputs"
+              />
+              <InputLabel id="select-input-selection">Input Selection</InputLabel>
+              <Select
+                name="inputSelection"
+                disabled={disabled}
+                displayEmpty
+                value={transferFormState.inputSelection}
+                onChange={setSelectFormValue}
+              >
+                <MenuItem value="PreferRevealed">
+                  Spend revealed funds first, then confidential
+                </MenuItem>
+                <MenuItem value="PreferConfidential">
+                  Spend confidential funds first, then revealed
+                </MenuItem>
+                <MenuItem value="ConfidentialOnly">
+                  Only spend confidential funds
+                </MenuItem>
+                <MenuItem value="RevealedOnly">
+                  Only spend revealed funds
+                </MenuItem>
+              </Select>
+            </>
           )}
           <TextField
             name="amount"

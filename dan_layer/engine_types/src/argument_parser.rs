@@ -401,7 +401,7 @@ mod tests {
             )
         );
 
-        // invalid template addreses are ignored
+        // invalid template addresses are ignored
         let invalid_template_address = "template_xxxxxx";
         let a = parse_arg(invalid_template_address).unwrap();
         assert_eq!(a, arg!(invalid_template_address));

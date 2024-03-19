@@ -83,7 +83,7 @@ impl Amount {
         if self.is_negative() || other.is_negative() {
             return None;
         }
-        if self < &other {
+        if *self < other {
             return None;
         }
 
@@ -161,7 +161,13 @@ impl PartialEq<i64> for Amount {
 
 impl Sum for Amount {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Amount::zero(), |a, b| a + b)
+        iter.map(|a| a.value()).sum()
+    }
+}
+
+impl Sum<i64> for Amount {
+    fn sum<I: Iterator<Item = i64>>(iter: I) -> Self {
+        Self(iter.sum())
     }
 }
 

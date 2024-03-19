@@ -480,7 +480,8 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         let values = (
             vaults::account_id.eq(account_id),
             vaults::address.eq(vault.address.to_string()),
-            vaults::balance.eq(vault.balance.value()),
+            vaults::revealed_balance.eq(vault.revealed_balance.value()),
+            vaults::confidential_balance.eq(vault.confidential_balance.value()),
             vaults::resource_address.eq(vault.resource_address.to_string()),
             vaults::resource_type.eq(format!("{:?}", vault.resource_type)),
             vaults::token_symbol.eq(vault.token_symbol),
@@ -493,14 +494,18 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn vaults_update(&mut self, vault_address: &SubstateId, balance: Option<Amount>) -> Result<(), WalletStorageError> {
+    fn vaults_update(
+        &mut self,
+        vault_address: &SubstateId,
+        revealed_balance: Amount,
+        confidential_balance: Amount,
+    ) -> Result<(), WalletStorageError> {
         use crate::schema::vaults;
 
-        let Some(balance) = balance else {
-            return Ok(());
-        };
-
-        let changeset = vaults::balance.eq(balance.value());
+        let changeset = (
+            vaults::revealed_balance.eq(revealed_balance.value()),
+            vaults::confidential_balance.eq(confidential_balance.value()),
+        );
 
         let num_rows = diesel::update(vaults::table)
             .set(changeset)
