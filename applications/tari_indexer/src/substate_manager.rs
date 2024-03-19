@@ -318,7 +318,6 @@ impl SubstateManager {
             template_address: template_address.to_string(),
             tx_hash: tx_hash.to_string(),
             topic,
-            payload: payload.to_json().expect("Failed to convert to JSON"),
             version: version as i32,
         };
         tx.save_event(new_event)?;
