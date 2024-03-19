@@ -3,22 +3,22 @@
  * //  SPDX-License-Identifier: BSD-3-Clause
  */
 
-import FetchRpcTransport from './fetch';
+import FetchRpcTransport from "./fetch";
 
-export {FetchRpcTransport};
+export { FetchRpcTransport };
 
 export interface RpcTransport {
-    sendRequest<T>(request: RpcRequest, options: RpcTransportOptions): Promise<T>;
+  sendRequest<T>(request: RpcRequest, options: RpcTransportOptions): Promise<T>;
 }
 
 export interface RpcTransportOptions {
-    token?: string;
-    timeout_millis?: number;
+  token?: string;
+  timeout_millis?: number;
 }
 
 export interface RpcRequest {
-    id: number,
-    jsonrpc: string;
-    method: string;
-    params: any;
+  id: number;
+  jsonrpc: string;
+  method: string;
+  params: any;
 }

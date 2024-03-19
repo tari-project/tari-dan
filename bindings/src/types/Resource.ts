@@ -12,4 +12,5 @@ export interface Resource {
   access_rules: ResourceAccessRules;
   metadata: Metadata;
   total_supply: Amount;
+  view_key: string | null;
 }
