@@ -102,9 +102,7 @@ export default function NFTList(props: NftListProps) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {nftsListData?.nfts.map((nft: NonFungibleToken, index) => (
-            <NftsList key={index} nft={nft} />
-          ))}
+          {nftsListData?.nfts.map((nft: NonFungibleToken, index) => <NftsList key={index} nft={nft} />)}
         </TableBody>
       </Table>
     </TableContainer>
