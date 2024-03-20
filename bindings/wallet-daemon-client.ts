@@ -11,6 +11,7 @@ export * from "./src/types/wallet-daemon-client/AuthLoginResponse";
 export * from "./src/types/wallet-daemon-client/GetValidatorFeesRequest";
 export * from "./src/types/wallet-daemon-client/AccountGetDefaultRequest";
 export * from "./src/types/wallet-daemon-client/AuthGetAllJwtRequest";
+export * from "./src/types/wallet-daemon-client/KeyBranch";
 export * from "./src/types/wallet-daemon-client/AccountGetResponse";
 export * from "./src/types/wallet-daemon-client/SettingsSetRequest";
 export * from "./src/types/wallet-daemon-client/GetValidatorFeesResponse";

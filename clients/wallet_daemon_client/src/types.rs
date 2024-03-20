@@ -305,6 +305,7 @@ pub struct KeysCreateRequest {
     derive(TS),
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
+#[serde(rename_all = "snake_case")]
 pub enum KeyBranch {
     Transaction,
     ViewKey,
