@@ -425,7 +425,8 @@ impl SubstateManager {
         Ok(events)
     }
 
-    pub async fn scan_events_by_payload(&self,
+    pub async fn scan_events_by_payload(
+        &self,
         payload_key: String,
         payload_value: String,
         offset: u32,

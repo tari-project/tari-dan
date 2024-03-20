@@ -166,11 +166,7 @@ async fn indexer_scans_network_events(
 }
 
 #[when(expr = "indexer {word} scans the network for events of resource {word}")]
-async fn indexer_scans_network_events_for_resource(
-    world: &mut TariWorld,
-    indexer_name: String,
-    resource_path: String,
-) {
+async fn indexer_scans_network_events_for_resource(world: &mut TariWorld, indexer_name: String, resource_path: String) {
     let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
 
     // extract the resource address from the outputs
