@@ -1,6 +1,8 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::convert;
+
 use tari_bor::{Deserialize, Serialize};
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::keys::PublicKey as _;
@@ -28,21 +30,50 @@ impl ElgamalVerifiableBalance {
         value_range: I,
         lookup_table: &mut TLookup,
     ) -> Result<Option<u64>, TLookup::Error> {
-        // V = E - pR
-        let balance = &self.encrypted - view_private_key * &self.public_nonce;
-        let balance_bytes = copy_fixed(balance.as_bytes());
+        let mut result = Self::batched_brute_force(view_private_key, value_range, lookup_table, Some(self))?;
+        Ok(result.pop().and_then(convert::identity))
+    }
+
+    pub fn batched_brute_force<'a, IValueRange, TLookup, IBalances>(
+        view_private_key: &PrivateKey,
+        value_range: IValueRange,
+        lookup_table: &mut TLookup,
+        verifiable_balances: IBalances,
+    ) -> Result<Vec<Option<u64>>, TLookup::Error>
+    where
+        IValueRange: IntoIterator<Item = u64>,
+        TLookup: ValueLookupTable,
+        IBalances: IntoIterator<Item = &'a Self>,
+    {
+        let mut balances = verifiable_balances
+            .into_iter()
+            .enumerate()
+            .map(|(i, balance)| {
+                // V = E - pR
+                let balance = &balance.encrypted - view_private_key * &balance.public_nonce;
+                (i, copy_fixed(balance.as_bytes()))
+            })
+            .collect::<Vec<_>>();
+
+        let mut results = vec![None; balances.len()];
 
         for v in value_range {
             let value = lookup_table.lookup(v)?.unwrap_or_else(|| {
                 let pk = PublicKey::from_secret_key(&PrivateKey::from(v));
                 copy_fixed(pk.as_bytes())
             });
-            if value == balance_bytes {
-                return Ok(Some(v));
+
+            while let Some(pos) = balances.iter().position(|(_, balance)| value == *balance) {
+                let (order, _) = balances.swap_remove(pos);
+                results.get_mut(order).unwrap().replace(v);
+            }
+
+            if balances.is_empty() {
+                break;
             }
         }
 
-        Ok(None)
+        Ok(results)
     }
 }
 
@@ -136,6 +167,30 @@ mod tests {
                 .brute_force_balance(&PrivateKey::default(), 102..=103, &mut TestLookupTable)
                 .unwrap();
             assert_eq!(balance, None);
+        }
+
+        #[test]
+        fn it_brute_forces_a_batch() {
+            let view_sk = &PrivateKey::random(&mut OsRng);
+
+            let subject = (0..100)
+                .map(|v| {
+                    let (nonce_sk, nonce_pk) = PublicKey::random_keypair(&mut OsRng);
+                    let rp = nonce_sk * view_sk;
+                    ElgamalVerifiableBalance {
+                        encrypted: PublicKey::from_secret_key(&rp) + PublicKey::from_secret_key(&PrivateKey::from(v)),
+                        public_nonce: nonce_pk,
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            let balances =
+                ElgamalVerifiableBalance::batched_brute_force(view_sk, 0..=10000, &mut TestLookupTable, subject.iter())
+                    .unwrap();
+            assert_eq!(balances.len(), 100);
+            for (i, balance) in balances.into_iter().enumerate() {
+                assert_eq!(balance, Some(i as u64));
+            }
         }
     }
 }

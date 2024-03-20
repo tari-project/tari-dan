@@ -34,7 +34,7 @@ use ts_rs::TS;
 
 use crate::{
     bucket::Bucket,
-    confidential::{ConfidentialOutput, ValueLookupTable},
+    confidential::{ConfidentialOutput, ElgamalVerifiableBalance, ValueLookupTable},
     proof::{ContainerRef, LockedResource, Proof},
     resource_container::{ResourceContainer, ResourceError},
 };
@@ -115,27 +115,19 @@ impl Vault {
         I: IntoIterator<Item = u64> + Clone,
         TValueLookup: ValueLookupTable,
     {
-        let Some(commitments) = self.get_confidential_commitments() else {
+        let Some(utxos) = self.get_confidential_commitments() else {
             return Ok(None);
         };
 
-        let mut total = 0;
-        for output in commitments.values() {
-            let Some(balance) = output.viewable_balance.as_ref() else {
-                // We assume that if there is no viewable_balance in any (presumably the first) commitment, then this
-                // resource does not have a view key
-                return Ok(None);
-            };
+        let balances = ElgamalVerifiableBalance::batched_brute_force(
+            secret_view_key,
+            value_range,
+            value_lookup,
+            utxos.values().filter_map(|utxo| utxo.viewable_balance.as_ref()),
+        )?;
 
-            let value = balance.brute_force_balance(secret_view_key, value_range.clone(), value_lookup)?;
-
-            match value {
-                Some(v) => total += v,
-                // If any of the commitments cannot be brute forced, then we return None
-                None => return Ok(None),
-            }
-        }
-        Ok(Some(total))
+        // If any of the commitments cannot be brute forced, then we return None
+        Ok(balances.into_iter().sum())
     }
 
     pub fn resource_address(&self) -> &ResourceAddress {

@@ -28,6 +28,7 @@ use tari_wallet_daemon_client::types::{
     ProofsGenerateRequest,
     ProofsGenerateResponse,
 };
+use tokio::task::block_in_place;
 
 use crate::handlers::{
     helpers::{get_account_or_default, invalid_params},
@@ -267,19 +268,23 @@ pub async fn handle_view_vault_balance(
                 .map_err(|e| anyhow!("Unable to load value lookup file '{}': {e}", file.display()))?;
             let mut lookup = IoReaderValueLookup::load(&mut file)?;
 
+            block_in_place(|| {
+                sdk.confidential_crypto_api().try_brute_force_commitment_balances(
+                    &view_key.key,
+                    commitments.values(),
+                    value_range,
+                    &mut lookup,
+                )
+            })?
+        },
+        None => block_in_place(|| {
             sdk.confidential_crypto_api().try_brute_force_commitment_balances(
                 &view_key.key,
                 commitments.values(),
                 value_range,
-                &mut lookup,
-            )?
-        },
-        None => sdk.confidential_crypto_api().try_brute_force_commitment_balances(
-            &view_key.key,
-            commitments.values(),
-            value_range,
-            &mut AlwaysMissLookupTable,
-        )?,
+                &mut AlwaysMissLookupTable,
+            )
+        })?,
     };
 
     Ok(ConfidentialViewVaultBalanceResponse {

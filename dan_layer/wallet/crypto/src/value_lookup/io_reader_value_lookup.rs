@@ -51,6 +51,9 @@ impl<'a, R: Read + Seek> IoReaderValueLookup<'a, R> {
     }
 
     fn read_next(&mut self) -> io::Result<Option<[u8; 32]>> {
+        if self.buffer.is_empty() {
+            return Ok(None);
+        }
         let mut buf = [0u8; 32];
         buf.copy_from_slice(&self.buffer[self.pos * 32..(self.pos + 1) * 32]);
         self.pos += 1;

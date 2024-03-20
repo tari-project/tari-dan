@@ -17,7 +17,7 @@ use tari_dan_wallet_crypto::{
     ConfidentialProofStatement,
     WalletCryptoError,
 };
-use tari_engine_types::confidential::{ConfidentialOutput, ValueLookupTable};
+use tari_engine_types::confidential::{ConfidentialOutput, ElgamalVerifiableBalance, ValueLookupTable};
 use tari_template_lib::models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedData};
 
 pub struct ConfidentialCryptoApi;
@@ -111,14 +111,12 @@ impl ConfidentialCryptoApi {
         TLookup: ValueLookupTable,
         TOutputsIter: Iterator<Item = &'a ConfidentialOutput>,
     {
-        outputs
-            .map(|output| match output.viewable_balance {
-                Some(ref viewable_balance) => {
-                    viewable_balance.brute_force_balance(secret_view_key, value_range.clone(), lookup)
-                },
-                None => Ok(None),
-            })
-            .collect()
+        ElgamalVerifiableBalance::batched_brute_force(
+            secret_view_key,
+            value_range,
+            lookup,
+            outputs.filter_map(|output| output.viewable_balance.as_ref()),
+        )
     }
 }
 
