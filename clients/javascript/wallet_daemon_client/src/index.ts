@@ -24,8 +24,8 @@ import {
   AccountsCreateFreeTestCoinsRequest,
   AccountsCreateFreeTestCoinsResponse,
   ConfidentialViewVaultBalanceRequest,
-    ConfidentialViewVaultBalanceResponse,
-    ComponentAddressOrName,
+  ConfidentialViewVaultBalanceResponse,
+  ComponentAddressOrName,
 } from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 import {
@@ -42,7 +42,7 @@ import {
   substateIdToString,
   stringToSubstateId,
   rejectReasonToString,
-} from "@tariproject/typescript-bindings/index";
+} from "@tariproject/typescript-bindings";
 import { FetchRpcTransport, RpcTransport } from "./transports";
 
 export * as transports from "./transports";
@@ -50,38 +50,38 @@ export * as transports from "./transports";
 export { substateIdToString, stringToSubstateId, rejectReasonToString };
 
 export type {
-    AccountGetDefaultRequest,
-    AccountGetRequest,
-    AccountGetResponse,
-    AccountsCreateFreeTestCoinsRequest,
-    AccountsCreateFreeTestCoinsResponse,
-    AccountsGetBalancesRequest,
-    AccountsGetBalancesResponse,
-    Arg,
-    ArgDef,
-    ComponentAddressOrName,
-    ConfidentialViewVaultBalanceRequest,
-    ConfidentialViewVaultBalanceResponse,
-    FinalizeResult,
-    FunctionDef,
-    Instruction,
-    SubstateId,
-    SubstateType,
-    SubstatesGetRequest,
-    SubstatesGetResponse,
-    SubstatesListRequest,
-    SubstatesListResponse,
-    TemplateDef,
-    TemplatesGetRequest,
-    TemplatesGetResponse,
-    TransactionGetResultRequest,
-    TransactionGetResultResponse,
-    TransactionStatus,
-    TransactionSubmitRequest,
-    TransactionSubmitResponse,
-    TransactionWaitResultRequest,
-    TransactionWaitResultResponse,
-    Type,
+  AccountGetDefaultRequest,
+  AccountGetRequest,
+  AccountGetResponse,
+  AccountsCreateFreeTestCoinsRequest,
+  AccountsCreateFreeTestCoinsResponse,
+  AccountsGetBalancesRequest,
+  AccountsGetBalancesResponse,
+  Arg,
+  ArgDef,
+  ComponentAddressOrName,
+  ConfidentialViewVaultBalanceRequest,
+  ConfidentialViewVaultBalanceResponse,
+  FinalizeResult,
+  FunctionDef,
+  Instruction,
+  SubstateId,
+  SubstateType,
+  SubstatesGetRequest,
+  SubstatesGetResponse,
+  SubstatesListRequest,
+  SubstatesListResponse,
+  TemplateDef,
+  TemplatesGetRequest,
+  TemplatesGetResponse,
+  TransactionGetResultRequest,
+  TransactionGetResultResponse,
+  TransactionStatus,
+  TransactionSubmitRequest,
+  TransactionSubmitResponse,
+  TransactionWaitResultRequest,
+  TransactionWaitResultResponse,
+  Type,
 };
 
 export class WalletDaemonClient {
@@ -164,12 +164,12 @@ export class WalletDaemonClient {
   }
 
   viewVaultBalance(params: ConfidentialViewVaultBalanceRequest): Promise<ConfidentialViewVaultBalanceResponse> {
-        return this.__invokeRpc("confidential.view_vault_balance", params);
-    }
+    return this.__invokeRpc("confidential.view_vault_balance", params);
+  }
 
-    async __invokeRpc(method: string, params: object = null) {
-        const id = this.id++;
-        const response = await this.transport.sendRequest<any>(
+  async __invokeRpc(method: string, params: object = null) {
+    const id = this.id++;
+    const response = await this.transport.sendRequest<any>(
       {
         method,
         jsonrpc: "2.0",

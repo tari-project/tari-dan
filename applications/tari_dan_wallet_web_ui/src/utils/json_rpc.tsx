@@ -92,8 +92,8 @@ import type {
   TransferResponse,
   WebRtcStartRequest,
   WebRtcStartResponse,
-  ConfidentialViewBalanceRequest,
-  ConfidentialViewBalanceResponse,
+  ConfidentialViewVaultBalanceRequest,
+  ConfidentialViewVaultBalanceResponse,
 } from "@tariproject/typescript-bindings/wallet-daemon-client";
 import type { NonFungibleToken } from "@tariproject/typescript-bindings";
 
@@ -240,8 +240,8 @@ export const confidentialCreateOutputProof = (
 ): Promise<ConfidentialCreateOutputProofResponse> => jsonRpc("confidential.create_output_proof", request);
 
 export const confidentialViewVaultBalance = (
-  request: ConfidentialViewBalanceRequest,
-): Promise<ConfidentialViewBalanceResponse> => jsonRpc("confidential.view_vault_balance", request);
+  request: ConfidentialViewVaultBalanceRequest,
+): Promise<ConfidentialViewVaultBalanceResponse> => jsonRpc("confidential.view_vault_balance", request);
 
 // nfts
 export const nftMintAccountNft = (request: MintAccountNftRequest): Promise<MintAccountNftResponse> =>

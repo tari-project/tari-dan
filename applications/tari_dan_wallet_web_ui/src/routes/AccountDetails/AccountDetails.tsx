@@ -31,12 +31,13 @@ import TableCell from "@mui/material/TableCell";
 import TableBody from "@mui/material/TableBody";
 import { useParams } from "react-router-dom";
 import { useAccountsGetBalances, useAccountsGet, useAccountNFTsList } from "../../api/hooks/useAccounts";
-import { renderJson,shortenString } from "../../utils/helpers";
+import { renderJson, shortenString } from "../../utils/helpers";
 import { DataTableCell } from "../../Components/StyledComponents";
 import CopyToClipboard from "../../Components/CopyToClipboard";
 import FetchStatusCheck from "../../Components/FetchStatusCheck";
-import {  substateIdToString } from "@tariproject/typescript-bindings";
-import type { BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemon-client";import { IoCheckmarkOutline, IoCloseOutline } from "react-icons/io5";
+import { substateIdToString } from "@tariproject/typescript-bindings";
+import type { BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemon-client";
+import { IoCheckmarkOutline, IoCloseOutline } from "react-icons/io5";
 import NFTList from "../../Components/NFTList";
 
 function BalanceRow(props: BalanceEntry) {
@@ -62,8 +63,6 @@ function AccountDetailsLayout() {
     error: balancesError,
   } = useAccountsGetBalances(name || "");
 
-
-
   const {
     data: accountsData,
     isLoading: accountsIsLoading,
@@ -76,7 +75,8 @@ function AccountDetailsLayout() {
     isLoading: nftsListIsFetching,
     isError: nftsListIsError,
     error: nftsListError,
-  } = useAccountNFTsList({ Name: accountsData?.account?.name || "" }, 0, 10);return (
+  } = useAccountNFTsList({ Name: accountsData?.account?.name || "" }, 0, 10);
+  return (
     <>
       <Grid item xs={12} md={12} lg={12}>
         <PageHeading>Account Details</PageHeading>
@@ -146,8 +146,7 @@ function AccountDetailsLayout() {
             nftsListIsError={nftsListIsError}
             nftsListIsFetching={nftsListIsFetching}
             nftsListError={nftsListError}
-            nftsListData=
-                {nftsListData}
+            nftsListData={nftsListData}
           />
         </StyledPaper>
       </Grid>

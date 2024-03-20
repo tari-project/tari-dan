@@ -59,13 +59,13 @@ interface BalanceRowProps {
 }
 
 function BalanceRow({
-                      token_symbol,
-                      resource_address,
-                      resource_type,
-                      balance,
-                      confidential_balance,
-                      onSendClicked,
-                    }: BalanceRowProps) {
+  token_symbol,
+  resource_address,
+  resource_type,
+  balance,
+  confidential_balance,
+  onSendClicked,
+}: BalanceRowProps) {
   const { showBalance } = useAccountStore();
   return (
     <TableRow key={token_symbol || resource_address}>
@@ -188,7 +188,8 @@ function Assets({ accountName }: { accountName: string }) {
                       onSendClicked={handleSendResourceClicked}
                     />
                   ),
-                )}</TableBody>
+                )}
+              </TableBody>
             </Table>
           </TableContainer>
         )}
