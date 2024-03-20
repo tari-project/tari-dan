@@ -29,7 +29,7 @@ export const useKeysList = () => {
   return useQuery({
     queryKey: ["keys_list"],
     queryFn: () => {
-      return keysList({});
+      return keysList({ branch: "Transaction" });
     },
     onError: (error: apiError) => {
       error;
@@ -38,7 +38,7 @@ export const useKeysList = () => {
 };
 
 export const useKeysCreate = () => {
-  return useMutation(() => keysCreate({ specific_index: null }), {
+  return useMutation(() => keysCreate({ branch: "Transaction", specific_index: null }), {
     onError: (error: apiError) => {
       error;
     },

@@ -8,7 +8,7 @@ use integration_tests::{wallet_daemon_cli, TariWorld};
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tari_template_lib::prelude::Amount;
-use tari_wallet_daemon_client::ComponentAddressOrName;
+use tari_wallet_daemon_client::{types::KeyBranch, ComponentAddressOrName};
 
 #[when(
     expr = "I claim burn {word} with {word}, {word} and {word} and spend it into account {word} via the wallet daemon \
@@ -187,7 +187,7 @@ async fn when_i_create_account_via_wallet_daemon_with_free_coins(
 #[when(expr = "I create a key named {word} for {word}")]
 async fn when_i_create_a_wallet_key(world: &mut TariWorld, key_name: String, wallet_daemon_name: String) {
     let mut client = world.get_wallet_daemon(&wallet_daemon_name).get_authed_client().await;
-    let key = client.create_key().await.unwrap();
+    let key = client.create_key(KeyBranch::Transaction).await.unwrap();
     world.wallet_keys.insert(key_name, key.id);
 }
 
