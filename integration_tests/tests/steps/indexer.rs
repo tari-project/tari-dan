@@ -203,6 +203,8 @@ async fn indexer_scans_network_events_for_resource(
         .expect("Failed to obtain getEventsByPayload query result");
 
     let events = res.get("getEventsByPayload").unwrap();
+
+    // TODO: allow for asserts in the step
     eprintln!("{:?}", events);
 }
 

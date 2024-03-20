@@ -464,8 +464,7 @@ pub trait SubstateStoreWriteTransaction {
     fn delete_substate(&mut self, address: String) -> Result<(), StorageError>;
     fn clear_substates(&mut self) -> Result<(), StorageError>;
     fn add_non_fungible_index(&mut self, new_nft_index: NewNonFungibleIndex) -> Result<(), StorageError>;
-    fn save_event(&mut self, new_event: NewEvent) -> Result<Event, StorageError>;
-    fn save_event_payload(&mut self, event: Event) -> Result<(), StorageError>;
+    fn save_event(&mut self, new_event: NewEvent) -> Result<(), StorageError>;
 }
 
 impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
@@ -560,8 +559,8 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn save_event(&mut self, new_event: NewEvent) -> Result<Event, StorageError> {
-        use crate::substate_storage_sqlite::schema::events;
+    fn save_event(&mut self, new_event: NewEvent) -> Result<(), StorageError> {
+        use crate::substate_storage_sqlite::schema::{events, event_payloads};
         warn!(
             target: LOG_TARGET,
             "Added new event to the database with component_address = {:?}, template_address = {} and for transaction \
@@ -572,12 +571,38 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
             new_event.version,
         );
 
+        // Save the event into the database
         let event_row: Event = diesel::insert_into(events::table)
             .values(&new_event)
             .get_result::<Event>(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("save_event: {}", e),
             })?;
+
+        // Save all the key-value pairs of the payload to be able to query them later
+        let payload: BTreeMap<String, String> = serde_json::from_str(new_event.payload.as_str())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("save_event: {}", e),
+            })?;
+        let new_payload_fields = payload
+            .into_iter()
+            .map(|(key, value)| NewEventPayloadField {
+                payload_key: key,
+                payload_value: value,
+                event_id: event_row.id,
+            })
+            .collect::<Vec<_>>();
+        // diesel fails if we try to pass all the new rows in a single insert
+        // so the workaround is to loop over them
+        // TODO: make diesel work with a single insert instruction instead of looping
+        for field in new_payload_fields {
+            diesel::insert_into(event_payloads::table)
+                .values(&field)
+                .execute(self.connection())
+                .map_err(|e| StorageError::QueryError {
+                    reason: format!("save_event: {}", e),
+            })?;
+        }
 
         info!(
             target: LOG_TARGET,
@@ -588,41 +613,8 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
             new_event.tx_hash
         );
 
-        Ok(event_row)
-    }
-
-    fn save_event_payload(&mut self, event: Event) -> Result<(), StorageError> {
-        use crate::substate_storage_sqlite::schema::event_payloads;
-
-        let payload: BTreeMap<String, String> = serde_json::from_str(event.payload.as_str())
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("save_event_payload: {}", e),
-            })?;
-
-        let new_payload_fields = payload
-            .into_iter()
-            .map(|(key, value)| NewEventPayloadField {
-                payload_key: key,
-                payload_value: value,
-                event_id: event.id,
-            })
-            .collect::<Vec<_>>();
-
-        // diesel fails if we try to pass all the new rows in a single insert
-        // so the workaround is to loop over them
-        // TODO: use a single insert instruction instead of looping
-        for field in new_payload_fields {
-            diesel::insert_into(event_payloads::table)
-                .values(&field)
-                .execute(self.connection())
-                .map_err(|e| StorageError::QueryError {
-                    reason: format!("save_event_payload: {}", e),
-            })?;
-        }
-
         Ok(())
     }
-
 }
 
 impl<'a> Deref for SqliteSubstateStoreWriteTransaction<'a> {
