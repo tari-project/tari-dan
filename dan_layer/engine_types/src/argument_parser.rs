@@ -409,7 +409,7 @@ mod tests {
 
     #[test]
     fn it_returns_string_lit_if_string_or_unknown() {
-        let cases = &["this is a string", "123a"];
+        let cases = &["this is a string", "123ab"];
 
         for case in cases {
             let a = parse_arg(case).unwrap();
