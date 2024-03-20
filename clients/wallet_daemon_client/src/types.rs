@@ -662,7 +662,7 @@ pub struct ConfidentialTransferResponse {
     derive(TS),
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
-pub struct ConfidentialViewBalanceRequest {
+pub struct ConfidentialViewVaultBalanceRequest {
     pub vault_id: VaultId,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub minimum_expected_value: Option<u64>,
@@ -678,7 +678,7 @@ pub struct ConfidentialViewBalanceRequest {
     derive(TS),
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
-pub struct ConfidentialViewBalanceResponse {
+pub struct ConfidentialViewVaultBalanceResponse {
     #[cfg_attr(feature = "ts", ts(type = "Record<string, number | null>"))]
     pub balances: HashMap<PublicKey, Option<u64>>,
 }

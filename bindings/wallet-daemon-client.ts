@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 export * from "./src/types/wallet-daemon-client/WalletSubstateRecord";
-export * from "./src/types/wallet-daemon-client/ConfidentialViewBalanceResponse";
 export * from "./src/types/wallet-daemon-client/ProofsFinalizeResponse";
 export * from "./src/types/wallet-daemon-client/CallInstructionRequest";
 export * from "./src/types/wallet-daemon-client/AuthLoginAcceptResponse";
@@ -29,7 +28,6 @@ export * from "./src/types/wallet-daemon-client/AuthRevokeTokenResponse";
 export * from "./src/types/wallet-daemon-client/ProofsFinalizeRequest";
 export * from "./src/types/wallet-daemon-client/TransferResponse";
 export * from "./src/types/wallet-daemon-client/SettingsSetResponse";
-export * from "./src/types/wallet-daemon-client/ConfidentialViewBalanceRequest";
 export * from "./src/types/wallet-daemon-client/TransferRequest";
 export * from "./src/types/wallet-daemon-client/KeysListRequest";
 export * from "./src/types/wallet-daemon-client/TransactionGetResultResponse";
@@ -62,6 +60,7 @@ export * from "./src/types/wallet-daemon-client/KeysCreateRequest";
 export * from "./src/types/wallet-daemon-client/SettingsGetResponse";
 export * from "./src/types/wallet-daemon-client/ClaimBurnResponse";
 export * from "./src/types/wallet-daemon-client/WebRtcStartRequest";
+export * from "./src/types/wallet-daemon-client/ConfidentialViewVaultBalanceResponse";
 export * from "./src/types/wallet-daemon-client/WebRtcStart";
 export * from "./src/types/wallet-daemon-client/AccountSetDefaultRequest";
 export * from "./src/types/wallet-daemon-client/ConfidentialCreateOutputProofResponse";
@@ -83,6 +82,7 @@ export * from "./src/types/wallet-daemon-client/KeysSetActiveResponse";
 export * from "./src/types/wallet-daemon-client/ComponentAddressOrName";
 export * from "./src/types/wallet-daemon-client/AuthLoginAcceptRequest";
 export * from "./src/types/wallet-daemon-client/KeysSetActiveRequest";
+export * from "./src/types/wallet-daemon-client/ConfidentialViewVaultBalanceRequest";
 export * from "./src/types/wallet-daemon-client/ConfidentialTransferRequest";
 export * from "./src/types/wallet-daemon-client/AccountsCreateResponse";
 export * from "./src/types/wallet-daemon-client/TransactionWaitResultResponse";

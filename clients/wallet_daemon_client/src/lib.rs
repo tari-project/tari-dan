@@ -98,8 +98,8 @@ use crate::{
         ConfidentialCreateOutputProofResponse,
         ConfidentialTransferRequest,
         ConfidentialTransferResponse,
-        ConfidentialViewBalanceRequest,
-        ConfidentialViewBalanceResponse,
+        ConfidentialViewVaultBalanceRequest,
+        ConfidentialViewVaultBalanceResponse,
         GetValidatorFeesRequest,
         GetValidatorFeesResponse,
         KeysCreateRequest,
@@ -424,10 +424,10 @@ impl WalletDaemonClient {
         self.send_request("nfts.list", req.borrow()).await
     }
 
-    pub async fn view_vault_balance<T: Borrow<ConfidentialViewBalanceRequest>>(
+    pub async fn view_vault_balance<T: Borrow<ConfidentialViewVaultBalanceRequest>>(
         &mut self,
         req: T,
-    ) -> Result<ConfidentialViewBalanceResponse, WalletDaemonClientError> {
+    ) -> Result<ConfidentialViewVaultBalanceResponse, WalletDaemonClientError> {
         self.send_request("confidential.view_vault_balance", req.borrow()).await
     }
 

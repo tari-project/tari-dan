@@ -21,8 +21,8 @@ use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::types::{
     ConfidentialCreateOutputProofRequest,
     ConfidentialCreateOutputProofResponse,
-    ConfidentialViewBalanceRequest,
-    ConfidentialViewBalanceResponse,
+    ConfidentialViewVaultBalanceRequest,
+    ConfidentialViewVaultBalanceResponse,
     ProofsCancelRequest,
     ProofsCancelResponse,
     ProofsGenerateRequest,
@@ -238,8 +238,8 @@ pub async fn handle_create_output_proof(
 pub async fn handle_view_vault_balance(
     context: &HandlerContext,
     token: Option<String>,
-    req: ConfidentialViewBalanceRequest,
-) -> Result<ConfidentialViewBalanceResponse, anyhow::Error> {
+    req: ConfidentialViewVaultBalanceRequest,
+) -> Result<ConfidentialViewVaultBalanceResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
@@ -282,7 +282,7 @@ pub async fn handle_view_vault_balance(
         )?,
     };
 
-    Ok(ConfidentialViewBalanceResponse {
+    Ok(ConfidentialViewVaultBalanceResponse {
         balances: commitments
             .keys()
             .map(|c| c.as_public_key().clone())
