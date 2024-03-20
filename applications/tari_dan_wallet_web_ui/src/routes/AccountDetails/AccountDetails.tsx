@@ -76,7 +76,6 @@ function AccountDetailsLayout() {
     isError: nftsListIsError,
     error: nftsListError,
   } = useAccountNFTsList({ Name: accountsData?.account?.name || "" }, 0, 10);
-
   return (
     <>
       <Grid item xs={12} md={12} lg={12}>
