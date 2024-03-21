@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use chrono::NaiveDateTime;
+use tari_bor::json_encoding::CborValueJsonDeserializeWrapper;
 use tari_dan_wallet_sdk::storage::WalletStorageError;
 use tari_template_lib::{models::VaultId, prelude::NonFungibleId};
 
@@ -25,21 +26,22 @@ impl NonFungibleToken {
         self,
         vault_id: VaultId,
     ) -> Result<tari_dan_wallet_sdk::models::NonFungibleToken, WalletStorageError> {
-        let data: tari_bor::Value =
+        let data: CborValueJsonDeserializeWrapper =
             serde_json::from_str(&self.data).map_err(|e| WalletStorageError::DecodingError {
                 operation: "try_from",
                 item: "non_fungible_tokens.data",
                 details: e.to_string(),
             })?;
-        let mutable_data: tari_bor::Value =
+
+        let mutable_data: CborValueJsonDeserializeWrapper =
             serde_json::from_str(&self.mutable_data).map_err(|e| WalletStorageError::DecodingError {
                 operation: "try_from",
                 item: "non_fungible_tokens.data",
                 details: e.to_string(),
             })?;
         Ok(tari_dan_wallet_sdk::models::NonFungibleToken {
-            data,
-            mutable_data,
+            data: data.into_inner(),
+            mutable_data: mutable_data.into_inner(),
             nft_id: NonFungibleId::try_from_canonical_string(&self.nft_id).map_err(|e| {
                 WalletStorageError::DecodingError {
                     operation: "try_from",

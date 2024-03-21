@@ -18,6 +18,7 @@ use crate::storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletS
 pub type WalletKeyManager = KeyManager<RistrettoPublicKey, Blake2b<U64>>;
 
 pub const TRANSACTION_BRANCH: &str = "transactions";
+pub const VIEW_KEY_BRANCH: &str = "view_key";
 
 pub struct KeyManagerApi<'a, TStore> {
     store: &'a TStore,

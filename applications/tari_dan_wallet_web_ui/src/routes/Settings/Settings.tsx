@@ -28,6 +28,7 @@ import Keys from "../Wallet/Components/Keys";
 import AccessTokens from "../Wallet/Components/AccessTokens";
 import SettingsTabs from "./Components/SettingsTabs";
 import GeneralSettings from "./Components/GeneralSettings";
+import ViewVaultBalance from "./Components/ViewVaultBalance";
 
 export interface ISettingsMenu {
   label: string;
@@ -56,6 +57,11 @@ function SettingsPage() {
       label: "Access Tokens",
       title: "Manage Access Tokens",
       content: <AccessTokens />,
+    },
+    {
+      label: "View Vault Balance",
+      title: "View Vault Balance",
+      content: <ViewVaultBalance />,
     },
   ];
 

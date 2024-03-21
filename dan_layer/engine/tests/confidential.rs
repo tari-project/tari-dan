@@ -21,7 +21,7 @@ use tari_template_test_tooling::{
             generate_withdraw_proof_with_inputs,
             generate_withdraw_proof_with_view_key,
         },
-        value_lookup_tables::AlwaysMissLookupTable,
+        AlwaysMissLookupTable,
     },
     SubstateType,
     TemplateTest,
@@ -500,7 +500,7 @@ fn mint_with_view_key() {
         .unwrap();
 
     let total_balance = faucet_vault
-        .try_brute_force_confidential_balance(&view_key_secret, 0..=200, AlwaysMissLookupTable)
+        .try_brute_force_confidential_balance(&view_key_secret, 0..=200, &mut AlwaysMissLookupTable)
         .unwrap();
     assert_eq!(total_balance, Some(223 - 55));
 
@@ -511,7 +511,7 @@ fn mint_with_view_key() {
         .unwrap();
 
     let total_balance = user_vault
-        .try_brute_force_confidential_balance(&view_key_secret, 0..=200, AlwaysMissLookupTable)
+        .try_brute_force_confidential_balance(&view_key_secret, 0..=200, &mut AlwaysMissLookupTable)
         .unwrap();
     assert_eq!(total_balance, Some(55));
 }

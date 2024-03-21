@@ -201,6 +201,7 @@ where TConsensusSpec: ConsensusSpec
                 new_height,
                 &self.leader_strategy,
                 &local_committee,
+                high_qc_block.timestamp(),
                 *high_qc_block.base_layer_block_hash(),
             );
             // Set the last voted block so that we do not vote on other conflicting blocks

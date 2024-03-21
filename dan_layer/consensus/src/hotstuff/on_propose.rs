@@ -11,6 +11,7 @@ use indexmap::IndexMap;
 use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, PublicKey};
+use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
@@ -326,6 +327,7 @@ where TConsensusSpec: ConsensusSpec
             total_leader_fee,
             foreign_indexes,
             None,
+            EpochTime::now().as_u64(),
             current_base_layer_block_hash,
         );
 

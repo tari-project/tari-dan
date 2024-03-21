@@ -17,6 +17,7 @@ pub struct ConfidentialResourceBuilder {
     metadata: Metadata,
     access_rules: ResourceAccessRules,
     view_key: Option<RistrettoPublicKeyBytes>,
+    token_symbol: Option<String>,
     owner_rule: OwnerRule,
 }
 
@@ -28,6 +29,7 @@ impl ConfidentialResourceBuilder {
             metadata: Metadata::new(),
             access_rules: ResourceAccessRules::new(),
             view_key: None,
+            token_symbol: None,
             owner_rule: OwnerRule::default(),
         }
     }
@@ -86,7 +88,7 @@ impl ConfidentialResourceBuilder {
 
     /// Sets up the specified `symbol` as the token symbol in the metadata of the resource
     pub fn with_token_symbol<S: Into<String>>(mut self, symbol: S) -> Self {
-        self.metadata.insert(TOKEN_SYMBOL, symbol);
+        self.token_symbol = Some(symbol.into());
         self
     }
 
@@ -115,7 +117,14 @@ impl ConfidentialResourceBuilder {
             self.initial_supply_proof.is_none(),
             "call build_bucket when initial supply is set"
         );
-        let (address, _) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, None, self.view_key);
+        let (address, _) = Self::build_internal(
+            self.owner_rule,
+            self.access_rules,
+            self.metadata,
+            None,
+            self.view_key,
+            self.token_symbol,
+        );
         address
     }
 
@@ -134,6 +143,7 @@ impl ConfidentialResourceBuilder {
             self.metadata,
             Some(resource),
             self.view_key,
+            self.token_symbol,
         );
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
@@ -141,10 +151,14 @@ impl ConfidentialResourceBuilder {
     fn build_internal(
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
-        metadata: Metadata,
+        mut metadata: Metadata,
         resource: Option<MintArg>,
         view_key: Option<RistrettoPublicKeyBytes>,
+        token_symbol: Option<String>,
     ) -> (ResourceAddress, Option<Bucket>) {
+        if let Some(symbol) = token_symbol {
+            metadata.insert(TOKEN_SYMBOL, symbol);
+        }
         ResourceManager::new().create(
             ResourceType::Confidential,
             owner_rule,

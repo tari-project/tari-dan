@@ -235,13 +235,14 @@ where
 
             self.add_vault_to_account_if_not_exist(&versioned_account_address.substate_id, *vault_id, &vault)
                 .await?;
-            self.refresh_vault(&versioned_account_address.substate_id, *vault_id, &vault, &nfts)?;
+            self.refresh_vault(&versioned_account_address.substate_id, *vault_id, &vault, &nfts)
+                .await?;
         }
 
         Ok(is_updated)
     }
 
-    fn refresh_vault(
+    async fn refresh_vault(
         &self,
         account_address: &SubstateId,
         vault_id: VaultId,
@@ -267,13 +268,16 @@ where
                 vault_id,
                 account_address
             );
+
+            let resource = self.fetch_resource(*vault.resource_address()).await?;
+            let token_symbol = resource.metadata().get(TOKEN_SYMBOL).cloned();
+
             accounts_api.add_vault(
                 account_address.clone(),
                 vault_addr.clone(),
                 *vault.resource_address(),
                 vault.resource_type(),
-                // TODO: fetch the token symbol from the resource
-                None,
+                token_symbol,
             )?;
             has_changed = true;
         }
@@ -398,7 +402,7 @@ where
                 if let Some(vault) = vaults.remove(vault_id).and_then(|s| s.substate_value().vault()) {
                     self.add_vault_to_account_if_not_exist(account_addr, *vault_id, vault)
                         .await?;
-                    self.refresh_vault(account_addr, *vault_id, vault, &nfts)?;
+                    self.refresh_vault(account_addr, *vault_id, vault, &nfts).await?;
                 }
             }
         }
@@ -439,7 +443,7 @@ where
                 .await?;
 
             // Update the vault balance / confidential outputs
-            self.refresh_vault(&account_addr, vault_id, vault, &nfts)?;
+            self.refresh_vault(&account_addr, vault_id, vault, &nfts).await?;
             updated_accounts.push(account_addr);
         }
 

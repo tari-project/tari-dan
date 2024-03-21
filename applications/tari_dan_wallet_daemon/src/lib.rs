@@ -77,7 +77,12 @@ pub async fn run_tari_dan_wallet_daemon(
 
     let jrpc_address = config.dan_wallet_daemon.json_rpc_address.unwrap();
     let signaling_server_address = config.dan_wallet_daemon.signaling_server_address.unwrap();
-    let handlers = HandlerContext::new(wallet_sdk.clone(), notify, services.account_monitor_handle.clone());
+    let handlers = HandlerContext::new(
+        wallet_sdk.clone(),
+        notify,
+        services.account_monitor_handle.clone(),
+        config.dan_wallet_daemon.clone(),
+    );
     let listen_fut = jrpc_server::listen(jrpc_address, signaling_server_address, handlers, shutdown_signal);
 
     // Run the http ui

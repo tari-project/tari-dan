@@ -30,6 +30,8 @@ create table blocks
     foreign_indexes       text      not NULL,
     signature             text      NULL,
     created_at            timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    block_time            bigint    NULL,
+    timestamp             bigint    not NULL,
     base_layer_block_hash text not NULL,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
@@ -53,6 +55,8 @@ create table parked_blocks
     total_leader_fee      bigint  not NULL,
     foreign_indexes       text    not NULL,
     signature             text        NULL,
+    block_time            bigint      NULL,
+    timestamp             bigint  not NULL,
     base_layer_block_hash text    not NULL,
     created_at            timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -366,4 +370,3 @@ BEGIN
             OLD.updated_at,
             OLD.created_at);
 END;
-
