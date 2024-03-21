@@ -121,7 +121,6 @@ impl ExecutedTransaction {
                                 .unwrap_or("<invalid state, no abort details>")
                         )),
                     ),
-                    fee_receipt: None,
                 }
             }
         })
@@ -228,9 +227,10 @@ impl ExecutedTransaction {
             evidence: self.to_initial_evidence(),
             transaction_fee: self
                 .result()
+                .finalize
                 .fee_receipt
-                .as_ref()
-                .and_then(|f| f.total_fees_paid().as_u64_checked())
+                .total_fees_paid()
+                .as_u64_checked()
                 .unwrap_or(0),
             // We calculate the leader fee later depending on the epoch of the block
             leader_fee: None,

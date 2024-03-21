@@ -8,13 +8,14 @@ use crate::{
     config::WalletDaemonConfig,
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
     notify::Notify,
-    services::{AccountMonitorHandle, WalletEvent},
+    services::{AccountMonitorHandle, TransactionServiceHandle, WalletEvent},
 };
 
 #[derive(Debug, Clone)]
 pub struct HandlerContext {
     wallet_sdk: DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>,
     notifier: Notify<WalletEvent>,
+    transaction_service: TransactionServiceHandle,
     account_monitor: AccountMonitorHandle,
     config: WalletDaemonConfig,
 }
@@ -23,12 +24,14 @@ impl HandlerContext {
     pub fn new(
         wallet_sdk: DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>,
         notifier: Notify<WalletEvent>,
+        transaction_service: TransactionServiceHandle,
         account_monitor: AccountMonitorHandle,
         config: WalletDaemonConfig,
     ) -> Self {
         Self {
             wallet_sdk,
             notifier,
+            transaction_service,
             account_monitor,
             config,
         }
@@ -44,6 +47,10 @@ impl HandlerContext {
 
     pub fn account_monitor(&self) -> &AccountMonitorHandle {
         &self.account_monitor
+    }
+
+    pub fn transaction_service(&self) -> &TransactionServiceHandle {
+        &self.transaction_service
     }
 
     pub fn config(&self) -> &WalletDaemonConfig {

@@ -19,7 +19,6 @@ use crate::{
         helpers::{get_account_with_inputs, wait_for_result},
         HandlerContext,
     },
-    services::TransactionSubmittedEvent,
     DEFAULT_FEE,
 };
 
@@ -82,31 +81,28 @@ pub async fn handle_claim_validator_fees(
     let required_inputs = inputs.into_iter().map(Into::into).collect();
 
     if req.dry_run {
-        let result = sdk
+        let transaction = sdk
             .transaction_api()
             .submit_dry_run_transaction(transaction, required_inputs)
             .await?;
-        let execute_result = result.result.into_execute_result().unwrap();
         return Ok(ClaimValidatorFeesResponse {
-            transaction_id: result.transaction_id,
-            fee: execute_result
-                .fee_receipt
-                .clone()
-                .map(|fee_receipt| fee_receipt.total_fees_paid)
+            transaction_id: *transaction.transaction.id(),
+            fee: transaction
+                .finalize
+                .as_ref()
+                .map(|f| f.fee_receipt.total_fees_paid)
                 .unwrap_or_default(),
-            result: execute_result.finalize,
+            result: transaction
+                .finalize
+                .ok_or_else(|| anyhow!("No finalize result for dry run transaction"))?,
         });
     }
-    let tx_id = sdk
-        .transaction_api()
-        .submit_transaction(transaction, required_inputs)
-        .await?;
 
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent {
-        transaction_id: tx_id,
-        new_account: None,
-    });
+    let tx_id = context
+        .transaction_service()
+        .submit_transaction(transaction, required_inputs)
+        .await?;
 
     let finalized = wait_for_result(&mut events, tx_id).await?;
 

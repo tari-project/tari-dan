@@ -80,6 +80,7 @@ pub async fn run_tari_dan_wallet_daemon(
     let handlers = HandlerContext::new(
         wallet_sdk.clone(),
         notify,
+        services.transaction_service_handle.clone(),
         services.account_monitor_handle.clone(),
         config.dan_wallet_daemon.clone(),
     );

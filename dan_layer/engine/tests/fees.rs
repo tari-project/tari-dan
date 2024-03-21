@@ -33,7 +33,7 @@ fn deducts_fees_from_payments_and_refunds_the_rest() {
     test.disable_fees();
 
     // Check difference was refunded
-    let payment = result.fee_receipt.unwrap();
+    let payment = result.finalize.fee_receipt;
     let new_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
     assert_eq!(new_balance, orig_balance - payment.total_fees_charged());
     assert_eq!(payment.total_refunded(), Amount(1000) - payment.total_fees_charged());
@@ -64,7 +64,7 @@ fn deducts_fees_when_transaction_fails() {
     test.disable_fees();
 
     // Check the fee was still paid
-    let payment = result.fee_receipt.unwrap();
+    let payment = result.finalize.fee_receipt;
     let new_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
     assert!(!payment.total_fees_paid().is_zero());
     assert_eq!(orig_balance - new_balance, payment.total_fees_paid());
@@ -107,7 +107,7 @@ fn deposit_from_faucet_then_pay() {
 
     test.disable_fees();
 
-    let payment = result.fee_receipt.unwrap();
+    let payment = result.finalize.fee_receipt;
     let new_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
     assert_eq!(
         new_balance,
@@ -147,7 +147,7 @@ fn another_account_pays_partially_for_fees() {
     test.disable_fees();
 
     // Check difference was refunded
-    let payment = result.fee_receipt.unwrap();
+    let payment = result.finalize.fee_receipt;
     let new_balance: Amount = test.call_method(
         account_fee,
         "balance",
@@ -193,7 +193,6 @@ fn failed_fee_transaction() {
     assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
     test.disable_fees();
 
-    assert!(result.fee_receipt.is_none());
     let new_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
     assert_eq!(new_balance, initial_balance);
 }
@@ -230,7 +229,7 @@ fn fail_partial_paid_fees() {
     assert!(matches!(reason, RejectReason::FeesNotPaid(_)));
 
     // Check that the fee paid was deducted
-    let payment = result.fee_receipt.unwrap();
+    let payment = result.finalize.fee_receipt;
     assert!(!payment.is_paid_in_full());
     let new_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
     assert_eq!(new_balance, orig_balance - Amount(10));
