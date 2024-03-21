@@ -41,6 +41,7 @@ clap = { workspace = true, features = ["derive", "env"] }
 config = { workspace = true }
 diesel = { workspace = true, default-features = false, features = [
     "sqlite",
+    "returning_clauses_for_sqlite_3_35",
     "chrono",
 ] }
 diesel_migrations = { workspace = true }
