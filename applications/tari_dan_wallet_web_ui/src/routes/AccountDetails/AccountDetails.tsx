@@ -55,27 +55,28 @@ function BalanceRow(props: BalanceEntry) {
 }
 
 function AccountDetailsLayout() {
-  const { name } = useParams();
+  const { name: accountName } = useParams();
   const {
     data: balancesData,
     isLoading: balancesIsLoading,
     isError: balancesIsError,
     error: balancesError,
-  } = useAccountsGetBalances(name || "");
+  } = useAccountsGetBalances(accountName || "");
 
   const {
     data: accountsData,
     isLoading: accountsIsLoading,
     isError: accountsIsError,
     error: accountsError,
-  } = useAccountsGet(name || "");
+  } = useAccountsGet(accountName || "");
 
+  const name = accountsData?.account?.name || null;
   const {
     data: nftsListData,
     isLoading: nftsListIsFetching,
     isError: nftsListIsError,
     error: nftsListError,
-  } = useAccountNFTsList({ Name: accountsData?.account?.name || "" }, 0, 10);
+  } = useAccountNFTsList(name ? { Name: name } : null, 0, 10);
   return (
     <>
       <Grid item xs={12} md={12} lg={12}>

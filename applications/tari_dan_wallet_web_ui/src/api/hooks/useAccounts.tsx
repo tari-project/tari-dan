@@ -31,7 +31,6 @@ import {
   accountsInvoke,
   accountsList,
   accountsTransfer,
-  confidentialCreateTransferProof,
   nftList,
 } from "../../utils/json_rpc";
 import { apiError } from "../helpers/types";
@@ -93,7 +92,7 @@ export const useAccountsTransfer = (
   resource_address: string,
   destination_public_key: string,
   max_fee: number | null,
-  confidential: boolean,
+  isConfidential: boolean,
   badge: string | null,
   dry_run: boolean,
 ) => {
@@ -108,7 +107,7 @@ export const useAccountsTransfer = (
         proof_from_badge_resource: badge,
         dry_run,
       };
-      if (confidential) {
+      if (isConfidential) {
         return accountsConfidentialTransfer(transferRequest);
       } else {
         return accountsTransfer(transferRequest);
@@ -126,15 +125,16 @@ export const useAccountsTransfer = (
 };
 
 export const useAccountsCreateFreeTestCoins = () => {
-  const createFreeTestCoins = async ({
-    accountName,
-    amount,
-    fee,
-  }: {
-    accountName: string | null;
-    amount: number;
-    fee: number | null;
-  }) => {
+  const createFreeTestCoins = async (
+    {
+      accountName,
+      amount,
+      fee,
+    }: {
+      accountName: string | null;
+      amount: number;
+      fee: number | null;
+    }) => {
     const result = await accountsCreateFreeTestCoins({
       account: (accountName && { Name: accountName }) || null,
       amount,

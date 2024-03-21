@@ -91,7 +91,7 @@ import type {
   TransferRequest,
   TransferResponse,
   WebRtcStartRequest,
-  WebRtcStartResponse,
+  WebRtcStartResponse, SubstatesGetRequest, SubstatesGetResponse,
   ConfidentialViewVaultBalanceRequest,
   ConfidentialViewVaultBalanceResponse,
 } from "@tariproject/typescript-bindings/wallet-daemon-client";
@@ -211,6 +211,8 @@ export const accountsList = (request: AccountsListRequest): Promise<AccountsList
   jsonRpc("accounts.list", request);
 export const accountsGetBalances = (request: AccountsGetBalancesRequest): Promise<AccountsGetBalancesResponse> =>
   jsonRpc("accounts.get_balances", request);
+export const substatesGet = (request: SubstatesGetRequest): Promise<SubstatesGetResponse> =>
+  jsonRpc("substates.get", request);
 export const accountsInvoke = (request: AccountsInvokeRequest): Promise<AccountsInvokeResponse> =>
   jsonRpc("accounts.invoke", request);
 export const accountsGet = (request: AccountGetRequest): Promise<AccountGetResponse> =>

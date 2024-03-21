@@ -1,11 +1,14 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_template_lib::{models::ResourceAddress, prelude::NonFungibleId};
+use tari_template_lib::{
+    models::ResourceAddress,
+    prelude::{ComponentAddress, NonFungibleId},
+};
 use thiserror::Error;
 
 use crate::{
-    models::{Account, NonFungibleToken},
+    models::NonFungibleToken,
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
 
@@ -38,7 +41,7 @@ where TStore: WalletStore
 
     pub fn non_fungible_token_get_all(
         &self,
-        account: Account,
+        account: ComponentAddress,
         limit: u64,
         offset: u64,
     ) -> Result<Vec<NonFungibleToken>, NonFungibleTokensApiError> {
