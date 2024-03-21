@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::ops::RangeInclusive;
+
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_dan_wallet_crypto::{
     create_confidential_proof,
@@ -15,7 +17,7 @@ use tari_dan_wallet_crypto::{
     ConfidentialProofStatement,
     WalletCryptoError,
 };
-use tari_engine_types::confidential::ConfidentialOutput;
+use tari_engine_types::confidential::{ConfidentialOutput, ElgamalVerifiableBalance, ValueLookupTable};
 use tari_template_lib::models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedData};
 
 pub struct ConfidentialCryptoApi;
@@ -96,6 +98,25 @@ impl ConfidentialCryptoApi {
     ) -> Result<ConfidentialOutput, ConfidentialCryptoApiError> {
         let output = create_output_for_dest(dest_public_key, amount)?;
         Ok(output)
+    }
+
+    pub fn try_brute_force_commitment_balances<'a, TLookup, TOutputsIter>(
+        &self,
+        secret_view_key: &PrivateKey,
+        outputs: TOutputsIter,
+        value_range: RangeInclusive<u64>,
+        lookup: &mut TLookup,
+    ) -> Result<Vec<Option<u64>>, TLookup::Error>
+    where
+        TLookup: ValueLookupTable,
+        TOutputsIter: Iterator<Item = &'a ConfidentialOutput>,
+    {
+        ElgamalVerifiableBalance::batched_brute_force(
+            secret_view_key,
+            value_range,
+            lookup,
+            outputs.filter_map(|output| output.viewable_balance.as_ref()),
+        )
     }
 }
 

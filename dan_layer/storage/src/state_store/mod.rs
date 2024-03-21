@@ -150,10 +150,17 @@ pub trait StateStoreReadTransaction {
         &mut self,
         limit: u64,
         offset: u64,
-        asc_desc_created_at: Option<Ordering>,
+        filter_index: Option<usize>,
+        filter: Option<String>,
+        ordering_index: Option<usize>,
+        ordering: Option<Ordering>,
     ) -> Result<Vec<Block>, StorageError>;
     fn blocks_get_count(&mut self) -> Result<i64, StorageError>;
-
+    fn filtered_blocks_get_count(
+        &mut self,
+        filter_index: Option<usize>,
+        filter: Option<String>,
+    ) -> Result<i64, StorageError>;
     fn blocks_max_height(&mut self) -> Result<NodeHeight, StorageError>;
 
     fn parked_blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;

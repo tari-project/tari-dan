@@ -72,7 +72,7 @@ export default function FeeInstructions({ data }: { data: Array<Instruction> }) 
       <Table>
         <TableBody>
           {data.map((item: Instruction, index: number) => {
-            return <RowData title={Object.keys(item)[0]} data={item} />;
+            return <RowData key={index} title={Object.keys(item)[0]} data={item} />;
           })}
         </TableBody>
       </Table>

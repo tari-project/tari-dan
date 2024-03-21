@@ -759,7 +759,7 @@ impl FromStr for CliArg {
             return Ok(CliArg::SubstateId(v));
         }
 
-        if let Some(v) = parse_template_address(s.to_owned()) {
+        if let Some(v) = parse_template_address(s) {
             return Ok(CliArg::TemplateAddress(v));
         }
 

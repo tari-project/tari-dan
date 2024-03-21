@@ -20,6 +20,7 @@ pub struct NonFungibleResourceBuilder {
     metadata: Metadata,
     access_rules: ResourceAccessRules,
     tokens_ids: BTreeMap<NonFungibleId, (tari_bor::Value, tari_bor::Value)>,
+    token_symbol: Option<String>,
 }
 
 impl NonFungibleResourceBuilder {
@@ -30,6 +31,7 @@ impl NonFungibleResourceBuilder {
             metadata: Metadata::new(),
             access_rules: ResourceAccessRules::new(),
             tokens_ids: BTreeMap::new(),
+            token_symbol: None,
         }
     }
 
@@ -85,7 +87,7 @@ impl NonFungibleResourceBuilder {
 
     /// Sets up the specified `symbol` as the token symbol in the metadata of the resource
     pub fn with_token_symbol<S: Into<String>>(mut self, symbol: S) -> Self {
-        self.metadata.insert(TOKEN_SYMBOL, symbol);
+        self.token_symbol = Some(symbol.into());
         self
     }
 
@@ -148,7 +150,13 @@ impl NonFungibleResourceBuilder {
     pub fn build(self) -> ResourceAddress {
         // TODO: Improve API
         assert!(self.tokens_ids.is_empty(), "call build_bucket with initial tokens set");
-        let (address, _) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, None);
+        let (address, _) = Self::build_internal(
+            self.owner_rule,
+            self.access_rules,
+            self.metadata,
+            None,
+            self.token_symbol,
+        );
         address
     }
 
@@ -158,16 +166,27 @@ impl NonFungibleResourceBuilder {
             tokens: self.tokens_ids,
         };
 
-        let (_, bucket) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, Some(resource));
+        let (_, bucket) = Self::build_internal(
+            self.owner_rule,
+            self.access_rules,
+            self.metadata,
+            Some(resource),
+            self.token_symbol,
+        );
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
 
     fn build_internal(
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
-        metadata: Metadata,
+        mut metadata: Metadata,
         resource: Option<MintArg>,
+        token_symbol: Option<String>,
     ) -> (ResourceAddress, Option<Bucket>) {
+        if let Some(symbol) = token_symbol {
+            metadata.insert(TOKEN_SYMBOL, symbol);
+        }
+
         ResourceManager::new().create(
             ResourceType::NonFungible,
             owner_rule,

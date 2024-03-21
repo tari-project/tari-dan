@@ -8,6 +8,7 @@ use diesel::{
     dsl::sum,
     sql_query,
     BoolExpressionMethods,
+    JoinOnDsl,
     OptionalExtension,
     QueryDsl,
     RunQueryDsl,
@@ -44,7 +45,11 @@ use tari_template_lib::{
 use tari_transaction::TransactionId;
 use tari_utilities::hex::Hex;
 
-use crate::{diesel::ExpressionMethods, models, serialization::deserialize_json};
+use crate::{
+    diesel::{ExpressionMethods, NullableExpressionMethods},
+    models,
+    serialization::deserialize_json,
+};
 
 const LOG_TARGET: &str = "tari::dan::wallet_sdk::storage_sqlite::reader";
 
@@ -746,38 +751,43 @@ impl WalletStoreReader for ReadTransaction<'_> {
 
     fn non_fungible_token_get_all(
         &mut self,
+        account: ComponentAddress,
         limit: u64,
         offset: u64,
     ) -> Result<Vec<NonFungibleToken>, WalletStorageError> {
-        use crate::schema::{non_fungible_tokens, vaults};
+        use crate::schema::{accounts, non_fungible_tokens, vaults};
 
-        let non_fungibles = non_fungible_tokens::table
-            .limit(limit as i64)
-            .offset(offset as i64)
-            .load::<models::NonFungibleToken>(self.connection())
+        let vault_ids = vaults::table
+            .select(vaults::id)
+            .left_join(accounts::table.on(accounts::id.eq(vaults::account_id)))
+            .filter(accounts::address.eq(account.to_string()))
+            .get_results::<i32>(self.connection())
             .map_err(|e| WalletStorageError::general("non_fungible_token_get_all", e))?;
 
-        let vault_ids = non_fungibles.iter().map(|n| n.vault_id);
-        let vault_addresses = vaults::table
-            .select(vaults::address)
-            .filter(vaults::id.eq_any(vault_ids))
-            .load::<String>(self.connection())
-            .map_err(|e| WalletStorageError::general("accounts_get_by_vault", e))?;
-        let vault_addresses = vault_addresses
-            .iter()
-            .map(|va| {
-                VaultId::from_str(va).map_err(|e| WalletStorageError::DecodingError {
-                    details: e.to_string(),
-                    item: "non_fungible_tokens",
-                    operation: "non_fungible_token_get_by_nft_id",
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let non_fungibles = non_fungible_tokens::table
+            .left_join(vaults::table.on(vaults::id.eq(non_fungible_tokens::vault_id)))
+            .select((non_fungible_tokens::all_columns, vaults::all_columns.nullable()))
+            .filter(non_fungible_tokens::vault_id.eq_any(vault_ids))
+            .limit(limit as i64)
+            .offset(offset as i64)
+            .load::<(models::NonFungibleToken, Option<models::Vault>)>(self.connection())
+            .map_err(|e| WalletStorageError::general("non_fungible_token_get_all", e))?;
+
         non_fungibles
-            .iter()
-            .zip(vault_addresses)
-            .map(|(n, va)| n.clone().try_into_non_fungible_token(va))
-            .collect::<Result<Vec<_>, _>>()
+            .into_iter()
+            .map(|(n, vault)| {
+                let vault = vault.ok_or_else(|| WalletStorageError::DataInconsistent {
+                    operation: "non_fungible_token_get_all",
+                    details: format!("Vault not found for nft: {}", n.nft_id),
+                })?;
+                let vault_id = VaultId::from_str(&vault.address).map_err(|e| WalletStorageError::DecodingError {
+                    details: format!("Failed to convert vault address to VaultId: {}", e),
+                    item: "vault_id",
+                    operation: "non_fungible_token_get_all",
+                })?;
+                n.try_into_non_fungible_token(vault_id)
+            })
+            .collect()
     }
 
     fn non_fungible_token_get_resource_address(

@@ -30,6 +30,8 @@ fn create_tx_atom() -> TransactionAtom {
 }
 
 mod confirm_all_transitions {
+    use tari_utilities::epoch_time::EpochTime;
+
     use super::*;
 
     #[test]
@@ -60,6 +62,7 @@ mod confirm_all_transitions {
             Default::default(),
             Default::default(),
             None,
+            EpochTime::now().as_u64(),
             FixedHash::zero(),
         );
         block1.insert(&mut tx).unwrap();

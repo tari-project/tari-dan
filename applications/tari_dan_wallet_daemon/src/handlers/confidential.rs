@@ -1,8 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::convert::TryInto;
+use std::{convert::TryInto, fs};
 
+use anyhow::anyhow;
 use axum_jrpc::error::{JsonRpcError, JsonRpcErrorReason};
 use log::*;
 use rand::rngs::OsRng;
@@ -10,7 +11,7 @@ use serde_json::json;
 use tari_common_types::types::PublicKey;
 use tari_crypto::{commitment::HomomorphicCommitmentFactory, keys::PublicKey as _};
 use tari_dan_common_types::optional::Optional;
-use tari_dan_wallet_crypto::ConfidentialProofStatement;
+use tari_dan_wallet_crypto::{AlwaysMissLookupTable, ConfidentialProofStatement, IoReaderValueLookup};
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager},
     models::{ConfidentialOutputModel, OutputStatus},
@@ -20,11 +21,14 @@ use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::types::{
     ConfidentialCreateOutputProofRequest,
     ConfidentialCreateOutputProofResponse,
+    ConfidentialViewVaultBalanceRequest,
+    ConfidentialViewVaultBalanceResponse,
     ProofsCancelRequest,
     ProofsCancelResponse,
     ProofsGenerateRequest,
     ProofsGenerateResponse,
 };
+use tokio::task::block_in_place;
 
 use crate::handlers::{
     helpers::{get_account_or_default, invalid_params},
@@ -230,4 +234,64 @@ pub async fn handle_create_output_proof(
     };
     let proof = sdk.confidential_crypto_api().generate_output_proof(&statement)?;
     Ok(ConfidentialCreateOutputProofResponse { proof })
+}
+
+pub async fn handle_view_vault_balance(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: ConfidentialViewVaultBalanceRequest,
+) -> Result<ConfidentialViewVaultBalanceResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+
+    let substate = sdk.substate_api().scan_for_substate(&req.vault_id.into(), None).await?;
+    let vault = substate
+        .substate
+        .as_vault()
+        .ok_or_else(|| anyhow::anyhow!("Indexer returned a non-vault substate when scanning for a vault address"))?;
+
+    #[allow(clippy::mutable_key_type)]
+    let commitments = vault
+        .get_confidential_commitments()
+        .ok_or_else(|| invalid_params("vault_id", Some("Vault down not contain a confidential resource")))?;
+
+    // Get view secret key
+    let view_key = sdk
+        .key_manager_api()
+        .derive_key(key_manager::VIEW_KEY_BRANCH, req.view_key_id)?;
+
+    let value_range = req.minimum_expected_value.unwrap_or(0)..=req.maximum_expected_value.unwrap_or(10_000_000_000);
+
+    let balances = match context.config().value_lookup_table_file.as_ref() {
+        Some(file) => {
+            let mut file = fs::File::open(file)
+                .map_err(|e| anyhow!("Unable to load value lookup file '{}': {e}", file.display()))?;
+            let mut lookup = IoReaderValueLookup::load(&mut file)?;
+
+            block_in_place(|| {
+                sdk.confidential_crypto_api().try_brute_force_commitment_balances(
+                    &view_key.key,
+                    commitments.values(),
+                    value_range,
+                    &mut lookup,
+                )
+            })?
+        },
+        None => block_in_place(|| {
+            sdk.confidential_crypto_api().try_brute_force_commitment_balances(
+                &view_key.key,
+                commitments.values(),
+                value_range,
+                &mut AlwaysMissLookupTable,
+            )
+        })?,
+    };
+
+    Ok(ConfidentialViewVaultBalanceResponse {
+        balances: commitments
+            .keys()
+            .map(|c| c.as_public_key().clone())
+            .zip(balances)
+            .collect(),
+    })
 }

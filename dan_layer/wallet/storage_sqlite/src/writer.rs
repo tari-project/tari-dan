@@ -12,12 +12,14 @@ use chrono::NaiveDateTime;
 use diesel::{OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::*;
 use serde::Serialize;
+use tari_bor::json_encoding::CborValueJsonSerializeWrapper;
 use tari_common_types::types::{Commitment, PublicKey};
 use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_dan_wallet_sdk::{
     models::{
         ConfidentialOutputModel,
         ConfidentialProofId,
+        NonFungibleToken,
         OutputStatus,
         SubstateModel,
         TransactionStatus,
@@ -735,10 +737,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Non fungible tokens -------------------------------- //
-    fn non_fungible_token_upsert(
-        &mut self,
-        non_fungible_token: &tari_dan_wallet_sdk::models::NonFungibleToken,
-    ) -> Result<(), WalletStorageError> {
+    fn non_fungible_token_upsert(&mut self, non_fungible_token: &NonFungibleToken) -> Result<(), WalletStorageError> {
         use crate::schema::{non_fungible_tokens, vaults};
 
         info!(
@@ -746,14 +745,16 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             "Inserting new non fungible token with id = {}", non_fungible_token.nft_id
         );
 
-        let data = serde_json::to_string(&non_fungible_token.data).map_err(|e| WalletStorageError::DecodingError {
-            operation: "non_fungible_token_upsert",
-            item: "non_fungible_tokens.data",
-            details: e.to_string(),
+        let data = serde_json::to_string(&CborValueJsonSerializeWrapper(&non_fungible_token.data)).map_err(|e| {
+            WalletStorageError::DecodingError {
+                operation: "non_fungible_token_upsert",
+                item: "non_fungible_tokens.data",
+                details: e.to_string(),
+            }
         })?;
 
-        let mutable_data =
-            serde_json::to_string(&non_fungible_token.mutable_data).map_err(|e| WalletStorageError::DecodingError {
+        let mutable_data = serde_json::to_string(&CborValueJsonSerializeWrapper(&non_fungible_token.mutable_data))
+            .map_err(|e| WalletStorageError::DecodingError {
                 operation: "non_fungible_token_upsert",
                 item: "non_fungible_tokens.mutable_data",
                 details: e.to_string(),
