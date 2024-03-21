@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_wallet_sdk::{
-    apis::{confidential_transfer::ConfidentialTransferInputSelection, jwt::Claims},
+    apis::{confidential_transfer::ConfidentialTransferInputSelection, jwt::Claims, key_manager},
     models::{Account, ConfidentialProofId, NonFungibleToken, SubstateType, TransactionStatus},
 };
 use tari_engine_types::{
@@ -249,7 +249,9 @@ pub struct TransactionClaimBurnResponse {
     derive(TS),
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
-pub struct KeysListRequest {}
+pub struct KeysListRequest {
+    pub branch: KeyBranch,
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(
@@ -292,8 +294,30 @@ pub struct KeysSetActiveResponse {
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
 pub struct KeysCreateRequest {
+    pub branch: KeyBranch,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub specific_index: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
+)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyBranch {
+    Transaction,
+    ViewKey,
+}
+
+impl KeyBranch {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            KeyBranch::Transaction => key_manager::TRANSACTION_BRANCH,
+            KeyBranch::ViewKey => key_manager::VIEW_KEY_BRANCH,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
