@@ -13,7 +13,7 @@ use tari_dan_wallet_sdk::{
         substate::{SubstateApiError, ValidatorScanResult},
         transaction::TransactionApiError,
     },
-    models::NonFungibleToken,
+    models::{NewAccountInfo, NonFungibleToken},
     network::WalletNetworkInterface,
     storage::WalletStore,
     DanWalletSdk,
@@ -41,7 +41,7 @@ use tokio::{
 
 use crate::{
     notify::Notify,
-    services::{AccountChangedEvent, AccountCreatedEvent, NewAccountInfo, Reply, WalletEvent},
+    services::{AccountChangedEvent, AccountCreatedEvent, Reply, WalletEvent},
 };
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::account_monitor";

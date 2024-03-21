@@ -17,7 +17,7 @@ use tari_dan_common_types::optional::Optional;
 use tari_dan_wallet_crypto::ConfidentialProofStatement;
 use tari_dan_wallet_sdk::{
     apis::{confidential_transfer::TransferParams, jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
-    models::VersionedSubstateId,
+    models::{NewAccountInfo, VersionedSubstateId},
     storage::WalletStore,
     DanWalletSdk,
 };
@@ -79,7 +79,7 @@ use crate::{
         wait_for_result_and_account,
     },
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
-    services::{NewAccountInfo, TransactionSubmittedEvent},
+    services::TransactionSubmittedEvent,
     DEFAULT_FEE,
 };
 
@@ -142,17 +142,15 @@ pub async fn handle_create(
         .sign(&signing_key.key)
         .build();
 
-    let tx_id = sdk.transaction_api().submit_transaction(transaction, vec![]).await?;
-
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent {
-        transaction_id: tx_id,
-        new_account: Some(NewAccountInfo {
+    let tx_id = context
+        .transaction_service()
+        .submit_transaction_with_new_account(transaction, vec![], NewAccountInfo {
             name: req.account_name,
             key_index: owner_key.key_index,
             is_default: req.is_default,
-        }),
-    });
+        })
+        .await?;
 
     let event = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = event.finalize.result.reject() {
@@ -245,13 +243,11 @@ pub async fn handle_invoke(
         .sign(&signing_key.key)
         .build();
 
-    let tx_id = sdk.transaction_api().submit_transaction(transaction, vec![]).await?;
-
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent {
-        transaction_id: tx_id,
-        new_account: None,
-    });
+    let tx_id = context
+        .transaction_service()
+        .submit_transaction(transaction, vec![])
+        .await?;
 
     let mut finalized = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = finalized.finalize.result.reject() {
@@ -338,6 +334,7 @@ pub async fn handle_reveal_funds(
     let sdk = context.wallet_sdk().clone();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let notifier = context.notifier().clone();
+    let transaction_service = context.transaction_service().clone();
 
     // If the caller aborts the request early, this async block would be aborted at any await point. To avoid this, we
     // spawn a task that will continue running.
@@ -450,13 +447,8 @@ pub async fn handle_reveal_funds(
         sdk.confidential_outputs_api()
             .proofs_set_transaction_hash(proof_id, *transaction.id())?;
 
-        let tx_id = sdk.transaction_api().submit_transaction(transaction, vec![]).await?;
-
         let mut events = notifier.subscribe();
-        notifier.notify(TransactionSubmittedEvent {
-            transaction_id: tx_id,
-            new_account: None,
-        });
+        let tx_id = transaction_service.submit_transaction(transaction, vec![]).await?;
 
         let finalized = wait_for_result(&mut events, tx_id).await?;
         if let Some(reason) = finalized.finalize.reject() {
@@ -714,17 +706,20 @@ async fn finish_claiming<T: WalletStore>(
         .with_inputs(inputs)
         .sign(&account_secret_key.key)
         .build();
-    let tx_id = sdk.transaction_api().submit_transaction(transaction, vec![]).await?;
     let is_first_account = accounts_api.count()? == 0;
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent {
-        transaction_id: tx_id,
-        new_account: new_account_name.map(|name| NewAccountInfo {
-            name: Some(name),
-            key_index: account_secret_key.key_index,
-            is_default: is_first_account,
-        }),
-    });
+    let tx_id = context
+        .transaction_service()
+        .submit_transaction_with_opts(
+            transaction,
+            vec![],
+            new_account_name.map(|name| NewAccountInfo {
+                name: Some(name),
+                key_index: account_secret_key.key_index,
+                is_default: is_first_account,
+            }),
+        )
+        .await?;
 
     // Wait for the monitor to pick up the new or updated account
     let (finalized, _) = wait_for_result_and_account(&mut events, &tx_id, &account_address).await?;
@@ -964,44 +959,28 @@ pub async fn handle_transfer(
         .sign(&account_secret_key.key)
         .build();
 
-    // send the transaction
     let required_inputs = inputs.into_iter().map(Into::into).collect();
+    // If dry run we can return the result immediately
     if req.dry_run {
-        let result = sdk
-            .transaction_api()
+        let transaction_id = *transaction.id();
+        let execute_result = context
+            .transaction_service()
             .submit_dry_run_transaction(transaction, required_inputs)
             .await?;
-        let execute_result = result.result.into_execute_result().unwrap();
         return Ok(TransferResponse {
-            transaction_id: result.transaction_id,
-            fee: execute_result
-                .fee_receipt
-                .clone()
-                .map(|fee_receipt| fee_receipt.total_fees_paid)
-                .unwrap_or_default(),
-            fee_refunded: execute_result
-                .fee_receipt
-                .clone()
-                .map(|fee_receipt| fee_receipt.total_fee_payment)
-                .unwrap_or_default() -
-                execute_result
-                    .fee_receipt
-                    .clone()
-                    .map(|fee_receipt| fee_receipt.total_fees_paid)
-                    .unwrap_or_default(),
-            result: execute_result.finalize,
+            transaction_id,
+            fee: execute_result.fee_receipt.total_fees_paid,
+            fee_refunded: execute_result.fee_receipt.total_fee_payment - execute_result.fee_receipt.total_fees_paid,
+            result: execute_result,
         });
     }
-    let tx_id = sdk
-        .transaction_api()
+
+    // Otherwise submit and wait for a result
+    let mut events = context.notifier().subscribe();
+    let tx_id = context
+        .transaction_service()
         .submit_transaction(transaction, required_inputs)
         .await?;
-
-    let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent {
-        transaction_id: tx_id,
-        new_account: None,
-    });
 
     let finalized = wait_for_result(&mut events, tx_id).await?;
 
@@ -1041,6 +1020,7 @@ pub async fn handle_confidential_transfer(
     if req.amount.is_negative() {
         return Err(invalid_params("amount", Some("must be positive")));
     }
+    let transaction_service = context.transaction_service().clone();
 
     task::spawn(async move {
         let account = get_account_or_default(req.account, &sdk.accounts_api())?;
@@ -1061,33 +1041,31 @@ pub async fn handle_confidential_transfer(
             .await?;
 
         if req.dry_run {
-            let result = sdk
+            let transaction = sdk
                 .transaction_api()
                 .submit_dry_run_transaction(
                     transfer.transaction,
                     transfer.inputs.into_iter().map(Into::into).collect(),
                 )
                 .await?;
-            let execute_result = result.result.into_execute_result().unwrap();
+            let finalize = transaction
+                .finalize
+                .ok_or_else(|| anyhow!("No result for dry run transaction"))?;
             return Ok(ConfidentialTransferResponse {
-                transaction_id: result.transaction_id,
-                fee: execute_result
-                    .fee_receipt
-                    .map(|r| r.total_fees_paid)
-                    .unwrap_or_default(),
-                result: execute_result.finalize,
+                transaction_id: *transaction.transaction.id(),
+                fee: finalize.fee_receipt.total_fees_paid,
+                result: finalize,
             });
         }
 
-        let tx_id = sdk
-            .transaction_api()
+        let mut events = notifier.subscribe();
+        let tx_id = transaction_service
             .submit_transaction(
                 transfer.transaction,
                 transfer.inputs.into_iter().map(Into::into).collect(),
             )
             .await?;
 
-        let mut events = notifier.subscribe();
         notifier.notify(TransactionSubmittedEvent {
             transaction_id: tx_id,
             new_account: None,

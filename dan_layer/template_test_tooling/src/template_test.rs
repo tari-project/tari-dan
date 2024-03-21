@@ -476,15 +476,14 @@ impl TemplateTest {
         let result = processor.execute(transaction)?;
 
         if self.enable_fees {
-            if let Some(ref fee) = result.fee_receipt {
-                eprintln!("Initial payment: {}", fee.total_allocated_fee_payments());
-                eprintln!("Fee: {}", fee.total_fees_charged());
-                eprintln!("Paid: {}", fee.total_fees_paid());
-                eprintln!("Refund: {}", fee.total_refunded());
-                eprintln!("Unpaid: {}", fee.unpaid_debt());
-                for FeeBreakdown { source, amount } in &fee.cost_breakdown {
-                    eprintln!("- {:?} {}", source, amount);
-                }
+            let fee = &result.finalize.fee_receipt;
+            eprintln!("Initial payment: {}", fee.total_allocated_fee_payments());
+            eprintln!("Fee: {}", fee.total_fees_charged());
+            eprintln!("Paid: {}", fee.total_fees_paid());
+            eprintln!("Refund: {}", fee.total_refunded());
+            eprintln!("Unpaid: {}", fee.unpaid_debt());
+            for FeeBreakdown { source, amount } in &fee.cost_breakdown {
+                eprintln!("- {:?} {}", source, amount);
             }
         }
 

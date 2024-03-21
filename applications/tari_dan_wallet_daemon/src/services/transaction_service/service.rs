@@ -1,4 +1,4 @@
-//   Copyright 2023 The Tari Project
+//   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{sync::Arc, time::Duration};
@@ -6,27 +6,32 @@ use std::{sync::Arc, time::Duration};
 use log::*;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_dan_wallet_sdk::{
-    apis::transaction::TransactionApiError,
-    models::TransactionStatus,
+    models::{NewAccountInfo, TransactionStatus},
     network::WalletNetworkInterface,
     storage::WalletStore,
     DanWalletSdk,
 };
 use tari_shutdown::ShutdownSignal;
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use tokio::{
-    sync::{watch, Semaphore},
+    sync::{mpsc, watch, Semaphore},
     time,
     time::MissedTickBehavior,
 };
 
+use super::{
+    error::TransactionServiceError,
+    handle::{TransactionServiceHandle, TransactionServiceRequest},
+};
 use crate::{
     notify::Notify,
-    services::{TransactionFinalizedEvent, TransactionInvalidEvent, WalletEvent},
+    services::{TransactionFinalizedEvent, TransactionInvalidEvent, TransactionSubmittedEvent, WalletEvent},
 };
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::transaction_service";
 
 pub struct TransactionService<TStore, TNetworkInterface> {
+    rx_request: mpsc::Receiver<TransactionServiceRequest>,
     notify: Notify<WalletEvent>,
     wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
     trigger_poll: watch::Sender<()>,
@@ -45,28 +50,37 @@ where
         notify: Notify<WalletEvent>,
         wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
         shutdown_signal: ShutdownSignal,
-    ) -> Self {
+    ) -> (Self, TransactionServiceHandle) {
         let (trigger, rx_trigger) = watch::channel(());
-        Self {
+        let (tx_request, rx_request) = mpsc::channel(1);
+        let actor = Self {
+            rx_request,
             notify,
             wallet_sdk,
             trigger_poll: trigger,
             rx_trigger,
             poll_semaphore: Arc::new(Semaphore::new(1)),
             shutdown_signal,
-        }
+        };
+
+        (actor, TransactionServiceHandle::new(tx_request))
     }
 
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         let mut events_subscription = self.notify.subscribe();
         let mut poll_interval = time::interval(Duration::from_secs(10));
-        poll_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        poll_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         loop {
             tokio::select! {
                 _ = self.shutdown_signal.wait() => {
                     break Ok(());
                 }
+                Some(req) = self.rx_request.recv() => {
+                    if let Err(err) = self.handle_request(req).await {
+                        error!(target: LOG_TARGET, "Error handling request: {}", err);
+                    }
+                },
                 Ok(event) = events_subscription.recv() => {
                     if let Err(e) = self.on_event(event) {
                         error!(target: LOG_TARGET, "Error handling event: {}", e);
@@ -86,6 +100,69 @@ where
         }
     }
 
+    async fn handle_request(&self, request: TransactionServiceRequest) -> Result<(), TransactionServiceError> {
+        match request {
+            TransactionServiceRequest::SubmitTransaction {
+                transaction,
+                required_substates,
+                new_account_info,
+                reply,
+            } => {
+                reply
+                    .send(
+                        self.handle_submit_transaction(transaction, required_substates, new_account_info)
+                            .await,
+                    )
+                    .map_err(|_| TransactionServiceError::ServiceShutdown)?;
+            },
+            TransactionServiceRequest::SubmitDryRunTransaction {
+                transaction,
+                required_substates,
+                reply,
+            } => {
+                let transaction_api = self.wallet_sdk.transaction_api();
+                match transaction_api
+                    .submit_dry_run_transaction(transaction, required_substates)
+                    .await
+                {
+                    Ok(finalized_transaction) => {
+                        reply
+                            .send(finalized_transaction.finalize.ok_or_else(|| {
+                                TransactionServiceError::DryRunTransactionFailed {
+                                    details: "Transaction was not finalized".to_string(),
+                                }
+                            }))
+                            .map_err(|_| TransactionServiceError::ServiceShutdown)?;
+                    },
+                    Err(e) => {
+                        reply
+                            .send(Err(e.into()))
+                            .map_err(|_| TransactionServiceError::ServiceShutdown)?;
+                    },
+                }
+            },
+        }
+        Ok(())
+    }
+
+    async fn handle_submit_transaction(
+        &self,
+        transaction: Transaction,
+        required_substates: Vec<SubstateRequirement>,
+        new_account_info: Option<NewAccountInfo>,
+    ) -> Result<TransactionId, TransactionServiceError> {
+        let transaction_api = self.wallet_sdk.transaction_api();
+        let transaction_id = transaction_api
+            .insert_new_transaction(transaction, required_substates, new_account_info.clone(), false)
+            .await?;
+        transaction_api.submit_transaction(transaction_id).await?;
+        self.notify.notify(TransactionSubmittedEvent {
+            transaction_id,
+            new_account: new_account_info,
+        });
+        Ok(transaction_id)
+    }
+
     async fn on_poll(&self) -> Result<(), TransactionServiceError> {
         let permit = match self.poll_semaphore.clone().try_acquire_owned() {
             Ok(permit) => permit,
@@ -98,7 +175,10 @@ where
         let wallet_sdk = self.wallet_sdk.clone();
         let notify = self.notify.clone();
         tokio::spawn(async move {
-            if let Err(err) = Self::check_pending_transactions(wallet_sdk, notify).await {
+            if let Err(err) = Self::resubmit_new_transactions(&wallet_sdk, &notify).await {
+                error!(target: LOG_TARGET, "Error re-submitting new transactions: {}", err);
+            }
+            if let Err(err) = Self::check_pending_transactions(&wallet_sdk, &notify).await {
                 error!(target: LOG_TARGET, "Error checking pending transactions: {}", err);
             }
 
@@ -107,9 +187,42 @@ where
         Ok(())
     }
 
+    async fn resubmit_new_transactions(
+        wallet_sdk: &DanWalletSdk<TStore, TNetworkInterface>,
+        notify: &Notify<WalletEvent>,
+    ) -> Result<(), TransactionServiceError> {
+        let transaction_api = wallet_sdk.transaction_api();
+        let new_transactions = transaction_api.fetch_all(Some(TransactionStatus::New), None)?;
+        let log_level = if new_transactions.is_empty() {
+            Level::Debug
+        } else {
+            Level::Info
+        };
+        log!(
+            target: LOG_TARGET,
+            log_level,
+            "{} new transaction(s)",
+            new_transactions.len()
+        );
+        for transaction in new_transactions {
+            info!(
+                target: LOG_TARGET,
+                "Resubmitting transaction {}",
+                transaction.transaction.id()
+            );
+            let transaction_id = *transaction.transaction.id();
+            transaction_api.submit_transaction(transaction_id).await?;
+            notify.notify(TransactionSubmittedEvent {
+                transaction_id,
+                new_account: transaction.new_account_info,
+            });
+        }
+        Ok(())
+    }
+
     async fn check_pending_transactions(
-        wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
-        notify: Notify<WalletEvent>,
+        wallet_sdk: &DanWalletSdk<TStore, TNetworkInterface>,
+        notify: &Notify<WalletEvent>,
     ) -> Result<(), TransactionServiceError> {
         let transaction_api = wallet_sdk.transaction_api();
         let pending_transactions = transaction_api.fetch_all(Some(TransactionStatus::Pending), None)?;
@@ -149,7 +262,6 @@ where
                                 finalize,
                                 final_fee: transaction.final_fee.unwrap_or_default(),
                                 status: transaction.status,
-                                json_result: transaction.json_result,
                             });
                         },
                         None => notify.notify(TransactionInvalidEvent {
@@ -186,10 +298,4 @@ where
         }
         Ok(())
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum TransactionServiceError {
-    #[error("Transaction API error: {0}")]
-    TransactionApiError(#[from] TransactionApiError),
 }

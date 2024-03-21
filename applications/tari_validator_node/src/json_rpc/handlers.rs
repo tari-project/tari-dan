@@ -194,8 +194,8 @@ impl JsonRpcHandlers {
                         transaction_id: tx_id,
                         dry_run_result: Some(DryRunTransactionFinalizeResult {
                             decision: QuorumDecision::Accept,
+                            fee_breakdown: Some(exec_result.finalize.fee_receipt.to_cost_breakdown()),
                             finalize: exec_result.finalize,
-                            fee_breakdown: exec_result.fee_receipt.map(|f| f.to_cost_breakdown()),
                         }),
                     };
 
