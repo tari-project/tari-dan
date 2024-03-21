@@ -21,6 +21,7 @@ use diesel::{
     QueryableByName,
     RunQueryDsl,
     SqliteConnection,
+    TextExpressionMethods,
 };
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
@@ -878,7 +879,10 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         &mut self,
         limit: u64,
         offset: u64,
-        asc_desc_created_at: Option<Ordering>,
+        filter_index: Option<usize>,
+        filter: Option<String>,
+        ordering_index: Option<usize>,
+        ordering: Option<Ordering>,
     ) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
@@ -887,10 +891,64 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
             .into_boxed();
 
-        if let Some(ordering) = asc_desc_created_at {
-            match ordering {
-                Ordering::Ascending => query = query.order_by(blocks::created_at.asc()),
-                Ordering::Descending => query = query.order_by(blocks::created_at.desc()),
+        query = match ordering {
+            Some(Ordering::Ascending) => match ordering_index {
+                Some(0) => query.order_by(blocks::block_id.asc()),
+                Some(1) => query.order_by(blocks::epoch.asc()),
+                Some(2) => query.order_by(blocks::height.asc()),
+                Some(4) => query.order_by(blocks::command_count.asc()),
+                Some(5) => query.order_by(blocks::total_leader_fee.asc()),
+                Some(6) => query.order_by(blocks::block_time.asc()),
+                Some(7) => query.order_by(blocks::created_at.asc()),
+                Some(8) => query.order_by(blocks::proposed_by.asc()),
+                _ => query.order_by(blocks::height.asc()),
+            },
+            _ => match ordering_index {
+                Some(0) => query.order_by(blocks::block_id.desc()),
+                Some(1) => query.order_by(blocks::epoch.desc()),
+                Some(2) => query.order_by(blocks::height.desc()),
+                Some(4) => query.order_by(blocks::command_count.desc()),
+                Some(5) => query.order_by(blocks::total_leader_fee.desc()),
+                Some(6) => query.order_by(blocks::block_time.desc()),
+                Some(7) => query.order_by(blocks::created_at.desc()),
+                Some(8) => query.order_by(blocks::proposed_by.desc()),
+                _ => query.order_by(blocks::height.desc()),
+            },
+        };
+
+        if let Some(filter) = filter {
+            if !filter.is_empty() {
+                if let Some(filter_index) = filter_index {
+                    match filter_index {
+                        0 => query = query.filter(blocks::block_id.like(format!("%{filter}%"))),
+                        1 => {
+                            query = query.filter(
+                                blocks::epoch
+                                    .eq(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        2 => {
+                            query = query.filter(
+                                blocks::height
+                                    .eq(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        4 => {
+                            query = query.filter(
+                                blocks::command_count
+                                    .ge(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        5 => {
+                            query = query.filter(
+                                blocks::total_leader_fee
+                                    .ge(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        7 => query = query.filter(blocks::proposed_by.like(format!("%{filter}%"))),
+                        _ => (),
+                    }
+                }
             }
         }
 
@@ -907,7 +965,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .into_iter()
             .map(|(block, qc)| {
                 let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
-                    operation: "blocks_get_by_parent",
+                    operation: "blocks_get_paginated",
                     details: format!(
                         "block {} references non-existent quorum certificate {}",
                         block.id, block.qc_id
@@ -927,6 +985,64 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .first::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "blocks_get_count",
+                source: e,
+            })?;
+        Ok(count)
+    }
+
+    fn filtered_blocks_get_count(
+        &mut self,
+        filter_index: Option<usize>,
+        filter: Option<String>,
+    ) -> Result<i64, StorageError> {
+        use crate::schema::{blocks, quorum_certificates};
+
+        let mut query = blocks::table
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .into_boxed();
+
+        if let Some(filter) = filter {
+            if !filter.is_empty() {
+                if let Some(filter_index) = filter_index {
+                    match filter_index {
+                        0 => query = query.filter(blocks::block_id.like(format!("%{filter}%"))),
+                        1 => {
+                            query = query.filter(
+                                blocks::epoch
+                                    .eq(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        2 => {
+                            query = query.filter(
+                                blocks::height
+                                    .eq(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        4 => {
+                            query = query.filter(
+                                blocks::command_count
+                                    .ge(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        5 => {
+                            query = query.filter(
+                                blocks::total_leader_fee
+                                    .ge(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        7 => query = query.filter(blocks::proposed_by.like(format!("%{filter}%"))),
+                        _ => (),
+                    }
+                }
+            }
+        }
+
+        let count = query
+            .select(diesel::dsl::count(blocks::id))
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "filtered_blocks_get_count",
                 source: e,
             })?;
         Ok(count)

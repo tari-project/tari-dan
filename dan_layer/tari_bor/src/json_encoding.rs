@@ -50,6 +50,12 @@ impl serde::Serialize for CborValueJsonSerializeWrapper<'_> {
 
 pub struct CborValueJsonDeserializeWrapper(pub Value);
 
+impl CborValueJsonDeserializeWrapper {
+    pub fn into_inner(self) -> Value {
+        self.0
+    }
+}
+
 impl<'de> serde::Deserialize<'de> for CborValueJsonDeserializeWrapper {
     #[allow(clippy::too_many_lines)]
     fn deserialize<__D>(__deserializer: __D) -> Result<Self, __D::Error>

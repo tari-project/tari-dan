@@ -5,6 +5,7 @@ use tari_dan_wallet_sdk::DanWalletSdk;
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 
 use crate::{
+    config::WalletDaemonConfig,
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
     notify::Notify,
     services::{AccountMonitorHandle, TransactionServiceHandle, WalletEvent},
@@ -16,6 +17,7 @@ pub struct HandlerContext {
     notifier: Notify<WalletEvent>,
     transaction_service: TransactionServiceHandle,
     account_monitor: AccountMonitorHandle,
+    config: WalletDaemonConfig,
 }
 
 impl HandlerContext {
@@ -24,12 +26,14 @@ impl HandlerContext {
         notifier: Notify<WalletEvent>,
         transaction_service: TransactionServiceHandle,
         account_monitor: AccountMonitorHandle,
+        config: WalletDaemonConfig,
     ) -> Self {
         Self {
             wallet_sdk,
             notifier,
             transaction_service,
             account_monitor,
+            config,
         }
     }
 
@@ -47,5 +51,9 @@ impl HandlerContext {
 
     pub fn transaction_service(&self) -> &TransactionServiceHandle {
         &self.transaction_service
+    }
+
+    pub fn config(&self) -> &WalletDaemonConfig {
+        &self.config
     }
 }

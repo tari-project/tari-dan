@@ -36,11 +36,12 @@ import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import { DataTableCell } from "../../../Components/StyledComponents";
 import { useAccountNFTsList, useAccountsGetBalances } from "../../../api/hooks/useAccounts";
 import useAccountStore from "../../../store/accountStore";
-import type { BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemon-client";
-import Button from "@mui/material/Button/Button";
-import { SendMoneyDialog } from "./SendMoney";
 import { shortenString } from "../../../utils/helpers";
-import type { NonFungibleToken } from "@tariproject/typescript-bindings";
+import type { BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemon-client";
+import NFTList from "../../../Components/NFTList";
+import { Button } from "@mui/material";
+import { SendMoneyDialog } from "./SendMoney";
+import { ResourceAddress, ResourceType } from "@tariproject/typescript-bindings";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -50,21 +51,22 @@ interface TabPanelProps {
 
 interface BalanceRowProps {
   token_symbol: string;
-  resource_address: string;
-  resource_type: string;
+  resource_address: ResourceAddress;
+  resource_type: ResourceType;
   balance: number;
   confidential_balance: number;
-  onSendClicked?: (resource_address: string) => void;
+  onSendClicked?: (resource_address: ResourceAddress, resource_type: ResourceType) => void;
 }
 
-function BalanceRow({
-  token_symbol,
-  resource_address,
-  resource_type,
-  balance,
-  confidential_balance,
-  onSendClicked,
-}: BalanceRowProps) {
+function BalanceRow(props: BalanceRowProps) {
+  const {
+    token_symbol,
+    resource_address,
+    resource_type,
+    balance,
+    confidential_balance,
+    onSendClicked,
+  } = props;
   const { showBalance } = useAccountStore();
   return (
     <TableRow key={token_symbol || resource_address}>
@@ -74,9 +76,15 @@ function BalanceRow({
       </DataTableCell>
       <DataTableCell>{resource_type}</DataTableCell>
       <DataTableCell>{showBalance ? balance : "*************"}</DataTableCell>
-      <DataTableCell>{showBalance ? confidential_balance : "**************"}</DataTableCell>
       <DataTableCell>
-        <Button variant="outlined" onClick={() => onSendClicked?.(resource_address)}>
+        <ConfidentialBalance
+          show={showBalance}
+          resourceType={resource_type}
+          balance={confidential_balance}
+        />
+      </DataTableCell>
+      <DataTableCell>
+        <Button variant="outlined" onClick={() => onSendClicked?.(resource_address, resource_type)}>
           Send
         </Button>
       </DataTableCell>
@@ -84,16 +92,13 @@ function BalanceRow({
   );
 }
 
-function NftDetails(nft: NonFungibleToken) {
-  return (
-    <TableRow>
-      <DataTableCell>{JSON.stringify(nft.nft_id)}</DataTableCell>
-      <DataTableCell>{nft.vault_id}</DataTableCell>
-      <DataTableCell>{JSON.stringify(nft.data)}</DataTableCell>
-      <DataTableCell>{JSON.stringify(nft.mutable_data)}</DataTableCell>
-      <DataTableCell>{nft.is_burned ? "Yes" : "No"}</DataTableCell>
-    </TableRow>
-  );
+function ConfidentialBalance(props: { show: boolean, balance: number, resourceType: string }) {
+  switch (props.resourceType) {
+    case "Confidential":
+      return <>{props.show ? props.balance : "**************"}</>;
+    default:
+      return <>--</>;
+  }
 }
 
 function TabPanel(props: TabPanelProps) {
@@ -124,9 +129,11 @@ function tabProps(index: number) {
 }
 
 function Assets({ accountName }: { accountName: string }) {
-  const [resourceToSend, setResourceToSend] = useState<string | null>(null);
+  const [resourceToSend, setResourceToSend] = useState<{
+    address: ResourceAddress,
+    resource_type: ResourceType
+  } | null>(null);
   const [value, setValue] = useState(0);
-  const { showBalance } = useAccountStore();
 
   const {
     data: balancesData,
@@ -140,14 +147,14 @@ function Assets({ accountName }: { accountName: string }) {
     isError: nftsListIsError,
     error: nftsListError,
     isFetching: nftsListIsFetching,
-  } = useAccountNFTsList(0, 10);
+  } = useAccountNFTsList({ Name: accountName }, 0, 10);
 
-  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);
   };
 
-  const handleSendResourceClicked = (resource: string) => {
-    setResourceToSend(resource);
+  const handleSendResourceClicked = (address: ResourceAddress, resource_type: ResourceType) => {
+    setResourceToSend({ address, resource_type });
   };
 
   return (
@@ -156,7 +163,8 @@ function Assets({ accountName }: { accountName: string }) {
         open={resourceToSend !== null}
         handleClose={() => setResourceToSend(null)}
         onSendComplete={() => setResourceToSend(null)}
-        resource_address={resourceToSend || ""}
+        resource_address={resourceToSend?.address}
+        resource_type={resourceToSend?.resource_type}
       />
       <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Tabs value={value} onChange={handleChange} aria-label="account assets" variant="standard">
@@ -206,30 +214,12 @@ function Assets({ accountName }: { accountName: string }) {
         )}
       </TabPanel>
       <TabPanel value={value} index={1}>
-        {nftsListIsError || nftsListIsFetching ? (
-          <FetchStatusCheck
-            isError={nftsListIsError}
-            errorMessage={nftsListError?.message || "Error fetching data"}
-            isLoading={nftsListIsFetching}
-          />
-        ) : (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>ID</TableCell>
-                  <TableCell>Vault</TableCell>
-                  <TableCell>Data</TableCell>
-                  <TableCell>Mutable Data</TableCell>
-                  <TableCell>Is Burned</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {nftsListData?.nfts.map((nft: NonFungibleToken, i) => <NftDetails key={i} {...nft} />)}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
+        <NFTList
+          nftsListIsError={nftsListIsError}
+          nftsListIsFetching={nftsListIsFetching}
+          nftsListError={nftsListError}
+          nftsListData={nftsListData}
+        />
       </TabPanel>
     </Box>
   );

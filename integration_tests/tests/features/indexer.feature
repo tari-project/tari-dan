@@ -152,3 +152,71 @@ Feature: Indexer node
 
     # Scan the network for the event emitted on ACC_2 creation
     When indexer IDX scans the network 1 events for account ACC_2 with topics component-created
+
+  @serial
+  Scenario: Indexer GraphQL filtering and pagination of events
+    Given fees are disabled
+    # Initialize a base node, wallet, miner and VN
+    Given a base node BASE
+    Given a wallet WALLET connected to base node BASE
+    Given a miner MINER connected to base node BASE and wallet WALLET
+
+    # Initialize a VN
+    Given a validator node VN connected to base node BASE and wallet WALLET
+
+    # Initialize an indexer
+    Given an indexer IDX connected to base node BASE
+
+    # The wallet must have some funds before the VN sends transactions
+    When miner MINER mines 6 new blocks
+    When wallet WALLET has at least 2000000000 uT
+
+    # VN registration
+    When validator node VN sends a registration transaction
+
+    # Register the "faucet" template
+    When validator node VN registers the template "faucet"
+
+    # Mine a few block for the VN and template registration
+    When miner MINER mines 16 new blocks
+    Then VN has scanned to height 19
+    Then indexer IDX has scanned to height 19
+    Then the validator node VN is listed as registered
+
+    # Initialize the wallet daemon
+    Given a wallet daemon WALLET_D connected to indexer IDX
+
+    # A file-base CLI account must be created to sign future calls
+    When I use an account key named K1
+
+    # Creates a new account
+    When I create an account ACC_1 on VN
+    When I create an account ACC_2 on VN
+
+    # Create a new faucet component
+    When I call function "mint" on template "faucet" using account ACC_1 to pay fees via wallet daemon WALLET_D with args "10000" named "FAUCET"
+
+    # Generate some events by doing vault operations with the faucet and the acounts
+    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACC_1, ACC_2" named "TX1"
+    ```
+      let faucet = global!["FAUCET/components/TestFaucet"];
+      let faucet_resource = global!["FAUCET/resources/0"];
+      let mut acc1 = global!["ACC_1/components/Account"];
+      let mut acc2 = global!["ACC_2/components/Account"];
+
+      // get tokens from the faucet to ACC_1
+      let faucet_bucket = faucet.take_free_coins();
+      acc1.deposit(faucet_bucket);
+
+      // transfer some tokens from ACC_1 to ACC_2
+      let bucket1 = acc1.withdraw(faucet_resource, Amount(50));
+      acc2.deposit(bucket1);
+
+      // transfer some tokens back from ACC_2 to ACC_1
+      let bucket2 = acc2.withdraw(faucet_resource, Amount(20));
+      acc1.deposit(bucket2);
+    ```
+
+    # Scan the network for events
+    When indexer IDX scans the network for events of resource FAUCET/resources/0
+

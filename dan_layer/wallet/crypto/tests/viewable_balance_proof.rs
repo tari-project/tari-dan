@@ -8,10 +8,9 @@ use tari_crypto::{
     keys::{PublicKey, SecretKey},
     ristretto::{pedersen::PedersenCommitment, RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_dan_wallet_crypto::{create_confidential_proof, ConfidentialProofStatement};
+use tari_dan_wallet_crypto::{create_confidential_proof, AlwaysMissLookupTable, ConfidentialProofStatement};
 use tari_engine_types::confidential::validate_elgamal_verifiable_balance_proof;
 use tari_template_lib::models::Amount;
-use tari_template_test_tooling::support::value_lookup_tables::AlwaysMissLookupTable;
 use tari_utilities::ByteArray;
 
 fn create_output_statement(value: Amount, view_key: &RistrettoPublicKey) -> ConfidentialProofStatement {
@@ -90,7 +89,7 @@ fn it_generates_a_valid_proof() {
 
     let timer = Instant::now();
     let balance = proof
-        .brute_force_balance(&view_key_secret, 0..=1000, AlwaysMissLookupTable)
+        .brute_force_balance(&view_key_secret, 0..=1000, &mut AlwaysMissLookupTable)
         .unwrap();
     let brute_force_time = timer.elapsed();
     assert_eq!(balance, Some(123));

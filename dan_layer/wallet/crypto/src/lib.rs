@@ -16,3 +16,6 @@ pub use confidential_output::*;
 
 mod confidential_statement;
 pub use confidential_statement::*;
+
+mod value_lookup;
+pub use value_lookup::*;

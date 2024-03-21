@@ -80,6 +80,8 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         // Blocks
         "get_block" => handlers.get_block(value).await,
         "get_blocks_count" => handlers.get_blocks_count(value).await,
+        "get_blocks" => handlers.get_blocks(value).await,
+        "get_filtered_blocks_count" => handlers.get_filtered_blocks_count(value).await,
         // Template
         "get_template" => handlers.get_template(value).await,
         "get_templates" => handlers.get_templates(value).await,

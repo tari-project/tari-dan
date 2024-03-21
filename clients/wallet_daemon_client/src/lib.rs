@@ -98,8 +98,11 @@ use crate::{
         ConfidentialCreateOutputProofResponse,
         ConfidentialTransferRequest,
         ConfidentialTransferResponse,
+        ConfidentialViewVaultBalanceRequest,
+        ConfidentialViewVaultBalanceResponse,
         GetValidatorFeesRequest,
         GetValidatorFeesResponse,
+        KeyBranch,
         KeysCreateRequest,
         KeysCreateResponse,
         KeysListRequest,
@@ -214,13 +217,21 @@ impl WalletDaemonClient {
     //     self.send_request("identities.get", json!({})).await
     // }
 
-    pub async fn create_key(&mut self) -> Result<KeysCreateResponse, WalletDaemonClientError> {
-        self.send_request("keys.create", &KeysCreateRequest { specific_index: None })
-            .await
+    pub async fn create_key(&mut self, branch: KeyBranch) -> Result<KeysCreateResponse, WalletDaemonClientError> {
+        self.send_request("keys.create", &KeysCreateRequest {
+            branch,
+            specific_index: None,
+        })
+        .await
     }
 
-    pub async fn create_specific_key(&mut self, index: u64) -> Result<KeysCreateResponse, WalletDaemonClientError> {
+    pub async fn create_specific_key(
+        &mut self,
+        branch: KeyBranch,
+        index: u64,
+    ) -> Result<KeysCreateResponse, WalletDaemonClientError> {
         self.send_request("keys.create", &KeysCreateRequest {
+            branch,
             specific_index: Some(index),
         })
         .await
@@ -231,8 +242,8 @@ impl WalletDaemonClient {
             .await
     }
 
-    pub async fn list_keys(&mut self) -> Result<KeysListResponse, WalletDaemonClientError> {
-        self.send_request("keys.list", &KeysListRequest {}).await
+    pub async fn list_keys(&mut self, branch: KeyBranch) -> Result<KeysListResponse, WalletDaemonClientError> {
+        self.send_request("keys.list", &KeysListRequest { branch }).await
     }
 
     pub async fn get_transaction<T: Borrow<TransactionGetRequest>>(
@@ -420,6 +431,13 @@ impl WalletDaemonClient {
         req: T,
     ) -> Result<ListAccountNftResponse, WalletDaemonClientError> {
         self.send_request("nfts.list", req.borrow()).await
+    }
+
+    pub async fn view_vault_balance<T: Borrow<ConfidentialViewVaultBalanceRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ConfidentialViewVaultBalanceResponse, WalletDaemonClientError> {
+        self.send_request("confidential.view_vault_balance", req.borrow()).await
     }
 
     pub async fn auth_request<T: Borrow<AuthLoginRequest>>(

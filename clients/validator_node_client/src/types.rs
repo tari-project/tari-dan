@@ -754,7 +754,21 @@ pub struct GetBlocksRequest {
     pub limit: u64,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub offset: u64,
+    pub ordering_index: Option<usize>,
     pub ordering: Option<Ordering>,
+    pub filter_index: Option<usize>,
+    pub filter: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+)]
+pub struct GetFilteredBlocksCountRequest {
+    pub filter_index: Option<usize>,
+    pub filter: Option<String>,
 }
 
 #[derive(Serialize, Debug)]

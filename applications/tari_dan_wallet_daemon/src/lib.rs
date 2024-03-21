@@ -82,6 +82,7 @@ pub async fn run_tari_dan_wallet_daemon(
         notify,
         services.transaction_service_handle.clone(),
         services.account_monitor_handle.clone(),
+        config.dan_wallet_daemon.clone(),
     );
     let listen_fut = jrpc_server::listen(jrpc_address, signaling_server_address, handlers, shutdown_signal);
 
