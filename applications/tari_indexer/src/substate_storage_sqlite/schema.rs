@@ -27,7 +27,7 @@ diesel::table! {
         topic -> Text,
         payload -> Text,
         version -> Integer,
-        component_address -> Nullable<Text>,
+        substate_id -> Nullable<Text>,
     }
 }
 

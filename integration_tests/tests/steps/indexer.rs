@@ -14,7 +14,6 @@ use integration_tests::{
 use libp2p::Multiaddr;
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_indexer_client::types::AddPeerRequest;
-use tari_template_lib::models::ObjectKey;
 
 #[when(expr = "indexer {word} connects to all other validators")]
 async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: String) {
@@ -94,7 +93,7 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
     let template_address = [0u8; 32];
     let tx_hash = [0u8; 32];
     let query = format!(
-        "{{ getEventsForTransaction(txHash: {:?}) {{ componentAddress, templateAddress, txHash, topic, payload }}
+        "{{ getEventsForTransaction(txHash: {:?}) {{ substateId, templateAddress, txHash, topic, payload }}
     }}",
         tx_hash.to_hex()
     );
@@ -104,7 +103,6 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
         .expect("Failed to obtain getEventsForTransaction query result");
     let res = res.get("getEventsForTransaction").unwrap();
     assert_eq!(res.len(), 1);
-    assert_eq!(res[0].component_address, Some(ObjectKey::default().into_array()));
     assert_eq!(res[0].template_address, template_address);
     assert_eq!(res[0].tx_hash, tx_hash);
     assert_eq!(res[0].topic, "my_event");
@@ -132,16 +130,16 @@ async fn indexer_scans_network_events(
 
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
     let query = format!(
-        r#"{{ getEventsForComponent(componentAddress: "{}", version: {}) {{ componentAddress, templateAddress, txHash, topic, payload }} }}"#,
+        r#"{{ getEventsForSubstate(substateId: "{}", version: {}) {{ substateId, templateAddress, txHash, topic, payload }} }}"#,
         component_address.substate_id,
         component_address.version.unwrap()
     );
     let res = graphql_client
         .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
         .await
-        .expect("Failed to obtain getEventsForComponent query result");
+        .expect("Failed to obtain getEventsForSubstate query result");
 
-    let events_for_component = res.get("getEventsForComponent").unwrap();
+    let events_for_component = res.get("getEventsForSubstate").unwrap();
     assert_eq!(
         events_for_component.len(),
         num_events as usize,
