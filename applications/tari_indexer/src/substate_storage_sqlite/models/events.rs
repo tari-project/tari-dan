@@ -53,6 +53,15 @@ pub struct NewEvent {
     pub component_address: Option<String>,
 }
 
+#[derive(Debug, Clone, Insertable, AsChangeset)]
+#[diesel(table_name = event_payloads)]
+#[diesel(treat_none_as_null = true)]
+pub struct NewEventPayloadField {
+    pub payload_key: String,
+    pub payload_value: String,
+    pub event_id: i32,
+}
+
 #[derive(Clone, Debug, QueryableByName, Deserialize, Serialize)]
 pub struct EventData {
     #[diesel(sql_type = Text)]

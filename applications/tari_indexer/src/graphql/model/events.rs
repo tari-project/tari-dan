@@ -111,6 +111,29 @@ impl EventQuery {
         Ok(events)
     }
 
+    pub async fn get_events_by_payload(
+        &self,
+        ctx: &Context<'_>,
+        payload_key: String,
+        payload_value: String,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Event>, anyhow::Error> {
+        info!(
+            target: LOG_TARGET,
+            "Querying events. payload_key: {}, payload_value: {}, offset: {}, limit: {}, ", payload_key, payload_value, offset, limit,
+        );
+        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
+        let events = substate_manager
+            .scan_events_by_payload(payload_key, payload_value, offset, limit)
+            .await?
+            .iter()
+            .map(|e| Event::from_engine_event(e.clone()))
+            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
+
+        Ok(events)
+    }
+
     pub async fn save_event(
         &self,
         ctx: &Context<'_>,
