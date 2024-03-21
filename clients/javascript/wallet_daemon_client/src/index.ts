@@ -25,7 +25,7 @@ import {
   AccountsCreateFreeTestCoinsResponse,
   ConfidentialViewVaultBalanceRequest,
   ConfidentialViewVaultBalanceResponse,
-  ComponentAddressOrName,
+  ComponentAddressOrName, KeysCreateRequest, KeysCreateResponse, KeysListRequest, KeysListResponse,
 } from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 import {
@@ -65,6 +65,10 @@ export type {
   FinalizeResult,
   FunctionDef,
   Instruction,
+  KeysCreateRequest,
+  KeysCreateResponse,
+  KeysListRequest,
+  KeysListResponse,
   SubstateId,
   SubstateType,
   SubstatesGetRequest,
@@ -161,6 +165,14 @@ export class WalletDaemonClient {
 
   createFreeTestCoins(params: AccountsCreateFreeTestCoinsRequest): Promise<AccountsCreateFreeTestCoinsResponse> {
     return this.__invokeRpc("accounts.create_free_test_coins", params);
+  }
+
+  createKey(params: KeysCreateRequest): Promise<KeysCreateResponse> {
+    return this.__invokeRpc("keys.create", params);
+  }
+
+  listKeys(params: KeysListRequest): Promise<KeysListResponse> {
+    return this.__invokeRpc("keys.list", params);
   }
 
   viewVaultBalance(params: ConfidentialViewVaultBalanceRequest): Promise<ConfidentialViewVaultBalanceResponse> {
