@@ -213,7 +213,7 @@ function Assets({ accountName }: { accountName: string }) {
                       resource_type={resource_type}
                       balance={balance}
                       confidential_balance={confidential_balance}
-                      vault_address={vault_address.Vault || ""}
+                      vault_address={"Vault" in vault_address ? vault_address.Vault : ""}
                       onSendClicked={handleSendResourceClicked}
                     />
                   ),

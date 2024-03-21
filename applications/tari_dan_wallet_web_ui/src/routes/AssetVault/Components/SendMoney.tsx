@@ -36,7 +36,12 @@ import useAccountStore from "../../../store/accountStore";
 import Select from "@mui/material/Select";
 import { SelectChangeEvent } from "@mui/material/Select/Select";
 import MenuItem from "@mui/material/MenuItem";
-import { ResourceAddress, ResourceType, ConfidentialTransferInputSelection } from "@tariproject/typescript-bindings";
+import {
+  ResourceAddress,
+  ResourceType,
+  ConfidentialTransferInputSelection,
+  TransactionResult,
+} from "@tariproject/typescript-bindings";
 import InputLabel from "@mui/material/InputLabel";
 
 const XTR2 = "resource_01010101010101010101010101010101010101010101010101010101";
@@ -177,7 +182,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
                 title: "Fee estimate failed",
                 error: true,
                 // TODO: fix this
-                message: JSON.stringify(result.result.result.Reject || result.result.result.AcceptFeeRejectRest[1]),
+                message: JSON.stringify(unionGet(result.result.result, "Reject" as keyof TransactionResult) || unionGet(result.result.result, "AcceptFeeRejectRest" as keyof TransactionResult)?.[1]),
               });
               return;
             }
@@ -316,4 +321,9 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
       </DialogContent>
     </Dialog>
   );
+}
+
+
+function unionGet<T extends object>(object: T, key: keyof T): T[keyof T] | null {
+  return key in object ? object[key] : null;
 }
