@@ -190,10 +190,7 @@ impl StateTracker {
             let indexed = IndexedWellKnownTypes::from_value(&component.body.state)?;
             state.validate_component_state(&indexed, true)?;
 
-            state.new_substate(
-                substate_id.clone(),
-                SubstateValue::Component(component),
-            )?;
+            state.new_substate(substate_id.clone(), SubstateValue::Component(component))?;
 
             state.push_event(Event::new(
                 Some(substate_id),

@@ -39,10 +39,7 @@ use tari_indexer_lib::{
     substate_scanner::SubstateScanner,
     NonFungibleSubstate,
 };
-use tari_template_lib::{
-    models::TemplateAddress,
-    prelude::Metadata,
-};
+use tari_template_lib::{models::TemplateAddress, prelude::Metadata};
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, TariValidatorNodeRpcClientFactory};
 

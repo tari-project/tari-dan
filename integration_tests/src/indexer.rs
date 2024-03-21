@@ -117,9 +117,9 @@ impl IndexerProcess {
             .to_json()
             .unwrap();
         let query = format!(
-            "{{ saveEvent(substateId: {:?}, templateAddress: {:?}, txHash: {:?}, topic: {:?}, payload: {:?}, \
-             version: {:?}) {{ substateId templateAddress txHash topic payload }} }}",
-             substate_id, template_address, tx_hash, topic, payload, version
+            "{{ saveEvent(substateId: {:?}, templateAddress: {:?}, txHash: {:?}, topic: {:?}, payload: {:?}, version: \
+             {:?}) {{ substateId templateAddress txHash topic payload }} }}",
+            substate_id, template_address, tx_hash, topic, payload, version
         );
         let res = graphql_client
             .send_request::<HashMap<String, tari_indexer::graphql::model::events::Event>>(&query, None, None)

@@ -29,10 +29,7 @@ use tari_engine_types::{
     virtual_substate::{VirtualSubstate, VirtualSubstateId},
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_template_lib::{
-    models::NonFungibleIndexAddress,
-    prelude::ResourceAddress,
-};
+use tari_template_lib::{models::NonFungibleIndexAddress, prelude::ResourceAddress};
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 
@@ -428,10 +425,7 @@ where
         let mut version: u32 = version.unwrap_or_default();
 
         loop {
-            match self
-                .get_events_for_substate_and_version(&substate_id, version)
-                .await
-            {
+            match self.get_events_for_substate_and_version(&substate_id, version).await {
                 Ok(component_tx_events) => events.extend(
                     component_tx_events
                         .into_iter()

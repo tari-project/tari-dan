@@ -255,13 +255,25 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
         // we emit multiple events referencing vault and resource address
         // this way idexers/clients can search by any one
-        let vault_event = Event::new(Some(SubstateId::Vault(vault_id)), template_address.clone(), tx_hash, topic.clone(), payload.clone());
-        let resource_event = Event::new(Some(SubstateId::Resource(*resource_address)), template_address.clone(), tx_hash, topic, payload);
+        let vault_event = Event::new(
+            Some(SubstateId::Vault(vault_id)),
+            template_address.clone(),
+            tx_hash,
+            topic.clone(),
+            payload.clone(),
+        );
+        let resource_event = Event::new(
+            Some(SubstateId::Resource(*resource_address)),
+            template_address.clone(),
+            tx_hash,
+            topic,
+            payload,
+        );
         debug!(target: LOG_TARGET, "Emitted vault events {}", vault_event);
         debug!(target: LOG_TARGET, "Emitted resource event {}", resource_event);
         state.push_event(vault_event);
         state.push_event(resource_event);
-        
+
         Ok(())
     }
 }

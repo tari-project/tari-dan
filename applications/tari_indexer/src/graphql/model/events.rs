@@ -46,9 +46,7 @@ pub struct Event {
 impl Event {
     fn from_engine_event(event: tari_engine_types::events::Event) -> Result<Self, anyhow::Error> {
         Ok(Self {
-            substate_id: event
-                .substate_id()
-                .map(|sub_id| sub_id.to_string()),
+            substate_id: event.substate_id().map(|sub_id| sub_id.to_string()),
             template_address: event.template_address().into_array(),
             tx_hash: event.tx_hash().into_array(),
             topic: event.topic(),
