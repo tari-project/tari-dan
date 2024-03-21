@@ -127,9 +127,8 @@ impl DryRunTransactionProcessor {
         })?;
         let result = executed.into_result();
 
-        if let Some(ref fees) = result.fee_receipt {
-            info!(target: LOG_TARGET, "Transaction fees: {}", fees.total_fees_charged());
-        }
+        let fees = &result.finalize.fee_receipt;
+        info!(target: LOG_TARGET, "Transaction fees: {}", fees.total_fees_charged());
 
         Ok(result)
     }

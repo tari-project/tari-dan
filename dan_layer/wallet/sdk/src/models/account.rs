@@ -3,12 +3,15 @@
 
 use std::fmt::{Display, Formatter};
 
+use tari_bor::{Deserialize, Serialize};
 use tari_engine_types::substate::SubstateId;
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct Account {
     pub name: Option<String>,
     pub address: SubstateId,
@@ -24,4 +27,11 @@ impl Display for Account {
             None => write!(f, "{}", self.address),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewAccountInfo {
+    pub name: Option<String>,
+    pub key_index: u64,
+    pub is_default: bool,
 }

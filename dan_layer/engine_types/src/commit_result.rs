@@ -41,8 +41,6 @@ use crate::{
 pub struct ExecuteResult {
     /// The finalized result to commit. If the fee transaction succeeds but the transaction fails, this will be accept.
     pub finalize: FinalizeResult,
-    /// The fee payment summary including the Resource containing the fees taken during execution.
-    pub fee_receipt: Option<FeeReceipt>,
 }
 
 impl ExecuteResult {
@@ -89,7 +87,7 @@ impl ExecuteResult {
     }
 
     pub fn expect_fees_paid_in_full(&self) -> &FeeReceipt {
-        let receipt = self.fee_receipt.as_ref().expect("No fee receipt");
+        let receipt = &self.finalize.fee_receipt;
         assert!(receipt.is_paid_in_full(), "Fees not paid in full");
         receipt
     }

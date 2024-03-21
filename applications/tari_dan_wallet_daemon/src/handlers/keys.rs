@@ -18,15 +18,15 @@ use super::context::HandlerContext;
 pub async fn handle_create(
     context: &HandlerContext,
     token: Option<String>,
-    value: KeysCreateRequest,
+    req: KeysCreateRequest,
 ) -> Result<KeysCreateResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let key_manager = sdk.key_manager_api();
-    let key = value
+    let key = req
         .specific_index
-        .map(|idx| key_manager.derive_key(key_manager::TRANSACTION_BRANCH, idx))
-        .unwrap_or_else(|| key_manager.next_key(key_manager::TRANSACTION_BRANCH))?;
+        .map(|idx| key_manager.derive_key(req.branch.as_str(), idx))
+        .unwrap_or_else(|| key_manager.next_key(req.branch.as_str()))?;
     Ok(KeysCreateResponse {
         id: key.key_index,
         public_key: PublicKey::from_secret_key(&key.key),
@@ -36,11 +36,11 @@ pub async fn handle_create(
 pub async fn handle_list(
     context: &HandlerContext,
     token: Option<String>,
-    _value: KeysListRequest,
+    req: KeysListRequest,
 ) -> Result<KeysListResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::KeyList])?;
-    let keys = sdk.key_manager_api().get_all_keys(key_manager::TRANSACTION_BRANCH)?;
+    let keys = sdk.key_manager_api().get_all_keys(req.branch.as_str())?;
     Ok(KeysListResponse { keys })
 }
 

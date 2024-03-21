@@ -136,16 +136,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     let mut finalize =
                         FinalizeResult::new_rejected(transaction_hash, RejectReason::ExecutionFailure(err.to_string()));
                     finalize.execution_results = execution_results;
-                    return Ok(ExecuteResult {
-                        fee_receipt: None,
-                        finalize,
-                    });
+                    return Ok(ExecuteResult { finalize });
                 }
                 execution_results
             },
             Err(err) => {
                 return Ok(ExecuteResult {
-                    fee_receipt: None,
                     finalize: FinalizeResult::new_rejected(
                         transaction_hash,
                         RejectReason::ExecutionFailure(err.to_string()),
@@ -171,19 +167,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     } else {
                         TransactionResult::Reject(reason)
                     };
-                    return Ok(ExecuteResult {
-                        // TODO: clean up
-                        fee_receipt: Some(finalized.fee_receipt.clone()),
-                        finalize: finalized,
-                    });
+                    return Ok(ExecuteResult { finalize: finalized });
                 }
                 finalized.execution_results = execution_results;
 
-                Ok(ExecuteResult {
-                    // TODO: clean up
-                    fee_receipt: Some(finalized.fee_receipt.clone()),
-                    finalize: finalized,
-                })
+                Ok(ExecuteResult { finalize: finalized })
             },
             // This can happen e.g if you have dangling buckets after running the instructions
             Err(err) => {
@@ -201,11 +189,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                         .expect("The fee transaction should be there"),
                     RejectReason::ExecutionFailure(err.to_string()),
                 );
-                Ok(ExecuteResult {
-                    // TODO: clean up
-                    fee_receipt: Some(finalized.fee_receipt.clone()),
-                    finalize: finalized,
-                })
+                Ok(ExecuteResult { finalize: finalized })
             },
         }
     }
