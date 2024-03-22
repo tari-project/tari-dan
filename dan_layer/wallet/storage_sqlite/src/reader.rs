@@ -694,22 +694,16 @@ impl WalletStoreReader for ReadTransaction<'_> {
     fn proofs_get_by_transaction_id(
         &mut self,
         transaction_id: TransactionId,
-    ) -> Result<ConfidentialProofId, WalletStorageError> {
+    ) -> Result<Vec<ConfidentialProofId>, WalletStorageError> {
         use crate::schema::proofs;
 
-        let proof_id = proofs::table
+        let proof_ids = proofs::table
             .filter(proofs::transaction_hash.eq(transaction_id.to_string()))
             .select(proofs::id)
-            .first::<i32>(self.connection())
-            .optional()
+            .get_results::<i32>(self.connection())
             .map_err(|e| WalletStorageError::general("proofs_get_by_transaction_hash", e))?;
-        let proof_id = proof_id.ok_or_else(|| WalletStorageError::NotFound {
-            operation: "proofs_get_by_transaction_hash",
-            entity: "proofs".to_string(),
-            key: transaction_id.to_string(),
-        })?;
 
-        Ok(proof_id as u64)
+        Ok(proof_ids.into_iter().map(|id| id as u64).collect())
     }
 
     fn non_fungible_token_get_by_nft_id(

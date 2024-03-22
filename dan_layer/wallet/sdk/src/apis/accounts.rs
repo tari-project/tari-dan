@@ -174,6 +174,7 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
             resource_type,
             revealed_balance: Amount::zero(),
             confidential_balance: Amount::zero(),
+            locked_revealed_balance: Amount::zero(),
             token_symbol,
         })?;
         tx.commit()?;

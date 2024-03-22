@@ -133,7 +133,12 @@ fn generate_withdraw_proof_internal(
     revealed_output_amount: Amount,
     view_key: Option<PublicKey>,
 ) -> WithdrawProofOutput {
-    let output_mask = PrivateKey::random(&mut OsRng);
+    // If the amount is zero, we omit the output UTXO, therefore the mask is zero
+    let output_mask = if output_amount.is_zero() {
+        Default::default()
+    } else {
+        PrivateKey::random(&mut OsRng)
+    };
     let change_mask = change_amount.map(|_| PrivateKey::random(&mut OsRng));
 
     let output_proof = ConfidentialProofStatement {

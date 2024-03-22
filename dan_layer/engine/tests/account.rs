@@ -97,8 +97,8 @@ fn basic_faucet_transfer() {
         )
         .unwrap();
 
-    assert_eq!(result.finalize.execution_results[3].decode::<Amount>().unwrap(), 900);
-    assert_eq!(result.finalize.execution_results[4].decode::<Amount>().unwrap(), 100);
+    assert_eq!(result.finalize.execution_results[3].decode::<Amount>().unwrap(), 900u64);
+    assert_eq!(result.finalize.execution_results[4].decode::<Amount>().unwrap(), 100u64);
 }
 
 #[test]
