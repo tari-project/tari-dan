@@ -55,7 +55,7 @@ where TConsensusSpec: ConsensusSpec
         }
         info!(
             target: LOG_TARGET,
-            "🌿 PROPOSING foreignly new locked block {} to {} foreign shards. justify: {} ({}), parent: {}",
+            "🌿 PROPOSING new locked block {} to {} foreign shards. justify: {} ({}), parent: {}",
             block,
             non_local_shards.len(),
             block.justify().block_id(),

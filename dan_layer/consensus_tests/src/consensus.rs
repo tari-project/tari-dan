@@ -243,7 +243,6 @@ async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() 
     test.assert_clean_shutdown().await;
 }
 
-#[ignore = "FIXME: This test is very flaky"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn foreign_shard_decides_to_abort() {
     setup_logger();
@@ -409,9 +408,17 @@ async fn leader_failure_node_goes_down() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "FIXME: this test is flaky"]
 async fn foreign_block_distribution() {
-    setup_logger();
+    crate::support::logging::setup_logger_ci();
+    std::fs::create_dir_all(std::path::PathBuf::from(env!["CARGO_MANIFEST_DIR"]).join("../../data")).unwrap();
+
     let mut test = Test::builder()
         .with_test_timeout(Duration::from_secs(60))
+        .debug_sql(
+            std::path::PathBuf::from(env!["CARGO_MANIFEST_DIR"])
+                .join("../../data/test{}.db")
+                .display()
+                .to_string(),
+        )
         .with_message_filter(Box::new(move |from: &TestAddress, to: &TestAddress, _| {
             match from.0.as_str() {
                 // We filter our message from each leader to the foreign committees. So we will rely on other members of
@@ -457,7 +464,6 @@ async fn foreign_block_distribution() {
     test.assert_all_validators_at_same_height().await;
 
     log::info!("total messages sent: {}", test.network().total_messages_sent());
-    log::info!("total messages filtered: {}", test.network().total_messages_filtered());
     // Each leader sends 3 proposals to the both foreign committees, so 6 messages per leader. 18 in total.
     assert_eq!(test.network().total_messages_filtered(), 18);
     test.assert_clean_shutdown().await;

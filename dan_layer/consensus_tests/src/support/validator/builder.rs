@@ -90,7 +90,8 @@ impl ValidatorBuilder {
         let (outbound_messaging, rx_loopback) = TestOutboundMessaging::create(tx_leader, tx_broadcast);
         let inbound_messaging = TestInboundMessaging::new(self.address.clone(), rx_hs_message, rx_loopback);
 
-        let store = SqliteStateStore::connect(&self.sql_url).unwrap();
+        let store = SqliteStateStore::connect(&self.sql_url)
+            .unwrap_or_else(|e| panic!("Failed to connect to db at {}: {}", self.sql_url, e));
         let signing_service = TestVoteSignatureService::new(self.public_key.clone(), self.address.clone());
         let transaction_pool = TransactionPool::new();
         let noop_state_manager = NoopStateManager::new();
