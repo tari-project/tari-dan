@@ -79,6 +79,15 @@ impl Amount {
         Amount(self.0.saturating_sub(other.0))
     }
 
+    pub fn saturating_sub_positive(&self, other: Self) -> Self {
+        let amount = Amount(self.0 - other.0);
+        if amount.is_negative() {
+            Amount(0)
+        } else {
+            amount
+        }
+    }
+
     pub fn checked_sub_positive(&self, other: Self) -> Option<Self> {
         if self.is_negative() || other.is_negative() {
             return None;

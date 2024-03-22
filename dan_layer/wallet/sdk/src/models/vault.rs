@@ -23,3 +23,10 @@ impl VaultModel {
         self.confidential_balance + self.revealed_balance
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct VaultBalance {
+    pub account: SubstateId,
+    pub confidential: Amount,
+    pub revealed: Amount,
+}

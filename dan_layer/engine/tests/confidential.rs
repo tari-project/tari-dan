@@ -9,7 +9,7 @@ use tari_template_lib::{
     args,
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, ComponentAddress},
-    prelude::ConfidentialOutputProof,
+    prelude::ConfidentialOutputStatement,
 };
 use tari_template_test_tooling::{
     support::{
@@ -31,7 +31,7 @@ use tari_transaction_manifest::ManifestValue;
 use tari_utilities::ByteArray;
 
 fn setup(
-    initial_supply: ConfidentialOutputProof,
+    initial_supply: ConfidentialOutputStatement,
     view_key: Option<&PublicKey>,
 ) -> (TemplateTest, ComponentAddress, SubstateId) {
     let mut template_test = TemplateTest::new(vec![

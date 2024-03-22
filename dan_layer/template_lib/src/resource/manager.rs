@@ -42,7 +42,16 @@ use crate::{
     },
     auth::{OwnerRule, ResourceAccessRules},
     crypto::{PedersonCommitmentBytes, RistrettoPublicKeyBytes},
-    models::{Amount, Bucket, ConfidentialOutputProof, Metadata, NonFungible, NonFungibleId, ResourceAddress, VaultId},
+    models::{
+        Amount,
+        Bucket,
+        ConfidentialOutputStatement,
+        Metadata,
+        NonFungible,
+        NonFungibleId,
+        ResourceAddress,
+        VaultId,
+    },
     prelude::ResourceType,
 };
 
@@ -132,7 +141,7 @@ impl ResourceManager {
     ///
     /// * `proof` - A zero-knowledge proof that specifies the amount of tokens to be minted and returned back to the
     ///   caller
-    pub fn mint_confidential(&self, proof: ConfidentialOutputProof) -> Bucket {
+    pub fn mint_confidential(&self, proof: ConfidentialOutputStatement) -> Bucket {
         self.mint_internal(MintResourceArg {
             mint_arg: MintArg::Confidential { proof: Box::new(proof) },
         })
