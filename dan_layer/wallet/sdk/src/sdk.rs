@@ -12,6 +12,7 @@ use crate::{
         accounts::AccountsApi,
         confidential_crypto::ConfidentialCryptoApi,
         confidential_outputs::ConfidentialOutputsApi,
+        confidential_transfer::ConfidentialTransferApi,
         config::{ConfigApi, ConfigApiError, ConfigKey},
         jwt::JwtApi,
         key_manager::KeyManagerApi,
@@ -109,6 +110,16 @@ where
             &self.store,
             self.key_manager_api(),
             self.accounts_api(),
+            self.confidential_crypto_api(),
+        )
+    }
+
+    pub fn confidential_transfer_api(&self) -> ConfidentialTransferApi<'_, TStore, TNetworkInterface> {
+        ConfidentialTransferApi::new(
+            self.key_manager_api(),
+            self.accounts_api(),
+            self.confidential_outputs_api(),
+            self.substate_api(),
             self.confidential_crypto_api(),
         )
     }

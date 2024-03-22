@@ -30,22 +30,22 @@ CREATE UNIQUE INDEX config_uniq_key on config (key);
 -- Transaction
 CREATE TABLE transactions
 (
-    id                  INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
-    hash                TEXT     NOT NULL,
-    instructions        TEXT     NOT NULL,
-    signature           TEXT     NOT NULL,
-    sender_public_key   TEXT     NOT NULL,
-    fee_instructions    TEXT     NOT NULL,
-    meta                TEXT     NOT NULL,
-    result              TEXT     NULL,
-    qcs                 TEXT     NULL,
-    final_fee           BIGINT   NULL,
-    status              TEXT     NOT NULL,
-    dry_run             BOOLEAN  NOT NULL,
-    min_epoch           BIGINT   NULL,
-    max_epoch           BIGINT   NULL,
-    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id                INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
+    hash              TEXT     NOT NULL,
+    instructions      TEXT     NOT NULL,
+    signature         TEXT     NOT NULL,
+    sender_public_key TEXT     NOT NULL,
+    fee_instructions  TEXT     NOT NULL,
+    meta              TEXT     NOT NULL,
+    result            TEXT     NULL,
+    qcs               TEXT     NULL,
+    final_fee         BIGINT   NULL,
+    status            TEXT     NOT NULL,
+    dry_run           BOOLEAN  NOT NULL,
+    min_epoch         BIGINT   NULL,
+    max_epoch         BIGINT   NULL,
+    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE UNIQUE INDEX transactions_uniq_hash ON transactions (hash);
@@ -84,15 +84,16 @@ CREATE UNIQUE INDEX accounts_uniq_name ON accounts (name) WHERE name IS NOT NULL
 -- Vaults
 CREATE TABLE vaults
 (
-    id               INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
-    account_id       INTEGER  NOT NULL REFERENCES accounts (id),
-    address          TEXT     NOT NULL,
-    resource_address TEXT     NOT NULL,
-    resource_type    TEXT     NOT NULL,
-    balance          BIGINT   NOT NULL DEFAULT 0,
-    token_symbol     TEXT     NULL,
-    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id                   INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
+    account_id           INTEGER  NOT NULL REFERENCES accounts (id),
+    address              TEXT     NOT NULL,
+    resource_address     TEXT     NOT NULL,
+    resource_type        TEXT     NOT NULL,
+    revealed_balance     BIGINT   NOT NULL DEFAULT 0,
+    confidential_balance BIGINT   NOT NULL DEFAULT 0,
+    token_symbol         TEXT     NULL,
+    created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE UNIQUE INDEX vaults_uniq_address ON vaults (address);

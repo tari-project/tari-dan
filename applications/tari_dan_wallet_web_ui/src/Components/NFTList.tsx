@@ -26,17 +26,18 @@ import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from
 import type { ListAccountNftResponse } from "@tariproject/typescript-bindings/wallet-daemon-client";
 import type { apiError } from "../api/helpers/types";
 import { DataTableCell } from "./StyledComponents";
-import { renderJson } from "../utils/helpers";
+import { renderJson, toHexString } from "../utils/helpers";
 import { IoCheckmarkOutline, IoCloseOutline } from "react-icons/io5";
-import type { NonFungibleToken } from "@tariproject/typescript-bindings";
+import type { NonFungibleId, NonFungibleToken } from "@tariproject/typescript-bindings";
+import { convertCborValue } from "../utils/cbor";
 
 function NftsList({ nft }: { nft: NonFungibleToken }) {
   return (
     <TableRow>
-      <DataTableCell>{JSON.stringify(nft.nft_id)}</DataTableCell>
+      <DataTableCell>{displayNftId(nft.nft_id)}</DataTableCell>
       <DataTableCell>{nft.vault_id}</DataTableCell>
-      <DataTableCell>{JSON.stringify(nft.data)}</DataTableCell>
-      <DataTableCell>{JSON.stringify(nft.mutable_data)}</DataTableCell>
+      <DataTableCell>{JSON.stringify(convertCborValue(nft.data))}</DataTableCell>
+      <DataTableCell>{JSON.stringify(convertCborValue(nft.mutable_data))}</DataTableCell>
       <DataTableCell>
         {nft.is_burned ? (
           <IoCheckmarkOutline style={{ height: 22, width: 22 }} color="#DB7E7E" />
@@ -48,17 +49,39 @@ function NftsList({ nft }: { nft: NonFungibleToken }) {
   );
 }
 
-export default function NFTList({
-  nftsListIsError,
-  nftsListIsFetching,
-  nftsListError,
-  nftsListData,
-}: {
+function displayNftId(nftId: NonFungibleId) {
+  if ("U256" in nftId) {
+    return `U256:${toHexString(nftId.U256)}`;
+  }
+  if ("Uint64" in nftId) {
+    return `Uint64:${nftId.Uint64}`;
+  }
+  if ("Uint32" in nftId) {
+    return `Uint32:${nftId.Uint32}`;
+  }
+
+  if ("String" in nftId) {
+    return `String:${nftId.String}`;
+  }
+
+
+  return JSON.stringify(nftId);
+}
+
+export interface NftListProps {
   nftsListIsError: boolean;
   nftsListIsFetching: boolean;
   nftsListError: apiError | null;
   nftsListData?: ListAccountNftResponse;
-}) {
+}
+
+export default function NFTList(props: NftListProps) {
+  const {
+    nftsListIsError,
+    nftsListIsFetching,
+    nftsListError,
+    nftsListData,
+  } = props;
   if (nftsListIsError || nftsListIsFetching) {
     <FetchStatusCheck
       isError={nftsListIsError}
@@ -79,9 +102,7 @@ export default function NFTList({
           </TableRow>
         </TableHead>
         <TableBody>
-          {nftsListData?.nfts.map((nft: NonFungibleToken, index) => (
-            <NftsList key={index} nft={nft} />
-          ))}
+          {nftsListData?.nfts.map((nft: NonFungibleToken, index) => <NftsList key={index} nft={nft} />)}
         </TableBody>
       </Table>
     </TableContainer>

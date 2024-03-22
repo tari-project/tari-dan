@@ -13,6 +13,13 @@ pub struct VaultModel {
     pub address: SubstateId,
     pub resource_address: ResourceAddress,
     pub resource_type: ResourceType,
-    pub balance: Amount,
+    pub confidential_balance: Amount,
+    pub revealed_balance: Amount,
     pub token_symbol: Option<String>,
+}
+
+impl VaultModel {
+    pub fn total_balance(&self) -> Amount {
+        self.confidential_balance + self.revealed_balance
+    }
 }

@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer};
 use serde_json as json;
-use tari_bor::{cbor, to_value};
+use tari_bor::{cbor, encode, to_value};
 use tari_template_lib::{
     arg,
     args::Arg,
@@ -26,7 +26,7 @@ where D: Deserializer<'de> {
                 .collect(),
             // Vec<Arg> should always be a json::Value::Array
             v => Err(serde::de::Error::custom(format!(
-                "Unexpected value: {}. Expeected JSON array.",
+                "Unexpected value: {}. Expected JSON array.",
                 v
             ))),
         }
@@ -108,7 +108,7 @@ fn try_parse_special_string_arg(s: &str) -> Result<ParsedArg<'_>, ArgParseError>
         return Ok(ParsedArg::SubstateId(address));
     }
 
-    if let Some(address) = parse_template_address(s.to_owned()) {
+    if let Some(address) = parse_template_address(s) {
         return Ok(ParsedArg::TemplateAddress(address));
     }
 
@@ -120,6 +120,10 @@ fn try_parse_special_string_arg(s: &str) -> Result<ParsedArg<'_>, ArgParseError>
         "true" => return Ok(ParsedArg::Bool(true)),
         "false" => return Ok(ParsedArg::Bool(false)),
         _ => (),
+    }
+
+    if let Ok(bytes) = hex::decode(s) {
+        return Ok(ParsedArg::Bytes(bytes));
     }
 
     Ok(ParsedArg::String(s))
@@ -137,6 +141,7 @@ pub enum ParsedArg<'a> {
     Amount(Amount),
     String(&'a str),
     Workspace(Vec<u8>),
+    Bytes(Vec<u8>),
     SubstateId(SubstateId),
     TemplateAddress(TemplateAddress),
     UnsignedInteger(u64),
@@ -164,6 +169,8 @@ impl From<ParsedArg<'_>> for Arg {
             ParsedArg::UnsignedInteger(v) => arg!(v),
             ParsedArg::SignedInteger(v) => arg!(v),
             ParsedArg::Bool(v) => arg!(v),
+            // Ensure bytes are encoded as Cbor Bytes, not Array<u8>
+            ParsedArg::Bytes(v) => Arg::Literal(encode(&tari_bor::Value::Bytes(v)).unwrap()),
             ParsedArg::Workspace(s) => arg!(Workspace(s)),
             ParsedArg::Metadata(m) => arg!(m),
         }
@@ -200,6 +207,7 @@ fn convert_to_cbor(value: json::Value) -> tari_bor::Value {
                 ParsedArg::SignedInteger(i) => tari_bor::Value::Integer(i.into()),
                 ParsedArg::Bool(b) => tari_bor::Value::Bool(b),
                 ParsedArg::Metadata(metadata) => to_value(&metadata).unwrap(),
+                ParsedArg::Bytes(bytes) => tari_bor::Value::Bytes(bytes),
             },
             Err(_) => tari_bor::Value::Text(s),
         },
@@ -393,7 +401,7 @@ mod tests {
             )
         );
 
-        // invalid template addreses are ignored
+        // invalid template addresses are ignored
         let invalid_template_address = "template_xxxxxx";
         let a = parse_arg(invalid_template_address).unwrap();
         assert_eq!(a, arg!(invalid_template_address));
@@ -401,7 +409,7 @@ mod tests {
 
     #[test]
     fn it_returns_string_lit_if_string_or_unknown() {
-        let cases = &["this is a string", "123a"];
+        let cases = &["this is a string", "123ab"];
 
         for case in cases {
             let a = parse_arg(case).unwrap();

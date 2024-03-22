@@ -5,12 +5,15 @@ use std::{collections::HashSet, time::Duration};
 use anyhow::anyhow;
 use futures::{future, future::Either};
 use log::*;
+use tari_dan_app_utilities::json_encoding;
 use tari_dan_common_types::{optional::Optional, Epoch};
-use tari_dan_wallet_sdk::{
-    apis::{jwt::JrpcPermission, key_manager},
-    network::{TransactionFinalizedResult, TransactionQueryResult},
+use tari_dan_wallet_sdk::apis::{jwt::JrpcPermission, key_manager};
+use tari_engine_types::{
+    commit_result::ExecuteResult,
+    indexed_value::IndexedValue,
+    instruction::Instruction,
+    substate::SubstateId,
 };
-use tari_engine_types::{indexed_value::IndexedValue, instruction::Instruction, substate::SubstateId};
 use tari_template_lib::{args, args::Arg, models::Amount};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
@@ -31,10 +34,7 @@ use tari_wallet_daemon_client::types::{
 use tokio::time;
 
 use super::{accounts, context::HandlerContext};
-use crate::{
-    handlers::HandlerError,
-    services::{TransactionSubmittedEvent, WalletEvent},
-};
+use crate::{handlers::HandlerError, services::WalletEvent};
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::handlers::transaction";
 
@@ -158,32 +158,24 @@ pub async fn handle_submit(
         transaction.hash()
     );
     if req.is_dry_run {
-        let response: TransactionQueryResult = sdk
-            .transaction_api()
+        let finalize = context
+            .transaction_service()
             .submit_dry_run_transaction(transaction, inputs.clone())
             .await?;
 
-        let json_result = match &response.result {
-            TransactionFinalizedResult::Pending => None,
-            TransactionFinalizedResult::Finalized { json_results, .. } => Some(json_results.clone()),
-        };
+        let json_result = json_encoding::encode_finalize_result_into_json(&finalize)?;
 
         Ok(TransactionSubmitResponse {
-            transaction_id: response.transaction_id,
-            result: response.result.into_execute_result(),
-            json_result,
+            transaction_id: finalize.transaction_hash.into_array().into(),
+            result: Some(ExecuteResult { finalize }),
+            json_result: Some(json_result),
             inputs,
         })
     } else {
-        let transaction_id = sdk
-            .transaction_api()
+        let transaction_id = context
+            .transaction_service()
             .submit_transaction(transaction, inputs.clone())
             .await?;
-
-        context.notifier().notify(TransactionSubmittedEvent {
-            transaction_id,
-            new_account: None,
-        });
 
         Ok(TransactionSubmitResponse {
             transaction_id,
@@ -255,11 +247,17 @@ pub async fn handle_get_result(
         .optional()?
         .ok_or(HandlerError::NotFound)?;
 
+    let json_result = transaction
+        .finalize
+        .as_ref()
+        .map(json_encoding::encode_finalize_result_into_json)
+        .transpose()?;
+
     Ok(TransactionGetResultResponse {
         transaction_id: req.transaction_id,
         result: transaction.finalize,
         status: transaction.status,
-        json_result: transaction.json_result,
+        json_result,
     })
 }
 
@@ -281,13 +279,15 @@ pub async fn handle_wait_result(
         .ok_or(HandlerError::NotFound)?;
 
     if let Some(result) = transaction.finalize {
+        let json_result = json_encoding::encode_finalize_result_into_json(&result)?;
+
         return Ok(TransactionWaitResultResponse {
             transaction_id: req.transaction_id,
             result: Some(result),
             status: transaction.status,
             final_fee: transaction.final_fee.unwrap_or_default(),
             timed_out: false,
-            json_result: transaction.json_result,
+            json_result: Some(json_result),
         });
     }
 
@@ -310,13 +310,14 @@ pub async fn handle_wait_result(
 
         match evt_or_timeout {
             Some(WalletEvent::TransactionFinalized(event)) if event.transaction_id == req.transaction_id => {
+                let json_result = json_encoding::encode_finalize_result_into_json(&event.finalize)?;
                 return Ok(TransactionWaitResultResponse {
                     transaction_id: req.transaction_id,
                     result: Some(event.finalize),
                     status: event.status,
                     final_fee: event.final_fee,
                     timed_out: false,
-                    json_result: event.json_result,
+                    json_result: Some(json_result),
                 });
             },
             Some(WalletEvent::TransactionInvalid(event)) if event.transaction_id == req.transaction_id => {

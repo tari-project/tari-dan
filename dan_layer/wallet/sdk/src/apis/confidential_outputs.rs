@@ -52,6 +52,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         locked_by_proof_id: ConfidentialProofId,
         dry_run: bool,
     ) -> Result<(Vec<ConfidentialOutputModel>, u64), ConfidentialOutputsApiError> {
+        // TODO: DRY up
         if amount.is_negative() {
             return Err(ConfidentialOutputsApiError::InvalidParameter {
                 param: "amount",
@@ -74,6 +75,45 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
                 None => {
                     tx.rollback()?;
                     return Err(ConfidentialOutputsApiError::InsufficientFunds);
+                },
+            }
+        }
+        if dry_run {
+            tx.rollback()?;
+        } else {
+            tx.commit()?;
+        }
+        Ok((outputs, total_output_amount))
+    }
+
+    pub fn lock_outputs_until_partial_amount(
+        &self,
+        vault_address: &SubstateId,
+        amount: Amount,
+        locked_by_proof_id: ConfidentialProofId,
+        dry_run: bool,
+    ) -> Result<(Vec<ConfidentialOutputModel>, u64), ConfidentialOutputsApiError> {
+        if amount.is_negative() {
+            return Err(ConfidentialOutputsApiError::InvalidParameter {
+                param: "amount",
+                reason: "Amount cannot be negative".to_string(),
+            });
+        }
+        let amount = amount.as_u64_checked().unwrap();
+        let mut tx = self.store.create_write_tx()?;
+        let mut total_output_amount = 0;
+        let mut outputs = Vec::new();
+        while total_output_amount < amount {
+            let output = tx
+                .outputs_lock_smallest_amount(vault_address, locked_by_proof_id)
+                .optional()?;
+            match output {
+                Some(output) => {
+                    total_output_amount += output.value;
+                    outputs.push(output);
+                },
+                None => {
+                    break;
                 },
             }
         }

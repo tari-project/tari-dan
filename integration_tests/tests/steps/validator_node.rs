@@ -21,6 +21,7 @@ use tari_dan_common_types::{optional::Optional, Epoch, SubstateAddress};
 use tari_engine_types::substate::SubstateId;
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{AddPeerRequest, GetStateRequest, GetTemplateRequest, ListBlocksRequest};
+use tari_wallet_daemon_client::types::KeyBranch;
 
 #[given(expr = "a seed validator node {word} connected to base node {word} and wallet {word}")]
 async fn start_seed_validator_node(world: &mut TariWorld, seed_vn_name: String, bn_name: String, wallet_name: String) {
@@ -125,7 +126,10 @@ async fn send_vn_registration_with_claim_wallet(
         .get(&key_name)
         .unwrap_or_else(|| panic!("Key {} not found", key_name));
     let mut wallet_client = walletd.get_authed_client().await;
-    let key = wallet_client.create_specific_key(*index).await.unwrap();
+    let key = wallet_client
+        .create_specific_key(KeyBranch::Transaction, *index)
+        .await
+        .unwrap();
     if let Err(e) = client.register_validator_node(key.public_key).await {
         println!("register_validator_node error = {}", e);
         panic!("register_validator_node error = {}", e);

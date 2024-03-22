@@ -91,7 +91,9 @@ import type {
   TransferRequest,
   TransferResponse,
   WebRtcStartRequest,
-  WebRtcStartResponse,
+  WebRtcStartResponse, SubstatesGetRequest, SubstatesGetResponse,
+  ConfidentialViewVaultBalanceRequest,
+  ConfidentialViewVaultBalanceResponse,
 } from "@tariproject/typescript-bindings/wallet-daemon-client";
 import type { NonFungibleToken } from "@tariproject/typescript-bindings";
 
@@ -209,6 +211,8 @@ export const accountsList = (request: AccountsListRequest): Promise<AccountsList
   jsonRpc("accounts.list", request);
 export const accountsGetBalances = (request: AccountsGetBalancesRequest): Promise<AccountsGetBalancesResponse> =>
   jsonRpc("accounts.get_balances", request);
+export const substatesGet = (request: SubstatesGetRequest): Promise<SubstatesGetResponse> =>
+  jsonRpc("substates.get", request);
 export const accountsInvoke = (request: AccountsInvokeRequest): Promise<AccountsInvokeResponse> =>
   jsonRpc("accounts.invoke", request);
 export const accountsGet = (request: AccountGetRequest): Promise<AccountGetResponse> =>
@@ -236,6 +240,10 @@ export const confidentialCancel = (request: ProofsCancelRequest): Promise<Proofs
 export const confidentialCreateOutputProof = (
   request: ConfidentialCreateOutputProofRequest,
 ): Promise<ConfidentialCreateOutputProofResponse> => jsonRpc("confidential.create_output_proof", request);
+
+export const confidentialViewVaultBalance = (
+  request: ConfidentialViewVaultBalanceRequest,
+): Promise<ConfidentialViewVaultBalanceResponse> => jsonRpc("confidential.view_vault_balance", request);
 
 // nfts
 export const nftMintAccountNft = (request: MintAccountNftRequest): Promise<MintAccountNftResponse> =>

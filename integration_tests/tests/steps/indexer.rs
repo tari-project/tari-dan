@@ -163,6 +163,45 @@ async fn indexer_scans_network_events(
     }
 }
 
+#[when(expr = "indexer {word} scans the network for events of resource {word}")]
+async fn indexer_scans_network_events_for_resource(world: &mut TariWorld, indexer_name: String, resource_path: String) {
+    let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
+
+    // extract the resource address from the outputs
+    let (input_group, index) = resource_path.split_once('/').unwrap_or_else(|| {
+        panic!(
+            "Resource name must be in the format '{{group}}/resources/{{index}}', got {}",
+            resource_path
+        )
+    });
+    let resource_address = world
+        .outputs
+        .get(input_group)
+        .unwrap_or_else(|| panic!("No outputs found with name {}", input_group))
+        .iter()
+        .find(|(i, _)| **i == index)
+        .map(|(_, data)| data.clone())
+        .unwrap_or_else(|| panic!("No resource with index {}", index))
+        .substate_id()
+        .as_resource_address()
+        .unwrap_or_else(|| panic!("The output is not a resource {}", index));
+
+    let mut graphql_client = indexer.get_graphql_indexer_client().await;
+    let query = format!(
+        r#"{{ getEventsByPayload(payloadKey: "resource_address", payloadValue: "{}", offset:0, limit:2) {{ substateId, templateAddress, txHash, topic, payload }} }}"#,
+        resource_address
+    );
+    let res = graphql_client
+        .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
+        .await
+        .expect("Failed to obtain getEventsByPayload query result");
+
+    let events = res.get("getEventsByPayload").unwrap();
+
+    // TODO: allow for asserts in the step
+    eprintln!("{:?}", events);
+}
+
 #[when(expr = "the indexer {word} tracks the address {word}")]
 async fn track_addresss_in_indexer(world: &mut TariWorld, indexer_name: String, output_ref: String) {
     let indexer = world.indexers.get(&indexer_name).unwrap();

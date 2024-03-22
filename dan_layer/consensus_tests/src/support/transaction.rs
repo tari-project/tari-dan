@@ -65,11 +65,6 @@ pub fn build_transaction_from(
                     cost_breakdown: vec![],
                 },
             ),
-            fee_receipt: Some(FeeReceipt {
-                total_fee_payment: fee.try_into().unwrap(),
-                total_fees_paid: fee.try_into().unwrap(),
-                cost_breakdown: vec![],
-            }),
         },
         resulting_outputs,
         Duration::from_secs(0),
@@ -95,9 +90,8 @@ pub fn build_transaction(decision: Decision, fee: u64, num_shards: usize, num_co
 pub fn change_decision(tx: ExecutedTransaction, new_decision: Decision) -> ExecutedTransaction {
     let total_fees_paid = tx
         .result()
+        .finalize
         .fee_receipt
-        .as_ref()
-        .unwrap()
         .total_allocated_fee_payments()
         .as_u64_checked()
         .unwrap();

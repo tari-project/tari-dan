@@ -3,8 +3,7 @@
 
 use std::time::SystemTime;
 
-use serde_json::Value;
-use tari_dan_wallet_sdk::models::{Account, TransactionStatus};
+use tari_dan_wallet_sdk::models::{Account, NewAccountInfo, TransactionStatus};
 use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateId};
 use tari_template_lib::models::Amount;
 use tari_transaction::TransactionId;
@@ -63,19 +62,11 @@ pub struct TransactionSubmittedEvent {
 }
 
 #[derive(Debug, Clone)]
-pub struct NewAccountInfo {
-    pub name: Option<String>,
-    pub key_index: u64,
-    pub is_default: bool,
-}
-
-#[derive(Debug, Clone)]
 pub struct TransactionFinalizedEvent {
     pub transaction_id: TransactionId,
     pub finalize: FinalizeResult,
     pub final_fee: Amount,
     pub status: TransactionStatus,
-    pub json_result: Option<Vec<Value>>,
 }
 
 #[derive(Debug, Clone)]

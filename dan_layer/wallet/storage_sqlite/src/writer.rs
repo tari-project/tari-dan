@@ -12,12 +12,15 @@ use chrono::NaiveDateTime;
 use diesel::{OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::*;
 use serde::Serialize;
+use tari_bor::json_encoding::CborValueJsonSerializeWrapper;
 use tari_common_types::types::{Commitment, PublicKey};
 use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_dan_wallet_sdk::{
     models::{
         ConfidentialOutputModel,
         ConfidentialProofId,
+        NewAccountInfo,
+        NonFungibleToken,
         OutputStatus,
         SubstateModel,
         TransactionStatus,
@@ -28,7 +31,7 @@ use tari_dan_wallet_sdk::{
 };
 use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateId, TemplateAddress};
 use tari_template_lib::models::{Amount, EncryptedData};
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use tari_utilities::hex::Hex;
 
 use crate::{
@@ -246,7 +249,13 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Transactions -------------------------------- //
-    fn transactions_insert(&mut self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError> {
+    fn transactions_insert(
+        &mut self,
+        transaction: &Transaction,
+        required_substates: &[SubstateRequirement],
+        new_account_info: Option<&NewAccountInfo>,
+        is_dry_run: bool,
+    ) -> Result<(), WalletStorageError> {
         use crate::schema::transactions;
 
         diesel::insert_into(transactions::table)
@@ -260,7 +269,9 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                     inputs: transaction.inputs().to_vec(),
                     input_refs: transaction.input_refs().to_vec(),
                 })?),
-                transactions::status.eq(TransactionStatus::default().as_key_str()),
+                transactions::status.eq(TransactionStatus::New.as_key_str()),
+                transactions::required_substates.eq(serialize_json(&required_substates)?),
+                transactions::new_account_info.eq(new_account_info.map(serialize_json).transpose()?),
                 transactions::dry_run.eq(is_dry_run),
             ))
             .execute(self.connection())
@@ -478,7 +489,8 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         let values = (
             vaults::account_id.eq(account_id),
             vaults::address.eq(vault.address.to_string()),
-            vaults::balance.eq(vault.balance.value()),
+            vaults::revealed_balance.eq(vault.revealed_balance.value()),
+            vaults::confidential_balance.eq(vault.confidential_balance.value()),
             vaults::resource_address.eq(vault.resource_address.to_string()),
             vaults::resource_type.eq(format!("{:?}", vault.resource_type)),
             vaults::token_symbol.eq(vault.token_symbol),
@@ -491,14 +503,18 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn vaults_update(&mut self, vault_address: &SubstateId, balance: Option<Amount>) -> Result<(), WalletStorageError> {
+    fn vaults_update(
+        &mut self,
+        vault_address: &SubstateId,
+        revealed_balance: Amount,
+        confidential_balance: Amount,
+    ) -> Result<(), WalletStorageError> {
         use crate::schema::vaults;
 
-        let Some(balance) = balance else {
-            return Ok(());
-        };
-
-        let changeset = vaults::balance.eq(balance.value());
+        let changeset = (
+            vaults::revealed_balance.eq(revealed_balance.value()),
+            vaults::confidential_balance.eq(confidential_balance.value()),
+        );
 
         let num_rows = diesel::update(vaults::table)
             .set(changeset)
@@ -735,10 +751,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Non fungible tokens -------------------------------- //
-    fn non_fungible_token_upsert(
-        &mut self,
-        non_fungible_token: &tari_dan_wallet_sdk::models::NonFungibleToken,
-    ) -> Result<(), WalletStorageError> {
+    fn non_fungible_token_upsert(&mut self, non_fungible_token: &NonFungibleToken) -> Result<(), WalletStorageError> {
         use crate::schema::{non_fungible_tokens, vaults};
 
         info!(
@@ -746,14 +759,16 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             "Inserting new non fungible token with id = {}", non_fungible_token.nft_id
         );
 
-        let data = serde_json::to_string(&non_fungible_token.data).map_err(|e| WalletStorageError::DecodingError {
-            operation: "non_fungible_token_upsert",
-            item: "non_fungible_tokens.data",
-            details: e.to_string(),
+        let data = serde_json::to_string(&CborValueJsonSerializeWrapper(&non_fungible_token.data)).map_err(|e| {
+            WalletStorageError::DecodingError {
+                operation: "non_fungible_token_upsert",
+                item: "non_fungible_tokens.data",
+                details: e.to_string(),
+            }
         })?;
 
-        let mutable_data =
-            serde_json::to_string(&non_fungible_token.mutable_data).map_err(|e| WalletStorageError::DecodingError {
+        let mutable_data = serde_json::to_string(&CborValueJsonSerializeWrapper(&non_fungible_token.mutable_data))
+            .map_err(|e| WalletStorageError::DecodingError {
                 operation: "non_fungible_token_upsert",
                 item: "non_fungible_tokens.mutable_data",
                 details: e.to_string(),

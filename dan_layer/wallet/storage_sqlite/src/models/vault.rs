@@ -22,7 +22,8 @@ pub struct Vault {
     pub address: String,
     pub resource_address: String,
     pub resource_type: String,
-    pub balance: i64,
+    pub revealed_balance: i64,
+    pub confidential_balance: i64,
     pub token_symbol: Option<String>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
@@ -49,7 +50,8 @@ impl Vault {
             })?,
             resource_type: db_str_to_resource_type(&self.resource_type)?,
             token_symbol: self.token_symbol,
-            balance: Amount(self.balance),
+            revealed_balance: Amount(self.revealed_balance),
+            confidential_balance: Amount(self.confidential_balance),
         })
     }
 }

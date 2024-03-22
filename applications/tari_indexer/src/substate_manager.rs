@@ -422,6 +422,26 @@ impl SubstateManager {
         Ok(events)
     }
 
+    pub async fn scan_events_by_payload(
+        &self,
+        payload_key: String,
+        payload_value: String,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Event>, anyhow::Error> {
+        let events = {
+            let mut tx = self.substate_store.create_read_tx()?;
+            tx.get_events_by_payload(payload_key, payload_value, offset, limit)?
+        };
+
+        let events = events
+            .iter()
+            .map(|e| Event::try_from(e.clone()))
+            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
+
+        Ok(events)
+    }
+
     pub async fn scan_and_update_substates(&self) -> Result<usize, anyhow::Error> {
         let addresses = self.get_all_addresses_from_db().await?;
 

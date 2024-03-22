@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 mod account;
-pub use account::Account;
+pub use account::*;
 
 mod config;
 pub use config::Config;

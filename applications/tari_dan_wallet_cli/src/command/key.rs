@@ -22,7 +22,7 @@
 
 use clap::Subcommand;
 use tari_common_types::types::PublicKey;
-use tari_wallet_daemon_client::WalletDaemonClient;
+use tari_wallet_daemon_client::{types::KeyBranch, WalletDaemonClient};
 
 use crate::{table::Table, table_row};
 
@@ -42,11 +42,11 @@ impl KeysSubcommand {
         use KeysSubcommand::*;
         match self {
             New => {
-                let key = client.create_key().await?;
+                let key = client.create_key(KeyBranch::Transaction).await?;
                 println!("New key pair {} created", key.public_key);
             },
             List => {
-                let resp = client.list_keys().await?;
+                let resp = client.list_keys(KeyBranch::Transaction).await?;
                 if resp.keys.is_empty() {
                     println!("No keys found. Use 'keys create' to create a new key pair");
                     return Ok(());
@@ -57,7 +57,7 @@ impl KeysSubcommand {
                 let resp = client.set_active_key(index).await?;
                 println!("Key {} ({}) is now active", index, resp.public_key);
 
-                let resp = client.list_keys().await?;
+                let resp = client.list_keys(KeyBranch::Transaction).await?;
                 print_keys(resp.keys);
             },
         }

@@ -32,7 +32,7 @@ use tokio::sync::broadcast;
 use super::{context::HandlerContext, helpers::get_account_or_default};
 use crate::{
     handlers::helpers::get_account,
-    services::{TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
+    services::{TransactionFinalizedEvent, WalletEvent},
     DEFAULT_FEE,
 };
 
@@ -60,9 +60,7 @@ pub async fn handle_list_nfts(
     token: Option<String>,
     req: ListAccountNftRequest,
 ) -> Result<ListAccountNftResponse, anyhow::Error> {
-    let ListAccountNftRequest {
-        account, limit, offset, ..
-    } = req;
+    let ListAccountNftRequest { account, limit, offset } = req;
     let sdk = context.wallet_sdk();
     let account = get_account_or_default(account, &sdk.accounts_api())?;
     let sdk = context.wallet_sdk();
@@ -71,7 +69,7 @@ pub async fn handle_list_nfts(
     let non_fungible_api = sdk.non_fungible_api();
 
     let non_fungibles = non_fungible_api
-        .non_fungible_token_get_all(account, limit, offset)
+        .non_fungible_token_get_all(account.address.as_component_address().unwrap(), limit, offset)
         .map_err(|e| anyhow!("Failed to list all non fungibles, with error: {}", e))?;
     Ok(ListAccountNftResponse { nfts: non_fungibles })
 }
@@ -218,14 +216,13 @@ async fn mint_account_nft(
         .sign(owner_sk)
         .build();
 
-    let tx_hash = sdk.transaction_api().submit_transaction(transaction, inputs).await?;
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent {
-        transaction_id: tx_hash,
-        new_account: None,
-    });
+    let tx_id = context
+        .transaction_service()
+        .submit_transaction(transaction, inputs)
+        .await?;
 
-    let event = wait_for_result(&mut events, tx_hash).await?;
+    let event = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = event.finalize.result.reject() {
         return Err(anyhow!(
             "Mint new NFT using account {} was rejected: {}",
@@ -266,12 +263,12 @@ async fn create_account_nft(
         .sign(owner_sk)
         .build();
 
-    let tx_id = sdk.transaction_api().submit_transaction(transaction, vec![]).await?;
+    let tx_id = sdk
+        .transaction_api()
+        .insert_new_transaction(transaction, vec![], None, false)
+        .await?;
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent {
-        transaction_id: tx_id,
-        new_account: None,
-    });
+    sdk.transaction_api().submit_transaction(tx_id).await?;
 
     let event = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = event.finalize.result.reject() {

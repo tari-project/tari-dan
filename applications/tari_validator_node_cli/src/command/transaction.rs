@@ -281,8 +281,8 @@ pub async fn submit_transaction(
             } else {
                 QuorumDecision::Reject
             },
+            fee_breakdown: Some(result.finalize.fee_receipt.to_cost_breakdown()),
             finalize: result.finalize,
-            fee_breakdown: result.fee_receipt.map(|f| f.to_cost_breakdown()),
         });
     }
 
@@ -657,7 +657,7 @@ impl FromStr for CliArg {
             return Ok(CliArg::SubstateId(v));
         }
 
-        if let Some(v) = parse_template_address(s.to_owned()) {
+        if let Some(v) = parse_template_address(s) {
             return Ok(CliArg::TemplateAddress(v));
         }
 

@@ -13,7 +13,7 @@ use tari_dan_wallet_sdk::{
         substate::{SubstateApiError, ValidatorScanResult},
         transaction::TransactionApiError,
     },
-    models::NonFungibleToken,
+    models::{NewAccountInfo, NonFungibleToken},
     network::WalletNetworkInterface,
     storage::WalletStore,
     DanWalletSdk,
@@ -41,7 +41,7 @@ use tokio::{
 
 use crate::{
     notify::Notify,
-    services::{AccountChangedEvent, AccountCreatedEvent, NewAccountInfo, Reply, WalletEvent},
+    services::{AccountChangedEvent, AccountCreatedEvent, Reply, WalletEvent},
 };
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::account_monitor";
@@ -235,13 +235,14 @@ where
 
             self.add_vault_to_account_if_not_exist(&versioned_account_address.substate_id, *vault_id, &vault)
                 .await?;
-            self.refresh_vault(&versioned_account_address.substate_id, *vault_id, &vault, &nfts)?;
+            self.refresh_vault(&versioned_account_address.substate_id, *vault_id, &vault, &nfts)
+                .await?;
         }
 
         Ok(is_updated)
     }
 
-    fn refresh_vault(
+    async fn refresh_vault(
         &self,
         account_address: &SubstateId,
         vault_id: VaultId,
@@ -267,18 +268,29 @@ where
                 vault_id,
                 account_address
             );
+
+            let resource = self.fetch_resource(*vault.resource_address()).await?;
+            let token_symbol = resource.metadata().get(TOKEN_SYMBOL).cloned();
+
             accounts_api.add_vault(
                 account_address.clone(),
                 vault_addr.clone(),
                 *vault.resource_address(),
                 vault.resource_type(),
-                // TODO: fetch the token symbol from the resource
-                None,
+                token_symbol,
             )?;
             has_changed = true;
         }
 
-        accounts_api.update_vault_balance(&vault_addr, balance)?;
+        let outputs_api = self.wallet_sdk.confidential_outputs_api();
+        let confidential_balance = outputs_api.get_unspent_balance(&vault_addr)?;
+        let confidential_balance = confidential_balance
+            .try_into()
+            .map_err(|_| AccountMonitorError::Overflow {
+                details: "confidential balance overflowed Amount".to_string(),
+            })?;
+
+        accounts_api.update_vault_balance(&vault_addr, balance, confidential_balance)?;
         info!(
             target: LOG_TARGET,
             "🔒️ vault {} in account {} has new balance {}",
@@ -398,7 +410,7 @@ where
                 if let Some(vault) = vaults.remove(vault_id).and_then(|s| s.substate_value().vault()) {
                     self.add_vault_to_account_if_not_exist(account_addr, *vault_id, vault)
                         .await?;
-                    self.refresh_vault(account_addr, *vault_id, vault, &nfts)?;
+                    self.refresh_vault(account_addr, *vault_id, vault, &nfts).await?;
                 }
             }
         }
@@ -439,7 +451,7 @@ where
                 .await?;
 
             // Update the vault balance / confidential outputs
-            self.refresh_vault(&account_addr, vault_id, vault, &nfts)?;
+            self.refresh_vault(&account_addr, vault_id, vault, &nfts).await?;
             updated_accounts.push(account_addr);
         }
 
@@ -588,6 +600,8 @@ pub enum AccountMonitorError {
 
     #[error("Expected new account '{account_name}'to be created in transaction {tx_id}")]
     ExpectedNewAccount { tx_id: TransactionId, account_name: String },
+    #[error("Overflow error: {details}")]
+    Overflow { details: String },
 }
 
 fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateId> {
