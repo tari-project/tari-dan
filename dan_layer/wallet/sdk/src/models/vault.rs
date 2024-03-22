@@ -15,12 +15,13 @@ pub struct VaultModel {
     pub resource_type: ResourceType,
     pub confidential_balance: Amount,
     pub revealed_balance: Amount,
+    pub locked_revealed_balance: Amount,
     pub token_symbol: Option<String>,
 }
 
 impl VaultModel {
-    pub fn total_balance(&self) -> Amount {
-        self.confidential_balance + self.revealed_balance
+    pub fn available_revealed_balance(&self) -> Amount {
+        self.revealed_balance - self.locked_revealed_balance
     }
 }
 

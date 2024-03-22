@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    ops::{Deref, DerefMut},
+    ops::{Add, Deref, DerefMut, Sub},
     str::FromStr,
     sync::MutexGuard,
     time::Duration,
@@ -38,7 +38,6 @@ use crate::{
     diesel::ExpressionMethods,
     models::{self, TransactionInputs},
     reader::ReadTransaction,
-    schema::auth_status,
     serialization::serialize_json,
 };
 
@@ -56,6 +55,15 @@ impl<'a> WriteTransaction<'a> {
             transaction: ReadTransaction::new(connection),
         }
     }
+
+    fn get_proof(&mut self, proof_id: ConfidentialProofId) -> Result<models::Proof, WalletStorageError> {
+        use crate::schema::proofs;
+
+        proofs::table
+            .filter(proofs::id.eq(proof_id as i32))
+            .first(self.connection())
+            .map_err(|e| WalletStorageError::general("get_proof", e))
+    }
 }
 
 impl WalletStoreWriter for WriteTransaction<'_> {
@@ -70,6 +78,8 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     fn jwt_add_empty_token(&mut self) -> Result<u64, WalletStorageError> {
+        use crate::schema::auth_status;
+
         diesel::insert_into(auth_status::table)
             .values((auth_status::user_decided.eq(false), auth_status::granted.eq(false)))
             .execute(self.connection())
@@ -82,6 +92,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     fn jwt_store_decision(&mut self, id: u64, permissions_token: Option<String>) -> Result<(), WalletStorageError> {
+        use crate::schema::auth_status;
         // let values = match token {
         //     Some(token) => (auth_status::user_decided.eq(true),auth_status::granted.eq(true),auth_status::token)
         // }
@@ -98,6 +109,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     fn jwt_is_revoked(&mut self, token: &str) -> Result<bool, WalletStorageError> {
+        use crate::schema::auth_status;
         let revoked = auth_status::table
             .select(auth_status::revoked)
             .filter(auth_status::token.eq(token))
@@ -124,6 +136,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     fn jwt_revoke(&mut self, token_id: i32) -> Result<(), WalletStorageError> {
+        use crate::schema::auth_status;
         if diesel::update(auth_status::table)
             .set(auth_status::revoked.eq(true))
             .filter(auth_status::id.eq(token_id))
@@ -527,6 +540,105 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 operation: "vaults_update",
                 entity: "vault".to_string(),
                 key: vault_address.to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
+    fn vaults_lock_revealed_funds(
+        &mut self,
+        proof_id: ConfidentialProofId,
+        amount_to_lock: Amount,
+    ) -> Result<(), WalletStorageError> {
+        use crate::schema::{proofs, vaults};
+
+        let changeset = proofs::locked_revealed_amount.eq(proofs::locked_revealed_amount.add(amount_to_lock.value()));
+
+        let num_rows = diesel::update(proofs::table)
+            .set(changeset)
+            .filter(proofs::id.eq(proof_id as i32))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("vaults_lock_revealed_funds", e))?;
+
+        if num_rows == 0 {
+            return Err(WalletStorageError::NotFound {
+                operation: "vaults_lock_revealed_funds",
+                entity: "proof".to_string(),
+                key: proof_id.to_string(),
+            });
+        }
+
+        let proof = self.get_proof(proof_id)?;
+
+        let changeset = vaults::locked_revealed_balance.eq(vaults::locked_revealed_balance.add(amount_to_lock.value()));
+
+        let num_rows = diesel::update(vaults::table)
+            .set(changeset)
+            .filter(vaults::id.eq(proof.vault_id))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("vaults_lock_revealed_funds", e))?;
+
+        if num_rows == 0 {
+            return Err(WalletStorageError::NotFound {
+                operation: "vaults_lock_revealed_funds",
+                entity: "vault".to_string(),
+                key: proof.vault_id.to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
+    fn vaults_finalized_locked_revealed_funds(
+        &mut self,
+        proof_id: ConfidentialProofId,
+    ) -> Result<(), WalletStorageError> {
+        use crate::schema::vaults;
+
+        let proof = self.get_proof(proof_id)?;
+
+        let changeset = (
+            vaults::revealed_balance.eq(vaults::revealed_balance.sub(proof.locked_revealed_amount)),
+            vaults::locked_revealed_balance.eq(vaults::locked_revealed_balance.sub(proof.locked_revealed_amount)),
+        );
+
+        let num_rows = diesel::update(vaults::table)
+            .set(changeset)
+            .filter(vaults::id.eq(proof.vault_id))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("vaults_finalized_locked_funds", e))?;
+
+        if num_rows == 0 {
+            return Err(WalletStorageError::NotFound {
+                operation: "vaults_finalized_locked_funds",
+                entity: "vault".to_string(),
+                key: proof.vault_id.to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
+    fn vaults_unlock_revealed_funds(&mut self, proof_id: ConfidentialProofId) -> Result<(), WalletStorageError> {
+        use crate::schema::vaults;
+
+        let proof = self.get_proof(proof_id)?;
+
+        let changeset =
+            vaults::locked_revealed_balance.eq(vaults::locked_revealed_balance.sub(proof.locked_revealed_amount));
+
+        let num_rows = diesel::update(vaults::table)
+            .set(changeset)
+            .filter(vaults::id.eq(proof.vault_id))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("vaults_unlock_revealed_funds", e))?;
+
+        if num_rows == 0 {
+            return Err(WalletStorageError::NotFound {
+                operation: "vaults_unlock_revealed_funds",
+                entity: "vault".to_string(),
+                key: proof.vault_id.to_string(),
             });
         }
 

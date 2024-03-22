@@ -120,12 +120,16 @@ where
                 required_substates,
                 reply,
             } => {
+                let transaction_id = *transaction.id();
                 let transaction_api = self.wallet_sdk.transaction_api();
                 match transaction_api
                     .submit_dry_run_transaction(transaction, required_substates)
                     .await
                 {
                     Ok(finalized_transaction) => {
+                        // Unlock all proofs related to the transaction
+                        transaction_api.release_all_outputs_for_transaction(transaction_id)?;
+
                         reply
                             .send(finalized_transaction.finalize.ok_or_else(|| {
                                 TransactionServiceError::DryRunTransactionFailed {
@@ -135,6 +139,10 @@ where
                             .map_err(|_| TransactionServiceError::ServiceShutdown)?;
                     },
                     Err(e) => {
+                        if let Err(err) = transaction_api.release_all_outputs_for_transaction(transaction_id) {
+                            error!(target: LOG_TARGET, "Error releasing outputs for transaction {}: {}", transaction_id, err);
+                        }
+
                         reply
                             .send(Err(e.into()))
                             .map_err(|_| TransactionServiceError::ServiceShutdown)?;

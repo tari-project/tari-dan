@@ -50,43 +50,18 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         vault_address: &SubstateId,
         amount: Amount,
         locked_by_proof_id: ConfidentialProofId,
-        dry_run: bool,
     ) -> Result<(Vec<ConfidentialOutputModel>, u64), ConfidentialOutputsApiError> {
-        // TODO: DRY up, similar to lock_outputs_until_partial_amount
-        if amount.is_negative() {
-            return Err(ConfidentialOutputsApiError::InvalidParameter {
-                param: "amount",
-                reason: "Amount cannot be negative".to_string(),
-            });
-        }
-        let amount = amount.as_u64_checked().unwrap();
         let mut tx = self.store.create_write_tx()?;
-        let mut total_output_amount = 0;
-        let mut outputs = Vec::new();
-        while total_output_amount < amount {
-            let output = tx
-                .outputs_lock_smallest_amount(vault_address, locked_by_proof_id)
-                .optional()?;
-            match output {
-                Some(output) => {
-                    total_output_amount += output.value;
-                    outputs.push(output);
-                },
-                None => {
-                    tx.rollback()?;
-                    return Err(ConfidentialOutputsApiError::InsufficientFunds);
-                },
-            }
-        }
-        if dry_run {
-            // TODO: This is problematic if we lock additional utxos in the same transaction e.g. one for the fee
-            //       instructions, one for the main instructions. As the same inputs will be locked again
-            //       and the dry-run transaction will fail when it shouldn't. We need to have matching logic for dry
-            //       runs and real runs.
+        let (outputs, total_output_amount) =
+            self.lock_outputs_internal(&mut tx, vault_address, amount, locked_by_proof_id)?;
+
+        if total_output_amount < amount {
             tx.rollback()?;
-        } else {
-            tx.commit()?;
+            return Err(ConfidentialOutputsApiError::InsufficientFunds);
         }
+
+        tx.commit()?;
+
         Ok((outputs, total_output_amount))
     }
 
@@ -95,7 +70,20 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         vault_address: &SubstateId,
         amount: Amount,
         locked_by_proof_id: ConfidentialProofId,
-        dry_run: bool,
+    ) -> Result<(Vec<ConfidentialOutputModel>, u64), ConfidentialOutputsApiError> {
+        let mut tx = self.store.create_write_tx()?;
+        let (outputs, total_output_amount) =
+            self.lock_outputs_internal(&mut tx, vault_address, amount, locked_by_proof_id)?;
+        tx.commit()?;
+        Ok((outputs, total_output_amount))
+    }
+
+    fn lock_outputs_internal<TTx: WalletStoreWriter>(
+        &self,
+        tx: &mut TTx,
+        vault_address: &SubstateId,
+        amount: Amount,
+        locked_by_proof_id: ConfidentialProofId,
     ) -> Result<(Vec<ConfidentialOutputModel>, u64), ConfidentialOutputsApiError> {
         if amount.is_negative() {
             return Err(ConfidentialOutputsApiError::InvalidParameter {
@@ -104,7 +92,6 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
             });
         }
         let amount = amount.as_u64_checked().unwrap();
-        let mut tx = self.store.create_write_tx()?;
         let mut total_output_amount = 0;
         let mut outputs = Vec::new();
         while total_output_amount < amount {
@@ -121,11 +108,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
                 },
             }
         }
-        if dry_run {
-            tx.rollback()?;
-        } else {
-            tx.commit()?;
-        }
+
         Ok((outputs, total_output_amount))
     }
 
@@ -196,6 +179,37 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
             });
         }
         Ok(outputs_with_masks)
+    }
+
+    pub fn lock_revealed_funds(
+        &self,
+        proof_id: ConfidentialProofId,
+        amount_to_lock: Amount,
+    ) -> Result<(), ConfidentialOutputsApiError> {
+        let mut tx = self.store.create_write_tx()?;
+        tx.vaults_lock_revealed_funds(proof_id, amount_to_lock)?;
+        tx.commit()?;
+
+        Ok(())
+    }
+
+    pub fn finalize_locked_revealed_funds(
+        &self,
+        proof_id: ConfidentialProofId,
+    ) -> Result<(), ConfidentialOutputsApiError> {
+        let mut tx = self.store.create_write_tx()?;
+        tx.vaults_finalized_locked_revealed_funds(proof_id)?;
+        tx.commit()?;
+
+        Ok(())
+    }
+
+    pub fn release_revealed_funds(&self, proof_id: ConfidentialProofId) -> Result<(), ConfidentialOutputsApiError> {
+        let mut tx = self.store.create_write_tx()?;
+        tx.vaults_unlock_revealed_funds(proof_id)?;
+        tx.commit()?;
+
+        Ok(())
     }
 
     pub fn get_unspent_balance(&self, vault_addr: &SubstateId) -> Result<u64, ConfidentialOutputsApiError> {
