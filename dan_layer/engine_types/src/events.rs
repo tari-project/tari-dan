@@ -35,7 +35,7 @@ use crate::{serde_with, substate::SubstateId};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Event {
-    #[cfg_attr(feature = "ts", ts(type = "string | null"))] 
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     substate_id: Option<SubstateId>,
     #[serde(with = "serde_with::hex")]
     #[cfg_attr(feature = "ts", ts(type = "string"))]
