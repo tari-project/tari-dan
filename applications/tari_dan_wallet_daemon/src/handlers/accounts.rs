@@ -1,6 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 
 use anyhow::anyhow;
 use base64;
@@ -8,7 +8,7 @@ use log::*;
 use rand::rngs::OsRng;
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{
-    commitment::{HomomorphicCommitment as Commitment, HomomorphicCommitmentFactory},
+    commitment::HomomorphicCommitment as Commitment,
     keys::PublicKey as _,
     ristretto::{RistrettoComSig, RistrettoPublicKey},
     tari_utilities::ByteArray,
@@ -16,15 +16,15 @@ use tari_crypto::{
 use tari_dan_common_types::optional::Optional;
 use tari_dan_wallet_crypto::ConfidentialProofStatement;
 use tari_dan_wallet_sdk::{
-    apis::{jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
-    models::{ConfidentialOutputModel, NewAccountInfo, OutputStatus, VersionedSubstateId},
+    apis::{confidential_transfer::TransferParams, jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
+    models::{NewAccountInfo, VersionedSubstateId},
     storage::WalletStore,
     DanWalletSdk,
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::{
     component::new_account_address_from_parts,
-    confidential::{get_commitment_factory, ConfidentialClaim},
+    confidential::ConfidentialClaim,
     instruction::Instruction,
     substate::{Substate, SubstateId},
 };
@@ -33,7 +33,7 @@ use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
     models::{Amount, UnclaimedConfidentialOutputAddress},
-    prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
+    prelude::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
 };
 use tari_transaction::{SubstateRequirement, Transaction};
 use tari_wallet_daemon_client::{
@@ -278,22 +278,15 @@ pub async fn handle_get_balances(
             .await?;
     }
     let vaults = sdk.accounts_api().get_vaults_by_account(&account.address)?;
-    let outputs_api = sdk.confidential_outputs_api();
 
     let mut balances = Vec::with_capacity(vaults.len());
     for vault in vaults {
-        let confidential_balance = if matches!(vault.resource_type, ResourceType::Confidential) {
-            Amount::try_from(outputs_api.get_unspent_balance(&vault.address)?)?
-        } else {
-            Amount::zero()
-        };
-
         balances.push(BalanceEntry {
             vault_address: vault.address,
             resource_address: vault.resource_address,
-            balance: vault.balance,
+            balance: vault.revealed_balance,
             resource_type: vault.resource_type,
-            confidential_balance,
+            confidential_balance: vault.confidential_balance,
             token_symbol: vault.token_symbol,
         })
     }
@@ -899,9 +892,22 @@ pub async fn handle_transfer(
     let mut instructions = vec![];
     let mut fee_instructions = vec![];
 
-    // get destination account information
     let destination_account_address =
-        get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
+        new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &req.destination_public_key);
+    let existing_account = sdk
+        .substate_api()
+        .scan_for_substate(&SubstateId::Component(destination_account_address), None)
+        .await
+        .optional()?;
+
+    if let Some(ValidatorScanResult { address, .. }) = existing_account {
+        inputs.push(address);
+    } else {
+        instructions.push(Instruction::CreateAccount {
+            owner_public_key: req.destination_public_key,
+            workspace_bucket: None,
+        });
+    }
 
     if let Some(ref badge) = req.proof_from_badge_resource {
         instructions.extend([
@@ -1002,41 +1008,6 @@ pub async fn handle_transfer(
     })
 }
 
-async fn get_or_create_account_address(
-    sdk: &DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>,
-    public_key: &PublicKey,
-    inputs: &mut Vec<VersionedSubstateId>,
-    instructions: &mut Vec<Instruction>,
-) -> Result<ComponentAddress, anyhow::Error> {
-    // calculate the account component address from the public key
-    let account_address = new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, public_key);
-
-    let account_scan = sdk
-        .substate_api()
-        .scan_for_substate(&SubstateId::Component(account_address), None)
-        .await
-        .optional()?;
-
-    match account_scan {
-        Some(res) => {
-            // the account already exists in the network, so we must add the substate id to the inputs
-            debug!(target: LOG_TARGET, "Account {} exists. Adding input.", res.address);
-            inputs.push(res.address);
-        },
-        None => {
-            // the account does not exists, so we must add a instruction to create it, matching the public key
-            debug!(target: LOG_TARGET, "Account does not exist. Adding create instruction");
-            instructions.insert(0, Instruction::CreateAccount {
-                owner_public_key: public_key.clone(),
-                workspace_bucket: None,
-            });
-        },
-    };
-
-    Ok(account_address)
-}
-
-#[allow(clippy::too_many_lines)]
 pub async fn handle_confidential_transfer(
     context: &HandlerContext,
     token: Option<String>,
@@ -1052,154 +1023,30 @@ pub async fn handle_confidential_transfer(
     let transaction_service = context.transaction_service().clone();
 
     task::spawn(async move {
-        let outputs_api = sdk.confidential_outputs_api();
-        let crypto_api = sdk.confidential_crypto_api();
-        let accounts_api = sdk.accounts_api();
-        let substate_api = sdk.substate_api();
-        let key_manager_api = sdk.key_manager_api();
-        let mut inputs = vec![];
+        let account = get_account_or_default(req.account, &sdk.accounts_api())?;
 
-        let mut instructions = vec![];
-
-        // -------------------------------- Load up known substates -------------------------------- //
-        let account = get_account_or_default(req.account, &accounts_api)?;
-        let account_secret = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-        let source_component_address = account
-            .address
-            .as_component_address()
-            .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
-
-        let account_substate = substate_api.get_substate(&account.address)?;
-        inputs.push(account_substate.address);
-
-        // Add all versioned account child addresses as inputs
-        let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
-        inputs.extend(child_addresses);
-
-        let src_vault = accounts_api.get_vault_by_resource(&account.address, &CONFIDENTIAL_TARI_RESOURCE_ADDRESS)?;
-        let src_vault_substate = substate_api.get_substate(&src_vault.address)?;
-        inputs.push(src_vault_substate.address);
-
-        // add the input for the resource address to be transfered
-        let resource_substate = sdk
-            .substate_api()
-            .scan_for_substate(&SubstateId::Resource(req.resource_address), None)
-            .await?;
-        inputs.push(resource_substate.address);
-        let resource_view_key = resource_substate
-            .substate
-            .as_resource()
-            .ok_or_else(|| anyhow!("Indexer returned a non-resource substate when requesting a resource address"))?
-            .view_key()
-            .cloned();
-
-        // get destination account information
-        let destination_account_address =
-            get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
-
-        // -------------------------------- Lock outputs for spending -------------------------------- //
-        let total_amount = req.max_fee.unwrap_or(DEFAULT_FEE) + req.amount;
-        let proof_id = outputs_api.add_proof(&src_vault.address)?;
-        let (confidential_inputs, total_input_value) =
-            outputs_api.lock_outputs_by_amount(&src_vault.address, total_amount, proof_id, req.dry_run)?;
-
-        let output_mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
-        let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
-
-        let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
-            req.amount.as_u64_checked().unwrap(),
-            &output_mask.key,
-            &req.destination_public_key,
-            &nonce,
-        )?;
-
-        let output_statement = ConfidentialProofStatement {
-            amount: req.amount,
-            mask: output_mask.key,
-            sender_public_nonce: public_nonce,
-            encrypted_data,
-            minimum_value_promise: 0,
-            reveal_amount: Amount::zero(),
-            resource_view_key: resource_view_key.clone(),
-        };
-
-        let change_amount = total_input_value - req.amount.as_u64_checked().unwrap();
-        let maybe_change_statement = if change_amount > 0 {
-            let change_mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
-            let (_, public_nonce) = PublicKey::random_keypair(&mut OsRng);
-
-            let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
-                change_amount,
-                &change_mask.key,
-                &public_nonce,
-                &account_secret.key,
-            )?;
-
-            if !req.dry_run {
-                outputs_api.add_output(ConfidentialOutputModel {
-                    account_address: account.address,
-                    vault_address: src_vault.address,
-                    commitment: get_commitment_factory().commit_value(&change_mask.key, change_amount),
-                    value: change_amount,
-                    sender_public_nonce: Some(public_nonce.clone()),
-                    encryption_secret_key_index: account_secret.key_index,
-                    encrypted_data: encrypted_data.clone(),
-                    public_asset_tag: None,
-                    status: OutputStatus::LockedUnconfirmed,
-                    locked_by_proof: Some(proof_id),
-                })?;
-            }
-
-            Some(ConfidentialProofStatement {
-                amount: change_amount.try_into()?,
-                mask: change_mask.key,
-                sender_public_nonce: public_nonce,
-                minimum_value_promise: 0,
-                encrypted_data,
-                reveal_amount: Amount::zero(),
-                resource_view_key,
+        let transfer = sdk
+            .confidential_transfer_api()
+            .transfer(TransferParams {
+                from_account: account.address.as_component_address().unwrap(),
+                input_selection: req.input_selection,
+                amount: req.amount,
+                destination_public_key: req.destination_public_key,
+                resource_address: req.resource_address,
+                max_fee: req.max_fee.unwrap_or(DEFAULT_FEE),
+                output_to_revealed: req.output_to_revealed,
+                proof_from_resource: req.proof_from_badge_resource,
+                is_dry_run: req.dry_run,
             })
-        } else {
-            None
-        };
-
-        let confidential_inputs =
-            outputs_api.resolve_output_masks(confidential_inputs, key_manager::TRANSACTION_BRANCH)?;
-
-        let proof = crypto_api.generate_withdraw_proof(
-            &confidential_inputs,
-            // TODO: Support withdraw from revealed funds
-            Amount::zero(),
-            &output_statement,
-            maybe_change_statement.as_ref(),
-        )?;
-
-        instructions.append(&mut vec![
-            Instruction::CallMethod {
-                component_address: source_component_address,
-                method: "withdraw_confidential".to_string(),
-                args: args![req.resource_address, proof],
-            },
-            Instruction::PutLastInstructionOutputOnWorkspace {
-                key: b"bucket".to_vec(),
-            },
-            Instruction::CallMethod {
-                component_address: destination_account_address,
-                method: "deposit".to_string(),
-                args: args![Workspace("bucket")],
-            },
-        ]);
-
-        let transaction = Transaction::builder()
-            .fee_transaction_pay_from_component(source_component_address, req.max_fee.unwrap_or(DEFAULT_FEE))
-            .with_instructions(instructions)
-            .sign(&account_secret.key)
-            .build();
+            .await?;
 
         if req.dry_run {
             let transaction = sdk
                 .transaction_api()
-                .submit_dry_run_transaction(transaction, inputs.into_iter().map(Into::into).collect())
+                .submit_dry_run_transaction(
+                    transfer.transaction,
+                    transfer.inputs.into_iter().map(Into::into).collect(),
+                )
                 .await?;
             let finalize = transaction
                 .finalize
@@ -1211,11 +1058,12 @@ pub async fn handle_confidential_transfer(
             });
         }
 
-        outputs_api.proofs_set_transaction_hash(proof_id, *transaction.id())?;
-
         let mut events = notifier.subscribe();
         let tx_id = transaction_service
-            .submit_transaction(transaction, inputs.into_iter().map(Into::into).collect())
+            .submit_transaction(
+                transfer.transaction,
+                transfer.inputs.into_iter().map(Into::into).collect(),
+            )
             .await?;
 
         notifier.notify(TransactionSubmittedEvent {

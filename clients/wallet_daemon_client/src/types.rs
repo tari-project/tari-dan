@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_wallet_sdk::{
-    apis::{jwt::Claims, key_manager},
+    apis::{confidential_transfer::ConfidentialTransferInputSelection, jwt::Claims, key_manager},
     models::{Account, ConfidentialProofId, NonFungibleToken, SubstateType, TransactionStatus},
 };
 use tari_engine_types::{
@@ -660,10 +660,14 @@ pub struct ConfidentialTransferRequest {
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
     pub amount: Amount,
+    pub input_selection: ConfidentialTransferInputSelection,
     pub resource_address: ResourceAddress,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub destination_public_key: PublicKey,
     pub max_fee: Option<Amount>,
+    pub output_to_revealed: bool,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub proof_from_badge_resource: Option<ResourceAddress>,
     pub dry_run: bool,
 }
 

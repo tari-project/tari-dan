@@ -41,7 +41,7 @@ import type { BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemo
 import NFTList from "../../../Components/NFTList";
 import { Button } from "@mui/material";
 import { SendMoneyDialog } from "./SendMoney";
-import { ResourceAddress, ResourceType } from "@tariproject/typescript-bindings";
+import { ResourceAddress, ResourceType, VaultId } from "@tariproject/typescript-bindings";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -53,6 +53,7 @@ interface BalanceRowProps {
   token_symbol: string;
   resource_address: ResourceAddress;
   resource_type: ResourceType;
+  vault_address: VaultId;
   balance: number;
   confidential_balance: number;
   onSendClicked?: (resource_address: ResourceAddress, resource_type: ResourceType) => void;
@@ -65,13 +66,14 @@ function BalanceRow(props: BalanceRowProps) {
     resource_type,
     balance,
     confidential_balance,
+    vault_address,
     onSendClicked,
   } = props;
   const { showBalance } = useAccountStore();
   return (
     <TableRow key={token_symbol || resource_address}>
       <DataTableCell>
-        {shortenString(token_symbol || resource_address)}
+        <span title={vault_address}>{token_symbol || shortenString(resource_address)}</span>
         <CopyToClipboard copy={token_symbol || resource_address} />
       </DataTableCell>
       <DataTableCell>{resource_type}</DataTableCell>
@@ -194,7 +196,14 @@ function Assets({ accountName }: { accountName: string }) {
               <TableBody>
                 {balancesData?.balances.map(
                   (
-                    { resource_address, balance, resource_type, confidential_balance, token_symbol }: BalanceEntry,
+                    {
+                      resource_address,
+                      balance,
+                      resource_type,
+                      confidential_balance,
+                      token_symbol,
+                      vault_address,
+                    }: BalanceEntry,
                     i,
                   ) => (
                     <BalanceRow
@@ -204,6 +213,7 @@ function Assets({ accountName }: { accountName: string }) {
                       resource_type={resource_type}
                       balance={balance}
                       confidential_balance={confidential_balance}
+                      vault_address={"Vault" in vault_address ? vault_address.Vault : ""}
                       onSendClicked={handleSendResourceClicked}
                     />
                   ),

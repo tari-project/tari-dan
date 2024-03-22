@@ -282,7 +282,15 @@ where
             has_changed = true;
         }
 
-        accounts_api.update_vault_balance(&vault_addr, balance)?;
+        let outputs_api = self.wallet_sdk.confidential_outputs_api();
+        let confidential_balance = outputs_api.get_unspent_balance(&vault_addr)?;
+        let confidential_balance = confidential_balance
+            .try_into()
+            .map_err(|_| AccountMonitorError::Overflow {
+                details: "confidential balance overflowed Amount".to_string(),
+            })?;
+
+        accounts_api.update_vault_balance(&vault_addr, balance, confidential_balance)?;
         info!(
             target: LOG_TARGET,
             "🔒️ vault {} in account {} has new balance {}",
@@ -592,6 +600,8 @@ pub enum AccountMonitorError {
 
     #[error("Expected new account '{account_name}'to be created in transaction {tx_id}")]
     ExpectedNewAccount { tx_id: TransactionId, account_name: String },
+    #[error("Overflow error: {details}")]
+    Overflow { details: String },
 }
 
 fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateId> {

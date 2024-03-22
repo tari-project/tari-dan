@@ -270,7 +270,12 @@ pub trait WalletStoreWriter {
 
     // Vaults
     fn vaults_insert(&mut self, vault: VaultModel) -> Result<(), WalletStorageError>;
-    fn vaults_update(&mut self, vault_address: &SubstateId, balance: Option<Amount>) -> Result<(), WalletStorageError>;
+    fn vaults_update(
+        &mut self,
+        vault_address: &SubstateId,
+        revealed_balance: Amount,
+        confidential_balance: Amount,
+    ) -> Result<(), WalletStorageError>;
 
     // Confidential Outputs
     fn outputs_lock_smallest_amount(

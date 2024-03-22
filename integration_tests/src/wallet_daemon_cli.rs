@@ -30,6 +30,7 @@ use tari_crypto::{
     tari_utilities::ByteArray,
 };
 use tari_dan_common_types::Epoch;
+use tari_dan_wallet_sdk::apis::confidential_transfer::ConfidentialTransferInputSelection;
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
@@ -696,7 +697,10 @@ pub async fn confidential_transfer(
         destination_public_key,
         max_fee,
         resource_address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+        proof_from_badge_resource: None,
         dry_run: false,
+        input_selection: ConfidentialTransferInputSelection::ConfidentialOnly,
+        output_to_revealed: false,
     };
 
     let resp = client.accounts_confidential_transfer(request).await.unwrap();

@@ -36,6 +36,7 @@ use tari_bor::decode_exact;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_engine::abi::Type;
+use tari_dan_wallet_sdk::apis::confidential_transfer::ConfidentialTransferInputSelection;
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     instruction::Instruction,
@@ -369,10 +370,13 @@ pub async fn handle_confidential_transfer(
     let resp = client
         .accounts_confidential_transfer(ConfidentialTransferRequest {
             account: source_account,
+            input_selection: ConfidentialTransferInputSelection::PreferConfidential,
             amount: Amount::try_from(amount)?,
             resource_address: resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
             destination_public_key,
             max_fee: common.max_fee.map(|f| f.try_into()).transpose()?,
+            output_to_revealed: false,
+            proof_from_badge_resource: None,
             dry_run: false,
         })
         .await?;

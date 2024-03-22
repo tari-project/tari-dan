@@ -35,7 +35,7 @@ import {
 } from "../../utils/json_rpc";
 import { apiError } from "../helpers/types";
 import queryClient from "../queryClient";
-import type { Arg, ComponentAccessRules } from "@tariproject/typescript-bindings";
+import type { Arg, ComponentAccessRules, ConfidentialTransferInputSelection } from "@tariproject/typescript-bindings";
 import type { ComponentAddressOrName } from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 //   Fees are passed as strings because Amount is tagged
@@ -93,18 +93,22 @@ export const useAccountsTransfer = (
   destination_public_key: string,
   max_fee: number | null,
   isConfidential: boolean,
+  output_to_revealed: boolean,
+  input_selection: ConfidentialTransferInputSelection,
   badge: string | null,
   dry_run: boolean,
 ) => {
   return useMutation(
     () => {
       let transferRequest = {
-        account: (account && { Name: account }) || null,
+        account: account ? { Name: account } : null,
         amount,
         resource_address,
         destination_public_key,
         max_fee,
         proof_from_badge_resource: badge,
+        input_selection,
+        output_to_revealed,
         dry_run,
       };
       if (isConfidential) {
