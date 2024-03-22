@@ -302,10 +302,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     .and_then(|l| l.address().as_component_address()),
             )
         })?;
-        let substate_id = match component_address_option {
-            Some(component_address) => Some(SubstateId::Component(component_address)),
-            None => None,
-        };
+        let substate_id = component_address_option.map(SubstateId::Component);
         let tx_hash = self.entity_id_provider.transaction_hash();
         let template_address = self.tracker.get_template_address()?;
 
