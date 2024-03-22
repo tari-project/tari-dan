@@ -397,7 +397,7 @@ where
         version: u32,
     ) -> Result<Vec<Event>, IndexerError> {
         let transaction_id = self
-            .get_transaction_hash_from_substate_address(&substate_id, version)
+            .get_transaction_hash_from_substate_address(substate_id, version)
             .await?;
 
         match self.get_events_for_transaction(transaction_id).await {
@@ -425,7 +425,7 @@ where
         let mut version: u32 = version.unwrap_or_default();
 
         loop {
-            match self.get_events_for_substate_and_version(&substate_id, version).await {
+            match self.get_events_for_substate_and_version(substate_id, version).await {
                 Ok(component_tx_events) => events.extend(
                     component_tx_events
                         .into_iter()

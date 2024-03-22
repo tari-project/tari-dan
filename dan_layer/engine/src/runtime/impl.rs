@@ -257,14 +257,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         // this way idexers/clients can search by any one
         let vault_event = Event::new(
             Some(SubstateId::Vault(vault_id)),
-            template_address.clone(),
+            *template_address,
             tx_hash,
             topic.clone(),
             payload.clone(),
         );
         let resource_event = Event::new(
             Some(SubstateId::Resource(*resource_address)),
-            template_address.clone(),
+            *template_address,
             tx_hash,
             topic,
             payload,
