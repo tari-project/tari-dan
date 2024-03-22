@@ -9,7 +9,7 @@ use tari_template_lib::{
 };
 
 use crate::{
-    models::{Account, VaultModel},
+    models::{Account, VaultBalance, VaultModel},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
 
@@ -85,6 +85,15 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         tx.vaults_update(vault_address, revealed_balance, confidential_balance)?;
         tx.commit()?;
         Ok(())
+    }
+
+    pub fn get_vault_balance(&self, vault_address: &SubstateId) -> Result<VaultBalance, AccountsApiError> {
+        let vault = self.store.with_read_tx(|tx| tx.vaults_get(vault_address))?;
+        Ok(VaultBalance {
+            account: vault.account_address,
+            confidential: vault.confidential_balance,
+            revealed: vault.revealed_balance,
+        })
     }
 
     pub fn exists_by_address(&self, address: &SubstateId) -> Result<bool, AccountsApiError> {

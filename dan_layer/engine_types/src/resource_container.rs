@@ -15,7 +15,7 @@ use tari_template_lib::{
     crypto::PedersonCommitmentBytes,
     models::{
         Amount,
-        ConfidentialOutputProof,
+        ConfidentialOutputStatement,
         ConfidentialWithdrawProof,
         NonFungibleAddress,
         NonFungibleId,
@@ -91,7 +91,7 @@ impl ResourceContainer {
 
     pub fn mint_confidential(
         address: ResourceAddress,
-        proof: ConfidentialOutputProof,
+        proof: ConfidentialOutputStatement,
         view_key: Option<&PublicKey>,
     ) -> Result<ResourceContainer, ResourceError> {
         if proof.change_statement.is_some() {

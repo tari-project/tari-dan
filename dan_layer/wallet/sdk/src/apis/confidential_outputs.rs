@@ -52,7 +52,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         locked_by_proof_id: ConfidentialProofId,
         dry_run: bool,
     ) -> Result<(Vec<ConfidentialOutputModel>, u64), ConfidentialOutputsApiError> {
-        // TODO: DRY up
+        // TODO: DRY up, similar to lock_outputs_until_partial_amount
         if amount.is_negative() {
             return Err(ConfidentialOutputsApiError::InvalidParameter {
                 param: "amount",
@@ -79,6 +79,10 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
             }
         }
         if dry_run {
+            // TODO: This is problematic if we lock additional utxos in the same transaction e.g. one for the fee
+            //       instructions, one for the main instructions. As the same inputs will be locked again
+            //       and the dry-run transaction will fail when it shouldn't. We need to have matching logic for dry
+            //       runs and real runs.
             tx.rollback()?;
         } else {
             tx.commit()?;

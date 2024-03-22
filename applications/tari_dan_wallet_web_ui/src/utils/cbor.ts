@@ -29,6 +29,11 @@ export function getValueByPath(cborRepr: object, path: string): any {
 }
 
 export function convertCborValue(value: any): any {
+  // TODO: The value === "Null" case should be fixed
+  if (value === null || value === "Null") {
+    return null;
+  }
+
   if ("Map" in value) {
     const result = {};
     for (const [key, val] of value.Map) {
