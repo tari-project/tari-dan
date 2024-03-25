@@ -162,7 +162,11 @@ impl StateTracker {
                 state.current_template().map(|(addr, name)| (*addr, name.to_string()))?;
 
             let component_address = match address_allocation {
-                Some(address_allocation) => state.take_allocated_address(address_allocation.id())?,
+                Some(address_allocation) => {
+                    let addr = state.take_allocated_address(address_allocation.id())?;
+                    addr.try_into()
+                        .map_err(|address| RuntimeError::AddressAllocationTypeMismatch { address })?
+                },
                 None => state
                     .id_provider()?
                     .new_component_address(template_address, owner_key)?,

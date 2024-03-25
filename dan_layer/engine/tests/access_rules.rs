@@ -218,7 +218,9 @@ mod component_access_rules {
             vec![owner_proof],
         );
 
-        assert_access_denied_for_action(reason, ComponentAction::SetAccessRules);
+        assert_reject_reason(reason, RuntimeError::AccessDeniedOwnerRequired {
+            action: ComponentAction::SetAccessRules.into(),
+        });
     }
 }
 
@@ -950,5 +952,106 @@ mod resource_access_rules {
                 .build(),
             vec![owner_proof],
         );
+    }
+
+    #[test]
+    fn it_allows_resource_actions_if_auth_hook_passes() {
+        let mut test = TemplateTest::new(["tests/templates/access_rules"]);
+
+        // Create sender and receiver accounts
+        let (owner_account, owner_proof, owner_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder()
+                .call_function(access_rules_template, "with_auth_hook", args![true, "valid_auth_hook"])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        test.execute_expect_success(
+            Transaction::builder()
+                .call_method(component_address, "take_tokens", args![Amount(10)])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(owner_account, "deposit", args![Workspace("tokens")])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+    }
+
+    #[test]
+    fn it_denies_resource_actions_if_auth_hook_fails() {
+        let mut test = TemplateTest::new(["tests/templates/access_rules"]);
+
+        // Create sender and receiver accounts
+        let (owner_account, owner_proof, owner_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder()
+                .call_function(access_rules_template, "with_auth_hook", args![false, "valid_auth_hook"])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        let result = test.execute_expect_failure(
+            Transaction::builder()
+                .call_method(component_address, "take_tokens", args![Amount(10)])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(owner_account, "deposit", args![Workspace("tokens")])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        assert_reject_reason(result, RuntimeError::AccessDeniedAuthHook {
+            action_ident: ResourceAuthAction::Deposit.into(),
+            details: "Panic! Access denied for action Deposit".to_string(),
+        });
+    }
+
+    #[test]
+    fn it_fails_if_auth_hook_is_invalid() {
+        let mut test = TemplateTest::new(["tests/templates/access_rules"]);
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        [
+            "invalid_auth_hook1",
+            "invalid_auth_hook2",
+            "invalid_auth_hook3",
+            "invalid_auth_hook4",
+            "invalid_auth_hook5",
+            "hook_doesnt_exist",
+        ]
+        .iter()
+        .for_each(|hook| {
+            let reason = test.execute_expect_failure(
+                Transaction::builder()
+                    .call_function(access_rules_template, "with_auth_hook", args![true, hook])
+                    .sign(test.get_test_secret_key())
+                    .build(),
+                vec![test.get_test_proof()],
+            );
+
+            assert_reject_reason(reason, RuntimeError::InvalidArgument {
+                argument: "CreateResourceArg",
+                // Partial error text
+                reason: "Authorize hook".to_string(),
+            });
+        })
     }
 }

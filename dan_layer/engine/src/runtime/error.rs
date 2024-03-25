@@ -69,6 +69,12 @@ pub enum RuntimeError {
     WorkspaceError(#[from] WorkspaceError),
     #[error("Substate not found with address '{address}'")]
     SubstateNotFound { address: SubstateId },
+    #[error("Root substate not found with address '{address}'")]
+    RootSubstateNotFound { address: SubstateId },
+    #[error("Referenced substate not found with address '{address}'")]
+    ReferencedSubstateNotFound { address: SubstateId },
+    #[error("Non-existent substate returned from call with address '{address}'")]
+    NonExistentSubstateReturned { address: SubstateId },
     #[error("Substate not in scope with address '{address}'")]
     SubstateOutOfScope { address: SubstateId },
     #[error("Substate {address} is not owned by {requested_owner}")]
@@ -140,7 +146,9 @@ pub enum RuntimeError {
     DuplicateNonFungibleId { token_id: NonFungibleId },
     #[error("Access Denied: {action_ident}")]
     AccessDenied { action_ident: ActionIdent },
-    #[error("Access Denied: {action}")]
+    #[error("Resource Auth Hook Denied Access for action {action_ident}: {details}")]
+    AccessDeniedAuthHook { action_ident: ActionIdent, details: String },
+    #[error("Access Denied: You must be the owner to perform this action: {action}")]
     AccessDeniedOwnerRequired { action: ActionIdent },
     #[error("Invalid method address rule for {template_name}: {details}")]
     InvalidMethodAccessRule { template_name: String, details: String },
@@ -234,6 +242,8 @@ pub enum RuntimeError {
 
     #[error("Numeric conversion error: {details}")]
     NumericConversionError { details: String },
+    #[error("Auth callback MUST return null, but it returned non-null")]
+    UnexpectedNonNullInAuthHookReturn,
 }
 
 impl RuntimeError {

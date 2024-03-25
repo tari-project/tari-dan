@@ -111,7 +111,7 @@ fn it_rejects_unknown_substate_addresses() {
         vec![],
     );
 
-    assert_reject_reason(reason, RuntimeError::SubstateOutOfScope {
+    assert_reject_reason(reason, RuntimeError::ReferencedSubstateNotFound {
         address: ResourceAddress::from_hex("abababababababababababababababababababababababababababab")
             .unwrap()
             .into(),

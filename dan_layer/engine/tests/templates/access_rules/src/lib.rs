@@ -22,6 +22,7 @@ mod access_rules_template {
         value: u32,
         tokens: Vault,
         badges: Vault,
+        allowed: bool,
     }
 
     impl AccessRulesTest {
@@ -43,6 +44,7 @@ mod access_rules_template {
                 value: 0,
                 tokens: Vault::from_bucket(tokens),
                 badges: Vault::from_bucket(badges),
+                allowed: true,
             })
             .with_owner_rule(owner_rule)
             .with_access_rules(component_access_rule)
@@ -58,7 +60,29 @@ mod access_rules_template {
                 value: 0,
                 tokens: Vault::from_bucket(tokens),
                 badges: Vault::from_bucket(badges),
+                allowed: true,
             })
+        }
+
+        pub fn with_auth_hook(allowed: bool, hook: String) -> Component<AccessRulesTest> {
+            let badges = create_badge_resource(AccessRule::DenyAll);
+
+            let address_alloc = CallerContext::allocate_component_address();
+
+            let tokens = ResourceBuilder::fungible()
+                .initial_supply(1000)
+                .with_authorization_hook(*address_alloc.address(), hook)
+                .build_bucket();
+
+            Component::new(Self {
+                value: 0,
+                tokens: Vault::from_bucket(tokens),
+                badges: Vault::from_bucket(badges),
+                allowed,
+            })
+            .with_address_allocation(address_alloc)
+            .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
+            .create()
         }
 
         pub fn using_badge_rules() -> Component<AccessRulesTest> {
@@ -93,6 +117,7 @@ mod access_rules_template {
                 value: 0,
                 tokens: Vault::from_bucket(tokens),
                 badges: Vault::from_bucket(badges),
+                allowed: true,
             })
             .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
             .create()
@@ -122,6 +147,7 @@ mod access_rules_template {
                 value: 0,
                 tokens: Vault::from_bucket(tokens),
                 badges: Vault::from_bucket(badges),
+                allowed: true,
             })
             .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
             .create()
@@ -144,10 +170,32 @@ mod access_rules_template {
                 value: 0,
                 tokens: Vault::from_bucket(tokens),
                 badges: Vault::from_bucket(badges),
+                allowed: true,
             })
             .with_address_allocation(allocation)
             .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
             .create()
+        }
+
+        /// Custom resource auth hook
+        pub fn valid_auth_hook(&self, action: ResourceAuthAction, caller: AuthHookCaller) {
+            let state = caller.component_state();
+            debug!("Component state {:?}", state);
+            if !self.allowed {
+                panic!("Access denied for action {:?}", action);
+            }
+        }
+
+        pub fn invalid_auth_hook1(&mut self, _action: ResourceAuthAction, _caller: AuthHookCaller) {}
+
+        pub fn invalid_auth_hook2(&self, _action: String, _caller: AuthHookCaller) {}
+
+        pub fn invalid_auth_hook3(&self, _action: ResourceAuthAction, _caller: String) {}
+
+        pub fn invalid_auth_hook4(&self, _action: ResourceAuthAction, _caller: AuthHookCaller, _third: String) {}
+
+        pub fn invalid_auth_hook5(&self, _action: ResourceAuthAction, _caller: AuthHookCaller) -> String {
+            unimplemented!()
         }
 
         pub fn take_badge_by_name(&mut self, name: String) -> Bucket {

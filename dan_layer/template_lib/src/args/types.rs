@@ -32,7 +32,7 @@ use ts_rs::TS;
 
 use crate::{
     args::Arg,
-    auth::{OwnerRule, ResourceAccessRules},
+    auth::{AuthHook, OwnerRule, ResourceAccessRules},
     crypto::{PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{
         AddressAllocation,
@@ -259,6 +259,7 @@ pub struct CreateResourceArg {
     pub metadata: Metadata,
     pub mint_arg: Option<MintArg>,
     pub view_key: Option<RistrettoPublicKeyBytes>,
+    pub authorize_hook: Option<AuthHook>,
 }
 
 /// A resource minting operation argument
@@ -329,6 +330,16 @@ pub enum VaultAction {
     CreateProofByNonFungibles,
     CreateProofByConfidentialResource,
     GetNonFungibles,
+}
+
+impl VaultAction {
+    pub fn requires_write_access(&self) -> bool {
+        use VaultAction::*;
+        !matches!(
+            self,
+            GetBalance | GetResourceAddress | GetNonFungibleIds | GetCommitmentCount | GetNonFungibles
+        )
+    }
 }
 
 /// A vault withdraw operation argument
