@@ -112,13 +112,12 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
     );
 }
 
-#[when(expr = "indexer {word} scans the network {int} events for account {word} with topics {word}")]
+#[when(expr = "indexer {word} scans the network events for account {word} with topics {word}")]
 async fn indexer_scans_network_events(
     world: &mut TariWorld,
     indexer_name: String,
-    num_events: u32,
     account_name: String,
-    topics: String,
+    topics_str: String,
 ) {
     let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
     let accounts_component_addresses = world.outputs.get(&account_name).expect("Account name not found");
@@ -139,28 +138,49 @@ async fn indexer_scans_network_events(
         .await
         .expect("Failed to obtain getEventsForSubstate query result");
 
-    let events_for_component = res.get("getEventsForSubstate").unwrap();
-    assert_eq!(
-        events_for_component.len(),
-        num_events as usize,
-        "Unexpected number of events returned got {}, expected {}",
-        events_for_component.len(),
-        num_events
-    );
+    let topics = topics_str.split(',').collect::<Vec<_>>();
 
-    let topics = topics.split(',').collect::<Vec<_>>();
-    assert_eq!(
-        topics.len(),
-        num_events as usize,
-        "Unexpected number of topics provided got {}, expected {}",
-        topics.len(),
-        num_events
-    );
+    let events_for_component = res.get("getEventsForSubstate").unwrap();
 
     for (ind, topic) in topics.iter().enumerate() {
-        let event = events_for_component[ind].clone();
-        assert_eq!(&event.topic, topic);
+        let event = events_for_component.get(ind).unwrap_or_else(|| {
+            panic!(
+                "Too few events returned got {}, expected {}. Events emitted were {}",
+                events_for_component.len(),
+                topics.len(),
+                events_for_component
+                    .iter()
+                    .map(|e| e.topic.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        });
+        assert_eq!(
+            event.topic,
+            *topic,
+            "Unexpected topic at index {}. Events emitted were {}. Expected {}",
+            ind,
+            events_for_component
+                .iter()
+                .map(|e| e.topic.as_str())
+                .collect::<Vec<_>>()
+                .join(","),
+            topics_str
+        );
     }
+
+    assert_eq!(
+        events_for_component.len(),
+        topics.len(),
+        "Too many events returned got {}, expected {}. Events emitted were {}",
+        events_for_component.len(),
+        topics.len(),
+        events_for_component
+            .iter()
+            .map(|e| e.topic.as_str())
+            .collect::<Vec<_>>()
+            .join(","),
+    );
 }
 
 #[when(expr = "indexer {word} scans the network for events of resource {word}")]
