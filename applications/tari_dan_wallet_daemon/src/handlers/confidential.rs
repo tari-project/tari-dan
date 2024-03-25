@@ -28,7 +28,7 @@ use tari_wallet_daemon_client::types::{
     ProofsGenerateRequest,
     ProofsGenerateResponse,
 };
-use tokio::task::block_in_place;
+use tokio::{task::block_in_place, time::Instant};
 
 use crate::handlers::{
     helpers::{get_account_or_default, invalid_params},
@@ -68,7 +68,6 @@ pub async fn handle_create_transfer_proof(
         &vault.address,
         req.amount + req.reveal_amount,
         proof_id,
-        false,
     )?;
 
     info!(
@@ -185,6 +184,9 @@ pub async fn handle_finalize_transfer(
 ) -> Result<ProofsCancelResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+
+    sdk.confidential_outputs_api()
+        .finalize_locked_revealed_funds(req.proof_id)?;
     sdk.confidential_outputs_api()
         .finalize_outputs_for_proof(req.proof_id)?;
     Ok(ProofsCancelResponse {})
@@ -262,6 +264,7 @@ pub async fn handle_view_vault_balance(
 
     let value_range = req.minimum_expected_value.unwrap_or(0)..=req.maximum_expected_value.unwrap_or(10_000_000_000);
 
+    let timer = Instant::now();
     let balances = match context.config().value_lookup_table_file.as_ref() {
         Some(file) => {
             let mut file = fs::File::open(file)
@@ -286,6 +289,8 @@ pub async fn handle_view_vault_balance(
             )
         })?,
     };
+
+    info!(target: LOG_TARGET, "Brute force balance lookup took {:.2?}", timer.elapsed());
 
     Ok(ConfidentialViewVaultBalanceResponse {
         balances: commitments

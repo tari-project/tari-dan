@@ -352,7 +352,7 @@ pub async fn handle_reveal_funds(
 
         let (inputs, input_value) =
             sdk.confidential_outputs_api()
-                .lock_outputs_by_amount(&vault.address, amount_to_reveal, proof_id, false)?;
+                .lock_outputs_by_amount(&vault.address, amount_to_reveal, proof_id)?;
         let input_amount = Amount::try_from(input_value)?;
 
         let account_key = sdk
@@ -1041,18 +1041,15 @@ pub async fn handle_confidential_transfer(
             .await?;
 
         if req.dry_run {
-            let transaction = sdk
-                .transaction_api()
+            let transaction_id = *transfer.transaction.id();
+            let finalize = transaction_service
                 .submit_dry_run_transaction(
                     transfer.transaction,
                     transfer.inputs.into_iter().map(Into::into).collect(),
                 )
                 .await?;
-            let finalize = transaction
-                .finalize
-                .ok_or_else(|| anyhow!("No result for dry run transaction"))?;
             return Ok(ConfidentialTransferResponse {
-                transaction_id: *transaction.transaction.id(),
+                transaction_id,
                 fee: finalize.fee_receipt.total_fees_paid,
                 result: finalize,
             });

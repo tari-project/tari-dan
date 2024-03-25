@@ -9,7 +9,7 @@ use tari_crypto::{
     ristretto::{bulletproofs_plus::RistrettoAggregatedPublicStatement, RistrettoSecretKey},
     tari_utilities::ByteArray,
 };
-use tari_template_lib::models::{Amount, ConfidentialOutputProof, ViewableBalanceProof};
+use tari_template_lib::models::{Amount, ConfidentialOutputStatement, ViewableBalanceProof};
 
 use super::{challenges, get_commitment_factory, get_range_proof_service};
 use crate::{
@@ -26,7 +26,7 @@ pub struct ValidatedConfidentialProof {
 }
 
 pub fn validate_confidential_proof(
-    proof: &ConfidentialOutputProof,
+    proof: &ConfidentialOutputStatement,
     view_key: Option<&PublicKey>,
 ) -> Result<ValidatedConfidentialProof, ResourceError> {
     if proof.output_revealed_amount.is_negative() || proof.change_revealed_amount.is_negative() {
@@ -67,7 +67,7 @@ pub fn validate_confidential_proof(
         })
         .transpose()?;
 
-    let change = proof
+    let maybe_change = proof
         .change_statement
         .as_ref()
         .map(|stmt| {
@@ -96,11 +96,21 @@ pub fn validate_confidential_proof(
         })
         .transpose()?;
 
-    validate_bullet_proof(proof)?;
+    if maybe_output.is_none() && maybe_change.is_none() {
+        if !proof.range_proof.is_empty() {
+            return Err(ResourceError::InvalidConfidentialProof {
+                details: "Range proof is invalid because it was provided (non-empty) but the proof contained no \
+                          confidential outputs"
+                    .to_string(),
+            });
+        }
+    } else {
+        validate_bullet_proof(proof)?;
+    }
 
     Ok(ValidatedConfidentialProof {
         output: maybe_output,
-        change_output: change,
+        change_output: maybe_change,
         output_revealed_amount: proof.output_revealed_amount,
         change_revealed_amount: proof.change_revealed_amount,
     })
@@ -209,7 +219,7 @@ pub fn validate_elgamal_verifiable_balance_proof(
     }))
 }
 
-fn validate_bullet_proof(proof: &ConfidentialOutputProof) -> Result<(), ResourceError> {
+fn validate_bullet_proof(proof: &ConfidentialOutputStatement) -> Result<(), ResourceError> {
     let statements = proof
         .output_statement
         .iter()

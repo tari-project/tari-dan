@@ -5,7 +5,7 @@ use std::ops::RangeInclusive;
 
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_dan_wallet_crypto::{
-    create_confidential_proof,
+    create_confidential_output_statement,
     create_output_for_dest,
     create_withdraw_proof,
     encrypt_value_and_mask,
@@ -18,7 +18,7 @@ use tari_dan_wallet_crypto::{
     WalletCryptoError,
 };
 use tari_engine_types::confidential::{ConfidentialOutput, ElgamalVerifiableBalance, ValueLookupTable};
-use tari_template_lib::models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedData};
+use tari_template_lib::models::{Amount, ConfidentialOutputStatement, ConfidentialWithdrawProof, EncryptedData};
 
 pub struct ConfidentialCryptoApi;
 
@@ -70,8 +70,8 @@ impl ConfidentialCryptoApi {
     pub fn generate_output_proof(
         &self,
         statement: &ConfidentialProofStatement,
-    ) -> Result<ConfidentialOutputProof, ConfidentialCryptoApiError> {
-        let proof = create_confidential_proof(statement, None)?;
+    ) -> Result<ConfidentialOutputStatement, ConfidentialCryptoApiError> {
+        let proof = create_confidential_output_statement(statement, None)?;
         Ok(proof)
     }
 

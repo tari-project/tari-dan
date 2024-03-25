@@ -178,7 +178,7 @@ pub trait WalletStoreReader {
     fn proofs_get_by_transaction_id(
         &mut self,
         transaction_id: TransactionId,
-    ) -> Result<ConfidentialProofId, WalletStorageError>;
+    ) -> Result<Vec<ConfidentialProofId>, WalletStorageError>;
 
     // Non fungible tokens
     fn non_fungible_token_get_by_nft_id(
@@ -276,6 +276,16 @@ pub trait WalletStoreWriter {
         revealed_balance: Amount,
         confidential_balance: Amount,
     ) -> Result<(), WalletStorageError>;
+    fn vaults_lock_revealed_funds(
+        &mut self,
+        proof_id: ConfidentialProofId,
+        amount_to_lock: Amount,
+    ) -> Result<(), WalletStorageError>;
+    fn vaults_finalized_locked_revealed_funds(
+        &mut self,
+        proof_id: ConfidentialProofId,
+    ) -> Result<(), WalletStorageError>;
+    fn vaults_unlock_revealed_funds(&mut self, proof_id: ConfidentialProofId) -> Result<(), WalletStorageError>;
 
     // Confidential Outputs
     fn outputs_lock_smallest_amount(

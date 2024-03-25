@@ -55,7 +55,7 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Comm
 
     let input_revealed_amount = withdraw_proof.input_revealed_amount;
     // We expect the revealed amount to be excluded from the output commitment.
-    let output_revealed_amount =
+    let total_output_revealed_amount =
         withdraw_proof.output_proof.output_revealed_amount + withdraw_proof.output_proof.change_revealed_amount;
 
     // k.G + v.H or 0.G if None
@@ -67,7 +67,7 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Comm
 
     // 0.G + v.H
     let revealed_output_commitment =
-        get_commitment_factory().commit_value(&PrivateKey::default(), output_revealed_amount.value() as u64);
+        get_commitment_factory().commit_value(&PrivateKey::default(), total_output_revealed_amount.value() as u64);
     let output_commitment_with_revealed = output_commitment + revealed_output_commitment.as_public_key();
 
     let balance_proof =
@@ -80,12 +80,12 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Comm
         &PrivateKey::default(),
         withdraw_proof.input_revealed_amount.value() as u64,
     );
-    let total_inputs = inputs
+    let agg_inputs = inputs
         .into_iter()
         .fold(PublicKey::default(), |sum, commit| sum + commit.as_public_key()) +
         revealed_input_commitment.as_public_key();
 
-    let public_excess = total_inputs -
+    let public_excess = agg_inputs -
         &output_commitment_with_revealed -
         validated_proof
             .change_output
@@ -97,7 +97,7 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Comm
         &public_excess,
         balance_proof.get_public_nonce(),
         input_revealed_amount,
-        output_revealed_amount,
+        total_output_revealed_amount,
     );
 
     if !balance_proof.verify_raw_uniform(&public_excess, &challenge) {

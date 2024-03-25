@@ -11,13 +11,13 @@ use tari_crypto::{
 use tari_engine_types::confidential::{challenges, get_commitment_factory, ConfidentialOutput};
 use tari_template_lib::{
     crypto::{BalanceProofSignature, PedersonCommitmentBytes},
-    models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedData},
+    models::{Amount, ConfidentialOutputStatement, ConfidentialWithdrawProof, EncryptedData},
 };
 
 use crate::{
     confidential_output::ConfidentialOutputMaskAndValue,
     kdfs,
-    proof::{create_confidential_proof, decrypt_data_and_mask, encrypt_data},
+    proof::{create_confidential_output_statement, decrypt_data_and_mask, encrypt_data},
     ConfidentialProofError,
     ConfidentialProofStatement,
 };
@@ -28,7 +28,7 @@ pub fn create_withdraw_proof(
     output_statement: &ConfidentialProofStatement,
     change_statement: Option<&ConfidentialProofStatement>,
 ) -> Result<ConfidentialWithdrawProof, WalletCryptoError> {
-    let output_proof = create_confidential_proof(output_statement, change_statement)?;
+    let output_proof = create_confidential_output_statement(output_statement, change_statement)?;
     let (input_commitments, agg_input_mask) = inputs.iter().fold(
         (Vec::with_capacity(inputs.len()), RistrettoSecretKey::default()),
         |(mut commitments, agg_input), input| {
@@ -55,7 +55,7 @@ pub fn create_withdraw_proof(
     Ok(ConfidentialWithdrawProof {
         inputs: input_commitments,
         input_revealed_amount,
-        output_proof: ConfidentialOutputProof {
+        output_proof: ConfidentialOutputStatement {
             output_statement,
             change_statement,
             range_proof: output_proof.range_proof,

@@ -36,7 +36,7 @@ use tari_hash_domains::TransactionSecureNonceKdfDomain;
 use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
     models::{
-        ConfidentialOutputProof,
+        ConfidentialOutputStatement,
         ConfidentialStatement,
         EncryptedData,
         ViewableBalanceProof,
@@ -53,10 +53,10 @@ use crate::{
     ConfidentialProofStatement,
 };
 
-pub fn create_confidential_proof(
+pub fn create_confidential_output_statement(
     output_statement: &ConfidentialProofStatement,
     change_statement: Option<&ConfidentialProofStatement>,
-) -> Result<ConfidentialOutputProof, ConfidentialProofError> {
+) -> Result<ConfidentialOutputStatement, ConfidentialProofError> {
     let proof_change_statement = change_statement
         .as_ref()
         .map(|stmt| -> Result<_, ConfidentialProofError> {
@@ -79,25 +79,33 @@ pub fn create_confidential_proof(
         })
         .transpose()?;
 
-    let commitment = output_statement.to_commitment();
-
-    let output_range_proof = generate_extended_bullet_proof(output_statement, change_statement)?;
-
-    let output_value = output_statement
+    let confidential_output_value = output_statement
         .amount
         .as_u64_checked()
         .ok_or(ConfidentialProofError::NegativeAmount)?;
 
-    Ok(ConfidentialOutputProof {
-        output_statement: Some(ConfidentialStatement {
+    let proof_output_statement = if confidential_output_value == 0 {
+        None
+    } else {
+        let commitment = output_statement.to_commitment();
+        let statement = Some(ConfidentialStatement {
             commitment: copy_fixed(commitment.as_bytes()),
             sender_public_nonce: copy_fixed(output_statement.sender_public_nonce.as_bytes()),
             encrypted_data: output_statement.encrypted_data.clone(),
             minimum_value_promise: output_statement.minimum_value_promise,
             viewable_balance_proof: output_statement.resource_view_key.as_ref().map(|view_key| {
-                create_viewable_balance_proof(&output_statement.mask, output_value, &commitment, view_key)
+                create_viewable_balance_proof(&output_statement.mask, confidential_output_value, &commitment, view_key)
             }),
-        }),
+        });
+
+        statement
+    };
+
+    let output_range_proof =
+        generate_extended_bullet_proof(Some(output_statement).filter(|s| !s.amount.is_zero()), change_statement)?;
+
+    Ok(ConfidentialOutputStatement {
+        output_statement: proof_output_statement,
         change_statement: proof_change_statement,
         range_proof: output_range_proof,
         output_revealed_amount: output_statement.reveal_amount,
@@ -252,20 +260,27 @@ pub fn decrypt_data_and_mask(
 }
 
 fn generate_extended_bullet_proof(
-    output_statement: &ConfidentialProofStatement,
+    output_statement: Option<&ConfidentialProofStatement>,
     change_statement: Option<&ConfidentialProofStatement>,
 ) -> Result<Vec<u8>, RangeProofError> {
+    if output_statement.is_none() && change_statement.is_none() {
+        // We're only outputting revealed funds, so no need to generate a range proof (i.e. zero length is valid)
+        return Ok(vec![]);
+    }
+
     let mut extended_witnesses = vec![];
 
-    let extended_mask =
-        RistrettoExtendedMask::assign(ExtensionDegree::DefaultPedersen, vec![output_statement.mask.clone()]).unwrap();
-
-    let mut agg_factor = 1;
-    extended_witnesses.push(RistrettoExtendedWitness {
-        mask: extended_mask,
-        value: output_statement.amount.value() as u64,
-        minimum_value_promise: output_statement.minimum_value_promise,
-    });
+    let mut agg_factor = 0;
+    if let Some(stmt) = output_statement {
+        let extended_mask =
+            RistrettoExtendedMask::assign(ExtensionDegree::DefaultPedersen, vec![stmt.mask.clone()]).unwrap();
+        extended_witnesses.push(RistrettoExtendedWitness {
+            mask: extended_mask,
+            value: stmt.amount.value() as u64,
+            minimum_value_promise: stmt.minimum_value_promise,
+        });
+        agg_factor += 1;
+    }
     if let Some(stmt) = change_statement {
         let extended_mask =
             RistrettoExtendedMask::assign(ExtensionDegree::DefaultPedersen, vec![stmt.mask.clone()]).unwrap();
@@ -274,7 +289,7 @@ fn generate_extended_bullet_proof(
             value: stmt.amount.value() as u64,
             minimum_value_promise: stmt.minimum_value_promise,
         });
-        agg_factor = 2;
+        agg_factor += 1;
     }
 
     let output_range_proof = get_range_proof_service(agg_factor).construct_extended_proof(extended_witnesses, None)?;
@@ -294,9 +309,9 @@ mod tests {
 
         use super::*;
 
-        fn create_valid_proof(amount: Amount, minimum_value_promise: u64) -> ConfidentialOutputProof {
+        fn create_valid_proof(amount: Amount, minimum_value_promise: u64) -> ConfidentialOutputStatement {
             let mask = RistrettoSecretKey::random(&mut OsRng);
-            create_confidential_proof(
+            create_confidential_output_statement(
                 &ConfidentialProofStatement {
                     amount,
                     minimum_value_promise,

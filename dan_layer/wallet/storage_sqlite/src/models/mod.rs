@@ -20,4 +20,9 @@ mod vault;
 pub use vault::Vault;
 
 mod non_fungible_tokens;
+
 pub use non_fungible_tokens::NonFungibleToken;
+
+mod proof;
+// Currently only used internally
+pub(crate) use proof::Proof;

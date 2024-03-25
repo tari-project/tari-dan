@@ -282,15 +282,6 @@ where
             has_changed = true;
         }
 
-        let outputs_api = self.wallet_sdk.confidential_outputs_api();
-        let confidential_balance = outputs_api.get_unspent_balance(&vault_addr)?;
-        let confidential_balance = confidential_balance
-            .try_into()
-            .map_err(|_| AccountMonitorError::Overflow {
-                details: "confidential balance overflowed Amount".to_string(),
-            })?;
-
-        accounts_api.update_vault_balance(&vault_addr, balance, confidential_balance)?;
         info!(
             target: LOG_TARGET,
             "🔒️ vault {} in account {} has new balance {}",
@@ -309,6 +300,20 @@ where
             self.wallet_sdk
                 .confidential_outputs_api()
                 .verify_and_update_confidential_outputs(account_address, &vault_addr, commitments.values())?;
+            has_changed = true;
+        }
+
+        let outputs_api = self.wallet_sdk.confidential_outputs_api();
+        let confidential_balance = outputs_api.get_unspent_balance(&vault_addr)?;
+        let confidential_balance = confidential_balance
+            .try_into()
+            .map_err(|_| AccountMonitorError::Overflow {
+                details: "confidential balance overflowed Amount".to_string(),
+            })?;
+
+        let vault_balance = accounts_api.get_vault_balance(&vault_addr)?;
+        if vault_balance.confidential != confidential_balance || vault_balance.revealed != balance {
+            accounts_api.update_vault_balance(&vault_addr, balance, confidential_balance)?;
             has_changed = true;
         }
 
