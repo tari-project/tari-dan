@@ -40,7 +40,6 @@ use log::*;
 use tari_dan_storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
 use tari_engine_types::substate::SubstateId;
-use tari_template_lib::prelude::ComponentAddress;
 use tari_transaction::TransactionId;
 use thiserror::Error;
 
@@ -194,15 +193,12 @@ pub trait SubstateStoreReadTransaction {
     fn get_events_for_transaction(&mut self, tx_id: TransactionId) -> Result<Vec<EventData>, StorageError>;
     fn get_stored_versions_of_events(
         &mut self,
-        component_address: &ComponentAddress,
+        substate_id: &SubstateId,
         start_version: u32,
     ) -> Result<Vec<u32>, StorageError>;
-    fn get_events_by_version(
-        &mut self,
-        component_address: &ComponentAddress,
-        version: u32,
-    ) -> Result<Vec<EventData>, StorageError>;
-    fn get_all_events(&mut self, component_address: &ComponentAddress) -> Result<Vec<EventData>, StorageError>;
+    fn get_events_by_version(&mut self, substate_id: &SubstateId, version: u32)
+        -> Result<Vec<EventData>, StorageError>;
+    fn get_all_events(&mut self, substate_id: &SubstateId) -> Result<Vec<EventData>, StorageError>;
     fn get_events_by_payload(
         &mut self,
         payload_key: String,
@@ -348,8 +344,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             "Querying substate scanner database: get_events_for_transaction with tx_hash = {}", tx_id
         );
         let res = sql_query(
-            "SELECT component_address, template_address, tx_hash, topic, payload, version FROM events WHERE tx_hash = \
-             ?",
+            "SELECT substate_id, template_address, tx_hash, topic, payload, version FROM events WHERE tx_hash = ?",
         )
         .bind::<Text, _>(tx_id.to_string())
         .get_results::<EventData>(self.connection())
@@ -362,21 +357,21 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
 
     fn get_stored_versions_of_events(
         &mut self,
-        component_address: &ComponentAddress,
+        substate_id: &SubstateId,
         start_version: u32,
     ) -> Result<Vec<u32>, StorageError> {
         info!(
             target: LOG_TARGET,
-            "Querying substate scanner database: get_stored_versions_of_events with component_address = {} and \
+            "Querying substate scanner database: get_stored_versions_of_events with substate_id = {} and \
              start_version = {}",
-            component_address,
+             substate_id,
             start_version
         );
         use crate::substate_storage_sqlite::schema::events;
         let res: Vec<i32> = events::table
             .filter(
-                events::component_address
-                    .eq(&component_address.to_string())
+                events::substate_id
+                    .eq(&substate_id.to_string())
                     .and(events::version.gt(start_version as i32)),
             )
             .select(events::version)
@@ -392,20 +387,20 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
 
     fn get_events_by_version(
         &mut self,
-        component_address: &ComponentAddress,
+        substate_id: &SubstateId,
         version: u32,
     ) -> Result<Vec<EventData>, StorageError> {
         info!(
             target: LOG_TARGET,
-            "Querying substate scanner database: get_events_by_version with component_address = {} and version = {}",
-            component_address,
+            "Querying substate scanner database: get_events_by_version with substate_id = {} and version = {}",
+            substate_id,
             version
         );
         let res = sql_query(
-            "SELECT component_address, template_address, tx_hash, topic, payload FROM events WHERE component_address \
-             = ? AND version = ?",
+            "SELECT substate_id, template_address, tx_hash, topic, payload FROM events WHERE substate_id = ? AND \
+             version = ?",
         )
-        .bind::<Nullable<Text>, _>(Some(component_address.to_string()))
+        .bind::<Nullable<Text>, _>(Some(substate_id.to_string()))
         .bind::<Integer, _>(version as i32)
         .get_results::<EventData>(self.connection())
         .map_err(|e| StorageError::QueryError {
@@ -429,7 +424,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             payload_value
         );
         let res = sql_query(
-            "SELECT component_address, template_address, tx_hash, topic, payload, version FROM events e INNER JOIN \
+            "SELECT substate_id, template_address, tx_hash, topic, payload, version FROM events e INNER JOIN \
              event_payloads p ON p.event_id = e.id WHERE p.payload_key = ? AND p.payload_value = ? LIMIT ?,?",
         )
         .bind::<Text, _>(payload_key)
@@ -444,14 +439,13 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         Ok(res)
     }
 
-    fn get_all_events(&mut self, component_address: &ComponentAddress) -> Result<Vec<EventData>, StorageError> {
-        let res =
-            sql_query("SELECT component_address, tx_hash, topic, payload FROM events WHERE component_address = ?")
-                .bind::<Text, _>(component_address.to_string())
-                .get_results::<EventData>(self.connection())
-                .map_err(|e| StorageError::QueryError {
-                    reason: format!("get_events_by_version: {}", e),
-                })?;
+    fn get_all_events(&mut self, substate_id: &SubstateId) -> Result<Vec<EventData>, StorageError> {
+        let res = sql_query("SELECT substate_id, tx_hash, topic, payload FROM events WHERE substate_id = ?")
+            .bind::<Text, _>(substate_id.to_string())
+            .get_results::<EventData>(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("get_events_by_version: {}", e),
+            })?;
         Ok(res)
     }
 }
@@ -579,9 +573,9 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
         use crate::substate_storage_sqlite::schema::{event_payloads, events};
         warn!(
             target: LOG_TARGET,
-            "Added new event to the database with component_address = {:?}, template_address = {} and for transaction \
+            "Added new event to the database with substate_id = {:?}, template_address = {} and for transaction \
              hash = {}, version = {}",
-            new_event.component_address,
+            new_event.substate_id,
             new_event.template_address,
             new_event.tx_hash,
             new_event.version,
@@ -622,9 +616,9 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
 
         info!(
             target: LOG_TARGET,
-            "Added new event to the database with component_address = {:?}, template_address = {} and for transaction \
+            "Added new event to the database with substate_id = {:?}, template_address = {} and for transaction \
              hash = {}",
-            new_event.component_address,
+            new_event.substate_id,
             new_event.template_address,
             new_event.tx_hash
         );

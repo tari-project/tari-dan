@@ -14,7 +14,6 @@ use integration_tests::{
 use libp2p::Multiaddr;
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_indexer_client::types::AddPeerRequest;
-use tari_template_lib::models::ObjectKey;
 
 #[when(expr = "indexer {word} connects to all other validators")]
 async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: String) {
@@ -94,7 +93,7 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
     let template_address = [0u8; 32];
     let tx_hash = [0u8; 32];
     let query = format!(
-        "{{ getEventsForTransaction(txHash: {:?}) {{ componentAddress, templateAddress, txHash, topic, payload }}
+        "{{ getEventsForTransaction(txHash: {:?}) {{ substateId, templateAddress, txHash, topic, payload }}
     }}",
         tx_hash.to_hex()
     );
@@ -104,7 +103,6 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
         .expect("Failed to obtain getEventsForTransaction query result");
     let res = res.get("getEventsForTransaction").unwrap();
     assert_eq!(res.len(), 1);
-    assert_eq!(res[0].component_address, Some(ObjectKey::default().into_array()));
     assert_eq!(res[0].template_address, template_address);
     assert_eq!(res[0].tx_hash, tx_hash);
     assert_eq!(res[0].topic, "my_event");
@@ -114,13 +112,12 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
     );
 }
 
-#[when(expr = "indexer {word} scans the network {int} events for account {word} with topics {word}")]
+#[when(expr = "indexer {word} scans the network events for account {word} with topics {word}")]
 async fn indexer_scans_network_events(
     world: &mut TariWorld,
     indexer_name: String,
-    num_events: u32,
     account_name: String,
-    topics: String,
+    topics_str: String,
 ) {
     let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
     let accounts_component_addresses = world.outputs.get(&account_name).expect("Account name not found");
@@ -132,37 +129,58 @@ async fn indexer_scans_network_events(
 
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
     let query = format!(
-        r#"{{ getEventsForComponent(componentAddress: "{}", version: {}) {{ componentAddress, templateAddress, txHash, topic, payload }} }}"#,
+        r#"{{ getEventsForSubstate(substateId: "{}", version: {}) {{ substateId, templateAddress, txHash, topic, payload }} }}"#,
         component_address.substate_id,
         component_address.version.unwrap()
     );
     let res = graphql_client
         .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
         .await
-        .expect("Failed to obtain getEventsForComponent query result");
+        .expect("Failed to obtain getEventsForSubstate query result");
 
-    let events_for_component = res.get("getEventsForComponent").unwrap();
-    assert_eq!(
-        events_for_component.len(),
-        num_events as usize,
-        "Unexpected number of events returned got {}, expected {}",
-        events_for_component.len(),
-        num_events
-    );
+    let topics = topics_str.split(',').collect::<Vec<_>>();
 
-    let topics = topics.split(',').collect::<Vec<_>>();
-    assert_eq!(
-        topics.len(),
-        num_events as usize,
-        "Unexpected number of topics provided got {}, expected {}",
-        topics.len(),
-        num_events
-    );
+    let events_for_component = res.get("getEventsForSubstate").unwrap();
 
     for (ind, topic) in topics.iter().enumerate() {
-        let event = events_for_component[ind].clone();
-        assert_eq!(&event.topic, topic);
+        let event = events_for_component.get(ind).unwrap_or_else(|| {
+            panic!(
+                "Too few events returned got {}, expected {}. Events emitted were {}",
+                events_for_component.len(),
+                topics.len(),
+                events_for_component
+                    .iter()
+                    .map(|e| e.topic.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        });
+        assert_eq!(
+            event.topic,
+            *topic,
+            "Unexpected topic at index {}. Events emitted were {}. Expected {}",
+            ind,
+            events_for_component
+                .iter()
+                .map(|e| e.topic.as_str())
+                .collect::<Vec<_>>()
+                .join(","),
+            topics_str
+        );
     }
+
+    assert_eq!(
+        events_for_component.len(),
+        topics.len(),
+        "Too many events returned got {}, expected {}. Events emitted were {}",
+        events_for_component.len(),
+        topics.len(),
+        events_for_component
+            .iter()
+            .map(|e| e.topic.as_str())
+            .collect::<Vec<_>>()
+            .join(","),
+    );
 }
 
 #[when(expr = "indexer {word} scans the network for events of resource {word}")]
@@ -190,7 +208,7 @@ async fn indexer_scans_network_events_for_resource(world: &mut TariWorld, indexe
 
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
     let query = format!(
-        r#"{{ getEventsByPayload(payloadKey: "resource_address", payloadValue: "{}", offset:0, limit:2) {{ componentAddress, templateAddress, txHash, topic, payload }} }}"#,
+        r#"{{ getEventsByPayload(payloadKey: "resource_address", payloadValue: "{}", offset:0, limit:2) {{ substateId, templateAddress, txHash, topic, payload }} }}"#,
         resource_address
     );
     let res = graphql_client

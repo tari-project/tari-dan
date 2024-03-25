@@ -29,10 +29,7 @@ use tari_engine_types::{
     virtual_substate::{VirtualSubstate, VirtualSubstateId},
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_template_lib::{
-    models::NonFungibleIndexAddress,
-    prelude::{ComponentAddress, ResourceAddress},
-};
+use tari_template_lib::{models::NonFungibleIndexAddress, prelude::ResourceAddress};
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 
@@ -392,17 +389,15 @@ where
         transaction_hash.ok_or_else(|| IndexerError::NotFoundTransaction(substate_id.clone(), version))
     }
 
-    /// Queries the network to obtain all the events associated with a component and
+    /// Queries the network to obtain all the events associated with a substate and
     /// a specific version.
-    pub async fn get_events_for_component_and_version(
+    pub async fn get_events_for_substate_and_version(
         &self,
-        component_address: ComponentAddress,
+        substate_id: &SubstateId,
         version: u32,
     ) -> Result<Vec<Event>, IndexerError> {
-        let substate_address = SubstateId::Component(component_address);
-
         let transaction_id = self
-            .get_transaction_hash_from_substate_address(&substate_address, version)
+            .get_transaction_hash_from_substate_address(substate_id, version)
             .await?;
 
         match self.get_events_for_transaction(transaction_id).await {
@@ -411,7 +406,7 @@ where
                 // to the current component address
                 let component_tx_events = tx_events
                     .into_iter()
-                    .filter(|e| e.component_address().is_some() && e.component_address().unwrap() == component_address)
+                    .filter(|e| e.substate_id().is_some() && e.substate_id().clone().unwrap() == *substate_id)
                     .collect::<Vec<Event>>();
                 Ok(component_tx_events)
             },
@@ -421,19 +416,16 @@ where
 
     /// Queries the network to obtain all the events associated with a component,
     /// starting at an optional version (if `None`, starts from `0`).
-    pub async fn get_events_for_component(
+    pub async fn get_events_for_substate(
         &self,
-        component_address: ComponentAddress,
+        substate_id: &SubstateId,
         version: Option<u32>,
     ) -> Result<Vec<(u32, Event)>, IndexerError> {
         let mut events = vec![];
         let mut version: u32 = version.unwrap_or_default();
 
         loop {
-            match self
-                .get_events_for_component_and_version(component_address, version)
-                .await
-            {
+            match self.get_events_for_substate_and_version(substate_id, version).await {
                 Ok(component_tx_events) => events.extend(
                     component_tx_events
                         .into_iter()

@@ -25,19 +25,18 @@ use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 use tari_template_lib::{
     models::{Metadata, TemplateAddress},
-    prelude::ComponentAddress,
     Hash,
 };
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use crate::serde_with;
+use crate::{serde_with, substate::SubstateId};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct Event {
-    #[serde(with = "serde_with::hex::option")]
-    component_address: Option<ComponentAddress>,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    substate_id: Option<SubstateId>,
     #[serde(with = "serde_with::hex")]
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     template_address: TemplateAddress,
@@ -52,14 +51,14 @@ pub struct Event {
 
 impl Event {
     pub fn new(
-        component_address: Option<ComponentAddress>,
+        substate_id: Option<SubstateId>,
         template_address: TemplateAddress,
         tx_hash: Hash,
         topic: String,
         payload: Metadata,
     ) -> Self {
         Self {
-            component_address,
+            substate_id,
             template_address,
             tx_hash,
             topic,
@@ -67,8 +66,8 @@ impl Event {
         }
     }
 
-    pub fn component_address(&self) -> Option<ComponentAddress> {
-        self.component_address
+    pub fn substate_id(&self) -> Option<SubstateId> {
+        self.substate_id.clone()
     }
 
     pub fn template_address(&self) -> TemplateAddress {
@@ -104,8 +103,8 @@ impl Display for Event {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "event: component_address {:?}, template_address {}, tx_hash {}, topic {} and payload {:?}",
-            self.component_address, self.template_address, self.tx_hash, self.topic, self.payload
+            "event: substate_id {:?}, template_address {}, tx_hash {}, topic {} and payload {:?}",
+            self.substate_id, self.template_address, self.tx_hash, self.topic, self.payload
         )
     }
 }

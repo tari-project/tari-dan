@@ -44,31 +44,31 @@ Feature: Indexer node
     # Create a new SparkleNft component and mint an NFT
     When I call function "new" on template "basic_nft" on VN named "NFT"
     When I submit a transaction manifest on VN with inputs "NFT, ACC1" named "TX2" signed with key ACC1
-    ```
-    // $mint NFT/resources/0 6
-    // $nft_index NFT/resources/0 0
-    // $nft_index NFT/resources/0 1
-    // $nft_index NFT/resources/0 2
-    // $nft_index NFT/resources/0 3
-    // $nft_index NFT/resources/0 4
-    // $nft_index NFT/resources/0 5
-    let sparkle_nft = global!["NFT/components/SparkleNft"];
-    let mut acc1 = global!["ACC1/components/Account"];
+  ```
+  // $mint NFT/resources/0 6
+  // $nft_index NFT/resources/0 0
+  // $nft_index NFT/resources/0 1
+  // $nft_index NFT/resources/0 2
+  // $nft_index NFT/resources/0 3
+  // $nft_index NFT/resources/0 4
+  // $nft_index NFT/resources/0 5
+  let sparkle_nft = global!["NFT/components/SparkleNft"];
+  let mut acc1 = global!["ACC1/components/Account"];
 
-    // mint a couple of nfts with random ids
-    let nft_bucket_1 = sparkle_nft.mint("Astronaut (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149622024.jpg");
-    acc1.deposit(nft_bucket_1);
-    let nft_bucket_2 = sparkle_nft.mint("Baby (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629576.jpg");
-    acc1.deposit(nft_bucket_2);
-    let nft_bucket_3 = sparkle_nft.mint("Cool (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149622021.jpg");
-    acc1.deposit(nft_bucket_3);
-    let nft_bucket_4 = sparkle_nft.mint("Metaverse (Image by Freepik.com)", "https://img.freepik.com/premium-vector/hand-drawn-monkey-ape-vr-box-virtual-nft-style_361671-246.jpg");
-    acc1.deposit(nft_bucket_4);
-    let nft_bucket_5 = sparkle_nft.mint("Suit (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629594.jpg");
-    acc1.deposit(nft_bucket_5);
-    let nft_bucket_6 = sparkle_nft.mint("Cook  (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629582.jpg");
-    acc1.deposit(nft_bucket_6);
-    ```
+  // mint a couple of nfts with random ids
+  let nft_bucket_1 = sparkle_nft.mint("Astronaut (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149622024.jpg");
+  acc1.deposit(nft_bucket_1);
+  let nft_bucket_2 = sparkle_nft.mint("Baby (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629576.jpg");
+  acc1.deposit(nft_bucket_2);
+  let nft_bucket_3 = sparkle_nft.mint("Cool (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149622021.jpg");
+  acc1.deposit(nft_bucket_3);
+  let nft_bucket_4 = sparkle_nft.mint("Metaverse (Image by Freepik.com)", "https://img.freepik.com/premium-vector/hand-drawn-monkey-ape-vr-box-virtual-nft-style_361671-246.jpg");
+  acc1.deposit(nft_bucket_4);
+  let nft_bucket_5 = sparkle_nft.mint("Suit (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629594.jpg");
+  acc1.deposit(nft_bucket_5);
+  let nft_bucket_6 = sparkle_nft.mint("Cook  (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629582.jpg");
+  acc1.deposit(nft_bucket_6);
+  ```
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
@@ -97,7 +97,7 @@ Feature: Indexer node
     Then the indexer IDX returns 6 non fungibles for resource NFT/resources/0
 
     # Scan the network for the event emitted on ACC_1 creation
-    When indexer IDX scans the network 13 events for account ACC1 with topics component-created,deposit,std.vault.deposit,deposit,std.vault.deposit,deposit,std.vault.deposit,deposit,std.vault.deposit,deposit,std.vault.deposit,deposit,std.vault.deposit
+    When indexer IDX scans the network events for account ACC1 with topics component-created,deposit,deposit,deposit,deposit,deposit,deposit
 
   # When I print the cucumber world
   # When I wait 5000 seconds
@@ -148,10 +148,10 @@ Feature: Indexer node
     When I create an account ACC_2 on VN
 
     # Scan the network for the event emitted on ACC_1 creation
-    When indexer IDX scans the network 1 events for account ACC_1 with topics component-created
+    When indexer IDX scans the network events for account ACC_1 with topics component-created
 
     # Scan the network for the event emitted on ACC_2 creation
-    When indexer IDX scans the network 1 events for account ACC_2 with topics component-created
+    When indexer IDX scans the network events for account ACC_2 with topics component-created
 
   @serial
   Scenario: Indexer GraphQL filtering and pagination of events
@@ -198,24 +198,24 @@ Feature: Indexer node
 
     # Generate some events by doing vault operations with the faucet and the acounts
     When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACC_1, ACC_2" named "TX1"
-    ```
-      let faucet = global!["FAUCET/components/TestFaucet"];
-      let faucet_resource = global!["FAUCET/resources/0"];
-      let mut acc1 = global!["ACC_1/components/Account"];
-      let mut acc2 = global!["ACC_2/components/Account"];
+  ```
+  let faucet = global!["FAUCET/components/TestFaucet"];
+  let faucet_resource = global!["FAUCET/resources/0"];
+  let mut acc1 = global!["ACC_1/components/Account"];
+  let mut acc2 = global!["ACC_2/components/Account"];
 
-      // get tokens from the faucet to ACC_1
-      let faucet_bucket = faucet.take_free_coins();
-      acc1.deposit(faucet_bucket);
+  // get tokens from the faucet to ACC_1
+  let faucet_bucket = faucet.take_free_coins();
+  acc1.deposit(faucet_bucket);
 
-      // transfer some tokens from ACC_1 to ACC_2
-      let bucket1 = acc1.withdraw(faucet_resource, Amount(50));
-      acc2.deposit(bucket1);
+  // transfer some tokens from ACC_1 to ACC_2
+  let bucket1 = acc1.withdraw(faucet_resource, Amount(50));
+  acc2.deposit(bucket1);
 
-      // transfer some tokens back from ACC_2 to ACC_1
-      let bucket2 = acc2.withdraw(faucet_resource, Amount(20));
-      acc1.deposit(bucket2);
-    ```
+  // transfer some tokens back from ACC_2 to ACC_1
+  let bucket2 = acc2.withdraw(faucet_resource, Amount(20));
+  acc1.deposit(bucket2);
+  ```
 
     # Scan the network for events
     When indexer IDX scans the network for events of resource FAUCET/resources/0

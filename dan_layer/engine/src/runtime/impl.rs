@@ -234,7 +234,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         })
     }
 
-    fn emit_vault_event(
+    fn emit_vault_events(
         &self,
         topic: String,
         vault_id: VaultId,
@@ -243,11 +243,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         resource_type: ResourceType,
         state: &mut WorkingState,
     ) -> Result<(), RuntimeError> {
-        let component_address = state
-            .current_call_scope()?
-            .get_current_component_lock()
-            .and_then(|l| l.address().as_component_address());
-
         let tx_hash = self.entity_id_provider.transaction_hash();
         let (template_address, _) = state.current_template()?;
         let resource_address = state.get_vault(vault_lock)?.resource_address();
@@ -258,9 +253,26 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         payload.insert("resource_type", resource_type.to_string());
         payload.insert("amount", amount.to_string());
 
-        let event = Event::new(component_address, *template_address, tx_hash, topic, payload);
-        debug!(target: LOG_TARGET, "Emitted vault event {}", event);
-        state.push_event(event);
+        // we emit multiple events referencing vault and resource address
+        // this way idexers/clients can search by any one
+        let vault_event = Event::new(
+            Some(SubstateId::Vault(vault_id)),
+            *template_address,
+            tx_hash,
+            topic.clone(),
+            payload.clone(),
+        );
+        let resource_event = Event::new(
+            Some(SubstateId::Resource(*resource_address)),
+            *template_address,
+            tx_hash,
+            topic,
+            payload,
+        );
+        debug!(target: LOG_TARGET, "Emitted vault events {}", vault_event);
+        debug!(target: LOG_TARGET, "Emitted resource event {}", resource_event);
+        state.push_event(vault_event);
+        state.push_event(resource_event);
 
         Ok(())
     }
@@ -282,7 +294,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
         self.invoke_modules_on_runtime_call("emit_event")?;
 
-        let component_address = self.tracker.read_with(|state| {
+        let component_address_option = self.tracker.read_with(|state| {
             Ok::<_, RuntimeError>(
                 state
                     .current_call_scope()?
@@ -290,10 +302,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     .and_then(|l| l.address().as_component_address()),
             )
         })?;
+        let substate_id = component_address_option.map(SubstateId::Component);
         let tx_hash = self.entity_id_provider.transaction_hash();
         let template_address = self.tracker.get_template_address()?;
 
-        let event = Event::new(component_address, template_address, tx_hash, topic, payload);
+        let event = Event::new(substate_id, template_address, tx_hash, topic, payload);
         log::log!(target: "tari::dan::engine::runtime", log::Level::Debug, "{}", event.to_string());
         self.tracker.add_event(event);
         Ok(())
@@ -918,7 +931,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     let bucket = state.take_bucket(bucket_id)?;
 
                     // Emit a builtin event for the deposit
-                    self.emit_vault_event(
+                    self.emit_vault_events(
                         VAULT_DEPOSIT_TOPIC.to_owned(),
                         vault_id,
                         &vault_lock,
@@ -1003,7 +1016,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     };
 
                     // Emit a builtin event for the withdraw
-                    self.emit_vault_event(
+                    self.emit_vault_events(
                         VAULT_WITHDRAW_TOPIC.to_owned(),
                         vault_id,
                         &vault_lock,
