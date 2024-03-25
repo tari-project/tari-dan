@@ -31,6 +31,13 @@ pub enum EpochManagerRequest<TAddr> {
     CurrentBlockInfo {
         reply: Reply<(u64, FixedHash)>,
     },
+    GetLastBlockOfTheEpoch {
+        reply: Reply<FixedHash>,
+    },
+    IsLastBlockOfTheEpoch {
+        block_height: u64,
+        reply: Reply<bool>,
+    },
     GetValidatorNode {
         epoch: Epoch,
         addr: TAddr,
@@ -142,6 +149,10 @@ pub enum EpochManagerRequest<TAddr> {
         epoch: Epoch,
         buckets: HashSet<Shard>,
         reply: Reply<HashMap<Shard, Committee<TAddr>>>,
+    },
+    GetBaseLayerBlockHeight {
+        hash: FixedHash,
+        reply: Reply<Option<u64>>,
     },
     GetFeeClaimPublicKey {
         reply: Reply<Option<PublicKey>>,

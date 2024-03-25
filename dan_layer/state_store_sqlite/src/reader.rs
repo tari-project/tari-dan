@@ -388,6 +388,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .filter(foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32))
             .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
             .filter(foreign_proposals::transactions.eq(serialize_json(&foreign_proposal.transactions)?))
+            .filter(foreign_proposals::base_layer_block_height.eq(foreign_proposal.base_layer_block_height as i64))
             .count()
             .limit(1)
             .get_result::<i64>(self.connection())

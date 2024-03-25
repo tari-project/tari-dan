@@ -63,6 +63,7 @@ mod confirm_all_transitions {
             Default::default(),
             None,
             EpochTime::now().as_u64(),
+            0,
             FixedHash::zero(),
         );
         block1.insert(&mut tx).unwrap();

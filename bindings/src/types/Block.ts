@@ -24,5 +24,6 @@ export interface Block {
   signature: { public_nonce: string; signature: string } | null;
   block_time: number | null;
   timestamp: number;
+  base_layer_block_height: number;
   base_layer_block_hash: string;
 }

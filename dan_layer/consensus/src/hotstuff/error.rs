@@ -190,4 +190,17 @@ pub enum ProposalValidationError {
         calculated: FixedHash,
         from_block: FixedHash,
     },
+    #[error("Base layer block hash for block with height {proposed} too high, current height {current}")]
+    BlockHeightTooHigh { proposed: u64, current: u64 },
+    #[error("Base layer block hash for block with height {proposed} too small, current height {current}")]
+    BlockHeightTooSmall { proposed: u64, current: u64 },
+    #[error("Base layer block hash ({hash}) is not known to the node")]
+    BlockHashNotFound { hash: FixedHash },
+    #[error("Base layer block height {height} does not match the real height {real_height}")]
+    BlockHeightMismatch { height: u64, real_height: u64 },
+    #[error("Base layer block with height {base_layer_block_height} is not the last block of the epoch")]
+    NotLastBlockOfEpoch {
+        block_id: BlockId,
+        base_layer_block_height: u64,
+    },
 }

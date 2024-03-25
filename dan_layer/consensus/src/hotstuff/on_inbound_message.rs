@@ -18,8 +18,10 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::TransactionId;
 use tokio::{sync::mpsc, time};
 
+use super::config::HotstuffConfig;
 use crate::{
     block_validations::{
+        check_base_layer_block_hash,
         check_hash_and_height,
         check_network,
         check_proposed_by_leader,
@@ -37,6 +39,7 @@ pub type IncomingMessageResult<TAddr> = Result<Option<(TAddr, HotstuffMessage)>,
 
 pub struct OnInboundMessage<TConsensusSpec: ConsensusSpec> {
     network: Network,
+    config: HotstuffConfig,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -51,6 +54,7 @@ where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         network: Network,
+        config: HotstuffConfig,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -60,6 +64,7 @@ where TConsensusSpec: ConsensusSpec
         let (tx_msg_ready, rx_msg_ready) = mpsc::unbounded_channel();
         Self {
             network,
+            config,
             store,
             epoch_manager,
             leader_strategy,
@@ -107,6 +112,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     async fn check_proposal(&mut self, block: Block) -> Result<Option<Block>, HotStuffError> {
+        check_base_layer_block_hash::<TConsensusSpec>(&block, &self.epoch_manager, &self.config).await?;
         check_network(&block, self.network)?;
         check_hash_and_height(&block)?;
         let committee_for_block = self

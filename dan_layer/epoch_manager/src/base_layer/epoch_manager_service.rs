@@ -104,6 +104,12 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
             EpochManagerRequest::CurrentBlockInfo { reply } => handle(reply, Ok(self.inner.current_block_info())),
+            EpochManagerRequest::GetLastBlockOfTheEpoch { reply } => {
+                handle(reply, Ok(self.inner.last_block_of_current_epoch()))
+            },
+            EpochManagerRequest::IsLastBlockOfTheEpoch { block_height, reply } => {
+                handle(reply, self.inner.is_last_block_of_epoch(block_height).await)
+            },
             EpochManagerRequest::GetValidatorNode { epoch, addr, reply } => handle(
                 reply,
                 self.inner.get_validator_node_by_address(epoch, &addr).and_then(|x| {
@@ -224,6 +230,9 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::GetFeeClaimPublicKey { reply } => handle(reply, self.inner.get_fee_claim_public_key()),
             EpochManagerRequest::SetFeeClaimPublicKey { public_key, reply } => {
                 handle(reply, self.inner.set_fee_claim_public_key(public_key))
+            },
+            EpochManagerRequest::GetBaseLayerBlockHeight { hash, reply } => {
+                handle(reply, self.inner.get_base_layer_block_height(hash).await)
             },
         }
     }

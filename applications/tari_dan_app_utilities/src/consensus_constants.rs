@@ -24,6 +24,8 @@
 pub struct ConsensusConstants {
     pub base_layer_confirmations: u64,
     pub committee_size: u32,
+    pub max_base_layer_blocks_ahead: u64,
+    pub max_base_layer_blocks_behind: u64,
 }
 
 impl ConsensusConstants {
@@ -31,6 +33,8 @@ impl ConsensusConstants {
         Self {
             base_layer_confirmations: 3,
             committee_size: 7,
+            max_base_layer_blocks_ahead: 5,
+            max_base_layer_blocks_behind: 5,
         }
     }
 }
