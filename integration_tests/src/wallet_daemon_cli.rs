@@ -221,6 +221,7 @@ pub async fn transfer_confidential(
         override_inputs: false,
         instructions: vec![],
         inputs: vec![source_account_addr, dest_account_addr],
+        input_refs: vec![],
         min_epoch,
         max_epoch,
     };
@@ -451,6 +452,7 @@ pub async fn submit_manifest_with_signing_keys(
         is_dry_run: false,
         proof_ids: vec![],
         inputs,
+        input_refs: vec![],
         min_epoch,
         max_epoch,
     };
@@ -524,6 +526,7 @@ pub async fn submit_manifest(
         is_dry_run: false,
         proof_ids: vec![],
         inputs,
+        input_refs: vec![],
         min_epoch,
         max_epoch,
     };
@@ -571,6 +574,7 @@ pub async fn submit_transaction(
         override_inputs: false,
         is_dry_run: false,
         inputs,
+        input_refs: vec![],
         proof_ids: vec![],
         min_epoch,
         max_epoch,
@@ -624,6 +628,7 @@ pub async fn create_component(
         is_dry_run: false,
         proof_ids: vec![],
         inputs: vec![],
+        input_refs: vec![],
         min_epoch,
         max_epoch,
     };
