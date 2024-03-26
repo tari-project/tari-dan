@@ -100,6 +100,8 @@ pub struct Block {
     block_time: Option<u64>,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     timestamp: u64,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    base_layer_block_height: u64,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     base_layer_block_hash: FixedHash,
 }
@@ -118,6 +120,7 @@ impl Block {
         sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
         timestamp: u64,
+        base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
     ) -> Self {
         let mut block = Self {
@@ -139,6 +142,7 @@ impl Block {
             signature,
             block_time: None,
             timestamp,
+            base_layer_block_height,
             base_layer_block_hash,
         };
         block.id = block.calculate_hash().into();
@@ -164,6 +168,7 @@ impl Block {
         created_at: PrimitiveDateTime,
         block_time: Option<u64>,
         timestamp: u64,
+        base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
     ) -> Self {
         Self {
@@ -185,6 +190,7 @@ impl Block {
             signature,
             block_time,
             timestamp,
+            base_layer_block_height,
             base_layer_block_hash,
         }
     }
@@ -203,6 +209,7 @@ impl Block {
             IndexMap::new(),
             None,
             EpochTime::now().as_u64(),
+            0,
             FixedHash::zero(),
         )
     }
@@ -228,6 +235,7 @@ impl Block {
             signature: None,
             block_time: None,
             timestamp: EpochTime::now().as_u64(),
+            base_layer_block_height: 0,
             base_layer_block_hash: FixedHash::zero(),
         }
     }
@@ -241,6 +249,7 @@ impl Block {
         epoch: Epoch,
         parent_merkle_root: FixedHash,
         parent_timestamp: u64,
+        parent_base_layer_block_height: u64,
         parent_base_layer_block_hash: FixedHash,
     ) -> Self {
         let mut block = Self::new(
@@ -256,6 +265,7 @@ impl Block {
             IndexMap::new(),
             None,
             parent_timestamp,
+            parent_base_layer_block_height,
             parent_base_layer_block_hash,
         );
         block.is_dummy = true;
@@ -276,6 +286,7 @@ impl Block {
             .chain(&self.commands)
             .chain(&self.foreign_indexes)
             .chain(&self.timestamp)
+            .chain(&self.base_layer_block_height)
             .chain(&self.base_layer_block_hash)
             .result()
     }
@@ -419,6 +430,10 @@ impl Block {
 
     pub fn is_proposed_by_addr<A: NodeAddressable + PartialEq<A>>(&self, address: &A) -> Option<bool> {
         Some(A::try_from_public_key(&self.proposed_by)? == *address)
+    }
+
+    pub fn base_layer_block_height(&self) -> u64 {
+        self.base_layer_block_height
     }
 
     pub fn base_layer_block_hash(&self) -> &FixedHash {

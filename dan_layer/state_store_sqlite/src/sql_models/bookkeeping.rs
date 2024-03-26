@@ -43,6 +43,7 @@ pub struct ForeignProposal {
     pub state: String,
     pub mined_at: Option<i64>,
     pub transactions: String,
+    pub base_layer_block_height: i64,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -56,6 +57,7 @@ impl TryFrom<ForeignProposal> for consensus_models::ForeignProposal {
             state: parse_from_string(&value.state)?,
             proposed_height: value.mined_at.map(|mined_at| NodeHeight(mined_at as u64)),
             transactions: deserialize_json(&value.transactions)?,
+            base_layer_block_height: value.base_layer_block_height as u64,
         })
     }
 }

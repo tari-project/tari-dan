@@ -123,10 +123,25 @@ where TConsensusSpec: ConsensusSpec
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
-        let (_, current_base_layer_block_hash) = self.epoch_manager.current_base_layer_block_info().await?;
+        let (current_base_layer_block_height, current_base_layer_block_hash) =
+            self.epoch_manager.current_base_layer_block_info().await?;
+        let high_qc = self.store.with_read_tx(|tx| HighQc::get(tx))?;
+        let qc_block = self.store.with_read_tx(|tx| Block::get(tx, high_qc.block_id()))?;
+
+        let parent_base_layer_block_hash = qc_block.base_layer_block_hash();
+
+        let base_layer_block_hash = if qc_block.base_layer_block_height() >= current_base_layer_block_height {
+            *parent_base_layer_block_hash
+        } else {
+            // We select our current base layer block hash as the base layer block hash for the next block if
+            // and only if we know that the parent block was smaller.
+            current_base_layer_block_hash
+        };
+
+        let base_layer_block_height =
+            std::cmp::max(qc_block.base_layer_block_height(), current_base_layer_block_height);
 
         let next_block = self.store.with_write_tx(|tx| {
-            let high_qc = HighQc::get(tx.deref_mut())?;
             let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
             let next_block = self.build_next_block(
                 tx,
@@ -138,7 +153,8 @@ where TConsensusSpec: ConsensusSpec
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
                 //       is a good idea.
                 is_newview_propose,
-                current_base_layer_block_hash,
+                base_layer_block_height,
+                base_layer_block_hash,
             )?;
 
             next_block.as_last_proposed().set(tx)?;
@@ -195,7 +211,8 @@ where TConsensusSpec: ConsensusSpec
         proposed_by: PublicKey,
         local_committee_shard: &CommitteeShard,
         empty_block: bool,
-        current_base_layer_block_hash: FixedHash,
+        base_layer_block_height: u64,
+        base_layer_block_hash: FixedHash,
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
@@ -218,7 +235,9 @@ where TConsensusSpec: ConsensusSpec
                 !pending_proposals.iter().any(|pending_proposal| {
                     pending_proposal.bucket == foreign_proposal.bucket &&
                         pending_proposal.block_id == foreign_proposal.block_id
-                })
+                }) && foreign_proposal.base_layer_block_height <= base_layer_block_height // If the proposal base layer
+                                                                                          // height is too high, ignore
+                                                                                          // for now.
             })
             .map(|mut foreign_proposal| {
                 foreign_proposal.set_proposed_height(parent_block.height().saturating_add(NodeHeight(1)));
@@ -320,7 +339,8 @@ where TConsensusSpec: ConsensusSpec
             foreign_indexes,
             None,
             EpochTime::now().as_u64(),
-            current_base_layer_block_hash,
+            base_layer_block_height,
+            base_layer_block_hash,
         );
 
         let signature = self.signing_service.sign(next_block.id());

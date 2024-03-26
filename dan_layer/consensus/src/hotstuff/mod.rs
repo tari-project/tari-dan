@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 mod common;
+mod config;
 mod current_height;
 mod error;
 mod event;
@@ -27,6 +28,7 @@ mod vote_receiver;
 mod worker;
 
 pub use common::*;
+pub use config::HotstuffConfig;
 pub use error::*;
 pub use event::*;
 pub use state_machine::*;

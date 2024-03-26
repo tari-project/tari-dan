@@ -264,6 +264,7 @@ pub async fn spawn_services(
         metrics,
         shutdown.clone(),
         transaction_executor_builder,
+        consensus_constants.clone(),
     )
     .await;
     handles.push(consensus_join_handle);

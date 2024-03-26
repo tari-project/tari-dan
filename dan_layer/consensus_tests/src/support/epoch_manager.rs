@@ -262,6 +262,10 @@ impl EpochManagerReader for TestEpochManager {
             fee_claim_public_key: PublicKey::default(),
         })
     }
+
+    async fn get_base_layer_block_height(&self, _hash: FixedHash) -> Result<Option<u64>, EpochManagerError> {
+        Ok(Some(self.inner.lock().await.current_block_info.0))
+    }
 }
 
 #[derive(Debug, Clone)]

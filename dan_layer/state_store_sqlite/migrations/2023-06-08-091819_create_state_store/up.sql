@@ -12,27 +12,28 @@ create unique index quorum_certificates_uniq_idx_id on quorum_certificates (qc_i
 
 create table blocks
 (
-    id                    integer   not null primary key AUTOINCREMENT,
-    block_id              text      not NULL,
-    parent_block_id       text      not NULL,
-    merkle_root           text      not NULL,
-    network               text      not NULL,
-    height                bigint    not NULL,
-    epoch                 bigint    not NULL,
-    proposed_by           text      not NULL,
-    qc_id                 text      not NULL,
-    command_count         bigint    not NULL,
-    commands              text      not NULL,
-    total_leader_fee      bigint    not NULL,
-    is_committed          boolean   not NULL default '0',
-    is_processed          boolean   not NULL,
-    is_dummy              boolean   not NULL,
-    foreign_indexes       text      not NULL,
-    signature             text      NULL,
-    created_at            timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    block_time            bigint    NULL,
-    timestamp             bigint    not NULL,
-    base_layer_block_hash text not NULL,
+    id                      integer   not null primary key AUTOINCREMENT,
+    block_id                text      not NULL,
+    parent_block_id         text      not NULL,
+    merkle_root             text      not NULL,
+    network                 text      not NULL,
+    height                  bigint    not NULL,
+    epoch                   bigint    not NULL,
+    proposed_by             text      not NULL,
+    qc_id                   text      not NULL,
+    command_count           bigint    not NULL,
+    commands                text      not NULL,
+    total_leader_fee        bigint    not NULL,
+    is_committed            boolean   not NULL default '0',
+    is_processed            boolean   not NULL,
+    is_dummy                boolean   not NULL,
+    foreign_indexes         text      not NULL,
+    signature               text          NULL,
+    block_time              bigint        NULL,
+    timestamp               bigint    not NULL,
+    base_layer_block_height bigint    not NULL,
+    base_layer_block_hash   text      not NULL,
+    created_at              timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
 
@@ -41,24 +42,25 @@ create unique index blocks_uniq_idx_id on blocks (block_id);
 
 create table parked_blocks
 (   
-    id                    integer not null primary key AUTOINCREMENT,
-    block_id              text    not NULL,
-    parent_block_id       text    not NULL,
-    merkle_root           text    not NULL,
-    network               text    not NULL,
-    height                bigint  not NULL,
-    epoch                 bigint  not NULL,
-    proposed_by           text    not NULL,
-    justify               text    not NULL,
-    command_count         bigint  not NULL,
-    commands              text    not NULL,
-    total_leader_fee      bigint  not NULL,
-    foreign_indexes       text    not NULL,
-    signature             text        NULL,
-    block_time            bigint      NULL,
-    timestamp             bigint  not NULL,
-    base_layer_block_hash text    not NULL,
-    created_at            timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id                      integer   not null primary key AUTOINCREMENT,
+    block_id                text      not NULL,
+    parent_block_id         text      not NULL,
+    merkle_root             text      not NULL,
+    network                 text      not NULL,
+    height                  bigint    not NULL,
+    epoch                   bigint    not NULL,
+    proposed_by             text      not NULL,
+    justify                 text      not NULL,
+    command_count           bigint    not NULL,
+    commands                text      not NULL,
+    total_leader_fee        bigint    not NULL,
+    foreign_indexes         text      not NULL,
+    signature               text          NULL,
+    block_time              bigint        NULL,
+    timestamp               bigint    not NULL,
+    base_layer_block_height bigint    not NULL,
+    base_layer_block_hash   text      not NULL,
+    created_at              timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- block_id must be unique. Optimise fetching by block_id
@@ -261,13 +263,14 @@ CREATE TABLE missing_transactions
 
 CREATE TABLE foreign_proposals
 (
-    id              integer   not NULL primary key AUTOINCREMENT,
-    bucket          int       not NULL,
-    block_id        text      not NULL,
-    state           text      not NULL,
-    proposed_height bigint    NULL,
-    transactions    text      not NULL,
-    created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    id                      integer   not NULL primary key AUTOINCREMENT,
+    bucket                  int       not NULL,
+    block_id                text      not NULL,
+    state                   text      not NULL,
+    proposed_height         bigint        NULL,
+    transactions            text      not NULL,
+    base_layer_block_height bigint    not NULL,
+    created_at              timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (bucket, block_id)
 );
 

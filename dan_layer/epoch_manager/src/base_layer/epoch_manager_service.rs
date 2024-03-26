@@ -225,6 +225,9 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::SetFeeClaimPublicKey { public_key, reply } => {
                 handle(reply, self.inner.set_fee_claim_public_key(public_key))
             },
+            EpochManagerRequest::GetBaseLayerBlockHeight { hash, reply } => {
+                handle(reply, self.inner.get_base_layer_block_height(hash).await)
+            },
         }
     }
 }
