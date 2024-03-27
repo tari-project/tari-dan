@@ -53,7 +53,7 @@ use tari_template_lib::{
     prelude::{ComponentAccessRules, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateRequirement, Transaction};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
 use crate::{read_only_state_store::ReadOnlyStateStore, track_calls::TrackCallsModule, Package};
@@ -449,7 +449,7 @@ impl TemplateTest {
 
     pub fn try_execute(
         &mut self,
-        transaction: Transaction,
+        mut transaction: Transaction,
         proofs: Vec<NonFungibleAddress>,
     ) -> Result<ExecuteResult, TransactionError> {
         let mut modules: Vec<Arc<dyn RuntimeModule>> = vec![Arc::new(self.track_calls.clone())];
@@ -469,6 +469,17 @@ impl TemplateTest {
             modules,
             Network::LocalNet,
         );
+
+        {
+            let access = self.state_store.read_access().unwrap();
+
+            transaction.filled_inputs_mut().extend(
+                access
+                    .iter_raw()
+                    .map(|(k, _)| SubstateId::from_bytes(k).unwrap())
+                    .map(|s| SubstateRequirement::new(s, None)),
+            );
+        }
 
         let tx_id = *transaction.id();
         eprintln!("START Transaction id = \"{}\"", tx_id);

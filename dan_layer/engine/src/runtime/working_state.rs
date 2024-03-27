@@ -60,7 +60,6 @@ use crate::{
         state_store::WorkingStateStore,
         tracker_auth::Authorization,
         ActionIdent,
-        AuthorizationScope,
         RuntimeError,
         TransactionCommitError,
     },
@@ -89,7 +88,7 @@ pub(super) struct WorkingState {
     last_instruction_output: Option<IndexedValue>,
     workspace: Workspace,
     call_frames: Vec<CallFrame>,
-    base_call_scope: CallScope,
+    initial_call_scope: CallScope,
 
     fee_state: FeeState,
 }
@@ -98,12 +97,9 @@ impl WorkingState {
     pub fn new(
         state_store: MemoryStateStore,
         virtual_substates: VirtualSubstates,
-        initial_auth_scope: AuthorizationScope,
+        initial_call_scope: CallScope,
         transaction_hash: Hash,
     ) -> Self {
-        let mut base_call_scope = CallScope::new();
-        base_call_scope.set_auth_scope(initial_auth_scope);
-
         Self {
             transaction_hash,
             events: Vec::new(),
@@ -122,7 +118,7 @@ impl WorkingState {
             virtual_substates,
             new_fee_claims: HashMap::default(),
             call_frames: Vec::new(),
-            base_call_scope,
+            initial_call_scope,
             fee_state: FeeState::new(),
             object_ids: ObjectIds::new(1000),
         }
@@ -186,7 +182,7 @@ impl WorkingState {
             .component_mut()
             .ok_or_else(|| RuntimeError::LockSubstateMismatch {
                 lock_id: locked.lock_id(),
-                address,
+                address: address.clone(),
                 expected_type: "Component",
             })?;
         let before = IndexedWellKnownTypes::from_value(component_mut.state())?;
@@ -202,7 +198,7 @@ impl WorkingState {
                 });
             }
         }
-        self.validate_component_state(&indexed, false)?;
+        self.validate_component_state(&address, &indexed)?;
 
         Ok(ret)
     }
@@ -753,8 +749,8 @@ impl WorkingState {
 
     pub fn validate_component_state(
         &mut self,
+        component_id: &SubstateId,
         indexed: &IndexedWellKnownTypes,
-        require_in_scope: bool,
     ) -> Result<(), RuntimeError> {
         let mut dup_check = HashSet::with_capacity(indexed.vault_ids().len());
         for vault_id in indexed.vault_ids() {
@@ -764,13 +760,32 @@ impl WorkingState {
                 });
             }
         }
-        // TODO: I think that we can clean this up a bit. We should always be checking the scope but there are edge
-        //       cases and it was just easier to have this conditional
-        if require_in_scope {
-            self.check_all_substates_in_scope(indexed)?;
-        } else {
-            self.check_all_substates_known(indexed)?;
-        }
+
+        self.check_all_substates_known(indexed)?;
+
+        let diff_values = self
+            .store
+            .get_unmodified_substate(component_id)
+            .optional()?
+            .map(|prev_substate| {
+                let prev_component =
+                    prev_substate
+                        .substate_value()
+                        .component()
+                        .ok_or_else(|| RuntimeError::InvariantError {
+                            function: "validate_component_state",
+                            details: "SubstateId is not a Component".to_string(),
+                        })?;
+                let prev_state = prev_component.state();
+                Ok::<_, RuntimeError>(IndexedWellKnownTypes::from_value(prev_state)?.diff(indexed))
+            })
+            .transpose()?;
+
+        // We only require newly added values to be in scope since previous values were already checked. For instance,
+        // if a transaction uses an account does not have to input all vaults and resources just to transact on a
+        // single vault.
+        let new_values = diff_values.as_ref().unwrap_or(indexed);
+        self.check_all_substates_in_scope(new_values)?;
 
         let scope_mut = self.current_call_scope_mut()?;
         for address in indexed.referenced_substates() {
@@ -870,7 +885,7 @@ impl WorkingState {
             .call_frames
             .last_mut()
             .map(|s| s.scope_mut())
-            .unwrap_or(&mut self.base_call_scope))
+            .unwrap_or(&mut self.initial_call_scope))
     }
 
     pub fn current_call_scope(&self) -> Result<&CallScope, RuntimeError> {
@@ -878,7 +893,7 @@ impl WorkingState {
             .call_frames
             .last()
             .map(|f| f.scope())
-            .unwrap_or(&self.base_call_scope))
+            .unwrap_or(&self.initial_call_scope))
     }
 
     pub fn call_frame_depth(&self) -> usize {
@@ -928,7 +943,7 @@ impl WorkingState {
             // base to the first call scope)
             new_frame
                 .scope_mut()
-                .set_auth_scope(self.base_call_scope.auth_scope().clone());
+                .set_auth_scope(self.initial_call_scope.auth_scope().clone());
         }
 
         self.call_frames.push(new_frame);
@@ -964,14 +979,14 @@ impl WorkingState {
     }
 
     pub fn base_call_scope(&self) -> &CallScope {
-        &self.base_call_scope
+        &self.initial_call_scope
     }
 
     pub fn take_state(&mut self) -> Self {
         let new_state = WorkingState::new(
             self.store.state_store().clone(),
-            Default::default(),
-            AuthorizationScope::new(vec![]),
+            VirtualSubstates::new(),
+            CallScope::new(),
             self.transaction_hash,
         );
         mem::replace(self, new_state)

@@ -111,7 +111,6 @@ use crate::{
         RuntimeInterface,
         RuntimeModule,
     },
-    state_store::AtomicDb,
     template::LoadedTemplate,
     transaction::TransactionProcessor,
 };
@@ -153,22 +152,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             max_call_depth,
             network,
         };
-        runtime.initialize_initial_scope()?;
         runtime.invoke_modules_on_initialize()?;
         Ok(runtime)
-    }
-
-    fn initialize_initial_scope(&self) -> Result<(), RuntimeError> {
-        self.tracker.write_with(|state| {
-            let store = state.store().state_store().clone();
-            let tx = store.read_access()?;
-            let scope_mut = state.current_call_scope_mut()?;
-            for (k, _) in tx.iter_raw() {
-                let address = SubstateId::from_bytes(k)?;
-                scope_mut.add_substate_to_owned(address);
-            }
-            Ok(())
-        })
     }
 
     fn invoke_modules_on_initialize(&self) -> Result<(), RuntimeError> {
@@ -254,7 +239,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         payload.insert("amount", amount.to_string());
 
         // we emit multiple events referencing vault and resource address
-        // this way idexers/clients can search by any one
+        // this way indexers/clients can search by any one
         let vault_event = Event::new(
             Some(SubstateId::Vault(vault_id)),
             *template_address,
