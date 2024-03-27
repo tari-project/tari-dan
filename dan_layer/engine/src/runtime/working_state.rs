@@ -60,7 +60,6 @@ use crate::{
         state_store::WorkingStateStore,
         tracker_auth::Authorization,
         ActionIdent,
-        AuthorizationScope,
         RuntimeError,
         TransactionCommitError,
     },
@@ -89,7 +88,7 @@ pub(super) struct WorkingState {
     last_instruction_output: Option<IndexedValue>,
     workspace: Workspace,
     call_frames: Vec<CallFrame>,
-    base_call_scope: CallScope,
+    initial_call_scope: CallScope,
 
     fee_state: FeeState,
 }
@@ -98,12 +97,9 @@ impl WorkingState {
     pub fn new(
         state_store: MemoryStateStore,
         virtual_substates: VirtualSubstates,
-        initial_auth_scope: AuthorizationScope,
+        initial_call_scope: CallScope,
         transaction_hash: Hash,
     ) -> Self {
-        let mut base_call_scope = CallScope::new();
-        base_call_scope.set_auth_scope(initial_auth_scope);
-
         Self {
             transaction_hash,
             events: Vec::new(),
@@ -122,7 +118,7 @@ impl WorkingState {
             virtual_substates,
             new_fee_claims: HashMap::default(),
             call_frames: Vec::new(),
-            base_call_scope,
+            initial_call_scope,
             fee_state: FeeState::new(),
             object_ids: ObjectIds::new(1000),
         }
@@ -192,17 +188,8 @@ impl WorkingState {
         let before = IndexedWellKnownTypes::from_value(component_mut.state())?;
         let ret = f(component_mut);
 
-        let indexed = IndexedWellKnownTypes::from_value(component_mut.state())?;
-
-        for existing_vault in before.vault_ids() {
-            // Vaults can never be removed from components
-            if !indexed.vault_ids().contains(existing_vault) {
-                return Err(RuntimeError::OrphanedSubstate {
-                    address: (*existing_vault).into(),
-                });
-            }
-        }
-        self.validate_component_state(&indexed, false)?;
+        let after = IndexedWellKnownTypes::from_value(component_mut.state())?;
+        self.validate_component_state(Some(&before), &after)?;
 
         Ok(ret)
     }
@@ -394,10 +381,19 @@ impl WorkingState {
         if !self.current_call_scope()?.is_bucket_in_scope(bucket_id) {
             return Err(RuntimeError::BucketNotFound { bucket_id });
         }
-        self.current_call_scope_mut()?.remove_bucket_from_scope(bucket_id);
-        self.buckets
+        let bucket = self
+            .buckets
             .remove(&bucket_id)
-            .ok_or(RuntimeError::BucketNotFound { bucket_id })
+            .ok_or(RuntimeError::BucketNotFound { bucket_id })?;
+
+        // Use of the bucket adds the resource to the scope
+        let resource_addr = *bucket.resource_address();
+        {
+            let scope_mut = self.current_call_scope_mut()?;
+            scope_mut.remove_bucket_from_scope(bucket_id);
+            scope_mut.add_substate_to_owned(resource_addr.into());
+        }
+        Ok(bucket)
     }
 
     pub fn burn_bucket(&mut self, bucket: Bucket) -> Result<(), RuntimeError> {
@@ -753,28 +749,42 @@ impl WorkingState {
 
     pub fn validate_component_state(
         &mut self,
-        indexed: &IndexedWellKnownTypes,
-        require_in_scope: bool,
+        previous_state: Option<&IndexedWellKnownTypes>,
+        next_state: &IndexedWellKnownTypes,
     ) -> Result<(), RuntimeError> {
-        let mut dup_check = HashSet::with_capacity(indexed.vault_ids().len());
-        for vault_id in indexed.vault_ids() {
+        // Check that no vaults were dropped
+        if let Some(prev_state) = previous_state {
+            for existing_vault in prev_state.vault_ids() {
+                // Vaults can never be removed from components
+                if !next_state.vault_ids().contains(existing_vault) {
+                    return Err(RuntimeError::OrphanedSubstate {
+                        address: (*existing_vault).into(),
+                    });
+                }
+            }
+        }
+
+        // Check that no vaults are duplicated
+        let mut dup_check = HashSet::with_capacity(next_state.vault_ids().len());
+        for vault_id in next_state.vault_ids() {
             if !dup_check.insert(vault_id) {
                 return Err(RuntimeError::DuplicateReference {
                     address: (*vault_id).into(),
                 });
             }
         }
-        // TODO: I think that we can clean this up a bit. We should always be checking the scope but there are edge
-        //       cases and it was just easier to have this conditional
-        if require_in_scope {
-            self.check_all_substates_in_scope(indexed)?;
-        } else {
-            self.check_all_substates_known(indexed)?;
-        }
+
+        let diff_values = previous_state.map(|prev_state| next_state.diff(prev_state));
+
+        // We only require newly added values to be in scope since previous values were already checked. For instance,
+        // if a transaction uses an account does not have to input all vaults and resources just to transact on a
+        // single vault.
+        let new_values = diff_values.as_ref().unwrap_or(next_state);
+        self.check_all_substates_in_scope(new_values)?;
 
         let scope_mut = self.current_call_scope_mut()?;
-        for address in indexed.referenced_substates() {
-            // Move orphaned objects to owned
+        for address in next_state.referenced_substates() {
+            // Mark any orphaned objects as owned
             scope_mut.move_node_to_owned(&address)?
         }
 
@@ -870,7 +880,7 @@ impl WorkingState {
             .call_frames
             .last_mut()
             .map(|s| s.scope_mut())
-            .unwrap_or(&mut self.base_call_scope))
+            .unwrap_or(&mut self.initial_call_scope))
     }
 
     pub fn current_call_scope(&self) -> Result<&CallScope, RuntimeError> {
@@ -878,7 +888,7 @@ impl WorkingState {
             .call_frames
             .last()
             .map(|f| f.scope())
-            .unwrap_or(&self.base_call_scope))
+            .unwrap_or(&self.initial_call_scope))
     }
 
     pub fn call_frame_depth(&self) -> usize {
@@ -928,7 +938,7 @@ impl WorkingState {
             // base to the first call scope)
             new_frame
                 .scope_mut()
-                .set_auth_scope(self.base_call_scope.auth_scope().clone());
+                .set_auth_scope(self.initial_call_scope.auth_scope().clone());
         }
 
         self.call_frames.push(new_frame);
@@ -964,14 +974,14 @@ impl WorkingState {
     }
 
     pub fn base_call_scope(&self) -> &CallScope {
-        &self.base_call_scope
+        &self.initial_call_scope
     }
 
     pub fn take_state(&mut self) -> Self {
         let new_state = WorkingState::new(
             self.store.state_store().clone(),
-            Default::default(),
-            AuthorizationScope::new(vec![]),
+            VirtualSubstates::new(),
+            CallScope::new(),
             self.transaction_hash,
         );
         mem::replace(self, new_state)
@@ -1015,6 +1025,7 @@ impl WorkingState {
 
     pub fn check_all_substates_in_scope(&self, value: &IndexedWellKnownTypes) -> Result<(), RuntimeError> {
         let scope = self.current_call_scope()?;
+
         for addr in value.referenced_substates() {
             // You are allowed to reference root substates
             if addr.is_root() {
@@ -1022,6 +1033,9 @@ impl WorkingState {
                     return Err(RuntimeError::SubstateNotFound { address: addr.clone() });
                 }
             } else if !scope.is_substate_in_scope(&addr) {
+                if !self.substate_exists(&addr)? {
+                    return Err(RuntimeError::SubstateNotFound { address: addr.clone() });
+                }
                 return Err(RuntimeError::SubstateOutOfScope { address: addr.clone() });
             } else {
                 // OK

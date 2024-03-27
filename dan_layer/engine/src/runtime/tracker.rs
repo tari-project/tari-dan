@@ -51,10 +51,9 @@ use tari_template_lib::{
 use crate::{
     runtime::{
         locking::LockedSubstate,
-        scope::PushCallFrame,
+        scope::{CallScope, PushCallFrame},
         working_state::WorkingState,
         workspace::Workspace,
-        AuthorizationScope,
         RuntimeError,
     },
     state_store::memory::MemoryStateStore,
@@ -72,14 +71,14 @@ impl StateTracker {
     pub fn new(
         state_store: MemoryStateStore,
         virtual_substates: VirtualSubstates,
-        initial_auth_scope: AuthorizationScope,
+        initial_call_scope: CallScope,
         transaction_hash: Hash,
     ) -> Self {
         Self {
             working_state: Arc::new(RwLock::new(WorkingState::new(
                 state_store,
                 virtual_substates,
-                initial_auth_scope,
+                initial_call_scope,
                 transaction_hash,
             ))),
             fee_checkpoint: Arc::new(Mutex::new(None)),
@@ -188,7 +187,7 @@ impl StateTracker {
             }
 
             let indexed = IndexedWellKnownTypes::from_value(&component.body.state)?;
-            state.validate_component_state(&indexed, true)?;
+            state.validate_component_state(None, &indexed)?;
 
             state.new_substate(substate_id.clone(), SubstateValue::Component(component))?;
 
