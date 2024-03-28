@@ -20,9 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { ChangeEvent } from "react";
 import { toHexString } from "../routes/VN/Components/helpers";
-import type { SubstateId } from "@tariproject/typescript-bindings/dist/types/SubstateId";
+import type { SubstateId } from "@tariproject/typescript-bindings";
 
 export const renderJson = (json: any) => {
   if (!json) {
