@@ -34,6 +34,7 @@ use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_crypto::tari_utilities::hex::to_hex;
 use tari_dan_app_utilities::{
+    json_encoding::{encode_finalize_result_into_json, encode_finalized_result_into_json, encode_substate_into_json},
     keypair::RistrettoKeypair,
     substate_file_cache::SubstateFileCache,
     template_manager::{implementation::TemplateManager, interface::TemplateExecutable},
@@ -86,11 +87,6 @@ use tari_indexer_client::{
 use tari_networking::{is_supported_multiaddr, NetworkingHandle, NetworkingService};
 use tari_validator_node_rpc::client::{SubstateResult, TariValidatorNodeRpcClientFactory, TransactionResultStatus};
 
-use super::json_encoding::{
-    encode_execute_result_into_json,
-    encode_finalized_result_into_json,
-    encode_substate_into_json,
-};
 use crate::{
     bootstrap::Services,
     dry_run::processor::DryRunTransactionProcessor,
@@ -533,8 +529,8 @@ impl JsonRpcHandlers {
                 .await
                 .map_err(|e| Self::internal_error(answer_id, e))?;
 
-            let json_results =
-                encode_execute_result_into_json(&exec_result).map_err(|e| Self::internal_error(answer_id, e))?;
+            let json_results = encode_finalize_result_into_json(&exec_result.finalize)
+                .map_err(|e| Self::internal_error(answer_id, e))?;
 
             return Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
                 result: IndexerTransactionFinalizedResult::Finalized {
@@ -583,20 +579,22 @@ impl JsonRpcHandlers {
                 ),
             )
         })?;
-        let current_block_height = self.epoch_manager.current_block_height().await.map_err(|e| {
-            JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InternalError,
-                    format!("Could not get current block height: {}", e),
-                    json::Value::Null,
-                ),
-            )
-        })?;
+        let (current_block_height, current_block_hash) =
+            self.epoch_manager.current_block_info().await.map_err(|e| {
+                JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InternalError,
+                        format!("Could not get current block height: {}", e),
+                        json::Value::Null,
+                    ),
+                )
+            })?;
 
         let response = GetEpochManagerStatsResponse {
             current_epoch,
             current_block_height,
+            current_block_hash,
         };
         Ok(JsonRpcResponse::success(answer_id, response))
     }

@@ -33,7 +33,7 @@ use ts_rs::TS;
 use crate::{
     args::Arg,
     auth::{OwnerRule, ResourceAccessRules},
-    crypto::PedersonCommitmentBytes,
+    crypto::{PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{
         AddressAllocation,
         Amount,
@@ -233,11 +233,21 @@ pub enum MintArg {
         amount: Amount,
     },
     NonFungible {
-        tokens: BTreeMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
+        tokens: BTreeMap<NonFungibleId, (tari_bor::Value, tari_bor::Value)>,
     },
     Confidential {
         proof: Box<ConfidentialOutputProof>,
     },
+}
+
+impl MintArg {
+    pub fn as_resource_type(&self) -> ResourceType {
+        match self {
+            MintArg::Fungible { .. } => ResourceType::Fungible,
+            MintArg::NonFungible { .. } => ResourceType::NonFungible,
+            MintArg::Confidential { .. } => ResourceType::Confidential,
+        }
+    }
 }
 
 /// A resource creation operation
@@ -248,6 +258,7 @@ pub struct CreateResourceArg {
     pub access_rules: ResourceAccessRules,
     pub metadata: Metadata,
     pub mint_arg: Option<MintArg>,
+    pub view_key: Option<RistrettoPublicKeyBytes>,
 }
 
 /// A resource minting operation argument
@@ -266,7 +277,7 @@ pub struct ResourceGetNonFungibleArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceUpdateNonFungibleDataArg {
     pub id: NonFungibleId,
-    pub data: Vec<u8>,
+    pub data: tari_bor::Value,
 }
 
 /// A convenience enum that allows to specify resource types

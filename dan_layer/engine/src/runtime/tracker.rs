@@ -178,9 +178,10 @@ impl StateTracker {
                 entity_id: component_address.entity_id(),
                 body: component,
             };
+            let substate_id = SubstateId::Component(component_address);
 
             // The template address/component_id combination will not necessarily be unique so we need to check this.
-            if state.substate_exists(&SubstateId::Component(component_address))? {
+            if state.substate_exists(&substate_id)? {
                 return Err(RuntimeError::ComponentAlreadyExists {
                     address: component_address,
                 });
@@ -189,13 +190,10 @@ impl StateTracker {
             let indexed = IndexedWellKnownTypes::from_value(&component.body.state)?;
             state.validate_component_state(&indexed, true)?;
 
-            state.new_substate(
-                SubstateId::Component(component_address),
-                SubstateValue::Component(component),
-            )?;
+            state.new_substate(substate_id.clone(), SubstateValue::Component(component))?;
 
             state.push_event(Event::new(
-                Some(component_address),
+                Some(substate_id),
                 template_address,
                 state.transaction_hash(),
                 "component-created".to_string(),

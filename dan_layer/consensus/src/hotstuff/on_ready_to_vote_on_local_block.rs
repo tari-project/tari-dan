@@ -41,7 +41,7 @@ use tokio::sync::broadcast;
 
 use super::proposer::Proposer;
 use crate::{
-    hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, event::HotstuffEvent, ProposalValidationError},
+    hotstuff::{error::HotStuffError, event::HotstuffEvent, ProposalValidationError, EXHAUST_DIVISOR},
     messages::{HotstuffMessage, VoteMessage},
     traits::{
         hooks::ConsensusHooks,
@@ -639,21 +639,32 @@ where TConsensusSpec: ConsensusSpec
                                 block.id()
                             ))
                         })?;
+
+                        if t.leader_fee.is_none() {
+                            warn!(
+                                target: LOG_TARGET,
+                                "❌ Leader fee for tx {} is None for Accept command in block {}",
+                                t.id,
+                                block.id(),
+                            );
+                            return Ok(None);
+                        }
+
                         let calculated_leader_fee = tx_rec.calculate_leader_fee(distinct_shards, EXHAUST_DIVISOR);
-                        if calculated_leader_fee != t.leader_fee {
+                        if calculated_leader_fee != *t.leader_fee.as_ref().expect("None already checked") {
                             warn!(
                                 target: LOG_TARGET,
                                 "❌ Accept leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
                                 block.id(),
-                                t.leader_fee,
+                                t.leader_fee.as_ref().expect("None already checked"),
                                 calculated_leader_fee
                             );
 
                             return Ok(None);
                         }
-                        total_leader_fee += calculated_leader_fee;
+                        total_leader_fee += calculated_leader_fee.fee();
                         // If the decision was changed to Abort, which can only happen when a foreign shard decides
-                        // ABORT and we decide COMMIT, we set SomePrepared, otherwise
+                        // ABORT, and we decide COMMIT, we set SomePrepared, otherwise
                         // AllPrepared. There are no further stages after these, so these MUST
                         // never be ready to propose.
                         if tx_rec.remote_decision().map(|d| d.is_abort()).unwrap_or(false) {
@@ -1085,7 +1096,6 @@ where TConsensusSpec: ConsensusSpec
                 .count(),
         );
         let mut total_transaction_fee = 0;
-        let mut total_fee_due = 0;
         for cmd in block.commands() {
             match cmd {
                 Command::Prepare(_t) => {},
@@ -1100,7 +1110,6 @@ where TConsensusSpec: ConsensusSpec
                     );
 
                     total_transaction_fee += tx_rec.transaction().transaction_fee;
-                    total_fee_due += t.leader_fee;
 
                     let mut executed = t.get_executed_transaction(tx.deref_mut())?;
                     // Commit the transaction substate changes.
@@ -1158,9 +1167,9 @@ where TConsensusSpec: ConsensusSpec
         if total_transaction_fee > 0 {
             info!(
                 target: LOG_TARGET,
-                "🪙 Validator fee for block {} (amount due = {}, total fees = {})",
+                "🪙 Validator fee for block {} ({}, Total Fees Paid = {})",
                 block.proposed_by(),
-                total_fee_due,
+                block.total_leader_fee(),
                 total_transaction_fee
             );
         }

@@ -87,7 +87,6 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             Ok(result) => result,
             Err(err) => ExecuteResult {
                 finalize: FinalizeResult::new_rejected(tx_id, RejectReason::ExecutionFailure(err.to_string())),
-                fee_receipt: None,
             },
         };
 

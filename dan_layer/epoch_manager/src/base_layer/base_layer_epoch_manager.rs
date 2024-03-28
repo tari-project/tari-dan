@@ -41,7 +41,7 @@ use tari_dan_common_types::{
     NodeAddressable,
     SubstateAddress,
 };
-use tari_dan_storage::global::{models::ValidatorNode, DbEpoch, GlobalDb, MetadataKey};
+use tari_dan_storage::global::{models::ValidatorNode, DbBaseLayerBlockInfo, DbEpoch, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 use tokio::sync::broadcast;
@@ -57,7 +57,7 @@ pub struct BaseLayerEpochManager<TGlobalStore, TBaseNodeClient> {
     base_node_client: TBaseNodeClient,
     config: EpochManagerConfig,
     current_epoch: Epoch,
-    current_block_height: u64,
+    current_block_info: (u64, FixedHash),
     tx_events: broadcast::Sender<EpochManagerEvent>,
     node_public_key: PublicKey,
     current_shard_key: Option<SubstateAddress>,
@@ -82,7 +82,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             base_node_client,
             config,
             current_epoch: Epoch(0),
-            current_block_height: 0,
+            current_block_info: (0, Default::default()),
             tx_events,
             node_public_key,
             current_shard_key: None,
@@ -100,9 +100,9 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             .get_metadata(MetadataKey::EpochManagerCurrentEpoch)?
             .unwrap_or(Epoch(0));
         self.current_shard_key = metadata.get_metadata(MetadataKey::EpochManagerCurrentShardKey)?;
-        self.current_block_height = metadata
+        self.current_block_info = metadata
             .get_metadata(MetadataKey::EpochManagerCurrentBlockHeight)?
-            .unwrap_or(0);
+            .unwrap_or((0, Default::default()));
 
         Ok(())
     }
@@ -110,7 +110,8 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     pub async fn update_epoch(&mut self, block_height: u64, block_hash: FixedHash) -> Result<(), EpochManagerError> {
         let base_layer_constants = self.base_node_client.get_consensus_constants(block_height).await?;
         let epoch = base_layer_constants.height_to_epoch(block_height);
-        self.update_current_block_height(block_height)?;
+        self.add_base_layer_block_info(block_height, block_hash)?;
+        self.update_current_block_info(block_height, block_hash)?;
         if self.current_epoch >= epoch {
             // no need to update the epoch
             return Ok(());
@@ -263,13 +264,29 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(())
     }
 
-    fn update_current_block_height(&mut self, block_height: u64) -> Result<(), EpochManagerError> {
+    pub fn add_base_layer_block_info(
+        &mut self,
+        block_height: u64,
+        block_hash: FixedHash,
+    ) -> Result<(), EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        self.global_db
+            .base_layer_hashes(&mut tx)
+            .insert_base_layer_block_info(DbBaseLayerBlockInfo {
+                hash: block_hash,
+                height: block_height,
+            })?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    fn update_current_block_info(&mut self, block_height: u64, block_hash: FixedHash) -> Result<(), EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         self.global_db
             .metadata(&mut tx)
-            .set_metadata(MetadataKey::EpochManagerCurrentBlockHeight, &block_height)?;
+            .set_metadata(MetadataKey::EpochManagerCurrentBlockHeight, &(block_height, block_hash))?;
         tx.commit()?;
-        self.current_block_height = block_height;
+        self.current_block_info = (block_height, block_hash);
         Ok(())
     }
 
@@ -277,8 +294,8 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         self.current_epoch
     }
 
-    pub fn current_block_height(&self) -> u64 {
-        self.current_block_height
+    pub fn current_block_info(&self) -> (u64, FixedHash) {
+        self.current_block_info
     }
 
     pub fn get_validator_node_by_public_key(

@@ -14,13 +14,14 @@ use tari_template_lib::{
     models::Amount,
     prelude::{ComponentAddress, NonFungibleId, ResourceAddress},
 };
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 use crate::models::{
     Account,
     ConfidentialOutputModel,
     ConfidentialProofId,
     Config,
+    NewAccountInfo,
     NonFungibleToken,
     OutputStatus,
     SubstateModel,
@@ -87,6 +88,10 @@ pub enum WalletStorageError {
         entity: String,
         key: String,
     },
+    #[error("Operation error {operation}: {details}")]
+    OperationError { operation: &'static str, details: String },
+    #[error("Data inconsistency for operation {operation}: {details}")]
+    DataInconsistent { operation: &'static str, details: String },
 }
 
 impl IsNotFoundError for WalletStorageError {
@@ -183,6 +188,7 @@ pub trait WalletStoreReader {
 
     fn non_fungible_token_get_all(
         &mut self,
+        account: ComponentAddress,
         limit: u64,
         offset: u64,
     ) -> Result<Vec<NonFungibleToken>, WalletStorageError>;
@@ -216,7 +222,13 @@ pub trait WalletStoreWriter {
     ) -> Result<(), WalletStorageError>;
 
     // Transactions
-    fn transactions_insert(&mut self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError>;
+    fn transactions_insert(
+        &mut self,
+        transaction: &Transaction,
+        required_substates: &[SubstateRequirement],
+        new_account_info: Option<&NewAccountInfo>,
+        is_dry_run: bool,
+    ) -> Result<(), WalletStorageError>;
     fn transactions_set_result_and_status(
         &mut self,
         transaction_id: TransactionId,
@@ -229,14 +241,14 @@ pub trait WalletStoreWriter {
     ) -> Result<(), WalletStorageError>;
 
     // Substates
-    fn substates_insert_root(
+    fn substates_upsert_root(
         &mut self,
         transaction_id: TransactionId,
         address: VersionedSubstateId,
         module_name: Option<String>,
         template_addr: Option<TemplateAddress>,
     ) -> Result<(), WalletStorageError>;
-    fn substates_insert_child(
+    fn substates_upsert_child(
         &mut self,
         transaction_id: TransactionId,
         parent: SubstateId,
@@ -258,7 +270,12 @@ pub trait WalletStoreWriter {
 
     // Vaults
     fn vaults_insert(&mut self, vault: VaultModel) -> Result<(), WalletStorageError>;
-    fn vaults_update(&mut self, vault_address: &SubstateId, balance: Option<Amount>) -> Result<(), WalletStorageError>;
+    fn vaults_update(
+        &mut self,
+        vault_address: &SubstateId,
+        revealed_balance: Amount,
+        confidential_balance: Amount,
+    ) -> Result<(), WalletStorageError>;
 
     // Confidential Outputs
     fn outputs_lock_smallest_amount(
@@ -282,5 +299,5 @@ pub trait WalletStoreWriter {
     ) -> Result<(), WalletStorageError>;
 
     // Non fungible tokens
-    fn non_fungible_token_insert(&mut self, non_fungible_token: &NonFungibleToken) -> Result<(), WalletStorageError>;
+    fn non_fungible_token_upsert(&mut self, non_fungible_token: &NonFungibleToken) -> Result<(), WalletStorageError>;
 }

@@ -5,6 +5,7 @@ use super::TOKEN_SYMBOL;
 use crate::{
     args::MintArg,
     auth::{AccessRule, OwnerRule, ResourceAccessRules},
+    crypto::RistrettoPublicKeyBytes,
     models::{Bucket, Metadata, ResourceAddress},
     prelude::ConfidentialOutputProof,
     resource::{ResourceManager, ResourceType},
@@ -15,6 +16,8 @@ pub struct ConfidentialResourceBuilder {
     initial_supply_proof: Option<ConfidentialOutputProof>,
     metadata: Metadata,
     access_rules: ResourceAccessRules,
+    view_key: Option<RistrettoPublicKeyBytes>,
+    token_symbol: Option<String>,
     owner_rule: OwnerRule,
 }
 
@@ -25,6 +28,8 @@ impl ConfidentialResourceBuilder {
             initial_supply_proof: None,
             metadata: Metadata::new(),
             access_rules: ResourceAccessRules::new(),
+            view_key: None,
+            token_symbol: None,
             owner_rule: OwnerRule::default(),
         }
     }
@@ -39,6 +44,14 @@ impl ConfidentialResourceBuilder {
     /// Sets up who can access the resource for each type of action
     pub fn with_access_rules(mut self, rules: ResourceAccessRules) -> Self {
         self.access_rules = rules;
+        self
+    }
+
+    /// Specify a view key for the confidential resource. This allows anyone with the secret key to uncover the balance
+    /// of commitments generated for the resource.
+    /// NOTE: it is not currently possible to change the view key after the resource is created.
+    pub fn with_view_key(mut self, view_key: RistrettoPublicKeyBytes) -> Self {
+        self.view_key = Some(view_key);
         self
     }
 
@@ -75,7 +88,7 @@ impl ConfidentialResourceBuilder {
 
     /// Sets up the specified `symbol` as the token symbol in the metadata of the resource
     pub fn with_token_symbol<S: Into<String>>(mut self, symbol: S) -> Self {
-        self.metadata.insert(TOKEN_SYMBOL, symbol);
+        self.token_symbol = Some(symbol.into());
         self
     }
 
@@ -104,7 +117,14 @@ impl ConfidentialResourceBuilder {
             self.initial_supply_proof.is_none(),
             "call build_bucket when initial supply is set"
         );
-        let (address, _) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, None);
+        let (address, _) = Self::build_internal(
+            self.owner_rule,
+            self.access_rules,
+            self.metadata,
+            None,
+            self.view_key,
+            self.token_symbol,
+        );
         address
     }
 
@@ -117,16 +137,35 @@ impl ConfidentialResourceBuilder {
             ),
         };
 
-        let (_, bucket) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, Some(resource));
+        let (_, bucket) = Self::build_internal(
+            self.owner_rule,
+            self.access_rules,
+            self.metadata,
+            Some(resource),
+            self.view_key,
+            self.token_symbol,
+        );
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
 
     fn build_internal(
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
-        metadata: Metadata,
+        mut metadata: Metadata,
         resource: Option<MintArg>,
+        view_key: Option<RistrettoPublicKeyBytes>,
+        token_symbol: Option<String>,
     ) -> (ResourceAddress, Option<Bucket>) {
-        ResourceManager::new().create(ResourceType::Confidential, owner_rule, access_rules, metadata, resource)
+        if let Some(symbol) = token_symbol {
+            metadata.insert(TOKEN_SYMBOL, symbol);
+        }
+        ResourceManager::new().create(
+            ResourceType::Confidential,
+            owner_rule,
+            access_rules,
+            metadata,
+            resource,
+            view_key,
+        )
     }
 }

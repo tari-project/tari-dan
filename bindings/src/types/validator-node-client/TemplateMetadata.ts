@@ -2,7 +2,7 @@
 
 export interface TemplateMetadata {
   name: string;
-  address: Uint8Array;
+  address: string;
   url: string;
   binary_sha: Array<number>;
   height: number;

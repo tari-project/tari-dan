@@ -29,9 +29,9 @@ import { renderJson } from "../../utils/helpers";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import CodeBlockExpand from "../../Components/CodeBlock";
-import type { Event } from "@tarilabs/typescript-bindings";
+import type { Event } from "@tariproject/typescript-bindings";
 
-function RowData({ component_address, template_address, topic, tx_hash, payload }: Event, index: number) {
+function RowData({ substate_id, template_address, topic, tx_hash, payload }: Event, index: number) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -49,10 +49,10 @@ function RowData({ component_address, template_address, topic, tx_hash, payload 
           </AccordionIconButton>
         </DataTableCell>
         <DataTableCell>{topic}</DataTableCell>
-        {component_address && (
+        {substate_id && (
           <DataTableCell>
-            {shortenString(component_address)}
-            <CopyToClipboard copy={component_address} />
+            {shortenString(substate_id)}
+            <CopyToClipboard copy={substate_id} />
           </DataTableCell>
         )}
         <DataTableCell>
@@ -83,16 +83,16 @@ export default function Events({ data }: { data: Event[] }) {
           <TableRow>
             <TableCell width={90}>Payload</TableCell>
             <TableCell>Topic</TableCell>
-            <TableCell>Component Address</TableCell>
+            <TableCell>Substate Id</TableCell>
             <TableCell>Template Address</TableCell>
             <TableCell>Transaction Hash</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {data.map(({ component_address, template_address, topic, tx_hash, payload }: Event, index: number) => {
+          {data.map(({ substate_id, template_address, topic, tx_hash, payload }: Event, index: number) => {
             return (
               <RowData
-                component_address={component_address}
+                substate_id={substate_id}
                 template_address={template_address}
                 topic={topic}
                 tx_hash={tx_hash}

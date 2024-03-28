@@ -10,7 +10,8 @@ use std::{
 use indexmap::IndexMap;
 use log::*;
 use tari_common::configuration::Network;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
+use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
@@ -39,10 +40,10 @@ use tari_epoch_manager::EpochManagerReader;
 use crate::{
     hotstuff::{
         calculate_state_merkle_diff,
-        common::EXHAUST_DIVISOR,
         diff_to_substate_changes,
         error::HotStuffError,
         proposer,
+        EXHAUST_DIVISOR,
     },
     messages::{HotstuffMessage, ProposalMessage},
     traits::{ConsensusSpec, OutboundMessaging, ValidatorSignatureService},
@@ -122,6 +123,7 @@ where TConsensusSpec: ConsensusSpec
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
+        let (_, current_base_layer_block_hash) = self.epoch_manager.current_base_layer_block_info().await?;
 
         let next_block = self.store.with_write_tx(|tx| {
             let high_qc = HighQc::get(tx.deref_mut())?;
@@ -136,6 +138,7 @@ where TConsensusSpec: ConsensusSpec
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
                 //       is a good idea.
                 is_newview_propose,
+                current_base_layer_block_hash,
             )?;
 
             next_block.as_last_proposed().set(tx)?;
@@ -192,6 +195,7 @@ where TConsensusSpec: ConsensusSpec
         proposed_by: PublicKey,
         local_committee_shard: &CommitteeShard,
         empty_block: bool,
+        current_base_layer_block_hash: FixedHash,
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
@@ -238,7 +242,7 @@ where TConsensusSpec: ConsensusSpec
                         ))
                     })?;
                     let leader_fee = t.calculate_leader_fee(involved, EXHAUST_DIVISOR);
-                    total_leader_fee += leader_fee;
+                    total_leader_fee += leader_fee.fee();
                     let tx_atom = t.get_final_transaction_atom(leader_fee);
                     if tx_atom.decision.is_commit() {
                         let transaction = t.get_transaction(tx)?;
@@ -315,6 +319,8 @@ where TConsensusSpec: ConsensusSpec
             total_leader_fee,
             foreign_indexes,
             None,
+            EpochTime::now().as_u64(),
+            current_base_layer_block_hash,
         );
 
         let signature = self.signing_service.sign(next_block.id());

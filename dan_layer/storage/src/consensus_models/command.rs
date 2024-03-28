@@ -14,7 +14,7 @@ use tari_transaction::TransactionId;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use super::{ExecutedTransaction, ForeignProposal, TransactionRecord};
+use super::{ExecutedTransaction, ForeignProposal, LeaderFee, TransactionRecord};
 use crate::{
     consensus_models::{Decision, QcId},
     StateStoreReadTransaction,
@@ -129,8 +129,7 @@ pub struct TransactionAtom {
     pub evidence: Evidence,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub transaction_fee: u64,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
-    pub leader_fee: u64,
+    pub leader_fee: Option<LeaderFee>,
 }
 
 impl TransactionAtom {
@@ -158,7 +157,13 @@ impl Display for TransactionAtom {
         write!(
             f,
             "TransactionAtom({}, {}, {}, {})",
-            self.id, self.decision, self.transaction_fee, self.leader_fee
+            self.id,
+            self.decision,
+            self.transaction_fee,
+            self.leader_fee
+                .as_ref()
+                .map(|f| f.to_string())
+                .unwrap_or_else(|| "--".to_string())
         )
     }
 }

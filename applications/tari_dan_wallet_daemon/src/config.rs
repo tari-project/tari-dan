@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use config::Config;
 use serde::{Deserialize, Serialize};
@@ -64,6 +64,12 @@ pub struct WalletDaemonConfig {
     pub jwt_secret_key: Option<String>,
     /// The address of the HTTP UI
     pub http_ui_address: Option<SocketAddr>,
+    /// The path to the value lookup table binary file used for brute force value lookups. This setting
+    /// is only used when attempting to view confidential balances in confidential resources that use a view key
+    /// controlled by this wallet. The binary file can be generated using the generate_ristretto_value_lookup
+    /// utility. If this is not set, the value lookup table will be generated on the fly which will have a large
+    /// performance cost when brute forcing high-value outputs.
+    pub value_lookup_table_file: Option<PathBuf>,
 }
 
 impl Default for WalletDaemonConfig {
@@ -78,6 +84,7 @@ impl Default for WalletDaemonConfig {
             jwt_expiry: Some(Duration::from_secs(500 * 60)),
             jwt_secret_key: Some(create_secret()),
             http_ui_address: Some("127.0.0.1:5100".parse().unwrap()),
+            value_lookup_table_file: None,
         }
     }
 }

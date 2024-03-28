@@ -23,7 +23,7 @@
 use std::collections::BTreeSet;
 
 use serde::Serialize;
-use tari_bor::encode;
+use tari_bor::to_value;
 use tari_template_abi::{call_engine, rust::collections::BTreeMap, EngineOp};
 
 use crate::{
@@ -41,7 +41,7 @@ use crate::{
         ResourceUpdateNonFungibleDataArg,
     },
     auth::{OwnerRule, ResourceAccessRules},
-    crypto::PedersonCommitmentBytes,
+    crypto::{PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{Amount, Bucket, ConfidentialOutputProof, Metadata, NonFungible, NonFungibleId, ResourceAddress, VaultId},
     prelude::ResourceType,
 };
@@ -102,6 +102,7 @@ impl ResourceManager {
         access_rules: ResourceAccessRules,
         metadata: Metadata,
         mint_arg: Option<MintArg>,
+        view_key: Option<RistrettoPublicKeyBytes>,
     ) -> (ResourceAddress, Option<Bucket>) {
         let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
             resource_ref: ResourceRef::Resource,
@@ -111,7 +112,8 @@ impl ResourceManager {
                 owner_rule,
                 access_rules,
                 metadata,
-                mint_arg
+                mint_arg,
+                view_key,
             }],
         });
 
@@ -157,7 +159,7 @@ impl ResourceManager {
     ) -> Bucket {
         self.mint_internal(MintResourceArg {
             mint_arg: MintArg::NonFungible {
-                tokens: Some((id, (encode(metadata).unwrap(), encode(mutable_data).unwrap())))
+                tokens: Some((id, (to_value(metadata).unwrap(), to_value(mutable_data).unwrap())))
                     .into_iter()
                     .collect(),
             },
@@ -177,14 +179,14 @@ impl ResourceManager {
     /// * `mutable_data` - Initial data that each token will hold and that can potentially be updated in future
     ///   instructions
     /// * `supply` - The amount of new tokens to be minted
-    pub fn mint_many_non_fungible<T: Serialize, U: Serialize>(
+    pub fn mint_many_non_fungible<T: Serialize + ?Sized, U: Serialize + ?Sized>(
         &self,
         metadata: &T,
         mutable_data: &U,
         supply: usize,
     ) -> Bucket {
         let mut tokens = BTreeMap::new();
-        let token_data = (encode(metadata).unwrap(), encode(mutable_data).unwrap());
+        let token_data = (to_value(metadata).unwrap(), to_value(mutable_data).unwrap());
         for _ in 0..supply {
             let id = NonFungibleId::random();
             tokens.insert(id, token_data.clone());
@@ -338,7 +340,7 @@ impl ResourceManager {
             action: ResourceAction::UpdateNonFungibleData,
             args: invoke_args![ResourceUpdateNonFungibleDataArg {
                 id,
-                data: encode(data).unwrap()
+                data: to_value(data).unwrap()
             }],
         });
 

@@ -13,7 +13,6 @@ tari_common = { workspace = true }
 tari_common_types = { workspace = true }
 tari_crypto = { workspace = true }
 tari_shutdown = { workspace = true }
-tari_bor = { workspace = true, default-features = true }
 tari_dan_app_utilities = { workspace = true }
 tari_dan_common_types = { workspace = true }
 tari_base_node_client = { workspace = true }
@@ -41,6 +40,7 @@ clap = { workspace = true, features = ["derive", "env"] }
 config = { workspace = true }
 diesel = { workspace = true, default-features = false, features = [
     "sqlite",
+    "returning_clauses_for_sqlite_3_35",
     "chrono",
 ] }
 diesel_migrations = { workspace = true }

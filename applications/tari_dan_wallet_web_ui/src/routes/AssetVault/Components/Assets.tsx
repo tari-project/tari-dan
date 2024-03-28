@@ -37,7 +37,11 @@ import { DataTableCell } from "../../../Components/StyledComponents";
 import { useAccountNFTsList, useAccountsGetBalances } from "../../../api/hooks/useAccounts";
 import useAccountStore from "../../../store/accountStore";
 import { shortenString } from "../../../utils/helpers";
-import type { AccountNftInfo, BalanceEntry } from "@tarilabs/typescript-bindings/wallet-daemon-client";
+import type { BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemon-client";
+import NFTList from "../../../Components/NFTList";
+import { Button } from "@mui/material";
+import { SendMoneyDialog } from "./SendMoney";
+import { ResourceAddress, ResourceType, VaultId } from "@tariproject/typescript-bindings";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -47,34 +51,56 @@ interface TabPanelProps {
 
 interface BalanceRowProps {
   token_symbol: string;
-  resource_address: string;
-  resource_type: string;
+  resource_address: ResourceAddress;
+  resource_type: ResourceType;
+  vault_address: VaultId;
   balance: number;
   confidential_balance: number;
+  onSendClicked?: (resource_address: ResourceAddress, resource_type: ResourceType) => void;
 }
 
-function BalanceRow({ token_symbol, resource_address, resource_type, balance, confidential_balance }: BalanceRowProps) {
+function BalanceRow(props: BalanceRowProps) {
+  const {
+    token_symbol,
+    resource_address,
+    resource_type,
+    balance,
+    confidential_balance,
+    vault_address,
+    onSendClicked,
+  } = props;
   const { showBalance } = useAccountStore();
   return (
     <TableRow key={token_symbol || resource_address}>
       <DataTableCell>
-        {shortenString(token_symbol || resource_address)}
+        <span title={vault_address}>{token_symbol || shortenString(resource_address)}</span>
         <CopyToClipboard copy={token_symbol || resource_address} />
       </DataTableCell>
       <DataTableCell>{resource_type}</DataTableCell>
       <DataTableCell>{showBalance ? balance : "*************"}</DataTableCell>
-      <DataTableCell>{showBalance ? confidential_balance : "**************"}</DataTableCell>
+      <DataTableCell>
+        <ConfidentialBalance
+          show={showBalance}
+          resourceType={resource_type}
+          balance={confidential_balance}
+        />
+      </DataTableCell>
+      <DataTableCell>
+        <Button variant="outlined" onClick={() => onSendClicked?.(resource_address, resource_type)}>
+          Send
+        </Button>
+      </DataTableCell>
     </TableRow>
   );
 }
 
-function NftsList({ metadata, is_burned }: AccountNftInfo) {
-  return (
-    <TableRow key={metadata}>
-      <DataTableCell>{metadata}</DataTableCell>
-      <DataTableCell>{is_burned}</DataTableCell>
-    </TableRow>
-  );
+function ConfidentialBalance(props: { show: boolean, balance: number, resourceType: string }) {
+  switch (props.resourceType) {
+    case "Confidential":
+      return <>{props.show ? props.balance : "**************"}</>;
+    default:
+      return <>--</>;
+  }
 }
 
 function TabPanel(props: TabPanelProps) {
@@ -105,8 +131,11 @@ function tabProps(index: number) {
 }
 
 function Assets({ accountName }: { accountName: string }) {
+  const [resourceToSend, setResourceToSend] = useState<{
+    address: ResourceAddress,
+    resource_type: ResourceType
+  } | null>(null);
   const [value, setValue] = useState(0);
-  const { showBalance } = useAccountStore();
 
   const {
     data: balancesData,
@@ -120,14 +149,25 @@ function Assets({ accountName }: { accountName: string }) {
     isError: nftsListIsError,
     error: nftsListError,
     isFetching: nftsListIsFetching,
-  } = useAccountNFTsList(0, 10);
+  } = useAccountNFTsList({ Name: accountName }, 0, 10);
 
-  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);
+  };
+
+  const handleSendResourceClicked = (address: ResourceAddress, resource_type: ResourceType) => {
+    setResourceToSend({ address, resource_type });
   };
 
   return (
     <Box sx={{ width: "100%" }}>
+      <SendMoneyDialog
+        open={resourceToSend !== null}
+        handleClose={() => setResourceToSend(null)}
+        onSendComplete={() => setResourceToSend(null)}
+        resource_address={resourceToSend?.address}
+        resource_type={resourceToSend?.resource_type}
+      />
       <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Tabs value={value} onChange={handleChange} aria-label="account assets" variant="standard">
           <Tab label="Tokens" {...tabProps(0)} style={{ width: 150 }} />
@@ -150,32 +190,33 @@ function Assets({ accountName }: { accountName: string }) {
                   <TableCell>Resource Type</TableCell>
                   <TableCell>Revealed Balance</TableCell>
                   <TableCell>Confidential Balance</TableCell>
+                  <TableCell></TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {/* {balancesData?.balances.map((balance: number, index: number) =>
-                  BalanceRow(balance)
-                )} */}
                 {balancesData?.balances.map(
-                  ({
-                    vault_address,
-                    resource_address,
-                    balance,
-                    resource_type,
-                    confidential_balance,
-                    token_symbol,
-                  }: BalanceEntry) => {
-                    return (
-                      <BalanceRow
-                        key={resource_address}
-                        token_symbol={token_symbol || ""}
-                        resource_address={resource_address}
-                        resource_type={resource_type}
-                        balance={balance}
-                        confidential_balance={confidential_balance}
-                      />
-                    );
-                  },
+                  (
+                    {
+                      resource_address,
+                      balance,
+                      resource_type,
+                      confidential_balance,
+                      token_symbol,
+                      vault_address,
+                    }: BalanceEntry,
+                    i,
+                  ) => (
+                    <BalanceRow
+                      key={i}
+                      token_symbol={token_symbol || ""}
+                      resource_address={resource_address}
+                      resource_type={resource_type}
+                      balance={balance}
+                      confidential_balance={confidential_balance}
+                      vault_address={"Vault" in vault_address ? vault_address.Vault : ""}
+                      onSendClicked={handleSendResourceClicked}
+                    />
+                  ),
                 )}
               </TableBody>
             </Table>
@@ -183,30 +224,12 @@ function Assets({ accountName }: { accountName: string }) {
         )}
       </TabPanel>
       <TabPanel value={value} index={1}>
-        {nftsListIsError || nftsListIsFetching ? (
-          <FetchStatusCheck
-            isError={nftsListIsError}
-            errorMessage={nftsListError?.message || "Error fetching data"}
-            isLoading={nftsListIsFetching}
-          />
-        ) : (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Token Symbol</TableCell>
-                  <TableCell>Resource Type</TableCell>
-                  <TableCell>Is Burned</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {nftsListData?.nfts.map(({ metadata, is_burned }: AccountNftInfo) => {
-                  return <NftsList metadata={metadata} is_burned={is_burned} />;
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
+        <NFTList
+          nftsListIsError={nftsListIsError}
+          nftsListIsFetching={nftsListIsFetching}
+          nftsListError={nftsListError}
+          nftsListData={nftsListData}
+        />
       </TabPanel>
     </Box>
   );

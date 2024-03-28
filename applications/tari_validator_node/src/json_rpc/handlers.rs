@@ -43,57 +43,58 @@ use tari_dan_storage::{
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_networking::{is_supported_multiaddr, NetworkingHandle, NetworkingService};
 use tari_state_store_sqlite::SqliteStateStore;
-use tari_validator_node_client::{
-    types,
-    types::{
-        AddPeerRequest,
-        AddPeerResponse,
-        CommitteeShardInfo,
-        ConnectionDirection,
-        DryRunTransactionFinalizeResult,
-        GetAllVnsRequest,
-        GetAllVnsResponse,
-        GetBlockRequest,
-        GetBlockResponse,
-        GetBlocksCountResponse,
-        GetCommitteeRequest,
-        GetCommitteeResponse,
-        GetCommsStatsResponse,
-        GetConnectionsResponse,
-        GetEpochManagerStatsResponse,
-        GetIdentityResponse,
-        GetMempoolStatsResponse,
-        GetNetworkCommitteeResponse,
-        GetRecentTransactionsResponse,
-        GetShardKeyRequest,
-        GetShardKeyResponse,
-        GetStateRequest,
-        GetStateResponse,
-        GetSubstateRequest,
-        GetSubstateResponse,
-        GetSubstatesByTransactionRequest,
-        GetSubstatesByTransactionResponse,
-        GetTemplateRequest,
-        GetTemplateResponse,
-        GetTemplatesRequest,
-        GetTemplatesResponse,
-        GetTransactionRequest,
-        GetTransactionResponse,
-        GetTransactionResultRequest,
-        GetTransactionResultResponse,
-        GetValidatorFeesRequest,
-        GetValidatorFeesResponse,
-        ListBlocksRequest,
-        ListBlocksResponse,
-        RegisterValidatorNodeRequest,
-        RegisterValidatorNodeResponse,
-        SubmitTransactionRequest,
-        SubmitTransactionResponse,
-        SubstateStatus,
-        TemplateMetadata,
-        TemplateRegistrationRequest,
-        TemplateRegistrationResponse,
-    },
+use tari_validator_node_client::types::{
+    self,
+    AddPeerRequest,
+    AddPeerResponse,
+    CommitteeShardInfo,
+    ConnectionDirection,
+    DryRunTransactionFinalizeResult,
+    GetAllVnsRequest,
+    GetAllVnsResponse,
+    GetBlockRequest,
+    GetBlockResponse,
+    GetBlocksCountResponse,
+    GetBlocksRequest,
+    GetBlocksResponse,
+    GetCommitteeRequest,
+    GetCommitteeResponse,
+    GetCommsStatsResponse,
+    GetConnectionsResponse,
+    GetEpochManagerStatsResponse,
+    GetFilteredBlocksCountRequest,
+    GetIdentityResponse,
+    GetMempoolStatsResponse,
+    GetNetworkCommitteeResponse,
+    GetRecentTransactionsResponse,
+    GetShardKeyRequest,
+    GetShardKeyResponse,
+    GetStateRequest,
+    GetStateResponse,
+    GetSubstateRequest,
+    GetSubstateResponse,
+    GetSubstatesByTransactionRequest,
+    GetSubstatesByTransactionResponse,
+    GetTemplateRequest,
+    GetTemplateResponse,
+    GetTemplatesRequest,
+    GetTemplatesResponse,
+    GetTransactionRequest,
+    GetTransactionResponse,
+    GetTransactionResultRequest,
+    GetTransactionResultResponse,
+    GetValidatorFeesRequest,
+    GetValidatorFeesResponse,
+    ListBlocksRequest,
+    ListBlocksResponse,
+    RegisterValidatorNodeRequest,
+    RegisterValidatorNodeResponse,
+    SubmitTransactionRequest,
+    SubmitTransactionResponse,
+    SubstateStatus,
+    TemplateMetadata,
+    TemplateRegistrationRequest,
+    TemplateRegistrationResponse,
 };
 
 use crate::{
@@ -193,8 +194,8 @@ impl JsonRpcHandlers {
                         transaction_id: tx_id,
                         dry_run_result: Some(DryRunTransactionFinalizeResult {
                             decision: QuorumDecision::Accept,
+                            fee_breakdown: Some(exec_result.finalize.fee_receipt.to_cost_breakdown()),
                             finalize: exec_result.finalize,
-                            fee_breakdown: exec_result.fee_receipt.map(|f| f.to_cost_breakdown()),
                         }),
                     };
 
@@ -439,6 +440,37 @@ impl JsonRpcHandlers {
         }
     }
 
+    pub async fn get_filtered_blocks_count(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let req: GetFilteredBlocksCountRequest = value.parse_params()?;
+        let count = self
+            .state_store
+            .with_read_tx(|tx| tx.filtered_blocks_get_count(req.filter_index, req.filter))
+            .map_err(internal_error(answer_id))?;
+        let res = GetBlocksCountResponse { count };
+        Ok(JsonRpcResponse::success(answer_id, res))
+    }
+
+    pub async fn get_blocks(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let req: GetBlocksRequest = value.parse_params()?;
+        let blocks = self
+            .state_store
+            .with_read_tx(|tx| {
+                tx.blocks_get_paginated(
+                    req.limit,
+                    req.offset,
+                    req.filter_index,
+                    req.filter,
+                    req.ordering_index,
+                    req.ordering,
+                )
+            })
+            .map_err(internal_error(answer_id))?;
+        let res = GetBlocksResponse { blocks };
+        Ok(JsonRpcResponse::success(answer_id, res))
+    }
+
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let req: RegisterValidatorNodeRequest = value.parse_params()?;
@@ -594,16 +626,17 @@ impl JsonRpcHandlers {
                 ),
             )
         })?;
-        let current_block_height = self.epoch_manager.current_block_height().await.map_err(|e| {
-            JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InternalError,
-                    format!("Could not get current block height: {}", e),
-                    json::Value::Null,
-                ),
-            )
-        })?;
+        let (current_block_height, current_block_hash) =
+            self.epoch_manager.current_block_info().await.map_err(|e| {
+                JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InternalError,
+                        format!("Could not get current block height: {}", e),
+                        json::Value::Null,
+                    ),
+                )
+            })?;
         let committee_shard = self
             .epoch_manager
             .get_local_committee_shard(current_epoch)
@@ -626,6 +659,7 @@ impl JsonRpcHandlers {
         let response = GetEpochManagerStatsResponse {
             current_epoch,
             current_block_height,
+            current_block_hash,
             is_valid: committee_shard.is_some(),
             committee_shard,
         };

@@ -39,10 +39,7 @@ use tari_indexer_lib::{
     substate_scanner::SubstateScanner,
     NonFungibleSubstate,
 };
-use tari_template_lib::{
-    models::TemplateAddress,
-    prelude::{ComponentAddress, Metadata},
-};
+use tari_template_lib::{models::TemplateAddress, prelude::Metadata};
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, TariValidatorNodeRpcClientFactory};
 
@@ -305,7 +302,7 @@ impl SubstateManager {
 
     pub fn save_event_to_db(
         &self,
-        component_address: ComponentAddress,
+        substate_id: &SubstateId,
         template_address: TemplateAddress,
         tx_hash: TransactionId,
         topic: String,
@@ -314,7 +311,7 @@ impl SubstateManager {
     ) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
         let new_event = NewEvent {
-            component_address: Some(component_address.to_string()),
+            substate_id: Some(substate_id.to_string()),
             template_address: template_address.to_string(),
             tx_hash: tx_hash.to_string(),
             topic,
@@ -348,7 +345,7 @@ impl SubstateManager {
 
     pub async fn scan_events_for_substate_from_network(
         &self,
-        component_address: ComponentAddress,
+        substate_id: SubstateId,
         version: Option<u32>,
     ) -> Result<Vec<Event>, anyhow::Error> {
         let mut events = vec![];
@@ -359,15 +356,15 @@ impl SubstateManager {
         let stored_versions_in_db;
         {
             let mut tx = self.substate_store.create_read_tx()?;
-            stored_versions_in_db = tx.get_stored_versions_of_events(&component_address, version)?;
+            stored_versions_in_db = tx.get_stored_versions_of_events(&substate_id, version)?;
 
-            let stored_events = match tx.get_all_events(&component_address) {
+            let stored_events = match tx.get_all_events(&substate_id) {
                 Ok(events) => events,
                 Err(e) => {
                     info!(
                         target: LOG_TARGET,
-                        "Failed to get all events for component_address = {}, version = {} with error = {}",
-                        component_address,
+                        "Failed to get all events for substate_id = {}, version = {} with error = {}",
+                        substate_id,
                         version,
                         e
                     );
@@ -388,7 +385,7 @@ impl SubstateManager {
             }
             let network_version_events = self
                 .substate_scanner
-                .get_events_for_component_and_version(component_address, v)
+                .get_events_for_substate_and_version(&substate_id, v)
                 .await?;
             events.extend(network_version_events);
         }
@@ -399,11 +396,11 @@ impl SubstateManager {
         // check if there are newest events for this component address in the network
         let network_events = self
             .substate_scanner
-            .get_events_for_component(component_address, Some(version))
+            .get_events_for_substate(&substate_id, Some(version))
             .await?;
 
         // stores the newest network events to the db
-        // because the same component address with different version
+        // because the same substate_id with different version
         // can be processed in the same transaction, we need to avoid
         // duplicates
         for (version, event) in network_events {
@@ -412,7 +409,7 @@ impl SubstateManager {
             let topic = event.topic();
             let payload = event.payload();
             self.save_event_to_db(
-                component_address,
+                &substate_id,
                 template_address,
                 tx_hash,
                 topic,
@@ -421,6 +418,26 @@ impl SubstateManager {
             )?;
             events.push(event);
         }
+
+        Ok(events)
+    }
+
+    pub async fn scan_events_by_payload(
+        &self,
+        payload_key: String,
+        payload_value: String,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Event>, anyhow::Error> {
+        let events = {
+            let mut tx = self.substate_store.create_read_tx()?;
+            tx.get_events_by_payload(payload_key, payload_value, offset, limit)?
+        };
+
+        let events = events
+            .iter()
+            .map(|e| Event::try_from(e.clone()))
+            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
 
         Ok(events)
     }

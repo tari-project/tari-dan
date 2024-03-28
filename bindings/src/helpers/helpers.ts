@@ -40,8 +40,8 @@ export function substateIdToString(substateId: SubstateId | null): string {
 }
 
 export function stringToSubstateId(substateId: string): SubstateId {
-  const parts = substateId.split("_", 2);
-  if (parts.length !== 2) {
+  const parts = splitOnce(substateId, "_");
+  if (!parts) {
     throw new Error(`Invalid substate id: ${substateId}`);
   }
 
@@ -49,13 +49,15 @@ export function stringToSubstateId(substateId: string): SubstateId {
     case "component":
       return { Component: parts[1] };
     case "resource":
+      if (parts[1].includes(" nft_")) {
+        return { NonFungible: parts[1] };
+      }
+
       return { Resource: parts[1] };
     case "vault":
       return { Vault: parts[1] };
     case "commitment":
       return { UnclaimedConfidentialOutput: parts[1] };
-    case "nft":
-      return { NonFungible: parts[1] };
     case "txreceipt":
       return { TransactionReceipt: parts[1] };
     case "feeclaim":
@@ -131,4 +133,12 @@ export function jrpcPermissionToString(jrpcPermission: JrpcPermission): string {
     return `GetNft(${substateIdToString(jrpcPermission.GetNft[0])}, ${jrpcPermission.GetNft[1]})`;
   }
   return "Unknown";
+}
+
+function splitOnce(str: string, separator: string): [string, string] | null {
+  const index = str.indexOf(separator);
+  if (index === -1) {
+    return null;
+  }
+  return [str.slice(0, index), str.slice(index + 1)];
 }

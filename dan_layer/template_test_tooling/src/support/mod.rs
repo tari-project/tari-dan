@@ -4,3 +4,5 @@
 pub mod assert_error;
 pub mod confidential;
 pub mod crypto;
+
+pub use tari_dan_wallet_crypto::AlwaysMissLookupTable;

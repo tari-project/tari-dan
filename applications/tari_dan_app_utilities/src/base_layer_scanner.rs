@@ -264,7 +264,22 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
             },
             Some(end_height) => end_height,
         };
-
+        let mut scan = tip.tip_hash;
+        loop {
+            let header = self.base_node_client.get_header_by_hash(scan).await?;
+            if let Some(last_tip) = self.last_scanned_tip {
+                if last_tip == scan {
+                    // This was processed on the previous call to this function.
+                    break;
+                }
+            }
+            if header.height == end_height {
+                // This will be processed down below.
+                break;
+            }
+            self.epoch_manager.add_block_hash(header.height, scan).await?;
+            scan = header.prev_hash;
+        }
         for current_height in start_scan_height..=end_height {
             let utxos = self
                 .base_node_client

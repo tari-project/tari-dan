@@ -23,6 +23,7 @@
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::PublicKey;
 use tari_template_lib::{
     models::{Amount, BucketId, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
@@ -83,15 +84,20 @@ impl Bucket {
         self.resource_container.withdraw(amount)
     }
 
-    pub fn take_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Result<ResourceContainer, ResourceError> {
-        self.resource_container.withdraw_confidential(proof)
+    pub fn take_confidential(
+        &mut self,
+        proof: ConfidentialWithdrawProof,
+        view_key: Option<&PublicKey>,
+    ) -> Result<ResourceContainer, ResourceError> {
+        self.resource_container.withdraw_confidential(proof, view_key)
     }
 
     pub fn reveal_confidential(
         &mut self,
         proof: ConfidentialWithdrawProof,
+        view_key: Option<&PublicKey>,
     ) -> Result<ResourceContainer, ResourceError> {
-        self.resource_container.reveal_confidential(proof)
+        self.resource_container.reveal_confidential(proof, view_key)
     }
 
     pub fn lock_all(&mut self) -> Result<LockedResource, ResourceError> {

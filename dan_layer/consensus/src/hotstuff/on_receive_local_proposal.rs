@@ -409,6 +409,8 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     candidate_block.justify().clone(),
                     candidate_block.epoch(),
                     *candidate_block.merkle_root(),
+                    last_dummy_block.timestamp(),
+                    *last_dummy_block.base_layer_block_hash(),
                 ));
                 last_dummy_block = dummy_blocks.last().unwrap();
                 debug!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", last_dummy_block, leader);

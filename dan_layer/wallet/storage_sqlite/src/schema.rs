@@ -49,7 +49,8 @@ diesel::table! {
         id -> Integer,
         vault_id -> Integer,
         nft_id -> Text,
-        metadata -> Text,
+        data -> Text,
+        mutable_data -> Text,
         is_burned -> Bool,
         created_at -> Timestamp,
         updated_at -> Timestamp,
@@ -116,9 +117,10 @@ diesel::table! {
         max_epoch -> Nullable<BigInt>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
-        json_result -> Nullable<Text>,
         executed_time_ms -> Nullable<BigInt>,
         finalized_time_ms -> Nullable<BigInt>,
+        required_substates -> Text,
+        new_account_info -> Nullable<Text>,
     }
 }
 
@@ -129,7 +131,8 @@ diesel::table! {
         address -> Text,
         resource_address -> Text,
         resource_type -> Text,
-        balance -> BigInt,
+        revealed_balance -> BigInt,
+        confidential_balance -> BigInt,
         token_symbol -> Nullable<Text>,
         created_at -> Timestamp,
         updated_at -> Timestamp,

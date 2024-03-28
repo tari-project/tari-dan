@@ -14,6 +14,7 @@ pub struct FungibleResourceBuilder {
     initial_supply: Amount,
     owner_rule: OwnerRule,
     access_rules: ResourceAccessRules,
+    token_symbol: Option<String>,
     metadata: Metadata,
 }
 
@@ -24,6 +25,7 @@ impl FungibleResourceBuilder {
             initial_supply: Amount::zero(),
             owner_rule: OwnerRule::default(),
             access_rules: ResourceAccessRules::new(),
+            token_symbol: None,
             metadata: Metadata::new(),
         }
     }
@@ -74,7 +76,7 @@ impl FungibleResourceBuilder {
 
     /// Sets up the specified `symbol` as the token symbol in the metadata of the resource
     pub fn with_token_symbol<S: Into<String>>(mut self, symbol: S) -> Self {
-        self.metadata.insert(TOKEN_SYMBOL, symbol);
+        self.token_symbol = Some(symbol.into());
         self
     }
 
@@ -103,7 +105,13 @@ impl FungibleResourceBuilder {
             self.initial_supply.is_zero(),
             "call build_bucket when initial supply set"
         );
-        let (address, _) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, None);
+        let (address, _) = Self::build_internal(
+            self.owner_rule,
+            self.access_rules,
+            self.metadata,
+            None,
+            self.token_symbol,
+        );
         address
     }
 
@@ -113,16 +121,33 @@ impl FungibleResourceBuilder {
             amount: self.initial_supply,
         };
 
-        let (_, bucket) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, Some(mint_arg));
+        let (_, bucket) = Self::build_internal(
+            self.owner_rule,
+            self.access_rules,
+            self.metadata,
+            Some(mint_arg),
+            self.token_symbol,
+        );
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
 
     fn build_internal(
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
-        metadata: Metadata,
+        mut metadata: Metadata,
         mint_arg: Option<MintArg>,
+        token_symbol: Option<String>,
     ) -> (ResourceAddress, Option<Bucket>) {
-        ResourceManager::new().create(ResourceType::Fungible, owner_rule, access_rules, metadata, mint_arg)
+        if let Some(symbol) = token_symbol {
+            metadata.insert(TOKEN_SYMBOL, symbol);
+        }
+        ResourceManager::new().create(
+            ResourceType::Fungible,
+            owner_rule,
+            access_rules,
+            metadata,
+            mint_arg,
+            None,
+        )
     }
 }

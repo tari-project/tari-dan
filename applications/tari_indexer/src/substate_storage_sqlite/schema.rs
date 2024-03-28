@@ -27,8 +27,19 @@ diesel::table! {
         topic -> Text,
         payload -> Text,
         version -> Integer,
-        component_address -> Nullable<Text>,
+        substate_id -> Nullable<Text>,
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(substates, non_fungible_indexes, events);
+diesel::table! {
+    event_payloads (id) {
+        id -> Integer,
+        payload_key -> Text,
+        payload_value -> Text,
+        event_id -> Integer,
+    }
+}
+
+diesel::joinable!(event_payloads -> events (event_id));
+
+diesel::allow_tables_to_appear_in_same_query!(substates, non_fungible_indexes, events, event_payloads);

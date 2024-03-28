@@ -31,7 +31,7 @@ import Grid from "@mui/material/Grid";
 import SecondaryHeading from "../../Components/SecondaryHeading";
 import MonitoredSubstates from "./Components/MonitoredSubstates";
 import MonitoredNftCollections from "./Components/MonitoredNftCollections";
-import type { GetIdentityResponse } from "@tarilabs/typescript-bindings/tari-indexer-client";
+import type { GetIdentityResponse } from "@tariproject/typescript-bindings/tari-indexer-client";
 
 function ValidatorNode() {
   const [identity, setIdentity] = useState<GetIdentityResponse>();

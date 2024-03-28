@@ -21,6 +21,7 @@ use diesel::{
     QueryableByName,
     RunQueryDsl,
     SqliteConnection,
+    TextExpressionMethods,
 };
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
@@ -710,14 +711,14 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             SELECT count(1) as "count" FROM tree WHERE bid = ? LIMIT 1
         "#,
         )
-        .bind::<Text, _>(serialize_hex(descendant))
-        // .bind::<Text, _>(serialize_hex(BlockId::genesis())) // stop recursing at zero block
-        .bind::<Text, _>(serialize_hex(ancestor))
-        .get_result::<Count>(self.connection())
-        .map_err(|e| SqliteStorageError::DieselError {
-            operation: "blocks_is_ancestor",
-            source: e,
-        })?;
+            .bind::<Text, _>(serialize_hex(descendant))
+            // .bind::<Text, _>(serialize_hex(BlockId::genesis())) // stop recursing at zero block
+            .bind::<Text, _>(serialize_hex(ancestor))
+            .get_result::<Count>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_is_ancestor",
+                source: e,
+            })?;
 
         debug!(target: LOG_TARGET, "blocks_is_ancestor: is_ancestor: {}", is_ancestor.count);
 
@@ -878,7 +879,10 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         &mut self,
         limit: u64,
         offset: u64,
-        asc_desc_created_at: Option<Ordering>,
+        filter_index: Option<usize>,
+        filter: Option<String>,
+        ordering_index: Option<usize>,
+        ordering: Option<Ordering>,
     ) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
@@ -887,10 +891,64 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
             .into_boxed();
 
-        if let Some(ordering) = asc_desc_created_at {
-            match ordering {
-                Ordering::Ascending => query = query.order_by(blocks::created_at.asc()),
-                Ordering::Descending => query = query.order_by(blocks::created_at.desc()),
+        query = match ordering {
+            Some(Ordering::Ascending) => match ordering_index {
+                Some(0) => query.order_by(blocks::block_id.asc()),
+                Some(1) => query.order_by(blocks::epoch.asc()),
+                Some(2) => query.order_by(blocks::height.asc()),
+                Some(4) => query.order_by(blocks::command_count.asc()),
+                Some(5) => query.order_by(blocks::total_leader_fee.asc()),
+                Some(6) => query.order_by(blocks::block_time.asc()),
+                Some(7) => query.order_by(blocks::created_at.asc()),
+                Some(8) => query.order_by(blocks::proposed_by.asc()),
+                _ => query.order_by(blocks::height.asc()),
+            },
+            _ => match ordering_index {
+                Some(0) => query.order_by(blocks::block_id.desc()),
+                Some(1) => query.order_by(blocks::epoch.desc()),
+                Some(2) => query.order_by(blocks::height.desc()),
+                Some(4) => query.order_by(blocks::command_count.desc()),
+                Some(5) => query.order_by(blocks::total_leader_fee.desc()),
+                Some(6) => query.order_by(blocks::block_time.desc()),
+                Some(7) => query.order_by(blocks::created_at.desc()),
+                Some(8) => query.order_by(blocks::proposed_by.desc()),
+                _ => query.order_by(blocks::height.desc()),
+            },
+        };
+
+        if let Some(filter) = filter {
+            if !filter.is_empty() {
+                if let Some(filter_index) = filter_index {
+                    match filter_index {
+                        0 => query = query.filter(blocks::block_id.like(format!("%{filter}%"))),
+                        1 => {
+                            query = query.filter(
+                                blocks::epoch
+                                    .eq(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        2 => {
+                            query = query.filter(
+                                blocks::height
+                                    .eq(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        4 => {
+                            query = query.filter(
+                                blocks::command_count
+                                    .ge(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        5 => {
+                            query = query.filter(
+                                blocks::total_leader_fee
+                                    .ge(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        7 => query = query.filter(blocks::proposed_by.like(format!("%{filter}%"))),
+                        _ => (),
+                    }
+                }
             }
         }
 
@@ -907,7 +965,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .into_iter()
             .map(|(block, qc)| {
                 let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
-                    operation: "blocks_get_by_parent",
+                    operation: "blocks_get_paginated",
                     details: format!(
                         "block {} references non-existent quorum certificate {}",
                         block.id, block.qc_id
@@ -927,6 +985,64 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .first::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "blocks_get_count",
+                source: e,
+            })?;
+        Ok(count)
+    }
+
+    fn filtered_blocks_get_count(
+        &mut self,
+        filter_index: Option<usize>,
+        filter: Option<String>,
+    ) -> Result<i64, StorageError> {
+        use crate::schema::{blocks, quorum_certificates};
+
+        let mut query = blocks::table
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .into_boxed();
+
+        if let Some(filter) = filter {
+            if !filter.is_empty() {
+                if let Some(filter_index) = filter_index {
+                    match filter_index {
+                        0 => query = query.filter(blocks::block_id.like(format!("%{filter}%"))),
+                        1 => {
+                            query = query.filter(
+                                blocks::epoch
+                                    .eq(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        2 => {
+                            query = query.filter(
+                                blocks::height
+                                    .eq(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        4 => {
+                            query = query.filter(
+                                blocks::command_count
+                                    .ge(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        5 => {
+                            query = query.filter(
+                                blocks::total_leader_fee
+                                    .ge(filter.parse::<i64>().map_err(|_| StorageError::InvalidIntegerCast)?),
+                            )
+                        },
+                        7 => query = query.filter(blocks::proposed_by.like(format!("%{filter}%"))),
+                        _ => (),
+                    }
+                }
+            }
+        }
+
+        let count = query
+            .select(diesel::dsl::count(blocks::id))
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "filtered_blocks_get_count",
                 source: e,
             })?;
         Ok(count)
@@ -1134,7 +1250,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             let evidence = deserialize_json::<Evidence>(&update.evidence)?;
             let evidence = evidence
                 .iter()
-                .map(|(shard, evidence)| (shard.clone(), evidence.lock))
+                .map(|(shard, evidence)| (*shard, evidence.lock))
                 .collect::<HashSet<(SubstateAddress, _)>>();
             processed_substates.insert(deserialize_hex_try_from(tx_id)?, evidence);
         }
@@ -1153,7 +1269,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                             .transaction()
                             .evidence
                             .iter()
-                            .map(|(shard, evidence)| (shard.clone(), evidence.lock))
+                            .map(|(shard, evidence)| (*shard, evidence.lock))
                             .collect::<HashMap<_, _>>();
 
                         // Are there any conflicts between the currently selected set and this transaction?
@@ -1175,20 +1291,20 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                         // Are there any conflicts between this transaction and other transactions to be included in the
                         // block?
                         if processed_substates
-                                .iter()
-                                // Check other transactions
-                                .filter(|(tx_id, _)| *tx_id != rec.transaction_id())
-                                .all(|(_, evidence)| {
-                                    evidence.iter().all(|(shard, lock)| {
-                                        if lock.is_write() {
-                                            // Write lock must have no conflicts
-                                            !tx_substates.contains_key(shard)
-                                        } else {
-                                            // If there is a Shard conflict, then it must be a read lock
-                                            tx_substates.get(shard).map(|tx_lock| tx_lock.is_read()).unwrap_or(true)
-                                        }
-                                    })
+                            .iter()
+                            // Check other transactions
+                            .filter(|(tx_id, _)| *tx_id != rec.transaction_id())
+                            .all(|(_, evidence)| {
+                                evidence.iter().all(|(shard, lock)| {
+                                    if lock.is_write() {
+                                        // Write lock must have no conflicts
+                                        !tx_substates.contains_key(shard)
+                                    } else {
+                                        // If there is a Shard conflict, then it must be a read lock
+                                        tx_substates.get(shard).map(|tx_lock| tx_lock.is_read()).unwrap_or(true)
+                                    }
                                 })
+                            })
                         {
                             used_substates.extend(tx_substates);
                             Some(Ok(rec))

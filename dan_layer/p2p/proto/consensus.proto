@@ -52,6 +52,13 @@ message Block {
   uint64 total_leader_fee = 10;
   bytes foreign_indexes = 11;
   tari.dan.common.Signature signature = 12;
+  uint64 timestamp = 13;
+  bytes base_layer_block_hash = 14;
+}
+
+message LeaderFee {
+  uint64 leader_fee = 1;
+  uint64 global_exhaust_burn = 2;
 }
 
 message Command {
@@ -83,7 +90,7 @@ message TransactionAtom {
   Decision decision = 3;
   Evidence evidence = 4;
   uint64 fee = 5;
-  uint64 leader_fee = 6;
+  LeaderFee leader_fee = 6;
 }
 
 enum Decision {

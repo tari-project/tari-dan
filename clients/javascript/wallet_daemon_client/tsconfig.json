@@ -4,9 +4,7 @@
     "target": "ESNext",
     "moduleResolution": "Bundler",
     "declaration": true,
-    "outDir": "./dist"
+    "outDir": "./dist",
   },
-  "include": [
-    "src/**/*"
-  ]
+  "include": ["src/**/*"],
 }

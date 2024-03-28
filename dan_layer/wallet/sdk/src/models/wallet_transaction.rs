@@ -6,13 +6,14 @@ use std::{fmt::Display, str::FromStr, time::Duration};
 use anyhow::anyhow;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::models::Amount;
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateRequirement, Transaction};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
+
+use crate::models::NewAccountInfo;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletTransaction {
@@ -21,9 +22,10 @@ pub struct WalletTransaction {
     pub finalize: Option<FinalizeResult>,
     pub final_fee: Option<Amount>,
     pub qcs: Vec<QuorumCertificate>,
-    pub json_result: Option<Vec<Value>>,
     pub execution_time: Option<Duration>,
     pub finalized_time: Option<Duration>,
+    pub required_substates: Vec<SubstateRequirement>,
+    pub new_account_info: Option<NewAccountInfo>,
     pub is_dry_run: bool,
     pub last_update_time: NaiveDateTime,
 }

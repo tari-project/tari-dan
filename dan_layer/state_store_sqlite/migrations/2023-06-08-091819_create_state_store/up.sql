@@ -12,24 +12,27 @@ create unique index quorum_certificates_uniq_idx_id on quorum_certificates (qc_i
 
 create table blocks
 (
-    id               integer   not null primary key AUTOINCREMENT,
-    block_id         text      not NULL,
-    parent_block_id  text      not NULL,
-    merkle_root      text      not NULL,
-    network          text      not NULL,
-    height           bigint    not NULL,
-    epoch            bigint    not NULL,
-    proposed_by      text      not NULL,
-    qc_id            text      not NULL,
-    command_count    bigint    not NULL,
-    commands         text      not NULL,
-    total_leader_fee bigint    not NULL,
-    is_committed     boolean   not NULL default '0',
-    is_processed     boolean   not NULL,
-    is_dummy         boolean   not NULL,
-    foreign_indexes  text      not NULL,
-    signature        text      NULL,
-    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                    integer   not null primary key AUTOINCREMENT,
+    block_id              text      not NULL,
+    parent_block_id       text      not NULL,
+    merkle_root           text      not NULL,
+    network               text      not NULL,
+    height                bigint    not NULL,
+    epoch                 bigint    not NULL,
+    proposed_by           text      not NULL,
+    qc_id                 text      not NULL,
+    command_count         bigint    not NULL,
+    commands              text      not NULL,
+    total_leader_fee      bigint    not NULL,
+    is_committed          boolean   not NULL default '0',
+    is_processed          boolean   not NULL,
+    is_dummy              boolean   not NULL,
+    foreign_indexes       text      not NULL,
+    signature             text      NULL,
+    created_at            timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    block_time            bigint    NULL,
+    timestamp             bigint    not NULL,
+    base_layer_block_hash text not NULL,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
 
@@ -37,22 +40,25 @@ create table blocks
 create unique index blocks_uniq_idx_id on blocks (block_id);
 
 create table parked_blocks
-(
-    id               integer   not null primary key AUTOINCREMENT,
-    block_id         text      not NULL,
-    parent_block_id  text      not NULL,
-    merkle_root      text      not NULL,
-    network          text      not NULL,
-    height           bigint    not NULL,
-    epoch            bigint    not NULL,
-    proposed_by      text      not NULL,
-    justify          text      not NULL,
-    command_count    bigint    not NULL,
-    commands         text      not NULL,
-    total_leader_fee bigint    not NULL,
-    foreign_indexes  text      not NULL,
-    signature        text      NULL,
-    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+(   
+    id                    integer not null primary key AUTOINCREMENT,
+    block_id              text    not NULL,
+    parent_block_id       text    not NULL,
+    merkle_root           text    not NULL,
+    network               text    not NULL,
+    height                bigint  not NULL,
+    epoch                 bigint  not NULL,
+    proposed_by           text    not NULL,
+    justify               text    not NULL,
+    command_count         bigint  not NULL,
+    commands              text    not NULL,
+    total_leader_fee      bigint  not NULL,
+    foreign_indexes       text    not NULL,
+    signature             text        NULL,
+    block_time            bigint      NULL,
+    timestamp             bigint  not NULL,
+    base_layer_block_hash text    not NULL,
+    created_at            timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- block_id must be unique. Optimise fetching by block_id
@@ -181,20 +187,21 @@ create unique index transactions_uniq_idx_id on transactions (transaction_id);
 
 create table transaction_pool
 (
-    id                integer   not null primary key AUTOINCREMENT,
-    transaction_id    text      not null,
-    original_decision text      not null,
-    local_decision    text      null,
-    remote_decision   text      null,
-    evidence          text      not null,
-    remote_evidence   text      null,
-    transaction_fee   bigint    not null,
-    leader_fee        bigint    not null,
-    stage             text      not null,
-    pending_stage     text      null,
-    is_ready          boolean   not null,
-    updated_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                  integer   not null primary key AUTOINCREMENT,
+    transaction_id      text      not null,
+    original_decision   text      not null,
+    local_decision      text      null,
+    remote_decision     text      null,
+    evidence            text      not null,
+    remote_evidence     text      null,
+    transaction_fee     bigint    not null,
+    leader_fee          bigint    null,
+    global_exhaust_burn bigint    null,
+    stage               text      not null,
+    pending_stage       text      null,
+    is_ready            boolean   not null,
+    updated_at          timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at          timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
 create unique index transaction_pool_uniq_idx_transaction_id on transaction_pool (transaction_id);
@@ -308,22 +315,23 @@ CREATE UNIQUE INDEX pending_state_tree_diffs_uniq_idx_block_id on pending_state_
 -- Debug Triggers
 CREATE TABLE transaction_pool_history
 (
-    history_id        INTEGER PRIMARY KEY,
-    id                integer   not null,
-    transaction_id    text      not null,
-    original_decision text      not null,
-    local_decision    text      null,
-    remote_decision   text      null,
-    evidence          text      not null,
-    transaction_fee   bigint    not null,
-    leader_fee        bigint    not null,
-    stage             text      not null,
-    new_stage         text      not null,
-    is_ready          boolean   not null,
-    new_is_ready      boolean   not null,
-    updated_at        timestamp NOT NULL,
-    created_at        timestamp NOT NULL,
-    change_time       DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))
+    history_id          INTEGER PRIMARY KEY,
+    id                  integer   not null,
+    transaction_id      text      not null,
+    original_decision   text      not null,
+    local_decision      text      null,
+    remote_decision     text      null,
+    evidence            text      not null,
+    transaction_fee     bigint    not null,
+    leader_fee          bigint    null,
+    global_exhaust_burn bigint    null,
+    stage               text      not null,
+    new_stage           text      not null,
+    is_ready            boolean   not null,
+    new_is_ready        boolean   not null,
+    updated_at          timestamp NOT NULL,
+    created_at          timestamp NOT NULL,
+    change_time         DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))
 );
 
 CREATE TRIGGER copy_transaction_pool_history
@@ -339,6 +347,7 @@ BEGIN
                                           evidence,
                                           transaction_fee,
                                           leader_fee,
+                                          global_exhaust_burn,
                                           stage,
                                           new_stage,
                                           is_ready,
@@ -353,6 +362,7 @@ BEGIN
             OLD.evidence,
             OLD.transaction_fee,
             OLD.leader_fee,
+            OLD.global_exhaust_burn,
             OLD.stage,
             NEW.stage,
             OLD.is_ready,
@@ -360,4 +370,3 @@ BEGIN
             OLD.updated_at,
             OLD.created_at);
 END;
-

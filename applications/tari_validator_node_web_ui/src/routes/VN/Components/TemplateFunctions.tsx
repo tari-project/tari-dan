@@ -34,26 +34,28 @@ import PageHeading from "../../../Components/PageHeading";
 import Grid from "@mui/material/Grid";
 import { StyledPaper } from "../../../Components/StyledComponents";
 import { fromHexString } from "./helpers";
-import type { ArgDef, GetTemplateResponse } from "@tarilabs/typescript-bindings/validator-node-client";
+import type { ArgDef, GetTemplateResponse } from "@tariproject/typescript-bindings/validator-node-client";
 
 function TemplateFunctions() {
   const { address } = useParams();
   const [info, setInfo] = useState<GetTemplateResponse>();
 
   useEffect(() => {
-    const load = (address: Uint8Array) => {
+    const load = (address: string) => {
       getTemplate({ template_address: address }).then((response) => {
         setInfo(response);
       });
     };
-    const data = address ? fromHexString(address.replace("0x", "")) : new Uint8Array();
+    const data = address ? address.replace("0x", "") : "";
     load(data);
   }, [address]);
 
   const renderFunctions = (template: GetTemplateResponse) => {
     return (
       <TableContainer>
-        <BoxHeading2>{template.abi.template_name}</BoxHeading2>
+        <BoxHeading2>
+          {template.abi.template_name} {template.abi.version}
+        </BoxHeading2>
         <Table>
           <TableHead>
             <TableRow>

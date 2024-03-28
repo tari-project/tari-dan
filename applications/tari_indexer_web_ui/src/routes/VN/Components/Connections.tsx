@@ -36,7 +36,7 @@ import { TextField } from "@mui/material";
 import { Form } from "react-router-dom";
 import Fade from "@mui/material/Fade";
 import CopyToClipboard from "../../../Components/CopyToClipboard";
-import type { Connection } from "@tarilabs/typescript-bindings/tari-indexer-client";
+import type { Connection } from "@tariproject/typescript-bindings/tari-indexer-client";
 
 interface Duration {
   secs: number;
@@ -177,4 +177,5 @@ function displayDuration(duration: Duration) {
   }
   return `${duration.secs}.${(duration.nanos / 1000000).toFixed(0)}s`;
 }
+
 export default Connections;

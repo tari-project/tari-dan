@@ -121,7 +121,7 @@ fn add_answer_ice_candidate(
 
 fn get_offer(id: u64, value: JsonRpcExtractor, data: MutexGuard<Data>) -> Result<json::Value, JsonRpcResponse> {
     info!(target: LOG_TARGET, "Getting offer for id {id}");
-    println!("Offer {}", data.get_offer(id).map(|res| res.clone()).unwrap());
+    println!("Offer {}", data.get_offer(id).cloned().unwrap());
     data.get_offer(id).cloned().map_err(|e| {
         JsonRpcResponse::error(
             value.get_answer_id(),

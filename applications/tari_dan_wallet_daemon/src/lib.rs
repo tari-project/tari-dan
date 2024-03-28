@@ -77,18 +77,27 @@ pub async fn run_tari_dan_wallet_daemon(
 
     let jrpc_address = config.dan_wallet_daemon.json_rpc_address.unwrap();
     let signaling_server_address = config.dan_wallet_daemon.signaling_server_address.unwrap();
-    let handlers = HandlerContext::new(wallet_sdk.clone(), notify, services.account_monitor_handle.clone());
+    let handlers = HandlerContext::new(
+        wallet_sdk.clone(),
+        notify,
+        services.transaction_service_handle.clone(),
+        services.account_monitor_handle.clone(),
+        config.dan_wallet_daemon.clone(),
+    );
     let listen_fut = jrpc_server::listen(jrpc_address, signaling_server_address, handlers, shutdown_signal);
 
     // Run the http ui
     if let Some(http_address) = config.dan_wallet_daemon.http_ui_address {
-        task::spawn(run_http_ui_server(
-            http_address,
-            config
-                .dan_wallet_daemon
-                .ui_connect_address
-                .unwrap_or_else(|| jrpc_address.to_string()),
-        ));
+        let mut public_jrpc_address = config
+            .dan_wallet_daemon
+            .ui_connect_address
+            .unwrap_or_else(|| jrpc_address.to_string());
+        if !public_jrpc_address.starts_with("http://") && !public_jrpc_address.starts_with("https://") {
+            public_jrpc_address = format!("http://{}", public_jrpc_address);
+        }
+
+        let public_jrpc_address = url::Url::parse(&public_jrpc_address)?;
+        task::spawn(run_http_ui_server(http_address, public_jrpc_address));
     }
 
     if let Err(e) = fs::write(config.common.base_path.join("pid"), process::id().to_string()) {

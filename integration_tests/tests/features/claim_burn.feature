@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 Feature: Claim Burn
+
   @serial
   Scenario: Claim base layer burn funds with wallet daemon
     # Initialize a base node, wallet, miner and VN

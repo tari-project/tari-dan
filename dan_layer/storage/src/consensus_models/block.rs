@@ -13,6 +13,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, FixedHashSizeError, PublicKey};
+use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_dan_common_types::{
     hashing,
     optional::Optional,
@@ -50,7 +51,6 @@ use crate::{
         TransactionRecord,
         Vote,
     },
-    Ordering,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -96,6 +96,12 @@ pub struct Block {
     /// Signature of block by the proposer.
     #[cfg_attr(feature = "ts", ts(type = "{public_nonce : string, signature: string} | null"))]
     signature: Option<ValidatorSchnorrSignature>,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    block_time: Option<u64>,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    timestamp: u64,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    base_layer_block_hash: FixedHash,
 }
 
 impl Block {
@@ -111,6 +117,8 @@ impl Block {
         total_leader_fee: u64,
         sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
+        timestamp: u64,
+        base_layer_block_hash: FixedHash,
     ) -> Self {
         let mut block = Self {
             id: BlockId::genesis(),
@@ -129,6 +137,9 @@ impl Block {
             foreign_indexes: sorted_foreign_indexes,
             stored_at: None,
             signature,
+            block_time: None,
+            timestamp,
+            base_layer_block_hash,
         };
         block.id = block.calculate_hash().into();
         block
@@ -151,6 +162,9 @@ impl Block {
         sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
         created_at: PrimitiveDateTime,
+        block_time: Option<u64>,
+        timestamp: u64,
+        base_layer_block_hash: FixedHash,
     ) -> Self {
         Self {
             id,
@@ -169,6 +183,9 @@ impl Block {
             foreign_indexes: sorted_foreign_indexes,
             stored_at: Some(created_at),
             signature,
+            block_time,
+            timestamp,
+            base_layer_block_hash,
         }
     }
 
@@ -185,6 +202,8 @@ impl Block {
             0,
             IndexMap::new(),
             None,
+            EpochTime::now().as_u64(),
+            FixedHash::zero(),
         )
     }
 
@@ -207,6 +226,9 @@ impl Block {
             foreign_indexes: IndexMap::new(),
             stored_at: None,
             signature: None,
+            block_time: None,
+            timestamp: EpochTime::now().as_u64(),
+            base_layer_block_hash: FixedHash::zero(),
         }
     }
 
@@ -218,6 +240,8 @@ impl Block {
         high_qc: QuorumCertificate,
         epoch: Epoch,
         parent_merkle_root: FixedHash,
+        parent_timestamp: u64,
+        parent_base_layer_block_hash: FixedHash,
     ) -> Self {
         let mut block = Self::new(
             network,
@@ -231,6 +255,8 @@ impl Block {
             0,
             IndexMap::new(),
             None,
+            parent_timestamp,
+            parent_base_layer_block_hash,
         );
         block.is_dummy = true;
         block.is_processed = false;
@@ -243,11 +269,14 @@ impl Block {
             .chain(&self.parent)
             .chain(&self.justify)
             .chain(&self.height)
+            .chain(&self.total_leader_fee)
             .chain(&self.epoch)
             .chain(&self.proposed_by)
             .chain(&self.merkle_root)
             .chain(&self.commands)
             .chain(&self.foreign_indexes)
+            .chain(&self.timestamp)
+            .chain(&self.base_layer_block_hash)
             .result()
     }
 }
@@ -372,6 +401,14 @@ impl Block {
         &self.foreign_indexes
     }
 
+    pub fn block_time(&self) -> Option<u64> {
+        self.block_time
+    }
+
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
+    }
+
     pub fn get_signature(&self) -> Option<&ValidatorSchnorrSignature> {
         self.signature.as_ref()
     }
@@ -382,6 +419,10 @@ impl Block {
 
     pub fn is_proposed_by_addr<A: NodeAddressable + PartialEq<A>>(&self, address: &A) -> Option<bool> {
         Some(A::try_from_public_key(&self.proposed_by)? == *address)
+    }
+
+    pub fn base_layer_block_hash(&self) -> &FixedHash {
+        &self.base_layer_block_hash
     }
 }
 
@@ -435,14 +476,14 @@ impl Block {
         tx.blocks_insert(self)
     }
 
-    pub fn get_paginated<TTx: StateStoreReadTransaction>(
-        tx: &mut TTx,
-        limit: u64,
-        offset: u64,
-        ordering: Option<Ordering>,
-    ) -> Result<Vec<Self>, StorageError> {
-        tx.blocks_get_paginated(limit, offset, ordering)
-    }
+    // pub fn get_paginated<TTx: StateStoreReadTransaction>(
+    //     tx: &mut TTx,
+    //     limit: u64,
+    //     offset: u64,
+    //     ordering: Option<Ordering>,
+    // ) -> Result<Vec<Self>, StorageError> {
+    //     tx.blocks_get_paginated(limit, offset, ordering)
+    // }
 
     pub fn get_count<TTx: StateStoreReadTransaction>(tx: &mut TTx) -> Result<i64, StorageError> {
         tx.blocks_get_count()

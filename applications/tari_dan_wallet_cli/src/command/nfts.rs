@@ -29,9 +29,10 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use tari_dan_wallet_sdk::models::NonFungibleToken;
 use tari_template_lib::prelude::{Amount, NonFungibleId};
 use tari_wallet_daemon_client::{
-    types::{AccountNftInfo, GetAccountNftRequest, ListAccountNftRequest, MintAccountNftRequest},
+    types::{GetAccountNftRequest, ListAccountNftRequest, MintAccountNftRequest},
     ComponentAddressOrName,
     WalletDaemonClient,
 };
@@ -70,6 +71,8 @@ pub struct GetAccountNftArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct ListAccountNftArgs {
+    #[clap(long, short = 'a')]
+    pub account: Option<ComponentAddressOrName>,
     #[clap(long, short = 'l')]
     pub limit: Option<u64>,
     #[clap(long, short = 'o')]
@@ -173,7 +176,7 @@ pub async fn handle_get_account_nft(
 
     println!(
         "Account NFT with metadata {} is_burned: {}",
-        resp.metadata, resp.is_burned
+        resp.nft_id, resp.is_burned
     );
     println!();
 
@@ -184,12 +187,11 @@ pub async fn handle_list_account_nfts(
     args: ListAccountNftArgs,
     client: &mut WalletDaemonClient,
 ) -> Result<(), anyhow::Error> {
-    let ListAccountNftArgs { limit, offset } = args;
+    let ListAccountNftArgs { account, limit, offset } = args;
     let limit = limit.unwrap_or(100);
     let offset = offset.unwrap_or(0);
 
-    let req = ListAccountNftRequest { limit, offset };
-    println!("✅ List account NFTs submitted");
+    let req = ListAccountNftRequest { account, limit, offset };
     let resp = client
         .list_account_nfts(req)
         .await
@@ -197,10 +199,16 @@ pub async fn handle_list_account_nfts(
 
     let mut table = Table::new();
     table.enable_row_count();
-    table.set_titles(vec!["Name", "Address", "Public Key", "Default"]);
-    println!("Accounts:");
-    for AccountNftInfo { metadata, is_burned } in resp.nfts {
-        table.add_row(table_row!(metadata, is_burned));
+    table.set_titles(vec!["NFT ID", "Vault", "Burnt"]);
+    println!("NFTs:");
+    for NonFungibleToken {
+        vault_id,
+        nft_id,
+        is_burned,
+        ..
+    } in resp.nfts
+    {
+        table.add_row(table_row!(nft_id, vault_id, is_burned));
     }
     table.print_stdout();
     Ok(())

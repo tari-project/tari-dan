@@ -28,8 +28,8 @@ pub enum EpochManagerRequest<TAddr> {
     CurrentEpoch {
         reply: Reply<Epoch>,
     },
-    CurrentBlockHeight {
-        reply: Reply<u64>,
+    CurrentBlockInfo {
+        reply: Reply<(u64, FixedHash)>,
     },
     GetValidatorNode {
         epoch: Epoch,
@@ -48,6 +48,11 @@ pub enum EpochManagerRequest<TAddr> {
     AddValidatorNodeRegistration {
         block_height: u64,
         registration: ValidatorNodeRegistration,
+        reply: Reply<()>,
+    },
+    AddBlockHash {
+        block_height: u64,
+        block_hash: FixedHash,
         reply: Reply<()>,
     },
     UpdateEpoch {

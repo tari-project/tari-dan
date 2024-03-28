@@ -44,47 +44,19 @@ import Typography from "@mui/material/Typography";
 import Fade from "@mui/material/Fade";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import { emptyRows } from "../../../utils/helpers";
-import type { TemplateMetadata } from "@tarilabs/typescript-bindings/validator-node-client";
+import type { TemplateMetadata } from "@tariproject/typescript-bindings/validator-node-client";
 
-export interface ITemplate {
-  id: string;
-  name: string;
-  address: Uint8Array;
-  url: string;
-  binary_sha: Array<number>;
-  height: number;
-  show: boolean;
-}
-
-type ColumnKey = keyof ITemplate;
+type ColumnKey = keyof TemplateMetadata;
 
 function Templates() {
-  const [templates, setTemplates] = useState<ITemplate[]>([]);
+  const [templates, setTemplates] = useState<TemplateMetadata[]>([]);
   const [lastSort, setLastSort] = useState({ column: "", order: -1 });
 
   useEffect(() => {
     getTemplates({ limit: 10 }).then((response) => {
-      setTemplates(
-        response.templates
-          .slice()
-          .sort((a: TemplateMetadata, b: TemplateMetadata) => b.height - a.height)
-          .map((template: TemplateMetadata) => ({
-            id: toHex(template.address),
-            name: template.name,
-            address: template.address,
-            url: template.url,
-            binary_sha: template.binary_sha,
-            height: template.height,
-            template: template,
-            show: true,
-          })),
-      );
+      setTemplates(response.templates.slice().sort((a: TemplateMetadata, b: TemplateMetadata) => b.height - a.height));
     });
   }, []);
-
-  const toHex = (str: Uint8Array) => {
-    return "0x" + Array.prototype.map.call(str, (x: number) => ("00" + x.toString(16)).slice(-2)).join("");
-  };
 
   const sort = (column: ColumnKey, order: number) => {
     // let order = 1;
@@ -93,9 +65,7 @@ function Templates() {
     // }
     if (column) {
       setTemplates(
-        [...templates].sort((r0: ITemplate, r1: ITemplate) =>
-          r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0,
-        ),
+        [...templates].sort((r0, r1) => (r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0)),
       );
       setLastSort({ column, order });
     }
@@ -107,7 +77,7 @@ function Templates() {
   // Avoid a layout jump when reaching the last page with empty rows.
   const emptyRowsCnt = emptyRows(page, rowsPerPage, templates);
 
-  const handleChangePage = (event: unknown, newPage: number) => {
+  const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
@@ -127,12 +97,13 @@ function Templates() {
             {
               title: "Template Address",
               value: "id",
-              filterFn: (value: string, row: ITemplate) => row.id.toLowerCase().includes(value.toLowerCase()),
+              filterFn: (value: string, row: TemplateMetadata) =>
+                row.address.toLowerCase().includes(value.toLowerCase()),
             },
             {
               title: "Mined Height",
               value: "height",
-              filterFn: (value: string, row: ITemplate) => row.height.toString().includes(value),
+              filterFn: (value: string, row: TemplateMetadata) => row.height.toString().includes(value),
             },
           ]}
           placeholder="Search for Templates"
@@ -148,12 +119,12 @@ function Templates() {
                   menuItems={[
                     {
                       title: "Sort Ascending",
-                      fn: () => sort("id", 1),
+                      fn: () => sort("id" as ColumnKey, 1),
                       icon: <KeyboardArrowUpIcon />,
                     },
                     {
                       title: "Sort Descending",
-                      fn: () => sort("id", -1),
+                      fn: () => sort("id" as ColumnKey, -1),
                       icon: <KeyboardArrowDownIcon />,
                     },
                   ]}
@@ -192,15 +163,14 @@ function Templates() {
           </TableHead>
           <TableBody>
             {templates
-              .filter(({ show }) => show)
               .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-              .map(({ address, binary_sha, height, url, id, name }) => (
-                <TableRow key={id}>
+              .map(({ address, binary_sha, height, url, name }, i) => (
+                <TableRow key={i}>
                   <DataTableCell>
-                    <Link to={`/templates/${toHex(address)}`} state={[address]} style={{ textDecoration: "none" }}>
-                      {shortenString(toHex(address))}
+                    <Link to={`/templates/${address}`} state={[address]} style={{ textDecoration: "none" }}>
+                      {shortenString(address)}
                     </Link>
-                    <CopyToClipboard copy={toHex(address)} />
+                    <CopyToClipboard copy={address} />
                   </DataTableCell>
                   <DataTableCell>{name}</DataTableCell>
                   <DataTableCell>
@@ -234,7 +204,7 @@ function Templates() {
                   <DataTableCell style={{ textAlign: "center" }}>{height}</DataTableCell>
                   <DataTableCell style={{ textAlign: "center" }}>Active</DataTableCell>
                   <DataTableCell style={{ textAlign: "center" }}>
-                    <Link to={`/templates/${toHex(address)}`} state={[address]}>
+                    <Link to={`/templates/${address}`} state={[address]}>
                       <IconButton>
                         <KeyboardArrowRightIcon color="primary" />
                       </IconButton>
@@ -242,10 +212,10 @@ function Templates() {
                   </DataTableCell>
                 </TableRow>
               ))}
-            {templates.filter(({ show }) => show).length === 0 && (
+            {templates.length === 0 && (
               <TableRow>
                 <TableCell colSpan={4} style={{ textAlign: "center" }}>
-                  <Fade in={templates.filter(({ show }) => show).length === 0} timeout={500}>
+                  <Fade in={templates.length === 0} timeout={500}>
                     <Typography variant="h5">No results found</Typography>
                   </Fade>
                 </TableCell>
@@ -265,7 +235,7 @@ function Templates() {
         <TablePagination
           rowsPerPageOptions={[10, 25, 50]}
           component="div"
-          count={templates.filter((template) => template.show).length}
+          count={templates.length}
           rowsPerPage={rowsPerPage}
           page={page}
           onPageChange={handleChangePage}

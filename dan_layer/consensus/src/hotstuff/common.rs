@@ -26,8 +26,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::common";
 
 /// The value that fees are divided by to determine the amount of fees to burn. 0 means no fees are burned.
 /// This is a placeholder for the fee exhaust consensus constant so that we know where it's used later.
-/// TODO: exhaust > 0
-pub const EXHAUST_DIVISOR: u64 = 0;
+pub const EXHAUST_DIVISOR: u64 = 20; // 5%
 
 /// Calculates the dummy block required to reach the new height and returns the last dummy block (parent for next
 /// proposal).
@@ -39,6 +38,8 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
     new_height: NodeHeight,
     leader_strategy: &TLeaderStrategy,
     local_committee: &Committee<TAddr>,
+    parent_timestamp: u64,
+    parent_base_layer_block_hash: FixedHash,
 ) -> Option<LeafBlock> {
     let mut parent_block = high_qc.as_leaf_block();
     let mut current_height = high_qc.block_height() + NodeHeight(1);
@@ -68,6 +69,8 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
             high_qc.clone(),
             epoch,
             parent_merkle_root,
+            parent_timestamp,
+            parent_base_layer_block_hash,
         );
         debug!(
             target: LOG_TARGET,

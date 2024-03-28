@@ -35,19 +35,19 @@ import {
 } from "../../utils/json_rpc";
 import { apiError } from "../helpers/types";
 import queryClient from "../queryClient";
-import type { Arg, ComponentAccessRules } from "@tarilabs/typescript-bindings";
+import type { Arg, ComponentAccessRules, ConfidentialTransferInputSelection } from "@tariproject/typescript-bindings";
+import type { ComponentAddressOrName } from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 //   Fees are passed as strings because Amount is tagged
 export const useAccountsClaimBurn = (account: string, claimProof: string, fee: number) => {
   return useMutation(
-    async () => {
-      return await accountsClaimBurn({
+    () =>
+      accountsClaimBurn({
         account: { Name: account },
         claim_proof: claimProof,
         max_fee: fee,
         key_id: null,
-      });
-    },
+      }),
     {
       onError: (error: apiError) => {
         error;
@@ -92,20 +92,26 @@ export const useAccountsTransfer = (
   resource_address: string,
   destination_public_key: string,
   max_fee: number | null,
-  confidential: boolean,
+  isConfidential: boolean,
+  output_to_revealed: boolean,
+  input_selection: ConfidentialTransferInputSelection,
+  badge: string | null,
   dry_run: boolean,
 ) => {
   return useMutation(
     () => {
       let transferRequest = {
-        account: (account && { Name: account }) || null,
+        account: account ? { Name: account } : null,
         amount,
         resource_address,
         destination_public_key,
         max_fee,
+        proof_from_badge_resource: badge,
+        input_selection,
+        output_to_revealed,
         dry_run,
       };
-      if (confidential) {
+      if (isConfidential) {
         return accountsConfidentialTransfer(transferRequest);
       } else {
         return accountsTransfer(transferRequest);
@@ -123,15 +129,16 @@ export const useAccountsTransfer = (
 };
 
 export const useAccountsCreateFreeTestCoins = () => {
-  const createFreeTestCoins = async ({
-    accountName,
-    amount,
-    fee,
-  }: {
-    accountName: string | null;
-    amount: number;
-    fee: number | null;
-  }) => {
+  const createFreeTestCoins = async (
+    {
+      accountName,
+      amount,
+      fee,
+    }: {
+      accountName: string | null;
+      amount: number;
+      fee: number | null;
+    }) => {
     const result = await accountsCreateFreeTestCoins({
       account: (accountName && { Name: accountName }) || null,
       amount,
@@ -193,10 +200,10 @@ export const useAccountsGet = (name: string) => {
   });
 };
 
-export const useAccountNFTsList = (offset: number, limit: number) => {
+export const useAccountNFTsList = (account: ComponentAddressOrName | null, offset: number, limit: number) => {
   return useQuery({
     queryKey: ["nfts_list"],
-    queryFn: () => nftList({ offset, limit }),
+    queryFn: () => nftList({ account, offset, limit }),
     onError: (error: apiError) => {
       error;
     },

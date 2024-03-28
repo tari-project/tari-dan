@@ -25,7 +25,10 @@ use std::{ops::RangeInclusive, time::Duration};
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use tari_base_node_client::types::BaseLayerValidatorNode;
-use tari_common_types::{transaction::TxId, types::PublicKey};
+use tari_common_types::{
+    transaction::TxId,
+    types::{FixedHash, PublicKey},
+};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     shard::Shard,
@@ -114,7 +117,8 @@ pub struct TemplateRegistrationResponse {
     ts(export, export_to = "../../bindings/src/types/validator-node-client/")
 )]
 pub struct GetTemplateRequest {
-    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[serde(with = "serde_with::string")]
     pub template_address: TemplateAddress,
 }
 
@@ -138,6 +142,7 @@ pub struct GetTemplateResponse {
 pub struct TemplateAbi {
     pub template_name: String,
     pub functions: Vec<FunctionDef>,
+    pub version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -193,7 +198,8 @@ pub struct GetTemplatesResponse {
 )]
 pub struct TemplateMetadata {
     pub name: String,
-    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[serde(with = "serde_with::string")]
     pub address: TemplateAddress,
     pub url: String,
     /// SHA hash of binary
@@ -457,6 +463,7 @@ pub struct GetCommitteeRequest {
 pub struct GetCommitteeResponse {
     pub committee: Committee<PeerAddress>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "ts",
@@ -634,6 +641,8 @@ pub struct GetEpochManagerStatsResponse {
     pub current_epoch: Epoch,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub current_block_height: u64,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub current_block_hash: FixedHash,
     pub is_valid: bool,
     pub committee_shard: Option<CommitteeShard>,
 }
@@ -749,7 +758,21 @@ pub struct GetBlocksRequest {
     pub limit: u64,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub offset: u64,
+    pub ordering_index: Option<usize>,
     pub ordering: Option<Ordering>,
+    pub filter_index: Option<usize>,
+    pub filter: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+)]
+pub struct GetFilteredBlocksCountRequest {
+    pub filter_index: Option<usize>,
+    pub filter: Option<String>,
 }
 
 #[derive(Serialize, Debug)]

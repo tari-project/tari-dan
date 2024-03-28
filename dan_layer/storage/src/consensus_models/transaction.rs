@@ -138,7 +138,6 @@ impl TransactionRecord {
                                 .unwrap_or("<invalid state, no abort details>")
                         )),
                     ),
-                    fee_receipt: None,
                 })
             }
         })

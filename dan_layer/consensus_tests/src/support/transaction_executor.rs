@@ -62,7 +62,6 @@ where TStateStore: StateStore
                 )),
                 fee_receipt: FeeReceipt::default(),
             },
-            fee_receipt: None,
         };
         let execution_time = Duration::ZERO;
         Ok(ExecutedTransaction::new(transaction, result, outputs, execution_time))

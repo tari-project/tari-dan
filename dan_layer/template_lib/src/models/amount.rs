@@ -83,7 +83,7 @@ impl Amount {
         if self.is_negative() || other.is_negative() {
             return None;
         }
-        if self < &other {
+        if *self < other {
             return None;
         }
 
@@ -106,6 +106,8 @@ impl Amount {
         Amount(self.0.saturating_div(other.0))
     }
 
+    /// Returns the value as a u64 if possible, otherwise returns None.
+    /// Since the internal representation is i64, this will return None if the value is negative.
     pub fn as_u64_checked(&self) -> Option<u64> {
         self.0.try_into().ok()
     }
@@ -159,7 +161,13 @@ impl PartialEq<i64> for Amount {
 
 impl Sum for Amount {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Amount::zero(), |a, b| a + b)
+        iter.map(|a| a.value()).sum()
+    }
+}
+
+impl Sum<i64> for Amount {
+    fn sum<I: Iterator<Item = i64>>(iter: I) -> Self {
+        Self(iter.sum())
     }
 }
 

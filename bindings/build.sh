@@ -23,12 +23,12 @@ echo "//   SPDX-License-Identifier: BSD-3-Clause" >> $INDEX_FILE
 echo "" >> $INDEX_FILE
 
 # Generate the index file
-for file in $(find $DIRECTORY_PATH -name "*.ts" -maxdepth 1); do
+for file in $(find $DIRECTORY_PATH -name "*.ts" -maxdepth 1 | sort); do
   MODULE_NAME="${file%.*}"
   echo "export * from '$MODULE_NAME';" >> $INDEX_FILE
 done
 
-for dir in $(find $DIRECTORY_PATH -mindepth 1 -maxdepth 1 -type d); do
+for dir in $(find $DIRECTORY_PATH -mindepth 1 -maxdepth 1 -type d | sort); do
   index_file="$(basename $dir).ts"
   if [ -f "$index_file" ]; then
     npx shx rm "$index_file"
@@ -44,7 +44,7 @@ for dir in $(find $DIRECTORY_PATH -mindepth 1 -maxdepth 1 -type d); do
 done
 
 # Add helpers
-for file in $(find $HELPERS_PATH -name "*.ts"); do
+for file in $(find $HELPERS_PATH -name "*.ts" | sort); do
   FILE_NAME=$(basename $file)
   if [ "$FILE_NAME" != "index.ts" ]; then
     MODULE_NAME="${FILE_NAME%.*}"

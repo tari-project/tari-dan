@@ -7,7 +7,7 @@ use serde_with::{serde_as, Bytes};
 use ts_rs::TS;
 
 use crate::{
-    crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
+    crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes, SchnorrSignatureBytes},
     models::Amount,
 };
 
@@ -40,12 +40,11 @@ impl ConfidentialOutputProof {
 }
 
 /// A zero-knowledge proof that a confidential resource amount is valid
-#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialStatement {
-    #[serde_as(as = "Bytes")]
-    pub commitment: [u8; 32],
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
+    pub commitment: PedersonCommitmentBytes,
     /// Public nonce (R) that was used to generate the commitment mask
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub sender_public_nonce: RistrettoPublicKeyBytes,
@@ -54,14 +53,83 @@ pub struct ConfidentialStatement {
     pub encrypted_data: EncryptedData,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub minimum_value_promise: u64,
+    /// If the view key is enabled for a given resource, this proof MUST be provided, otherwise it MUST NOT.
+    pub viewable_balance_proof: Option<ViewableBalanceProof>,
+}
+
+/// ### Verifiable encryption
+///
+/// A verifiable ElGamal encryption proving system that asserts the value bound to a Pedersen
+/// commitment matches the value encrypted to a given public key. This will be used to assert that the issuer can
+/// decrypt account balances without knowing the opening to the account's balance commitment.
+///
+/// The proving relation is $\\{ (C, E, R, P); (v, m, r) | C = mG + vH, E = vG + rP, R = rG \\}$.
+///
+/// The prover samples $x_v, x_m, x_r$ uniformly at random.
+/// It computes $C' = x_v H + x_m G$, $E' = x_v G + x_r P$, and $R' = x_r G$ and sends them to the verifier.
+/// The verifier samples nonzero $e$ uniformly at random and sends it to the prover.
+/// The prover computes $s_v = ev + x_v$, $s_m = em + x_m$, and $s_r = er + x_r$ and sends them to the verifier.
+/// The verifier accepts the proof if and only if $eC + C' = s_v H + s_m G$, $eE + E' = s_v G + s_r P$, and $eR + R' =
+/// s_r G$.
+///
+/// It is a sigma protocol for the relation that is complete, $2$-special sound, and special honest-verifier zero
+/// knowledge.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+pub struct ViewableBalanceProof {
+    /// The encrypted value that takes the form: E = v.G + r.P
+    /// where v is the value, G is the generator, r is the secret_nonce and P is the view key
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub elgamal_encrypted: RistrettoPublicKeyBytes,
+    /// The public nonce used in the ElGamal encryption R = r.G
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub elgamal_public_nonce: RistrettoPublicKeyBytes,
+    /// Part of the proof that the encrypted value is correctly constructed. C' = x_v.H + x_m.G
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub c_prime: RistrettoPublicKeyBytes,
+    /// Part of the proof that the encrypted value is correctly constructed. E' = x_v.G + x_r.P
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub e_prime: RistrettoPublicKeyBytes,
+    /// Part of the proof that the encrypted value is correctly constructed. R' = x_r.G
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub r_prime: RistrettoPublicKeyBytes,
+    /// Part of the proof that the encrypted value is correctly constructed. s_v = x_v + e.v
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub s_v: SchnorrSignatureBytes,
+    /// Part of the proof that the encrypted value is correctly constructed. s_m = x_m + e.m
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub s_m: SchnorrSignatureBytes,
+    /// Part of the proof that the encrypted value is correctly constructed. s_r = x_r + e.r
+    #[cfg_attr(feature = "ts", ts(type = "Uint8Array"))]
+    pub s_r: SchnorrSignatureBytes,
+}
+
+impl ViewableBalanceProof {
+    pub fn as_challenge_fields(&self) -> ViewableBalanceProofChallengeFields<'_> {
+        ViewableBalanceProofChallengeFields {
+            elgamal_encrypted: &self.elgamal_encrypted,
+            elgamal_public_nonce: &self.elgamal_public_nonce,
+            c_prime: &self.c_prime,
+            e_prime: &self.e_prime,
+            r_prime: &self.r_prime,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Serialize)]
+pub struct ViewableBalanceProofChallengeFields<'a> {
+    pub elgamal_encrypted: &'a RistrettoPublicKeyBytes,
+    pub elgamal_public_nonce: &'a RistrettoPublicKeyBytes,
+    pub c_prime: &'a RistrettoPublicKeyBytes,
+    pub e_prime: &'a RistrettoPublicKeyBytes,
+    pub r_prime: &'a RistrettoPublicKeyBytes,
 }
 
 /// A zero-knowledge proof that a withdrawal of confidential resources from a vault is valid
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialWithdrawProof {
-    // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
-    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
+    #[cfg_attr(feature = "ts", ts(type = "Array<Uint8Array>"))]
     pub inputs: Vec<PedersonCommitmentBytes>,
     /// The amount to withdraw from revealed funds i.e. the revealed funds as inputs
     #[cfg_attr(feature = "ts", ts(type = "number"))]

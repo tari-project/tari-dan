@@ -31,12 +31,14 @@ import TableCell from "@mui/material/TableCell";
 import TableBody from "@mui/material/TableBody";
 import { useParams } from "react-router-dom";
 import { useAccountsGetBalances, useAccountsGet, useAccountNFTsList } from "../../api/hooks/useAccounts";
-import { shortenString } from "../../utils/helpers";
+import { renderJson, shortenString } from "../../utils/helpers";
 import { DataTableCell } from "../../Components/StyledComponents";
 import CopyToClipboard from "../../Components/CopyToClipboard";
 import FetchStatusCheck from "../../Components/FetchStatusCheck";
-import { substateIdToString } from "@tarilabs/typescript-bindings";
-import type { AccountNftInfo, BalanceEntry } from "@tarilabs/typescript-bindings/wallet-daemon-client";
+import { substateIdToString } from "@tariproject/typescript-bindings";
+import type { BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemon-client";
+import { IoCheckmarkOutline, IoCloseOutline } from "react-icons/io5";
+import NFTList from "../../Components/NFTList";
 
 function BalanceRow(props: BalanceEntry) {
   return (
@@ -52,38 +54,29 @@ function BalanceRow(props: BalanceEntry) {
   );
 }
 
-function NftsList({ nft }: { nft: AccountNftInfo }) {
-  return (
-    <TableRow>
-      <DataTableCell>{nft.metadata}</DataTableCell>
-      <DataTableCell>{nft.is_burned}</DataTableCell>
-    </TableRow>
-  );
-}
-
 function AccountDetailsLayout() {
-  const { name } = useParams();
+  const { name: accountName } = useParams();
   const {
     data: balancesData,
     isLoading: balancesIsLoading,
     isError: balancesIsError,
     error: balancesError,
-  } = useAccountsGetBalances(name || "");
-
-  const {
-    data: nftsListData,
-    isLoading: nftsListIsLoading,
-    isError: nftsListIsError,
-    error: nftsListError,
-  } = useAccountNFTsList(0, 10);
+  } = useAccountsGetBalances(accountName || "");
 
   const {
     data: accountsData,
     isLoading: accountsIsLoading,
     isError: accountsIsError,
     error: accountsError,
-  } = useAccountsGet(name || "");
+  } = useAccountsGet(accountName || "");
 
+  const name = accountsData?.account?.name || null;
+  const {
+    data: nftsListData,
+    isLoading: nftsListIsFetching,
+    isError: nftsListIsError,
+    error: nftsListError,
+  } = useAccountNFTsList(name ? { Name: name } : null, 0, 10);
   return (
     <>
       <Grid item xs={12} md={12} lg={12}>
@@ -150,27 +143,12 @@ function AccountDetailsLayout() {
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           Account NFTs
-          <FetchStatusCheck
-            isError={nftsListIsError}
-            errorMessage={nftsListError?.message || "Error fetching data"}
-            isLoading={nftsListIsLoading}
+          <NFTList
+            nftsListIsError={nftsListIsError}
+            nftsListIsFetching={nftsListIsFetching}
+            nftsListError={nftsListError}
+            nftsListData={nftsListData}
           />
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Token Symbol</TableCell>
-                  <TableCell>Resource Type</TableCell>
-                  <TableCell>Is Burned</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {nftsListData?.nfts.map((nft: AccountNftInfo, index: number) => (
-                  <NftsList key={index} nft={nft} />
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
         </StyledPaper>
       </Grid>
     </>

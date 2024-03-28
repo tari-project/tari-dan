@@ -78,10 +78,11 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
     pub fn update_vault_balance(
         &self,
         vault_address: &SubstateId,
-        new_balance: Amount,
+        revealed_balance: Amount,
+        confidential_balance: Amount,
     ) -> Result<(), AccountsApiError> {
         let mut tx = self.store.create_write_tx()?;
-        tx.vaults_update(vault_address, Some(new_balance))?;
+        tx.vaults_update(vault_address, revealed_balance, confidential_balance)?;
         tx.commit()?;
         Ok(())
     }
@@ -162,7 +163,8 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
             address: vault_address,
             resource_address,
             resource_type,
-            balance: Amount::zero(),
+            revealed_balance: Amount::zero(),
+            confidential_balance: Amount::zero(),
             token_symbol,
         })?;
         tx.commit()?;

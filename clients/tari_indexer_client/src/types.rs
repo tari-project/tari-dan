@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use serde_with::{serde_as, DisplayFromStr};
 use tari_base_node_client::types::BaseLayerValidatorNode;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::Epoch;
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
@@ -419,6 +419,8 @@ pub struct GetEpochManagerStatsResponse {
     pub current_epoch: Epoch,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub current_block_height: u64,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub current_block_hash: FixedHash,
 }
 
 #[derive(Serialize, Debug)]

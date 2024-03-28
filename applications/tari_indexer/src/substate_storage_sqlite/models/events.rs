@@ -25,7 +25,8 @@ use std::{convert::TryFrom, str::FromStr};
 
 use diesel::sql_types::{Integer, Nullable, Text};
 use serde::{Deserialize, Serialize};
-use tari_template_lib::{prelude::ComponentAddress, Hash};
+use tari_engine_types::substate::SubstateId;
+use tari_template_lib::Hash;
 
 use crate::substate_storage_sqlite::schema::*;
 
@@ -38,7 +39,7 @@ pub struct Event {
     pub topic: String,
     pub payload: String,
     pub version: i32,
-    pub component_address: Option<String>,
+    pub substate_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Insertable, AsChangeset)]
@@ -50,7 +51,16 @@ pub struct NewEvent {
     pub topic: String,
     pub payload: String,
     pub version: i32,
-    pub component_address: Option<String>,
+    pub substate_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Insertable, AsChangeset)]
+#[diesel(table_name = event_payloads)]
+#[diesel(treat_none_as_null = true)]
+pub struct NewEventPayloadField {
+    pub payload_key: String,
+    pub payload_value: String,
+    pub event_id: i32,
 }
 
 #[derive(Clone, Debug, QueryableByName, Deserialize, Serialize)]
@@ -66,18 +76,14 @@ pub struct EventData {
     #[diesel(sql_type = Integer)]
     pub version: i32,
     #[diesel(sql_type = Nullable<Text>)]
-    pub component_address: Option<String>,
+    pub substate_id: Option<String>,
 }
 
 impl TryFrom<EventData> for crate::graphql::model::events::Event {
     type Error = anyhow::Error;
 
     fn try_from(event_data: EventData) -> Result<Self, Self::Error> {
-        let component_address = event_data
-            .component_address
-            .map(|comp_addr| ComponentAddress::from_str(comp_addr.as_str()))
-            .transpose()?
-            .map(|comp_addr| comp_addr.as_object_key().into_array());
+        let substate_id = event_data.substate_id;
 
         let template_address = Hash::from_hex(&event_data.template_address)?.into_array();
 
@@ -86,7 +92,7 @@ impl TryFrom<EventData> for crate::graphql::model::events::Event {
         let payload = serde_json::from_str(event_data.payload.as_str())?;
 
         Ok(Self {
-            component_address,
+            substate_id,
             template_address,
             tx_hash,
             payload,
@@ -99,17 +105,17 @@ impl TryFrom<EventData> for tari_engine_types::events::Event {
     type Error = anyhow::Error;
 
     fn try_from(event_data: EventData) -> Result<Self, Self::Error> {
-        let component_address = event_data
-            .component_address
+        let substate_id = event_data
+            .substate_id
             .clone()
-            .map(|comp_addr| ComponentAddress::from_str(comp_addr.as_str()))
+            .map(|sub_id| SubstateId::from_str(&sub_id))
             .transpose()?;
         let template_address = Hash::from_hex(&event_data.template_address)?;
         let tx_hash = Hash::from_hex(&event_data.tx_hash)?;
         let payload = serde_json::from_str(event_data.payload.as_str())?;
 
         Ok(Self::new(
-            component_address,
+            substate_id,
             template_address,
             tx_hash,
             event_data.topic,

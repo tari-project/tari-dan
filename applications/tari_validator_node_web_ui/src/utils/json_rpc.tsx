@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import type { GetFilteredBlocksCountRequest } from "@tariproject/typescript-bindings/validator-node-client";
 import type {
   AddPeerRequest,
   GetAllVnsRequest,
@@ -27,6 +28,8 @@ import type {
   GetBlockRequest,
   GetBlockResponse,
   GetBlocksCountResponse,
+  GetBlocksRequest,
+  GetBlocksResponse,
   GetCommitteeRequest,
   GetCommitteeResponse,
   GetCommsStatsResponse,
@@ -63,7 +66,7 @@ import type {
   TemplateRegistrationResponse,
   VNGetValidatorFeesRequest,
   VNGetValidatorFeesResponse,
-} from "@tarilabs/typescript-bindings/validator-node-client";
+} from "@tariproject/typescript-bindings/validator-node-client";
 
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
@@ -119,6 +122,9 @@ export const getTxPool = (): Promise<GetTxPoolResponse> => jsonRpc("get_tx_pool"
 // Blocks
 export const getBlock = (request: GetBlockRequest): Promise<GetBlockResponse> => jsonRpc("get_block", request);
 export const getBlocksCount = (): Promise<GetBlocksCountResponse> => jsonRpc("get_blocks_count");
+export const getBlocks = (request: GetBlocksRequest): Promise<GetBlocksResponse> => jsonRpc("get_blocks", request);
+export const getFilteredBlocksCount = (request: GetFilteredBlocksCountRequest): Promise<GetBlocksCountResponse> =>
+  jsonRpc("get_filtered_blocks_count", request);
 
 // Template
 export const getTemplate = (request: GetTemplateRequest): Promise<GetTemplateResponse> =>

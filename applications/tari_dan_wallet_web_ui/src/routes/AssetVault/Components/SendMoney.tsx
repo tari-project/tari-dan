@@ -20,8 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import {useState} from "react";
-import {Form} from "react-router-dom";
+import { useState } from "react";
+import { Form } from "react-router-dom";
 import Button from "@mui/material/Button";
 import CheckBox from "@mui/material/Checkbox";
 import TextField from "@mui/material/TextField";
@@ -30,169 +30,300 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Box from "@mui/material/Box";
-import {useAccountsTransfer} from "../../../api/hooks/useAccounts";
-import {useTheme} from "@mui/material/styles";
+import { useAccountsGet, useAccountsGetBalances, useAccountsTransfer } from "../../../api/hooks/useAccounts";
+import { useTheme } from "@mui/material/styles";
 import useAccountStore from "../../../store/accountStore";
+import Select from "@mui/material/Select";
+import { SelectChangeEvent } from "@mui/material/Select/Select";
+import MenuItem from "@mui/material/MenuItem";
+import {
+  ResourceAddress,
+  ResourceType,
+  ConfidentialTransferInputSelection,
+  TransactionResult,
+} from "@tariproject/typescript-bindings";
+import InputLabel from "@mui/material/InputLabel";
+
+const XTR2 = "resource_01010101010101010101010101010101010101010101010101010101";
 
 export default function SendMoney() {
-    const [open, setOpen] = useState(false);
-    const [disabled, setDisabled] = useState(false);
-    const [estimatedFee, setEstimatedFee] = useState(0);
-    const [transferFormState, setTransferFormState] = useState({
-        publicKey: "",
-        confidential: false,
-        amount: "",
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Button variant="outlined" onClick={() => setOpen(true)}>
+        Send Tari
+      </Button>
+      <SendMoneyDialog
+        open={open}
+        handleClose={() => setOpen(false)}
+        onSendComplete={() => setOpen(false)}
+        resource_type="Confidential"
+        resource_address={XTR2}
+      />
+    </>
+  );
+}
+
+export interface SendMoneyDialogProps {
+  open: boolean;
+  resource_address?: ResourceAddress;
+  resource_type?: ResourceType,
+  onSendComplete?: () => void;
+  handleClose: () => void;
+}
+
+export function SendMoneyDialog(props: SendMoneyDialogProps) {
+  const INITIAL_VALUES = {
+    publicKey: "",
+    outputToConfidential: false,
+    inputSelection: "PreferRevealed",
+    amount: "",
+    badge: null,
+  };
+  const isConfidential = props.resource_type === "Confidential";
+  const [useBadge, setUseBadge] = useState(false);
+  const [disabled, setDisabled] = useState(false);
+  const [estimatedFee, setEstimatedFee] = useState(0);
+  const [transferFormState, setTransferFormState] = useState(INITIAL_VALUES);
+  const [validity, setValidity] = useState<object>({
+    publicKey: false,
+    amount: false,
+  });
+
+  const { accountName, setPopup } = useAccountStore();
+
+  const theme = useTheme();
+
+  const { data } = useAccountsGetBalances(accountName);
+  const badges = data?.balances
+    ?.filter((b) => b.resource_type === "NonFungible" && b.balance > 0)
+    .map((b) => b.resource_address) as string[];
+
+  // TODO: we should have separate calls for confidential and non-confidential transfers
+  const { mutateAsync: sendIt } = useAccountsTransfer(
+    accountName,
+    parseInt(transferFormState.amount),
+    // HACK: default to XTR2 because the resource is only set when open==true, and we cannot conditionally call hooks i.e. when props.resource_address is set
+    props.resource_address || XTR2,
+    transferFormState.publicKey,
+    estimatedFee,
+    props.resource_type === "Confidential",
+    !transferFormState.outputToConfidential,
+    transferFormState.inputSelection as ConfidentialTransferInputSelection,
+    transferFormState.badge,
+    false,
+  );
+
+  const { mutateAsync: calculateFeeEstimate } = useAccountsTransfer(
+    accountName,
+    parseInt(transferFormState.amount),
+    props.resource_address || XTR2,
+    transferFormState.publicKey,
+    3000,
+    props.resource_type === "Confidential",
+    !transferFormState.outputToConfidential,
+    transferFormState.inputSelection as ConfidentialTransferInputSelection,
+    transferFormState.badge,
+    true,
+  );
+
+  function setFormValue(e: React.ChangeEvent<HTMLInputElement>) {
+    setTransferFormState({
+      ...transferFormState,
+      [e.target.name]: e.target.value,
     });
+    if (validity[e.target.name as keyof object] !== undefined) {
+      setValidity({
+        ...validity,
+        [e.target.name]: e.target.validity.valid,
+      });
+    }
+    setEstimatedFee(0);
+  }
 
-    const {accountName, setPopup} = useAccountStore();
+  function setSelectFormValue(e: SelectChangeEvent<unknown>) {
+    setTransferFormState({
+      ...transferFormState,
+      [e.target.name]: e.target.value,
+    });
+    setEstimatedFee(0);
+  }
 
-    const theme = useTheme();
+  function setCheckboxFormValue(e: React.ChangeEvent<HTMLInputElement>) {
+    setTransferFormState({
+      ...transferFormState,
+      [e.target.name]: e.target.checked,
+    });
+    setEstimatedFee(0);
+  }
 
-    const {mutateAsync: sendIt} = useAccountsTransfer(
-        accountName,
-        parseInt(transferFormState.amount),
-        "resource_01010101010101010101010101010101010101010101010101010101",
-        transferFormState.publicKey,
-        estimatedFee,
-        transferFormState.confidential,
-        false,
-    );
-
-    const {mutateAsync: calculateFeeEstimate} = useAccountsTransfer(
-        accountName,
-        parseInt(transferFormState.amount),
-        "resource_01010101010101010101010101010101010101010101010101010101",
-        transferFormState.publicKey,
-        1000,
-        transferFormState.confidential,
-        true,
-    );
-
-    const onPublicKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (/^[0-9a-fA-F]*$/.test(e.target.value)) {
-            setTransferFormState({
-                ...transferFormState,
-                [e.target.name]: e.target.value,
-            });
-        }
-        setEstimatedFee(0);
-    };
-
-    const onConfidentialChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setTransferFormState({
-            ...transferFormState,
-            [e.target.name]: e.target.checked,
-        });
-        setEstimatedFee(0);
-    };
-
-    const onNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (/^[0-9]*$/.test(e.target.value)) {
-            setTransferFormState({
-                ...transferFormState,
-                [e.target.name]: e.target.value,
-            });
-        }
-        setEstimatedFee(0);
-    };
-
-    const onTransfer = async () => {
-        if (accountName) {
-            setDisabled(true);
-            if (estimatedFee) {
-                sendIt()
-                    .then(() => {
-                        setTransferFormState({
-                            publicKey: "",
-                            confidential: false,
-                            amount: "",
-                        });
-                        setOpen(false);
-                        setPopup({title: "Send successful", error: false});
-                    })
-                    .catch((e) => {
-                        setPopup({title: "Send failed", error: true, message: e.message});
-                    })
-                    .finally(() => {
-                        setDisabled(false);
-                    });
-            } else {
-                let result = await calculateFeeEstimate();
-                setEstimatedFee(result.fee);
-                setDisabled(false);
+  const onTransfer = async () => {
+    if (accountName) {
+      setDisabled(true);
+      if (estimatedFee) {
+        sendIt?.()
+          .then(() => {
+            setTransferFormState(INITIAL_VALUES);
+            props.onSendComplete?.();
+            setPopup({ title: "Send successful", error: false });
+          })
+          .catch((e) => {
+            setPopup({ title: "Send failed", error: true, message: e.message });
+          })
+          .finally(() => {
+            setDisabled(false);
+          });
+      } else {
+        calculateFeeEstimate?.()
+          .then((result) => {
+            if (!("Accept" in result.result.result)) {
+              setPopup({
+                title: "Fee estimate failed",
+                error: true,
+                // TODO: fix this
+                message: JSON.stringify(unionGet(result.result.result, "Reject" as keyof TransactionResult) || unionGet(result.result.result, "AcceptFeeRejectRest" as keyof TransactionResult)?.[1]),
+              });
+              return;
             }
-        }
-    };
+            setEstimatedFee(result.fee);
+          })
+          .catch((e) => {
+            setPopup({ title: "Fee estimate failed", error: true, message: e.message });
+          })
+          .finally(() => {
+            setDisabled(false);
+          });
+      }
+    }
+  };
 
-    const handleClickOpen = () => {
-        setOpen(true);
-    };
+  const handleClose = () => {
+    props.handleClose?.();
+  };
 
-    const handleClose = () => {
-        setOpen(false);
-    };
+  const handleUseBadgeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUseBadge(e.target.checked);
+    if (!e.target.checked) {
+      setTransferFormState({
+        ...transferFormState,
+        badge: null,
+      });
+    }
+  };
 
-    return (
-        <div>
-            <Button variant="outlined" onClick={handleClickOpen}>
-                Send Tari
+  const allValid = Object.values(validity).every((v) => v);
+
+  return (
+    <Dialog open={props.open} onClose={handleClose}>
+      <DialogTitle>Send {props.resource_address}</DialogTitle>
+      <DialogContent className="dialog-content">
+        <Form onSubmit={onTransfer} className="flex-container-vertical" style={{ paddingTop: theme.spacing(1) }}>
+          {badges && (
+            <>
+              <FormControlLabel
+                control={<CheckBox name="useBadge" checked={useBadge} onChange={handleUseBadgeChange} />}
+                label="Use Badge"
+              />
+              <InputLabel id="select-badge">Badge</InputLabel>
+              <Select
+                id="select-badge"
+                name="badge"
+                disabled={!useBadge || disabled}
+                displayEmpty
+                value={transferFormState.badge || ""}
+                onChange={setSelectFormValue}
+              >
+                {badges.map((b, i) => (
+                  <MenuItem key={i} value={b}>
+                    {b}
+                  </MenuItem>
+                ))}
+              </Select>
+            </>
+          )}
+          <TextField
+            name="publicKey"
+            label="Public Key"
+            value={transferFormState.publicKey}
+            inputProps={{ pattern: "^[0-9a-fA-F]*$" }}
+            onChange={setFormValue}
+            style={{ flexGrow: 1 }}
+            disabled={disabled}
+          />
+          {isConfidential && (
+            <>
+              <FormControlLabel
+                control={
+                  <CheckBox
+                    name="outputToConfidential"
+                    checked={transferFormState.outputToConfidential}
+                    onChange={setCheckboxFormValue}
+                    disabled={disabled}
+                  />
+                }
+                label="Send Confidential Outputs"
+              />
+              <InputLabel id="select-input-selection">Input Selection</InputLabel>
+              <Select
+                name="inputSelection"
+                disabled={disabled}
+                displayEmpty
+                value={transferFormState.inputSelection}
+                onChange={setSelectFormValue}
+              >
+                <MenuItem value="PreferRevealed">
+                  Spend revealed funds first, then confidential
+                </MenuItem>
+                <MenuItem value="PreferConfidential">
+                  Spend confidential funds first, then revealed
+                </MenuItem>
+                <MenuItem value="ConfidentialOnly">
+                  Only spend confidential funds
+                </MenuItem>
+                <MenuItem value="RevealedOnly">
+                  Only spend revealed funds
+                </MenuItem>
+              </Select>
+            </>
+          )}
+          <TextField
+            name="amount"
+            label="Amount"
+            value={transferFormState.amount}
+            type="number"
+            onChange={setFormValue}
+            style={{ flexGrow: 1 }}
+            disabled={disabled}
+          />
+          <TextField
+            name="fee"
+            label="Fee"
+            value={estimatedFee || "Press fee estimate to calculate"}
+            style={{ flexGrow: 1 }}
+            disabled={disabled}
+            InputProps={{ readOnly: true }}
+          />
+          <Box
+            className="flex-container"
+            style={{
+              justifyContent: "flex-end",
+            }}
+          >
+            <Button variant="outlined" onClick={handleClose} disabled={disabled}>
+              Cancel
             </Button>
-            <Dialog open={open} onClose={handleClose}>
-                <DialogTitle>Send Tari</DialogTitle>
-                <DialogContent className="dialog-content">
-                    <Form onSubmit={onTransfer} className="flex-container-vertical"
-                          style={{paddingTop: theme.spacing(1)}}>
-                        <TextField
-                            name="publicKey"
-                            label="Public Key"
-                            value={transferFormState.publicKey}
-                            onChange={onPublicKeyChange}
-                            style={{flexGrow: 1}}
-                            disabled={disabled}
-                        />
-                        <FormControlLabel
-                            control={
-                                <CheckBox
-                                    name="confidential"
-                                    checked={transferFormState.confidential}
-                                    onChange={onConfidentialChange}
-                                    disabled={disabled}
-                                />
-                            }
-                            label="Confidential"
-                        />
-                        <TextField
-                            name="amount"
-                            label="Amount"
-                            value={transferFormState.amount}
-                            onChange={onNumberChange}
-                            style={{flexGrow: 1}}
-                            disabled={disabled}
-                        />
-                        <TextField
-                            name="fee"
-                            label="Fee"
-                            value={estimatedFee || "Press fee estimate to calculate"}
-                            style={{flexGrow: 1}}
-                            disabled={disabled}
-                            InputProps={{readOnly: true}}
-                        />
-                        <Box
-                            className="flex-container"
-                            style={{
-                                justifyContent: "flex-end",
-                            }}
-                        >
-                            <Button variant="outlined" onClick={handleClose} disabled={disabled}>
-                                Cancel
-                            </Button>
-                            <Button variant="contained" type="submit" disabled={disabled}>
-                                {estimatedFee ? "Send" : "Estimate fee"}
-                            </Button>
-                        </Box>
-                    </Form>
-                </DialogContent>
-            </Dialog>
-        </div>
-    );
+            <Button variant="contained" type="submit" disabled={disabled || !allValid}>
+              {estimatedFee ? "Send" : "Estimate fee"}
+            </Button>
+          </Box>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+function unionGet<T extends object>(object: T, key: keyof T): T[keyof T] | null {
+  return key in object ? object[key] : null;
 }

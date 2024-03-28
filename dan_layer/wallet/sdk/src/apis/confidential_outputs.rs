@@ -4,6 +4,7 @@
 use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
+use tari_dan_wallet_crypto::{kdfs, ConfidentialOutputMaskAndValue};
 use tari_engine_types::{confidential::ConfidentialOutput, substate::SubstateId};
 use tari_key_manager::key_manager::DerivedKey;
 use tari_template_lib::models::Amount;
@@ -16,8 +17,7 @@ use crate::{
         key_manager,
         key_manager::{KeyManagerApi, KeyManagerApiError},
     },
-    confidential::{kdfs, ConfidentialProofError},
-    models::{Account, ConfidentialOutputModel, ConfidentialOutputWithMask, ConfidentialProofId, OutputStatus},
+    models::{Account, ConfidentialOutputModel, ConfidentialProofId, OutputStatus},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
 
@@ -52,6 +52,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         locked_by_proof_id: ConfidentialProofId,
         dry_run: bool,
     ) -> Result<(Vec<ConfidentialOutputModel>, u64), ConfidentialOutputsApiError> {
+        // TODO: DRY up
         if amount.is_negative() {
             return Err(ConfidentialOutputsApiError::InvalidParameter {
                 param: "amount",
@@ -74,6 +75,45 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
                 None => {
                     tx.rollback()?;
                     return Err(ConfidentialOutputsApiError::InsufficientFunds);
+                },
+            }
+        }
+        if dry_run {
+            tx.rollback()?;
+        } else {
+            tx.commit()?;
+        }
+        Ok((outputs, total_output_amount))
+    }
+
+    pub fn lock_outputs_until_partial_amount(
+        &self,
+        vault_address: &SubstateId,
+        amount: Amount,
+        locked_by_proof_id: ConfidentialProofId,
+        dry_run: bool,
+    ) -> Result<(Vec<ConfidentialOutputModel>, u64), ConfidentialOutputsApiError> {
+        if amount.is_negative() {
+            return Err(ConfidentialOutputsApiError::InvalidParameter {
+                param: "amount",
+                reason: "Amount cannot be negative".to_string(),
+            });
+        }
+        let amount = amount.as_u64_checked().unwrap();
+        let mut tx = self.store.create_write_tx()?;
+        let mut total_output_amount = 0;
+        let mut outputs = Vec::new();
+        while total_output_amount < amount {
+            let output = tx
+                .outputs_lock_smallest_amount(vault_address, locked_by_proof_id)
+                .optional()?;
+            match output {
+                Some(output) => {
+                    total_output_amount += output.value;
+                    outputs.push(output);
+                },
+                None => {
+                    break;
                 },
             }
         }
@@ -119,7 +159,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         &self,
         outputs: Vec<ConfidentialOutputModel>,
         key_branch: &str,
-    ) -> Result<Vec<ConfidentialOutputWithMask>, ConfidentialOutputsApiError> {
+    ) -> Result<Vec<ConfidentialOutputMaskAndValue>, ConfidentialOutputsApiError> {
         let mut outputs_with_masks = Vec::with_capacity(outputs.len());
         for output in outputs {
             let output_key = self
@@ -146,11 +186,9 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
                 &output.encrypted_data,
             )?;
 
-            outputs_with_masks.push(ConfidentialOutputWithMask {
-                commitment: output.commitment,
+            outputs_with_masks.push(ConfidentialOutputMaskAndValue {
                 value: output.value,
                 mask,
-                public_asset_tag: None,
             });
         }
         Ok(outputs_with_masks)
@@ -263,8 +301,6 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
 pub enum ConfidentialOutputsApiError {
     #[error("Store error: {0}")]
     StoreError(#[from] WalletStorageError),
-    #[error("Confidential proof error: {0}")]
-    ConfidentialProof(#[from] ConfidentialProofError),
     #[error("Confidential crypto error: {0}")]
     ConfidentialCrypto(#[from] ConfidentialCryptoApiError),
     #[error("Insufficient funds")]

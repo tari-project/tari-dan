@@ -48,7 +48,7 @@ import type {
   InspectSubstateRequest,
   InspectSubstateResponse,
   SubmitTransactionResponse,
-} from "@tarilabs/typescript-bindings/tari-indexer-client";
+} from "@tariproject/typescript-bindings/tari-indexer-client";
 
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;

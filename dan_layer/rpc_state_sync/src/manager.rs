@@ -301,6 +301,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         block.justify().clone(),
                         block.epoch(),
                         *block.merkle_root(),
+                        block.timestamp(),
+                        *block.base_layer_block_hash(),
                     );
                     dummy_block.save(tx)?;
                     last_dummy_block = BlockIdAndHeight { id: *dummy_block.id(), height: next_height };

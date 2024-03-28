@@ -21,12 +21,10 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { Mutex } from "async-mutex";
-import { json } from "react-router-dom";
 import type {
   AccountGetDefaultRequest,
   AccountGetRequest,
   AccountGetResponse,
-  AccountNftInfo,
   AccountSetDefaultRequest,
   AccountSetDefaultResponse,
   AccountsCreateFreeTestCoinsRequest,
@@ -93,11 +91,16 @@ import type {
   TransferRequest,
   TransferResponse,
   WebRtcStartRequest,
-  WebRtcStartResponse,
-} from "@tarilabs/typescript-bindings/wallet-daemon-client";
+  WebRtcStartResponse, SubstatesGetRequest, SubstatesGetResponse,
+  ConfidentialViewVaultBalanceRequest,
+  ConfidentialViewVaultBalanceResponse,
+} from "@tariproject/typescript-bindings/wallet-daemon-client";
+import type { NonFungibleToken } from "@tariproject/typescript-bindings";
 
 let token: String | null = null;
 let json_id = 0;
+let address = new URL("http://localhost:9000");
+let isAddressSet = false;
 const mutex_token = new Mutex();
 const mutex_id = new Mutex();
 
@@ -107,13 +110,19 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
     id = json_id;
     json_id += 1;
   });
-  let address = "http://localhost:9000";
-  try {
-    address = await (await fetch("/json_rpc_address")).text();
-    if (!address.startsWith("http")) {
-      address = "http://" + address;
+  if (!isAddressSet) {
+    try {
+      let resp = await fetch("/json_rpc_address");
+      if (resp.status === 200) {
+        address = new URL(await resp.text());
+      }
+    } catch (e) {
+      console.warn(e);
     }
-  } catch {}
+
+    isAddressSet = true;
+  }
+
   let headers: { [key: string]: string } = {
     "Content-Type": "application/json",
   };
@@ -138,7 +147,7 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
   return json.result;
 }
 
-export async function jsonRpc(method: string, params: any = null) {
+async function jsonRpc(method: string, params: any = null) {
   await mutex_token.runExclusive(async () => {
     if (token === null) {
       let auth_response = await internalJsonRpc("auth.request", null, [["Admin"], null]);
@@ -202,6 +211,8 @@ export const accountsList = (request: AccountsListRequest): Promise<AccountsList
   jsonRpc("accounts.list", request);
 export const accountsGetBalances = (request: AccountsGetBalancesRequest): Promise<AccountsGetBalancesResponse> =>
   jsonRpc("accounts.get_balances", request);
+export const substatesGet = (request: SubstatesGetRequest): Promise<SubstatesGetResponse> =>
+  jsonRpc("substates.get", request);
 export const accountsInvoke = (request: AccountsInvokeRequest): Promise<AccountsInvokeResponse> =>
   jsonRpc("accounts.invoke", request);
 export const accountsGet = (request: AccountGetRequest): Promise<AccountGetResponse> =>
@@ -230,10 +241,14 @@ export const confidentialCreateOutputProof = (
   request: ConfidentialCreateOutputProofRequest,
 ): Promise<ConfidentialCreateOutputProofResponse> => jsonRpc("confidential.create_output_proof", request);
 
+export const confidentialViewVaultBalance = (
+  request: ConfidentialViewVaultBalanceRequest,
+): Promise<ConfidentialViewVaultBalanceResponse> => jsonRpc("confidential.view_vault_balance", request);
+
 // nfts
 export const nftMintAccountNft = (request: MintAccountNftRequest): Promise<MintAccountNftResponse> =>
   jsonRpc("nfts.mint_account_nft", request);
-export const nftGet = (request: GetAccountNftRequest): Promise<AccountNftInfo> => jsonRpc("nfts.get", request);
+export const nftGet = (request: GetAccountNftRequest): Promise<NonFungibleToken> => jsonRpc("nfts.get", request);
 export const nftList = (request: ListAccountNftRequest): Promise<ListAccountNftResponse> =>
   jsonRpc("nfts.list", request);
 

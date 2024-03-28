@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { ChangeEvent } from "react";
-import type { FinalizeResult, SubstateId, Transaction, TransactionStatus } from "@tarilabs/typescript-bindings";
+import type { FinalizeResult, SubstateId, Transaction, TransactionStatus } from "@tariproject/typescript-bindings";
 
 const renderJson = (json: any) => {
   if (Array.isArray(json)) {
@@ -32,8 +32,8 @@ const renderJson = (json: any) => {
       <>
         [
         <ol>
-          {json.map((val) => (
-            <li>{renderJson(val)},</li>
+          {json.map((val, index) => (
+            <li key={index}>{renderJson(val)},</li>
           ))}
         </ol>
         ],
@@ -44,8 +44,8 @@ const renderJson = (json: any) => {
       <>
         {"{"}
         <ul>
-          {Object.keys(json).map((key) => (
-            <li>
+          {Object.keys(json).map((key, index) => (
+            <li key={index}>
               <b>"{key}"</b>:{renderJson(json[key])}
             </li>
           ))}

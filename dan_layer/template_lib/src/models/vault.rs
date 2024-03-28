@@ -35,7 +35,7 @@ use tari_template_abi::{
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use super::{BinaryTag, KeyParseError, NonFungible, ObjectKey, Proof, ProofAuth};
+use super::{BinaryTag, EntityId, KeyParseError, NonFungible, ObjectKey, Proof, ProofAuth};
 use crate::{
     args::{
         ConfidentialRevealArg,
@@ -72,6 +72,10 @@ impl VaultId {
 
     pub fn as_object_key(&self) -> &ObjectKey {
         self.0.inner()
+    }
+
+    pub fn entity_id(&self) -> EntityId {
+        self.0.inner().as_entity_id()
     }
 }
 

@@ -3,7 +3,7 @@
 
 use serde_json as json;
 use tari_engine_types::{
-    commit_result::ExecuteResult,
+    commit_result::FinalizeResult,
     component::ComponentHeader,
     non_fungible::NonFungibleContainer,
     substate::{Substate, SubstateValue},
@@ -25,14 +25,13 @@ pub enum JsonEncodingError {
 
 pub fn encode_finalized_result_into_json(result: &FinalizedResult) -> Result<Vec<json::Value>, JsonEncodingError> {
     match &result.execute_result {
-        Some(res) => encode_execute_result_into_json(res),
+        Some(res) => encode_finalize_result_into_json(&res.finalize),
         None => Ok(vec![]),
     }
 }
 
-pub fn encode_execute_result_into_json(result: &ExecuteResult) -> Result<Vec<json::Value>, JsonEncodingError> {
-    result
-        .finalize
+pub fn encode_finalize_result_into_json(finalize: &FinalizeResult) -> Result<Vec<json::Value>, JsonEncodingError> {
+    finalize
         .execution_results
         .iter()
         .map(|r| serde_json::to_value(r.indexed.value()).map_err(JsonEncodingError::Serde))
@@ -85,20 +84,11 @@ fn encode_non_fungible_into_json(
         let non_fungible_field = get_mut_json_field(substate_json_field, "NonFungible")?;
         let non_fungible_object = json_value_as_object(non_fungible_field)?;
 
-        decode_cbor_field_into_json(nf.data(), non_fungible_object, "data")?;
-        decode_cbor_field_into_json(nf.mutable_data(), non_fungible_object, "mutable_data")?;
+        fix_cbor_value_for_json(nf.data(), non_fungible_object, "data")?;
+        fix_cbor_value_for_json(nf.mutable_data(), non_fungible_object, "mutable_data")?;
     }
 
     Ok(())
-}
-
-fn decode_cbor_field_into_json(
-    bytes: &[u8],
-    parent_object: &mut JsonObject,
-    field_name: &str,
-) -> Result<(), JsonEncodingError> {
-    let cbor_value = tari_bor::decode(bytes)?;
-    fix_cbor_value_for_json(&cbor_value, parent_object, field_name)
 }
 
 fn fix_cbor_value_for_json(
@@ -185,6 +175,7 @@ mod tests {
             stealth_public_nonce: commitment.as_public_key().clone(),
             encrypted_data: Default::default(),
             minimum_value_promise: 0,
+            viewable_balance: None,
         };
         let commitment = Some((commitment, confidential_output));
 
