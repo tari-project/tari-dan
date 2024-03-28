@@ -146,6 +146,11 @@ pub enum RuntimeError {
     DuplicateNonFungibleId { token_id: NonFungibleId },
     #[error("Access Denied: {action_ident}")]
     AccessDenied { action_ident: ActionIdent },
+    #[error("Access Denied: attempt to set state on component {attempted_on} from another component {attempted_by}")]
+    AccessDeniedSetComponentState {
+        attempted_on: SubstateId,
+        attempted_by: SubstateId,
+    },
     #[error("Resource Auth Hook Denied Access for action {action_ident}: {details}")]
     AccessDeniedAuthHook { action_ident: ActionIdent, details: String },
     #[error("Access Denied: You must be the owner to perform this action: {action}")]

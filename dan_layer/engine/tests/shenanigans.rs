@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_engine::runtime::{LockError, RuntimeError};
+use tari_dan_engine::runtime::RuntimeError;
 use tari_engine_types::{indexed_value::IndexedWellKnownTypes, resource_container::ResourceError};
 use tari_template_lib::{
     args,
@@ -232,12 +232,10 @@ fn it_prevents_access_to_out_of_scope_component() {
     );
 
     // Fails because the engine does not lock this component
-    assert_reject_reason(
-        reason,
-        RuntimeError::LockError(LockError::SubstateNotLocked {
-            address: account.into(),
-        }),
-    );
+    assert_reject_reason(reason, RuntimeError::AccessDeniedSetComponentState {
+        attempted_on: account.into(),
+        attempted_by: shenanigans.into(),
+    });
 }
 
 #[test]

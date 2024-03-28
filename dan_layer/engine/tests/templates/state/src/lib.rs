@@ -33,7 +33,17 @@ mod state_template {
     impl State {
         pub fn new() -> Component<Self> {
             Component::new(Self { value: 0 })
-                .with_access_rules(AccessRules::allow_all())
+                .with_access_rules(AccessRules::new().default(AccessRule::AllowAll))
+                .create()
+        }
+
+        pub fn restricted() -> Component<Self> {
+            Component::new(Self { value: 0 })
+                .with_access_rules(
+                    AccessRules::new()
+                        .add_method_rule("get", AccessRule::AllowAll)
+                        .default(AccessRule::DenyAll),
+                )
                 .create()
         }
 

@@ -637,9 +637,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     // the fact that the engine creates the lock on the currently executing component and that is the
                     // lock we use to gain access.
                     if *component_lock.address() != component_address {
-                        return Err(RuntimeError::LockError(LockError::SubstateNotLocked {
-                            address: SubstateId::Component(component_address),
-                        }));
+                        return Err(RuntimeError::AccessDeniedSetComponentState {
+                            attempted_on: component_address.into(),
+                            attempted_by: component_lock.address().clone(),
+                        });
                     }
 
                     state.modify_component_with(&component_lock, |component| {
