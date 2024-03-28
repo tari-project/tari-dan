@@ -1,0 +1,33 @@
+[package]
+name = "tari_wallet_sdk_ffi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tari_engine_types = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_dan_wallet_sdk = { workspace = true }
+tari_dan_wallet_storage_sqlite = { workspace = true }
+tari_indexer_client = {workspace = true }
+tari_template_abi = {workspace = true}
+tari_template_lib = { workspace = true }
+tari_transaction = {workspace = true }
+
+
+axum = { workspace = true, features = ["headers"] }
+reqwest = { workspace = true, features = ["json"] }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+
+[build-dependencies]
+tari_common = {workspace = true, features = ["build"]}
+cbindgen = "0.24.3"
+
+[lib]
+crate-type = ["cdylib"]

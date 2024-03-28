@@ -1349,6 +1349,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "cbindgen"
+version = "0.24.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b922faaf31122819ec80c4047cc684c6979a087366c069611e33649bf98e18d"
+dependencies = [
+ "clap 3.2.25",
+ "heck 0.4.1",
+ "indexmap 1.9.3",
+ "log",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "syn 1.0.109",
+ "tempfile",
+ "toml 0.5.11",
+]
+
+[[package]]
 name = "cc"
 version = "1.0.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10126,6 +10145,26 @@ dependencies = [
  "tari_transaction",
  "thiserror",
  "ts-rs",
+]
+
+[[package]]
+name = "tari_wallet_sdk_ffi"
+version = "0.4.1"
+dependencies = [
+ "axum",
+ "cbindgen",
+ "reqwest",
+ "tari_common",
+ "tari_dan_common_types",
+ "tari_dan_wallet_sdk",
+ "tari_dan_wallet_storage_sqlite",
+ "tari_engine_types",
+ "tari_indexer_client",
+ "tari_template_abi",
+ "tari_template_lib",
+ "tari_transaction",
+ "thiserror",
+ "url",
 ]
 
 [[package]]
