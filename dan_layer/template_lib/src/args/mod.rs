@@ -108,7 +108,7 @@ macro_rules! invoke_args {
     () => (Vec::new());
 
     ($($args:expr),+) => {{
-        let mut args = Vec::with_capacity($crate::__expr_counter!($($args),+));
+        let mut args = Vec::<Vec<u8>>::with_capacity($crate::__expr_counter!($($args),+));
         $(
             $crate::args::__push(&mut args, tari_bor::encode(&$args).unwrap());
         )+

@@ -112,6 +112,15 @@ pub enum Type {
     },
 }
 
+impl Type {
+    pub fn other(&self) -> Option<&str> {
+        match self {
+            Type::Other { name } => Some(name),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(feature = "std")]
 impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

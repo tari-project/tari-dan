@@ -69,6 +69,11 @@ pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateId>, In
             Ok(vec![substate_address])
         },
         SubstateValue::Vault(vault) => Ok(vec![SubstateId::Resource(*vault.resource_address())]),
+        SubstateValue::Resource(resource) => Ok(resource
+            .auth_hook()
+            .map(|hook| SubstateId::Component(hook.component_address))
+            .into_iter()
+            .collect()),
         // Other types of substates cannot hold references to other substates
         _ => Ok(vec![]),
     }

@@ -43,7 +43,7 @@ impl Display for ActionIdent {
         match self {
             ActionIdent::Native(native_fn) => write!(f, "native.{}", native_fn),
             ActionIdent::ComponentCallMethod { method } => {
-                write!(f, "{}", method)
+                write!(f, "call component method '{}'", method)
             },
         }
     }

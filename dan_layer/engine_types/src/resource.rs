@@ -23,7 +23,7 @@
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_template_lib::{
-    auth::{OwnerRule, Ownership, ResourceAccessRules},
+    auth::{AuthHook, OwnerRule, Ownership, ResourceAccessRules},
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, Metadata},
     resource::{ResourceType, TOKEN_SYMBOL},
@@ -45,6 +45,7 @@ pub struct Resource {
     total_supply: Amount,
     #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     view_key: Option<PublicKey>,
+    auth_hook: Option<AuthHook>,
 }
 
 impl Resource {
@@ -55,6 +56,7 @@ impl Resource {
         access_rules: ResourceAccessRules,
         metadata: Metadata,
         view_key: Option<PublicKey>,
+        auth_hook: Option<AuthHook>,
     ) -> Self {
         Self {
             resource_type,
@@ -64,6 +66,7 @@ impl Resource {
             metadata,
             total_supply: 0.into(),
             view_key,
+            auth_hook,
         }
     }
 
@@ -88,6 +91,10 @@ impl Resource {
 
     pub fn view_key(&self) -> Option<&PublicKey> {
         self.view_key.as_ref()
+    }
+
+    pub fn auth_hook(&self) -> Option<&AuthHook> {
+        self.auth_hook.as_ref()
     }
 
     pub fn access_rules(&self) -> &ResourceAccessRules {

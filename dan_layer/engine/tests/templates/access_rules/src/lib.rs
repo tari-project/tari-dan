@@ -22,6 +22,8 @@ mod access_rules_template {
         value: u32,
         tokens: Vault,
         badges: Vault,
+        allowed: bool,
+        attack_component: Option<ComponentAddress>,
     }
 
     impl AccessRulesTest {
@@ -43,6 +45,8 @@ mod access_rules_template {
                 value: 0,
                 tokens: Vault::from_bucket(tokens),
                 badges: Vault::from_bucket(badges),
+                allowed: true,
+                attack_component: None,
             })
             .with_owner_rule(owner_rule)
             .with_access_rules(component_access_rule)
@@ -58,7 +62,56 @@ mod access_rules_template {
                 value: 0,
                 tokens: Vault::from_bucket(tokens),
                 badges: Vault::from_bucket(badges),
+                allowed: true,
+                attack_component: None,
             })
+        }
+
+        pub fn with_auth_hook(allowed: bool, hook: String) -> Component<AccessRulesTest> {
+            let badges = create_badge_resource(AccessRule::DenyAll);
+
+            let address_alloc = CallerContext::allocate_component_address();
+
+            let tokens = ResourceBuilder::fungible()
+                .initial_supply(1000)
+                .with_authorization_hook(*address_alloc.address(), hook)
+                .build_bucket();
+
+            Component::new(Self {
+                value: 0,
+                tokens: Vault::from_bucket(tokens),
+                badges: Vault::from_bucket(badges),
+                allowed,
+                attack_component: None,
+            })
+            .with_address_allocation(address_alloc)
+            .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
+            .create()
+        }
+
+        pub fn with_auth_hook_attack_component(component_address: ComponentAddress) -> Component<AccessRulesTest> {
+            let badges = create_badge_resource(AccessRule::DenyAll);
+
+            let address_alloc = CallerContext::allocate_component_address();
+
+            let tokens = ResourceBuilder::fungible()
+                .initial_supply(1000)
+                .with_authorization_hook(
+                    *address_alloc.address(),
+                    "malicious_auth_hook_set_state_on_another_component",
+                )
+                .build_bucket();
+
+            Component::new(Self {
+                value: 0,
+                tokens: Vault::from_bucket(tokens),
+                badges: Vault::from_bucket(badges),
+                allowed: true,
+                attack_component: Some(component_address),
+            })
+            .with_address_allocation(address_alloc)
+            .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
+            .create()
         }
 
         pub fn using_badge_rules() -> Component<AccessRulesTest> {
@@ -93,6 +146,8 @@ mod access_rules_template {
                 value: 0,
                 tokens: Vault::from_bucket(tokens),
                 badges: Vault::from_bucket(badges),
+                allowed: true,
+                attack_component: None,
             })
             .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
             .create()
@@ -122,6 +177,8 @@ mod access_rules_template {
                 value: 0,
                 tokens: Vault::from_bucket(tokens),
                 badges: Vault::from_bucket(badges),
+                allowed: true,
+                attack_component: None,
             })
             .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
             .create()
@@ -144,10 +201,67 @@ mod access_rules_template {
                 value: 0,
                 tokens: Vault::from_bucket(tokens),
                 badges: Vault::from_bucket(badges),
+                allowed: true,
+                attack_component: None,
             })
             .with_address_allocation(allocation)
             .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
             .create()
+        }
+
+        /// Custom resource auth hook
+        pub fn valid_auth_hook(&self, action: ResourceAuthAction, caller: AuthHookCaller) {
+            let state = caller.component_state();
+            debug!("Component state {:?}", state);
+            if !self.allowed {
+                panic!("Access denied for action {:?}", action);
+            }
+        }
+
+        pub fn malicious_auth_hook_set_state(&self, action: ResourceAuthAction, caller: AuthHookCaller) {
+            debug!("malicious_auth_hook_set_state: action = {:?}", action);
+            let caller = caller.component().unwrap();
+            // Try to write component state - this should fail.
+            // Typically a transaction would have write access to the caller component. However the caller component
+            // will always have at least a read lock during the hook call, preventing this from working.
+
+            ComponentManager::get(*caller).set_state(&());
+        }
+
+        pub fn malicious_auth_hook_call_mut(&self, action: ResourceAuthAction, caller: AuthHookCaller) {
+            debug!("malicious_auth_hook_call_mut: action = {:?}", action);
+            let caller = caller.component().unwrap();
+            // Try to cross template call to a component - this should fail.
+            let bucket = ComponentManager::get(*caller).call("withdraw", args![self.tokens.resource_address()]);
+            self.tokens.deposit(bucket);
+        }
+
+        pub fn malicious_auth_hook_set_state_on_another_component(
+            &self,
+            action: ResourceAuthAction,
+            _caller: AuthHookCaller,
+        ) {
+            debug!(
+                "malicious_auth_hook_set_state_on_another_component: action = {:?}",
+                action
+            );
+            // Try to cross template call to another component. This will succeed if the component allows all access to
+            // the method, otherwise it will fail. Since the auth hook does not allow foreign proofs, there is no way to
+            // authorize a restricted cross template call. We're really checking the semantics of cross-template calls,
+            // not the auth hook.
+            ComponentManager::get(self.attack_component.unwrap()).invoke("set", args![123]);
+        }
+
+        pub fn invalid_auth_hook1(&mut self, _action: ResourceAuthAction, _caller: AuthHookCaller) {}
+
+        pub fn invalid_auth_hook2(&self, _action: String, _caller: AuthHookCaller) {}
+
+        pub fn invalid_auth_hook3(&self, _action: ResourceAuthAction, _caller: String) {}
+
+        pub fn invalid_auth_hook4(&self, _action: ResourceAuthAction, _caller: AuthHookCaller, _third: String) {}
+
+        pub fn invalid_auth_hook5(&self, _action: ResourceAuthAction, _caller: AuthHookCaller) -> String {
+            unimplemented!()
         }
 
         pub fn take_badge_by_name(&mut self, name: String) -> Bucket {

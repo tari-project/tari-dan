@@ -46,6 +46,10 @@ impl AuthorizationScope {
             .position(|p| p == proof_id)
             .map(|i| self.proofs.remove(i))
     }
+
+    pub(super) fn update_from_child(&mut self, child: AuthorizationScope) {
+        self.proofs.extend(child.proofs);
+    }
 }
 
 impl Display for AuthorizationScope {

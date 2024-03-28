@@ -6,5 +6,8 @@
 mod access_rules;
 pub use access_rules::*;
 
+mod auth_hook;
+pub use auth_hook::*;
+
 mod owner_rule;
 pub use owner_rule::*;
