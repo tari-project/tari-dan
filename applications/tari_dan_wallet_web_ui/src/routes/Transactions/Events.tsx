@@ -22,10 +22,9 @@
 
 import { useState } from "react";
 import { TableContainer, Table, TableHead, TableRow, TableCell, TableBody, Collapse } from "@mui/material";
-import { DataTableCell, CodeBlock, AccordionIconButton } from "../../Components/StyledComponents";
-import { shortenString } from "../../utils/helpers";
+import { DataTableCell, AccordionIconButton } from "../../Components/StyledComponents";
+import { shortenString, shortenSubstateId, substateIdToString } from "../../utils/helpers";
 import CopyToClipboard from "../../Components/CopyToClipboard";
-import { renderJson } from "../../utils/helpers";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import CodeBlockExpand from "../../Components/CodeBlock";
@@ -51,8 +50,8 @@ function RowData({ substate_id, template_address, topic, tx_hash, payload }: Eve
         </DataTableCell>
         <DataTableCell>{topic}</DataTableCell>
         <DataTableCell>
-          {shortenString(substate_id)}
-          {substate_id && <CopyToClipboard copy={substate_id} />}
+          {shortenSubstateId(substate_id)}
+          {substate_id && <CopyToClipboard copy={substateIdToString(substate_id)} />}
         </DataTableCell>
         <DataTableCell>
           {shortenString(template_address)}

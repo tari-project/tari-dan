@@ -23,7 +23,7 @@
 import { ChangeEvent } from "react";
 import type { FinalizeResult, SubstateId, Transaction, TransactionStatus } from "@tariproject/typescript-bindings";
 
-const renderJson = (json: any) => {
+export const renderJson = (json: any) => {
   if (Array.isArray(json)) {
     if (json.length == 32) {
       return <span className="string">"{toHexString(json)}"</span>;
@@ -59,9 +59,9 @@ const renderJson = (json: any) => {
   }
 };
 
-function toHexString(byteArray: any): string {
+export function toHexString(byteArray: any): string {
   if (Array.isArray(byteArray)) {
-    return Array.from(byteArray, function (byte) {
+    return Array.from(byteArray, function(byte) {
       return ("0" + (byte & 0xff).toString(16)).slice(-2);
     }).join("");
   }
@@ -75,7 +75,7 @@ function toHexString(byteArray: any): string {
   return "Unsupported type";
 }
 
-function fromHexString(hexString: string) {
+export function fromHexString(hexString: string) {
   let res = [];
   for (let i = 0; i < hexString.length; i += 2) {
     res.push(Number("0x" + hexString.substring(i, i + 2)));
@@ -83,7 +83,23 @@ function fromHexString(hexString: string) {
   return res;
 }
 
-function shortenString(string: string | null | undefined, start: number = 8, end: number = 8) {
+export function substateIdToString(substateId: SubstateId | null | undefined) {
+  if (substateId === null || substateId === undefined) {
+    return "";
+  }
+  const key = Object.keys(substateId)[0] as keyof SubstateId;
+  return substateId[key];
+}
+
+export function shortenSubstateId(substateId: SubstateId | null | undefined, start: number = 8, end: number = 8) {
+  if (substateId === null || substateId === undefined) {
+    return "";
+  }
+  const string = substateIdToString(substateId);
+  return shortenString(string, start, end);
+}
+
+export function shortenString(string: string | null | undefined, start: number = 8, end: number = 8) {
   if (string === null || string === undefined) {
     return "";
   }
@@ -94,7 +110,7 @@ function shortenString(string: string | null | undefined, start: number = 8, end
   return string.substring(0, start) + "..." + string.slice(-end);
 }
 
-function emptyRows(
+export function emptyRows(
   page: number,
   rowsPerPage: number,
   array: Array<[Transaction, FinalizeResult | null, TransactionStatus, string]> | undefined,
@@ -105,11 +121,11 @@ function emptyRows(
   return page > 0 ? Math.max(0, (1 + page) * rowsPerPage - array.length) : 0;
 }
 
-function handleChangePage(event: unknown, newPage: number, setPage: React.Dispatch<React.SetStateAction<number>>) {
+export function handleChangePage(event: unknown, newPage: number, setPage: React.Dispatch<React.SetStateAction<number>>) {
   setPage(newPage);
 }
 
-function handleChangeRowsPerPage(
+export function handleChangeRowsPerPage(
   event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   setRowsPerPage: React.Dispatch<React.SetStateAction<number>>,
   setPage: React.Dispatch<React.SetStateAction<number>>,
@@ -118,4 +134,3 @@ function handleChangeRowsPerPage(
   setPage(0);
 }
 
-export { renderJson, toHexString, fromHexString, shortenString, emptyRows, handleChangePage, handleChangeRowsPerPage };
