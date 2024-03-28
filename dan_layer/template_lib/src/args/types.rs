@@ -320,6 +320,7 @@ pub enum VaultAction {
     Deposit,
     Withdraw,
     GetBalance,
+    GetLockedBalance,
     GetResourceAddress,
     GetNonFungibleIds,
     GetCommitmentCount,
@@ -337,7 +338,12 @@ impl VaultAction {
         use VaultAction::*;
         !matches!(
             self,
-            GetBalance | GetResourceAddress | GetNonFungibleIds | GetCommitmentCount | GetNonFungibles
+            GetBalance |
+                GetLockedBalance |
+                GetResourceAddress |
+                GetNonFungibleIds |
+                GetCommitmentCount |
+                GetNonFungibles
         )
     }
 }

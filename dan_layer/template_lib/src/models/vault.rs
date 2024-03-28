@@ -254,6 +254,17 @@ impl Vault {
         resp.decode().expect("failed to decode Amount")
     }
 
+    /// Returns how many tokens this vault holds
+    pub fn locked_balance(&self) -> Amount {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::GetLockedBalance,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("failed to decode Amount")
+    }
+
     /// Returns how many Pederson commitments (related to confidential balances) this vault holds
     pub fn commitment_count(&self) -> u32 {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {

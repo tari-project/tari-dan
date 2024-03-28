@@ -1282,6 +1282,20 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     Ok(InvokeResult::encode(&balance)?)
                 })
             },
+            VaultAction::GetLockedBalance => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "GetBalance vault action requires a vault id".to_string(),
+                })?;
+                args.assert_no_args("Vault::GetBalance")?;
+
+                self.tracker.write_with(|state| {
+                    let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Read)?;
+                    let balance = state.get_vault(&vault_lock)?.locked_balance();
+                    state.unlock_substate(vault_lock)?;
+                    Ok(InvokeResult::encode(&balance)?)
+                })
+            },
             VaultAction::GetResourceAddress => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "vault_ref",
