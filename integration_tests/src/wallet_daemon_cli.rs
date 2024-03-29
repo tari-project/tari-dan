@@ -49,6 +49,7 @@ use tari_wallet_daemon_client::{
         AccountsCreateFreeTestCoinsRequest,
         AccountsCreateRequest,
         AccountsGetBalancesRequest,
+        AccountsTransferRequest,
         ClaimBurnRequest,
         ClaimBurnResponse,
         ClaimValidatorFeesRequest,
@@ -60,7 +61,6 @@ use tari_wallet_daemon_client::{
         TransactionSubmitRequest,
         TransactionWaitResultRequest,
         TransactionWaitResultResponse,
-        TransferRequest,
     },
     ComponentAddressOrName,
     WalletDaemonClient,
@@ -664,7 +664,7 @@ pub async fn transfer(
     let account = Some(ComponentAddressOrName::Name(account_name));
     let max_fee = Some(Amount(1));
 
-    let request = TransferRequest {
+    let request = AccountsTransferRequest {
         account,
         amount,
         resource_address,

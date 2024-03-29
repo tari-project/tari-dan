@@ -87,6 +87,7 @@ export const breadcrumbRoutes = [
 
 function App() {
   const { popup, setPopup } = useAccountStore();
+
   const handleClose = () => {
     setPopup({ visible: false });
   };

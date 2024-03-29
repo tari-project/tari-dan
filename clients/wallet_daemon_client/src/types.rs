@@ -543,7 +543,7 @@ pub struct AccountSetDefaultResponse {}
     derive(TS),
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
-pub struct TransferRequest {
+pub struct AccountsTransferRequest {
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
     pub amount: Amount,
@@ -562,7 +562,7 @@ pub struct TransferRequest {
     derive(TS),
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
-pub struct TransferResponse {
+pub struct AccountsTransferResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
     pub fee: Amount,
