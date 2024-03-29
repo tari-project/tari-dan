@@ -209,7 +209,7 @@ export default function BlockDetails() {
                             fontSize: "0.85rem",
                           }}
                           startIcon={<KeyboardArrowUpIcon />}
-                          disabled={expandedPanels.length === 0 ? true : false}
+                          disabled={expandedPanels.length === 0}
                         >
                           Collapse All
                         </Button>

@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { ChangeEvent } from "react";
 import { toHexString } from "../routes/VN/Components/helpers";
+import type { SubstateId } from "@tariproject/typescript-bindings";
 
-const renderJson = (json: any) => {
+export const renderJson = (json: any) => {
   if (!json) {
     return <span>Null</span>;
   }
@@ -63,7 +63,7 @@ const renderJson = (json: any) => {
   }
 };
 
-function fromHexString(hexString: string) {
+export function fromHexString(hexString: string) {
   let res = [];
   for (let i = 0; i < hexString.length; i += 2) {
     res.push(Number("0x" + hexString.substring(i, i + 2)));
@@ -71,37 +71,46 @@ function fromHexString(hexString: string) {
   return res;
 }
 
-function shortenString(string: string, start: number = 8, end: number = 8) {
+export function substateIdToString(substateId: SubstateId | null | undefined) {
+  if (substateId === null || substateId === undefined) {
+    return "";
+  }
+  const key = Object.keys(substateId)[0] as keyof SubstateId;
+  return substateId[key];
+}
+
+export function shortenSubstateId(substateId: SubstateId | null | undefined, start: number = 8, end: number = 8) {
+  if (substateId === null || substateId === undefined) {
+    return "";
+  }
+  const string = substateIdToString(substateId);
+  return shortenString(string, start, end);
+}
+
+export function shortenString(string: string, start: number = 8, end: number = 8) {
   return string.substring(0, start) + "..." + string.slice(-end);
 }
 
-function emptyRows(page: number, rowsPerPage: number, array: any[]) {
+export function emptyRows(page: number, rowsPerPage: number, array: any[]) {
   return page > 0 ? Math.max(0, (1 + page) * rowsPerPage - array.length) : 0;
 }
 
-function handleChangeRowsPerPage(
-  event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  setRowsPerPage: React.Dispatch<React.SetStateAction<number>>,
-  setPage: React.Dispatch<React.SetStateAction<number>>,
-) {
-  setRowsPerPage(parseInt(event.target.value, 10));
-  setPage(0);
-}
 
-function primitiveDateTimeToDate([year, dayOfTheYear, hour, minute, second, nanos]: number[]): Date {
+export function primitiveDateTimeToDate([year, dayOfTheYear, hour, minute, second, nanos]: number[]): Date {
   return new Date(year, 0, dayOfTheYear, hour, minute, second, nanos / 1000000);
 }
 
-function primitiveDateTimeToSecs([year, dayOfTheYear, hour, minute, second, nanos]: number[]): number {
+export function primitiveDateTimeToSecs([year, dayOfTheYear, hour, minute, second, nanos]: number[]): number {
   // The datetime is in format [year, day of the year, hour, minute, second, nanos]
   return new Date(year, 0, dayOfTheYear, hour, minute, second, nanos / 1000000).valueOf() / 1000;
 }
 
-interface Duration {
+export interface Duration {
   secs: number;
   nanos: number;
 }
-function displayDuration(duration: Duration) {
+
+export function displayDuration(duration: Duration) {
   if (duration.secs === 0) {
     if (duration.nanos > 1000000) {
       return `${(duration.nanos / 1000000).toFixed(2)}ms`;
@@ -119,15 +128,3 @@ function displayDuration(duration: Duration) {
   }
   return `${duration.secs}.${(duration.nanos / 1000000).toFixed(0).padStart(3, "0").replace(/0+$/, "")}s`;
 }
-
-export {
-  emptyRows,
-  fromHexString,
-  handleChangeRowsPerPage,
-  primitiveDateTimeToDate,
-  primitiveDateTimeToSecs,
-  renderJson,
-  shortenString,
-  displayDuration,
-};
-export type { Duration };
