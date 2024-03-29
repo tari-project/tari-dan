@@ -37,8 +37,11 @@ pub use crate::{
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS, XTR2},
     crypto::{PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     debug,
+    error,
     events::emit_event,
+    info,
     invoke_args,
+    log,
     models::{
         AddressAllocation,
         Amount,
@@ -61,4 +64,5 @@ pub use crate::{
     rand,
     resource::{ResourceBuilder, ResourceManager, ResourceType},
     template::{BuiltinTemplate, TemplateManager},
+    warn,
 };
