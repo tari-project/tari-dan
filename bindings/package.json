@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.ts",
   "scripts": {
-    "build": "sh build.sh && tsc"
+    "build": "sh build.sh && tsc",
+    "tsc": "tsc"
   },
   "author": "",
   "license": "ISC",
