@@ -58,16 +58,23 @@ pub struct ForeignProposal {
     pub proposed_height: Option<NodeHeight>,
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub transactions: Vec<TransactionId>,
+    pub base_layer_block_height: u64,
 }
 
 impl ForeignProposal {
-    pub fn new(bucket: Shard, block_id: BlockId, transactions: Vec<TransactionId>) -> Self {
+    pub fn new(
+        bucket: Shard,
+        block_id: BlockId,
+        transactions: Vec<TransactionId>,
+        base_layer_block_height: u64,
+    ) -> Self {
         Self {
             bucket,
             block_id,
             state: ForeignProposalState::New,
             proposed_height: None,
             transactions,
+            base_layer_block_height,
         }
     }
 
