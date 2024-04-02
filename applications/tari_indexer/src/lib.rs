@@ -32,6 +32,7 @@ mod dry_run;
 pub mod graphql;
 mod http_ui;
 
+mod event_manager;
 mod json_rpc;
 mod substate_manager;
 mod substate_storage_sqlite;
@@ -64,6 +65,7 @@ use crate::{
     bootstrap::{spawn_services, Services},
     config::ApplicationConfig,
     dry_run::processor::DryRunTransactionProcessor,
+    event_manager::EventManager,
     graphql::server::run_graphql,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
     transaction_manager::TransactionManager,
@@ -159,11 +161,18 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
             ));
         }
     }
+
+    // Run the event manager
+    let event_manager = Arc::new(EventManager::new(
+        Box::new(services.epoch_manager.clone()),
+        services.validator_node_client_factory.clone(),
+    ));
+
     // Run the GraphQL API
     let graphql_address = config.indexer.graphql_address;
     if let Some(address) = graphql_address {
         info!(target: LOG_TARGET, "🌐 Started GraphQL server on {}", address);
-        task::spawn(run_graphql(address, substate_manager.clone()));
+        task::spawn(run_graphql(address, substate_manager.clone(), event_manager.clone()));
     }
 
     // Create pid to allow watchers to know that the process has started

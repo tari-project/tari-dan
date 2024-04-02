@@ -11,6 +11,7 @@ license.workspace = true
 minotari_app_utilities = { workspace = true }
 tari_common = { workspace = true }
 tari_common_types = { workspace = true }
+tari_consensus = { workspace = true }
 tari_crypto = { workspace = true }
 tari_shutdown = { workspace = true }
 tari_dan_app_utilities = { workspace = true }
@@ -44,6 +45,7 @@ diesel = { workspace = true, default-features = false, features = [
     "chrono",
 ] }
 diesel_migrations = { workspace = true }
+futures = { workspace = true }
 include_dir = { workspace = true }
 libp2p = { workspace = true }
 log = { workspace = true, features = ["std"] }
@@ -54,6 +56,7 @@ log4rs = { workspace = true, features = [
     "fixed_window_roller",
 ] }
 mime_guess = { workspace = true }
+rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["default", "derive"] }
 serde_json = { workspace = true }

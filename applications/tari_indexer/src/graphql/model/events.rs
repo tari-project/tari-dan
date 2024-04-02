@@ -29,7 +29,7 @@ use tari_engine_types::substate::SubstateId;
 use tari_template_lib::Hash;
 use tari_transaction::TransactionId;
 
-use crate::substate_manager::SubstateManager;
+use crate::{event_manager::EventManager, substate_manager::SubstateManager};
 
 const LOG_TARGET: &str = "tari::indexer::graphql::events";
 
@@ -146,9 +146,9 @@ impl EventQuery {
             "Querying events. topic: {:?}, substate_id: {:?}, offset: {}, limit: {}, ", topic, substate_id, offset, limit,
         );
         let substate_id = substate_id.map(|str| SubstateId::from_str(&str)).transpose()?;
-        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        let events = substate_manager
-            .scan_events(topic, substate_id, offset, limit)
+        let event_manager = ctx.data_unchecked::<Arc<EventManager>>();
+        let events = event_manager
+            .scan_events(None, topic, substate_id)
             .await?
             .iter()
             .map(|e| Event::from_engine_event(e.clone()))

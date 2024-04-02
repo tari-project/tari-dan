@@ -453,20 +453,6 @@ impl SubstateManager {
 
         Ok(num_scanned)
     }
-
-    pub async fn scan_events(
-        &self,
-        topic: Option<String>,
-        substate_id: Option<SubstateId>,
-        _offset: u32,
-        _limit: u32,
-    ) -> Result<Vec<Event>, anyhow::Error> {
-        // TODO: fetch only from the database
-        let start_block = None;
-        let events = self.substate_scanner.scan_events(start_block, topic, substate_id).await?;
-
-        Ok(events)
-    }
 }
 
 fn store_substate_in_db(

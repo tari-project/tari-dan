@@ -23,6 +23,7 @@
 use log::*;
 use rand::{prelude::*, rngs::OsRng};
 use tari_dan_common_types::{NodeAddressable, SubstateAddress};
+use tari_dan_storage::consensus_models::BlockId;
 use tari_engine_types::{
     events::Event,
     substate::{SubstateId, SubstateValue},
@@ -32,7 +33,6 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_template_lib::{models::NonFungibleIndexAddress, prelude::ResourceAddress};
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
-use tari_dan_storage::consensus_models::BlockId;
 
 use crate::{
     error::IndexerError,
@@ -441,7 +441,12 @@ where
         }
     }
 
-    pub async fn scan_events(&self, start_block: Option<BlockId>, topic: Option<String>, substate_id: Option<SubstateId>) -> Result<Vec<Event>, IndexerError> {
+    pub async fn scan_events(
+        &self,
+        start_block: Option<BlockId>,
+        topic: Option<String>,
+        substate_id: Option<SubstateId>,
+    ) -> Result<Vec<Event>, IndexerError> {
         warn!(
             target: LOG_TARGET,
             "scan_events: start_block={:?}, topic={:?}, substate_id={:?}",
