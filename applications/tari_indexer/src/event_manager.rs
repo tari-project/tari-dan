@@ -26,8 +26,10 @@ use tari_common::configuration::Network;
 use futures::StreamExt;
 use log::*;
 use rand::{prelude::*, rngs::OsRng};
-use tari_dan_common_types::{PeerAddress, SubstateAddress};
+use tari_dan_common_types::{committee::Committee, PeerAddress, SubstateAddress};
+use tari_dan_p2p::proto::rpc::GetTransactionResultRequest;
 use tari_dan_p2p::proto::rpc::SyncBlocksRequest;
+use tari_dan_p2p::proto::rpc::PayloadResultStatus;
 use tari_dan_storage::consensus_models::{Block, BlockId};
 use tari_engine_types::{events::Event, substate::SubstateId};
 use tari_epoch_manager::EpochManagerReader;
@@ -37,6 +39,9 @@ use tari_transaction::Transaction;
 use tari_transaction::TransactionId;
 use tari_dan_storage::consensus_models::Command;
 use std::collections::HashSet;
+use tari_bor::decode;
+use tari_dan_storage::consensus_models::Decision;
+use tari_engine_types::commit_result::ExecuteResult;
 
 const LOG_TARGET: &str = "tari::indexer::event_manager";
 
@@ -76,13 +81,80 @@ impl EventManager {
         let new_blocks = self.get_new_blocks().await?;
         let transaction_ids = self.extract_transaction_ids_from_blocks(new_blocks);
 
+        let mut events = vec![];
+        for transaction_id in transaction_ids {
+            let mut transaction_events = self.get_events_for_transaction(transaction_id).await?;
+            events.append(&mut transaction_events);
+        }
+
         info!(
             target: LOG_TARGET,
-            "scan_events: got {} transaction_ids",
-            transaction_ids.len()
-        );
+                "Events: {:?}",
+                events
+            );
 
+        Ok(events)
+    }
+
+    async fn get_events_for_transaction(&self, transaction_id: TransactionId) -> Result<Vec<Event>, anyhow::Error> {
+        let committee = self.get_all_vns().await?;
+
+        for member in committee.addresses() {
+            let resp = self.get_execute_result_from_vn(member, &transaction_id).await;
+
+            match resp {
+                Ok(res) => {
+                    if let Some(execute_result) = res {
+                        return Ok(execute_result.finalize.events)
+                    } else {
+                        // The transaction is not successful, we don't return any events
+                        return Ok(vec![])
+                    }
+                },
+                Err(e) => {
+                    // We do nothing on a single VN failure, we only log it
+                    warn!(
+                        target: LOG_TARGET,
+                        "Could not get transaction result from vn {}: {}",
+                        member,
+                        e
+                    );
+                },
+            };
+        }
+
+        warn!(
+            target: LOG_TARGET,
+            "We could not get transaction result from any of the vns",
+        );
         Ok(vec![])
+    }
+
+    async fn get_execute_result_from_vn(&self, vn_addr: &PeerAddress, transaction_id: &TransactionId) -> Result<Option<ExecuteResult>, anyhow::Error> {
+        let mut rpc_client = self.client_factory.create_client(vn_addr);
+        let mut client = rpc_client.client_connection().await?;
+
+        let response = client
+            .get_transaction_result(GetTransactionResultRequest {
+                transaction_id: transaction_id.as_bytes().to_vec(),
+            })
+            .await?;
+
+        match PayloadResultStatus::try_from(response.status) {
+            Ok(PayloadResultStatus::Finalized) => {
+                let proto_decision = tari_dan_p2p::proto::consensus::Decision::try_from(response.final_decision)?;
+                let final_decision = proto_decision.try_into()?;
+                if let Decision::Commit = final_decision {
+                    Ok(Some(response.execution_result)
+                        .filter(|r| !r.is_empty())
+                        .map(|r| decode(&r))
+                        .transpose()?)
+                } else {
+                    Ok(None)
+                }
+            },
+            _ => Ok(None),
+        }
     }
 
     fn extract_transaction_ids_from_blocks(&self, blocks: Vec<Block>) -> HashSet<TransactionId> {
@@ -107,15 +179,7 @@ impl EventManager {
     async fn get_new_blocks(&self) -> Result<Vec<Block>, anyhow::Error> {
         let mut blocks = vec![];
 
-        // get all the committees
-        // TODO: optimize by getting all individual CommiteeShards instead of all the VNs
-        let epoch = self.epoch_manager.current_epoch().await?;
-        let full_range = RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::max());
-        let mut committee = self
-            .epoch_manager
-            .get_committee_within_shard_range(epoch, full_range)
-            .await?;
-        committee.members.shuffle(&mut OsRng);
+        let committee = self.get_all_vns().await?;
 
         // TODO: use the latest block id that we scanned
         let start_block = Block::zero_block(self.network);
@@ -141,6 +205,20 @@ impl EventManager {
         }
 
         Ok(blocks)
+    }
+
+    async fn get_all_vns(&self) -> Result<Committee<PeerAddress>, anyhow::Error> {
+        // get all the committees
+        // TODO: optimize by getting all individual CommiteeShards instead of all the VNs
+        let epoch = self.epoch_manager.current_epoch().await?;
+        let full_range = RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::max());
+        let mut committee = self
+            .epoch_manager
+            .get_committee_within_shard_range(epoch, full_range)
+            .await?;
+        committee.members.shuffle(&mut OsRng);
+
+        Ok(committee)
     }
 
     async fn get_blocks_from_vn(&self, vn_addr: &PeerAddress, start_block_id: BlockId) -> Result<Vec<Block>, anyhow::Error> {

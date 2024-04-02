@@ -9473,6 +9473,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tari_base_node_client",
+ "tari_bor",
  "tari_common",
  "tari_common_types",
  "tari_consensus",
