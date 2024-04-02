@@ -117,7 +117,8 @@ impl BaseNodeClient for GrpcBaseNodeClient {
     async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<BaseLayerValidatorNode>, BaseNodeClientError> {
         let inner = self.connection().await?;
 
-        let request = grpc::GetActiveValidatorNodesRequest { height };
+        // SidechainId is empty because we need all the sidechain nodes to create the merkle root
+        let request = grpc::GetActiveValidatorNodesRequest { height, sidechain_id: vec![]  };
         let mut stream = inner.get_active_validator_nodes(request).await?.into_inner();
 
         let mut vns = vec![];
@@ -131,6 +132,13 @@ impl BaseNodeClient for GrpcBaseNodeClient {
                         shard_key: SubstateAddress::from_bytes(&val.shard_key).map_err(|_| {
                             BaseNodeClientError::InvalidPeerMessage("shard_key was not a valid fixed hash".to_string())
                         })?,
+                        sidechain_id: if val.sidechain_id.is_empty() {
+                            None
+                        } else {
+                            Some(PublicKey::from_canonical_bytes(&val.sidechain_id).map_err(|_| {
+                                BaseNodeClientError::InvalidPeerMessage("sidechain_id was not a valid public key".to_string())
+                            }))
+                        }.transpose()?,
                     });
                 },
                 Ok(None) => {

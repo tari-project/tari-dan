@@ -55,6 +55,7 @@ diesel::table! {
         committee_bucket -> Nullable<BigInt>,
         fee_claim_public_key -> Binary,
         address -> Text,
+        sidechain_id -> Nullable<Binary>,
     }
 }
 

@@ -59,7 +59,7 @@ use tari_engine_types::{
 use tari_transaction::{Transaction, TransactionId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
-use tari_common_types::types::PrivateKey;
+use tari_common_types::types::{PrivateKey, Signature};
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,6 +95,8 @@ pub struct TemplateRegistrationRequest {
     pub binary_sha: Vec<u8>,
     pub binary_url: String,
     pub template_type: String,
+    pub sidechain_id: Option<PublicKey>,
+    pub sidechain_id_knowledge_proof: Option<Signature>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

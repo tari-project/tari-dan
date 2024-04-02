@@ -216,6 +216,8 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
         commit_hash,
         binary_sha: binary_sha.to_vec(),
         binary_url,
+        sidechain_id: None,
+        sidechain_id_knowledge_proof: None,
     };
     let resp = client.register_template(request).await?;
     println!("✅ Template registration submitted");

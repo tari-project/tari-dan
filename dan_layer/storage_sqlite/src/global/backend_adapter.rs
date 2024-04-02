@@ -357,6 +357,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         shard_key: SubstateAddress,
         epoch: Epoch,
         fee_claim_public_key: PublicKey,
+        sidechain_id: Option<PublicKey>
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
 

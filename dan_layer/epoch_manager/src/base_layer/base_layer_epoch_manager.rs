@@ -211,6 +211,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             shard_key,
             next_epoch,
             registration.claim_public_key().clone(),
+            registration.sidechain_id().cloned(),
         )?;
 
         if *registration.public_key() == self.node_public_key {

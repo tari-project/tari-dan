@@ -37,7 +37,6 @@ use tari_shutdown::ShutdownSignal;
 use tokio::{task, task::JoinHandle, time};
 
 use crate::{
-    grpc::base_layer_wallet::{GrpcWalletClient, WalletGrpcError},
     ApplicationConfig,
 };
 
@@ -55,73 +54,8 @@ pub enum AutoRegistrationError {
     SqliteStorageError(#[from] SqliteStorageError),
     #[error("Base node error: {0}")]
     BaseNodeError(#[from] BaseNodeClientError),
-    #[error("Wallet GRPC error: {0}")]
-    WalletGrpcError(#[from] WalletGrpcError),
     #[error("Fee claim public key not set")]
     FeeClaimPublicKeyNotSet,
-}
-
-pub async fn register(
-    mut wallet_client: GrpcWalletClient,
-    keypair: &RistrettoKeypair,
-    epoch_manager: &EpochManagerHandle<PeerAddress>,
-) -> Result<RegisterValidatorNodeResponse, AutoRegistrationError> {
-    let balance = wallet_client.get_balance().await?;
-    let constants = epoch_manager.get_base_layer_consensus_constants().await?;
-    if balance.available_balance == constants.validator_node_registration_min_deposit_amount().as_u64() {
-        return Err(AutoRegistrationError::RegistrationFailed {
-            details: format!(
-                "Wallet does not have sufficient balance to pay for registration. Available funds: {}",
-                balance.available_balance
-            ),
-        });
-    }
-
-    let mut attempts = 1;
-    let fee_claim_public_key = epoch_manager
-        .get_fee_claim_public_key()
-        .await?
-        .ok_or(AutoRegistrationError::FeeClaimPublicKeyNotSet)?;
-
-    loop {
-        match wallet_client
-            .register_validator_node(keypair, &fee_claim_public_key)
-            .await
-        {
-            Ok(resp) => {
-                let tx_id = resp.transaction_id;
-                info!(
-                    target: LOG_TARGET,
-                    "✅ Validator node registration submitted (tx_id: {})", tx_id
-                );
-
-                let current_epoch = epoch_manager.current_epoch().await?;
-                epoch_manager.update_last_registration_epoch(current_epoch).await?;
-
-                return Ok(resp);
-            },
-            Err(e) => {
-                warn!(
-                    target: LOG_TARGET,
-                    "❌ Validator node registration failed with error {}. Trying again, attempt {} of {}.",
-                    e.to_string(),
-                    attempts,
-                    MAX_REGISTRATION_ATTEMPTS,
-                );
-
-                if attempts >= MAX_REGISTRATION_ATTEMPTS {
-                    return Err(AutoRegistrationError::RegistrationFailed { details: e.to_string() });
-                }
-
-                time::sleep(Duration::from_millis(u64::from(
-                    REGISTRATION_COOLDOWN_IN_MS * u32::from(attempts),
-                )))
-                .await;
-
-                attempts += 1;
-            },
-        }
-    }
 }
 
 pub fn spawn(
@@ -180,12 +114,14 @@ async fn handle_epoch_changed(
 
     let remaining_epochs = epoch_manager.remaining_registration_epochs().await?.unwrap_or(Epoch(0));
     if remaining_epochs.is_zero() {
-        let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
-            let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-        }));
 
-        register(wallet_client, keypair, epoch_manager).await?;
+
+        warn!(
+            target: LOG_TARGET,
+            "📋️ Validator has not registered for the current epoch. Auto-registration TODO"
+        );
+        todo!();
+        //register(wallet_client, keypair, epoch_manager).await?;
     } else {
         info!(
             target: LOG_TARGET,

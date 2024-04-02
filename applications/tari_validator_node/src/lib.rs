@@ -27,7 +27,6 @@ mod consensus;
 mod dan_node;
 mod dry_run_transaction_processor;
 mod event_subscription;
-mod grpc;
 mod http_ui;
 mod json_rpc;
 #[cfg(feature = "metrics")]
@@ -35,7 +34,6 @@ mod metrics;
 mod p2p;
 mod registration;
 mod substate_resolver;
-mod template_registration_signing;
 mod virtual_substate;
 
 use std::{
@@ -63,7 +61,6 @@ pub use crate::config::{ApplicationConfig, ValidatorNodeConfig};
 use crate::{
     bootstrap::{spawn_services, Services},
     dan_node::DanNode,
-    grpc::base_layer_wallet::{GrpcWalletClient, WalletGrpcError},
     http_ui::server::run_http_ui_server,
     json_rpc::{spawn_json_rpc, JsonRpcHandlers},
 };
@@ -84,8 +81,6 @@ pub enum ShardKeyError {
     NotYetRegistered,
     #[error("Registration failed")]
     RegistrationFailed,
-    #[error("Registration error {0}")]
-    RegistrationError(#[from] WalletGrpcError),
     #[error("Base node error: {0}")]
     BaseNodeError(#[from] BaseNodeClientError),
 }

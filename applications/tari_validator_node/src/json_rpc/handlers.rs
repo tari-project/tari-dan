@@ -99,7 +99,6 @@ use tari_validator_node_client::types::{
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
-    grpc::base_layer_wallet::GrpcWalletClient,
     json_rpc::jrpc_errors::{internal_error, not_found},
     p2p::services::mempool::MempoolHandle,
     registration,

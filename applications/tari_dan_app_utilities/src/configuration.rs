@@ -58,7 +58,7 @@ pub fn load_configuration_with_overrides<P: AsRef<Path>, TOverride: ConfigOverri
         )
         .build()?;
 
-    let network = match cfg.get_string("network") {
+    let mut network = match cfg.get_string("network") {
         Ok(network) => {
             Network::from_str(&network).map_err(|e| ConfigError::new("Invalid network", Some(e.to_string())))?
         },
@@ -74,7 +74,7 @@ pub fn load_configuration_with_overrides<P: AsRef<Path>, TOverride: ConfigOverri
         },
     };
 
-    let overrides = overrides.get_config_property_overrides(network);
+    let overrides = overrides.get_config_property_overrides(&mut network);
     if overrides.is_empty() {
         return Ok(cfg);
     }
