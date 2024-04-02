@@ -14,8 +14,8 @@ use tokio::{
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
-    NoopStateManager,
     RoundRobinLeaderStrategy,
+    TestStateManager,
     ValidatorBuilder,
 };
 
@@ -39,7 +39,7 @@ pub struct Validator {
     pub epoch_manager: TestEpochManager,
     pub leader_strategy: RoundRobinLeaderStrategy,
     pub events: broadcast::Receiver<HotstuffEvent>,
-    pub state_manager: NoopStateManager,
+    pub state_manager: TestStateManager,
 
     pub handle: JoinHandle<()>,
 }
@@ -54,7 +54,7 @@ impl Validator {
         &self.leader_strategy
     }
 
-    pub fn state_manager(&self) -> &NoopStateManager {
+    pub fn state_manager(&self) -> &TestStateManager {
         &self.state_manager
     }
 
