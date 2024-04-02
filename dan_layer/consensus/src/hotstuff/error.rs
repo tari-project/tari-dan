@@ -190,4 +190,6 @@ pub enum ProposalValidationError {
         calculated: FixedHash,
         from_block: FixedHash,
     },
+    #[error("Problem converting values")]
+    QCConversionError
 }

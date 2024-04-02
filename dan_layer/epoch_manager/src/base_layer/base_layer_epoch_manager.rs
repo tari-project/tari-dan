@@ -92,8 +92,10 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     }
 
     pub async fn load_initial_state(&mut self) -> Result<(), EpochManagerError> {
+        info!(target: LOG_TARGET, "Loading base layer constants");
         self.refresh_base_layer_consensus_constants().await?;
 
+        info!(target: LOG_TARGET, "Retrieving current epoch and block info from database");
         let mut tx = self.global_db.create_transaction()?;
         let mut metadata = self.global_db.metadata(&mut tx);
         self.current_epoch = metadata

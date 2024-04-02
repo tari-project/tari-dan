@@ -134,7 +134,7 @@ where
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
-        debug!(target: LOG_TARGET, "🌐 Starting networking service {:?}", self.config);
+        info!(target: LOG_TARGET, "🌐 Starting networking service {:?}", self.config);
         // Listen on all interfaces TODO: Configure
         self.swarm.listen_on(
             format!("/ip4/0.0.0.0/tcp/{}", self.config.listener_port)
@@ -150,6 +150,7 @@ where
         if self.config.reachability_mode.is_private() {
             self.attempt_relay_reservation();
         }
+
 
         let mut check_connections_interval = time::interval(self.config.check_connections_interval);
 
@@ -184,6 +185,7 @@ where
 
     #[allow(clippy::too_many_lines)]
     async fn handle_request(&mut self, request: NetworkingRequest<TMsg>) -> Result<(), NetworkingError> {
+        dbg!("heren");
         match request {
             NetworkingRequest::DialPeer { dial_opts, reply_tx } => {
                 let (tx_waiter, rx_waiter) = oneshot::channel();
@@ -363,6 +365,7 @@ where
         if self.active_connections.len() < self.relays.num_possible_relays() {
             info!(target: LOG_TARGET, "🥾 Bootstrapping with {} known relay peers", self.relays.num_possible_relays());
             for (peer, addrs) in self.relays.possible_relays() {
+                dbg!("heer");
                 self.swarm
                     .dial(
                         DialOpts::peer_id(*peer)
@@ -382,6 +385,8 @@ where
             self.is_initial_bootstrap_complete = true;
         }
 
+
+        dbg!("eneta");
         Ok(())
     }
 
@@ -431,6 +436,7 @@ where
                 error,
                 ..
             } => {
+                warn!(target: LOG_TARGET, "🚨 Outgoing connection error: peer_id={}, error={}", peer_id, error);
                 let Some(waiters) = self.pending_dial_requests.remove(&peer_id) else {
                     debug!(target: LOG_TARGET, "No pending dial requests initiated by this service for peer {}", peer_id);
                     return Ok(());
@@ -440,6 +446,7 @@ where
                 for waiter in waiters {
                     let _ignore = waiter.send(Err(NetworkingError::OutgoingConnectionError(error.to_string())));
                 }
+                dbg!("here");
             },
             SwarmEvent::ExternalAddrConfirmed { address } => {
                 info!(target: LOG_TARGET, "🌍️ External address confirmed: {}", address);

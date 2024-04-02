@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use log::error;
+use log::{debug, error, info};
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
@@ -84,12 +84,22 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
     }
 
     pub async fn run(&mut self, mut shutdown: ShutdownSignal) -> Result<(), EpochManagerError> {
+        info!(target: LOG_TARGET, "Starting epoch manager");
+        info!(target: LOG_TARGET, "Loading initial state");
         // first, load initial state
         self.inner.load_initial_state().await?;
 
         loop {
             tokio::select! {
-                Some(req) = self.rx_request.recv() => self.handle_request(req).await,
+                req = self.rx_request.recv() => {
+                    match req {
+                        Some(req) => self.handle_request(req).await,
+                        None => {
+                            error!(target: LOG_TARGET, "Channel closed. Shutting down epoch manager");
+                            break;
+                        }
+                    }
+                },
                 _ = shutdown.wait() => {
                     dbg!("Shutting down epoch manager");
                     break;
@@ -101,6 +111,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
 
     #[allow(clippy::too_many_lines)]
     async fn handle_request(&mut self, req: EpochManagerRequest<TAddr>) {
+        info!(target: LOG_TARGET, "Received request: {:?}", req);
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
             EpochManagerRequest::CurrentBlockInfo { reply } => handle(reply, Ok(self.inner.current_block_info())),

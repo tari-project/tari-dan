@@ -96,7 +96,7 @@ pub struct ShardKey {
     substate_address: Option<SubstateAddress>,
 }
 
-pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
+pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: ShutdownSignal) -> Result<(), anyhow::Error> {
     let keypair = setup_keypair_prompt(
         &config.validator_node.identity_file,
         !config.validator_node.dont_create_id,
@@ -119,13 +119,14 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
     #[cfg(feature = "metrics")]
     let metrics_registry = create_metrics_registry(keypair.public_key());
 
-    let (base_node_client, wallet_client) = create_base_layer_clients(config).await?;
+    let base_node_client = create_base_layer_client(config).await?;
     let services = spawn_services(
         config,
         shutdown_signal.clone(),
         keypair.clone(),
         global_db,
         ConsensusConstants::devnet(), // TODO: change this eventually
+        base_node_client.clone(),
         #[cfg(feature = "metrics")]
         &metrics_registry,
     )
@@ -137,7 +138,7 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
     let mut jrpc_address = config.validator_node.json_rpc_listener_address;
     if let Some(jrpc_address) = jrpc_address.as_mut() {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", jrpc_address);
-        let handlers = JsonRpcHandlers::new(wallet_client, base_node_client, &services);
+        let handlers = JsonRpcHandlers::new(base_node_client, &services);
         *jrpc_address = spawn_json_rpc(
             *jrpc_address,
             handlers,
@@ -168,23 +169,21 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
     Ok(())
 }
 
-async fn create_base_layer_clients(
+async fn create_base_layer_client(
     config: &ApplicationConfig,
-) -> Result<(GrpcBaseNodeClient, GrpcWalletClient), ExitError> {
+) -> Result<GrpcBaseNodeClient, ExitError> {
+    let base_node_address = config.validator_node.base_node_grpc_address.clone().unwrap_or_else(|| {
+        let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+        format!("127.0.0.1:{port}")
+    });
+    info!(target: LOG_TARGET, "Connecting to base node on GRPC at {}", base_node_address);
     let base_node_client =
-        GrpcBaseNodeClient::connect(config.validator_node.base_node_grpc_address.clone().unwrap_or_else(|| {
-            let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-            format!("127.0.0.1:{port}")
-        }))
+        GrpcBaseNodeClient::connect(base_node_address)
         .await
         .map_err(|error| ExitError::new(ExitCode::ConfigError, error))?;
 
-    let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
-        let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-    }));
 
-    Ok((base_node_client, wallet_client))
+    Ok(base_node_client)
 }
 
 #[cfg(feature = "metrics")]

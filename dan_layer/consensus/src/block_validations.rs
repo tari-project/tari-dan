@@ -131,7 +131,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         .await?;
 
     if committee_shard.quorum_threshold() >
-        u32::try_from(qc.signatures().len()).map_err(|_| ProposalValidationError::QCisNotValid { qc: qc.clone() })?
+        u32::try_from(qc.signatures().len()).map_err(|_| ProposalValidationError::QCConversionError)?
     {
         return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
     }

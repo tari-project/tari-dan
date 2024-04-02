@@ -25,7 +25,7 @@ use std::{fs, io, ops::DerefMut, str::FromStr};
 use anyhow::anyhow;
 use futures::{future, FutureExt};
 use libp2p::identity;
-use log::info;
+use log::{debug, info};
 use minotari_app_utilities::identity_management;
 use serde::Serialize;
 use sqlite_message_logger::SqliteMessageLogger;
@@ -124,18 +124,12 @@ pub async fn spawn_services(
     keypair: RistrettoKeypair,
     global_db: GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>,
     consensus_constants: ConsensusConstants,
+    base_node_client: GrpcBaseNodeClient,
     #[cfg(feature = "metrics")] metrics_registry: &prometheus::Registry,
 ) -> Result<Services, anyhow::Error> {
     let mut handles = Vec::with_capacity(8);
 
     ensure_directories_exist(config)?;
-
-    // Connection to base node
-    let base_node_client =
-        GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.clone().unwrap_or_else(|| {
-            let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-            format!("127.0.0.1:{port}")
-        }));
 
     // Networking
     let (tx_consensus_messages, rx_consensus_messages) = mpsc::unbounded_channel();
@@ -182,14 +176,17 @@ pub async fn spawn_services(
     )?;
     handles.push(join_handle);
 
+    info!(target: LOG_TARGET, "Message logging initializing");
     // Spawn messaging
     let message_logger = SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
 
+    info!(target: LOG_TARGET, "State store initializing");
     // Connect to shard db
     let state_store =
         SqliteStateStore::connect(&format!("sqlite://{}", config.validator_node.state_db_path().display()))?;
     state_store.with_write_tx(|tx| bootstrap_state(tx, config.network))?;
 
+    info!(target: LOG_TARGET, "Epoch manager initializing");
     // Epoch manager
     let (epoch_manager, join_handle) = tari_epoch_manager::base_layer::spawn_service(
         config.network,
@@ -209,12 +206,14 @@ pub async fn spawn_services(
     // Create registration file
     create_registration_file(config, &epoch_manager, &keypair).await?;
 
+    info!(target: LOG_TARGET, "Template manager initializing");
     // Template manager
     let template_manager = TemplateManager::initialize(global_db.clone(), config.validator_node.templates.clone())?;
     let (template_manager_service, join_handle) =
         template_manager::implementation::spawn(template_manager.clone(), shutdown.clone());
     handles.push(join_handle);
 
+    info!(target: LOG_TARGET, "Payload processor initializing");
     // Payload processor
     let fee_table = if config.validator_node.no_fees {
         FeeTable::zero_rated()

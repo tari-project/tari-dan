@@ -85,10 +85,8 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         // Template
         "get_template" => handlers.get_template(value).await,
         "get_templates" => handlers.get_templates(value).await,
-        "register_template" => handlers.register_template(value).await,
         // Validator Node
         "get_identity" => handlers.get_identity(value).await,
-        "register_validator_node" => handlers.register_validator_node(value).await,
         "get_mempool_stats" => handlers.get_mempool_stats(value).await,
         "get_epoch_manager_stats" => handlers.get_epoch_manager_stats(value).await,
         "get_shard_key" => handlers.get_shard_key(value).await,

@@ -229,11 +229,14 @@ impl BaseNodeClient for GrpcBaseNodeClient {
         &mut self,
         block_height: u64,
     ) -> Result<BaseLayerConsensusConstants, BaseNodeClientError> {
+        dbg!("asdfa");
         let inner = self.connection().await?;
 
+        dbg!("asdfa");
         let request = grpc::BlockHeight { block_height };
         let result = inner.get_constants(request).await?.into_inner();
 
+        dbg!("asdfa");
         let consensus_constants = BaseLayerConsensusConstants {
             validator_node_registration_expiry: result.validator_node_validity_period,
             epoch_length: result.epoch_length,
