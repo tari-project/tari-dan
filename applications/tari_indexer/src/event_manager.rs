@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, ops::RangeInclusive};
+use std::ops::RangeInclusive;
 
 use tari_common::configuration::Network;
 use futures::StreamExt;
@@ -34,6 +34,9 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_validator_node_rpc::client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory};
 use tari_dan_storage::consensus_models::TransactionRecord;
 use tari_transaction::Transaction;
+use tari_transaction::TransactionId;
+use tari_dan_storage::consensus_models::Command;
+use std::collections::HashSet;
 
 const LOG_TARGET: &str = "tari::indexer::event_manager";
 
@@ -70,6 +73,40 @@ impl EventManager {
             substate_id
         );
 
+        let new_blocks = self.get_new_blocks().await?;
+        let transaction_ids = self.extract_transaction_ids_from_blocks(new_blocks);
+
+        info!(
+            target: LOG_TARGET,
+            "scan_events: got {} transaction_ids",
+            transaction_ids.len()
+        );
+
+        Ok(vec![])
+    }
+
+    fn extract_transaction_ids_from_blocks(&self, blocks: Vec<Block>) -> HashSet<TransactionId> {
+        let mut transaction_ids = HashSet::new();
+
+        for block in blocks {
+            for command in block.commands() {
+                match command {
+                    Command::Accept(t) => {
+                        transaction_ids.insert(*t.id());
+                    },
+                    _ => { 
+                        // we are only interested in confirmed transactions
+                    },
+                }
+            }
+        }
+
+        transaction_ids
+    }
+
+    async fn get_new_blocks(&self) -> Result<Vec<Block>, anyhow::Error> {
+        let mut blocks = vec![];
+
         // get all the committees
         // TODO: optimize by getting all individual CommiteeShards instead of all the VNs
         let epoch = self.epoch_manager.current_epoch().await?;
@@ -80,17 +117,19 @@ impl EventManager {
             .await?;
         committee.members.shuffle(&mut OsRng);
 
-        let mut blocks = HashMap::new();
+        // TODO: use the latest block id that we scanned
+        let start_block = Block::zero_block(self.network);
+        let start_block_id = start_block.id();
+
         for member in committee.addresses() {
-            let resp = self.get_blocks_from_vn(member).await;
+            let resp = self.get_blocks_from_vn(member, *start_block_id).await;
 
             match resp {
-                Ok(vn_blocks) => {
-                    vn_blocks.into_iter().for_each(|b| {
-                        blocks.insert(*b.id(), b);
-                    });
+                Ok(mut vn_blocks) => {
+                    blocks.append(&mut vn_blocks); 
                 },
                 Err(e) => {
+                    // We do nothing on a single VN failure, we only log it
                     warn!(
                         target: LOG_TARGET,
                         "Could not get blocks from vn {}: {}",
@@ -101,36 +140,23 @@ impl EventManager {
             };
         }
 
-        info!(
-            target: LOG_TARGET,
-            "scan_events: blocks={:?}",
-            blocks
-        );
-
-        Ok(vec![])
+        Ok(blocks)
     }
 
-    async fn get_blocks_from_vn(&self, vn_addr: &PeerAddress) -> Result<Vec<Block>, anyhow::Error> {
+    async fn get_blocks_from_vn(&self, vn_addr: &PeerAddress, start_block_id: BlockId) -> Result<Vec<Block>, anyhow::Error> {
         let mut blocks = vec![];
 
         let mut rpc_client = self.client_factory.create_client(vn_addr);
         let mut client = rpc_client.client_connection().await?;
 
-        // TODO: use the latest block id that we scanned
-        let start_block = Block::zero_block(self.network);
-
         let mut stream = client
             .sync_blocks(SyncBlocksRequest {
-                start_block_id: start_block.id().as_bytes().to_vec(),
+                start_block_id: start_block_id.as_bytes().to_vec(),
             })
             .await?;
         while let Some(resp) = stream.next().await {
             let msg = resp?;
-            info!(
-                target: LOG_TARGET,
-                "scan_events: msg={:?}",
-                blocks
-            );
+
             let new_block = msg
                 .into_block()
                 .ok_or_else(|| anyhow::anyhow!("Expected peer to return a newblock"))?;
@@ -165,18 +191,11 @@ impl EventManager {
             let msg = resp?;
             let transactions = msg.into_transactions().ok_or_else(|| anyhow::anyhow!("Expected peer to return transactions"))?;
 
-            let transactions = transactions
+            let _transactions = transactions
                 .into_iter()
                 .map(Transaction::try_from)
                 .map(|r| r.map(TransactionRecord::new))
                 .collect::<Result<Vec<_>, _>>()?;
-
-            info!(
-                target: LOG_TARGET,
-                "Synced block {} with {} transactions",
-                block.id(),
-                transactions.len(),
-            );
 
             blocks.push(block);
         }
