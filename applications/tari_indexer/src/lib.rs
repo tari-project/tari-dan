@@ -164,6 +164,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
 
     // Run the event manager
     let event_manager = Arc::new(EventManager::new(
+        config.network,
         Box::new(services.epoch_manager.clone()),
         services.validator_node_client_factory.clone(),
     ));

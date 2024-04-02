@@ -22,6 +22,7 @@
 
 use std::{collections::HashMap, ops::RangeInclusive};
 
+use tari_common::configuration::Network;
 use futures::StreamExt;
 use log::*;
 use rand::{prelude::*, rngs::OsRng};
@@ -31,20 +32,25 @@ use tari_dan_storage::consensus_models::{Block, BlockId};
 use tari_engine_types::{events::Event, substate::SubstateId};
 use tari_epoch_manager::EpochManagerReader;
 use tari_validator_node_rpc::client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory};
+use tari_dan_storage::consensus_models::TransactionRecord;
+use tari_transaction::Transaction;
 
 const LOG_TARGET: &str = "tari::indexer::event_manager";
 
 pub struct EventManager {
+    network: Network,
     epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
     client_factory: TariValidatorNodeRpcClientFactory,
 }
 
 impl EventManager {
     pub fn new(
+        network: Network,
         epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
         client_factory: TariValidatorNodeRpcClientFactory,
     ) -> Self {
         Self {
+            network,
             epoch_manager,
             client_factory,
         }
@@ -110,18 +116,68 @@ impl EventManager {
         let mut rpc_client = self.client_factory.create_client(vn_addr);
         let mut client = rpc_client.client_connection().await?;
 
+        // TODO: use the latest block id that we scanned
+        let start_block = Block::zero_block(self.network);
+
         let mut stream = client
             .sync_blocks(SyncBlocksRequest {
-                // TODO: use the latest block id that we scanned
-                start_block_id: vec![],
+                start_block_id: start_block.id().as_bytes().to_vec(),
             })
             .await?;
         while let Some(resp) = stream.next().await {
             let msg = resp?;
+            info!(
+                target: LOG_TARGET,
+                "scan_events: msg={:?}",
+                blocks
+            );
             let new_block = msg
                 .into_block()
                 .ok_or_else(|| anyhow::anyhow!("Expected peer to return a newblock"))?;
             let block = Block::try_from(new_block)?;
+            info!(
+                target: LOG_TARGET,
+                "scan_events: block={:?}",
+                block
+            );
+
+            let Some(_) = stream.next().await else {
+                anyhow::bail!("Peer closed session before sending QC message")
+            };
+
+            let Some(resp) = stream.next().await else {
+                anyhow::bail!("Peer closed session before sending substate update count message")
+            };
+            let msg = resp?;
+            let num_substates = msg.substate_count().ok_or_else(|| {
+                anyhow::anyhow!("Expected peer to return substate count")
+            })? as usize;
+
+            for _ in 0..num_substates {
+                let Some(_) = stream.next().await else {
+                    anyhow::bail!("Peer closed session before sending substate updates message")
+                };
+            }
+
+            let Some(resp) = stream.next().await else {
+                anyhow::bail!("Peer closed session before sending transactions message")
+            };
+            let msg = resp?;
+            let transactions = msg.into_transactions().ok_or_else(|| anyhow::anyhow!("Expected peer to return transactions"))?;
+
+            let transactions = transactions
+                .into_iter()
+                .map(Transaction::try_from)
+                .map(|r| r.map(TransactionRecord::new))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            info!(
+                target: LOG_TARGET,
+                "Synced block {} with {} transactions",
+                block.id(),
+                transactions.len(),
+            );
+
             blocks.push(block);
         }
 
