@@ -34,7 +34,7 @@ use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_crypto::tari_utilities::hex::to_hex;
 use tari_dan_app_utilities::{
-    json_encoding::{encode_finalize_result_into_json, encode_finalized_result_into_json, encode_substate_into_json},
+    json_encoding::{encode_finalize_result_into_json, encode_finalized_result_into_json},
     keypair::RistrettoKeypair,
     substate_file_cache::SubstateFileCache,
     template_manager::{implementation::TemplateManager, interface::TemplateExecutable},
@@ -388,8 +388,7 @@ impl JsonRpcHandlers {
         Ok(JsonRpcResponse::success(answer_id, InspectSubstateResponse {
             address: resp.address,
             version: resp.version,
-            substate_contents: encode_substate_into_json(&resp.substate)
-                .map_err(|e| Self::internal_error(answer_id, e))?,
+            substate: resp.substate,
             created_by_transaction: resp.created_by_transaction,
         }))
     }

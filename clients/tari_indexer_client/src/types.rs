@@ -76,7 +76,7 @@ pub struct InspectSubstateResponse {
     pub address: SubstateId,
     pub version: u32,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub substate_contents: serde_json::Value,
+    pub substate: Substate,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_by_transaction: TransactionId,
 }

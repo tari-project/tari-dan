@@ -49,19 +49,16 @@ interface ITableAddresses {
 
 type ColumnKey = keyof ITableAddresses;
 
-function RowData({
-  id,
-  address,
-  version,
-  onDelete,
-}: {
+interface RowProps {
   id: string;
   address: string;
   version: number;
   onDelete: (address: string) => void;
-}) {
+}
+
+function RowData({ id, address, version, onDelete }: RowProps) {
   const [open1, setOpen1] = useState(false);
-  const [data, setData] = useState<string | null>(null);
+  const [data, setData] = useState<object | null>(null);
   return (
     <>
       <TableRow key={id} sx={{ borderBottom: "none" }}>
@@ -95,7 +92,7 @@ function RowData({
                 // TODO: We always use Component, because it's anyway to be serialized as a string, but maybe we should parse the address and use the correct type?
                 inspectSubstate({ address: { Component: address }, version: null })
                   .then((resp) => {
-                    setData(JSON.stringify(resp));
+                    setData(resp);
                   })
                   .catch((error) => {
                     console.log("Error", error);
@@ -121,7 +118,7 @@ function RowData({
       <TableRow key={`${id}-2`}>
         <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={4}>
           <Collapse in={open1} timeout="auto" unmountOnExit>
-            <CodeBlock style={{ marginBottom: "10px" }}>{data ? renderJson(JSON.parse(data)) : null}</CodeBlock>
+            <CodeBlock style={{ marginBottom: "10px" }}>{data ? renderJson(data) : null}</CodeBlock>
           </Collapse>
         </DataTableCell>
       </TableRow>

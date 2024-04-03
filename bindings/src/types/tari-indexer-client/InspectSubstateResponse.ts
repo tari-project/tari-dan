@@ -4,6 +4,6 @@ import type { SubstateId } from "../SubstateId";
 export interface InspectSubstateResponse {
   address: SubstateId;
   version: number;
-  substate_contents: string;
+  substate: string;
   created_by_transaction: string;
 }
