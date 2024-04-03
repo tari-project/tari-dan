@@ -20,37 +20,36 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::ops::RangeInclusive;
-use std::collections::BTreeMap;
-use tari_common::configuration::Network;
+use std::{
+    collections::{BTreeMap, HashSet},
+    ops::RangeInclusive,
+    str::FromStr,
+};
+
 use futures::StreamExt;
 use log::*;
 use rand::{prelude::*, rngs::OsRng};
-use tari_dan_common_types::{committee::Committee, PeerAddress, SubstateAddress};
-use tari_dan_p2p::proto::rpc::GetTransactionResultRequest;
-use tari_dan_p2p::proto::rpc::SyncBlocksRequest;
-use tari_dan_p2p::proto::rpc::PayloadResultStatus;
-use tari_dan_storage::consensus_models::{Block, BlockId};
-use tari_engine_types::{events::Event, substate::SubstateId};
-use tari_epoch_manager::EpochManagerReader;
-use tari_validator_node_rpc::client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory};
-use tari_dan_storage::consensus_models::TransactionRecord;
-use tari_transaction::Transaction;
-use tari_transaction::TransactionId;
-use tari_dan_storage::consensus_models::Command;
-use std::collections::HashSet;
 use tari_bor::decode;
-use tari_dan_storage::consensus_models::Decision;
-use tari_engine_types::commit_result::ExecuteResult;
-use crate::substate_storage_sqlite::models::events::NewEvent;
-use crate::substate_storage_sqlite::sqlite_substate_store_factory::SqliteSubstateStore;
-use crate::substate_storage_sqlite::sqlite_substate_store_factory::SubstateStore;
-use crate::substate_storage_sqlite::sqlite_substate_store_factory::SubstateStoreReadTransaction;
-use crate::substate_storage_sqlite::sqlite_substate_store_factory::SubstateStoreWriteTransaction;
+use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
-use tari_template_lib::Hash;
-use std::str::FromStr;
-use tari_template_lib::models::Metadata;
+use tari_dan_common_types::{committee::Committee, PeerAddress, SubstateAddress};
+use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
+use tari_dan_storage::consensus_models::{Block, BlockId, Command, Decision, TransactionRecord};
+use tari_engine_types::{commit_result::ExecuteResult, events::Event, substate::SubstateId};
+use tari_epoch_manager::EpochManagerReader;
+use tari_template_lib::{models::Metadata, Hash};
+use tari_transaction::{Transaction, TransactionId};
+use tari_validator_node_rpc::client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory};
+
+use crate::substate_storage_sqlite::{
+    models::events::NewEvent,
+    sqlite_substate_store_factory::{
+        SqliteSubstateStore,
+        SubstateStore,
+        SubstateStoreReadTransaction,
+        SubstateStoreWriteTransaction,
+    },
+};
 
 const LOG_TARGET: &str = "tari::indexer::event_manager";
 
@@ -72,25 +71,33 @@ impl EventManager {
             network,
             epoch_manager,
             client_factory,
-            substate_store
+            substate_store,
         }
     }
 
-    pub async fn scan_events(
+    pub async fn find_events_in_db(
         &self,
-        start_block: Option<BlockId>,
         topic: Option<String>,
         substate_id: Option<SubstateId>,
+        offset: u32,
+        limit: u32,
     ) -> Result<Vec<Event>, anyhow::Error> {
+        // TODO: scanning should be done in a background process, not here
+        // TODO: AND use the latest block id that we scanned
+        self.scan_events(None).await?;
+
+        let events = self.get_events_from_db(topic, substate_id, offset, limit).await?;
+        Ok(events)
+    }
+
+    pub async fn scan_events(&self, start_block: Option<BlockId>) -> Result<(), anyhow::Error> {
         info!(
             target: LOG_TARGET,
-            "scan_events: start_block={:?}, topic={:?}, substate_id={:?}",
+            "scan_events: start_block={:?}",
             start_block,
-            topic,
-            substate_id
         );
 
-        let new_blocks = self.get_new_blocks().await?;
+        let new_blocks = self.get_new_blocks(start_block).await?;
         let transaction_ids = self.extract_transaction_ids_from_blocks(new_blocks);
 
         let mut events = vec![];
@@ -100,20 +107,25 @@ impl EventManager {
         }
 
         self.store_events_in_db(&events).await?;
-        let events = self.get_events_from_db(topic, substate_id).await?;
-        
-        info!(
-            target: LOG_TARGET,
-                "Events: {:?}",
-                events
-            );
 
-        Ok(events)
+        info!(
+        target: LOG_TARGET,
+            "Scanned {} events",
+            events.len()
+        );
+
+        Ok(())
     }
 
-    async fn get_events_from_db(&self, topic: Option<String>, substate_id: Option<SubstateId>) -> Result<Vec<Event>, anyhow::Error> {
+    async fn get_events_from_db(
+        &self,
+        topic: Option<String>,
+        substate_id: Option<SubstateId>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Event>, anyhow::Error> {
         let mut tx = self.substate_store.create_read_tx()?;
-        let rows = tx.get_events(substate_id, topic, 0, 100)?;
+        let rows = tx.get_events(substate_id, topic, offset, limit)?;
 
         let mut events = vec![];
         for row in rows {
@@ -122,13 +134,7 @@ impl EventManager {
             let tx_hash = Hash::from_hex(&row.tx_hash)?;
             let topic = row.topic;
             let payload = Metadata::from(serde_json::from_str::<BTreeMap<String, String>>(row.payload.as_str())?);
-            events.push(Event::new(
-                substate_id,
-                template_address,
-                tx_hash,
-                topic,
-                payload
-            ));
+            events.push(Event::new(substate_id, template_address, tx_hash, topic, payload));
         }
 
         Ok(events)
@@ -163,10 +169,10 @@ impl EventManager {
             match resp {
                 Ok(res) => {
                     if let Some(execute_result) = res {
-                        return Ok(execute_result.finalize.events)
+                        return Ok(execute_result.finalize.events);
                     } else {
                         // The transaction is not successful, we don't return any events
-                        return Ok(vec![])
+                        return Ok(vec![]);
                     }
                 },
                 Err(e) => {
@@ -188,7 +194,11 @@ impl EventManager {
         Ok(vec![])
     }
 
-    async fn get_execute_result_from_vn(&self, vn_addr: &PeerAddress, transaction_id: &TransactionId) -> Result<Option<ExecuteResult>, anyhow::Error> {
+    async fn get_execute_result_from_vn(
+        &self,
+        vn_addr: &PeerAddress,
+        transaction_id: &TransactionId,
+    ) -> Result<Option<ExecuteResult>, anyhow::Error> {
         let mut rpc_client = self.client_factory.create_client(vn_addr);
         let mut client = rpc_client.client_connection().await?;
 
@@ -224,7 +234,7 @@ impl EventManager {
                     Command::Accept(t) => {
                         transaction_ids.insert(*t.id());
                     },
-                    _ => { 
+                    _ => {
                         // we are only interested in confirmed transactions
                     },
                 }
@@ -234,21 +244,25 @@ impl EventManager {
         transaction_ids
     }
 
-    async fn get_new_blocks(&self) -> Result<Vec<Block>, anyhow::Error> {
+    async fn get_new_blocks(&self, start_block: Option<BlockId>) -> Result<Vec<Block>, anyhow::Error> {
         let mut blocks = vec![];
 
         let committee = self.get_all_vns().await?;
 
-        // TODO: use the latest block id that we scanned
-        let start_block = Block::zero_block(self.network);
-        let start_block_id = start_block.id();
+        let start_block_id = match start_block {
+            Some(id) => id,
+            None => {
+                let start_block = Block::zero_block(self.network);
+                *start_block.id()
+            },
+        };
 
         for member in committee.addresses() {
-            let resp = self.get_blocks_from_vn(member, *start_block_id).await;
+            let resp = self.get_blocks_from_vn(member, start_block_id).await;
 
             match resp {
                 Ok(mut vn_blocks) => {
-                    blocks.append(&mut vn_blocks); 
+                    blocks.append(&mut vn_blocks);
                 },
                 Err(e) => {
                     // We do nothing on a single VN failure, we only log it
@@ -279,7 +293,11 @@ impl EventManager {
         Ok(committee)
     }
 
-    async fn get_blocks_from_vn(&self, vn_addr: &PeerAddress, start_block_id: BlockId) -> Result<Vec<Block>, anyhow::Error> {
+    async fn get_blocks_from_vn(
+        &self,
+        vn_addr: &PeerAddress,
+        start_block_id: BlockId,
+    ) -> Result<Vec<Block>, anyhow::Error> {
         let mut blocks = vec![];
 
         let mut rpc_client = self.client_factory.create_client(vn_addr);
@@ -311,9 +329,9 @@ impl EventManager {
                 anyhow::bail!("Peer closed session before sending substate update count message")
             };
             let msg = resp?;
-            let num_substates = msg.substate_count().ok_or_else(|| {
-                anyhow::anyhow!("Expected peer to return substate count")
-            })? as usize;
+            let num_substates =
+                msg.substate_count()
+                    .ok_or_else(|| anyhow::anyhow!("Expected peer to return substate count"))? as usize;
 
             for _ in 0..num_substates {
                 let Some(_) = stream.next().await else {
@@ -325,7 +343,9 @@ impl EventManager {
                 anyhow::bail!("Peer closed session before sending transactions message")
             };
             let msg = resp?;
-            let transactions = msg.into_transactions().ok_or_else(|| anyhow::anyhow!("Expected peer to return transactions"))?;
+            let transactions = msg
+                .into_transactions()
+                .ok_or_else(|| anyhow::anyhow!("Expected peer to return transactions"))?;
 
             let _transactions = transactions
                 .into_iter()

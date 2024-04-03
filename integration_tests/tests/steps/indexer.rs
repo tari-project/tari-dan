@@ -208,7 +208,7 @@ async fn indexer_scans_network_events_for_resource(world: &mut TariWorld, indexe
 
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
     let query = format!(
-        r#"{{ getEvents(substateId:"{}", offset:0, limit:2) {{ substateId, templateAddress, txHash, topic, payload }} }}"#,
+        r#"{{ getEvents(substateId:"{}", offset:0, limit:10) {{ substateId, templateAddress, txHash, topic, payload }} }}"#,
         resource_address
     );
     let res = graphql_client

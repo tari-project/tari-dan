@@ -455,13 +455,13 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             })?;
         Ok(res)
     }
-    
+
     fn get_events(
         &mut self,
         substate_id_filter: Option<SubstateId>,
         topic_filter: Option<String>,
-        _offset: u32,
-        _limit: u32,
+        offset: u32,
+        limit: u32,
     ) -> Result<Vec<Event>, StorageError> {
         // TODO: allow to query by payload as well, unifying all event methods into one
         info!(
@@ -476,17 +476,16 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         let mut query = events::table.into_boxed();
 
         if let Some(substate_id) = substate_id_filter {
-            query = query.filter(
-                events::substate_id
-                    .eq(substate_id.to_string())
-            );
+            query = query.filter(events::substate_id.eq(substate_id.to_string()));
         }
 
         if let Some(topic) = topic_filter {
-            query = query.filter(
-                events::topic
-                    .eq(topic)
-            );
+            query = query.filter(events::topic.eq(topic));
+        }
+
+        query = query.offset(offset.into());
+        if limit > 0 {
+            query = query.limit(limit.into());
         }
 
         let events = query
@@ -496,7 +495,6 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             })?;
 
         Ok(events)
-        
     }
 }
 

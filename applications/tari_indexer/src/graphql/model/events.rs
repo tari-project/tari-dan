@@ -148,7 +148,7 @@ impl EventQuery {
         let substate_id = substate_id.map(|str| SubstateId::from_str(&str)).transpose()?;
         let event_manager = ctx.data_unchecked::<Arc<EventManager>>();
         let events = event_manager
-            .scan_events(None, topic, substate_id)
+            .find_events_in_db(None, substate_id, offset, limit)
             .await?
             .iter()
             .map(|e| Event::from_engine_event(e.clone()))
