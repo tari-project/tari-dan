@@ -5520,17 +5520,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "minotari_wallet_grpc_client"
-version = "0.1.0"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan2#93ccbb6629ae773272614c54e05755b0468b85cd"
-dependencies = [
- "minotari_app_grpc",
- "tari_common_types",
- "thiserror",
- "tonic 0.8.3",
-]
-
-[[package]]
 name = "mio"
 version = "0.7.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10008,7 +9997,6 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-jrpc",
- "blake2",
  "clap 3.2.25",
  "config",
  "futures 0.3.30",
@@ -10022,9 +10010,7 @@ dependencies = [
  "mime_guess",
  "minotari_app_grpc",
  "minotari_app_utilities",
- "minotari_wallet_grpc_client",
  "prometheus",
- "prost 0.12.3",
  "rand",
  "reqwest",
  "serde",
@@ -10058,7 +10044,6 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
- "tonic 0.8.3",
  "tower-http",
 ]
 
