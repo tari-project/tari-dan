@@ -152,7 +152,16 @@ impl EventManager {
                 substate_id: event.substate_id().map(|s| s.to_string()),
                 version: 0_i32,
             };
-            tx.save_event(row)?;
+
+            // TODO: properly avoid or handle duplicated events, as right now the same event could be persistent twice
+            //       and we don't want to fail the entire operation
+            let _ = tx.save_event(row).map_err(|e| {
+                warn!(
+                target: LOG_TARGET,
+                    "Could not store event: {}",
+                    e
+                );
+            });
         }
 
         tx.commit()?;
