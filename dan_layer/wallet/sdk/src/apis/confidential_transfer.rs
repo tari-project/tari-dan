@@ -450,6 +450,10 @@ where
         let mut builder = Transaction::builder()
             .fee_transaction_pay_from_component_confidential(from_account_address, fee_withdraw_proof);
 
+        if !dest_account_exists {
+            builder = builder.create_account(params.destination_public_key.clone());
+        }
+
         if let Some(ref badge) = params.proof_from_resource {
             builder = builder
                 .call_method(from_account_address, "create_proof_for_resource", args![badge])
