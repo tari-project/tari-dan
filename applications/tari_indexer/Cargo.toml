@@ -12,7 +12,6 @@ minotari_app_utilities = { workspace = true }
 tari_bor = { workspace = true }
 tari_common = { workspace = true }
 tari_common_types = { workspace = true }
-tari_consensus = { workspace = true }
 tari_crypto = { workspace = true }
 tari_shutdown = { workspace = true }
 tari_dan_app_utilities = { workspace = true }
