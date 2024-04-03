@@ -223,6 +223,3 @@ Feature: Indexer node
     # Query the events from the network
     When indexer IDX scans the network for events of resource FAUCET/resources/0
 
-    # Wait for the scanning and indexing of events
-    When I wait 100 seconds
-
