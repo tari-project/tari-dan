@@ -189,7 +189,12 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
                     Ok(0) => {},
                     Ok(cnt) => info!(target: LOG_TARGET, "Scanned {} substate(s) successfully", cnt),
                     Err(e) =>  error!(target: LOG_TARGET, "Substate auto-scan failed: {}", e),
-                }
+                };
+                match event_manager.scan_events().await {
+                    Ok(0) => {},
+                    Ok(cnt) => info!(target: LOG_TARGET, "Scanned {} events(s) successfully", cnt),
+                    Err(e) =>  error!(target: LOG_TARGET, "Event auto-scan failed: {}", e),
+                };
             },
 
             Ok(event) = epoch_manager_events.recv() => {

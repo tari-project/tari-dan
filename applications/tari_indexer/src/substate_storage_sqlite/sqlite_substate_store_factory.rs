@@ -213,6 +213,7 @@ pub trait SubstateStoreReadTransaction {
         offset: u32,
         limit: u32,
     ) -> Result<Vec<Event>, StorageError>;
+    fn event_exists(&mut self, event: NewEvent) -> Result<bool, StorageError>;
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
@@ -495,6 +496,29 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             })?;
 
         Ok(events)
+    }
+
+    fn event_exists(&mut self, value: NewEvent) -> Result<bool, StorageError> {
+        use crate::substate_storage_sqlite::schema::events;
+
+        let count = events::table
+            .filter(
+                events::substate_id
+                    .eq(value.substate_id)
+                    .and(events::template_address.eq(value.template_address))
+                    .and(events::topic.eq(value.topic))
+                    .and(events::version.eq(value.version))
+                    .and(events::payload.eq(value.payload))
+                    .and(events::tx_hash.eq(value.tx_hash)),
+            )
+            .count()
+            .get_result::<i64>(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("event_exists: {}", e),
+            })?;
+        let exists = count > 0;
+
+        Ok(exists)
     }
 }
 

@@ -82,22 +82,18 @@ impl EventManager {
         offset: u32,
         limit: u32,
     ) -> Result<Vec<Event>, anyhow::Error> {
-        // TODO: scanning should be done in a background process, not here
-        // TODO: AND use the latest block id that we scanned
-        self.scan_events(None).await?;
-
         let events = self.get_events_from_db(topic, substate_id, offset, limit).await?;
         Ok(events)
     }
 
-    pub async fn scan_events(&self, start_block: Option<BlockId>) -> Result<(), anyhow::Error> {
+    pub async fn scan_events(&self) -> Result<usize, anyhow::Error> {
         info!(
             target: LOG_TARGET,
-            "scan_events: start_block={:?}",
-            start_block,
+            "scan_events",
         );
 
-        let new_blocks = self.get_new_blocks(start_block).await?;
+        // TODO: AND use the latest block id that we scanned
+        let new_blocks = self.get_new_blocks(None).await?;
         let transaction_ids = self.extract_transaction_ids_from_blocks(new_blocks);
 
         let mut events = vec![];
@@ -114,7 +110,7 @@ impl EventManager {
             events.len()
         );
 
-        Ok(())
+        Ok(events.len())
     }
 
     async fn get_events_from_db(
@@ -153,15 +149,15 @@ impl EventManager {
                 version: 0_i32,
             };
 
-            // TODO: properly avoid or handle duplicated events, as right now the same event could be persistent twice
-            //       and we don't want to fail the entire operation
-            let _ = tx.save_event(row).map_err(|e| {
-                warn!(
-                target: LOG_TARGET,
-                    "Could not store event: {}",
-                    e
-                );
-            });
+            // TODO: properly avoid or handle duplicated events
+            //       For now we will just check if a similar event exists in the db
+            let event_already_exists = tx.event_exists(row.clone())?;
+            if event_already_exists {
+                // the event is was already stored previously
+                continue;
+            }
+
+            tx.save_event(row)?;
         }
 
         tx.commit()?;
