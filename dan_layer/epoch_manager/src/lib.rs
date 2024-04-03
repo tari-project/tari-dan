@@ -22,8 +22,6 @@
 
 pub mod traits;
 
-use tari_core::ValidatorNodeSmtHasherBlake256;
-use tari_mmr::sparse_merkle_tree::SparseMerkleTree;
 pub use traits::EpochManagerReader;
 
 #[cfg(feature = "base_layer")]
@@ -33,8 +31,3 @@ pub use error::EpochManagerError;
 
 mod event;
 pub use event::*;
-
-pub struct ValidatorNodeMerkleTree {
-    sidechains_tree: SparseMerkleTree<ValidatorNodeSmtHasherBlake256>,
-    //    trees_data: HashMap<Option<PublicKey>, Vec<>>
-}

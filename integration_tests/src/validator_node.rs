@@ -26,10 +26,7 @@ use std::{
 };
 
 use reqwest::Url;
-use tari_common::{
-    configuration::{CommonConfig, StringList},
-    exit_codes::ExitError,
-};
+use tari_common::configuration::{CommonConfig, StringList};
 use tari_common_types::types::PublicKey;
 use tari_dan_app_utilities::p2p_config::PeerSeedsConfig;
 use tari_p2p::Network;
@@ -52,7 +49,7 @@ pub struct ValidatorNodeProcess {
     pub json_rpc_port: u16,
     pub http_ui_port: u16,
     pub base_node_grpc_port: u16,
-    pub handle: task::JoinHandle<Result<(), ExitError>>,
+    pub handle: task::JoinHandle<Result<(), anyhow::Error>>,
     pub temp_dir_path: PathBuf,
     pub shutdown: Shutdown,
 }

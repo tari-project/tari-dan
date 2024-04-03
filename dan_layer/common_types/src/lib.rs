@@ -6,7 +6,6 @@ pub mod crypto;
 mod epoch;
 
 pub use epoch::Epoch;
-use tari_mmr::sparse_merkle_tree::SparseMerkleTree;
 
 pub mod committee;
 pub mod hasher;

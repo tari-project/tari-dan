@@ -32,16 +32,10 @@ mod json_rpc;
 #[cfg(feature = "metrics")]
 mod metrics;
 mod p2p;
-mod registration;
 mod substate_resolver;
 mod virtual_substate;
 
-use std::{
-    fs,
-    io,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    process,
-};
+use std::{fs, io, process};
 
 use log::*;
 use serde::{Deserialize, Serialize};

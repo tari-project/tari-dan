@@ -40,6 +40,8 @@ pub async fn send_template_registration(
         commit_hash: vec![],
         binary_sha: binary_sha.to_vec(),
         binary_url: mock.url,
+        sidechain_id: None,
+        sidechain_id_knowledge_proof: None,
     };
 
     // send the template registration request

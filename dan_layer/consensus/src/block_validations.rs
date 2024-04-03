@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common::configuration::Network;
-use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey, NodeHeight};
+use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey};
 use tari_dan_storage::consensus_models::Block;
 use tari_epoch_manager::EpochManagerReader;
 

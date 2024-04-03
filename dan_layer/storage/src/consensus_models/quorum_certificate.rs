@@ -7,20 +7,13 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_dan_common_types::{
-    hashing::{
-        quorum_certificate_hasher,
-        MergedValidatorNodeMerkleProof,
-        ValidatorNodeBalancedMerkleTree,
-        ValidatorNodeBmtHasherBlake2b,
-        ValidatorNodeMerkleProof,
-    },
+    hashing::quorum_certificate_hasher,
     optional::Optional,
     serde_with,
     shard::Shard,
     Epoch,
     NodeHeight,
 };
-use tari_mmr::MergedBalancedBinaryMerkleProof;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 

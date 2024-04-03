@@ -87,21 +87,16 @@ use tari_validator_node_client::types::{
     GetValidatorFeesResponse,
     ListBlocksRequest,
     ListBlocksResponse,
-    RegisterValidatorNodeRequest,
-    RegisterValidatorNodeResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
     SubstateStatus,
     TemplateMetadata,
-    TemplateRegistrationRequest,
-    TemplateRegistrationResponse,
 };
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
     json_rpc::jrpc_errors::{internal_error, not_found},
     p2p::services::mempool::MempoolHandle,
-    registration,
     Services,
 };
 

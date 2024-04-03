@@ -26,23 +26,12 @@ use std::{
     ops::RangeInclusive,
 };
 
-use blake2::Blake2b;
-use digest::consts::U32;
 use log::*;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
-use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_core::{
-    blocks::BlockHeader,
-    chain_storage::ValidatorNodeRegistrationInfo,
-    consensus::DomainSeparatedConsensusHasher,
-    transactions::transaction_components::ValidatorNodeRegistration,
-    ValidatorNodeBMT,
-    ValidatorNodeSmtHasherBlake256,
-};
+use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
-    hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
     optional::Optional,
     shard::Shard,
     DerivableFromPublicKey,
@@ -52,11 +41,6 @@ use tari_dan_common_types::{
 };
 use tari_dan_storage::global::{models::ValidatorNode, DbBaseLayerBlockInfo, DbEpoch, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
-use tari_hashing::TransactionHashDomain;
-use tari_mmr::{
-    sparse_merkle_tree::{NodeKey, SparseMerkleTree, ValueHash},
-    MergedBalancedBinaryMerkleProof,
-};
 use tari_utilities::byte_array::ByteArray;
 use tokio::sync::broadcast;
 
@@ -66,7 +50,6 @@ const LOG_TARGET: &str = "tari::dan::epoch_manager::base_layer";
 
 #[derive(Clone)]
 pub struct BaseLayerEpochManager<TGlobalStore, TBaseNodeClient> {
-    network: Network,
     global_db: GlobalDb<TGlobalStore>,
     base_node_client: TBaseNodeClient,
     config: EpochManagerConfig,
@@ -83,7 +66,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
 {
     pub fn new(
-        network: Network,
         config: EpochManagerConfig,
         global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
         base_node_client: GrpcBaseNodeClient,
@@ -91,7 +73,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         node_public_key: PublicKey,
     ) -> Self {
         Self {
-            network,
             global_db,
             base_node_client,
             config,

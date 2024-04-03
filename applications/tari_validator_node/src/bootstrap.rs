@@ -25,16 +25,13 @@ use std::{fs, io, ops::DerefMut, str::FromStr};
 use anyhow::anyhow;
 use futures::{future, FutureExt};
 use libp2p::identity;
-use log::{debug, info};
+use log::info;
 use minotari_app_utilities::identity_management;
 use serde::Serialize;
 use sqlite_message_logger::SqliteMessageLogger;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
-    configuration::{
-        bootstrap::{grpc_default_port, ApplicationType},
-        Network,
-    },
+    configuration::Network,
     exit_codes::{ExitCode, ExitError},
 };
 use tari_common_types::types::PublicKey;
@@ -108,7 +105,6 @@ use crate::{
             messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, Gossip},
         },
     },
-    registration,
     substate_resolver::TariSubstateResolver,
     virtual_substate::VirtualSubstateManager,
     ApplicationConfig,
@@ -189,7 +185,6 @@ pub async fn spawn_services(
     info!(target: LOG_TARGET, "Epoch manager initializing");
     // Epoch manager
     let (epoch_manager, join_handle) = tari_epoch_manager::base_layer::spawn_service(
-        config.network,
         // TODO: We should be able to pass consensus constants here. However, these are currently located in dan_core
         // which depends on epoch_manager, so would be a circular dependency.
         EpochManagerConfig {
@@ -335,14 +330,6 @@ pub async fn spawn_services(
     // Save final node identity after comms has initialized. This is required because the public_address can be
     // changed by comms during initialization when using tor.
     save_identities(config, &keypair)?;
-
-    // Auto-registration
-    if config.validator_node.auto_register {
-        let handle = registration::spawn(config.clone(), keypair.clone(), epoch_manager.clone(), shutdown);
-        handles.push(handle);
-    } else {
-        info!(target: LOG_TARGET, "♽️ Node auto registration is disabled");
-    }
 
     let dry_run_transaction_processor =
         DryRunTransactionProcessor::new(epoch_manager.clone(), payload_processor, substate_resolver);

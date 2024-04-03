@@ -6,7 +6,7 @@ use std::ops::DerefMut;
 use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{committee::CommitteeShard, hashing::MergedValidatorNodeMerkleProof, optional::Optional};
+use tari_dan_common_types::{committee::CommitteeShard, optional::Optional};
 use tari_dan_storage::{
     consensus_models::{Block, QuorumCertificate, QuorumDecision, ValidatorSignature, Vote},
     StateStore,
