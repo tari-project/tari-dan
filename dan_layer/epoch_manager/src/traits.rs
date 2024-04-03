@@ -169,4 +169,6 @@ pub trait EpochManagerReader: Send + Sync {
                 }
             })
     }
+
+    async fn get_base_layer_block_height(&self, hash: FixedHash) -> Result<Option<u64>, EpochManagerError>;
 }

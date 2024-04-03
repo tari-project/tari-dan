@@ -664,6 +664,15 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     fn publish_event(&mut self, event: EpochManagerEvent) {
         let _ignore = self.tx_events.send(event);
     }
+
+    pub async fn get_base_layer_block_height(&self, hash: FixedHash) -> Result<Option<u64>, EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        let mut base_layer_hashes = self.global_db.base_layer_hashes(&mut tx);
+        let info = base_layer_hashes
+            .get_base_layer_block_height(hash)?
+            .map(|info| info.height);
+        Ok(info)
+    }
 }
 
 fn calculate_num_committees(num_vns: u64, committee_size: u32) -> u32 {

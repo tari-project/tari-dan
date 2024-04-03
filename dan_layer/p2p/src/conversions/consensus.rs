@@ -264,6 +264,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             foreign_indexes: encode(value.foreign_indexes()).unwrap(),
             signature: value.get_signature().map(Into::into),
             timestamp: value.timestamp(),
+            base_layer_block_height: value.base_layer_block_height(),
             base_layer_block_hash: value.base_layer_block_hash().as_bytes().to_vec(),
         }
     }
@@ -299,6 +300,7 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
             decode_exact(&value.foreign_indexes)?,
             value.signature.map(TryInto::try_into).transpose()?,
             value.timestamp,
+            value.base_layer_block_height,
             value.base_layer_block_hash.try_into()?,
         ))
     }
@@ -337,7 +339,7 @@ impl TryFrom<proto::consensus::Command> for Command {
     }
 }
 
-//---------------------------------- TranactionAtom --------------------------------------------//
+//---------------------------------- TransactionAtom --------------------------------------------//
 
 impl From<&TransactionAtom> for proto::consensus::TransactionAtom {
     fn from(value: &TransactionAtom) -> Self {
@@ -427,6 +429,7 @@ impl From<&ForeignProposal> for proto::consensus::ForeignProposal {
             state: proto::consensus::ForeignProposalState::from(value.state).into(),
             mined_at: value.proposed_height.map(|a| a.0).unwrap_or(0),
             transactions: value.transactions.iter().map(|tx| tx.as_bytes().to_vec()).collect(),
+            base_layer_block_height: value.base_layer_block_height,
         }
     }
 }
@@ -451,6 +454,7 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
                 .into_iter()
                 .map(|tx| tx.try_into())
                 .collect::<Result<_, _>>()?,
+            base_layer_block_height: value.base_layer_block_height,
         })
     }
 }

@@ -23,6 +23,7 @@ diesel::table! {
         created_at -> Timestamp,
         block_time -> Nullable<BigInt>,
         timestamp -> BigInt,
+        base_layer_block_height -> BigInt,
         base_layer_block_hash -> Text,
     }
 }
@@ -35,6 +36,7 @@ diesel::table! {
         state -> Text,
         proposed_height -> Nullable<BigInt>,
         transactions -> Text,
+        base_layer_block_height -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -164,6 +166,7 @@ diesel::table! {
         created_at -> Timestamp,
         block_time -> Nullable<BigInt>,
         timestamp -> BigInt,
+        base_layer_block_height -> BigInt,
         base_layer_block_hash -> Text,
     }
 }

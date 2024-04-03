@@ -161,6 +161,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
             parked_blocks::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
             parked_blocks::block_time.eq(block.block_time().map(|v| v as i64)),
             parked_blocks::timestamp.eq(block.timestamp() as i64),
+            parked_blocks::base_layer_block_height.eq(block.base_layer_block_height() as i64),
             parked_blocks::base_layer_block_hash.eq(serialize_hex(block.base_layer_block_hash())),
         );
 
@@ -212,6 +213,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             blocks::signature.eq(block.get_signature().map(serialize_json).transpose()?),
             blocks::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
             blocks::timestamp.eq(block.timestamp() as i64),
+            blocks::base_layer_block_height.eq(block.base_layer_block_height() as i64),
             blocks::base_layer_block_hash.eq(serialize_hex(block.base_layer_block_hash())),
         );
 
@@ -481,6 +483,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             foreign_proposals::state.eq(foreign_proposal.state.to_string()),
             foreign_proposals::proposed_height.eq(foreign_proposal.proposed_height.map(|h| h.as_u64() as i64)),
             foreign_proposals::transactions.eq(serialize_json(&foreign_proposal.transactions)?),
+            foreign_proposals::base_layer_block_height.eq(foreign_proposal.base_layer_block_height as i64),
         );
 
         diesel::insert_into(foreign_proposals::table)

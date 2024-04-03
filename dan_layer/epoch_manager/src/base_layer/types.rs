@@ -134,6 +134,10 @@ pub enum EpochManagerRequest<TAddr> {
         buckets: HashSet<Shard>,
         reply: Reply<HashMap<Shard, Committee<TAddr>>>,
     },
+    GetBaseLayerBlockHeight {
+        hash: FixedHash,
+        reply: Reply<Option<u64>>,
+    },
     GetFeeClaimPublicKey {
         reply: Reply<Option<PublicKey>>,
     },

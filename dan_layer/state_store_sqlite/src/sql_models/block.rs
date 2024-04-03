@@ -38,6 +38,7 @@ pub struct Block {
     pub created_at: PrimitiveDateTime,
     pub block_time: Option<i64>,
     pub timestamp: i64,
+    pub base_layer_block_height: i64,
     pub base_layer_block_hash: String,
 }
 
@@ -74,6 +75,7 @@ impl Block {
             self.created_at,
             self.block_time.map(|v| v as u64),
             self.timestamp as u64,
+            self.base_layer_block_height as u64,
             deserialize_hex_try_from(&self.base_layer_block_hash)?,
         ))
     }
@@ -99,6 +101,7 @@ pub struct ParkedBlock {
     pub created_at: PrimitiveDateTime,
     pub block_time: Option<i64>,
     pub timestamp: i64,
+    pub base_layer_block_height: i64,
     pub base_layer_block_hash: String,
 }
 
@@ -137,6 +140,7 @@ impl TryFrom<ParkedBlock> for consensus_models::Block {
             value.created_at,
             value.block_time.map(|v| v as u64),
             value.timestamp as u64,
+            value.base_layer_block_height as u64,
             deserialize_hex_try_from(&value.base_layer_block_hash)?,
         ))
     }
