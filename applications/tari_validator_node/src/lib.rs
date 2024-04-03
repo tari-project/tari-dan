@@ -91,7 +91,10 @@ pub struct ShardKey {
     substate_address: Option<SubstateAddress>,
 }
 
-pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: ShutdownSignal) -> Result<(), anyhow::Error> {
+pub async fn run_validator_node(
+    config: &ApplicationConfig,
+    shutdown_signal: ShutdownSignal,
+) -> Result<(), anyhow::Error> {
     let keypair = setup_keypair_prompt(
         &config.validator_node.identity_file,
         !config.validator_node.dont_create_id,
@@ -164,19 +167,15 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
     Ok(())
 }
 
-async fn create_base_layer_client(
-    config: &ApplicationConfig,
-) -> Result<GrpcBaseNodeClient, ExitError> {
+async fn create_base_layer_client(config: &ApplicationConfig) -> Result<GrpcBaseNodeClient, ExitError> {
     let base_node_address = config.validator_node.base_node_grpc_address.clone().unwrap_or_else(|| {
         let port = grpc_default_port(ApplicationType::BaseNode, config.network);
         format!("127.0.0.1:{port}")
     });
     info!(target: LOG_TARGET, "Connecting to base node on GRPC at {}", base_node_address);
-    let base_node_client =
-        GrpcBaseNodeClient::connect(base_node_address)
+    let base_node_client = GrpcBaseNodeClient::connect(base_node_address)
         .await
         .map_err(|error| ExitError::new(ExitCode::ConfigError, error))?;
-
 
     Ok(base_node_client)
 }

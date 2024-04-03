@@ -37,7 +37,7 @@ pub struct BaseLayerValidatorNode {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub public_key: PublicKey,
     pub shard_key: SubstateAddress,
-    pub sidechain_id: Option<PublicKey>
+    pub sidechain_id: Option<PublicKey>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

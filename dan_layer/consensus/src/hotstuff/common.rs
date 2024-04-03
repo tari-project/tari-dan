@@ -4,8 +4,7 @@
 use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{committee::Committee, Epoch, NodeAddressable, NodeHeight};
-use tari_dan_common_types::shard::Shard;
+use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::consensus_models::{Block, LeafBlock, PendingStateTreeDiff, QuorumCertificate};
 use tari_engine_types::{
     hashing::substate_value_hasher32,

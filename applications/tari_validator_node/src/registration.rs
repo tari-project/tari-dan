@@ -36,9 +36,7 @@ use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, Epoc
 use tari_shutdown::ShutdownSignal;
 use tokio::{task, task::JoinHandle, time};
 
-use crate::{
-    ApplicationConfig,
-};
+use crate::ApplicationConfig;
 
 const LOG_TARGET: &str = "tari::dan::validator_node::auto_registration";
 const MAX_REGISTRATION_ATTEMPTS: u8 = 8;
@@ -114,14 +112,12 @@ async fn handle_epoch_changed(
 
     let remaining_epochs = epoch_manager.remaining_registration_epochs().await?.unwrap_or(Epoch(0));
     if remaining_epochs.is_zero() {
-
-
         warn!(
             target: LOG_TARGET,
             "📋️ Validator has not registered for the current epoch. Auto-registration TODO"
         );
         todo!();
-        //register(wallet_client, keypair, epoch_manager).await?;
+        // register(wallet_client, keypair, epoch_manager).await?;
     } else {
         info!(
             target: LOG_TARGET,

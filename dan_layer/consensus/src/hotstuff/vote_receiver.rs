@@ -226,7 +226,6 @@ where TConsensusSpec: ConsensusSpec
             };
         }
 
-
         let block_height = vote_data.block.height();
         let qc = create_qc(vote_data);
         info!(target: LOG_TARGET, "🔥 New QC {}", qc);

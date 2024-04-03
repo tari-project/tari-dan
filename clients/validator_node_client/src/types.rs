@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use tari_base_node_client::types::BaseLayerValidatorNode;
 use tari_common_types::{
     transaction::TxId,
-    types::{FixedHash, PublicKey},
+    types::{FixedHash, PrivateKey, PublicKey, Signature},
 };
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
@@ -59,8 +59,6 @@ use tari_engine_types::{
 use tari_transaction::{Transaction, TransactionId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
-use tari_common_types::types::{PrivateKey, Signature};
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
@@ -659,7 +657,7 @@ pub struct RegisterValidatorNodeRequest {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub fee_claim_public_key: PublicKey,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub validator_network_key: Option<PrivateKey>
+    pub validator_network_key: Option<PrivateKey>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

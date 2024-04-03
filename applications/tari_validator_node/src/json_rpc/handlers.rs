@@ -119,10 +119,7 @@ pub struct JsonRpcHandlers {
 }
 
 impl JsonRpcHandlers {
-    pub fn new(
-        base_node_client: GrpcBaseNodeClient,
-        services: &Services,
-    ) -> Self {
+    pub fn new(base_node_client: GrpcBaseNodeClient, services: &Services) -> Self {
         Self {
             keypair: services.keypair.clone(),
             mempool: services.mempool.clone(),

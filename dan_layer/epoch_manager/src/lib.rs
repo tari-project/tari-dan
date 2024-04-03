@@ -34,8 +34,7 @@ pub use error::EpochManagerError;
 mod event;
 pub use event::*;
 
-
 pub struct ValidatorNodeMerkleTree {
-    sidechains_tree : SparseMerkleTree<ValidatorNodeSmtHasherBlake256>,
-//    trees_data: HashMap<Option<PublicKey>, Vec<>>
+    sidechains_tree: SparseMerkleTree<ValidatorNodeSmtHasherBlake256>,
+    //    trees_data: HashMap<Option<PublicKey>, Vec<>>
 }

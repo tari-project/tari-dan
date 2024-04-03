@@ -5,8 +5,8 @@ pub mod crypto;
 
 mod epoch;
 
-use tari_mmr::sparse_merkle_tree::SparseMerkleTree;
 pub use epoch::Epoch;
+use tari_mmr::sparse_merkle_tree::SparseMerkleTree;
 
 pub mod committee;
 pub mod hasher;
@@ -33,6 +33,3 @@ pub use peer_address::*;
 pub mod uint;
 
 pub use tari_engine_types::serde_with;
-
-
-

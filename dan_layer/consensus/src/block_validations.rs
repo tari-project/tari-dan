@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common::configuration::Network;
-use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey};
+use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey, NodeHeight};
 use tari_dan_storage::consensus_models::Block;
 use tari_epoch_manager::EpochManagerReader;
 
@@ -10,7 +10,6 @@ use crate::{
     hotstuff::{HotStuffError, HotstuffConfig, ProposalValidationError},
     traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
 };
-use tari_dan_common_types::NodeHeight;
 
 pub fn check_network(candidate_block: &Block, network: Network) -> Result<(), ProposalValidationError> {
     if candidate_block.network() != network {
@@ -148,11 +147,13 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         let vn = epoch_manager
             .get_validator_node_by_public_key(qc.epoch(), signature.public_key())
             .await?;
-        let actual_shard =  epoch_manager.get_committee_shard(qc.epoch(), vn.shard_key).await?.shard();
+        let actual_shard = epoch_manager
+            .get_committee_shard(qc.epoch(), vn.shard_key)
+            .await?
+            .shard();
         if actual_shard != qc.shard() {
             return Err(ProposalValidationError::ValidatorNotInCommittee {
-                validator
-                : signature.public_key().to_string(),
+                validator: signature.public_key().to_string(),
                 expected_shard: qc.shard().to_string(),
                 actual_shard: actual_shard.to_string(),
             }

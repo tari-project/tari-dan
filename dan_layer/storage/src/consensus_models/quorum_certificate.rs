@@ -16,13 +16,13 @@ use tari_dan_common_types::{
     },
     optional::Optional,
     serde_with,
+    shard::Shard,
     Epoch,
     NodeHeight,
 };
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
-use tari_dan_common_types::shard::Shard;
 
 use crate::{
     consensus_models::{Block, BlockId, HighQc, LastVoted, LeafBlock, QuorumDecision, ValidatorSignature},

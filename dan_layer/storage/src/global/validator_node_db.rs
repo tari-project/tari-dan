@@ -47,7 +47,7 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         shard_key: SubstateAddress,
         epoch: Epoch,
         fee_claim_public_key: PublicKey,
-        sidechain_id: Option<PublicKey>
+        sidechain_id: Option<PublicKey>,
     ) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend
             .insert_validator_node(
@@ -57,7 +57,7 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
                 shard_key,
                 epoch,
                 fee_claim_public_key,
-                sidechain_id
+                sidechain_id,
             )
             .map_err(TGlobalDbAdapter::Error::into)
     }

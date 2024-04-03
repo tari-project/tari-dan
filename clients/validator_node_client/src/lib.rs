@@ -68,7 +68,7 @@ impl ValidatorNodeClient {
     pub async fn register_validator_node(
         &mut self,
         claim_public_key: PublicKey,
-        validator_network_key: Option<PrivateKey>
+        validator_network_key: Option<PrivateKey>,
     ) -> Result<TxId, ValidatorNodeClientError> {
         let resp: RegisterValidatorNodeResponse = self
             .send_request("register_validator_node", RegisterValidatorNodeRequest {

@@ -3,11 +3,10 @@
 
 use diesel::{Queryable, QueryableByName};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, NodeHeight};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight};
 use tari_dan_storage::{consensus_models, StorageError};
 use tari_utilities::byte_array::ByteArray;
 use time::PrimitiveDateTime;
-use tari_dan_common_types::shard::Shard;
 
 use crate::{
     schema::blocks,

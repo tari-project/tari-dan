@@ -151,7 +151,6 @@ where
             self.attempt_relay_reservation();
         }
 
-
         let mut check_connections_interval = time::interval(self.config.check_connections_interval);
 
         self.swarm
@@ -382,7 +381,6 @@ where
             }
             self.is_initial_bootstrap_complete = true;
         }
-
 
         Ok(())
     }
