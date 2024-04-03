@@ -206,6 +206,13 @@ pub trait SubstateStoreReadTransaction {
         offset: u32,
         limit: u32,
     ) -> Result<Vec<EventData>, StorageError>;
+    fn get_events(
+        &mut self,
+        substate_id_filter: Option<SubstateId>,
+        topic_filter: Option<String>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Event>, StorageError>;
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
@@ -447,6 +454,49 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
                 reason: format!("get_events_by_version: {}", e),
             })?;
         Ok(res)
+    }
+    
+    fn get_events(
+        &mut self,
+        substate_id_filter: Option<SubstateId>,
+        topic_filter: Option<String>,
+        _offset: u32,
+        _limit: u32,
+    ) -> Result<Vec<Event>, StorageError> {
+        // TODO: allow to query by payload as well, unifying all event methods into one
+        info!(
+            target: LOG_TARGET,
+            "Querying substate scanner database: get_events with substate_id_filter = {:?} and \
+            topic_filter = {:?}",
+            substate_id_filter,
+            topic_filter
+        );
+        use crate::substate_storage_sqlite::schema::events;
+
+        let mut query = events::table.into_boxed();
+
+        if let Some(substate_id) = substate_id_filter {
+            query = query.filter(
+                events::substate_id
+                    .eq(substate_id.to_string())
+            );
+        }
+
+        if let Some(topic) = topic_filter {
+            query = query.filter(
+                events::topic
+                    .eq(topic)
+            );
+        }
+
+        let events = query
+            .get_results::<Event>(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("get_events: {}", e),
+            })?;
+
+        Ok(events)
+        
     }
 }
 

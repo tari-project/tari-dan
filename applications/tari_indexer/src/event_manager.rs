@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::ops::RangeInclusive;
-
+use std::collections::BTreeMap;
 use tari_common::configuration::Network;
 use futures::StreamExt;
 use log::*;
@@ -42,6 +42,15 @@ use std::collections::HashSet;
 use tari_bor::decode;
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::commit_result::ExecuteResult;
+use crate::substate_storage_sqlite::models::events::NewEvent;
+use crate::substate_storage_sqlite::sqlite_substate_store_factory::SqliteSubstateStore;
+use crate::substate_storage_sqlite::sqlite_substate_store_factory::SubstateStore;
+use crate::substate_storage_sqlite::sqlite_substate_store_factory::SubstateStoreReadTransaction;
+use crate::substate_storage_sqlite::sqlite_substate_store_factory::SubstateStoreWriteTransaction;
+use tari_crypto::tari_utilities::message_format::MessageFormat;
+use tari_template_lib::Hash;
+use std::str::FromStr;
+use tari_template_lib::models::Metadata;
 
 const LOG_TARGET: &str = "tari::indexer::event_manager";
 
@@ -49,6 +58,7 @@ pub struct EventManager {
     network: Network,
     epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
     client_factory: TariValidatorNodeRpcClientFactory,
+    substate_store: SqliteSubstateStore,
 }
 
 impl EventManager {
@@ -56,11 +66,13 @@ impl EventManager {
         network: Network,
         epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
         client_factory: TariValidatorNodeRpcClientFactory,
+        substate_store: SqliteSubstateStore,
     ) -> Self {
         Self {
             network,
             epoch_manager,
             client_factory,
+            substate_store
         }
     }
 
@@ -87,6 +99,9 @@ impl EventManager {
             events.append(&mut transaction_events);
         }
 
+        self.store_events_in_db(&events).await?;
+        let events = self.get_events_from_db(topic, substate_id).await?;
+        
         info!(
             target: LOG_TARGET,
                 "Events: {:?}",
@@ -94,6 +109,49 @@ impl EventManager {
             );
 
         Ok(events)
+    }
+
+    async fn get_events_from_db(&self, topic: Option<String>, substate_id: Option<SubstateId>) -> Result<Vec<Event>, anyhow::Error> {
+        let mut tx = self.substate_store.create_read_tx()?;
+        let rows = tx.get_events(substate_id, topic, 0, 100)?;
+
+        let mut events = vec![];
+        for row in rows {
+            let substate_id = row.substate_id.map(|str| SubstateId::from_str(&str)).transpose()?;
+            let template_address = Hash::from_hex(&row.template_address)?;
+            let tx_hash = Hash::from_hex(&row.tx_hash)?;
+            let topic = row.topic;
+            let payload = Metadata::from(serde_json::from_str::<BTreeMap<String, String>>(row.payload.as_str())?);
+            events.push(Event::new(
+                substate_id,
+                template_address,
+                tx_hash,
+                topic,
+                payload
+            ));
+        }
+
+        Ok(events)
+    }
+
+    async fn store_events_in_db(&self, events: &Vec<Event>) -> Result<(), anyhow::Error> {
+        let mut tx = self.substate_store.create_write_tx()?;
+
+        for event in events {
+            let row = NewEvent {
+                template_address: event.template_address().to_string(),
+                tx_hash: event.tx_hash().to_string(),
+                topic: event.topic(),
+                payload: event.payload().to_json().expect("Failed to convert to JSON"),
+                substate_id: event.substate_id().map(|s| s.to_string()),
+                version: 0_i32,
+            };
+            tx.save_event(row)?;
+        }
+
+        tx.commit()?;
+
+        Ok(())
     }
 
     async fn get_events_for_transaction(&self, transaction_id: TransactionId) -> Result<Vec<Event>, anyhow::Error> {
