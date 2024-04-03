@@ -90,15 +90,6 @@ pub enum EpochManagerRequest<TAddr> {
         epoch: Epoch,
         reply: Reply<Vec<ValidatorNode<TAddr>>>,
     },
-    GetValidatorSetMergedMerkleProof {
-        epoch: Epoch,
-        validator_set: Vec<PublicKey>,
-        reply: Reply<MergedValidatorNodeMerkleProof>,
-    },
-    GetValidatorNodeMerkleRoot {
-        epoch: Epoch,
-        reply: Reply<Vec<u8>>,
-    },
     IsValidatorInCommitteeForCurrentEpoch {
         shard: SubstateAddress,
         identity: TAddr,

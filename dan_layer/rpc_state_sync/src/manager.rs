@@ -300,6 +300,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         next_height,
                         block.justify().clone(),
                         block.epoch(),
+                        block.shard(),
                         *block.merkle_root(),
                         block.timestamp(),
                         *block.base_layer_block_hash(),

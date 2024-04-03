@@ -5,6 +5,7 @@ use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{committee::Committee, Epoch, NodeAddressable, NodeHeight};
+use tari_dan_common_types::shard::Shard;
 use tari_dan_storage::consensus_models::{Block, LeafBlock, PendingStateTreeDiff, QuorumCertificate};
 use tari_engine_types::{
     hashing::substate_value_hasher32,
@@ -33,6 +34,7 @@ pub const EXHAUST_DIVISOR: u64 = 20; // 5%
 pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
     network: Network,
     epoch: Epoch,
+    shard: Shard,
     high_qc: &QuorumCertificate,
     parent_merkle_root: FixedHash,
     new_height: NodeHeight,
@@ -68,6 +70,7 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
             current_height,
             high_qc.clone(),
             epoch,
+            shard,
             parent_merkle_root,
             parent_timestamp,
             parent_base_layer_block_hash,

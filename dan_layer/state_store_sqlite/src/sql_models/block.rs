@@ -7,6 +7,7 @@ use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{consensus_models, StorageError};
 use tari_utilities::byte_array::ByteArray;
 use time::PrimitiveDateTime;
+use tari_dan_common_types::shard::Shard;
 
 use crate::{
     schema::blocks,
@@ -23,6 +24,7 @@ pub struct Block {
     pub network: String,
     pub height: i64,
     pub epoch: i64,
+    pub shard: i32,
     pub proposed_by: String,
     pub qc_id: String,
     pub command_count: i64,
@@ -53,6 +55,7 @@ impl Block {
             qc.try_into()?,
             NodeHeight(self.height as u64),
             Epoch(self.epoch as u64),
+            Shard::from(self.shard as u32),
             PublicKey::from_canonical_bytes(&deserialize_hex(&self.proposed_by)?).map_err(|_| {
                 StorageError::DecodingError {
                     operation: "try_convert",
@@ -85,6 +88,7 @@ pub struct ParkedBlock {
     pub network: String,
     pub height: i64,
     pub epoch: i64,
+    pub shard: i32,
     pub proposed_by: String,
     pub justify: String,
     pub command_count: i64,
@@ -114,6 +118,7 @@ impl TryFrom<ParkedBlock> for consensus_models::Block {
             deserialize_json(&value.justify)?,
             NodeHeight(value.height as u64),
             Epoch(value.epoch as u64),
+            Shard::from(value.shard as u32),
             PublicKey::from_canonical_bytes(&deserialize_hex(&value.proposed_by)?).map_err(|_| {
                 StorageError::DecodingError {
                     operation: "try_convert",

@@ -191,5 +191,7 @@ pub enum ProposalValidationError {
         from_block: FixedHash,
     },
     #[error("Problem converting values")]
-    QCConversionError
+    QCConversionError,
+    #[error("Validator {validator} is not in committee for shard {expected_shard}. Actual shard: {actual_shard}")]
+    ValidatorNotInCommittee{ validator: String, expected_shard: String, actual_shard: String}
 }

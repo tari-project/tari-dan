@@ -313,6 +313,7 @@ where TConsensusSpec: ConsensusSpec
             high_qc,
             next_height,
             epoch,
+            local_committee_shard.shard(),
             proposed_by,
             commands,
             state_root,

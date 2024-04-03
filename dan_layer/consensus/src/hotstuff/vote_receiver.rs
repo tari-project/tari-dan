@@ -226,17 +226,9 @@ where TConsensusSpec: ConsensusSpec
             };
         }
 
-        // Generate merkle proofs for signer set
-        let merged_proof = self
-            .epoch_manager
-            .get_validator_set_merged_merkle_proof(
-                current_epoch,
-                vote_data.signatures.iter().map(|s| s.public_key().clone()).collect(),
-            )
-            .await?;
 
         let block_height = vote_data.block.height();
-        let qc = create_qc(vote_data, merged_proof);
+        let qc = create_qc(vote_data);
         info!(target: LOG_TARGET, "🔥 New QC {}", qc);
         let high_qc = self.store.with_write_tx(|tx| qc.update_high_qc(tx))?;
 
@@ -281,7 +273,7 @@ where TConsensusSpec: ConsensusSpec
     }
 }
 
-fn create_qc(vote_data: VoteData, merged_proof: MergedValidatorNodeMerkleProof) -> QuorumCertificate {
+fn create_qc(vote_data: VoteData) -> QuorumCertificate {
     let VoteData {
         signatures,
         leaf_hashes,
@@ -292,8 +284,8 @@ fn create_qc(vote_data: VoteData, merged_proof: MergedValidatorNodeMerkleProof) 
         *block.id(),
         block.height(),
         block.epoch(),
+        block.shard(),
         signatures,
-        merged_proof,
         leaf_hashes,
         quorum_decision,
     )

@@ -178,19 +178,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                 handle(reply, self.inner.is_validator_in_committee(epoch, shard, &identity));
             },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.subscribe())),
-            EpochManagerRequest::GetValidatorSetMergedMerkleProof {
-                epoch,
-                validator_set,
-                reply,
-            } => {
-                handle(
-                    reply,
-                    self.inner.get_validator_set_merged_merkle_proof(epoch, validator_set),
-                );
-            },
-            EpochManagerRequest::GetValidatorNodeMerkleRoot { epoch, reply } => {
-                handle(reply, self.inner.get_validator_node_merkle_root(epoch))
-            },
             EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply } => {
                 handle(reply, self.inner.get_validator_nodes_per_epoch(epoch))
             },

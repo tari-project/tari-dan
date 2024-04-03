@@ -83,14 +83,6 @@ pub trait EpochManagerReader: Send + Sync {
         Ok(results)
     }
 
-    async fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError>;
-
-    async fn get_validator_set_merged_merkle_proof(
-        &self,
-        epoch: Epoch,
-        validators: Vec<PublicKey>,
-    ) -> Result<MergedValidatorNodeMerkleProof, EpochManagerError>;
-
     async fn get_our_validator_node(&self, epoch: Epoch) -> Result<ValidatorNode<Self::Addr>, EpochManagerError>;
     async fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, EpochManagerError>;
     async fn get_committee_shard(

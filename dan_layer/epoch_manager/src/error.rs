@@ -43,6 +43,8 @@ pub enum EpochManagerError {
     IntegerOverflow { func: &'static str },
     #[error("Invalid epoch: {epoch}")]
     InvalidEpoch { epoch: Epoch },
+    #[error("Could not create SMT: {0}")]
+    SmtError(#[from] tari_mmr::sparse_merkle_tree::SMTError)
 }
 
 impl EpochManagerError {

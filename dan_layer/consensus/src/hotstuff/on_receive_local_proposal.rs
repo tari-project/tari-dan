@@ -408,6 +408,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     next_height,
                     candidate_block.justify().clone(),
                     candidate_block.epoch(),
+                    local_committee_shard.shard(),
                     *candidate_block.merkle_root(),
                     last_dummy_block.timestamp(),
                     *last_dummy_block.base_layer_block_hash(),
