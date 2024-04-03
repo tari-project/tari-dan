@@ -185,7 +185,6 @@ where
 
     #[allow(clippy::too_many_lines)]
     async fn handle_request(&mut self, request: NetworkingRequest<TMsg>) -> Result<(), NetworkingError> {
-        dbg!("heren");
         match request {
             NetworkingRequest::DialPeer { dial_opts, reply_tx } => {
                 let (tx_waiter, rx_waiter) = oneshot::channel();
@@ -365,7 +364,6 @@ where
         if self.active_connections.len() < self.relays.num_possible_relays() {
             info!(target: LOG_TARGET, "🥾 Bootstrapping with {} known relay peers", self.relays.num_possible_relays());
             for (peer, addrs) in self.relays.possible_relays() {
-                dbg!("heer");
                 self.swarm
                     .dial(
                         DialOpts::peer_id(*peer)
@@ -386,7 +384,6 @@ where
         }
 
 
-        dbg!("eneta");
         Ok(())
     }
 
@@ -446,7 +443,6 @@ where
                 for waiter in waiters {
                     let _ignore = waiter.send(Err(NetworkingError::OutgoingConnectionError(error.to_string())));
                 }
-                dbg!("here");
             },
             SwarmEvent::ExternalAddrConfirmed { address } => {
                 info!(target: LOG_TARGET, "🌍️ External address confirmed: {}", address);
