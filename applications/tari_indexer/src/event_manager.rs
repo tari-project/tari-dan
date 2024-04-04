@@ -31,7 +31,7 @@ use log::*;
 use tari_bor::decode;
 use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
-use tari_dan_common_types::{committee::Committee, PeerAddress, SubstateAddress};
+use tari_dan_common_types::{committee::{Committee, CommitteeShardInfo}, Epoch, PeerAddress, SubstateAddress};
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
 use tari_dan_storage::consensus_models::{Block, BlockId, Command, Decision, TransactionRecord};
 use tari_engine_types::{commit_result::ExecuteResult, events::Event, substate::SubstateId};
@@ -80,25 +80,45 @@ impl EventManager {
             "scan_events",
         );
 
-        // TODO: AND use the latest block id that we scanned
-        let new_blocks = self.get_new_blocks(None).await?;
-        let transaction_ids = self.extract_transaction_ids_from_blocks(new_blocks);
+        let mut event_count = 0;
 
-        let mut events = vec![];
-        for transaction_id in transaction_ids {
-            let mut transaction_events = self.get_events_for_transaction(transaction_id).await?;
-            events.append(&mut transaction_events);
+        let network_committee_info = self.epoch_manager.get_network_committees().await?;
+        let epoch = network_committee_info.epoch;
+        for committee in network_committee_info.committees {
+            info!(
+                target: LOG_TARGET,
+                "Scanning committee epoch={}, shard={}",
+                epoch,
+                committee.shard
+            );
+            // TODO: use the latest block id that we scanned for each committee
+            let new_blocks = self.get_new_blocks_from_committee(&mut committee.clone(), epoch).await?;
+            info!(
+                target: LOG_TARGET,
+                "Scanned {} blocks",
+                new_blocks.len()
+            );
+            let transaction_ids = self.extract_transaction_ids_from_blocks(new_blocks);
+            info!(
+                target: LOG_TARGET,
+                "Scanned {} transactions",
+                transaction_ids.len()
+            );
+
+            for transaction_id in transaction_ids {
+                let events = self.get_events_for_transaction(transaction_id).await?;
+                event_count += events.len();
+                self.store_events_in_db(&events).await?;
+            }
         }
 
-        self.store_events_in_db(&events).await?;
-
         info!(
-        target: LOG_TARGET,
+            target: LOG_TARGET,
             "Scanned {} events",
-            events.len()
+            event_count
         );
 
-        Ok(events.len())
+        Ok(event_count)
     }
 
     pub async fn get_events_from_db(
@@ -182,7 +202,7 @@ impl EventManager {
 
         warn!(
             target: LOG_TARGET,
-            "We could not get transaction result from any of the vns",
+            "We could not get transaction results from any of the vns",
         );
         Ok(vec![])
     }
@@ -224,11 +244,11 @@ impl EventManager {
         for block in blocks {
             for command in block.commands() {
                 match command {
-                    Command::Accept(t) => {
+                    Command::Accept(t) | Command::LocalOnly(t) => {
                         transaction_ids.insert(*t.id());
                     },
                     _ => {
-                        // we are only interested in confirmed transactions
+                        // we are only interested in events from confirmed transactions
                     },
                 }
             }
@@ -237,39 +257,51 @@ impl EventManager {
         transaction_ids
     }
 
-    async fn get_new_blocks(&self, start_block: Option<BlockId>) -> Result<Vec<Block>, anyhow::Error> {
-        let mut blocks = vec![];
+    async fn get_new_blocks_from_committee(&self, committee: &mut CommitteeShardInfo<PeerAddress>, epoch: Epoch) -> Result<Vec<Block>, anyhow::Error> {
+        // TODO: store and use the latest scanned block from database
+        let start_block = Block::zero_block(self.network);
+        let start_block_id = *start_block.id();
 
-        let committee = self.get_all_vns().await?;
+        committee.validators.shuffle();
 
-        let start_block_id = match start_block {
-            Some(id) => id,
-            None => {
-                let start_block = Block::zero_block(self.network);
-                *start_block.id()
-            },
-        };
-
-        for member in committee.addresses() {
+        for member in committee.validators.addresses() {
             let resp = self.get_blocks_from_vn(member, start_block_id).await;
 
             match resp {
-                Ok(mut vn_blocks) => {
-                    blocks.append(&mut vn_blocks);
+                Ok(blocks) => {
+                    // TODO: try more than 1 VN per commitee
+                    info!(
+                        target: LOG_TARGET,
+                        "Got {} blocks from VN {} (epoch={}, shard={})",
+                        blocks.len(),
+                        member,
+                        epoch,
+                        committee.shard,
+                    );
+                    return Ok(blocks);
                 },
                 Err(e) => {
                     // We do nothing on a single VN failure, we only log it
                     warn!(
                         target: LOG_TARGET,
-                        "Could not get blocks from vn {}: {}",
+                        "Could not get blocks from VN {} (epoch={}, shard={}): {}",
                         member,
+                        epoch,
+                        committee.shard,
                         e
                     );
                 },
             };
         }
-
-        Ok(blocks)
+    
+        // We don't raise an error if none of the VNs have blocks, the scanning will retry eventually
+        warn!(
+            target: LOG_TARGET,
+            "Could not get blocks from any of the VNs of the committee (epoch={}, shard={})",
+            epoch,
+            committee.shard
+        );
+        Ok(vec![])
     }
 
     async fn get_all_vns(&self) -> Result<Committee<PeerAddress>, anyhow::Error> {
@@ -308,11 +340,6 @@ impl EventManager {
                 .into_block()
                 .ok_or_else(|| anyhow::anyhow!("Expected peer to return a newblock"))?;
             let block = Block::try_from(new_block)?;
-            info!(
-                target: LOG_TARGET,
-                "scan_events: block={:?}",
-                block
-            );
 
             let Some(_) = stream.next().await else {
                 anyhow::bail!("Peer closed session before sending QC message")
