@@ -23,6 +23,7 @@
 use log::*;
 use rand::{prelude::*, rngs::OsRng};
 use tari_dan_common_types::{NodeAddressable, SubstateAddress};
+use tari_dan_storage::consensus_models::BlockId;
 use tari_engine_types::{
     events::Event,
     substate::{SubstateId, SubstateValue},
@@ -438,5 +439,21 @@ where
 
             version += 1;
         }
+    }
+
+    pub async fn scan_events(
+        &self,
+        start_block: Option<BlockId>,
+        topic: Option<String>,
+        substate_id: Option<SubstateId>,
+    ) -> Result<Vec<Event>, IndexerError> {
+        warn!(
+            target: LOG_TARGET,
+            "scan_events: start_block={:?}, topic={:?}, substate_id={:?}",
+            start_block,
+            topic,
+            substate_id
+        );
+        Ok(vec![])
     }
 }
