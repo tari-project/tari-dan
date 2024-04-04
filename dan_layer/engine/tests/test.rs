@@ -74,6 +74,7 @@ fn test_state() {
     assert_eq!(component.module_name, "State");
 
     let component = store.get_component(component_address2).unwrap();
+    assert_eq!(component.owner_key, Some(template_test.get_test_public_key_bytes()));
     assert_eq!(component.module_name, "State");
 
     // call the "set" method to update the instance value
@@ -106,7 +107,7 @@ fn test_composed() {
         .iter()
         .map(|f| f.name.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(functions, vec!["new", "set", "get"]);
+    assert_eq!(functions, vec!["new", "restricted", "set", "get"]);
 
     let component_state: ComponentAddress = template_test.call_function("State", "new", args![], vec![]);
     let component_hw: ComponentAddress = template_test.call_function("HelloWorld", "new", args!["أهلا"], vec![]);

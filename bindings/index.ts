@@ -104,6 +104,6 @@ export * from "./src/types/UnsignedTransaction";
 export * from "./src/types/ValidatorSignature";
 export * from "./src/types/VaultId";
 export * from "./src/types/Vault";
-export * from "./src/types/VersionedSubstate";
+export * from "./src/types/VersionedSubstateId";
 export * from "./src/types/ViewableBalanceProof";
 export * from "./src/helpers/helpers";

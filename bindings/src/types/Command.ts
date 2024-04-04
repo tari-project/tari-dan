@@ -6,4 +6,5 @@ export type Command =
   | { Prepare: TransactionAtom }
   | { LocalPrepared: TransactionAtom }
   | { Accept: TransactionAtom }
-  | { ForeignProposal: ForeignProposal };
+  | { ForeignProposal: ForeignProposal }
+  | { LocalOnly: TransactionAtom };

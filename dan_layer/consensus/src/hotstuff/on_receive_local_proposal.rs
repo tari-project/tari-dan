@@ -144,6 +144,11 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .await?;
 
         let maybe_high_qc_and_block = self.store.with_write_tx(|tx| {
+            if block.exists(tx.deref_mut())? {
+                info!(target: LOG_TARGET, "🧊 Block {} already exists", block);
+                return Ok(None);
+            }
+
             let Some((valid_block, tree_diff)) =
                 self.validate_block(tx, block, &local_committee, &local_committee_shard)?
             else {

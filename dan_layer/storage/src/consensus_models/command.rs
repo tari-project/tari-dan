@@ -176,6 +176,7 @@ pub enum Command {
     LocalPrepared(TransactionAtom),
     Accept(TransactionAtom),
     ForeignProposal(ForeignProposal),
+    LocalOnly(TransactionAtom),
 }
 
 #[derive(PartialEq, Eq, Ord, PartialOrd)]
@@ -199,6 +200,7 @@ impl Command {
             Command::Prepare(tx) => Some(tx),
             Command::LocalPrepared(tx) => Some(tx),
             Command::Accept(tx) => Some(tx),
+            Command::LocalOnly(tx) => Some(tx),
             Command::ForeignProposal(_) => None,
         }
     }
@@ -208,6 +210,7 @@ impl Command {
             Command::Prepare(tx) => CommandId::TransactionId(tx.id),
             Command::LocalPrepared(tx) => CommandId::TransactionId(tx.id),
             Command::Accept(tx) => CommandId::TransactionId(tx.id),
+            Command::LocalOnly(tx) => CommandId::TransactionId(tx.id),
             Command::ForeignProposal(foreign_proposal) => CommandId::ForeignProposal(foreign_proposal.clone()),
         }
     }
@@ -217,6 +220,7 @@ impl Command {
             Command::Prepare(tx) => tx.decision,
             Command::LocalPrepared(tx) => tx.decision,
             Command::Accept(tx) => tx.decision,
+            Command::LocalOnly(tx) => tx.decision,
             Command::ForeignProposal(_) => panic!("ForeignProposal does not have a decision"),
         }
     }
@@ -249,11 +253,22 @@ impl Command {
         }
     }
 
+    pub fn committing(&self) -> Option<&TransactionAtom> {
+        let committing = match self {
+            Command::Accept(tx) => Some(tx),
+            Command::LocalOnly(tx) => Some(tx),
+            _ => None,
+        };
+
+        committing.filter(|_| self.decision().is_commit())
+    }
+
     pub fn involved_shards(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
         match self {
             Command::Prepare(tx) => tx.evidence.shards_iter(),
             Command::LocalPrepared(tx) => tx.evidence.shards_iter(),
             Command::Accept(tx) => tx.evidence.shards_iter(),
+            Command::LocalOnly(tx) => tx.evidence.shards_iter(),
             Command::ForeignProposal(_) => panic!("ForeignProposal does not have involved shards"),
         }
     }
@@ -263,6 +278,7 @@ impl Command {
             Command::Prepare(tx) => &tx.evidence,
             Command::LocalPrepared(tx) => &tx.evidence,
             Command::Accept(tx) => &tx.evidence,
+            Command::LocalOnly(tx) => &tx.evidence,
             Command::ForeignProposal(_) => panic!("ForeignProposal does not have evidence"),
         }
     }
@@ -286,6 +302,7 @@ impl Display for Command {
             Command::Prepare(tx) => write!(f, "Prepare({}, {})", tx.id, tx.decision),
             Command::LocalPrepared(tx) => write!(f, "LocalPrepared({}, {})", tx.id, tx.decision),
             Command::Accept(tx) => write!(f, "Accept({}, {})", tx.id, tx.decision),
+            Command::LocalOnly(tx) => write!(f, "LocalOnly({}, {})", tx.id, tx.decision),
             Command::ForeignProposal(fp) => write!(f, "ForeignProposal {}", fp.block_id),
         }
     }

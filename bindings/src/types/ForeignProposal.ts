@@ -8,4 +8,5 @@ export interface ForeignProposal {
   state: ForeignProposalState;
   proposed_height: NodeHeight | null;
   transactions: Array<string>;
+  base_layer_block_height: bigint;
 }

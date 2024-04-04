@@ -11,9 +11,9 @@
 use std::time::Duration;
 
 use tari_consensus::hotstuff::HotStuffError;
-use tari_dan_common_types::{Epoch, NodeHeight};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{BlockId, Decision},
+    consensus_models::{Block, BlockId, Command, Decision},
     StateStore,
     StateStoreReadTransaction,
 };
@@ -54,6 +54,26 @@ async fn single_transaction() {
 
     test.assert_all_validators_at_same_height().await;
     test.assert_all_validators_committed();
+
+    // Assert all LocalOnly
+    test.get_validator(&TestAddress::new("1"))
+        .state_store
+        .with_read_tx(|tx| {
+            let mut block = Some(Block::get_tip(tx)?);
+            loop {
+                block = block.as_ref().unwrap().get_parent(tx).optional()?;
+                let Some(b) = block.as_ref() else {
+                    break;
+                };
+
+                for cmd in b.commands() {
+                    assert!(matches!(cmd, Command::LocalOnly(_)));
+                }
+            }
+            Ok::<_, HotStuffError>(())
+        })
+        .unwrap();
+
     test.assert_clean_shutdown().await;
 }
 
@@ -298,9 +318,8 @@ async fn leader_failure_output_conflict() {
     setup_logger();
     let mut test = Test::builder()
         .with_test_timeout(Duration::from_secs(60))
-        .debug_sql("/tmp/test{}.db")
         .add_committee(0, vec!["1", "2"])
-        // .add_committee(1, vec!["3", "4"])
+        .add_committee(1, vec!["3", "4"])
         .start()
         .await;
 
@@ -323,7 +342,6 @@ async fn leader_failure_output_conflict() {
         .await;
 
     test.wait_all_have_at_least_n_new_transactions_in_pool(2).await;
-    tokio::time::sleep(Duration::from_secs(1)).await;
     test.start_epoch(Epoch(0)).await;
 
     loop {
@@ -334,7 +352,7 @@ async fn leader_failure_output_conflict() {
         }
 
         let leaf1 = test.get_validator(&TestAddress::new("1")).get_leaf_block();
-        let leaf2 = test.get_validator(&TestAddress::new("2")).get_leaf_block();
+        let leaf2 = test.get_validator(&TestAddress::new("3")).get_leaf_block();
         if leaf1.height > NodeHeight(30) || leaf2.height > NodeHeight(30) {
             panic!(
                 "Not all transaction committed after {}/{} blocks",

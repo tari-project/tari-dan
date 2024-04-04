@@ -9,8 +9,8 @@ use tari_bor::to_value;
 use super::TOKEN_SYMBOL;
 use crate::{
     args::MintArg,
-    auth::{AccessRule, OwnerRule, ResourceAccessRules},
-    models::{Bucket, Metadata, NonFungibleId, ResourceAddress},
+    auth::{AccessRule, AuthHook, OwnerRule, ResourceAccessRules},
+    models::{Bucket, ComponentAddress, Metadata, NonFungibleId, ResourceAddress},
     resource::{ResourceManager, ResourceType},
 };
 
@@ -21,6 +21,7 @@ pub struct NonFungibleResourceBuilder {
     access_rules: ResourceAccessRules,
     tokens_ids: BTreeMap<NonFungibleId, (tari_bor::Value, tari_bor::Value)>,
     token_symbol: Option<String>,
+    authorize_hook: Option<AuthHook>,
 }
 
 impl NonFungibleResourceBuilder {
@@ -32,6 +33,7 @@ impl NonFungibleResourceBuilder {
             access_rules: ResourceAccessRules::new(),
             tokens_ids: BTreeMap::new(),
             token_symbol: None,
+            authorize_hook: None,
         }
     }
 
@@ -146,6 +148,36 @@ impl NonFungibleResourceBuilder {
         self
     }
 
+    /// Specify a hook method that will be called to authorize actions on the resource.
+    /// The signature of the method must be `fn(action: ResourceAuthAction, caller: CallerContext)`.
+    /// The method should panic to deny the action.
+    /// The resource will fail to build if the component's template does not have a method with the specified signature.
+    /// Hooks are only run when the resource is acted on by an external component.
+    ///
+    /// ## Examples
+    ///
+    /// Building a resource with a hook from within a component
+    /// ```rust
+    /// use tari_template_lib::{caller_context::CallerContext, prelude::ResourceBuilder};
+    /// ResourceBuilder::non_fungible()
+    ///     .with_authorization_hook(CallerContext::current_component_address(), "my_hook")
+    ///     .build();
+    /// ```
+    ///
+    /// Building a resource with a hook in a static template function. The address is allocated beforehand.
+    ///
+    /// ```rust
+    /// use tari_template_lib::{caller_context::CallerContext, prelude::ResourceBuilder};
+    /// let alloc = CallerContext::allocate_component_address();
+    /// ResourceBuilder::non_fungible()
+    ///     .with_authorization_hook(*alloc.address(), "my_hook")
+    ///     .build();
+    /// ```
+    pub fn with_authorization_hook<T: Into<String>>(mut self, address: ComponentAddress, auth_callback: T) -> Self {
+        self.authorize_hook = Some(AuthHook::new(address, auth_callback.into()));
+        self
+    }
+
     /// Build the resource, returning the address
     pub fn build(self) -> ResourceAddress {
         // TODO: Improve API
@@ -156,6 +188,7 @@ impl NonFungibleResourceBuilder {
             self.metadata,
             None,
             self.token_symbol,
+            self.authorize_hook,
         );
         address
     }
@@ -172,6 +205,7 @@ impl NonFungibleResourceBuilder {
             self.metadata,
             Some(resource),
             self.token_symbol,
+            self.authorize_hook,
         );
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
@@ -182,6 +216,7 @@ impl NonFungibleResourceBuilder {
         mut metadata: Metadata,
         resource: Option<MintArg>,
         token_symbol: Option<String>,
+        authorize_hook: Option<AuthHook>,
     ) -> (ResourceAddress, Option<Bucket>) {
         if let Some(symbol) = token_symbol {
             metadata.insert(TOKEN_SYMBOL, symbol);
@@ -194,6 +229,7 @@ impl NonFungibleResourceBuilder {
             metadata,
             resource,
             None,
+            authorize_hook,
         )
     }
 }

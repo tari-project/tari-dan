@@ -61,7 +61,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_engine_types::lock::LockFlag;
-use tari_transaction::TransactionId;
+use tari_transaction::{TransactionId, VersionedSubstateId};
 use tari_utilities::ByteArray;
 
 use crate::{
@@ -1474,7 +1474,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         substates.into_iter().map(TryInto::try_into).collect()
     }
 
-    fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<SubstateAddress>>(
+    fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<VersionedSubstateId>>(
         &mut self,
         addresses: I,
     ) -> Result<bool, StorageError> {
@@ -1482,7 +1482,14 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         let count = substates::table
             .count()
-            .filter(substates::address.eq_any(addresses.into_iter().map(|s| serialize_hex(s.borrow()))))
+            .filter(
+                substates::address.eq_any(
+                    addresses
+                        .into_iter()
+                        .map(|v| v.borrow().to_substate_address())
+                        .map(serialize_hex),
+                ),
+            )
             .limit(1)
             .get_result::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -1666,18 +1673,18 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
     fn locked_outputs_check_all<I, B>(&mut self, output_addresses: I) -> Result<SubstateLockState, StorageError>
     where
         I: IntoIterator<Item = B>,
-        B: Borrow<SubstateAddress>,
+        B: Borrow<VersionedSubstateId>,
     {
         use crate::schema::locked_outputs;
 
         let outputs_hex = output_addresses
             .into_iter()
-            .map(|address| serialize_hex(address.borrow()))
-            .collect::<Vec<_>>();
+            .map(|address| serialize_hex(address.borrow().to_substate_address()));
 
         let has_conflict = locked_outputs::table
             .count()
             .filter(locked_outputs::substate_address.eq_any(outputs_hex))
+            .limit(1)
             .first::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "locked_outputs_check_all",

@@ -1,19 +1,12 @@
 //    Copyright 2024 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use std::time::Duration;
-
 use tari_consensus::traits::{
     BlockTransactionExecutor,
     BlockTransactionExecutorBuilder,
     BlockTransactionExecutorError,
 };
 use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
-use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
-    fees::FeeReceipt,
-};
-use tari_template_lib::Hash;
 use tari_transaction::Transaction;
 
 #[derive(Debug, Clone)]
@@ -48,22 +41,10 @@ where TStateStore: StateStore
     fn execute(
         &mut self,
         transaction: Transaction,
-        _db_tx: &mut TStateStore::ReadTransaction<'_>,
+        db_tx: &mut TStateStore::ReadTransaction<'_>,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
-        let outputs = vec![];
-        let result = ExecuteResult {
-            finalize: FinalizeResult {
-                transaction_hash: Hash::default(),
-                events: vec![],
-                logs: vec![],
-                execution_results: vec![],
-                result: TransactionResult::Reject(RejectReason::ExecutionFailure(
-                    "TestBlockTransactionProcessor is just a mock".to_owned(),
-                )),
-                fee_receipt: FeeReceipt::default(),
-            },
-        };
-        let execution_time = Duration::ZERO;
-        Ok(ExecutedTransaction::new(transaction, result, outputs, execution_time))
+        // Tests generate executed transactions, so if execute is called we expect it to already be in the database.
+        let executed = ExecutedTransaction::get(db_tx, transaction.id())?;
+        Ok(executed)
     }
 }
