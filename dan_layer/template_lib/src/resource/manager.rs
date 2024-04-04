@@ -43,7 +43,7 @@ use crate::{
     auth::{OwnerRule, ResourceAccessRules},
     crypto::{PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{Amount, Bucket, ConfidentialOutputProof, Metadata, NonFungible, NonFungibleId, ResourceAddress, VaultId},
-    prelude::ResourceType,
+    prelude::{AuthHook, ResourceType},
 };
 
 /// Utility for managing resources inside templates
@@ -103,6 +103,7 @@ impl ResourceManager {
         metadata: Metadata,
         mint_arg: Option<MintArg>,
         view_key: Option<RistrettoPublicKeyBytes>,
+        authorize_hook: Option<AuthHook>,
     ) -> (ResourceAddress, Option<Bucket>) {
         let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
             resource_ref: ResourceRef::Resource,
@@ -114,6 +115,7 @@ impl ResourceManager {
                 metadata,
                 mint_arg,
                 view_key,
+                authorize_hook,
             }],
         });
 

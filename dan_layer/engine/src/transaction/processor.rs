@@ -417,9 +417,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             LockFlag::Read
         };
 
-        let component_lock = runtime
-            .interface()
-            .lock_substate(&(*component_address).into(), lock_flag)?;
+        let component_lock = runtime.interface().lock_component(component_address, lock_flag)?;
 
         let args = runtime.resolve_args(args)?;
         let arg_scope = args
