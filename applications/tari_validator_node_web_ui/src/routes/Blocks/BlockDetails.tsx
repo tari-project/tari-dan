@@ -44,6 +44,7 @@ export default function BlockDetails() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<String>();
   const [block, setBlock] = useState<Block>();
+  const [localOnly, setLocalOnly] = useState<TransactionAtom[]>([]);
   const [prepare, setPrepare] = useState<TransactionAtom[]>([]);
   const [localPrepared, setLocalPrepared] = useState<TransactionAtom[]>([]);
   const [accept, setAccept] = useState<TransactionAtom[]>([]);
@@ -65,11 +66,15 @@ export default function BlockDetails() {
               }
             });
           }
+          setLocalOnly([]);
           setPrepare([]);
           setLocalPrepared([]);
           setAccept([]);
           for (let command of resp.block.commands) {
-            if ("Prepare" in command) {
+            if ("LocalOnly" in command) {
+              let newLocalOnly = command.LocalOnly;
+              setLocalOnly((localOnly: TransactionAtom[]) => [...localOnly, newLocalOnly]);
+            } else if ("Prepare" in command) {
               let newPrepare = command.Prepare;
               setPrepare((prepare: TransactionAtom[]) => [...prepare, newPrepare]);
             } else if ("LocalPrepared" in command) {
@@ -91,7 +96,7 @@ export default function BlockDetails() {
   }, [blockId]);
 
   const handleChange = (panel: string) => (event: React.SyntheticEvent, isExpanded: boolean) => {
-    setExpandedPanels((prevExpandedPanels) => {
+    setExpandedPanels((prevExpandedPanels: string[]) => {
       if (isExpanded) {
         return [...prevExpandedPanels, panel];
       } else {
@@ -216,6 +221,16 @@ export default function BlockDetails() {
                       </div>
                     </div>
                   </>
+                )}
+                {localOnly.length > 0 && (
+                  <Accordion expanded={expandedPanels.includes("panel1")} onChange={handleChange("panel1")}>
+                    <AccordionSummary aria-controls="panel1bh-content" id="panel1bh-header">
+                      <Typography>LocalOnly</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Transactions transactions={localOnly} />
+                    </AccordionDetails>
+                  </Accordion>
                 )}
                 {prepare.length > 0 && (
                   <Accordion expanded={expandedPanels.includes("panel1")} onChange={handleChange("panel1")}>

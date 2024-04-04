@@ -4,9 +4,9 @@
 use super::TOKEN_SYMBOL;
 use crate::{
     args::MintArg,
-    auth::{AccessRule, OwnerRule, ResourceAccessRules},
+    auth::{AccessRule, AuthHook, OwnerRule, ResourceAccessRules},
     crypto::RistrettoPublicKeyBytes,
-    models::{Bucket, Metadata, ResourceAddress},
+    models::{Bucket, ComponentAddress, Metadata, ResourceAddress},
     prelude::ConfidentialOutputProof,
     resource::{ResourceManager, ResourceType},
 };
@@ -19,6 +19,7 @@ pub struct ConfidentialResourceBuilder {
     view_key: Option<RistrettoPublicKeyBytes>,
     token_symbol: Option<String>,
     owner_rule: OwnerRule,
+    authorize_hook: Option<AuthHook>,
 }
 
 impl ConfidentialResourceBuilder {
@@ -31,6 +32,7 @@ impl ConfidentialResourceBuilder {
             view_key: None,
             token_symbol: None,
             owner_rule: OwnerRule::default(),
+            authorize_hook: None,
         }
     }
 
@@ -110,6 +112,36 @@ impl ConfidentialResourceBuilder {
         self
     }
 
+    /// Specify a hook method that will be called to authorize actions on the resource.
+    /// The signature of the method must be `fn(action: ResourceAuthAction, caller: CallerContext)`.
+    /// The method should panic to deny the action.
+    /// The resource will fail to build if the component's template does not have a method with the specified signature.
+    /// Hooks are only run when the resource is acted on by an external component.
+    ///
+    /// ## Examples
+    ///
+    /// Building a resource with a hook from within a component
+    /// ```rust
+    /// use tari_template_lib::{caller_context::CallerContext, prelude::ResourceBuilder};
+    /// ResourceBuilder::confidential()
+    ///     .with_authorization_hook(CallerContext::current_component_address(), "my_hook")
+    ///     .build();
+    /// ```
+    ///
+    /// Building a resource with a hook in a static template function. The address is allocated beforehand.
+    ///
+    /// ```rust
+    /// use tari_template_lib::{caller_context::CallerContext, prelude::ResourceBuilder};
+    /// let alloc = CallerContext::allocate_component_address();
+    /// ResourceBuilder::confidential()
+    ///     .with_authorization_hook(*alloc.address(), "my_hook")
+    ///     .build();
+    /// ```
+    pub fn with_authorization_hook<T: Into<String>>(mut self, address: ComponentAddress, auth_callback: T) -> Self {
+        self.authorize_hook = Some(AuthHook::new(address, auth_callback.into()));
+        self
+    }
+
     /// Build the resource, returning the address
     pub fn build(self) -> ResourceAddress {
         // TODO: Improve API
@@ -124,6 +156,7 @@ impl ConfidentialResourceBuilder {
             None,
             self.view_key,
             self.token_symbol,
+            self.authorize_hook,
         );
         address
     }
@@ -144,6 +177,7 @@ impl ConfidentialResourceBuilder {
             Some(resource),
             self.view_key,
             self.token_symbol,
+            self.authorize_hook,
         );
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
@@ -155,6 +189,7 @@ impl ConfidentialResourceBuilder {
         resource: Option<MintArg>,
         view_key: Option<RistrettoPublicKeyBytes>,
         token_symbol: Option<String>,
+        authorize_hook: Option<AuthHook>,
     ) -> (ResourceAddress, Option<Bucket>) {
         if let Some(symbol) = token_symbol {
             metadata.insert(TOKEN_SYMBOL, symbol);
@@ -166,6 +201,7 @@ impl ConfidentialResourceBuilder {
             metadata,
             resource,
             view_key,
+            authorize_hook,
         )
     }
 }

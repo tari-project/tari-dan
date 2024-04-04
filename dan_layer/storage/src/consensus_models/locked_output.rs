@@ -4,7 +4,7 @@
 use std::{borrow::Borrow, ops::DerefMut};
 
 use tari_dan_common_types::SubstateAddress;
-use tari_transaction::TransactionId;
+use tari_transaction::{TransactionId, VersionedSubstateId};
 
 use crate::{
     consensus_models::{BlockId, SubstateLockState},
@@ -25,7 +25,7 @@ impl LockedOutput {
         tx: &mut TTx,
         block_id: &BlockId,
         transaction_id: &TransactionId,
-        output_shards: &[SubstateAddress],
+        output_shards: &[VersionedSubstateId],
     ) -> Result<SubstateLockState, StorageError>
     where
         TTx: StateStoreWriteTransaction + DerefMut,
@@ -39,7 +39,7 @@ impl LockedOutput {
 
     pub fn check_locks<TTx>(
         tx: &mut TTx,
-        output_shards: &[SubstateAddress],
+        output_shards: &[VersionedSubstateId],
     ) -> Result<SubstateLockState, StorageError>
     where
         TTx: StateStoreReadTransaction,

@@ -101,10 +101,10 @@ impl LockedSubstates {
         })?;
 
         if !lock_state.has_access(lock_flag) {
-            return Err(LockError::InvalidLockRequest {
+            return Err(LockError::InvalidLockAccess {
                 address: addr.clone(),
-                requested_lock: lock_flag,
-                lock_state: *lock_state,
+                requested: lock_flag,
+                actual: lock_state.as_flag(),
             });
         }
 
@@ -131,6 +131,13 @@ pub enum LockState {
 }
 
 impl LockState {
+    pub fn as_flag(&self) -> LockFlag {
+        match self {
+            Self::Read(_) => LockFlag::Read,
+            Self::Write => LockFlag::Write,
+        }
+    }
+
     pub fn is_read(&self) -> bool {
         matches!(self, Self::Read(_))
     }

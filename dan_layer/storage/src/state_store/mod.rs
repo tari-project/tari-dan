@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_state_tree::{TreeStore, TreeStoreReader, Version};
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -212,7 +212,7 @@ pub trait StateStoreReadTransaction {
     fn substates_any_exist<I, S>(&mut self, substates: I) -> Result<bool, StorageError>
     where
         I: IntoIterator<Item = S>,
-        S: Borrow<SubstateAddress>;
+        S: Borrow<VersionedSubstateId>;
 
     fn substates_exists_for_transaction(&mut self, transaction_id: &TransactionId) -> Result<bool, StorageError>;
 
@@ -245,7 +245,7 @@ pub trait StateStoreReadTransaction {
     fn locked_outputs_check_all<I, B>(&mut self, output_shards: I) -> Result<SubstateLockState, StorageError>
     where
         I: IntoIterator<Item = B>,
-        B: Borrow<SubstateAddress>;
+        B: Borrow<VersionedSubstateId>;
 
     fn pending_state_tree_diffs_exists_for_block(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn pending_state_tree_diffs_get_all_up_to_commit_block(
@@ -382,7 +382,7 @@ pub trait StateStoreWriteTransaction {
     ) -> Result<SubstateLockState, StorageError>
     where
         I: IntoIterator<Item = B>,
-        B: Borrow<SubstateAddress>;
+        B: Borrow<VersionedSubstateId>;
 
     fn locked_outputs_release_all<I, B>(&mut self, output_shards: I) -> Result<Vec<LockedOutput>, StorageError>
     where
