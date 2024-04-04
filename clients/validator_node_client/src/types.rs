@@ -93,7 +93,9 @@ pub struct TemplateRegistrationRequest {
     pub binary_sha: Vec<u8>,
     pub binary_url: String,
     pub template_type: String,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub sidechain_id: Option<PublicKey>,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub sidechain_id_knowledge_proof: Option<Signature>,
 }
 
