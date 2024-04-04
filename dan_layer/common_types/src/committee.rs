@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{borrow::Borrow, cmp};
+use std::{borrow::Borrow, cmp, ops::RangeInclusive};
 
 use rand::{rngs::OsRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
@@ -244,6 +244,19 @@ impl CommitteeShard {
             .collect::<std::collections::HashSet<_>>()
             .len()
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
+pub struct CommitteeShardInfo<TAddr> {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub shard: Shard,
+    pub substate_address_range: RangeInclusive<SubstateAddress>,
+    pub validators: Committee<TAddr>,
 }
 
 #[cfg(test)]

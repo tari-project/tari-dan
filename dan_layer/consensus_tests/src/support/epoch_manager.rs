@@ -267,6 +267,38 @@ impl EpochManagerReader for TestEpochManager {
     async fn get_base_layer_block_height(&self, _hash: FixedHash) -> Result<Option<u64>, EpochManagerError> {
         Ok(Some(self.inner.lock().await.current_block_info.0))
     }
+    
+    async fn get_network_committees(&self) -> Result<Vec<CommitteeShardInfo<Self::Addr>>, EpochManagerError> {
+        let current_epoch = self.current_epoch;
+        let num_committees = self.get_num_committees(current_epoch)?;
+
+        let mut validators = self.get_validator_nodes_per_epoch(current_epoch)?;
+        validators.sort_by(|vn_a, vn_b| vn_b.committee_shard.cmp(&vn_a.committee_shard));
+
+        // Group by bucket, IndexMap used to preserve ordering
+        let mut validators_per_bucket = IndexMap::with_capacity(validators.len());
+        for validator in validators {
+            validators_per_bucket
+                .entry(
+                    validator
+                        .committee_shard
+                        .expect("validator committee bucket must have been populated within valid epoch"),
+                )
+                .or_insert_with(Vec::new)
+                .push(validator);
+        }
+
+        let committees = validators_per_bucket
+            .into_iter()
+            .map(|(bucket, validators)| CommitteeShardInfo {
+                shard: bucket,
+                substate_address_range: bucket.to_substate_address_range(num_committees),
+                validators: Committee::new(validators.into_iter().map(|v| (v.address, v.public_key)).collect()),
+            })
+            .collect();
+
+        Ok(committees)
+    }
 }
 
 #[derive(Debug, Clone)]

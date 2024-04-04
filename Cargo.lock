@@ -9404,6 +9404,7 @@ version = "0.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
+ "indexmap 2.2.3",
  "log",
  "tari_base_node_client",
  "tari_common",

@@ -417,4 +417,13 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
             .map_err(|_| EpochManagerError::SendError)?;
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
+    
+    async fn get_network_committees(&self) -> Result<Vec<tari_dan_common_types::committee::CommitteeShardInfo<Self::Addr>>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetNetworkCommittees { reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
 }
