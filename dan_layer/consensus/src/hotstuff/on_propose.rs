@@ -238,12 +238,11 @@ where TConsensusSpec: ConsensusSpec
                 !pending_proposals.iter().any(|pending_proposal| {
                     pending_proposal.bucket == foreign_proposal.bucket &&
                         pending_proposal.block_id == foreign_proposal.block_id
-                })
-
+                })&& foreign_proposal.base_layer_block_height <= base_layer_block_height
                 // If the proposal base layer
-                 height is too high, ignore
-                 for now.
-                    && foreign_proposal.base_layer_block_height <= base_layer_block_height
+                // height is too high, ignore
+                // for now.
+
             })
             .map(|mut foreign_proposal| {
                 foreign_proposal.set_proposed_height(parent_block.height().saturating_add(NodeHeight(1)));
