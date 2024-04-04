@@ -28,7 +28,6 @@ use std::{
 
 use futures::StreamExt;
 use log::*;
-use rand::{prelude::*, rngs::OsRng};
 use tari_bor::decode;
 use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
@@ -293,7 +292,7 @@ impl EventManager {
             .epoch_manager
             .get_committee_within_shard_range(epoch, full_range)
             .await?;
-        committee.members.shuffle(&mut OsRng);
+        committee.shuffle();
 
         Ok(committee)
     }
