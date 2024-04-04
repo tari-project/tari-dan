@@ -254,7 +254,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
     async fn process_block(
         &mut self,
-        block: Block,
+        mut block: Block,
         qcs: Vec<QuorumCertificate>,
         updates: Vec<SubstateUpdate>,
         transactions: Vec<TransactionRecord>,

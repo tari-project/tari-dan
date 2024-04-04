@@ -197,9 +197,9 @@ impl CallScope {
         for owned in &child.owned {
             self.orphans.swap_remove(owned);
         }
-        self.proof_scope.extend(child.proof_scope.iter().copied());
-        self.bucket_scope.extend(child.bucket_scope.iter().copied());
-        self.auth_scope = child.auth_scope;
+        self.proof_scope.extend(child.proof_scope);
+        self.bucket_scope.extend(child.bucket_scope);
+        self.auth_scope.update_from_child(child.auth_scope);
     }
 
     pub fn include_owned_in_scope(&mut self, values: &IndexedWellKnownTypes) {

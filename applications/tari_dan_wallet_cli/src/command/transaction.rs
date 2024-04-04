@@ -59,13 +59,13 @@ use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::{
     types::{
         AccountGetResponse,
+        AccountsTransferRequest,
         ConfidentialTransferRequest,
         TransactionGetResultRequest,
         TransactionSubmitRequest,
         TransactionSubmitResponse,
         TransactionWaitResultRequest,
         TransactionWaitResultResponse,
-        TransferRequest,
     },
     ComponentAddressOrName,
     WalletDaemonClient,
@@ -333,7 +333,7 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
 
     let fee = common.max_fee.map(|f| f.try_into()).transpose()?;
     let resp = client
-        .accounts_transfer(TransferRequest {
+        .accounts_transfer(AccountsTransferRequest {
             account: source_account_name,
             amount: Amount::try_from(amount)?,
             resource_address,

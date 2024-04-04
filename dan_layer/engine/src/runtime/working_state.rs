@@ -47,13 +47,14 @@ use tari_template_lib::{
         UnclaimedConfidentialOutputAddress,
         VaultId,
     },
-    prelude::PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+    prelude::{AuthHookCaller, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
     Hash,
 };
 
 use super::workspace::Workspace;
 use crate::{
     runtime::{
+        address_allocation::AllocatedAddress,
         fee_state::FeeState,
         locking::LockedSubstate,
         scope::{CallFrame, CallScope},
@@ -74,7 +75,7 @@ pub(super) struct WorkingState {
     events: Vec<Event>,
     logs: Vec<LogEntry>,
     buckets: HashMap<BucketId, Bucket>,
-    address_allocations: HashMap<u32, SubstateId>,
+    address_allocations: HashMap<u32, AllocatedAddress>,
     address_allocation_id: u32,
     proofs: HashMap<ProofId, Proof>,
     object_ids: ObjectIds,
@@ -683,20 +684,38 @@ impl WorkingState {
     ) -> Result<AddressAllocation<T>, RuntimeError> {
         let id = self.address_allocation_id;
         self.address_allocation_id += 1;
-        self.address_allocations.insert(id, address.clone().into());
+        let (current_template, _) = self.current_template()?;
+        let current_template = *current_template;
+        self.address_allocations
+            .insert(id, AllocatedAddress::new(current_template, address.clone().into()));
         let allocation = AddressAllocation::new(id, address);
         Ok(allocation)
     }
 
-    pub fn take_allocated_address<T: TryFrom<SubstateId, Error = SubstateId>>(
+    pub fn get_allocated_address_by_address<T: Into<SubstateId>>(&mut self, address: T) -> Option<&AllocatedAddress> {
+        let substate_id = address.into();
+        self.address_allocations
+            .values()
+            .find(|alloc| *alloc.address() == substate_id)
+    }
+
+    pub fn get_template_for_component(
         &mut self,
-        id: u32,
-    ) -> Result<T, RuntimeError> {
-        let address = self
-            .address_allocations
+        component_address: &ComponentAddress,
+    ) -> Result<TemplateAddress, RuntimeError> {
+        match self.get_allocated_address_by_address(*component_address) {
+            Some(alloc) => Ok(*alloc.template_address()),
+            None => {
+                let component = self.store.load_component(component_address)?;
+                Ok(component.template_address)
+            },
+        }
+    }
+
+    pub fn take_allocated_address(&mut self, id: u32) -> Result<AllocatedAddress, RuntimeError> {
+        self.address_allocations
             .remove(&id)
-            .ok_or(RuntimeError::AddressAllocationNotFound { id })?;
-        T::try_from(address).map_err(|address| RuntimeError::AddressAllocationTypeMismatch { address })
+            .ok_or(RuntimeError::AddressAllocationNotFound { id })
     }
 
     pub fn pay_fee(&mut self, resource: ResourceContainer, return_vault: VaultId) -> Result<(), RuntimeError> {
@@ -923,6 +942,17 @@ impl WorkingState {
             .and_then(|lock| lock.address().as_component_address()))
     }
 
+    pub fn get_auth_caller(&self) -> Result<AuthHookCaller, RuntimeError> {
+        let frame = self.call_frames.last().ok_or(RuntimeError::NoActiveCallFrame)?;
+        let (template, _) = frame.current_template();
+        let component = frame
+            .scope()
+            .get_current_component_lock()
+            .and_then(|lock| lock.address().as_component_address());
+
+        Ok(AuthHookCaller::new(*template, component))
+    }
+
     pub fn push_frame(&mut self, mut new_frame: CallFrame, max_call_depth: usize) -> Result<(), RuntimeError> {
         if self.call_frame_depth() + 1 > max_call_depth {
             return Err(RuntimeError::MaxCallDepthExceeded {
@@ -999,14 +1029,14 @@ impl WorkingState {
         self.last_instruction_output.take()
     }
 
-    pub fn load_component(&mut self, component_address: &ComponentAddress) -> Result<ComponentHeader, RuntimeError> {
-        self.store.load_component(component_address).cloned()
+    pub fn load_component(&mut self, component_address: &ComponentAddress) -> Result<&ComponentHeader, RuntimeError> {
+        self.store.load_component(component_address)
     }
 
     pub fn check_all_substates_known(&self, value: &IndexedWellKnownTypes) -> Result<(), RuntimeError> {
         for addr in value.referenced_substates() {
             if !self.substate_exists(&addr)? {
-                return Err(RuntimeError::SubstateNotFound { address: addr.clone() });
+                return Err(RuntimeError::ReferencedSubstateNotFound { address: addr.clone() });
             }
         }
         for bucket_id in value.bucket_ids() {
@@ -1027,14 +1057,14 @@ impl WorkingState {
         let scope = self.current_call_scope()?;
 
         for addr in value.referenced_substates() {
-            // You are allowed to reference root substates
+            // You are allowed to reference existing root substates
             if addr.is_root() {
                 if !self.substate_exists(&addr)? {
-                    return Err(RuntimeError::SubstateNotFound { address: addr.clone() });
+                    return Err(RuntimeError::RootSubstateNotFound { address: addr.clone() });
                 }
             } else if !scope.is_substate_in_scope(&addr) {
                 if !self.substate_exists(&addr)? {
-                    return Err(RuntimeError::SubstateNotFound { address: addr.clone() });
+                    return Err(RuntimeError::ReferencedSubstateNotFound { address: addr.clone() });
                 }
                 return Err(RuntimeError::SubstateOutOfScope { address: addr.clone() });
             } else {

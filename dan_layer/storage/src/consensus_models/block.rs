@@ -523,7 +523,8 @@ impl Block {
         tx.blocks_set_flags(self.id(), Some(true), None)
     }
 
-    pub fn set_as_processed<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn set_as_processed<TTx: StateStoreWriteTransaction>(&mut self, tx: &mut TTx) -> Result<(), StorageError> {
+        self.is_processed = true;
         tx.blocks_set_flags(self.id(), None, Some(true))
     }
 

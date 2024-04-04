@@ -54,6 +54,8 @@ use tari_wallet_daemon_client::{
         AccountsInvokeResponse,
         AccountsListRequest,
         AccountsListResponse,
+        AccountsTransferRequest,
+        AccountsTransferResponse,
         BalanceEntry,
         ClaimBurnRequest,
         ClaimBurnResponse,
@@ -61,8 +63,6 @@ use tari_wallet_daemon_client::{
         ConfidentialTransferResponse,
         RevealFundsRequest,
         RevealFundsResponse,
-        TransferRequest,
-        TransferResponse,
     },
     ComponentAddressOrName,
 };
@@ -858,8 +858,8 @@ fn get_or_create_account<T: WalletStore>(
 pub async fn handle_transfer(
     context: &HandlerContext,
     token: Option<String>,
-    req: TransferRequest,
-) -> Result<TransferResponse, anyhow::Error> {
+    req: AccountsTransferRequest,
+) -> Result<AccountsTransferResponse, anyhow::Error> {
     let sdk = context.wallet_sdk().clone();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
@@ -967,7 +967,7 @@ pub async fn handle_transfer(
             .transaction_service()
             .submit_dry_run_transaction(transaction, required_inputs)
             .await?;
-        return Ok(TransferResponse {
+        return Ok(AccountsTransferResponse {
             transaction_id,
             fee: execute_result.fee_receipt.total_fees_paid,
             fee_refunded: execute_result.fee_receipt.total_fee_payment - execute_result.fee_receipt.total_fees_paid,
@@ -1000,7 +1000,7 @@ pub async fn handle_transfer(
         finalized.final_fee
     );
 
-    Ok(TransferResponse {
+    Ok(AccountsTransferResponse {
         transaction_id: tx_id,
         fee: finalized.final_fee,
         fee_refunded: max_fee - finalized.final_fee,

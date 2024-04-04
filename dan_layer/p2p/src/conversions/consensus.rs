@@ -309,6 +309,7 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
 impl From<&Command> for proto::consensus::Command {
     fn from(value: &Command) -> Self {
         let command = match value {
+            Command::LocalOnly(tx) => proto::consensus::command::Command::LocalOnly(tx.into()),
             Command::Prepare(tx) => proto::consensus::command::Command::Prepare(tx.into()),
             Command::LocalPrepared(tx) => proto::consensus::command::Command::LocalPrepared(tx.into()),
             Command::Accept(tx) => proto::consensus::command::Command::Accept(tx.into()),
@@ -327,6 +328,7 @@ impl TryFrom<proto::consensus::Command> for Command {
     fn try_from(value: proto::consensus::Command) -> Result<Self, Self::Error> {
         let command = value.command.ok_or_else(|| anyhow!("Command is missing"))?;
         Ok(match command {
+            proto::consensus::command::Command::LocalOnly(tx) => Command::LocalOnly(tx.try_into()?),
             proto::consensus::command::Command::Prepare(tx) => Command::Prepare(tx.try_into()?),
             proto::consensus::command::Command::LocalPrepared(tx) => Command::LocalPrepared(tx.try_into()?),
             proto::consensus::command::Command::Accept(tx) => Command::Accept(tx.try_into()?),

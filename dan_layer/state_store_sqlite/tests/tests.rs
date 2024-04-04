@@ -12,6 +12,7 @@ use tari_dan_storage::{
 };
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::TransactionId;
+use tari_utilities::epoch_time::EpochTime;
 
 fn create_db() -> SqliteStateStore<String> {
     SqliteStateStore::connect(":memory:").unwrap()
@@ -30,8 +31,6 @@ fn create_tx_atom() -> TransactionAtom {
 }
 
 mod confirm_all_transitions {
-    use tari_utilities::epoch_time::EpochTime;
-
     use super::*;
 
     #[test]
