@@ -74,17 +74,6 @@ impl EventManager {
         }
     }
 
-    pub async fn find_events_in_db(
-        &self,
-        topic: Option<String>,
-        substate_id: Option<SubstateId>,
-        offset: u32,
-        limit: u32,
-    ) -> Result<Vec<Event>, anyhow::Error> {
-        let events = self.get_events_from_db(topic, substate_id, offset, limit).await?;
-        Ok(events)
-    }
-
     pub async fn scan_events(&self) -> Result<usize, anyhow::Error> {
         info!(
             target: LOG_TARGET,
@@ -112,7 +101,7 @@ impl EventManager {
         Ok(events.len())
     }
 
-    async fn get_events_from_db(
+    pub async fn get_events_from_db(
         &self,
         topic: Option<String>,
         substate_id: Option<SubstateId>,
