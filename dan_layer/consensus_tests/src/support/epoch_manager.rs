@@ -10,7 +10,7 @@ use std::{
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard, CommitteeShardInfo},
+    committee::{Committee, CommitteeShard, CommitteeShardInfo, NetworkCommitteeInfo},
     hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
     shard::Shard,
     Epoch,
@@ -268,7 +268,7 @@ impl EpochManagerReader for TestEpochManager {
         Ok(Some(self.inner.lock().await.current_block_info.0))
     }
     
-    async fn get_network_committees(&self) -> Result<Vec<CommitteeShardInfo<Self::Addr>>, EpochManagerError> {
+    async fn get_network_committees(&self) -> Result<NetworkCommitteeInfo<Self::Addr>, EpochManagerError> {
         let lock = self.state_lock().await;
         let commitees_lock = &lock.committees;
         let num_committees = commitees_lock.len().try_into().unwrap();
@@ -282,7 +282,12 @@ impl EpochManagerReader for TestEpochManager {
             }
         }).collect();
 
-        Ok(committees)
+        let network_commitee_info = NetworkCommitteeInfo {
+            epoch: lock.current_epoch,
+            committees,
+        };
+
+        Ok(network_commitee_info)
     }
 }
 

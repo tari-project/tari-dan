@@ -28,7 +28,7 @@ use std::{
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard, CommitteeShardInfo},
+    committee::{Committee, CommitteeShard, NetworkCommitteeInfo},
     hashing::MergedValidatorNodeMerkleProof,
     shard::Shard,
     Epoch,
@@ -180,5 +180,5 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn get_base_layer_block_height(&self, hash: FixedHash) -> Result<Option<u64>, EpochManagerError>;
 
-    async fn get_network_committees(&self) -> Result<Vec<CommitteeShardInfo<Self::Addr>>, EpochManagerError>;
+    async fn get_network_committees(&self) -> Result<NetworkCommitteeInfo<Self::Addr>, EpochManagerError>;
 }

@@ -10,7 +10,7 @@ use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard, CommitteeShardInfo},
+    committee::{Committee, CommitteeShard, NetworkCommitteeInfo},
     hashing::MergedValidatorNodeMerkleProof,
     shard::Shard,
     Epoch,
@@ -155,6 +155,6 @@ pub enum EpochManagerRequest<TAddr> {
         reply: Reply<()>,
     },
     GetNetworkCommittees {
-        reply: Reply<Vec<CommitteeShardInfo<TAddr>>>,
+        reply: Reply<NetworkCommitteeInfo<TAddr>>,
     },
 }

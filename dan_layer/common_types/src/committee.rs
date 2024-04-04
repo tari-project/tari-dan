@@ -9,7 +9,7 @@ use tari_common_types::types::PublicKey;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use crate::{shard::Shard, SubstateAddress};
+use crate::{shard::Shard, Epoch, SubstateAddress};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
@@ -244,6 +244,17 @@ impl CommitteeShard {
             .collect::<std::collections::HashSet<_>>()
             .len()
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
+pub struct NetworkCommitteeInfo<TAddr> {
+    pub epoch: Epoch,
+    pub committees: Vec<CommitteeShardInfo<TAddr>>,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -33,7 +33,7 @@ use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard, CommitteeShardInfo},
+    committee::{Committee, CommitteeShard, CommitteeShardInfo, NetworkCommitteeInfo},
     hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
     optional::Optional,
     shard::Shard,
@@ -720,7 +720,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(info)
     }
 
-    pub async fn get_network_committees(&self) -> Result<Vec<CommitteeShardInfo<TAddr>>, EpochManagerError> {
+    pub async fn get_network_committees(&self) -> Result<NetworkCommitteeInfo<TAddr>, EpochManagerError> {
         let current_epoch = self.current_epoch;
         let num_committees = self.get_num_committees(current_epoch)?;
 
@@ -749,7 +749,12 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             })
             .collect();
 
-        Ok(committees)
+        let network_committee_info = NetworkCommitteeInfo {
+            epoch: current_epoch,
+            committees,
+        };
+
+        Ok(network_committee_info)
     }
 }
 
