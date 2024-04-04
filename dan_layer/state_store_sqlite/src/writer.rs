@@ -51,7 +51,7 @@ use tari_dan_storage::{
     StateStoreWriteTransaction,
     StorageError,
 };
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
 use tari_utilities::ByteArray;
 use time::{OffsetDateTime, PrimitiveDateTime};
 
@@ -1330,7 +1330,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     ) -> Result<SubstateLockState, StorageError>
     where
         I: IntoIterator<Item = B>,
-        B: Borrow<SubstateAddress>,
+        B: Borrow<VersionedSubstateId>,
     {
         use crate::schema::locked_outputs;
         let block_id_hex = serialize_hex(block_id);
@@ -1342,7 +1342,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 (
                     locked_outputs::block_id.eq(&block_id_hex),
                     locked_outputs::transaction_id.eq(&transaction_id_hex),
-                    locked_outputs::substate_address.eq(serialize_hex(address.borrow())),
+                    locked_outputs::substate_address.eq(serialize_hex(address.borrow().to_substate_address())),
                 )
             })
             .collect::<Vec<_>>();

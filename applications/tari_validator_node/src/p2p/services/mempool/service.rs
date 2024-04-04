@@ -674,9 +674,9 @@ where
                 .resulting_outputs()
                 .iter()
                 // All involved shards commit the transaction receipt, so we exclude the shard @ tx_substate_address from propagation and consensus.
-                .filter(|s| **s != tx_substate_address)
+                .map(|s| s.to_substate_address())
+                .filter(|s| *s != tx_substate_address)
                 .filter(|s| !input_shards.contains(&s.to_committee_shard(num_committees)))
-                .copied()
                 .collect();
 
             if let Err(err) = self
@@ -686,7 +686,11 @@ where
                     output_shards,
                     NewTransactionMessage {
                         transaction: executed.transaction().clone(),
-                        output_shards: executed.resulting_outputs().to_vec(),
+                        output_shards: executed
+                            .resulting_outputs()
+                            .iter()
+                            .map(|s| s.to_substate_address())
+                            .collect::<Vec<_>>(),
                     },
                     sender_shard,
                 )

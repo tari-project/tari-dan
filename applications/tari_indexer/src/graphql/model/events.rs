@@ -29,7 +29,7 @@ use tari_engine_types::substate::SubstateId;
 use tari_template_lib::Hash;
 use tari_transaction::TransactionId;
 
-use crate::substate_manager::SubstateManager;
+use crate::{event_manager::EventManager, substate_manager::SubstateManager};
 
 const LOG_TARGET: &str = "tari::indexer::graphql::events";
 
@@ -125,6 +125,30 @@ impl EventQuery {
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         let events = substate_manager
             .scan_events_by_payload(payload_key, payload_value, offset, limit)
+            .await?
+            .iter()
+            .map(|e| Event::from_engine_event(e.clone()))
+            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
+
+        Ok(events)
+    }
+
+    pub async fn get_events(
+        &self,
+        ctx: &Context<'_>,
+        topic: Option<String>,
+        substate_id: Option<String>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Event>, anyhow::Error> {
+        info!(
+            target: LOG_TARGET,
+            "Querying events. topic: {:?}, substate_id: {:?}, offset: {}, limit: {}, ", topic, substate_id, offset, limit,
+        );
+        let substate_id = substate_id.map(|str| SubstateId::from_str(&str)).transpose()?;
+        let event_manager = ctx.data_unchecked::<Arc<EventManager>>();
+        let events = event_manager
+            .find_events_in_db(None, substate_id, offset, limit)
             .await?
             .iter()
             .map(|e| Event::from_engine_event(e.clone()))

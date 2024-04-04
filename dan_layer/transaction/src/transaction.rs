@@ -265,6 +265,13 @@ impl SubstateRequirement {
         }
     }
 
+    pub fn with_version(address: SubstateId, version: u32) -> Self {
+        Self {
+            substate_id: address,
+            version: Some(version),
+        }
+    }
+
     pub fn substate_id(&self) -> &SubstateId {
         &self.substate_id
     }
@@ -282,6 +289,13 @@ impl SubstateRequirement {
     /// A shard is an equal division of the 256-bit shard space.
     pub fn to_committee_shard(&self, num_committees: u32) -> Shard {
         self.to_substate_address().to_committee_shard(num_committees)
+    }
+
+    pub fn to_versioned(&self) -> Option<VersionedSubstateId> {
+        self.version.map(|v| VersionedSubstateId {
+            substate_id: self.substate_id.clone(),
+            version: v,
+        })
     }
 }
 
@@ -322,6 +336,12 @@ impl Display for SubstateRequirement {
     }
 }
 
+impl From<VersionedSubstateId> for SubstateRequirement {
+    fn from(value: VersionedSubstateId) -> Self {
+        Self::with_version(value.substate_id, value.version)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 #[error("Failed to parse substate requirement {0}")]
 pub struct SubstateRequirementParseError(String);
@@ -332,13 +352,13 @@ pub struct SubstateRequirementParseError(String);
     derive(ts_rs::TS),
     ts(export, export_to = "../../bindings/src/types/")
 )]
-pub struct VersionedSubstate {
+pub struct VersionedSubstateId {
     #[serde(with = "serde_with::string")]
     pub substate_id: SubstateId,
     pub version: u32,
 }
 
-impl VersionedSubstate {
+impl VersionedSubstateId {
     pub fn new(substate_id: SubstateId, version: u32) -> Self {
         Self { substate_id, version }
     }
@@ -362,7 +382,7 @@ impl VersionedSubstate {
     }
 }
 
-impl FromStr for VersionedSubstate {
+impl FromStr for VersionedSubstateId {
     type Err = SubstateRequirementParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -387,7 +407,7 @@ impl FromStr for VersionedSubstate {
     }
 }
 
-impl Display for VersionedSubstate {
+impl Display for VersionedSubstateId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}", self.substate_id, self.version)
     }

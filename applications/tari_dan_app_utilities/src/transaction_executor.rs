@@ -7,7 +7,7 @@ use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{services::template_provider::TemplateProvider, SubstateAddress};
+use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_dan_engine::{
     fees::{FeeModule, FeeTable},
     runtime::{AuthParams, RuntimeModule},
@@ -21,7 +21,7 @@ use tari_engine_types::{
     virtual_substate::VirtualSubstates,
 };
 use tari_template_lib::{crypto::RistrettoPublicKeyBytes, prelude::NonFungibleAddress};
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, VersionedSubstateId};
 
 const _LOG_TARGET: &str = "tari::dan::transaction_executor";
 
@@ -96,7 +96,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             .accept()
             .map(|diff| {
                 diff.up_iter()
-                    .map(|(addr, substate)| SubstateAddress::from_address(addr, substate.version()))
+                    .map(|(addr, substate)| VersionedSubstateId::new(addr.clone(), substate.version()))
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();

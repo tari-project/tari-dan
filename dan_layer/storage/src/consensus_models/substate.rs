@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, SubstateAddress};
 use tari_engine_types::substate::{Substate, SubstateId, SubstateValue};
-use tari_transaction::TransactionId;
+use tari_transaction::{TransactionId, VersionedSubstateId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -186,7 +186,11 @@ impl SubstateRecord {
         Ok(Self::get(tx, shard).optional()?.is_some())
     }
 
-    pub fn any_exist<TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = S>, S: Borrow<SubstateAddress>>(
+    pub fn any_exist<
+        TTx: StateStoreReadTransaction + ?Sized,
+        I: IntoIterator<Item = S>,
+        S: Borrow<VersionedSubstateId>,
+    >(
         tx: &mut TTx,
         substates: I,
     ) -> Result<bool, StorageError> {
