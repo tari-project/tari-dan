@@ -20,10 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_common_types::types::PublicKey;
-use tari_crypto::{ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
+use tari_crypto::{tari_utilities::ByteArray};
 use tari_dan_common_types::Epoch;
 use tari_template_lib::crypto::RistrettoPublicKeyBytes;
 use tari_validator_node_client::{types::GetValidatorFeesRequest, ValidatorNodeClient};

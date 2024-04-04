@@ -1,0 +1,5 @@
+
+[alias]
+ci-clippy = "lints clippy --all-targets --all-features"
+ci-test-compile = "test --no-run --workspace --all-features --no-default-features"
+ci-check = "check --workspace --release --all-features --all-targets --locked"
