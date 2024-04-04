@@ -31,7 +31,7 @@ use log::*;
 use tari_bor::decode;
 use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
-use tari_dan_common_types::{committee::{Committee, CommitteeShardInfo}, Epoch, PeerAddress, SubstateAddress};
+use tari_dan_common_types::{committee::{Committee, CommitteeShardInfo}, shard::Shard, Epoch, PeerAddress, SubstateAddress};
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
 use tari_dan_storage::consensus_models::{Block, BlockId, Command, Decision, TransactionRecord};
 use tari_engine_types::{commit_result::ExecuteResult, events::Event, substate::SubstateId};
@@ -41,7 +41,7 @@ use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory};
 
 use crate::substate_storage_sqlite::{
-    models::events::NewEvent,
+    models::events::{NewEvent, NewScannedBlockId},
     sqlite_substate_store_factory::{
         SqliteSubstateStore,
         SubstateStore,
@@ -257,12 +257,31 @@ impl EventManager {
         transaction_ids
     }
 
-    async fn get_new_blocks_from_committee(&self, committee: &mut CommitteeShardInfo<PeerAddress>, epoch: Epoch) -> Result<Vec<Block>, anyhow::Error> {
-        // TODO: store and use the latest scanned block from database
+    fn build_genesis_block_id(&self) -> BlockId {
         let start_block = Block::zero_block(self.network);
-        let start_block_id = *start_block.id();
+        *start_block.id()
+    }
+
+    #[allow(unused_assignments)]
+    async fn get_new_blocks_from_committee(&self, committee: &mut CommitteeShardInfo<PeerAddress>, epoch: Epoch) -> Result<Vec<Block>, anyhow::Error> {
+        // We start scanning from the last scanned block for this commitee
+        let shard = committee.shard;
+        let start_block_id = {
+            let mut tx = self.substate_store.create_read_tx()?;
+            tx.get_last_scanned_block_id(epoch, shard)?
+        };
+        let start_block_id = start_block_id.unwrap_or(self.build_genesis_block_id());
 
         committee.validators.shuffle();
+        let mut last_block_id = start_block_id;
+
+        info!(
+            target: LOG_TARGET,
+            "Scanning new blocks since {} from (epoch={}, shard={})",
+            last_block_id,
+            epoch,
+            shard
+        );
 
         for member in committee.validators.addresses() {
             let resp = self.get_blocks_from_vn(member, start_block_id).await;
@@ -276,8 +295,13 @@ impl EventManager {
                         blocks.len(),
                         member,
                         epoch,
-                        committee.shard,
+                        shard,
                     );
+                    if let Some(block) = blocks.last() {
+                        last_block_id = *block.id();
+                    }
+                    // Store the latest scanned block id in the database for future scans
+                    self.save_scanned_block_id(epoch, shard, last_block_id)?;
                     return Ok(blocks);
                 },
                 Err(e) => {
@@ -287,7 +311,7 @@ impl EventManager {
                         "Could not get blocks from VN {} (epoch={}, shard={}): {}",
                         member,
                         epoch,
-                        committee.shard,
+                        shard,
                         e
                     );
                 },
@@ -299,9 +323,21 @@ impl EventManager {
             target: LOG_TARGET,
             "Could not get blocks from any of the VNs of the committee (epoch={}, shard={})",
             epoch,
-            committee.shard
+            shard
         );
         Ok(vec![])
+    }
+
+    fn save_scanned_block_id(&self, epoch: Epoch, shard: Shard, last_block_id: BlockId) -> Result<(), anyhow::Error> {
+        let row = NewScannedBlockId {
+            epoch: epoch.0 as i64,
+            shard: shard.as_u32() as i64,
+            last_block_id: last_block_id.as_bytes().to_vec(),
+        };
+        let mut tx = self.substate_store.create_write_tx()?;
+        tx.save_scanned_block_id(row)?;
+        tx.commit()?;
+        Ok(())
     }
 
     async fn get_all_vns(&self) -> Result<Committee<PeerAddress>, anyhow::Error> {
