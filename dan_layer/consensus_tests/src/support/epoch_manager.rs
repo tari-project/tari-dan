@@ -10,7 +10,7 @@ use std::{
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard},
+    committee::{Committee, CommitteeShard, CommitteeShardInfo},
     hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
     shard::Shard,
     Epoch,
@@ -269,33 +269,18 @@ impl EpochManagerReader for TestEpochManager {
     }
     
     async fn get_network_committees(&self) -> Result<Vec<CommitteeShardInfo<Self::Addr>>, EpochManagerError> {
-        let current_epoch = self.current_epoch;
-        let num_committees = self.get_num_committees(current_epoch)?;
+        let lock = self.state_lock().await;
+        let commitees_lock = &lock.committees;
+        let num_committees = commitees_lock.len().try_into().unwrap();
 
-        let mut validators = self.get_validator_nodes_per_epoch(current_epoch)?;
-        validators.sort_by(|vn_a, vn_b| vn_b.committee_shard.cmp(&vn_a.committee_shard));
-
-        // Group by bucket, IndexMap used to preserve ordering
-        let mut validators_per_bucket = IndexMap::with_capacity(validators.len());
-        for validator in validators {
-            validators_per_bucket
-                .entry(
-                    validator
-                        .committee_shard
-                        .expect("validator committee bucket must have been populated within valid epoch"),
-                )
-                .or_insert_with(Vec::new)
-                .push(validator);
-        }
-
-        let committees = validators_per_bucket
-            .into_iter()
-            .map(|(bucket, validators)| CommitteeShardInfo {
-                shard: bucket,
-                substate_address_range: bucket.to_substate_address_range(num_committees),
-                validators: Committee::new(validators.into_iter().map(|v| (v.address, v.public_key)).collect()),
-            })
-            .collect();
+        let committees = commitees_lock.into_iter().map(|s| {
+            let shard = s.0;
+            CommitteeShardInfo {
+                shard: *shard,
+                substate_address_range: shard.to_substate_address_range(num_committees),
+                validators: s.1.clone(),
+            }
+        }).collect();
 
         Ok(committees)
     }
