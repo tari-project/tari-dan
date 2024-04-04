@@ -3,7 +3,7 @@
 
 use diesel::{Connection, SqliteConnection};
 use rand::rngs::OsRng;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{PublicKey};
 use tari_crypto::keys::PublicKey as _;
 use tari_dan_common_types::{Epoch, PeerAddress, SubstateAddress};
 use tari_dan_storage::global::{GlobalDb, ValidatorNodeDb};
@@ -29,9 +29,10 @@ fn insert_vns(
     validator_nodes: &mut ValidatorNodeDb<'_, '_, SqliteGlobalDbAdapter<PeerAddress>>,
     num: usize,
     epoch: Epoch,
+    sidechain_id: Option<PublicKey>
 ) {
     for _ in 0..num {
-        insert_vn_with_public_key(validator_nodes, new_public_key(), epoch)
+        insert_vn_with_public_key(validator_nodes, new_public_key(), epoch, sidechain_id.clone())
     }
 }
 
@@ -39,6 +40,7 @@ fn insert_vn_with_public_key(
     validator_nodes: &mut ValidatorNodeDb<'_, '_, SqliteGlobalDbAdapter<PeerAddress>>,
     public_key: PublicKey,
     epoch: Epoch,
+    sidechain_id: Option<PublicKey>,
 ) {
     validator_nodes
         .insert_validator_node(
@@ -47,6 +49,7 @@ fn insert_vn_with_public_key(
             derived_substate_address(&public_key),
             epoch,
             public_key,
+            sidechain_id,
         )
         .unwrap()
 }
@@ -56,8 +59,8 @@ fn insert_and_get_within_epoch() {
     let db = create_db();
     let mut tx = db.create_transaction().unwrap();
     let mut validator_nodes = db.validator_nodes(&mut tx);
-    insert_vns(&mut validator_nodes, 2, Epoch(0));
-    insert_vns(&mut validator_nodes, 1, Epoch(10));
+    insert_vns(&mut validator_nodes, 2, Epoch(0), None);
+    insert_vns(&mut validator_nodes, 1, Epoch(10), None);
 
     let vns = validator_nodes.get_all_within_epochs(Epoch(0), Epoch(10)).unwrap();
     assert_eq!(vns.len(), 3);
@@ -68,11 +71,11 @@ fn insert_and_get_within_epoch_duplicate_public_keys() {
     let db = create_db();
     let mut tx = db.create_transaction().unwrap();
     let mut validator_nodes = db.validator_nodes(&mut tx);
-    insert_vns(&mut validator_nodes, 2, Epoch(0));
-    insert_vns(&mut validator_nodes, 1, Epoch(10));
+    insert_vns(&mut validator_nodes, 2, Epoch(0), None);
+    insert_vns(&mut validator_nodes, 1, Epoch(10), None);
     let pk = new_public_key();
-    insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(0));
-    insert_vn_with_public_key(&mut validator_nodes, pk, Epoch(1));
+    insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(0), None);
+    insert_vn_with_public_key(&mut validator_nodes, pk, Epoch(1), None);
 
     let vns = validator_nodes.get_all_within_epochs(Epoch(0), Epoch(10)).unwrap();
     assert_eq!(vns.len(), 4);
@@ -85,13 +88,13 @@ fn insert_and_get_within_shard_range_duplicate_public_keys() {
     let mut tx = db.create_transaction().unwrap();
     let mut validator_nodes = db.validator_nodes(&mut tx);
     // Insert lower shard key
-    insert_vn_with_public_key(&mut validator_nodes, PublicKey::default(), Epoch(0));
+    insert_vn_with_public_key(&mut validator_nodes, PublicKey::default(), Epoch(0), None);
 
     let pk = new_public_key();
-    insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(0));
-    insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(1));
+    insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(0), None);
+    insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(1), None);
     let pk2 = new_public_key();
-    insert_vn_with_public_key(&mut validator_nodes, pk2.clone(), Epoch(1));
+    insert_vn_with_public_key(&mut validator_nodes, pk2.clone(), Epoch(1), None);
 
     let shard_id = derived_substate_address(&pk);
     let shard_id2 = derived_substate_address(&pk2);

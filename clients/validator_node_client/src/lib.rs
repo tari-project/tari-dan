@@ -21,7 +21,6 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 mod error;
 pub use error::ValidatorNodeClientError;
-use tari_common_types::types::PrivateKey;
 
 pub mod types;
 
@@ -29,7 +28,6 @@ use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
-use tari_common_types::{transaction::TxId, types::PublicKey};
 
 use crate::types::*;
 
@@ -63,27 +61,6 @@ impl ValidatorNodeClient {
 
     pub async fn get_epoch_manager_stats(&mut self) -> Result<GetEpochManagerStatsResponse, ValidatorNodeClientError> {
         self.send_request("get_epoch_manager_stats", json!({})).await
-    }
-
-    pub async fn register_validator_node(
-        &mut self,
-        claim_public_key: PublicKey,
-        validator_network_key: Option<PrivateKey>,
-    ) -> Result<TxId, ValidatorNodeClientError> {
-        let resp: RegisterValidatorNodeResponse = self
-            .send_request("register_validator_node", RegisterValidatorNodeRequest {
-                fee_claim_public_key: claim_public_key,
-                validator_network_key,
-            })
-            .await?;
-        Ok(resp.transaction_id)
-    }
-
-    pub async fn register_template(
-        &mut self,
-        request: TemplateRegistrationRequest,
-    ) -> Result<TemplateRegistrationResponse, ValidatorNodeClientError> {
-        self.send_request("register_template", request).await
     }
 
     pub async fn get_active_templates(

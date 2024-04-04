@@ -49,8 +49,9 @@ pub async fn send_template_registration(
     let mut client = vn.get_client();
 
     // store the template address for future reference
-    let resp = client.register_template(request).await?;
-    Ok(resp)
+    todo!()
+    // let resp = client.register_template(request).await?;
+    // Ok(resp)
 }
 
 pub fn compile_wasm_template(template_name: String) -> Result<Hash, anyhow::Error> {

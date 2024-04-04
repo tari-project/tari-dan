@@ -98,14 +98,15 @@ async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: Stri
 #[when(expr = "validator node {word} sends a registration transaction")]
 async fn send_vn_registration(world: &mut TariWorld, vn_name: String) {
     let mut client = world.get_validator_node(&vn_name).get_client();
-    if let Err(e) = client.register_validator_node(PublicKey::default()).await {
-        println!("register_validator_node error = {}", e);
-        panic!("register_validator_node error = {}", e);
-    }
-
-    world
-        .wait_until_base_nodes_have_transaction_in_mempool(1, Duration::from_secs(10))
-        .await;
+    todo!()
+    // if let Err(e) = client.register_validator_node(PublicKey::default()).await {
+    //     println!("register_validator_node error = {}", e);
+    //     panic!("register_validator_node error = {}", e);
+    // }
+    //
+    // world
+    //     .wait_until_base_nodes_have_transaction_in_mempool(1, Duration::from_secs(10))
+    //     .await;
 }
 
 #[when(
@@ -130,26 +131,28 @@ async fn send_vn_registration_with_claim_wallet(
         .create_specific_key(KeyBranch::Transaction, *index)
         .await
         .unwrap();
-    if let Err(e) = client.register_validator_node(key.public_key).await {
-        println!("register_validator_node error = {}", e);
-        panic!("register_validator_node error = {}", e);
-    }
-
-    world
-        .wait_until_base_nodes_have_transaction_in_mempool(1, Duration::from_secs(10))
-        .await;
+    todo!()
+    // if let Err(e) = client.register_validator_node(key.public_key).await {
+    //     println!("register_validator_node error = {}", e);
+    //     panic!("register_validator_node error = {}", e);
+    // }
+    //
+    // world
+    //     .wait_until_base_nodes_have_transaction_in_mempool(1, Duration::from_secs(10))
+    //     .await;
 }
 
 #[when(expr = "all validator nodes send registration transactions")]
 async fn all_vns_send_registration(world: &mut TariWorld) {
-    for vn_ps in world.all_validators_iter() {
-        let mut client = vn_ps.get_client();
-        let _resp = client.register_validator_node(Default::default()).await.unwrap();
-    }
-
-    world
-        .wait_until_base_nodes_have_transaction_in_mempool(world.validator_nodes.len(), Duration::from_secs(10))
-        .await;
+    todo!()
+    // for vn_ps in world.all_validators_iter() {
+    //     let mut client = vn_ps.get_client();
+    //     let _resp = client.register_validator_node(Default::default()).await.unwrap();
+    // }
+    //
+    // world
+    //     .wait_until_base_nodes_have_transaction_in_mempool(world.validator_nodes.len(), Duration::from_secs(10))
+    //     .await;
 }
 
 #[when(expr = "validator node {word} registers the template \"{word}\"")]

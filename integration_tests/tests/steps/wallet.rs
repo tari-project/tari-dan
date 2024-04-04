@@ -47,6 +47,8 @@ async fn when_i_burn_on_wallet(
             fee_per_gram: 1,
             message: "Burn".to_string(),
             claim_public_key: public_key.to_vec(),
+            sidechain_id: vec![],
+            sidechain_id_knowledge_proof: None
         })
         .await
         .unwrap()
