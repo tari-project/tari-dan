@@ -31,11 +31,14 @@ use tari_dan_storage::{
         PendingStateTreeDiff,
         QuorumCertificate,
         TransactionPool,
+        TransactionPoolRecord,
         TransactionPoolStage,
     },
     StateStore,
+    StateStoreReadTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
+use tari_state_tree::SubstateChange;
 
 use crate::{
     hotstuff::{
@@ -123,10 +126,25 @@ where TConsensusSpec: ConsensusSpec
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
-        let (_, current_base_layer_block_hash) = self.epoch_manager.current_base_layer_block_info().await?;
+        let (current_base_layer_block_height, current_base_layer_block_hash) =
+            self.epoch_manager.current_base_layer_block_info().await?;
+        let high_qc = self.store.with_read_tx(|tx| HighQc::get(tx))?;
+        let qc_block = self.store.with_read_tx(|tx| Block::get(tx, high_qc.block_id()))?;
+
+        let parent_base_layer_block_hash = qc_block.base_layer_block_hash();
+
+        let base_layer_block_hash = if qc_block.base_layer_block_height() >= current_base_layer_block_height {
+            *parent_base_layer_block_hash
+        } else {
+            // We select our current base layer block hash as the base layer block hash for the next block if
+            // and only if we know that the parent block was smaller.
+            current_base_layer_block_hash
+        };
+
+        let base_layer_block_height =
+            std::cmp::max(qc_block.base_layer_block_height(), current_base_layer_block_height);
 
         let next_block = self.store.with_write_tx(|tx| {
-            let high_qc = HighQc::get(tx.deref_mut())?;
             let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
             let next_block = self.build_next_block(
                 tx,
@@ -138,7 +156,8 @@ where TConsensusSpec: ConsensusSpec
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
                 //       is a good idea.
                 is_newview_propose,
-                current_base_layer_block_hash,
+                base_layer_block_height,
+                base_layer_block_hash,
             )?;
 
             next_block.as_last_proposed().set(tx)?;
@@ -195,7 +214,8 @@ where TConsensusSpec: ConsensusSpec
         proposed_by: PublicKey,
         local_committee_shard: &CommitteeShard,
         empty_block: bool,
-        current_base_layer_block_hash: FixedHash,
+        base_layer_block_height: u64,
+        base_layer_block_hash: FixedHash,
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
@@ -219,59 +239,21 @@ where TConsensusSpec: ConsensusSpec
                     pending_proposal.bucket == foreign_proposal.bucket &&
                         pending_proposal.block_id == foreign_proposal.block_id
                 })
+                    // If the proposal base layer height is too high, ignore for now.
+                    && foreign_proposal.base_layer_block_height <= base_layer_block_height
             })
             .map(|mut foreign_proposal| {
                 foreign_proposal.set_proposed_height(parent_block.height().saturating_add(NodeHeight(1)));
                 Ok(Command::ForeignProposal(foreign_proposal))
             })
-            .chain(batch.into_iter().map(|t| match t.current_stage() {
-                // If the transaction is New, propose to Prepare it
-                TransactionPoolStage::New => Ok(Command::Prepare(t.get_local_transaction_atom())),
-                // The transaction is Prepared, this stage is only _ready_ once we know that all local nodes
-                // accepted Prepared so we propose LocalPrepared
-                TransactionPoolStage::Prepared => Ok(Command::LocalPrepared(t.get_local_transaction_atom())),
-                // The transaction is LocalPrepared, meaning that we know that all foreign and local nodes have
-                // prepared. We can now propose to Accept it. We also propose the decision change which everyone
-                // should agree with if they received the same foreign LocalPrepare.
-                TransactionPoolStage::LocalPrepared => {
-                    let involved = local_committee_shard.count_distinct_shards(t.transaction().evidence.shards_iter());
-                    let involved = NonZeroU64::new(involved as u64).ok_or_else(|| {
-                        HotStuffError::InvariantError(format!(
-                            "Number of involved shards is zero for transaction {}",
-                            t.transaction_id(),
-                        ))
-                    })?;
-                    let leader_fee = t.calculate_leader_fee(involved, EXHAUST_DIVISOR);
-                    total_leader_fee += leader_fee.fee();
-                    let tx_atom = t.get_final_transaction_atom(leader_fee);
-                    if tx_atom.decision.is_commit() {
-                        let transaction = t.get_transaction(tx)?;
-                        let result = transaction.result().ok_or_else(|| {
-                            HotStuffError::InvariantError(format!(
-                                "Transaction {} is committed but has no result when proposing",
-                                t.transaction_id(),
-                            ))
-                        })?;
-
-                        let diff = result.finalize.result.accept().ok_or_else(|| {
-                            HotStuffError::InvariantError(format!(
-                                "Transaction {} has COMMIT decision but execution failed when proposing",
-                                t.transaction_id(),
-                            ))
-                        })?;
-                        substate_changes.extend(diff_to_substate_changes(diff));
-                    }
-                    Ok(Command::Accept(tx_atom))
-                },
-                // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes
-                // agreed with the Accept, more (possibly empty) blocks with QCs will be
-                // proposed and accepted, otherwise the Accept block will not be committed.
-                TransactionPoolStage::AllPrepared | TransactionPoolStage::SomePrepared => {
-                    unreachable!(
-                        "It is invalid for TransactionPoolStage::{} to be ready to propose",
-                        t.current_stage()
-                    )
-                },
+            .chain(batch.into_iter().map(|t| {
+                let command = transaction_pool_record_to_command(tx, &t, local_committee_shard, &mut substate_changes)?;
+                total_leader_fee += command
+                    .committing()
+                    .and_then(|tx| tx.leader_fee.as_ref())
+                    .map(|f| f.fee)
+                    .unwrap_or(0);
+                Ok::<_, HotStuffError>(command)
             }))
             .collect::<Result<BTreeSet<_>, HotStuffError>>()?;
 
@@ -320,12 +302,81 @@ where TConsensusSpec: ConsensusSpec
             foreign_indexes,
             None,
             EpochTime::now().as_u64(),
-            current_base_layer_block_hash,
+            base_layer_block_height,
+            base_layer_block_hash,
         );
 
         let signature = self.signing_service.sign(next_block.id());
         next_block.set_signature(signature);
 
         Ok(next_block)
+    }
+}
+
+fn transaction_pool_record_to_command<TTx: StateStoreReadTransaction>(
+    tx: &mut TTx,
+    t: &TransactionPoolRecord,
+    local_committee_shard: &CommitteeShard,
+    substate_changes: &mut Vec<SubstateChange>,
+) -> Result<Command, HotStuffError> {
+    let involved = local_committee_shard.count_distinct_shards(t.transaction().evidence.shards_iter());
+    if involved == 1 {
+        info!(
+            target: LOG_TARGET,
+            "🏠️ Transaction {} is local only, proposing LocalOnly",
+            t.transaction_id(),
+        );
+        let involved = NonZeroU64::new(involved as u64).expect("involved is 1");
+        let leader_fee = t.calculate_leader_fee(involved, EXHAUST_DIVISOR);
+        let tx_atom = t.get_final_transaction_atom(leader_fee);
+        return Ok(Command::LocalOnly(tx_atom));
+    }
+
+    match t.current_stage() {
+        // If the transaction is New, propose to Prepare it
+        TransactionPoolStage::New => Ok(Command::Prepare(t.get_local_transaction_atom())),
+        // The transaction is Prepared, this stage is only _ready_ once we know that all local nodes
+        // accepted Prepared so we propose LocalPrepared
+        TransactionPoolStage::Prepared => Ok(Command::LocalPrepared(t.get_local_transaction_atom())),
+        // The transaction is LocalPrepared, meaning that we know that all foreign and local nodes have
+        // prepared. We can now propose to Accept it. We also propose the decision change which everyone
+        // should agree with if they received the same foreign LocalPrepare.
+        TransactionPoolStage::LocalPrepared => {
+            let involved = NonZeroU64::new(involved as u64).ok_or_else(|| {
+                HotStuffError::InvariantError(format!(
+                    "Number of involved shards is zero for transaction {}",
+                    t.transaction_id(),
+                ))
+            })?;
+            let leader_fee = t.calculate_leader_fee(involved, EXHAUST_DIVISOR);
+            let tx_atom = t.get_final_transaction_atom(leader_fee);
+            if tx_atom.decision.is_commit() {
+                let transaction = t.get_transaction(tx)?;
+                let result = transaction.result().ok_or_else(|| {
+                    HotStuffError::InvariantError(format!(
+                        "Transaction {} is committed but has no result when proposing",
+                        t.transaction_id(),
+                    ))
+                })?;
+
+                let diff = result.finalize.result.accept().ok_or_else(|| {
+                    HotStuffError::InvariantError(format!(
+                        "Transaction {} has COMMIT decision but execution failed when proposing",
+                        t.transaction_id(),
+                    ))
+                })?;
+                substate_changes.extend(diff_to_substate_changes(diff));
+            }
+            Ok(Command::Accept(tx_atom))
+        },
+        // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes
+        // agreed with the Accept, more (possibly empty) blocks with QCs will be
+        // proposed and accepted, otherwise the Accept block will not be committed.
+        TransactionPoolStage::AllPrepared | TransactionPoolStage::SomePrepared | TransactionPoolStage::LocalOnly => {
+            unreachable!(
+                "It is invalid for TransactionPoolStage::{} to be ready to propose",
+                t.current_stage()
+            )
+        },
     }
 }

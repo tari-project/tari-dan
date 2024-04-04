@@ -179,10 +179,10 @@ export const useAccountsInvoke = (accountName: string, method: string, args: Arr
   });
 };
 
-export const useAccountsGetBalances = (accountName: string) => {
+export const useAccountsGetBalances = (accountName: string, refresh: boolean = false) => {
   return useQuery({
     queryKey: ["accounts_balances"],
-    queryFn: () => accountsGetBalances({ account: { Name: accountName }, refresh: true }),
+    queryFn: () => accountsGetBalances({ account: { Name: accountName }, refresh }),
     onError: (error: apiError) => {
       error;
     },

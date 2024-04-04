@@ -10,7 +10,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::SubstateAddress;
 use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
 
 use crate::{
     consensus_models::{Decision, ExecutedTransaction},
@@ -25,7 +25,7 @@ pub struct TransactionRecord {
     pub transaction: Transaction,
     pub result: Option<ExecuteResult>,
     pub execution_time: Option<Duration>,
-    pub resulting_outputs: Vec<SubstateAddress>,
+    pub resulting_outputs: Vec<VersionedSubstateId>,
     pub final_decision: Option<Decision>,
     pub finalized_time: Option<Duration>,
     pub abort_details: Option<String>,
@@ -50,7 +50,7 @@ impl TransactionRecord {
         execution_time: Option<Duration>,
         final_decision: Option<Decision>,
         finalized_time: Option<Duration>,
-        resulting_outputs: Vec<SubstateAddress>,
+        resulting_outputs: Vec<VersionedSubstateId>,
         abort_details: Option<String>,
     ) -> Self {
         Self {
@@ -87,11 +87,11 @@ impl TransactionRecord {
     pub fn involved_shards_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
         self.transaction
             .all_inputs_iter()
-            .map(|input| input.to_substate_address())
-            .chain(self.resulting_outputs.clone())
+            .map(|requirement| requirement.to_substate_address())
+            .chain(self.resulting_outputs.iter().map(|output| output.to_substate_address()))
     }
 
-    pub fn resulting_outputs(&self) -> &[SubstateAddress] {
+    pub fn resulting_outputs(&self) -> &[VersionedSubstateId] {
         &self.resulting_outputs
     }
 

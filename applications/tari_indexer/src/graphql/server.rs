@@ -43,6 +43,7 @@ use serde::Serialize;
 use crate::{
     graphql::model::events::{EventQuery, EventSchema},
     substate_manager::SubstateManager,
+    EventManager,
 };
 
 const LOG_TARGET: &str = "tari::indexer::graphql";
@@ -50,9 +51,11 @@ const LOG_TARGET: &str = "tari::indexer::graphql";
 pub async fn run_graphql(
     preferred_address: SocketAddr,
     substate_manager: Arc<SubstateManager>,
+    event_manager: Arc<EventManager>,
 ) -> Result<(), anyhow::Error> {
     let schema = Schema::build(EventQuery, EmptyMutation, EmptySubscription)
         .data(substate_manager)
+        .data(event_manager)
         .finish();
     let router = Router::new()
         .route("/", get(graphql_playground).post(graphql_handler))

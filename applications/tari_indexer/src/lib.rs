@@ -32,6 +32,7 @@ mod dry_run;
 pub mod graphql;
 mod http_ui;
 
+mod event_manager;
 mod json_rpc;
 mod substate_manager;
 mod substate_storage_sqlite;
@@ -64,6 +65,7 @@ use crate::{
     bootstrap::{spawn_services, Services},
     config::ApplicationConfig,
     dry_run::processor::DryRunTransactionProcessor,
+    event_manager::EventManager,
     graphql::server::run_graphql,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
     transaction_manager::TransactionManager,
@@ -159,11 +161,20 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
             ));
         }
     }
+
+    // Run the event manager
+    let event_manager = Arc::new(EventManager::new(
+        config.network,
+        Box::new(services.epoch_manager.clone()),
+        services.validator_node_client_factory.clone(),
+        services.substate_store.clone(),
+    ));
+
     // Run the GraphQL API
     let graphql_address = config.indexer.graphql_address;
     if let Some(address) = graphql_address {
         info!(target: LOG_TARGET, "🌐 Started GraphQL server on {}", address);
-        task::spawn(run_graphql(address, substate_manager.clone()));
+        task::spawn(run_graphql(address, substate_manager.clone(), event_manager.clone()));
     }
 
     // Create pid to allow watchers to know that the process has started
@@ -178,7 +189,12 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
                     Ok(0) => {},
                     Ok(cnt) => info!(target: LOG_TARGET, "Scanned {} substate(s) successfully", cnt),
                     Err(e) =>  error!(target: LOG_TARGET, "Substate auto-scan failed: {}", e),
-                }
+                };
+                match event_manager.scan_events().await {
+                    Ok(0) => {},
+                    Ok(cnt) => info!(target: LOG_TARGET, "Scanned {} events(s) successfully", cnt),
+                    Err(e) =>  error!(target: LOG_TARGET, "Event auto-scan failed: {}", e),
+                };
             },
 
             Ok(event) = epoch_manager_events.recv() => {

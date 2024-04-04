@@ -226,8 +226,11 @@ impl CommitteeShard {
             .any(|substate_address| self.includes_substate_address(substate_address.borrow()))
     }
 
-    pub fn filter<'a, I, B: Borrow<SubstateAddress>>(&'a self, items: I) -> impl Iterator<Item = B> + '_
-    where I: IntoIterator<Item = B> + 'a {
+    pub fn filter<'a, I, B>(&'a self, items: I) -> impl Iterator<Item = B> + '_
+    where
+        I: IntoIterator<Item = B> + 'a,
+        B: Borrow<SubstateAddress>,
+    {
         items
             .into_iter()
             .filter(|substate_address| self.includes_substate_address(substate_address.borrow()))

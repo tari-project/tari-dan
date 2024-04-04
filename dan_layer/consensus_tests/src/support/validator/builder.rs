@@ -3,7 +3,7 @@
 
 use tari_common_types::types::PublicKey;
 use tari_consensus::{
-    hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker},
+    hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffConfig, HotstuffWorker},
     traits::hooks::NoopHooks,
 };
 use tari_dan_common_types::{shard::Shard, SubstateAddress};
@@ -18,10 +18,10 @@ use crate::support::{
     messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
     signing_service::TestVoteSignatureService,
     sync::AlwaysSyncedSyncManager,
-    NoopStateManager,
     RoundRobinLeaderStrategy,
     TestBlockTransactionExecutorBuilder,
     TestConsensusSpec,
+    TestStateManager,
     Validator,
     ValidatorChannels,
 };
@@ -93,7 +93,7 @@ impl ValidatorBuilder {
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
         let signing_service = TestVoteSignatureService::new(self.public_key.clone(), self.address.clone());
         let transaction_pool = TransactionPool::new();
-        let noop_state_manager = NoopStateManager::new();
+        let noop_state_manager = TestStateManager::new();
         let (tx_events, _) = broadcast::channel(100);
 
         let epoch_manager =
@@ -121,6 +121,10 @@ impl ValidatorBuilder {
             tx_mempool,
             NoopHooks,
             shutdown_signal.clone(),
+            HotstuffConfig {
+                max_base_layer_blocks_ahead: 5,
+                max_base_layer_blocks_behind: 5,
+            },
         );
 
         let (tx_current_state, _) = watch::channel(Default::default());

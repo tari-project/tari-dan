@@ -53,7 +53,8 @@ message Block {
   bytes foreign_indexes = 11;
   tari.dan.common.Signature signature = 12;
   uint64 timestamp = 13;
-  bytes base_layer_block_hash = 14;
+  uint64 base_layer_block_height = 14;
+  bytes base_layer_block_hash = 15;
 }
 
 message LeaderFee {
@@ -66,7 +67,8 @@ message Command {
     TransactionAtom prepare = 1;
     TransactionAtom local_prepared = 2;
     TransactionAtom accept = 3;
-    ForeignProposal foreign_proposal = 4;
+    TransactionAtom local_only = 4;
+    ForeignProposal foreign_proposal = 5;
   }
 }
 
@@ -83,6 +85,7 @@ message ForeignProposal {
   ForeignProposalState state = 3;
   uint64 mined_at = 4;
   repeated bytes transactions = 5;
+  uint64 base_layer_block_height = 6;
 }
 
 message TransactionAtom {

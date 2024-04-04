@@ -254,7 +254,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
     async fn process_block(
         &mut self,
-        block: Block,
+        mut block: Block,
         qcs: Vec<QuorumCertificate>,
         updates: Vec<SubstateUpdate>,
         transactions: Vec<TransactionRecord>,
@@ -302,6 +302,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         block.epoch(),
                         *block.merkle_root(),
                         block.timestamp(),
+                        block.base_layer_block_height(),
                         *block.base_layer_block_hash(),
                     );
                     dummy_block.save(tx)?;

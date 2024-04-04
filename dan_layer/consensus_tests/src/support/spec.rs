@@ -4,14 +4,13 @@
 use tari_consensus::traits::{hooks::NoopHooks, ConsensusSpec};
 use tari_state_store_sqlite::SqliteStateStore;
 
-use super::TestBlockTransactionExecutorBuilder;
+use super::{TestBlockTransactionExecutorBuilder, TestStateManager};
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
     messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
     signing_service::TestVoteSignatureService,
     sync::AlwaysSyncedSyncManager,
-    NoopStateManager,
     RoundRobinLeaderStrategy,
 };
 
@@ -27,7 +26,7 @@ impl ConsensusSpec for TestConsensusSpec {
     type LeaderStrategy = RoundRobinLeaderStrategy;
     type OutboundMessaging = TestOutboundMessaging;
     type SignatureService = TestVoteSignatureService;
-    type StateManager = NoopStateManager;
+    type StateManager = TestStateManager;
     type StateStore = SqliteStateStore<Self::Addr>;
     type SyncManager = AlwaysSyncedSyncManager;
 }
