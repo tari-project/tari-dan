@@ -40,6 +40,15 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    scanned_block_ids (id) {
+        id -> Integer,
+        epoch -> BigInt,
+        shard -> Binary,
+        last_block_id -> Text,
+    }
+}
+
 diesel::joinable!(event_payloads -> events (event_id));
 
 diesel::allow_tables_to_appear_in_same_query!(substates, non_fungible_indexes, events, event_payloads);
