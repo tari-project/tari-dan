@@ -67,7 +67,8 @@ message Command {
     TransactionAtom prepare = 1;
     TransactionAtom local_prepared = 2;
     TransactionAtom accept = 3;
-    ForeignProposal foreign_proposal = 4;
+    TransactionAtom local_only = 4;
+    ForeignProposal foreign_proposal = 5;
   }
 }
 

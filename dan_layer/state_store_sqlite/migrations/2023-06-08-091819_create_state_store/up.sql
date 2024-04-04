@@ -28,8 +28,8 @@ create table blocks
     is_processed            boolean   not NULL,
     is_dummy                boolean   not NULL,
     foreign_indexes         text      not NULL,
-    signature               text          NULL,
-    block_time              bigint        NULL,
+    signature               text      NULL,
+    block_time              bigint    NULL,
     timestamp               bigint    not NULL,
     base_layer_block_height bigint    not NULL,
     base_layer_block_hash   text      not NULL,
@@ -41,7 +41,7 @@ create table blocks
 create unique index blocks_uniq_idx_id on blocks (block_id);
 
 create table parked_blocks
-(   
+(
     id                      integer   not null primary key AUTOINCREMENT,
     block_id                text      not NULL,
     parent_block_id         text      not NULL,
@@ -55,8 +55,8 @@ create table parked_blocks
     commands                text      not NULL,
     total_leader_fee        bigint    not NULL,
     foreign_indexes         text      not NULL,
-    signature               text          NULL,
-    block_time              bigint        NULL,
+    signature               text      NULL,
+    block_time              bigint    NULL,
     timestamp               bigint    not NULL,
     base_layer_block_height bigint    not NULL,
     base_layer_block_hash   text      not NULL,
@@ -235,7 +235,7 @@ create table locked_outputs
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
-create unique index locked_outputs_uniq_idx_shard_id on locked_outputs (substate_address);
+create unique index locked_outputs_uniq_idx_substate_address on locked_outputs (substate_address);
 
 create table votes
 (
@@ -267,7 +267,7 @@ CREATE TABLE foreign_proposals
     bucket                  int       not NULL,
     block_id                text      not NULL,
     state                   text      not NULL,
-    proposed_height         bigint        NULL,
+    proposed_height         bigint    NULL,
     transactions            text      not NULL,
     base_layer_block_height bigint    not NULL,
     created_at              timestamp not NULL DEFAULT CURRENT_TIMESTAMP,

@@ -18,10 +18,10 @@ use crate::support::{
     messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
     signing_service::TestVoteSignatureService,
     sync::AlwaysSyncedSyncManager,
-    NoopStateManager,
     RoundRobinLeaderStrategy,
     TestBlockTransactionExecutorBuilder,
     TestConsensusSpec,
+    TestStateManager,
     Validator,
     ValidatorChannels,
 };
@@ -93,7 +93,7 @@ impl ValidatorBuilder {
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
         let signing_service = TestVoteSignatureService::new(self.public_key.clone(), self.address.clone());
         let transaction_pool = TransactionPool::new();
-        let noop_state_manager = NoopStateManager::new();
+        let noop_state_manager = TestStateManager::new();
         let (tx_events, _) = broadcast::channel(100);
 
         let epoch_manager =

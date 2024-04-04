@@ -52,11 +52,17 @@ pub enum TransactionPoolStage {
     AllPrepared,
     /// All foreign shards have prepared but one or more has decided to ABORT
     SomePrepared,
+    /// Only involves local shards
+    LocalOnly,
 }
 
 impl TransactionPoolStage {
     pub fn is_new(&self) -> bool {
         matches!(self, Self::New)
+    }
+
+    pub fn is_local_only(&self) -> bool {
+        matches!(self, Self::LocalOnly)
     }
 
     pub fn is_prepared(&self) -> bool {
@@ -84,17 +90,9 @@ impl TransactionPoolStage {
             TransactionPoolStage::New => Some(TransactionPoolStage::Prepared),
             TransactionPoolStage::Prepared => Some(TransactionPoolStage::LocalPrepared),
             TransactionPoolStage::LocalPrepared => Some(TransactionPoolStage::AllPrepared),
-            TransactionPoolStage::AllPrepared | TransactionPoolStage::SomePrepared => None,
-        }
-    }
-
-    pub fn prev_stage(&self) -> Option<Self> {
-        match self {
-            TransactionPoolStage::New => None,
-            TransactionPoolStage::Prepared => Some(TransactionPoolStage::New),
-            TransactionPoolStage::LocalPrepared => Some(TransactionPoolStage::Prepared),
-            TransactionPoolStage::AllPrepared => Some(TransactionPoolStage::LocalPrepared),
-            TransactionPoolStage::SomePrepared => Some(TransactionPoolStage::LocalPrepared),
+            TransactionPoolStage::LocalOnly |
+            TransactionPoolStage::AllPrepared |
+            TransactionPoolStage::SomePrepared => None,
         }
     }
 }
@@ -115,6 +113,7 @@ impl FromStr for TransactionPoolStage {
             "LocalPrepared" => Ok(TransactionPoolStage::LocalPrepared),
             "SomePrepared" => Ok(TransactionPoolStage::SomePrepared),
             "AllPrepared" => Ok(TransactionPoolStage::AllPrepared),
+            "LocalOnly" => Ok(TransactionPoolStage::LocalOnly),
             _ => Err(()),
         }
     }
@@ -182,6 +181,10 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         tx: &mut TStateStore::ReadTransaction<'_>,
     ) -> Result<bool, TransactionPoolError> {
         let count = tx.transaction_pool_count(None, Some(true), None)?;
+        if count > 0 {
+            return Ok(true);
+        }
+        let count = tx.transaction_pool_count(Some(TransactionPoolStage::LocalOnly), None, None)?;
         if count > 0 {
             return Ok(true);
         }
@@ -401,6 +404,7 @@ impl TransactionPoolRecord {
         // Check that only permitted stage transactions are performed
         match ((self.current_stage(), pending_stage), is_ready) {
             ((TransactionPoolStage::New, TransactionPoolStage::Prepared), true) |
+            ((TransactionPoolStage::New, TransactionPoolStage::LocalOnly), false) |
             ((TransactionPoolStage::Prepared, TransactionPoolStage::LocalPrepared), _) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), true) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), false) |

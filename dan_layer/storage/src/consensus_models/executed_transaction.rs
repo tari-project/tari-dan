@@ -15,9 +15,7 @@ use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
     lock::LockFlag,
 };
-use tari_transaction::{Transaction, TransactionId};
-#[cfg(feature = "ts")]
-use ts_rs::TS;
+use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
 
 use crate::{
     consensus_models::{Decision, Evidence, ShardEvidence, TransactionAtom, TransactionRecord},
@@ -27,11 +25,15 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
-    resulting_outputs: Vec<SubstateAddress>,
+    resulting_outputs: Vec<VersionedSubstateId>,
     #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
     execution_time: Duration,
     final_decision: Option<Decision>,
@@ -44,7 +46,7 @@ impl ExecutedTransaction {
     pub fn new(
         transaction: Transaction,
         result: ExecuteResult,
-        resulting_outputs: Vec<SubstateAddress>,
+        resulting_outputs: Vec<VersionedSubstateId>,
         execution_time: Duration,
     ) -> Self {
         Self {
@@ -98,7 +100,7 @@ impl ExecutedTransaction {
         self.transaction
             .all_inputs_iter()
             .map(|input| input.to_substate_address())
-            .chain(self.resulting_outputs.clone())
+            .chain(self.resulting_outputs.iter().map(|output| output.to_substate_address()))
     }
 
     pub fn num_involved_shards(&self) -> usize {
@@ -135,7 +137,7 @@ impl ExecutedTransaction {
     }
 
     /// Returns the outputs that resulted from execution.
-    pub fn resulting_outputs(&self) -> &[SubstateAddress] {
+    pub fn resulting_outputs(&self) -> &[VersionedSubstateId] {
         &self.resulting_outputs
     }
 
@@ -170,10 +172,11 @@ impl ExecutedTransaction {
         deduped_evidence.extend(
             self.resulting_outputs
                 .iter()
+                .map(|output| output.to_substate_address())
                 // Exclude transaction receipt address from evidence since all involved shards will commit it
-                .filter(|output| **output != tx_reciept_address)
+                .filter(|output| *output != tx_reciept_address)
                 .map(|output| {
-                    (*output, ShardEvidence {
+                    (output, ShardEvidence {
                         qc_ids: IndexSet::new(),
                         lock: LockFlag::Write,
                     })
