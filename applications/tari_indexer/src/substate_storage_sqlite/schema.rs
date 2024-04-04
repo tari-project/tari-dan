@@ -44,8 +44,8 @@ diesel::table! {
     scanned_block_ids (id) {
         id -> Integer,
         epoch -> BigInt,
-        shard -> Binary,
-        last_block_id -> Text,
+        shard -> BigInt,
+        last_block_id -> Binary,
     }
 }
 

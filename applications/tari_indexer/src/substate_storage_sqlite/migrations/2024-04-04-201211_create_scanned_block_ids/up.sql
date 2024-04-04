@@ -4,8 +4,8 @@ create table scanned_block_ids
 (
     id               integer    not NULL primary key AUTOINCREMENT,
     epoch            bigint     not NULL,
-    shard            blob       not null,
-    last_block_id    text       not null,
+    shard            bigint     not null,
+    last_block_id    blob       not null,
 );
 
 

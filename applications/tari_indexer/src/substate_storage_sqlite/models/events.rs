@@ -131,14 +131,14 @@ impl TryFrom<EventData> for tari_engine_types::events::Event {
 pub struct ScannedBlockId {
     pub id: i32,
     pub epoch: i64,
-    pub shard: Vec<u8>,
-    pub last_block_id: String,
+    pub shard: i64,
+    pub last_block_id: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Insertable, AsChangeset)]
 #[diesel(table_name = scanned_block_ids)]
 pub struct NewScannedBlockId {
     pub epoch: i64,
-    pub shard: Vec<u8>,
-    pub last_block_id: String,
+    pub shard: i64,
+    pub last_block_id: Vec<u8>,
 }

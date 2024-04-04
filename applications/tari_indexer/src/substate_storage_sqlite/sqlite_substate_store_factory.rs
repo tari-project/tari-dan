@@ -37,20 +37,21 @@ use diesel::{
 };
 use diesel_migrations::EmbeddedMigrations;
 use log::*;
-use tari_dan_storage::StorageError;
+use tari_dan_common_types::{shard::Shard, Epoch};
+use tari_dan_storage::{consensus_models::BlockId, StorageError};
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
 use tari_engine_types::substate::SubstateId;
 use tari_transaction::TransactionId;
 use thiserror::Error;
 
 use super::models::{
-    events::{EventData, NewEvent},
+    events::{EventData, NewEvent, NewScannedBlockId},
     non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex},
 };
 use crate::{
     diesel_migrations::MigrationHarness,
     substate_storage_sqlite::models::{
-        events::{Event, NewEventPayloadField},
+        events::{Event, NewEventPayloadField, ScannedBlockId},
         substate::{NewSubstate, Substate},
     },
 };
@@ -214,6 +215,7 @@ pub trait SubstateStoreReadTransaction {
         limit: u32,
     ) -> Result<Vec<Event>, StorageError>;
     fn event_exists(&mut self, event: NewEvent) -> Result<bool, StorageError>;
+    fn get_last_scanned_block_id(&mut self, epoch: Epoch, shard: Shard) -> Result<Option<BlockId>, StorageError>;
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
@@ -520,6 +522,25 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
 
         Ok(exists)
     }
+    
+    fn get_last_scanned_block_id(&mut self, epoch: Epoch, shard: Shard) -> Result<Option<BlockId>, StorageError> {
+        use crate::substate_storage_sqlite::schema::scanned_block_ids;
+
+        let row: Option<ScannedBlockId> = scanned_block_ids::table
+            .filter(
+                scanned_block_ids::epoch.eq(epoch.0 as i64)
+                .and(scanned_block_ids::shard.eq(shard.as_u32() as i64))
+            )
+            .first(self.connection())
+            .optional()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("find_by_address: {}", e),
+            })?;
+
+        let block_id_option = row.map(|r| BlockId::try_from(r.last_block_id)).transpose()?;
+
+        Ok(block_id_option)
+    }
 }
 
 pub struct SqliteSubstateStoreWriteTransaction<'a> {
@@ -547,6 +568,7 @@ pub trait SubstateStoreWriteTransaction {
     fn clear_substates(&mut self) -> Result<(), StorageError>;
     fn add_non_fungible_index(&mut self, new_nft_index: NewNonFungibleIndex) -> Result<(), StorageError>;
     fn save_event(&mut self, new_event: NewEvent) -> Result<(), StorageError>;
+    fn save_scanned_block_id(&mut self, new_scanned_block_id: NewScannedBlockId) -> Result<(), StorageError>;
 }
 
 impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
@@ -693,6 +715,24 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
             new_event.substate_id,
             new_event.template_address,
             new_event.tx_hash
+        );
+
+        Ok(())
+    }
+    
+    fn save_scanned_block_id(&mut self, new: NewScannedBlockId) -> Result<(), StorageError> {
+        use crate::substate_storage_sqlite::schema::scanned_block_ids;
+
+        diesel::insert_or_ignore_into(scanned_block_ids::table)
+            .values(&new)
+            .execute(&mut *self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("save_scanned_block_id error: {}", e),
+            })?;
+
+        info!(
+            target: LOG_TARGET,
+            "Added new scanned block id {:?} for epoch {} and shard {:?}", new.last_block_id, new.epoch, new.shard
         );
 
         Ok(())
