@@ -27,9 +27,6 @@ import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import Slide from "@mui/material/Slide";
-import useAccountStore from "../../../store/accountStore";
-import { useTheme } from "@mui/material/styles";
 import { useEffect } from "react";
 import { settingsGet, settingsSet } from "../../../utils/json_rpc";
 
@@ -38,7 +35,6 @@ function IndexerSettings() {
   const [accountFormState, setAccountFormState] = useState({
     indexer_url: "",
   });
-  const theme = useTheme();
   const [showForm, setShowForm] = useState(false);
   const [settings, setSettings] = useState({ indexer_url: "" });
 
