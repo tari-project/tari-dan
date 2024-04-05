@@ -163,7 +163,7 @@ impl Default for ComponentAccessRules {
 }
 
 /// An enum that represents all the possible actions that can be performed on a resource
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResourceAuthAction {
     Mint,
     Burn,

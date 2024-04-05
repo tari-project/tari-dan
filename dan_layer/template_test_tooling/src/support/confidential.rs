@@ -8,13 +8,13 @@ use tari_dan_wallet_crypto::{ConfidentialOutputMaskAndValue, ConfidentialProofSt
 use tari_engine_types::confidential::get_commitment_factory;
 use tari_template_lib::{
     crypto::PedersonCommitmentBytes,
-    models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof},
+    models::{Amount, ConfidentialOutputStatement, ConfidentialWithdrawProof},
 };
 
 pub fn generate_confidential_proof(
     output_amount: Amount,
     change: Option<Amount>,
-) -> (ConfidentialOutputProof, PrivateKey, Option<PrivateKey>) {
+) -> (ConfidentialOutputStatement, PrivateKey, Option<PrivateKey>) {
     generate_confidential_proof_internal(output_amount, change, None)
 }
 
@@ -22,7 +22,7 @@ pub fn generate_confidential_proof_with_view_key(
     output_amount: Amount,
     change: Option<Amount>,
     view_key: &PublicKey,
-) -> (ConfidentialOutputProof, PrivateKey, Option<PrivateKey>) {
+) -> (ConfidentialOutputStatement, PrivateKey, Option<PrivateKey>) {
     generate_confidential_proof_internal(output_amount, change, Some(view_key.clone()))
 }
 
@@ -30,7 +30,7 @@ fn generate_confidential_proof_internal(
     output_amount: Amount,
     change: Option<Amount>,
     view_key: Option<PublicKey>,
-) -> (ConfidentialOutputProof, PrivateKey, Option<PrivateKey>) {
+) -> (ConfidentialOutputStatement, PrivateKey, Option<PrivateKey>) {
     let mask = PrivateKey::random(&mut OsRng);
     let output_statement = ConfidentialProofStatement {
         amount: output_amount,
@@ -54,7 +54,8 @@ fn generate_confidential_proof_internal(
     });
 
     let proof =
-        tari_dan_wallet_crypto::create_confidential_proof(&output_statement, change_statement.as_ref()).unwrap();
+        tari_dan_wallet_crypto::create_confidential_output_statement(&output_statement, change_statement.as_ref())
+            .unwrap();
     (proof, mask, change.map(|_| change_mask))
 }
 
@@ -132,7 +133,12 @@ fn generate_withdraw_proof_internal(
     revealed_output_amount: Amount,
     view_key: Option<PublicKey>,
 ) -> WithdrawProofOutput {
-    let output_mask = PrivateKey::random(&mut OsRng);
+    // If the amount is zero, we omit the output UTXO, therefore the mask is zero
+    let output_mask = if output_amount.is_zero() {
+        Default::default()
+    } else {
+        PrivateKey::random(&mut OsRng)
+    };
     let change_mask = change_amount.map(|_| PrivateKey::random(&mut OsRng));
 
     let output_proof = ConfidentialProofStatement {

@@ -42,8 +42,17 @@ use crate::{
     },
     auth::{OwnerRule, ResourceAccessRules},
     crypto::{PedersonCommitmentBytes, RistrettoPublicKeyBytes},
-    models::{Amount, Bucket, ConfidentialOutputProof, Metadata, NonFungible, NonFungibleId, ResourceAddress, VaultId},
-    prelude::ResourceType,
+    models::{
+        Amount,
+        Bucket,
+        ConfidentialOutputStatement,
+        Metadata,
+        NonFungible,
+        NonFungibleId,
+        ResourceAddress,
+        VaultId,
+    },
+    prelude::{AuthHook, ResourceType},
 };
 
 /// Utility for managing resources inside templates
@@ -103,6 +112,7 @@ impl ResourceManager {
         metadata: Metadata,
         mint_arg: Option<MintArg>,
         view_key: Option<RistrettoPublicKeyBytes>,
+        authorize_hook: Option<AuthHook>,
     ) -> (ResourceAddress, Option<Bucket>) {
         let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
             resource_ref: ResourceRef::Resource,
@@ -114,6 +124,7 @@ impl ResourceManager {
                 metadata,
                 mint_arg,
                 view_key,
+                authorize_hook,
             }],
         });
 
@@ -132,7 +143,7 @@ impl ResourceManager {
     ///
     /// * `proof` - A zero-knowledge proof that specifies the amount of tokens to be minted and returned back to the
     ///   caller
-    pub fn mint_confidential(&self, proof: ConfidentialOutputProof) -> Bucket {
+    pub fn mint_confidential(&self, proof: ConfidentialOutputStatement) -> Bucket {
         self.mint_internal(MintResourceArg {
             mint_arg: MintArg::Confidential { proof: Box::new(proof) },
         })

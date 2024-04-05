@@ -36,7 +36,7 @@ use tari_template_lib::{
     args::Arg,
     crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{
-        ConfidentialOutputProof,
+        ConfidentialOutputStatement,
         ConfidentialStatement,
         ConfidentialWithdrawProof,
         EncryptedData,
@@ -449,13 +449,13 @@ impl From<ConfidentialWithdrawProof> for proto::transaction::ConfidentialWithdra
     }
 }
 
-// -------------------------------- ConfidentialOutputProof -------------------------------- //
+// -------------------------------- ConfidentialOutputStatement -------------------------------- //
 
-impl TryFrom<proto::transaction::ConfidentialOutputProof> for ConfidentialOutputProof {
+impl TryFrom<proto::transaction::ConfidentialOutputStatement> for ConfidentialOutputStatement {
     type Error = anyhow::Error;
 
-    fn try_from(val: proto::transaction::ConfidentialOutputProof) -> Result<Self, Self::Error> {
-        Ok(ConfidentialOutputProof {
+    fn try_from(val: proto::transaction::ConfidentialOutputStatement) -> Result<Self, Self::Error> {
+        Ok(ConfidentialOutputStatement {
             output_statement: val.output_statement.map(TryInto::try_into).transpose()?,
             change_statement: val.change_statement.map(TryInto::try_into).transpose()?,
             range_proof: val.range_proof,
@@ -465,8 +465,8 @@ impl TryFrom<proto::transaction::ConfidentialOutputProof> for ConfidentialOutput
     }
 }
 
-impl From<ConfidentialOutputProof> for proto::transaction::ConfidentialOutputProof {
-    fn from(val: ConfidentialOutputProof) -> Self {
+impl From<ConfidentialOutputStatement> for proto::transaction::ConfidentialOutputStatement {
+    fn from(val: ConfidentialOutputStatement) -> Self {
         Self {
             output_statement: val.output_statement.map(Into::into),
             change_statement: val.change_statement.map(Into::into),

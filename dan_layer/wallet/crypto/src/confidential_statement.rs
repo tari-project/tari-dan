@@ -8,6 +8,7 @@ use tari_crypto::{
 use tari_engine_types::confidential::get_commitment_factory;
 use tari_template_lib::models::{Amount, EncryptedData};
 
+#[derive(Debug, Clone)]
 pub struct ConfidentialProofStatement {
     pub amount: Amount,
     pub mask: RistrettoSecretKey,

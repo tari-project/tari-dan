@@ -14,7 +14,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@tariproject/typescript-bindings": "https://gitpkg.now.sh/tari-project/tari-dan/bindings?development"
+    "@tariproject/typescript-bindings": "file:../../../bindings"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

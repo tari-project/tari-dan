@@ -50,7 +50,7 @@ impl CallScope {
         this
     }
 
-    pub(super) fn set_auth_scope(&mut self, scope: AuthorizationScope) {
+    pub(crate) fn set_auth_scope(&mut self, scope: AuthorizationScope) {
         self.auth_scope = scope;
     }
 
@@ -168,7 +168,7 @@ impl CallScope {
     }
 
     /// Add a substate to the owned nodes set without checking if it is already in the scope. This is used when
-    /// initializing the root scope from the state store.
+    /// initializing the root scope from the state store and for resources used in buckets.
     pub fn add_substate_to_owned(&mut self, address: SubstateId) {
         self.referenced.swap_remove(&address);
         self.orphans.swap_remove(&address);
@@ -197,14 +197,24 @@ impl CallScope {
         for owned in &child.owned {
             self.orphans.swap_remove(owned);
         }
-        self.proof_scope.extend(child.proof_scope.iter().copied());
-        self.bucket_scope.extend(child.bucket_scope.iter().copied());
-        self.auth_scope = child.auth_scope;
+        self.proof_scope.extend(child.proof_scope);
+        self.bucket_scope.extend(child.bucket_scope);
+        self.auth_scope.update_from_child(child.auth_scope);
     }
 
-    pub fn include_in_scope(&mut self, values: &IndexedWellKnownTypes) {
+    pub fn include_owned_in_scope(&mut self, values: &IndexedWellKnownTypes) {
         for addr in values.referenced_substates() {
-            // These are never able to be brought into scope
+            // These are never able to bring these into scope
+            if addr.is_public_key_identity() || addr.is_transaction_receipt() {
+                continue;
+            }
+            self.add_substate_to_owned(addr);
+        }
+    }
+
+    pub fn include_refs_in_scope(&mut self, values: &IndexedWellKnownTypes) {
+        for addr in values.referenced_substates() {
+            // These are never able to bring these into scope
             if addr.is_public_key_identity() || addr.is_vault() || addr.is_transaction_receipt() {
                 continue;
             }
@@ -333,6 +343,7 @@ pub enum PushCallFrame {
     ForComponent {
         template_address: TemplateAddress,
         module_name: String,
+        component_scope: IndexedWellKnownTypes,
         component_lock: LockedSubstate,
         arg_scope: IndexedWellKnownTypes,
         entity_id: EntityId,
@@ -365,12 +376,14 @@ impl PushCallFrame {
             Self::ForComponent {
                 template_address,
                 module_name,
+                component_scope,
                 component_lock,
                 arg_scope,
                 entity_id,
             } => {
                 let mut frame = CallFrame::for_component(template_address, module_name, component_lock, entity_id);
-                frame.scope_mut().include_in_scope(&arg_scope);
+                frame.scope_mut().include_owned_in_scope(&component_scope);
+                frame.scope_mut().include_refs_in_scope(&arg_scope);
                 frame
             },
             Self::Static {
@@ -380,7 +393,7 @@ impl PushCallFrame {
                 entity_id,
             } => {
                 let mut frame = CallFrame::for_static(template_address, module_name, entity_id);
-                frame.scope_mut().include_in_scope(&arg_scope);
+                frame.scope_mut().include_refs_in_scope(&arg_scope);
                 frame
             },
         }

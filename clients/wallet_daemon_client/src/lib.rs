@@ -45,6 +45,8 @@ use ts_rs::TS;
 use types::{
     AccountsCreateFreeTestCoinsRequest,
     AccountsCreateFreeTestCoinsResponse,
+    AccountsTransferRequest,
+    AccountsTransferResponse,
     AuthLoginAcceptRequest,
     AuthLoginAcceptResponse,
     AuthLoginDenyRequest,
@@ -66,8 +68,6 @@ use types::{
     ProofsFinalizeResponse,
     ProofsGenerateRequest,
     ProofsGenerateResponse,
-    TransferRequest,
-    TransferResponse,
     WebRtcStartRequest,
     WebRtcStartResponse,
 };
@@ -347,10 +347,10 @@ impl WalletDaemonClient {
             .await
     }
 
-    pub async fn accounts_transfer<T: Borrow<TransferRequest>>(
+    pub async fn accounts_transfer<T: Borrow<AccountsTransferRequest>>(
         &mut self,
         req: T,
-    ) -> Result<TransferResponse, WalletDaemonClientError> {
+    ) -> Result<AccountsTransferResponse, WalletDaemonClientError> {
         self.send_request("accounts.transfer", req.borrow()).await
     }
 

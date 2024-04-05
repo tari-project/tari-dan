@@ -176,7 +176,7 @@ impl Vault {
     /// The bucket will be empty after the call
     pub fn from_bucket(bucket: Bucket) -> Self {
         let resource_address = bucket.resource_address();
-        let mut vault = Self::new_empty(resource_address);
+        let vault = Self::new_empty(resource_address);
         vault.deposit(bucket);
         vault
     }
@@ -184,7 +184,7 @@ impl Vault {
     /// Deposit all the tokens from the provided bucket into the vault.
     /// The bucket will be empty after the call.
     /// It will panic if the tokens in the bucket are from a different resource than the ones in the vault
-    pub fn deposit(&mut self, bucket: Bucket) {
+    pub fn deposit(&self, bucket: Bucket) {
         let result: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::Deposit,
@@ -195,7 +195,7 @@ impl Vault {
     }
 
     /// Withdraw an `amount` of tokens from the vault into a new bucket.
-    pub fn withdraw(&mut self, amount: Amount) -> Bucket {
+    pub fn withdraw(&self, amount: Amount) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::Withdraw,
@@ -207,13 +207,13 @@ impl Vault {
 
     /// Withdraw a single non-fungible token from the vault into a new bucket.
     /// It will panic if the vault does not contain the specified non-fungible token
-    pub fn withdraw_non_fungible(&mut self, id: NonFungibleId) -> Bucket {
+    pub fn withdraw_non_fungible(&self, id: NonFungibleId) -> Bucket {
         self.withdraw_non_fungibles(Some(id))
     }
 
     /// Withdraw multiple non-fungible tokens from the vault into a new bucket.
     /// It will panic if the vault does not contain the specified non-fungible tokens
-    pub fn withdraw_non_fungibles<I: IntoIterator<Item = NonFungibleId>>(&mut self, ids: I) -> Bucket {
+    pub fn withdraw_non_fungibles<I: IntoIterator<Item = NonFungibleId>>(&self, ids: I) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::Withdraw,
@@ -227,7 +227,7 @@ impl Vault {
 
     /// Withdraws an amount (specified in the `proof`) of confidential tokens from the vault into a new bucket.
     /// It will panic if the proof is invalid or there are not enough tokens in the vault
-    pub fn withdraw_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
+    pub fn withdraw_confidential(&self, proof: ConfidentialWithdrawProof) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::Withdraw,
@@ -248,6 +248,17 @@ impl Vault {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::GetBalance,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("failed to decode Amount")
+    }
+
+    /// Returns how many tokens this vault holds
+    pub fn locked_balance(&self) -> Amount {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::GetLockedBalance,
             args: invoke_args![],
         });
 
@@ -307,7 +318,7 @@ impl Vault {
 
     /// Returns a new bucket with revealed funds, specified by the `proof`.
     /// The amount of tokens will not change, only how many of those tokens will be known by everyone
-    pub fn reveal_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
+    pub fn reveal_confidential(&self, proof: ConfidentialWithdrawProof) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::ConfidentialReveal,
@@ -319,7 +330,7 @@ impl Vault {
 
     /// Pay a transaction fee with the funds present in the vault.
     /// Note that the vault must hold native Tari tokens to perform this operation
-    pub fn pay_fee(&mut self, amount: Amount) {
+    pub fn pay_fee(&self, amount: Amount) {
         let _resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::PayFee,
@@ -329,7 +340,7 @@ impl Vault {
 
     /// Pay a transaction fee with the confidential funds present in the vault.
     /// Note that the vault must hold native Tari tokens to perform this operation
-    pub fn pay_fee_confidential(&mut self, proof: ConfidentialWithdrawProof) {
+    pub fn pay_fee_confidential(&self, proof: ConfidentialWithdrawProof) {
         let _resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::PayFee,
@@ -342,7 +353,7 @@ impl Vault {
 
     /// Deposit an amount (specified in the `proof`) of confidential tokens into the vault.
     /// It will panic if the proof is invalid or the resource of the proof is not the same as the one in the vault
-    pub fn join_confidential(&mut self, proof: ConfidentialWithdrawProof) {
+    pub fn join_confidential(&self, proof: ConfidentialWithdrawProof) {
         let bucket = self.withdraw_confidential(proof);
         self.deposit(bucket);
     }

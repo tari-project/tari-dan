@@ -16,7 +16,7 @@ mod template {
 
     impl Recall {
         pub fn new(
-            confidential_supply: ConfidentialOutputProof,
+            confidential_supply: ConfidentialOutputStatement,
         ) -> (Component<Self>, ResourceAddress, ResourceAddress, ResourceAddress) {
             let fungible = ResourceBuilder::fungible()
                 .initial_supply(Amount(1_000_000))

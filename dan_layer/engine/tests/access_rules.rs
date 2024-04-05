@@ -15,7 +15,7 @@ use tari_template_lib::{
         ResourceAuthAction,
         RestrictedAccessRule,
     },
-    models::{Amount, ComponentAddress, NonFungibleId, ResourceAddress, VaultId},
+    models::{Amount, ComponentAddress, Metadata, NonFungibleId, ResourceAddress, VaultId},
 };
 use tari_template_test_tooling::{
     support::assert_error::{
@@ -218,12 +218,14 @@ mod component_access_rules {
             vec![owner_proof],
         );
 
-        assert_access_denied_for_action(reason, ComponentAction::SetAccessRules);
+        assert_reject_reason(reason, RuntimeError::AccessDeniedOwnerRequired {
+            action: ComponentAction::SetAccessRules.into(),
+        });
     }
 }
 
 mod resource_access_rules {
-    use tari_template_lib::models::Metadata;
+    use tari_dan_engine::runtime::LockError;
 
     use super::*;
 
@@ -549,7 +551,7 @@ mod resource_access_rules {
 
         assert_access_denied_for_action(reason, ResourceAuthAction::Withdraw);
 
-        // Give the user a withdraw and deposit badge
+        // Give the user a badge
         test.execute_expect_success(
             Transaction::builder()
                 .call_method(access_rules_component, "mint_new_badge", args![])
@@ -950,5 +952,244 @@ mod resource_access_rules {
                 .build(),
             vec![owner_proof],
         );
+    }
+
+    #[test]
+    fn it_allows_resource_actions_if_auth_hook_passes() {
+        let mut test = TemplateTest::new(["tests/templates/access_rules"]);
+
+        // Create sender and receiver accounts
+        let (owner_account, owner_proof, owner_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder()
+                .call_function(access_rules_template, "with_auth_hook", args![true, "valid_auth_hook"])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        test.execute_expect_success(
+            Transaction::builder()
+                .call_method(component_address, "take_tokens", args![Amount(10)])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(owner_account, "deposit", args![Workspace("tokens")])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+    }
+
+    #[test]
+    fn it_denies_resource_actions_if_auth_hook_fails() {
+        let mut test = TemplateTest::new(["tests/templates/access_rules"]);
+
+        let (owner_account, owner_proof, owner_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder()
+                .call_function(access_rules_template, "with_auth_hook", args![false, "valid_auth_hook"])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        let result = test.execute_expect_failure(
+            Transaction::builder()
+                .call_method(component_address, "take_tokens", args![Amount(10)])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(owner_account, "deposit", args![Workspace("tokens")])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        assert_reject_reason(result, RuntimeError::AccessDeniedAuthHook {
+            action_ident: ResourceAuthAction::Deposit.into(),
+            details: "Panic! Access denied for action Deposit".to_string(),
+        });
+    }
+
+    #[test]
+    fn it_disallows_hook_that_writes_to_caller_component() {
+        let mut test = TemplateTest::new(["tests/templates/access_rules"]);
+
+        let (_owner_account, owner_proof, owner_key) = test.create_empty_account();
+        let (user_account, user_proof, user_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder()
+                .call_function(access_rules_template, "with_auth_hook", args![
+                    true,
+                    "malicious_auth_hook_set_state"
+                ])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        let result = test.execute_expect_failure(
+            Transaction::builder()
+                .call_method(component_address, "take_tokens", args![Amount(10)])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(user_account, "deposit", args![Workspace("tokens")])
+                .sign(&user_key)
+                .build(),
+            vec![user_proof.clone()],
+        );
+
+        assert_reject_reason(result, RuntimeError::AccessDeniedSetComponentState {
+            attempted_on: user_account.into(),
+            attempted_by: component_address.into(),
+        });
+    }
+
+    #[test]
+    fn it_disallows_hook_that_attempts_mutable_call_to_caller() {
+        let mut test = TemplateTest::new(["tests/templates/access_rules"]);
+
+        let (_owner_account, owner_proof, owner_key) = test.create_empty_account();
+        let (user_account, user_proof, user_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder()
+                .call_function(access_rules_template, "with_auth_hook", args![
+                    true,
+                    "malicious_auth_hook_call_mut"
+                ])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        let result = test.execute_expect_failure(
+            Transaction::builder()
+                .call_method(component_address, "take_tokens", args![Amount(10)])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(user_account, "deposit", args![Workspace("tokens")])
+                .sign(&user_key)
+                .build(),
+            vec![user_proof.clone()],
+        );
+
+        assert_reject_reason(
+            result,
+            RuntimeError::LockError(LockError::MultipleWriteLockRequested {
+                address: user_account.into(),
+            }),
+        );
+    }
+
+    #[test]
+    fn it_disallows_hook_that_attempts_mutable_call_to_another_component_in_the_transaction() {
+        let mut test = TemplateTest::new(["tests/templates/access_rules", "tests/templates/state"]);
+
+        let (_owner_account, owner_proof, owner_key) = test.create_empty_account();
+        let (user_account, user_proof, user_key) = test.create_empty_account();
+
+        // User has a state component
+        let state_template = test.get_template_address("State");
+        let result = test.execute_expect_success(
+            Transaction::builder()
+                .call_function(state_template, "restricted", args![])
+                .sign(&user_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        let state_component = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder()
+                .call_function(access_rules_template, "with_auth_hook_attack_component", args![
+                    state_component
+                ])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        let result = test.execute_expect_failure(
+            Transaction::builder()
+                .call_method(component_address, "take_tokens", args![Amount(10)])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(state_component, "set", args![1])
+                // The hook should not be able to set the state component to 123
+                .call_method(user_account, "deposit", args![Workspace("tokens")])
+                .sign(&user_key)
+                .build(),
+            vec![user_proof.clone()],
+        );
+
+        // Check that the access hook fails (it does not have permission to call set in the state component)
+        // even though the transaction signer has ownership of the object and the previous call to set works.
+        assert_reject_reason(result, RuntimeError::AccessDeniedAuthHook {
+            action_ident: ResourceAuthAction::Deposit.into(),
+            details: String::new(),
+        });
+    }
+
+    #[test]
+    fn it_fails_if_auth_hook_is_invalid() {
+        let mut test = TemplateTest::new(["tests/templates/access_rules"]);
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        [
+            "invalid_auth_hook1",
+            "invalid_auth_hook2",
+            "invalid_auth_hook3",
+            "invalid_auth_hook4",
+            "invalid_auth_hook5",
+            "hook_doesnt_exist",
+        ]
+        .iter()
+        .for_each(|hook| {
+            let reason = test.execute_expect_failure(
+                Transaction::builder()
+                    .call_function(access_rules_template, "with_auth_hook", args![true, hook])
+                    .sign(test.get_test_secret_key())
+                    .build(),
+                vec![test.get_test_proof()],
+            );
+
+            assert_reject_reason(reason, RuntimeError::InvalidArgument {
+                argument: "CreateResourceArg",
+                // Partial error text
+                reason: "Authorize hook".to_string(),
+            });
+        })
     }
 }

@@ -46,7 +46,7 @@ use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::Arg,
     auth::ComponentAccessRules,
-    models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress, VaultId},
+    models::{Amount, ConfidentialOutputStatement, NonFungibleId, ResourceAddress, VaultId},
     prelude::{ComponentAddress, ConfidentialWithdrawProof, ResourceType},
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId, UnsignedTransaction};
@@ -543,7 +543,7 @@ pub struct AccountSetDefaultResponse {}
     derive(TS),
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
-pub struct TransferRequest {
+pub struct AccountsTransferRequest {
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
     pub amount: Amount,
@@ -562,7 +562,7 @@ pub struct TransferRequest {
     derive(TS),
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
-pub struct TransferResponse {
+pub struct AccountsTransferResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
     pub fee: Amount,
@@ -647,7 +647,7 @@ pub struct ConfidentialCreateOutputProofRequest {
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
 pub struct ConfidentialCreateOutputProofResponse {
-    pub proof: ConfidentialOutputProof,
+    pub proof: ConfidentialOutputStatement,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

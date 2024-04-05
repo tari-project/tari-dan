@@ -28,14 +28,13 @@ import {
   accountsCreateFreeTestCoins,
   accountsGet,
   accountsGetBalances,
-  accountsInvoke,
   accountsList,
   accountsTransfer,
   nftList,
 } from "../../utils/json_rpc";
 import { apiError } from "../helpers/types";
 import queryClient from "../queryClient";
-import type { Arg, ComponentAccessRules, ConfidentialTransferInputSelection } from "@tariproject/typescript-bindings";
+import type { ComponentAccessRules, ConfidentialTransferInputSelection } from "@tariproject/typescript-bindings";
 import type { ComponentAddressOrName } from "@tariproject/typescript-bindings/wallet-daemon-client";
 
 //   Fees are passed as strings because Amount is tagged
@@ -169,15 +168,6 @@ export const useAccountsList = (offset: number, limit: number) => {
   });
 };
 
-export const useAccountsInvoke = (accountName: string, method: string, args: Array<Arg>) => {
-  return useQuery({
-    queryKey: ["accounts_invoke"],
-    queryFn: () => accountsInvoke({ account: { Name: accountName }, method, args, max_fee: null }),
-    onError: (error: apiError) => {
-      error;
-    },
-  });
-};
 
 export const useAccountsGetBalances = (accountName: string, refresh: boolean = false) => {
   return useQuery({
