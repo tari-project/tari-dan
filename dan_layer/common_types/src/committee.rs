@@ -247,22 +247,14 @@ impl CommitteeShard {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/")
-)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct NetworkCommitteeInfo<TAddr> {
     pub epoch: Epoch,
     pub committees: Vec<CommitteeShardInfo<TAddr>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/")
-)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct CommitteeShardInfo<TAddr> {
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub shard: Shard,

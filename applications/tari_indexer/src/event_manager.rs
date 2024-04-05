@@ -31,7 +31,13 @@ use log::*;
 use tari_bor::decode;
 use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
-use tari_dan_common_types::{committee::{Committee, CommitteeShardInfo}, shard::Shard, Epoch, PeerAddress, SubstateAddress};
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeShardInfo},
+    shard::Shard,
+    Epoch,
+    PeerAddress,
+    SubstateAddress,
+};
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
 use tari_dan_storage::consensus_models::{Block, BlockId, Command, Decision, TransactionRecord};
 use tari_engine_types::{commit_result::ExecuteResult, events::Event, substate::SubstateId};
@@ -92,7 +98,9 @@ impl EventManager {
                 committee.shard
             );
             // TODO: use the latest block id that we scanned for each committee
-            let new_blocks = self.get_new_blocks_from_committee(&mut committee.clone(), epoch).await?;
+            let new_blocks = self
+                .get_new_blocks_from_committee(&mut committee.clone(), epoch)
+                .await?;
             info!(
                 target: LOG_TARGET,
                 "Scanned {} blocks",
@@ -263,7 +271,11 @@ impl EventManager {
     }
 
     #[allow(unused_assignments)]
-    async fn get_new_blocks_from_committee(&self, committee: &mut CommitteeShardInfo<PeerAddress>, epoch: Epoch) -> Result<Vec<Block>, anyhow::Error> {
+    async fn get_new_blocks_from_committee(
+        &self,
+        committee: &mut CommitteeShardInfo<PeerAddress>,
+        epoch: Epoch,
+    ) -> Result<Vec<Block>, anyhow::Error> {
         // We start scanning from the last scanned block for this commitee
         let shard = committee.shard;
         let start_block_id = {
@@ -317,7 +329,7 @@ impl EventManager {
                 },
             };
         }
-    
+
         // We don't raise an error if none of the VNs have blocks, the scanning will retry eventually
         warn!(
             target: LOG_TARGET,

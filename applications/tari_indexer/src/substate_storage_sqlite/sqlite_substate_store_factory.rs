@@ -522,14 +522,15 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
 
         Ok(exists)
     }
-    
+
     fn get_last_scanned_block_id(&mut self, epoch: Epoch, shard: Shard) -> Result<Option<BlockId>, StorageError> {
         use crate::substate_storage_sqlite::schema::scanned_block_ids;
 
         let row: Option<ScannedBlockId> = scanned_block_ids::table
             .filter(
-                scanned_block_ids::epoch.eq(epoch.0 as i64)
-                .and(scanned_block_ids::shard.eq(shard.as_u32() as i64))
+                scanned_block_ids::epoch
+                    .eq(epoch.0 as i64)
+                    .and(scanned_block_ids::shard.eq(shard.as_u32() as i64)),
             )
             .first(self.connection())
             .optional()
@@ -719,7 +720,7 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
 
         Ok(())
     }
-    
+
     fn save_scanned_block_id(&mut self, new: NewScannedBlockId) -> Result<(), StorageError> {
         use crate::substate_storage_sqlite::schema::scanned_block_ids;
 
