@@ -35,16 +35,10 @@ pub enum EpochManagerError {
     BaseLayerConsensusConstantsNotSet,
     #[error("Base layer could not return shard key for {public_key} at height {block_height}")]
     ShardKeyNotFound { public_key: PublicKey, block_height: u64 },
-    #[error("BalancedBinaryMerkleTreeError: {0}")]
-    BalancedBinaryMerkleTreeError(anyhow::Error),
-    #[error("BalancedBinaryMerkleProofError: {0}")]
-    BalancedBinaryMerkleProofError(anyhow::Error),
     #[error("Integer overflow: {func}")]
     IntegerOverflow { func: &'static str },
     #[error("Invalid epoch: {epoch}")]
     InvalidEpoch { epoch: Epoch },
-    #[error("Could not create SMT: {0}")]
-    SmtError(#[from] tari_mmr::sparse_merkle_tree::SMTError),
 }
 
 impl EpochManagerError {

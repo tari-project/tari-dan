@@ -3,7 +3,7 @@
 
 use diesel::{Connection, SqliteConnection};
 use rand::rngs::OsRng;
-use tari_common_types::types::{PublicKey};
+use tari_common_types::types::PublicKey;
 use tari_crypto::keys::PublicKey as _;
 use tari_dan_common_types::{Epoch, PeerAddress, SubstateAddress};
 use tari_dan_storage::global::{GlobalDb, ValidatorNodeDb};
@@ -29,7 +29,7 @@ fn insert_vns(
     validator_nodes: &mut ValidatorNodeDb<'_, '_, SqliteGlobalDbAdapter<PeerAddress>>,
     num: usize,
     epoch: Epoch,
-    sidechain_id: Option<PublicKey>
+    sidechain_id: Option<PublicKey>,
 ) {
     for _ in 0..num {
         insert_vn_with_public_key(validator_nodes, new_public_key(), epoch, sidechain_id.clone())

@@ -8,13 +8,4 @@ import type { ResourceAddress } from "./ResourceAddress";
 import type { TransactionReceiptAddress } from "./TransactionReceiptAddress";
 import type { VaultId } from "./VaultId";
 
-export interface IndexedWellKnownTypes {
-  bucket_ids: Array<BucketId>;
-  proof_ids: Array<ProofId>;
-  component_addresses: Array<ComponentAddress>;
-  resource_addresses: Array<ResourceAddress>;
-  transaction_receipt_addresses: Array<TransactionReceiptAddress>;
-  non_fungible_addresses: Array<NonFungibleAddress>;
-  vault_ids: Array<VaultId>;
-  metadata: Array<Metadata>;
-}
+export interface IndexedWellKnownTypes { bucket_ids: Array<BucketId>, proof_ids: Array<ProofId>, component_addresses: Array<ComponentAddress>, resource_addresses: Array<ResourceAddress>, transaction_receipt_addresses: Array<TransactionReceiptAddress>, non_fungible_addresses: Array<NonFungibleAddress>, vault_ids: Array<VaultId>, metadata: Array<Metadata>, }

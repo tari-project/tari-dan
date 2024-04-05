@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use tari_dan_engine::wasm::compile::compile_template;
 use tari_engine_types::{hashing::template_hasher32, TemplateAddress};
 use tari_template_lib::Hash;
-use tari_validator_node_client::types::{TemplateRegistrationRequest, TemplateRegistrationResponse};
+use tari_transaction::TransactionId;
 
 use crate::TariWorld;
 
@@ -20,7 +20,7 @@ pub async fn send_template_registration(
     world: &mut TariWorld,
     template_name: String,
     vn_name: String,
-) -> anyhow::Result<TemplateRegistrationResponse> {
+) -> anyhow::Result<(TransactionId, TemplateAddress)> {
     let binary_sha = compile_wasm_template(template_name.clone())?;
 
     // publish the wasm file into http to be able to be fetched by the VN later
@@ -32,21 +32,21 @@ pub async fn send_template_registration(
         .await;
 
     // build the template registration request
-    let request = TemplateRegistrationRequest {
-        template_name,
-        template_version: 0,
-        template_type: "wasm".to_string(),
-        repo_url: String::new(),
-        commit_hash: vec![],
-        binary_sha: binary_sha.to_vec(),
-        binary_url: mock.url,
-        sidechain_id: None,
-        sidechain_id_knowledge_proof: None,
-    };
-
-    // send the template registration request
-    let vn = world.get_validator_node(&vn_name);
-    let mut client = vn.get_client();
+    // let request = TemplateRegistrationRequest {
+    //     template_name,
+    //     template_version: 0,
+    //     template_type: "wasm".to_string(),
+    //     repo_url: String::new(),
+    //     commit_hash: vec![],
+    //     binary_sha: binary_sha.to_vec(),
+    //     binary_url: mock.url,
+    //     sidechain_id: None,
+    //     sidechain_id_knowledge_proof: None,
+    // };
+    //
+    // // send the template registration request
+    // let vn = world.get_validator_node(&vn_name);
+    // let mut client = vn.get_client();
 
     // store the template address for future reference
     todo!()

@@ -21,7 +21,6 @@ tari_dan_storage = { workspace = true }
 
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
-cargo_metadata = { workspace = true }
 dirs = { workspace = true }
 jfs = { workspace = true }
 log = { workspace = true }

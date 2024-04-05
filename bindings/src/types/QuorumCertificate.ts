@@ -2,15 +2,7 @@
 import type { Epoch } from "./Epoch";
 import type { NodeHeight } from "./NodeHeight";
 import type { QuorumDecision } from "./QuorumDecision";
+import type { Shard } from "./Shard";
 import type { ValidatorSignature } from "./ValidatorSignature";
 
-export interface QuorumCertificate {
-  qc_id: string;
-  block_id: string;
-  block_height: NodeHeight;
-  epoch: Epoch;
-  signatures: Array<ValidatorSignature>;
-  merged_proof: any;
-  leaf_hashes: Array<string>;
-  decision: QuorumDecision;
-}
+export interface QuorumCertificate { qc_id: string, block_id: string, block_height: NodeHeight, epoch: Epoch, shard: Shard, signatures: Array<ValidatorSignature>, leaf_hashes: Array<string>, decision: QuorumDecision, }

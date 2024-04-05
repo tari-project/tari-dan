@@ -22,7 +22,7 @@
 
 use clap::{Args, Subcommand};
 use tari_common_types::types::PublicKey;
-use tari_crypto::{tari_utilities::ByteArray};
+use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::Epoch;
 use tari_template_lib::crypto::RistrettoPublicKeyBytes;
 use tari_validator_node_client::{types::GetValidatorFeesRequest, ValidatorNodeClient};

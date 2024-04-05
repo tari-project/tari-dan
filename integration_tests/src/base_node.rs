@@ -114,6 +114,8 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
                 database_url: DbConnectionUrl::File(temp_dir.join("dht.sqlite")),
                 ..DhtConfig::default_local_test()
             };
+            base_node_config.base_node.second_layer_grpc_enabled = true;
+            base_node_config.base_node.mining_enabled = true;
 
             let result = run_base_node(shutdown, Arc::new(base_node_identity), Arc::new(base_node_config)).await;
             if let Err(e) = result {

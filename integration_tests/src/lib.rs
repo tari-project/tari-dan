@@ -20,10 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    fmt::{Debug, Formatter},
-    time::{Duration, Instant},
-};
+use std::{fmt::{Debug, Formatter}, fs, time::{Duration, Instant}};
+use std::path::Path;
 
 use base_node::BaseNodeProcess;
 use cucumber::gherkin::Scenario;
@@ -50,6 +48,7 @@ use template::RegisteredTemplate;
 use validator_node::ValidatorNodeProcess;
 use wallet::WalletProcess;
 use wallet_daemon::DanWalletDaemonProcess;
+use crate::logging::{get_base_dir, get_base_dir_for_scenario};
 
 pub mod base_node;
 pub mod helpers;
@@ -97,6 +96,26 @@ pub struct TariWorld {
 }
 
 impl TariWorld {
+
+    pub fn mark_point_in_logs(&self, point_name: &str) {
+        fn write_point(file_name: &str, point_name: &str) {
+            let base_dir = get_base_dir();
+            if !base_dir.exists() {
+                fs::create_dir_all(&base_dir).unwrap();
+            }
+            if base_dir.join(file_name).exists() {
+                let log_file = fs::read_to_string(base_dir.join(file_name)).unwrap();
+                fs::write(base_dir.join(file_name), format!("{}\n\n------------------------------------------------\n\n{}\n\n----------------------------------------------------------\n\n",  log_file, point_name)).unwrap();
+            }
+        }
+
+        write_point("base_layer.log", point_name);
+        write_point("dan_layer.log", point_name);
+        write_point("wallet.log", point_name);
+        write_point("network.log", point_name);
+        write_point("wallet_daemon.log", point_name);
+    }
+
     pub fn get_mock_server(&self) -> &MockHttpServer {
         self.http_server.as_ref().unwrap()
     }

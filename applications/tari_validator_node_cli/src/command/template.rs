@@ -20,8 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use clap::{Subcommand};
-use tari_engine_types::{TemplateAddress};
+use clap::Subcommand;
+use tari_engine_types::TemplateAddress;
 use tari_validator_node_client::{
     types::{GetTemplateRequest, GetTemplateResponse, GetTemplatesRequest},
     ValidatorNodeClient,
@@ -34,7 +34,6 @@ pub enum TemplateSubcommand {
     Get { template_address: FromHex<TemplateAddress> },
     List,
 }
-
 
 impl TemplateSubcommand {
     pub async fn handle(self, client: ValidatorNodeClient) -> Result<(), anyhow::Error> {

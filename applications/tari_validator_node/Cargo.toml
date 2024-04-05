@@ -13,7 +13,6 @@ metrics = ["prometheus"]
 ts = []                  # this is just for the build script to skip the build
 
 [dependencies]
-minotari_app_grpc = { workspace = true }
 minotari_app_utilities = { workspace = true }
 tari_common = { workspace = true }
 tari_common_types = { workspace = true }

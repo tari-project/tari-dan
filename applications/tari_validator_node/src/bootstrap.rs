@@ -110,6 +110,7 @@ use crate::{
     ApplicationConfig,
     ValidatorNodeConfig,
 };
+use crate::validator_registration_file::ValidatorRegistrationFile;
 
 const LOG_TARGET: &str = "tari::validator_node::bootstrap";
 
@@ -360,12 +361,7 @@ async fn create_registration_file(
         .await?;
 
     let signature = ValidatorNodeSignature::sign(keypair.secret_key(), &fee_claim_public_key, b"");
-    #[derive(Serialize)]
-    struct ValidatorRegistrationFile {
-        signature: ValidatorNodeSignature,
-        public_key: PublicKey,
-        claim_public_key: PublicKey,
-    }
+
     let registration = ValidatorRegistrationFile {
         signature,
         public_key: keypair.public_key().clone(),

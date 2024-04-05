@@ -35,6 +35,9 @@ mod p2p;
 mod substate_resolver;
 mod virtual_substate;
 
+mod validator_registration_file;
+pub use validator_registration_file::ValidatorRegistrationFile;
+
 use std::{fs, io, process};
 
 use log::*;

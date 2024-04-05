@@ -74,8 +74,6 @@ pub struct ValidatorNodeConfig {
     // pub public_address: Option<Multiaddr>,
     /// The Tari base node's GRPC address
     pub base_node_grpc_address: Option<String>,
-    /// The Tari console wallet's GRPC address
-    pub wallet_grpc_address: Option<SocketAddr>,
     /// If set to false, there will be no base layer scanning at all
     pub scan_base_layer: bool,
     /// How often do we want to scan the base layer for changes
@@ -96,8 +94,6 @@ pub struct ValidatorNodeConfig {
     pub json_rpc_public_address: Option<String>,
     /// The address of the HTTP UI
     pub http_ui_listener_address: Option<SocketAddr>,
-    /// The node will re-register each epoch
-    pub auto_register: bool,
     /// Template config
     pub templates: TemplateConfig,
     /// Dont charge fees
@@ -133,7 +129,6 @@ impl Default for ValidatorNodeConfig {
             shard_key_file: PathBuf::from("shard_key.json"),
             identity_file: PathBuf::from("validator_node_id.json"),
             base_node_grpc_address: None,
-            wallet_grpc_address: None,
             scan_base_layer: true,
             base_layer_scanning_interval: Duration::from_secs(10),
             data_dir: PathBuf::from("data/validator_node"),
@@ -143,7 +138,6 @@ impl Default for ValidatorNodeConfig {
             json_rpc_listener_address: Some("127.0.0.1:18200".parse().unwrap()),
             json_rpc_public_address: None,
             http_ui_listener_address: Some("127.0.0.1:5001".parse().unwrap()),
-            auto_register: true,
             templates: TemplateConfig::default(),
             no_fees: false,
             // Burn your fees

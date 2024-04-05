@@ -91,7 +91,13 @@ impl TestEpochManager {
             .await
             .validator_shards
             .iter()
-            .filter_map(|(a, (shard, substate_address, pk, sidechain_id))| if sidechain_id.is_none() { Some((a.clone(), *shard, *substate_address, pk.clone())) } else { None })
+            .filter_map(|(a, (shard, substate_address, pk, sidechain_id))| {
+                if sidechain_id.is_none() {
+                    Some((a.clone(), *shard, *substate_address, pk.clone()))
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
@@ -136,7 +142,7 @@ impl EpochManagerReader for TestEpochManager {
             epoch,
             committee_shard: Some(shard),
             fee_claim_public_key: PublicKey::default(),
-            sidechain_id
+            sidechain_id,
         })
     }
 
@@ -245,7 +251,7 @@ impl EpochManagerReader for TestEpochManager {
             epoch,
             committee_shard: Some(*shard),
             fee_claim_public_key: PublicKey::default(),
-            sidechain_id: sidechain_id.clone()
+            sidechain_id: sidechain_id.clone(),
         })
     }
 

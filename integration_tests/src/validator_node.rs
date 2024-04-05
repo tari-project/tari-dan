@@ -31,9 +31,10 @@ use tari_common_types::types::PublicKey;
 use tari_dan_app_utilities::p2p_config::PeerSeedsConfig;
 use tari_p2p::Network;
 use tari_shutdown::Shutdown;
-use tari_validator_node::{run_validator_node, ApplicationConfig, ValidatorNodeConfig};
+use tari_validator_node::{run_validator_node, ApplicationConfig, ValidatorNodeConfig, ValidatorRegistrationFile};
 use tari_validator_node_client::ValidatorNodeClient;
 use tokio::task;
+use tari_wallet_daemon_client::types::KeyBranch;
 
 use crate::{
     helpers::{check_join_handle, get_os_assigned_port, get_os_assigned_ports, wait_listener_on_local_port},
@@ -64,19 +65,33 @@ impl ValidatorNodeProcess {
         let from = &self.temp_dir_path.join(format!("{}.db", database_name));
         fs::copy(from, to.join(format!("{}.sqlite", database_name))).expect("Could not copy file");
     }
+
+    pub fn get_registration_info(&self) -> ValidatorRegistrationFile {
+        let registration_file_path = self.temp_dir_path.join("registration.json");
+        let registration_file = fs::read_to_string(&registration_file_path).expect("Could not read file");
+        serde_json::from_str(&registration_file).expect("Could not parse file")
+    }
 }
 
 pub async fn spawn_validator_node(
-    world: &TariWorld,
+    world: &mut TariWorld,
     validator_node_name: String,
     base_node_name: String,
-    wallet_name: String,
+    wallet_daemon_name: String
 ) -> ValidatorNodeProcess {
     // each spawned VN will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
     let http_ui_port = get_os_assigned_port();
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
-    let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
+    let walletd = world.wallet_daemons.get(&wallet_daemon_name).unwrap();
+    let mut wallet_client = walletd.get_authed_client().await;
+    let index = world
+        .wallet_keys
+        .entry(format!("{}_claim_fee_key", &validator_node_name)).or_insert_with(|| 0);
+    let key = wallet_client
+        .create_specific_key(KeyBranch::Transaction, *index)
+        .await
+        .unwrap().public_key;
     let name = validator_node_name.clone();
 
     let peer_seeds: Vec<String> = world
@@ -109,7 +124,6 @@ pub async fn spawn_validator_node(
         config.validator_node.shard_key_file = temp_dir.join("shard_key.json");
         config.validator_node.identity_file = temp_dir.join("validator_node_id.json");
         config.validator_node.base_node_grpc_address = Some(format!("127.0.0.1:{}", base_node_grpc_port));
-        config.validator_node.wallet_grpc_address = Some(format!("127.0.0.1:{}", wallet_grpc_port).parse().unwrap());
 
         // config.validator_node.public_address =
         // Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
@@ -119,9 +133,7 @@ pub async fn spawn_validator_node(
         config.validator_node.p2p.listener_port = port;
 
         config.validator_node.no_fees = !enable_fees;
-
-        // The VNS will try to auto register upon startup
-        config.validator_node.auto_register = false;
+        config.validator_node.fee_claim_public_key = key;
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);

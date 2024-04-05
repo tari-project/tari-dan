@@ -83,41 +83,6 @@ pub struct GetIdentityResponse {
     derive(TS),
     ts(export, export_to = "../../bindings/src/types/validator-node-client/")
 )]
-pub struct TemplateRegistrationRequest {
-    pub template_name: String,
-    pub template_version: u16,
-    pub repo_url: String,
-    #[serde(with = "serde_with::base64")]
-    pub commit_hash: Vec<u8>,
-    #[serde(with = "serde_with::base64")]
-    pub binary_sha: Vec<u8>,
-    pub binary_url: String,
-    pub template_type: String,
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub sidechain_id: Option<PublicKey>,
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub sidechain_id_knowledge_proof: Option<Signature>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
-)]
-pub struct TemplateRegistrationResponse {
-    #[serde(with = "serde_with::base64")]
-    pub template_address: Vec<u8>,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
-    pub transaction_id: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
-)]
 pub struct GetTemplateRequest {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     #[serde(with = "serde_with::string")]
@@ -649,29 +614,6 @@ pub struct GetEpochManagerStatsResponse {
     pub committee_shard: Option<CommitteeShard>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
-)]
-pub struct RegisterValidatorNodeRequest {
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub fee_claim_public_key: PublicKey,
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub validator_network_key: Option<PrivateKey>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
-)]
-pub struct RegisterValidatorNodeResponse {
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub transaction_id: TxId,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
