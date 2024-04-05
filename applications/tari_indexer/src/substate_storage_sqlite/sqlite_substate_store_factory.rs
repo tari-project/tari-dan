@@ -534,7 +534,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             .first(self.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
-                reason: format!("find_by_address: {}", e),
+                reason: format!("get_last_scanned_block_id: {}", e),
             })?;
 
         let block_id_option = row.map(|r| BlockId::try_from(r.last_block_id)).transpose()?;
@@ -723,8 +723,11 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
     fn save_scanned_block_id(&mut self, new: NewScannedBlockId) -> Result<(), StorageError> {
         use crate::substate_storage_sqlite::schema::scanned_block_ids;
 
-        diesel::insert_or_ignore_into(scanned_block_ids::table)
+        diesel::insert_into(scanned_block_ids::table)
             .values(&new)
+            .on_conflict((scanned_block_ids::epoch, scanned_block_ids::shard))
+            .do_update()
+            .set(new.clone())
             .execute(&mut *self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("save_scanned_block_id error: {}", e),
