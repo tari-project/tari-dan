@@ -246,6 +246,26 @@ impl IndexedWellKnownTypes {
     pub fn metadata(&self) -> &[Metadata] {
         &self.metadata
     }
+
+    pub fn diff(&self, other: &Self) -> Self {
+        Self {
+            bucket_ids: diff_vec(&self.bucket_ids, &other.bucket_ids),
+            proof_ids: diff_vec(&self.proof_ids, &other.proof_ids),
+            component_addresses: diff_vec(&self.component_addresses, &other.component_addresses),
+            resource_addresses: diff_vec(&self.resource_addresses, &other.resource_addresses),
+            transaction_receipt_addresses: diff_vec(
+                &self.transaction_receipt_addresses,
+                &other.transaction_receipt_addresses,
+            ),
+            non_fungible_addresses: diff_vec(&self.non_fungible_addresses, &other.non_fungible_addresses),
+            vault_ids: diff_vec(&self.vault_ids, &other.vault_ids),
+            metadata: diff_vec(&self.metadata, &other.metadata),
+        }
+    }
+}
+
+fn diff_vec<T: PartialEq + Clone>(a: &[T], b: &[T]) -> Vec<T> {
+    a.iter().filter(|x| !b.contains(x)).cloned().collect()
 }
 
 impl FromIterator<IndexedWellKnownTypes> for IndexedWellKnownTypes {
@@ -434,6 +454,7 @@ mod tests {
     use std::collections::HashMap;
 
     use rand::{rngs::OsRng, RngCore};
+    use tari_bor::cbor;
     use tari_template_lib::models::NonFungibleId;
 
     use super::*;
@@ -524,5 +545,31 @@ mod tests {
 
         let buckets: Vec<BucketId> = indexed.get_value("$.sub_structs.1.buckets").unwrap().unwrap();
         assert_eq!(buckets, vec![1.into(), 2.into()]);
+    }
+
+    #[test]
+    fn it_diffs_two_indexed_values() {
+        let v1 = IndexedWellKnownTypes::from_value(
+            &cbor!({
+                "bucket" => BucketId::from(1),
+                "proof1" => ProofId::from(1),
+                "proof2" => ProofId::from(2),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        let v2 = IndexedWellKnownTypes::from_value(
+            &cbor!({
+                "buckets" => [BucketId::from(1), BucketId::from(2)],
+                "proofs" => [ProofId::from(2), ProofId::from(3), ProofId::from(4)],
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let diff = v2.diff(&v1);
+
+        assert_eq!(diff.bucket_ids, [BucketId::from(2)]);
+        assert_eq!(diff.proof_ids, [ProofId::from(3), ProofId::from(4)]);
     }
 }

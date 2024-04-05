@@ -551,7 +551,7 @@ mod resource_access_rules {
 
         assert_access_denied_for_action(reason, ResourceAuthAction::Withdraw);
 
-        // Give the user a withdraw and deposit badge
+        // Give the user a badge
         test.execute_expect_success(
             Transaction::builder()
                 .call_method(access_rules_component, "mint_new_badge", args![])

@@ -52,7 +52,7 @@ use tari_utilities::ByteArray;
 
 use crate::{
     runtime::{
-        scope::PushCallFrame,
+        scope::{CallScope, PushCallFrame},
         AuthParams,
         AuthorizationScope,
         Runtime,
@@ -110,7 +110,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         } = self;
 
         let initial_auth_scope = AuthorizationScope::new(auth_params.initial_ownership_proofs);
-        let tracker = StateTracker::new(state_db, virtual_substates, initial_auth_scope, transaction.hash());
+        let mut initial_call_scope = CallScope::new();
+        initial_call_scope.set_auth_scope(initial_auth_scope);
+        for input in transaction.all_inputs_iter() {
+            initial_call_scope.add_substate_to_owned(input.substate_id.clone());
+        }
+
+        let tracker = StateTracker::new(state_db, virtual_substates, initial_call_scope, transaction.hash());
+
         let runtime_interface = RuntimeInterfaceImpl::initialize(
             tracker,
             template_provider.clone(),
@@ -425,9 +432,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             .map(IndexedWellKnownTypes::from_value)
             .collect::<Result<_, _>>()?;
 
+        let component_scope = IndexedWellKnownTypes::from_value(component.state())?;
+
         runtime.interface().push_call_frame(PushCallFrame::ForComponent {
             template_address,
             module_name: template.template_name().to_string(),
+            component_scope,
             component_lock: component_lock.clone(),
             arg_scope,
             entity_id: component.entity_id,
