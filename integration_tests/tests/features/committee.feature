@@ -13,8 +13,8 @@ Feature: Committee scenarios
 
     # Initialize two validator nodes
     Given a seed validator node SEED_VN connected to base node BASE and wallet WALLET
-    Given a validator node VAL_1 connected to base node BASE and wallet WALLET
-    Given a validator node VAL_2 connected to base node BASE and wallet WALLET
+    Given a validator node VAL_1 connected to base node BASE and wallet daemon WALLET_D
+    Given a validator node VAL_2 connected to base node BASE and wallet daemon WALLET_D
     Given validator VAL_1 nodes connect to all other validators
 
     # The wallet must have some funds before the VN sends transactions

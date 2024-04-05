@@ -41,6 +41,8 @@ use crate::{
     logging::get_base_dir_for_scenario,
     TariWorld,
 };
+use crate::indexer::spawn_indexer;
+use crate::wallet_daemon::spawn_wallet_daemon;
 
 #[derive(Debug)]
 pub struct ValidatorNodeProcess {
@@ -83,7 +85,18 @@ pub async fn spawn_validator_node(
     let (port, json_rpc_port) = get_os_assigned_ports();
     let http_ui_port = get_os_assigned_port();
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
-    let walletd = world.wallet_daemons.get(&wallet_daemon_name).unwrap();
+    let walletd = match  world.wallet_daemons.get(&wallet_daemon_name) {
+        Some(walletd) => walletd,
+        None =>
+            {
+                let indexer_name = format!("{}_indexer", wallet_daemon_name);
+                if world.indexers.get(&indexer_name).is_none() {
+                    spawn_indexer(world, indexer_name.clone(), base_node_name).await;
+                }
+                spawn_wallet_daemon(world, wallet_daemon_name.clone(), indexer_name).await;
+                world.wallet_daemons.get(&wallet_daemon_name).unwrap()
+            }
+    };
     let mut wallet_client = walletd.get_authed_client().await;
     let index = world
         .wallet_keys

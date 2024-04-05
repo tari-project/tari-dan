@@ -12,7 +12,7 @@ Feature: NFTs
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 7 new blocks
@@ -78,7 +78,7 @@ Feature: NFTs
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 7 new blocks

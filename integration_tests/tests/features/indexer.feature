@@ -13,7 +13,7 @@ Feature: Indexer node
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 6 new blocks
@@ -123,7 +123,7 @@ Feature: Indexer node
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
@@ -162,7 +162,7 @@ Feature: Indexer node
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE

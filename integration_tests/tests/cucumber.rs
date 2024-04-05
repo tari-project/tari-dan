@@ -96,11 +96,7 @@ async fn fees_are_enabled(world: &mut TariWorld) {
     world.fees_enabled = false;
 }
 
-#[given(expr = "a validator node {word} connected to base node {word} and wallet daemon {word}")]
-async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_daemon_name: String) {
-    let vn = spawn_validator_node(world, vn_name.clone(), bn_name, wallet_daemon_name).await;
-    world.validator_nodes.insert(vn_name, vn);
-}
+
 
 #[when(expr = "I stop validator node {word}")]
 async fn stop_validator_node(world: &mut TariWorld, vn_name: String) {

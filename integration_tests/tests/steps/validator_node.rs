@@ -26,6 +26,12 @@ use tari_wallet_daemon_client::types::KeyBranch;
 use tari_crypto::tari_utilities::ByteArray;
 
 
+#[given(expr = "a validator node {word} connected to base node {word} and wallet daemon {word}")]
+async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_daemon_name: String) {
+    let vn = spawn_validator_node(world, vn_name.clone(), bn_name, wallet_daemon_name).await;
+    world.validator_nodes.insert(vn_name, vn);
+}
+
 #[given(expr = "a seed validator node {word} connected to base node {word} and wallet daemon {word}")]
 async fn start_seed_validator_node(world: &mut TariWorld, seed_vn_name: String, bn_name: String, wallet_daemon_name: String) {
     let validator = spawn_validator_node(world, seed_vn_name.clone(), bn_name, wallet_daemon_name).await;
@@ -98,19 +104,7 @@ async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: Stri
     }
 }
 
-#[when(expr = "validator node {word} sends a registration transaction")]
-async fn send_vn_registration(world: &mut TariWorld, vn_name: String) {
-    let mut client = world.get_validator_node(&vn_name).get_client();
-    todo!()
-    // if let Err(e) = client.register_validator_node(PublicKey::default()).await {
-    //     println!("register_validator_node error = {}", e);
-    //     panic!("register_validator_node error = {}", e);
-    // }
-    //
-    // world
-    //     .wait_until_base_nodes_have_transaction_in_mempool(1, Duration::from_secs(10))
-    //     .await;
-}
+
 
 #[when(
     expr = "validator node {word} sends a registration transaction to base wallet {word}"
