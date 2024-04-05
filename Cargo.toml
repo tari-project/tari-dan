@@ -56,6 +56,7 @@ members = [
     "utilities/transaction_submitter",
     "utilities/transaction_submitter",
     "utilities/generate_ristretto_value_lookup",
+    "applications/tari_swarm/daemon",
 ]
 resolver = "2"
 

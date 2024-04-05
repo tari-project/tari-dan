@@ -1,0 +1,32 @@
+[package]
+name = "swarm_daemon"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tari_common = { workspace = true } # Needed for the Network enum (-_-)
+tari_shutdown = { workspace = true }
+
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+axum = { workspace = true }
+axum-jrpc = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+fern = { workspace = true, features = ["colored"] }
+humantime = { workspace = true }
+include_dir = { workspace = true }
+lockfile = "0.4.0"
+log = { workspace = true }
+mime_guess = { workspace = true }
+futures = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "process", "time"] }
+toml = "0.8.12"
