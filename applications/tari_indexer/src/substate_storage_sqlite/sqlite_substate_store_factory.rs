@@ -530,7 +530,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             .filter(
                 scanned_block_ids::epoch
                     .eq(epoch.0 as i64)
-                    .and(scanned_block_ids::shard.eq(shard.as_u32() as i64)),
+                    .and(scanned_block_ids::shard.eq(i64::from(shard.as_u32()))),
             )
             .first(self.connection())
             .optional()

@@ -274,7 +274,7 @@ impl EpochManagerReader for TestEpochManager {
         let num_committees = commitees_lock.len().try_into().unwrap();
 
         let committees = commitees_lock
-            .into_iter()
+            .iter()
             .map(|s| {
                 let shard = s.0;
                 CommitteeShardInfo {

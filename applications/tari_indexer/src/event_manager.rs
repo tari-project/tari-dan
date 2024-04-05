@@ -343,7 +343,7 @@ impl EventManager {
     fn save_scanned_block_id(&self, epoch: Epoch, shard: Shard, last_block_id: BlockId) -> Result<(), anyhow::Error> {
         let row = NewScannedBlockId {
             epoch: epoch.0 as i64,
-            shard: shard.as_u32() as i64,
+            shard: i64::from(shard.as_u32()),
             last_block_id: last_block_id.as_bytes().to_vec(),
         };
         let mut tx = self.substate_store.create_write_tx()?;
