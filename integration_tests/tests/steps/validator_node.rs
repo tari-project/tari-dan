@@ -181,16 +181,15 @@ async fn all_vns_send_registration(world: &mut TariWorld) {
     //     .await;
 }
 
-#[when(expr = "validator node {word} registers the template \"{word}\"")]
-async fn register_template(world: &mut TariWorld, vn_name: String, template_name: String) {
-    let (transaction_id, template_address) = match send_template_registration(world, template_name.clone(), vn_name).await {
+#[when(expr = "base wallet {word} registers the template \"{word}\"")]
+async fn register_template(world: &mut TariWorld, wallet_name: String, template_name: String) {
+    let template_address = match send_template_registration(world, template_name.clone(), wallet_name).await {
         Ok(resp) => resp,
         Err(e) => {
             println!("register_template error = {}", e);
             panic!("register_template error = {}", e);
         },
     };
-    assert!(!transaction_id.is_empty());
     assert!(!template_address.is_empty());
 
     // store the template address for future reference

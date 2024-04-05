@@ -19,10 +19,10 @@ Feature: Substates
     When wallet WALLET has at least 20 T
 
     # VN registration
-    When validator node VAL_1 sends a registration transaction
+    When validator node VAL_1 sends a registration transaction to base wallet WALLET
 
     # Register the "counter" template
-    When validator node VAL_1 registers the template "counter"
+    When base wallet WALLET registers the template "counter"
     When miner MINER mines 13 new blocks
     Then VAL_1 has scanned to height 16
     Then the validator node VAL_1 is listed as registered

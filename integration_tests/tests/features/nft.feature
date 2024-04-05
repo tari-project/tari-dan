@@ -19,10 +19,10 @@ Feature: NFTs
     When wallet WALLET has at least 10000 T
 
     # VN registration
-    When validator node VN sends a registration transaction
+    When validator node VN sends a registration transaction to base wallet WALLET
 
     # Register the "basic_nft" template
-    When validator node VN registers the template "basic_nft"
+    When base wallet WALLET registers the template "basic_nft"
     When miner MINER mines 13 new blocks
     Then VN has scanned to height 17
     Then the validator node VN is listed as registered
@@ -85,10 +85,10 @@ Feature: NFTs
     When wallet WALLET has at least 10000 T
 
     # VN registration
-    When validator node VN sends a registration transaction
+    When validator node VN sends a registration transaction to base wallet WALLET
 
     # Register the "basic_nft" template
-    When validator node VN registers the template "basic_nft"
+    When base wallet WALLET registers the template "basic_nft"
     When miner MINER mines 13 new blocks
     Then VN has scanned to height 17
     Then the validator node VN is listed as registered

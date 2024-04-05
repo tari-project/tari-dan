@@ -17,10 +17,10 @@ Feature: Claim Fees
     When I create a key named K1 for WALLET_D
 
     # Initialize a VN
-    Given a seed validator node VN connected to base node BASE and wallet WALLET
+    Given a seed validator node VN connected to base node BASE and wallet daemon WALLET_D
     When miner MINER mines 4 new blocks
     When wallet WALLET has at least 5000 T
-    When validator node VN sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
+    When validator node VN sends a registration transaction to base wallet WALLET
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17
     And indexer IDX has scanned to height 17
@@ -57,10 +57,10 @@ Feature: Claim Fees
     When I create a key named K1 for WALLET_D
 
     # Initialize a VN
-    Given a seed validator node VN connected to base node BASE and wallet WALLET
+    Given a seed validator node VN connected to base node BASE and wallet daemon WALLET_D
     When miner MINER mines 4 new blocks
     When wallet WALLET has at least 10000 T
-    When validator node VN sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
+    When validator node VN sends a registration transaction to base wallet WALLET
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17
     And indexer IDX has scanned to height 17
@@ -102,10 +102,10 @@ Feature: Claim Fees
     When I create a key named K2 for WALLET2
 
     # Initialize a VN
-    Given a seed validator node VN connected to base node BASE and wallet WALLET
+    Given a seed validator node VN connected to base node BASE and wallet daemon WALLET_D
     When miner MINER mines 4 new blocks
     When wallet WALLET has at least 10000 T
-    When validator node VN sends a registration transaction allowing fee claims from wallet WALLET1 using key K1
+    When validator node VN sends a registration transaction to base wallet WALLET
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17
     And indexer IDX has scanned to height 17
