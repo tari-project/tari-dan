@@ -56,7 +56,6 @@ log4rs = { workspace = true, features = [
     "fixed_window_roller",
 ] }
 mime_guess = { workspace = true }
-rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["default", "derive"] }
 serde_json = { workspace = true }

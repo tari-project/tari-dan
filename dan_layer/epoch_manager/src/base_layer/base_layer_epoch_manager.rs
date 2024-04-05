@@ -26,13 +26,14 @@ use std::{
     ops::RangeInclusive,
 };
 
+use indexmap::IndexMap;
 use log::*;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard},
+    committee::{Committee, CommitteeShard, CommitteeShardInfo, NetworkCommitteeInfo},
     hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
     optional::Optional,
     shard::Shard,
@@ -717,6 +718,43 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             .get_base_layer_block_height(hash)?
             .map(|info| info.height);
         Ok(info)
+    }
+
+    pub async fn get_network_committees(&self) -> Result<NetworkCommitteeInfo<TAddr>, EpochManagerError> {
+        let current_epoch = self.current_epoch;
+        let num_committees = self.get_num_committees(current_epoch)?;
+
+        let mut validators = self.get_validator_nodes_per_epoch(current_epoch)?;
+        validators.sort_by(|vn_a, vn_b| vn_b.committee_shard.cmp(&vn_a.committee_shard));
+
+        // Group by bucket, IndexMap used to preserve ordering
+        let mut validators_per_bucket = IndexMap::with_capacity(validators.len());
+        for validator in validators {
+            validators_per_bucket
+                .entry(
+                    validator
+                        .committee_shard
+                        .expect("validator committee bucket must have been populated within valid epoch"),
+                )
+                .or_insert_with(Vec::new)
+                .push(validator);
+        }
+
+        let committees = validators_per_bucket
+            .into_iter()
+            .map(|(bucket, validators)| CommitteeShardInfo {
+                shard: bucket,
+                substate_address_range: bucket.to_substate_address_range(num_committees),
+                validators: Committee::new(validators.into_iter().map(|v| (v.address, v.public_key)).collect()),
+            })
+            .collect();
+
+        let network_committee_info = NetworkCommitteeInfo {
+            epoch: current_epoch,
+            committees,
+        };
+
+        Ok(network_committee_info)
     }
 }
 

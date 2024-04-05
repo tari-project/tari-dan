@@ -11,7 +11,7 @@ use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard},
+    committee::{Committee, CommitteeShard, NetworkCommitteeInfo},
     hashing::MergedValidatorNodeMerkleProof,
     shard::Shard,
     Epoch,
@@ -413,6 +413,15 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetBaseLayerBlockHeight { hash, reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    async fn get_network_committees(&self) -> Result<NetworkCommitteeInfo<Self::Addr>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetNetworkCommittees { reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?

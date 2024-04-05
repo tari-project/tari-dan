@@ -10,7 +10,7 @@ use std::{
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard},
+    committee::{Committee, CommitteeShard, CommitteeShardInfo, NetworkCommitteeInfo},
     hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
     shard::Shard,
     Epoch,
@@ -266,6 +266,31 @@ impl EpochManagerReader for TestEpochManager {
 
     async fn get_base_layer_block_height(&self, _hash: FixedHash) -> Result<Option<u64>, EpochManagerError> {
         Ok(Some(self.inner.lock().await.current_block_info.0))
+    }
+
+    async fn get_network_committees(&self) -> Result<NetworkCommitteeInfo<Self::Addr>, EpochManagerError> {
+        let lock = self.state_lock().await;
+        let commitees_lock = &lock.committees;
+        let num_committees = commitees_lock.len().try_into().unwrap();
+
+        let committees = commitees_lock
+            .iter()
+            .map(|s| {
+                let shard = s.0;
+                CommitteeShardInfo {
+                    shard: *shard,
+                    substate_address_range: shard.to_substate_address_range(num_committees),
+                    validators: s.1.clone(),
+                }
+            })
+            .collect();
+
+        let network_commitee_info = NetworkCommitteeInfo {
+            epoch: lock.current_epoch,
+            committees,
+        };
+
+        Ok(network_commitee_info)
     }
 }
 
