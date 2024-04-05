@@ -69,44 +69,6 @@ where
             }));
         }
 
-        if transaction.is_dry_run {
-            let query = self
-                .network_interface
-                .submit_dry_run_transaction(transaction.transaction, transaction.required_substates)
-                .await
-                .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
-
-            match &query.result {
-                TransactionFinalizedResult::Pending => {
-                    return Err(TransactionApiError::NetworkInterfaceError(
-                        "Pending execution result returned from dry run".to_string(),
-                    ));
-                },
-                TransactionFinalizedResult::Finalized {
-                    execution_result,
-                    finalized_time,
-                    execution_time,
-                    ..
-                } => {
-                    self.store.with_write_tx(|tx| {
-                        tx.transactions_set_result_and_status(
-                            query.transaction_id,
-                            execution_result.as_ref().map(|e| &e.finalize),
-                            execution_result
-                                .as_ref()
-                                .map(|e| e.finalize.fee_receipt.total_fees_charged()),
-                            None,
-                            TransactionStatus::DryRun,
-                            Some(*execution_time),
-                            Some(*finalized_time),
-                        )
-                    })?;
-                },
-            }
-
-            return Ok(());
-        }
-
         self.network_interface
             .submit_transaction(transaction.transaction, transaction.required_substates)
             .await
@@ -136,42 +98,41 @@ where
             .with_write_tx(|tx| tx.transactions_insert(&transaction, &required_substates, None, true))?;
 
         let tx_id = *transaction.id();
-        self.submit_transaction(tx_id).await?;
+        let query = self
+            .network_interface
+            .submit_dry_run_transaction(transaction, required_substates)
+            .await
+            .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
+
+        match &query.result {
+            TransactionFinalizedResult::Pending => {
+                return Err(TransactionApiError::NetworkInterfaceError(
+                    "Pending execution result returned from dry run".to_string(),
+                ));
+            },
+            TransactionFinalizedResult::Finalized {
+                execution_result,
+                finalized_time,
+                execution_time,
+                ..
+            } => {
+                self.store.with_write_tx(|tx| {
+                    tx.transactions_set_result_and_status(
+                        query.transaction_id,
+                        execution_result.as_ref().map(|e| &e.finalize),
+                        execution_result
+                            .as_ref()
+                            .map(|e| e.finalize.fee_receipt.total_fees_charged()),
+                        None,
+                        TransactionStatus::DryRun,
+                        Some(*execution_time),
+                        Some(*finalized_time),
+                    )
+                })?;
+            },
+        }
+
         let transaction = self.store.with_read_tx(|tx| tx.transactions_get(tx_id))?;
-        // let query = self
-        //     .network_interface
-        //     .submit_dry_run_transaction(transaction, required_substates)
-        //     .await
-        //     .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
-        //
-        // match &query.result {
-        //     TransactionFinalizedResult::Pending => {
-        //         return Err(TransactionApiError::NetworkInterfaceError(
-        //             "Pending execution result returned from dry run".to_string(),
-        //         ));
-        //     },
-        //     TransactionFinalizedResult::Finalized {
-        //         execution_result,
-        //         finalized_time,
-        //         execution_time,
-        //         ..
-        //     } => {
-        //         self.store.with_write_tx(|tx| {
-        //             tx.transactions_set_result_and_status(
-        //                 query.transaction_id,
-        //                 execution_result.as_ref().map(|e| &e.finalize),
-        //                 execution_result
-        //                     .as_ref()
-        //                     .and_then(|e| e.fee_receipt.as_ref())
-        //                     .map(|f| f.total_fees_charged()),
-        //                 None,
-        //                 TransactionStatus::DryRun,
-        //                 Some(*execution_time),
-        //                 Some(*finalized_time),
-        //             )
-        //         })?;
-        //     },
-        // }
 
         Ok(transaction)
     }
@@ -268,17 +229,18 @@ where
                         Some(execution_time),
                         Some(finalized_time),
                     )?;
-                    if !transaction.is_dry_run {
-                        // if the transaction being processed is confidential,
-                        // we should make sure that the account's locked outputs
-                        // are either set to spent or released, depending if the
-                        // transaction was finalized or rejected
-                        if let Some(proof_id) = tx.proofs_get_by_transaction_id(transaction_id).optional()? {
-                            if new_status == TransactionStatus::Accepted {
-                                tx.outputs_finalize_by_proof_id(proof_id)?;
-                            } else {
-                                tx.outputs_release_by_proof_id(proof_id)?;
-                            }
+
+                    // if the transaction being processed is confidential,
+                    // we should make sure that the account's locked outputs
+                    // are either set to spent or released, depending if the
+                    // transaction was finalized or rejected. Always release for dry runs.
+                    if transaction.is_dry_run || new_status != TransactionStatus::Accepted {
+                        self.release_all_outputs_for_transaction_internal(tx, transaction_id)?;
+                    } else {
+                        let proof_ids = tx.proofs_get_by_transaction_id(transaction_id)?;
+                        for proof_id in proof_ids {
+                            tx.outputs_finalize_by_proof_id(proof_id)?;
+                            tx.vaults_finalized_locked_revealed_funds(proof_id)?;
                         }
                     }
 
@@ -289,6 +251,29 @@ where
                 Ok(Some(transaction))
             },
         }
+    }
+
+    pub fn release_all_outputs_for_transaction(
+        &self,
+        transaction_id: TransactionId,
+    ) -> Result<(), TransactionApiError> {
+        self.store
+            .with_write_tx(|tx| self.release_all_outputs_for_transaction_internal(tx, transaction_id))
+    }
+
+    fn release_all_outputs_for_transaction_internal(
+        &self,
+        tx: &mut <TStore as WalletStore>::WriteTransaction<'_>,
+        transaction_id: TransactionId,
+    ) -> Result<(), TransactionApiError> {
+        let proof_ids = tx.proofs_get_by_transaction_id(transaction_id)?;
+
+        debug!(target: LOG_TARGET, "Releasing {} proofs (and associated outputs) for transaction {} that was not committed", proof_ids.len(), transaction_id);
+        for proof_id in proof_ids {
+            tx.outputs_release_by_proof_id(proof_id)?;
+        }
+
+        Ok(())
     }
 
     fn commit_result(

@@ -48,7 +48,7 @@ pub use crate::{
         Bucket,
         BucketId,
         ComponentAddress,
-        ConfidentialOutputProof,
+        ConfidentialOutputStatement,
         ConfidentialWithdrawProof,
         Metadata,
         NonFungible,

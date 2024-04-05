@@ -7,13 +7,13 @@ use crate::{
     auth::{AccessRule, AuthHook, OwnerRule, ResourceAccessRules},
     crypto::RistrettoPublicKeyBytes,
     models::{Bucket, ComponentAddress, Metadata, ResourceAddress},
-    prelude::ConfidentialOutputProof,
+    prelude::ConfidentialOutputStatement,
     resource::{ResourceManager, ResourceType},
 };
 
 /// Utility for building confidential resources inside templates
 pub struct ConfidentialResourceBuilder {
-    initial_supply_proof: Option<ConfidentialOutputProof>,
+    initial_supply_proof: Option<ConfidentialOutputStatement>,
     metadata: Metadata,
     access_rules: ResourceAccessRules,
     view_key: Option<RistrettoPublicKeyBytes>,
@@ -107,7 +107,7 @@ impl ConfidentialResourceBuilder {
     }
 
     /// Sets up how many tokens are going to be minted on resource creation
-    pub fn initial_supply(mut self, initial_supply: ConfidentialOutputProof) -> Self {
+    pub fn initial_supply(mut self, initial_supply: ConfidentialOutputStatement) -> Self {
         self.initial_supply_proof = Some(initial_supply);
         self
     }

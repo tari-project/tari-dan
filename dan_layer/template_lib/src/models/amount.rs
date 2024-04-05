@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::cmp;
+
 use newtype_ops::newtype_ops;
 use serde::{Deserialize, Serialize};
 use tari_template_abi::rust::{
@@ -79,6 +81,15 @@ impl Amount {
         Amount(self.0.saturating_sub(other.0))
     }
 
+    pub fn saturating_sub_positive(&self, other: Self) -> Self {
+        let amount = Amount(self.0 - other.0);
+        if amount.is_negative() {
+            Amount(0)
+        } else {
+            amount
+        }
+    }
+
     pub fn checked_sub_positive(&self, other: Self) -> Option<Self> {
         if self.is_negative() || other.is_negative() {
             return None;
@@ -121,10 +132,11 @@ impl TryFrom<u64> for Amount {
     }
 }
 
-// TODO: This is fallible since changing from i128 to i64
-impl From<usize> for Amount {
-    fn from(value: usize) -> Self {
-        Amount(value as i64)
+impl TryFrom<usize> for Amount {
+    type Error = TryFromIntError;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        Ok(Amount(i64::try_from(value)?))
     }
 }
 
@@ -159,6 +171,42 @@ impl PartialEq<i64> for Amount {
     }
 }
 
+impl PartialEq<u64> for Amount {
+    fn eq(&self, other: &u64) -> bool {
+        if self.is_negative() {
+            return false;
+        }
+        self.0 as u64 == *other
+    }
+}
+
+impl PartialOrd<u64> for Amount {
+    fn partial_cmp(&self, other: &u64) -> Option<cmp::Ordering> {
+        match i64::try_from(*other) {
+            Ok(other) => self.0.partial_cmp(&other),
+            Err(_) => Some(cmp::Ordering::Less),
+        }
+    }
+}
+
+impl PartialEq<Amount> for u64 {
+    fn eq(&self, other: &Amount) -> bool {
+        if other.is_negative() {
+            return false;
+        }
+        *self == other.0 as u64
+    }
+}
+
+impl PartialOrd<Amount> for u64 {
+    fn partial_cmp(&self, other: &Amount) -> Option<cmp::Ordering> {
+        match i64::try_from(*self) {
+            Ok(v) => v.partial_cmp(&other.0),
+            Err(_) => Some(cmp::Ordering::Greater),
+        }
+    }
+}
+
 impl Sum for Amount {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.map(|a| a.value()).sum()
@@ -186,13 +234,13 @@ mod tests {
         let a = Amount(4);
         let b = Amount(6);
         let c = a + b;
-        assert_eq!(c, 10);
+        assert_eq!(c, 10i64);
         let d = a - b;
-        assert_eq!(d, -2);
+        assert_eq!(d, -2i64);
         let e = a * b;
-        assert_eq!(e, 24);
+        assert_eq!(e, 24i64);
         let f = b / a;
-        assert_eq!(f, 1);
+        assert_eq!(f, 1i64);
     }
 
     #[test]
@@ -200,5 +248,31 @@ mod tests {
         let a = Amount(4);
         let b = serde_json::to_string(&a).unwrap();
         assert_eq!(b, "4");
+    }
+
+    #[test]
+    fn u64_ord() {
+        let a = Amount(4);
+        let b = 6;
+        assert!(a < b);
+        assert!(b > a);
+        assert!(a <= b);
+        assert!(b >= a);
+
+        // Negatives
+        let c = Amount(-4);
+        let d = 6;
+        assert!(c < d);
+        assert!(d > c);
+        assert!(c <= d);
+        assert!(d >= c);
+
+        // Overflow
+        let e = Amount(i64::MAX);
+        let f = u64::MAX;
+        assert!(e < f);
+        assert!(f > e);
+        assert!(e <= f);
+        assert!(f >= e);
     }
 }

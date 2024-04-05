@@ -48,7 +48,7 @@ use crate::{
         VaultId,
         VaultRef,
     },
-    prelude::{ComponentAccessRules, ConfidentialOutputProof, TemplateAddress},
+    prelude::{ComponentAccessRules, ConfidentialOutputStatement, TemplateAddress},
     resource::ResourceType,
     template::BuiltinTemplate,
 };
@@ -236,7 +236,7 @@ pub enum MintArg {
         tokens: BTreeMap<NonFungibleId, (tari_bor::Value, tari_bor::Value)>,
     },
     Confidential {
-        proof: Box<ConfidentialOutputProof>,
+        proof: Box<ConfidentialOutputStatement>,
     },
 }
 

@@ -46,7 +46,7 @@ use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::Arg,
     auth::ComponentAccessRules,
-    models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress, VaultId},
+    models::{Amount, ConfidentialOutputStatement, NonFungibleId, ResourceAddress, VaultId},
     prelude::{ComponentAddress, ConfidentialWithdrawProof, ResourceType},
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId, UnsignedTransaction};
@@ -647,7 +647,7 @@ pub struct ConfidentialCreateOutputProofRequest {
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
 pub struct ConfidentialCreateOutputProofResponse {
-    pub proof: ConfidentialOutputProof,
+    pub proof: ConfidentialOutputStatement,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

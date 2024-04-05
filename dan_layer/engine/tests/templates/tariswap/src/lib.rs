@@ -189,7 +189,7 @@ mod tariswap {
         pub fn get_pool_ratio(&self, resource: ResourceAddress, amount: Amount) -> Amount {
             let balance = self.get_pool_balance(resource);
 
-            if balance == 0 {
+            if balance == Amount::zero() {
                 Amount::new(1)
             } else {
                 amount / balance

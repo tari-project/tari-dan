@@ -15,7 +15,7 @@ use tari_template_lib::{
     crypto::PedersonCommitmentBytes,
     models::{
         Amount,
-        ConfidentialOutputProof,
+        ConfidentialOutputStatement,
         ConfidentialWithdrawProof,
         NonFungibleAddress,
         NonFungibleId,
@@ -91,7 +91,7 @@ impl ResourceContainer {
 
     pub fn mint_confidential(
         address: ResourceAddress,
-        proof: ConfidentialOutputProof,
+        proof: ConfidentialOutputStatement,
         view_key: Option<&PublicKey>,
     ) -> Result<ResourceContainer, ResourceError> {
         if proof.change_statement.is_some() {
@@ -123,7 +123,9 @@ impl ResourceContainer {
     pub fn amount(&self) -> Amount {
         match self {
             ResourceContainer::Fungible { amount, .. } => *amount,
-            ResourceContainer::NonFungible { token_ids, .. } => token_ids.len().into(),
+            ResourceContainer::NonFungible { token_ids, .. } => {
+                token_ids.len().try_into().unwrap_or_else(|_| i64::MAX.into())
+            },
             ResourceContainer::Confidential { revealed_amount, .. } => *revealed_amount,
         }
     }
@@ -142,7 +144,9 @@ impl ResourceContainer {
     pub fn locked_amount(&self) -> Amount {
         match self {
             ResourceContainer::Fungible { locked_amount, .. } => *locked_amount,
-            ResourceContainer::NonFungible { locked_token_ids, .. } => locked_token_ids.len().into(),
+            ResourceContainer::NonFungible { locked_token_ids, .. } => {
+                locked_token_ids.len().try_into().unwrap_or_else(|_| i64::MAX.into())
+            },
             ResourceContainer::Confidential {
                 locked_revealed_amount, ..
             } => *locked_revealed_amount,
@@ -220,6 +224,15 @@ impl ResourceContainer {
                     ..
                 },
             ) => {
+                // General protection against Amount overflow. Currently, i64::MAX is the limit, however we likely
+                // want to greatly reduce this limit.
+                let num_to_add = Amount::try_from(other_token_ids.len())
+                    .map_err(|_| ResourceError::OperationNotAllowed("Too many tokens to deposit".to_string()))?;
+                if token_ids.len() as i64 + num_to_add.value() > Amount::MAX.value() {
+                    return Err(ResourceError::OperationNotAllowed(
+                        "Non-fungible deposit would exceed maximum number of tokens".to_string(),
+                    ));
+                }
                 token_ids.extend(other_token_ids);
             },
             (
@@ -272,7 +285,7 @@ impl ResourceContainer {
                 Ok(ResourceContainer::fungible(*self.resource_address(), amt))
             },
             ResourceContainer::NonFungible { token_ids, .. } => {
-                if amt > token_ids.len().into() {
+                if amt > token_ids.len() as u64 {
                     return Err(ResourceError::InsufficientBalance {
                         details: format!(
                             "Bucket contained insufficient tokens. Required: {}, Available: {}",
@@ -394,7 +407,8 @@ impl ResourceContainer {
                 if validated_proof.input_revealed_amount > *revealed_amount {
                     return Err(ResourceError::InsufficientBalance {
                         details: format!(
-                            "Bucket contained insufficient funds. Required: {}, Available: {}",
+                            "Bucket contained insufficient funds with withdrawing revealed amount. Required: {}, \
+                             Available: {}",
                             validated_proof.input_revealed_amount, revealed_amount
                         ),
                     });
@@ -517,7 +531,7 @@ impl ResourceContainer {
             ResourceContainer::Fungible {
                 amount, locked_amount, ..
             } => {
-                if *amount == 0 {
+                if amount.is_zero() {
                     return Err(ResourceError::InsufficientBalance {
                         details: "lock_all: resource container contained no funds".to_string(),
                     });
@@ -725,7 +739,7 @@ impl ResourceContainer {
                 locked_token_ids,
                 ..
             } => {
-                if amount > token_ids.len().into() {
+                if amount > token_ids.len() as u64 {
                     return Err(ResourceError::InsufficientBalance {
                         details: format!(
                             "lock_by_amount: resource container did not contain enough tokens. Required: {}, \

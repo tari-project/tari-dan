@@ -82,6 +82,7 @@ diesel::table! {
         account_id -> Integer,
         vault_id -> Integer,
         transaction_hash -> Nullable<Text>,
+        locked_revealed_amount -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -133,6 +134,7 @@ diesel::table! {
         resource_type -> Text,
         revealed_balance -> BigInt,
         confidential_balance -> BigInt,
+        locked_revealed_balance -> BigInt,
         token_symbol -> Nullable<Text>,
         created_at -> Timestamp,
         updated_at -> Timestamp,

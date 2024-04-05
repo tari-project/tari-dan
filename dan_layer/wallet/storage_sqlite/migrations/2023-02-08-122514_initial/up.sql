@@ -84,16 +84,17 @@ CREATE UNIQUE INDEX accounts_uniq_name ON accounts (name) WHERE name IS NOT NULL
 -- Vaults
 CREATE TABLE vaults
 (
-    id                   INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
-    account_id           INTEGER  NOT NULL REFERENCES accounts (id),
-    address              TEXT     NOT NULL,
-    resource_address     TEXT     NOT NULL,
-    resource_type        TEXT     NOT NULL,
-    revealed_balance     BIGINT   NOT NULL DEFAULT 0,
-    confidential_balance BIGINT   NOT NULL DEFAULT 0,
-    token_symbol         TEXT     NULL,
-    created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id                      INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
+    account_id              INTEGER  NOT NULL REFERENCES accounts (id),
+    address                 TEXT     NOT NULL,
+    resource_address        TEXT     NOT NULL,
+    resource_type           TEXT     NOT NULL,
+    revealed_balance        BIGINT   NOT NULL DEFAULT 0,
+    confidential_balance    BIGINT   NOT NULL DEFAULT 0,
+    locked_revealed_balance BIGINT   NOT NULL DEFAULT 0,
+    token_symbol            TEXT     NULL,
+    created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE UNIQUE INDEX vaults_uniq_address ON vaults (address);
@@ -123,10 +124,11 @@ CREATE INDEX outputs_idx_account_status ON outputs (account_id, status);
 -- Proofs
 CREATE TABLE proofs
 (
-    id               INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
-    account_id       INTEGER  NOT NULL REFERENCES accounts (id),
-    vault_id         INTEGER  NOT NULL REFERENCES vaults (id),
-    transaction_hash TEXT     NULL,
-    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id                     INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
+    account_id             INTEGER  NOT NULL REFERENCES accounts (id),
+    vault_id               INTEGER  NOT NULL REFERENCES vaults (id),
+    transaction_hash       TEXT     NULL,
+    locked_revealed_amount BIGINT   NOT NULL DEFAULT 0,
+    created_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
