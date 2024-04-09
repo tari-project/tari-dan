@@ -429,7 +429,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f28243a43d821d11341ab73c80bed182dc015c514b951616cf79bd4af39af0c3"
 dependencies = [
  "concurrent-queue",
- "event-listener 5.2.0",
+ "event-listener 5.3.0",
  "event-listener-strategy 0.5.1",
  "futures-core",
  "pin-project-lite",
@@ -437,9 +437,9 @@ dependencies = [
 
 [[package]]
 name = "async-executor"
-version = "1.9.1"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10b3e585719c2358d2660232671ca8ca4ddb4be4ce8a1842d6c2dc8685303316"
+checksum = "5f98c37cf288e302c16ef6c8472aad1e034c6c84ce5ea7b8101c98eb4a802fee"
 dependencies = [
  "async-lock 3.3.0",
  "async-task",
@@ -792,9 +792,9 @@ checksum = "f1fdabc7756949593fe60f30ec81974b613357de856987752631dea1e3394c80"
 
 [[package]]
 name = "autotools"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aef8da1805e028a172334c3b680f93e71126f2327622faef2ec3d893c0a4ad77"
+checksum = "ef941527c41b0fc0dd48511a8154cd5fc7e29200a0ff8b7203c5d777dbc795cf"
 dependencies = [
  "cc",
 ]
@@ -928,6 +928,12 @@ name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
+
+[[package]]
+name = "base64"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9475866fec1451be56a3c2400fd081ff546538961565ccb5b7142cbd22bc7a51"
 
 [[package]]
 name = "base64ct"
@@ -1160,9 +1166,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.15.4"
+version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ff69b9dd49fd426c69a0db9fc04dd934cdb6645ff000864d98f7e2af8830eaa"
+checksum = "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
 
 [[package]]
 name = "byte-slice-cast"
@@ -1335,9 +1341,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.90"
+version = "1.0.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cd6604a82acf3039f1144f54b8eb34e91ffba622051189e71b781822d5ee1f5"
+checksum = "2678b2e3449475e95b0aa6f9b506a28e61b3dc8996592b983695e8ebb58a8b41"
 dependencies = [
  "jobserver",
  "libc",
@@ -1853,9 +1859,9 @@ dependencies = [
 
 [[package]]
 name = "crc"
-version = "3.0.1"
+version = "3.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86ec7a15cbe22e59248fc7eadb1907dab5ba09372595da4d73dd805ed4417dfe"
+checksum = "69e6e4d7b33a94f0991c26729976b10ebde1d34c3ee82408fb536164fa10d636"
 dependencies = [
  "crc-catalog",
 ]
@@ -2796,9 +2802,9 @@ dependencies = [
 
 [[package]]
 name = "event-listener"
-version = "5.2.0"
+version = "5.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b5fb89194fa3cad959b833185b3063ba881dbfc7030680b314250779fb4cc91"
+checksum = "6d9944b8ca13534cdfb2800775f8dd4902ff3fc75a50101466decadfdf322a24"
 dependencies = [
  "concurrent-queue",
  "parking",
@@ -2821,7 +2827,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "332f51cb23d20b0de8458b86580878211da09bcd4503cb579c225b3d124cabb3"
 dependencies = [
- "event-listener 5.2.0",
+ "event-listener 5.3.0",
  "pin-project-lite",
 ]
 
@@ -3198,9 +3204,9 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
-version = "0.2.12"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "190092ea657667030ac6a35e305e62fc4dd69fd98ac98631e5d3a2b1575a12b5"
+checksum = "94b22e06ecb0110981051723910cbf0b5f5e09a2062dd7663334ee79a9d1286c"
 dependencies = [
  "cfg-if",
  "libc",
@@ -4154,6 +4160,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4601,7 +4616,7 @@ dependencies = [
  "async-trait",
  "futures-bounded 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libp2p",
- "prost 0.12.3",
+ "prost 0.12.4",
  "smallvec 2.0.0-alpha.5",
  "tracing",
 ]
@@ -5299,7 +5314,7 @@ dependencies = [
 [[package]]
 name = "minotari_app_grpc"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "argon2",
  "base64 0.13.1",
@@ -5328,7 +5343,7 @@ dependencies = [
 [[package]]
 name = "minotari_app_utilities"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "clap 3.2.25",
  "dialoguer",
@@ -5350,7 +5365,7 @@ dependencies = [
 [[package]]
 name = "minotari_console_wallet"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "blake2",
  "chrono",
@@ -5404,7 +5419,7 @@ dependencies = [
 [[package]]
 name = "minotari_node"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5450,7 +5465,7 @@ dependencies = [
 [[package]]
 name = "minotari_node_grpc_client"
 version = "0.1.0"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "minotari_app_grpc",
 ]
@@ -5458,7 +5473,7 @@ dependencies = [
 [[package]]
 name = "minotari_wallet"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "argon2",
  "async-trait",
@@ -5666,6 +5681,12 @@ name = "multimap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
+
+[[package]]
+name = "multimap"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "defc4c55412d89136f966bbb339008b474350e5e6e78d2714439c386b3137a03"
 
 [[package]]
 name = "multistream-select"
@@ -6284,11 +6305,11 @@ dependencies = [
 
 [[package]]
 name = "pem"
-version = "3.0.3"
+version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b8fcc794035347fb64beda2d3b462595dd2753e3f268d89c5aae77e8cf2c310"
+checksum = "8e459365e590736a54c3fa561947c84837534b8e9af6fc5bf781307e82658fae"
 dependencies = [
- "base64 0.21.7",
+ "base64 0.22.0",
  "serde",
 ]
 
@@ -6781,12 +6802,12 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.12.3"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "146c289cda302b98a28d40c8b3b90498d6e526dd24ac2ecea73e4e491685b94a"
+checksum = "d0f5d036824e4761737860779c906171497f6d55681139d8312388f8fe398922"
 dependencies = [
  "bytes 1.6.0",
- "prost-derive 0.12.3",
+ "prost-derive 0.12.4",
 ]
 
 [[package]]
@@ -6800,7 +6821,7 @@ dependencies = [
  "itertools 0.10.5",
  "lazy_static",
  "log",
- "multimap",
+ "multimap 0.8.3",
  "petgraph",
  "prettyplease 0.1.25",
  "prost 0.11.9",
@@ -6813,24 +6834,23 @@ dependencies = [
 
 [[package]]
 name = "prost-build"
-version = "0.12.3"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c55e02e35260070b6f716a2423c2ff1c3bb1642ddca6f99e1f26d06268a0e2d2"
+checksum = "80b776a1b2dc779f5ee0641f8ade0125bc1298dd41a9a0c16d8bd57b42d222b1"
 dependencies = [
  "bytes 1.6.0",
- "heck 0.4.1",
- "itertools 0.11.0",
+ "heck 0.5.0",
+ "itertools 0.12.1",
  "log",
- "multimap",
+ "multimap 0.10.0",
  "once_cell",
  "petgraph",
  "prettyplease 0.2.17",
- "prost 0.12.3",
- "prost-types 0.12.3",
+ "prost 0.12.4",
+ "prost-types 0.12.4",
  "regex",
  "syn 2.0.58",
  "tempfile",
- "which",
 ]
 
 [[package]]
@@ -6861,12 +6881,12 @@ dependencies = [
 
 [[package]]
 name = "prost-derive"
-version = "0.12.3"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efb6c9a1dd1def8e2124d17e83a20af56f1570d6c2d2bd9e266ccb768df3840e"
+checksum = "19de2de2a00075bf566bee3bd4db014b11587e84184d3f7a791bc17f1a8e9e48"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.58",
@@ -6893,18 +6913,18 @@ dependencies = [
 
 [[package]]
 name = "prost-types"
-version = "0.12.3"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "193898f59edcf43c26227dcd4c8427f00d99d61e95dcde58dabd49fa291d470e"
+checksum = "3235c33eb02c1f1e212abdbe34c78b264b038fb58ca612664343271e36e55ffe"
 dependencies = [
- "prost 0.12.3",
+ "prost 0.12.4",
 ]
 
 [[package]]
 name = "proto_builder"
 version = "0.4.1"
 dependencies = [
- "prost-build 0.12.3",
+ "prost-build 0.12.4",
  "sha2",
 ]
 
@@ -7170,7 +7190,7 @@ version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52c4f3084aa3bc7dfbba4eff4fab2a54db4324965d8872ab933565e6fbd83bc6"
 dependencies = [
- "pem 3.0.3",
+ "pem 3.0.4",
  "ring 0.16.20",
  "time",
  "x509-parser",
@@ -7703,9 +7723,9 @@ dependencies = [
 
 [[package]]
 name = "rustversion"
-version = "1.0.14"
+version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ffc183a10b4478d04cbbbfc96d0873219d962dd5accaff2ffbd4ceb7df837f4"
+checksum = "80af6f9131f277a45a3fba6ce8e2258037bb0477a67e610d3c1fe046ab31de47"
 
 [[package]]
 name = "rustyline"
@@ -7990,9 +8010,9 @@ dependencies = [
 
 [[package]]
 name = "serde_repr"
-version = "0.1.18"
+version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b2e6b945e9d3df726b65d6ee24060aff8e3533d431f677a9695db04eff9dfdb"
+checksum = "6c64451ba24fc7a6a2d60fc75dd9c83c90903b19028d4eff35e88fc1e86564e9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8729,7 +8749,7 @@ dependencies = [
 [[package]]
 name = "tari_common"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "anyhow",
  "blake2",
@@ -8756,7 +8776,7 @@ dependencies = [
 [[package]]
 name = "tari_common_sqlite"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "diesel",
  "diesel_migrations",
@@ -8770,7 +8790,7 @@ dependencies = [
 [[package]]
 name = "tari_common_types"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "base64 0.21.7",
  "blake2",
@@ -8793,7 +8813,7 @@ dependencies = [
 [[package]]
 name = "tari_comms"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8837,7 +8857,7 @@ dependencies = [
 [[package]]
 name = "tari_comms_dht"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "anyhow",
  "bitflags 2.5.0",
@@ -8872,7 +8892,7 @@ dependencies = [
 [[package]]
 name = "tari_comms_rpc_macros"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8906,7 +8926,7 @@ dependencies = [
 [[package]]
 name = "tari_contacts"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "chrono",
  "diesel",
@@ -8938,7 +8958,7 @@ dependencies = [
 [[package]]
 name = "tari_core"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "async-trait",
  "bincode 1.3.3",
@@ -9039,7 +9059,7 @@ dependencies = [
  "log",
  "mini-moka",
  "multiaddr 0.18.1",
- "prost 0.12.3",
+ "prost 0.12.4",
  "rand",
  "reqwest",
  "serde",
@@ -9078,7 +9098,7 @@ dependencies = [
  "blake2",
  "libp2p-identity",
  "newtype-ops",
- "prost 0.12.3",
+ "prost 0.12.4",
  "prost-types 0.9.0",
  "rand",
  "ruint",
@@ -9133,7 +9153,7 @@ name = "tari_dan_p2p"
 version = "0.4.1"
 dependencies = [
  "anyhow",
- "prost 0.12.3",
+ "prost 0.12.4",
  "proto_builder",
  "serde",
  "tari_bor",
@@ -9400,7 +9420,7 @@ dependencies = [
 [[package]]
 name = "tari_features"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 
 [[package]]
 name = "tari_generate"
@@ -9430,7 +9450,7 @@ dependencies = [
 [[package]]
 name = "tari_hashing"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "borsh",
  "digest 0.10.7",
@@ -9531,7 +9551,7 @@ dependencies = [
 [[package]]
 name = "tari_key_manager"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "argon2",
  "async-trait",
@@ -9564,7 +9584,7 @@ dependencies = [
 [[package]]
 name = "tari_libtor"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "derivative",
  "libtor",
@@ -9580,7 +9600,7 @@ dependencies = [
 [[package]]
 name = "tari_metrics"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "once_cell",
  "prometheus",
@@ -9590,7 +9610,7 @@ dependencies = [
 [[package]]
 name = "tari_mmr"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "borsh",
  "digest 0.10.7",
@@ -9621,7 +9641,7 @@ dependencies = [
 [[package]]
 name = "tari_p2p"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "anyhow",
  "fs2",
@@ -9664,8 +9684,8 @@ dependencies = [
  "log",
  "once_cell",
  "pin-project 1.1.5",
- "prost 0.12.3",
- "prost-build 0.12.3",
+ "prost 0.12.4",
+ "prost-build 0.12.4",
  "proto_builder",
  "tari_metrics",
  "tari_shutdown",
@@ -9723,7 +9743,7 @@ dependencies = [
 [[package]]
 name = "tari_script"
 version = "1.0.0-dan.8"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "blake2",
  "borsh",
@@ -9740,7 +9760,7 @@ dependencies = [
 [[package]]
 name = "tari_service_framework"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9755,7 +9775,7 @@ dependencies = [
 [[package]]
 name = "tari_shutdown"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "futures 0.3.30",
 ]
@@ -9827,7 +9847,7 @@ dependencies = [
 [[package]]
 name = "tari_storage"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "bincode 1.3.3",
  "lmdb-zero",
@@ -9915,7 +9935,7 @@ dependencies = [
 [[package]]
 name = "tari_test_utils"
 version = "1.0.0-dan.5"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"
 dependencies = [
  "futures 0.3.30",
  "rand",
@@ -10081,7 +10101,7 @@ version = "0.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
- "prost 0.12.3",
+ "prost 0.12.4",
  "proto_builder",
  "serde",
  "tari_bor",
@@ -11740,9 +11760,9 @@ dependencies = [
 
 [[package]]
 name = "widestring"
-version = "1.0.2"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "653f141f39ec16bba3c5abe400a0c60da7468261cc2cbf36805022876bc721a8"
+checksum = "7219d36b6eac893fa81e84ebe06485e7dcbb616177469b142df14f1f4deb1311"
 
 [[package]]
 name = "winapi"
@@ -12208,4 +12228,4 @@ dependencies = [
 [[patch.unused]]
 name = "minotari_wallet_grpc_client"
 version = "0.1.0"
-source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#63589d42404e844046d05c1cc4e32a3066c1c5f8"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-refactor-code-template#421a1ae2c302987c2e251f6ff9b2fd5efd309c3f"

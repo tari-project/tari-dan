@@ -141,8 +141,7 @@ async fn send_vn_registration_with_claim_wallet(
             signature:       registration.signature.signature().get_signature().to_vec(),
         }),
         validator_node_claim_public_key: registration.claim_public_key.to_vec(),
-        sidechain_id: vec![],
-        sidechain_id_knowledge_proof: None,
+        sidechain_deployment_key: vec![],
         fee_per_gram: 1,
         message: "Register".to_string()
     }).await.unwrap();
