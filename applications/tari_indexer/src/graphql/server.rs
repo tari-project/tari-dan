@@ -39,6 +39,7 @@ use axum::{
 };
 use log::*;
 use serde::Serialize;
+use tower_http::cors::CorsLayer;
 
 use crate::{
     graphql::model::events::{EventQuery, EventSchema},
@@ -60,6 +61,7 @@ pub async fn run_graphql(
     let router = Router::new()
         .route("/", get(graphql_playground).post(graphql_handler))
         .route("/health", get(health))
+        .layer(CorsLayer::permissive())
         .layer(Extension(schema));
 
     axum::Server::try_bind(&preferred_address)
