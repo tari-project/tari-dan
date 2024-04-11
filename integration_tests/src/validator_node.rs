@@ -79,7 +79,8 @@ pub async fn spawn_validator_node(
     world: &mut TariWorld,
     validator_node_name: String,
     base_node_name: String,
-    wallet_daemon_name: String
+    wallet_daemon_name: String,
+    claim_fee_key_name: String
 ) -> ValidatorNodeProcess {
     // each spawned VN will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
@@ -98,13 +99,21 @@ pub async fn spawn_validator_node(
             }
     };
     let mut wallet_client = walletd.get_authed_client().await;
-    let index = world
-        .wallet_keys
-        .entry(format!("{}_claim_fee_key", &validator_node_name)).or_insert_with(|| 0);
+
+
+    // get the default wallet account public key
     let key = wallet_client
-        .create_specific_key(KeyBranch::Transaction, *index)
+        .create_key(KeyBranch::Transaction)
         .await
-        .unwrap().public_key;
+        .unwrap();
+    dbg!(&key);
+    world
+        .wallet_keys
+        .insert(claim_fee_key_name,  key.id);
+
+
+
+    // let wallet_account_pub = wallet_client.accounts_get_default().await.unwrap().public_key;
     let name = validator_node_name.clone();
 
     let peer_seeds: Vec<String> = world
@@ -146,7 +155,7 @@ pub async fn spawn_validator_node(
         config.validator_node.p2p.listener_port = port;
 
         config.validator_node.no_fees = !enable_fees;
-        config.validator_node.fee_claim_public_key = key;
+        config.validator_node.fee_claim_public_key = key.public_key;
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);

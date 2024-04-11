@@ -365,7 +365,7 @@ async fn create_registration_file(
     let registration = ValidatorRegistrationFile {
         signature,
         public_key: keypair.public_key().clone(),
-        claim_public_key: fee_claim_public_key,
+        claim_fees_public_key: fee_claim_public_key,
     };
     fs::write(
         config.common.base_path.join("registration.json"),

@@ -1038,6 +1038,8 @@ pub struct ClaimValidatorFeesRequest {
     pub max_fee: Option<Amount>,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub validator_public_key: PublicKey,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub claim_fees_public_key: PublicKey,
     pub epoch: Epoch,
     pub dry_run: bool,
 }

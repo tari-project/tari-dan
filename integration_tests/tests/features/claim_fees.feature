@@ -17,7 +17,7 @@ Feature: Claim Fees
     When I create a key named K1 for WALLET_D
 
     # Initialize a VN
-    Given a seed validator node VN connected to base node BASE and wallet daemon WALLET_D
+    Given a seed validator node VN connected to base node BASE and wallet daemon WALLET_D with claim fee key K1
     When miner MINER mines 4 new blocks
     When wallet WALLET has at least 5000 T
     When validator node VN sends a registration transaction to base wallet WALLET
@@ -42,7 +42,7 @@ Feature: Claim Fees
 
     When I check the balance of ACC2 on wallet daemon WALLET_D the amount is at least 10200
 
-  @serial
+  @serial @current
   Scenario: Prevent double claim of validator fees
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -57,7 +57,7 @@ Feature: Claim Fees
     When I create a key named K1 for WALLET_D
 
     # Initialize a VN
-    Given a seed validator node VN connected to base node BASE and wallet daemon WALLET_D
+    Given a seed validator node VN connected to base node BASE and wallet daemon WALLET_D using claim fee key K1
     When miner MINER mines 4 new blocks
     When wallet WALLET has at least 10000 T
     When validator node VN sends a registration transaction to base wallet WALLET

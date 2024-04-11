@@ -106,18 +106,18 @@ pub async fn handle_create(
         .locate_dependent_substates(&[default_account.address.clone()])
         .await?;
 
-    // We aren't mutating the resources
-    let (input_refs, inputs) = inputs
-        .into_iter()
-        .partition::<Vec<_>, _>(|s| s.substate_id.is_resource());
+        // We aren't mutating the resources
+        let (input_refs, inputs) = inputs
+            .into_iter()
+            .partition::<Vec<_>, _>(|s| s.substate_id.is_resource());
 
-    let signing_key_index = req.key_id.unwrap_or(default_account.key_index);
-    let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
+        let signing_key_index = req.key_id.unwrap_or(default_account.key_index);
+        let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
 
-    let owner_key = key_manager_api.next_key(key_manager::TRANSACTION_BRANCH)?;
-    let owner_pk = PublicKey::from_secret_key(&owner_key.key);
+        let owner_key = key_manager_api.next_key(key_manager::TRANSACTION_BRANCH)?;
+        let owner_pk = PublicKey::from_secret_key(&owner_key.key);
 
-    info!(
+        info!(
         target: LOG_TARGET,
         "Creating account with owner token {}. Fees are paid using account '{}' {}",
         owner_pk,
@@ -125,41 +125,42 @@ pub async fn handle_create(
         default_account.address
     );
 
-    let max_fee = req.max_fee.unwrap_or(DEFAULT_FEE);
-    let transaction = Transaction::builder()
-        .fee_transaction_pay_from_component(default_account.address.as_component_address().unwrap(), max_fee)
-        .create_account(owner_pk.clone())
-        .with_input_refs(
-            input_refs
-                .iter()
-                .map(|s| SubstateRequirement::new(s.substate_id.clone(), Some(s.version))),
-        )
-        .with_inputs(
-            inputs
-                .iter()
-                .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version))),
-        )
-        .sign(&signing_key.key)
-        .build();
+        let max_fee = req.max_fee.unwrap_or(DEFAULT_FEE);
+        let transaction = Transaction::builder()
+            .fee_transaction_pay_from_component(default_account.address.as_component_address().unwrap(), max_fee)
+            .create_account(owner_pk.clone())
+            .with_input_refs(
+                input_refs
+                    .iter()
+                    .map(|s| SubstateRequirement::new(s.substate_id.clone(), Some(s.version))),
+            )
+            .with_inputs(
+                inputs
+                    .iter()
+                    .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version))),
+            )
+            .sign(&signing_key.key)
+            .build();
 
-    let mut events = context.notifier().subscribe();
-    let tx_id = context
-        .transaction_service()
-        .submit_transaction_with_new_account(transaction, vec![], NewAccountInfo {
-            name: req.account_name,
-            key_index: owner_key.key_index,
-            is_default: req.is_default,
-        })
-        .await?;
+        let mut events = context.notifier().subscribe();
+        let tx_id = context
+            .transaction_service()
+            .submit_transaction_with_new_account(transaction, vec![], NewAccountInfo {
+                name: req.account_name,
+                key_index: owner_key.key_index,
+                is_default: req.is_default,
+            })
+            .await?;
 
-    let event = wait_for_result(&mut events, tx_id).await?;
-    if let Some(reject) = event.finalize.result.reject() {
-        return Err(anyhow!("Create account transaction rejected: {}", reject));
-    }
+        let event = wait_for_result(&mut events, tx_id).await?;
+        if let Some(reject) = event.finalize.result.reject() {
+            return Err(anyhow!("Create account transaction rejected: {}", reject));
+        }
 
-    if let Some(reason) = event.finalize.reject() {
-        return Err(anyhow!("Create account transaction failed: {}", reason));
-    }
+        if let Some(reason) = event.finalize.reject() {
+            return Err(anyhow!("Create account transaction failed: {}", reason));
+        }
+
 
     let address = event
         .finalize

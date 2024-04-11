@@ -28,13 +28,19 @@ use tari_crypto::tari_utilities::ByteArray;
 
 #[given(expr = "a validator node {word} connected to base node {word} and wallet daemon {word}")]
 async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_daemon_name: String) {
-    let vn = spawn_validator_node(world, vn_name.clone(), bn_name, wallet_daemon_name).await;
+    let vn = spawn_validator_node(world, vn_name.clone(), bn_name, wallet_daemon_name, format!("{}_claim_fee", vn_name)).await;
     world.validator_nodes.insert(vn_name, vn);
 }
 
 #[given(expr = "a seed validator node {word} connected to base node {word} and wallet daemon {word}")]
-async fn start_seed_validator_node(world: &mut TariWorld, seed_vn_name: String, bn_name: String, wallet_daemon_name: String) {
-    let validator = spawn_validator_node(world, seed_vn_name.clone(), bn_name, wallet_daemon_name).await;
+async fn start_seed_vn_without_claim_fee
+   (world: &mut TariWorld, seed_vn_name: String, bn_name: String, wallet_daemon_name: String) {
+   start_seed_validator_node(world, seed_vn_name.clone(), bn_name, wallet_daemon_name,format!("{}_claim_fee", &seed_vn_name)).await;
+}
+
+#[given(expr = "a seed validator node {word} connected to base node {word} and wallet daemon {word} using claim fee key {word}")]
+async fn start_seed_validator_node(world: &mut TariWorld, seed_vn_name: String, bn_name: String, wallet_daemon_name: String, claim_fee_key_name: String) {
+    let validator = spawn_validator_node(world, seed_vn_name.clone(), bn_name, wallet_daemon_name, claim_fee_key_name).await;
     // Ensure any existing nodes know about the new seed node
     let mut client = validator.get_client();
     let ident = client.get_identity().await.unwrap();
@@ -68,7 +74,7 @@ async fn start_seed_validator_node(world: &mut TariWorld, seed_vn_name: String, 
 async fn start_multiple_validator_nodes(world: &mut TariWorld, num_nodes: u64, bn_name: String, wallet_name: String) {
     for i in 1..=num_nodes {
         let vn_name = format!("VAL_{i}");
-        let vn = spawn_validator_node(world, vn_name.clone(), bn_name.clone(), wallet_name.clone()).await;
+        let vn = spawn_validator_node(world, vn_name.clone(), bn_name.clone(), wallet_name.clone(), format!("{}_claim_fee",vn_name)).await;
         world.validator_nodes.insert(vn_name, vn);
     }
 }
@@ -113,25 +119,13 @@ async fn send_vn_registration_with_claim_wallet(
     world: &mut TariWorld,
     vn_name: String,
     base_wallet_name: String,
-    // wallet_daemon_name: String,
-    // key_name: String,
 ) {
-    // let walletd = world.get_wallet_daemon(&wallet_daemon_name);
-    // let index = world
-    //     .wallet_keys
-    //     .get(&key_name)
-    //     .unwrap_or_else(|| panic!("Key {} not found", key_name));
-    // let mut wallet_client = walletd.get_authed_client().await;
-    // let key = wallet_client
-    //     .create_specific_key(KeyBranch::Transaction, *index)
-    //     .await
-    //     .unwrap();
-
     let mut vn = world.get_validator_node(&vn_name);
 
     let mut base_layer_wallet = world.get_wallet(&base_wallet_name).create_client().await;
     world.mark_point_in_logs("before get_registration_info");
     let registration = vn.get_registration_info();
+
 
     let response = base_layer_wallet.register_validator_node(RegisterValidatorNodeRequest {
         validator_node_public_key: registration.public_key.to_vec(),
@@ -140,7 +134,7 @@ async fn send_vn_registration_with_claim_wallet(
             public_nonce:    registration.signature.signature().get_public_nonce().to_vec(),
             signature:       registration.signature.signature().get_signature().to_vec(),
         }),
-        validator_node_claim_public_key: registration.claim_public_key.to_vec(),
+        validator_node_claim_public_key: registration.claim_fees_public_key.to_vec(),
         sidechain_deployment_key: vec![],
         fee_per_gram: 1,
         message: "Register".to_string()
