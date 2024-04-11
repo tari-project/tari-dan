@@ -565,8 +565,8 @@ async fn print_world(world: &mut TariWorld) {
     // indexes
     for (name, node) in &world.indexers {
         eprintln!(
-            "Indexer \"{}\": json rpc port \"{}\", http ui port  \"{}\", temp dir path \"{}\"",
-            name, node.json_rpc_port, node.http_ui_port, node.temp_dir_path
+            "Indexer \"{}\": json rpc port \"{}\", graphql port \"{}\", http ui port  \"{}\", temp dir path \"{}\"",
+            name, node.json_rpc_port, node.graphql_port, node.http_ui_port, node.temp_dir_path
         );
     }
 
