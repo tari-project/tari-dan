@@ -106,11 +106,11 @@ use crate::{
         },
     },
     substate_resolver::TariSubstateResolver,
+    validator_registration_file::ValidatorRegistrationFile,
     virtual_substate::VirtualSubstateManager,
     ApplicationConfig,
     ValidatorNodeConfig,
 };
-use crate::validator_registration_file::ValidatorRegistrationFile;
 
 const LOG_TARGET: &str = "tari::validator_node::bootstrap";
 

@@ -614,7 +614,6 @@ pub struct GetEpochManagerStatsResponse {
     pub committee_shard: Option<CommitteeShard>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "ts",

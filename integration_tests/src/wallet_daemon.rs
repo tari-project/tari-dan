@@ -32,9 +32,19 @@ use tari_dan_wallet_daemon::{
     run_tari_dan_wallet_daemon,
 };
 use tari_shutdown::Shutdown;
-use tari_wallet_daemon_client::{ComponentAddressOrName, types::{AuthLoginAcceptRequest, AuthLoginRequest, AuthLoginResponse}, WalletDaemonClient};
+use tari_wallet_daemon_client::{
+    types::{
+        AccountsCreateFreeTestCoinsRequest,
+        AccountsCreateRequest,
+        AuthLoginAcceptRequest,
+        AuthLoginRequest,
+        AuthLoginResponse,
+        KeyBranch,
+    },
+    ComponentAddressOrName,
+    WalletDaemonClient,
+};
 use tokio::task;
-use tari_wallet_daemon_client::types::{AccountsCreateFreeTestCoinsRequest, AccountsCreateRequest, KeyBranch};
 
 use crate::{
     helpers::{check_join_handle, get_os_assigned_ports, wait_listener_on_local_port},

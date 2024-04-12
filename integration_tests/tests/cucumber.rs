@@ -96,8 +96,6 @@ async fn fees_are_enabled(world: &mut TariWorld) {
     world.fees_enabled = false;
 }
 
-
-
 #[when(expr = "I stop validator node {word}")]
 async fn stop_validator_node(world: &mut TariWorld, vn_name: String) {
     let vn_ps = world.validator_nodes.get_mut(&vn_name).unwrap();

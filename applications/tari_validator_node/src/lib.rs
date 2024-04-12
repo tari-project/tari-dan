@@ -36,8 +36,6 @@ mod substate_resolver;
 mod virtual_substate;
 
 mod validator_registration_file;
-pub use validator_registration_file::ValidatorRegistrationFile;
-
 use std::{fs, io, process};
 
 use log::*;
@@ -53,6 +51,7 @@ use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::task;
+pub use validator_registration_file::ValidatorRegistrationFile;
 
 pub use crate::config::{ApplicationConfig, ValidatorNodeConfig};
 use crate::{

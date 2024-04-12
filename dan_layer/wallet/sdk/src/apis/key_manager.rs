@@ -105,14 +105,22 @@ impl<'a, TStore: WalletStore> KeyManagerApi<'a, TStore> {
         }
     }
 
-    pub fn get_key_for_public_key(&self, branch: &str, public_key: &PublicKey, max_index: u64) -> Result<(u64, DerivedKey<RistrettoPublicKey>), KeyManagerApiError> {
+    pub fn get_key_for_public_key(
+        &self,
+        branch: &str,
+        public_key: &PublicKey,
+        max_index: u64,
+    ) -> Result<(u64, DerivedKey<RistrettoPublicKey>), KeyManagerApiError> {
         for index in 0..=max_index {
             let key = self.derive_key(branch, index)?;
             if &PublicKey::from_secret_key(&key.key) == public_key {
                 return Ok((index, key));
             }
         }
-        Err(KeyManagerApiError::KeyNotFound { key: public_key.clone(), branch: branch.to_string() })
+        Err(KeyManagerApiError::KeyNotFound {
+            key: public_key.clone(),
+            branch: branch.to_string(),
+        })
     }
 
     pub fn get_public_key(&self, branch: &str, key_index: Option<u64>) -> Result<PublicKey, KeyManagerApiError> {
@@ -148,5 +156,5 @@ pub enum KeyManagerApiError {
     #[error("Key manager error: {0}")]
     KeyManagerError(#[from] tari_key_manager::error::KeyManagerError),
     #[error("Key for public key {key}, branch {branch} not found")]
-    KeyNotFound{ key: PublicKey, branch: String },
+    KeyNotFound { key: PublicKey, branch: String },
 }
