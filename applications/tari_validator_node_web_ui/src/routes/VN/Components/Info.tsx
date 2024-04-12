@@ -48,12 +48,7 @@ function Info({
   const [registering, setRegistering] = useState(false);
   const [registerMessage, setRegisterMessage] = useState("");
   const [feeClaimPublicKey, setRegisterFeeClaimPublicKey] = useState("");
-  const register = () => {
-    setRegistering(true);
-    registerValidatorNode({ fee_claim_public_key: feeClaimPublicKey }).then((response) => {
-      setRegisterMessage(`Registration successful, the TxId ${response.transaction_id}`);
-    });
-  };
+
   const renderShardKey = () => {
     if (shardKey === null)
       return (
@@ -82,9 +77,6 @@ function Info({
                 value={feeClaimPublicKey}
                 onChange={(e) => setRegisterFeeClaimPublicKey(e.target.value)}
               />
-              <Button disabled={registering} variant="contained" onClick={registering ? () => {} : register}>
-                Register
-              </Button>
               {registerMessage ? <span style={{ marginLeft: "20px" }}>{registerMessage}</span> : null}
             </DataTableCell>
           </TableRow>

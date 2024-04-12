@@ -136,8 +136,7 @@ export const registerTemplate = (request: TemplateRegistrationRequest): Promise<
 
 // Validator Node
 export const getIdentity = (): Promise<GetIdentityResponse> => jsonRpc("get_identity");
-export const registerValidatorNode = (request: RegisterValidatorNodeRequest): Promise<RegisterValidatorNodeResponse> =>
-  jsonRpc("register_validator_node", request);
+
 export const getMempoolStats = (): Promise<GetMempoolStatsResponse> => jsonRpc("get_mempool_stats");
 export const getEpochManagerStats = (): Promise<GetEpochManagerStatsResponse> => jsonRpc("get_epoch_manager_stats");
 export const getShardKey = (request: GetShardKeyRequest): Promise<GetShardKeyResponse> =>

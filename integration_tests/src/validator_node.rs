@@ -101,7 +101,6 @@ pub async fn spawn_validator_node(
 
     // get the default wallet account public key
     let key = wallet_client.create_key(KeyBranch::Transaction).await.unwrap();
-    dbg!(&key);
     world.wallet_keys.insert(claim_fee_key_name, key.id);
 
     // let wallet_account_pub = wallet_client.accounts_get_default().await.unwrap().public_key;

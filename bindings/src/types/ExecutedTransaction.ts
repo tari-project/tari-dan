@@ -4,12 +4,4 @@ import type { ExecuteResult } from "./ExecuteResult";
 import type { Transaction } from "./Transaction";
 import type { VersionedSubstateId } from "./VersionedSubstateId";
 
-export interface ExecutedTransaction {
-  transaction: Transaction;
-  result: ExecuteResult;
-  resulting_outputs: Array<VersionedSubstateId>;
-  execution_time: { secs: number; nanos: number };
-  final_decision: Decision | null;
-  finalized_time: { secs: number; nanos: number } | null;
-  abort_details: string | null;
-}
+export interface ExecutedTransaction { transaction: Transaction, result: ExecuteResult, resulting_outputs: Array<VersionedSubstateId>, execution_time: {secs: number, nanos: number}, final_decision: Decision | null, finalized_time: {secs: number, nanos: number} | null, abort_details: string | null, }

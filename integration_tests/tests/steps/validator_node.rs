@@ -174,37 +174,7 @@ async fn send_vn_registration_with_claim_wallet(world: &mut TariWorld, vn_name: 
         .unwrap();
     assert!(response.into_inner().transaction_id != 0);
     world.mark_point_in_logs("after register_validator_node");
-    //     validator_node_signature: ,
-    //     validator_node_claim_public_key: ,
-    //     fee_per_gram: u64,
-    //     message: ,
-    //     sidechain_id: ,
-    //     sidechain_id_knowledge_proof: ,
-    // }).await.unwrap();
 
-    // todo!("rieg")
-
-    // if let Err(e) = client.register_validator_node(key.public_key).await {
-    //     println!("register_validator_node error = {}", e);
-    //     panic!("register_validator_node error = {}", e);
-    // }
-    //
-    // world
-    //     .wait_until_base_nodes_have_transaction_in_mempool(1, Duration::from_secs(10))
-    //     .await;
-}
-
-#[when(expr = "all validator nodes send registration transactions")]
-async fn all_vns_send_registration(world: &mut TariWorld) {
-    todo!()
-    // for vn_ps in world.all_validators_iter() {
-    //     let mut client = vn_ps.get_client();
-    //     let _resp = client.register_validator_node(Default::default()).await.unwrap();
-    // }
-    //
-    // world
-    //     .wait_until_base_nodes_have_transaction_in_mempool(world.validator_nodes.len(), Duration::from_secs(10))
-    //     .await;
 }
 
 #[when(expr = "base wallet {word} registers the template \"{word}\"")]

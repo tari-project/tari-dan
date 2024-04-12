@@ -102,27 +102,7 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
         shutdown,
     };
 
-    // if create_default_account {
-    //     let mut client = wallet_daemon_process.get_authed_client().await;
-    //     // Get the key that it will use for the first public key
-    //    let key = client.create_specific_key(KeyBranch::Transaction, 0).await.unwrap();
-    //    world.wallet_keys.insert(wallet_daemon_name.clone(), key.id);
-    //     // let key_index = key_name.map(|k| {
-    //     //     *world
-    //     //         .wallet_keys
-    //     //         .get(&k)
-    //     //         .unwrap_or_else(|| panic!("Wallet {} not found", wallet_daemon_name))
-    //     // });
-    //     let request = AccountsCreateRequest {
-    //         account_name: Some("default".to_string()),
-    //         custom_access_rules: None,
-    //         max_fee: None,
-    //         is_default: true,
-    //         key_id: Some(key.id),
-    //     };
-    //
-    //     client.create_account(request).await.unwrap();
-    // }
+
     world.wallet_daemons.insert(wallet_daemon_name, wallet_daemon_process);
 }
 

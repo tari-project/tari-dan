@@ -254,7 +254,6 @@ async fn when_i_burn_funds_with_wallet_daemon(
     world.commitments.insert(commitment_name, resp.commitment);
     // TODO: use proto::transaction::CommitmentSignature to deserialize once we update tari to include https://github.com/tari-project/tari/pull/5200
     let ownership_proof = resp.ownership_proof.unwrap();
-    dbg!(ownership_proof.clone());
     world.commitment_ownership_proofs.insert(
         ownership_proof_name,
         RistrettoComSig::new(
@@ -264,8 +263,7 @@ async fn when_i_burn_funds_with_wallet_daemon(
         ),
     );
     world.rangeproofs.insert(rangeproof_name, resp.range_proof);
-    dbg!(&resp.reciprocal_claim_public_key);
-    dbg!(public_key.to_vec());
+
     world.claim_public_keys.insert(
         claim_pubkey_name,
         PublicKey::from_canonical_bytes(&resp.reciprocal_claim_public_key).unwrap(),
