@@ -32,7 +32,7 @@ use ts_rs::TS;
 
 use crate::{
     args::Arg,
-    auth::{OwnerRule, ResourceAccessRules},
+    auth::{AuthHook, OwnerRule, ResourceAccessRules},
     crypto::{PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{
         AddressAllocation,
@@ -48,7 +48,7 @@ use crate::{
         VaultId,
         VaultRef,
     },
-    prelude::{ComponentAccessRules, ConfidentialOutputProof, TemplateAddress},
+    prelude::{ComponentAccessRules, ConfidentialOutputStatement, TemplateAddress},
     resource::ResourceType,
     template::BuiltinTemplate,
 };
@@ -236,7 +236,7 @@ pub enum MintArg {
         tokens: BTreeMap<NonFungibleId, (tari_bor::Value, tari_bor::Value)>,
     },
     Confidential {
-        proof: Box<ConfidentialOutputProof>,
+        proof: Box<ConfidentialOutputStatement>,
     },
 }
 
@@ -259,6 +259,7 @@ pub struct CreateResourceArg {
     pub metadata: Metadata,
     pub mint_arg: Option<MintArg>,
     pub view_key: Option<RistrettoPublicKeyBytes>,
+    pub authorize_hook: Option<AuthHook>,
 }
 
 /// A resource minting operation argument
@@ -319,6 +320,7 @@ pub enum VaultAction {
     Deposit,
     Withdraw,
     GetBalance,
+    GetLockedBalance,
     GetResourceAddress,
     GetNonFungibleIds,
     GetCommitmentCount,
@@ -329,6 +331,21 @@ pub enum VaultAction {
     CreateProofByNonFungibles,
     CreateProofByConfidentialResource,
     GetNonFungibles,
+}
+
+impl VaultAction {
+    pub fn requires_write_access(&self) -> bool {
+        use VaultAction::*;
+        !matches!(
+            self,
+            GetBalance |
+                GetLockedBalance |
+                GetResourceAddress |
+                GetNonFungibleIds |
+                GetCommitmentCount |
+                GetNonFungibles
+        )
+    }
 }
 
 /// A vault withdraw operation argument

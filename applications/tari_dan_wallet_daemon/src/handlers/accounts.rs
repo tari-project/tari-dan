@@ -54,6 +54,8 @@ use tari_wallet_daemon_client::{
         AccountsInvokeResponse,
         AccountsListRequest,
         AccountsListResponse,
+        AccountsTransferRequest,
+        AccountsTransferResponse,
         BalanceEntry,
         ClaimBurnRequest,
         ClaimBurnResponse,
@@ -61,8 +63,6 @@ use tari_wallet_daemon_client::{
         ConfidentialTransferResponse,
         RevealFundsRequest,
         RevealFundsResponse,
-        TransferRequest,
-        TransferResponse,
     },
     ComponentAddressOrName,
 };
@@ -353,7 +353,7 @@ pub async fn handle_reveal_funds(
 
         let (inputs, input_value) =
             sdk.confidential_outputs_api()
-                .lock_outputs_by_amount(&vault.address, amount_to_reveal, proof_id, false)?;
+                .lock_outputs_by_amount(&vault.address, amount_to_reveal, proof_id)?;
         let input_amount = Amount::try_from(input_value)?;
 
         let account_key = sdk
@@ -858,8 +858,8 @@ fn get_or_create_account<T: WalletStore>(
 pub async fn handle_transfer(
     context: &HandlerContext,
     token: Option<String>,
-    req: TransferRequest,
-) -> Result<TransferResponse, anyhow::Error> {
+    req: AccountsTransferRequest,
+) -> Result<AccountsTransferResponse, anyhow::Error> {
     let sdk = context.wallet_sdk().clone();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
@@ -967,7 +967,7 @@ pub async fn handle_transfer(
             .transaction_service()
             .submit_dry_run_transaction(transaction, required_inputs)
             .await?;
-        return Ok(TransferResponse {
+        return Ok(AccountsTransferResponse {
             transaction_id,
             fee: execute_result.fee_receipt.total_fees_paid,
             fee_refunded: execute_result.fee_receipt.total_fee_payment - execute_result.fee_receipt.total_fees_paid,
@@ -1000,7 +1000,7 @@ pub async fn handle_transfer(
         finalized.final_fee
     );
 
-    Ok(TransferResponse {
+    Ok(AccountsTransferResponse {
         transaction_id: tx_id,
         fee: finalized.final_fee,
         fee_refunded: max_fee - finalized.final_fee,
@@ -1041,18 +1041,15 @@ pub async fn handle_confidential_transfer(
             .await?;
 
         if req.dry_run {
-            let transaction = sdk
-                .transaction_api()
+            let transaction_id = *transfer.transaction.id();
+            let finalize = transaction_service
                 .submit_dry_run_transaction(
                     transfer.transaction,
                     transfer.inputs.into_iter().map(Into::into).collect(),
                 )
                 .await?;
-            let finalize = transaction
-                .finalize
-                .ok_or_else(|| anyhow!("No result for dry run transaction"))?;
             return Ok(ConfidentialTransferResponse {
-                transaction_id: *transaction.transaction.id(),
+                transaction_id,
                 fee: finalize.fee_receipt.total_fees_paid,
                 result: finalize,
             });

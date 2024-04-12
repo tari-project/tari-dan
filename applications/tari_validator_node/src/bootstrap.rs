@@ -460,6 +460,7 @@ where
                 ResourceAccessRules::new(),
                 metadata,
                 None,
+                None,
             )
             .into(),
             state_hash: Default::default(),
@@ -487,6 +488,7 @@ where
                 OwnerRule::None,
                 ResourceAccessRules::new(),
                 metadata,
+                None,
                 None,
             )
             .into(),

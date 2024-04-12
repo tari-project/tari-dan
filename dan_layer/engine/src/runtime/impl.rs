@@ -36,6 +36,7 @@ use tari_engine_types::{
     entity_id_provider::EntityIdProvider,
     events::Event,
     indexed_value::IndexedValue,
+    instruction_result::InstructionResult,
     lock::LockFlag,
     logs::LogEntry,
     resource::Resource,
@@ -44,10 +45,12 @@ use tari_engine_types::{
     vault::Vault,
     TemplateAddress,
 };
-use tari_template_abi::TemplateDef;
+use tari_template_abi::{TemplateDef, Type};
 use tari_template_builtin::{ACCOUNT_NFT_TEMPLATE_ADDRESS, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
+    args,
     args::{
+        Arg,
         BucketAction,
         BucketRef,
         BuiltinTemplateAction,
@@ -80,8 +83,8 @@ use tari_template_lib::{
         VaultWithdrawArg,
         WorkspaceAction,
     },
-    auth::{ComponentAccessRules, OwnerRule, ResourceAccessRules, ResourceAuthAction},
-    constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+    auth::{AuthHook, AuthHookCaller, ComponentAccessRules, OwnerRule, ResourceAccessRules, ResourceAuthAction},
+    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, XTR2},
     crypto::RistrettoPublicKeyBytes,
     models::{
         Amount,
@@ -111,7 +114,6 @@ use crate::{
         RuntimeInterface,
         RuntimeModule,
     },
-    state_store::AtomicDb,
     template::LoadedTemplate,
     transaction::TransactionProcessor,
 };
@@ -153,22 +155,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             max_call_depth,
             network,
         };
-        runtime.initialize_initial_scope()?;
         runtime.invoke_modules_on_initialize()?;
         Ok(runtime)
-    }
-
-    fn initialize_initial_scope(&self) -> Result<(), RuntimeError> {
-        self.tracker.write_with(|state| {
-            let store = state.store().state_store().clone();
-            let tx = store.read_access()?;
-            let scope_mut = state.current_call_scope_mut()?;
-            for (k, _) in tx.iter_raw() {
-                let address = SubstateId::from_bytes(k)?;
-                scope_mut.add_substate_to_owned(address);
-            }
-            Ok(())
-        })
     }
 
     fn invoke_modules_on_initialize(&self) -> Result<(), RuntimeError> {
@@ -226,7 +214,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         target: LOG_TARGET,
                         "Returned substate {address} does not exist",
                     );
-                    return Err(RuntimeError::SubstateNotFound { address });
+
+                    return Err(RuntimeError::NonExistentSubstateReturned { address });
                 }
             }
 
@@ -234,9 +223,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         })
     }
 
-    fn emit_vault_events(
+    fn emit_vault_events<T: Into<String>>(
         &self,
-        topic: String,
+        topic: T,
         vault_id: VaultId,
         vault_lock: &LockedSubstate,
         amount: Amount,
@@ -253,8 +242,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         payload.insert("resource_type", resource_type.to_string());
         payload.insert("amount", amount.to_string());
 
+        let topic = topic.into();
+
         // we emit multiple events referencing vault and resource address
-        // this way idexers/clients can search by any one
+        // this way indexers/clients can search by any one
         let vault_event = Event::new(
             Some(SubstateId::Vault(vault_id)),
             *template_address,
@@ -269,10 +260,157 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             topic,
             payload,
         );
-        debug!(target: LOG_TARGET, "Emitted vault events {}", vault_event);
+        debug!(target: LOG_TARGET, "Emitted vault event {}", vault_event);
         debug!(target: LOG_TARGET, "Emitted resource event {}", resource_event);
         state.push_event(vault_event);
         state.push_event(resource_event);
+
+        Ok(())
+    }
+
+    fn invoke_resource_access_hook(
+        &self,
+        auth_hook: AuthHook,
+        mut auth_caller: AuthHookCaller,
+        action: ResourceAuthAction,
+    ) -> Result<(), RuntimeError> {
+        self.invoke_modules_on_runtime_call("invoke_resource_access_hook")?;
+        // Check if the component exist
+        let skip_hook = self.tracker.read_with(|state| {
+            let current_component = state.current_component()?;
+            // Only execute hooks if the resource is being acted upon by an external component
+            if current_component == Some(auth_hook.component_address) {
+                return Ok::<_, RuntimeError>(true);
+            }
+            // We know that the auth hook has been validated before this is called. However, the component may not yet
+            // exist if it is being created in the same call as the resource action is taking place. For
+            // example, commonly a user creates a resource with initial supply and deposits it into a bucket
+            // before creating the component. In this case, we "skip" the hook.
+            let exists = state.store().exists(&auth_hook.component_address.into())?;
+            Ok::<_, RuntimeError>(!exists)
+        })?;
+
+        if skip_hook {
+            return Ok(());
+        }
+
+        let caller = auth_caller
+            .component()
+            .map(|component| self.load_component(component))
+            .transpose()?;
+
+        if let Some(caller) = caller {
+            auth_caller.with_component_state(caller.into_component().state);
+        }
+
+        // The signature of a call back is (action: ResourceAuthAction, auth_caller: AuthCaller)
+        let ret = self
+            .invoke_component_method(&auth_hook.component_address, &auth_hook.method, args![
+                action,
+                auth_caller
+            ])
+            .map_err(|e| match e {
+                RuntimeError::CrossTemplateCallMethodError { details, .. } => RuntimeError::AccessDeniedAuthHook {
+                    action_ident: action.into(),
+                    details: details.to_string(),
+                },
+                _ => e,
+            })?;
+        // Enforce that the return type is actually empty. We cannot rely on InstructionResult::return_type field
+        // because that comes from the template definition which is defined by the template author and may not reflect
+        // actual behaviour.
+        if !ret.indexed.value().is_null() {
+            return Err(RuntimeError::UnexpectedNonNullInAuthHookReturn);
+        }
+        Ok(())
+    }
+
+    fn invoke_component_method(
+        &self,
+        component_address: &ComponentAddress,
+        method: &str,
+        args: Vec<Arg>,
+    ) -> Result<InstructionResult, RuntimeError> {
+        let call_runtime = Runtime::new(Arc::new(self.clone()));
+        TransactionProcessor::call_method(&*self.template_provider, &call_runtime, component_address, method, args)
+            .map_err(|e| RuntimeError::CrossTemplateCallMethodError {
+                component_address: *component_address,
+                method: method.to_string(),
+                details: e.to_string(),
+            })
+    }
+
+    fn invoke_template_function(
+        &self,
+        template_address: &TemplateAddress,
+        function: &str,
+        args: Vec<Arg>,
+    ) -> Result<InstructionResult, RuntimeError> {
+        // we are initializing a new runtime for the nested call
+        let call_runtime = Runtime::new(Arc::new(self.clone()));
+        TransactionProcessor::call_function(
+            &*self.template_provider,
+            &call_runtime,
+            template_address,
+            function,
+            args,
+        )
+        .map_err(|e| RuntimeError::CrossTemplateCallFunctionError {
+            template_address: *template_address,
+            function: function.to_string(),
+            details: e.to_string(),
+        })
+    }
+
+    fn check_resource_auth_hook(&self, hook: &AuthHook) -> Result<(), RuntimeError> {
+        let template_address = self
+            .tracker
+            .write_with(|state| state.get_template_for_component(&hook.component_address))?;
+        let template = self.get_template_def(&template_address)?;
+        let func = template
+            .get_function(&hook.method)
+            .ok_or(RuntimeError::InvalidArgument {
+                argument: "CreateResourceArg",
+                reason: format!("Authorize hook '{}' not found", hook),
+            })?;
+
+        if func.is_mut {
+            return Err(RuntimeError::InvalidArgument {
+                argument: "CreateResourceArg",
+                reason: format!("Authorize hook '{}' cannot be mutable", hook),
+            });
+        }
+        if !matches!(func.output, Type::Unit) {
+            return Err(RuntimeError::InvalidArgument {
+                argument: "CreateResourceArg",
+                reason: format!("Authorize hook '{}' must return unit", hook),
+            });
+        }
+
+        if func.arguments.len() != 3 {
+            return Err(RuntimeError::InvalidArgument {
+                argument: "CreateResourceArg",
+                reason: format!(
+                    "Authorize hook '{}' must take 3 arguments (incl &self), but found {}",
+                    hook,
+                    func.arguments.len()
+                ),
+            });
+        }
+
+        if !matches!(func.arguments[1].arg_type.other(), Some("ResourceAuthAction")) {
+            return Err(RuntimeError::InvalidArgument {
+                argument: "CreateResourceArg",
+                reason: format!("Authorize hook '{}' must take a ResourceAuthAction as argument 1", hook),
+            });
+        }
+
+        if !matches!(func.arguments[2].arg_type.other(), Some("AuthHookCaller")) {
+            return Err(RuntimeError::InvalidArgument {
+                argument: "CreateResourceArg",
+                reason: format!("Authorize hook '{}' must take an AuthHookCaller as argument 2", hook),
+            });
+        }
 
         Ok(())
     }
@@ -330,11 +468,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
     fn load_component(&self, address: &ComponentAddress) -> Result<ComponentHeader, RuntimeError> {
         self.invoke_modules_on_runtime_call("load_component")?;
-        self.tracker.write_with(|state| state.load_component(address))
+        self.tracker.write_with(|state| state.load_component(address).cloned())
     }
 
-    fn lock_substate(&self, address: &SubstateId, lock_flag: LockFlag) -> Result<LockedSubstate, RuntimeError> {
-        self.tracker.lock_substate(address, lock_flag)
+    fn lock_component(&self, address: &ComponentAddress, lock_flag: LockFlag) -> Result<LockedSubstate, RuntimeError> {
+        self.tracker.lock_substate(&SubstateId::Component(*address), lock_flag)
     }
 
     fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError> {
@@ -484,9 +622,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     // the fact that the engine creates the lock on the currently executing component and that is the
                     // lock we use to gain access.
                     if *component_lock.address() != component_address {
-                        return Err(RuntimeError::LockError(LockError::SubstateNotLocked {
-                            address: SubstateId::Component(component_address),
-                        }));
+                        return Err(RuntimeError::AccessDeniedSetComponentState {
+                            attempted_on: component_address.into(),
+                            attempted_by: component_lock.address().clone(),
+                        });
                     }
 
                     state.modify_component_with(&component_lock, |component| {
@@ -621,6 +760,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         reason: format!("Invalid view key: {}", e),
                     })?;
 
+                // Check that auth hook is valid
+                if let Some(hook) = arg.authorize_hook.as_ref() {
+                    self.check_resource_auth_hook(hook)?;
+                }
+
                 self.tracker.write_with(|state| {
                     let resource = Resource::new(
                         arg.resource_type,
@@ -629,21 +773,23 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         arg.access_rules,
                         arg.metadata,
                         maybe_view_key,
+                        arg.authorize_hook,
                     );
 
                     let resource_address = state.id_provider()?.new_resource_address()?;
                     state.new_substate(resource_address, resource)?;
-                    let locked = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Write)?;
+                    let resource_lock =
+                        state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Write)?;
 
                     let mut output_bucket = None;
                     if let Some(mint_arg) = arg.mint_arg {
                         let bucket_id = state.id_provider()?.new_bucket_id();
-                        let container = state.mint_resource(&locked, mint_arg)?;
+                        let container = state.mint_resource(&resource_lock, mint_arg)?;
                         state.new_bucket(bucket_id, container)?;
                         output_bucket = Some(tari_template_lib::models::Bucket::from_id(bucket_id));
                     }
 
-                    state.unlock_substate(locked)?;
+                    state.unlock_substate(resource_lock)?;
 
                     Ok(InvokeResult::encode(&(resource_address, output_bucket))?)
                 })
@@ -695,17 +841,27 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         })?;
                 let mint_resource: MintResourceArg = args.assert_one_arg()?;
 
-                self.tracker.write_with(|state| {
+                let (resource_lock, maybe_auth_hook, auth_caller) = self.tracker.write_with(|state_mut| {
                     let resource_lock =
-                        state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Write)?;
-                    let resource = state.get_resource(&resource_lock)?;
+                        state_mut.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Write)?;
 
-                    state.authorization().check_resource_access_rules(
+                    let resource = state_mut.get_resource(&resource_lock)?;
+
+                    state_mut.authorization().check_resource_access_rules(
                         ResourceAuthAction::Mint,
                         resource.as_ownership(),
                         resource.access_rules(),
                     )?;
 
+                    let auth_caller = state_mut.get_auth_caller()?;
+                    Ok::<_, RuntimeError>((resource_lock, resource.auth_hook().cloned(), auth_caller))
+                })?;
+
+                if let Some(auth_hook) = maybe_auth_hook {
+                    self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Mint)?;
+                }
+
+                self.tracker.write_with(|state| {
                     let resource = state.mint_resource(&resource_lock, mint_resource.mint_arg)?;
                     let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource)?;
@@ -726,17 +882,30 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         })?;
                 let arg: RecallResourceArg = args.assert_one_arg()?;
 
-                self.tracker.write_with(|state| {
+                let (maybe_auth_hook, auth_caller) = self.tracker.write_with(|state_mut| {
                     let resource_lock =
-                        state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Write)?;
-                    let resource = state.get_resource(&resource_lock)?;
+                        state_mut.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
 
-                    state.authorization().check_resource_access_rules(
+                    let resource = state_mut.get_resource(&resource_lock)?;
+
+                    state_mut.authorization().check_resource_access_rules(
                         ResourceAuthAction::Recall,
                         resource.as_ownership(),
                         resource.access_rules(),
                     )?;
 
+                    let auth_hook = resource.auth_hook().cloned();
+                    let auth_caller = state_mut.get_auth_caller()?;
+
+                    state_mut.unlock_substate(resource_lock)?;
+                    Ok::<_, RuntimeError>((auth_hook, auth_caller))
+                })?;
+
+                if let Some(auth_hook) = maybe_auth_hook {
+                    self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Recall)?;
+                }
+
+                self.tracker.write_with(|state| {
                     let vault_lock = state.lock_substate(&arg.vault_id.into(), LockFlag::Write)?;
 
                     let resource = state.recall_resource_from_vault(&vault_lock, arg.resource)?;
@@ -745,7 +914,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     state.new_bucket(bucket_id, resource)?;
 
                     state.unlock_substate(vault_lock)?;
-                    state.unlock_substate(resource_lock)?;
 
                     Ok(InvokeResult::encode(&tari_template_lib::models::Bucket::from_id(
                         bucket_id,
@@ -764,9 +932,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 self.tracker.write_with(|state| {
                     let addr = SubstateId::NonFungible(NonFungibleAddress::new(resource_address, arg.id.clone()));
-                    let locked = state.lock_substate(&addr, LockFlag::Read)?;
+                    let nft_lock = state.lock_substate(&addr, LockFlag::Read)?;
 
-                    let nf_container = state.get_non_fungible(&locked)?;
+                    let nf_container = state.get_non_fungible(&nft_lock)?;
 
                     if nf_container.is_burnt() {
                         return Err(RuntimeError::InvalidOpNonFungibleBurnt {
@@ -776,7 +944,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         });
                     }
 
-                    state.unlock_substate(locked)?;
+                    state.unlock_substate(nft_lock)?;
 
                     Ok(InvokeResult::encode(addr.as_non_fungible_address().unwrap())?)
                 })
@@ -791,16 +959,34 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         })?;
                 let arg: ResourceUpdateNonFungibleDataArg = args.assert_one_arg()?;
 
-                self.tracker.write_with(|state| {
-                    let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
-                    let resource = state.get_resource(&resource_lock)?;
+                let (maybe_auth_hook, auth_caller) = self.tracker.write_with(|state_mut| {
+                    let resource_lock =
+                        state_mut.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
 
-                    state.authorization().check_resource_access_rules(
+                    let resource = state_mut.get_resource(&resource_lock)?;
+
+                    state_mut.authorization().check_resource_access_rules(
                         ResourceAuthAction::UpdateNonFungibleData,
                         resource.as_ownership(),
                         resource.access_rules(),
                     )?;
 
+                    let auth_hook = resource.auth_hook().cloned();
+                    let auth_caller = state_mut.get_auth_caller()?;
+
+                    state_mut.unlock_substate(resource_lock)?;
+                    Ok::<_, RuntimeError>((auth_hook, auth_caller))
+                })?;
+
+                if let Some(auth_hook) = maybe_auth_hook {
+                    self.invoke_resource_access_hook(
+                        auth_hook,
+                        auth_caller,
+                        ResourceAuthAction::UpdateNonFungibleData,
+                    )?;
+                }
+
+                self.tracker.write_with(|state| {
                     let addr = NonFungibleAddress::new(resource_address, arg.id);
                     let locked = state.lock_substate(&SubstateId::NonFungible(addr.clone()), LockFlag::Write)?;
 
@@ -816,7 +1002,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     contents.set_mutable_data(arg.data);
 
                     state.unlock_substate(locked)?;
-                    state.unlock_substate(resource_lock)?;
 
                     Ok(InvokeResult::unit())
                 })
@@ -831,17 +1016,27 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         })?;
                 let access_rules: ResourceAccessRules = args.assert_one_arg()?;
 
-                self.tracker.write_with(|state| {
+                let (resource_lock, maybe_auth_hook, auth_caller) = self.tracker.write_with(|state_mut| {
                     let resource_lock =
-                        state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Write)?;
-                    let resource = state.get_resource(&resource_lock)?;
-                    state
+                        state_mut.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Write)?;
+
+                    let resource = state_mut.get_resource(&resource_lock)?;
+
+                    state_mut
                         .authorization()
                         .require_ownership(ResourceAuthAction::UpdateAccessRules, resource.as_ownership())?;
 
+                    let auth_caller = state_mut.get_auth_caller()?;
+                    Ok::<_, RuntimeError>((resource_lock, resource.auth_hook().cloned(), auth_caller))
+                })?;
+
+                if let Some(auth_hook) = maybe_auth_hook {
+                    self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::UpdateAccessRules)?;
+                }
+
+                self.tracker.write_with(|state| {
                     let resource_mut = state.get_resource_mut(&resource_lock)?;
                     resource_mut.set_access_rules(access_rules);
-
                     state.unlock_substate(resource_lock)?;
 
                     Ok(InvokeResult::unit())
@@ -862,9 +1057,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         debug!(target: LOG_TARGET, "Vault invoke: {} {:?}", vault_ref, action,);
 
         // Check vault ownership if referencing an ID
-        if let Some(vault_id) = vault_ref.vault_id() {
-            self.tracker
-                .read_with(|state| state.check_component_scope(&vault_id.into(), action))?;
+        if action.requires_write_access() {
+            if let Some(vault_id) = vault_ref.vault_id() {
+                self.tracker
+                    .read_with(|state| state.check_component_scope(&vault_id.into(), action))?;
+            }
         }
 
         match action {
@@ -878,8 +1075,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 args.assert_no_args("CreateVault")?;
 
                 self.tracker.write_with(|state| {
-                    let substate_id = SubstateId::Resource(*resource_address);
-                    let resource_lock = state.lock_substate(&substate_id, LockFlag::Read)?;
+                    let resource_substate_id = SubstateId::Resource(*resource_address);
+                    let resource_lock = state.lock_substate(&resource_substate_id, LockFlag::Read)?;
                     let resource = state.get_resource(&resource_lock)?;
 
                     // Require deposit permissions on the resource to create the vault (even if empty)
@@ -912,8 +1109,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     );
                     state.unlock_substate(resource_lock)?;
 
-                    // The resource has been "claimed" by an empty vault
-                    state.current_call_scope_mut()?.move_node_to_owned(&substate_id)?;
+                    // The resource is not orphaned because of the new vault.
+                    state
+                        .current_call_scope_mut()?
+                        .move_node_to_owned(&resource_substate_id)?;
 
                     Ok(InvokeResult::encode(&vault_id)?)
                 })
@@ -926,32 +1125,33 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 let bucket_id: BucketId = args.assert_one_arg()?;
 
-                self.tracker.write_with(|state| {
-                    let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
-                    let bucket = state.take_bucket(bucket_id)?;
+                let (vault_lock, resource_lock, maybe_auth_hook, auth_caller) =
+                    self.tracker.write_with(|state_mut| {
+                        let vault_lock = state_mut.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
 
-                    // Emit a builtin event for the deposit
-                    self.emit_vault_events(
-                        VAULT_DEPOSIT_TOPIC.to_owned(),
-                        vault_id,
-                        &vault_lock,
-                        bucket.amount(),
-                        bucket.resource_type(),
-                        state,
-                    )?;
+                        let resource_address = state_mut.get_vault(&vault_lock)?.resource_address();
 
-                    let resource_address = state.get_vault(&vault_lock)?.resource_address();
-                    let resource_lock =
-                        state.lock_substate(&SubstateId::Resource(*resource_address), LockFlag::Read)?;
+                        let resource_lock =
+                            state_mut.lock_substate(&SubstateId::Resource(*resource_address), LockFlag::Read)?;
 
-                    let resource = state.get_resource(&resource_lock)?;
+                        let resource = state_mut.get_resource(&resource_lock)?;
 
-                    state.authorization().check_resource_access_rules(
-                        ResourceAuthAction::Deposit,
-                        resource.as_ownership(),
-                        resource.access_rules(),
-                    )?;
+                        state_mut.authorization().check_resource_access_rules(
+                            ResourceAuthAction::Deposit,
+                            resource.as_ownership(),
+                            resource.access_rules(),
+                        )?;
 
+                        let auth_caller = state_mut.get_auth_caller()?;
+                        Ok::<_, RuntimeError>((vault_lock, resource_lock, resource.auth_hook().cloned(), auth_caller))
+                    })?;
+
+                if let Some(auth_hook) = maybe_auth_hook {
+                    self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Deposit)?;
+                }
+
+                self.tracker.write_with(move |state_mut| {
+                    let bucket = state_mut.take_bucket(bucket_id)?;
                     // It is invalid to deposit a bucket that has locked funds
                     if !bucket.locked_amount().is_zero() {
                         return Err(RuntimeError::InvalidOpDepositLockedBucket {
@@ -960,11 +1160,21 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         });
                     }
 
-                    let vault_mut = state.get_vault_mut(&vault_lock)?;
+                    // Emit a builtin event for the deposit
+                    self.emit_vault_events(
+                        VAULT_DEPOSIT_TOPIC.to_owned(),
+                        vault_id,
+                        &vault_lock,
+                        bucket.amount(),
+                        bucket.resource_type(),
+                        state_mut,
+                    )?;
+
+                    let vault_mut = state_mut.get_vault_mut(&vault_lock)?;
                     vault_mut.deposit(bucket)?;
 
-                    state.unlock_substate(resource_lock)?;
-                    state.unlock_substate(vault_lock)?;
+                    state_mut.unlock_substate(resource_lock)?;
+                    state_mut.unlock_substate(vault_lock)?;
 
                     Ok(InvokeResult::unit())
                 })
@@ -976,21 +1186,32 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 })?;
                 let arg: VaultWithdrawArg = args.assert_one_arg()?;
 
+                let (vault_lock, resource_lock, maybe_auth_hook, auth_caller) =
+                    self.tracker.write_with(|state_mut| {
+                        let vault_lock = state_mut.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
+
+                        let resource_address = state_mut.get_vault(&vault_lock)?.resource_address();
+
+                        let resource_lock =
+                            state_mut.lock_substate(&SubstateId::Resource(*resource_address), LockFlag::Read)?;
+
+                        let resource = state_mut.get_resource(&resource_lock)?;
+
+                        state_mut.authorization().check_resource_access_rules(
+                            ResourceAuthAction::Withdraw,
+                            resource.as_ownership(),
+                            resource.access_rules(),
+                        )?;
+
+                        let auth_caller = state_mut.get_auth_caller()?;
+                        Ok::<_, RuntimeError>((vault_lock, resource_lock, resource.auth_hook().cloned(), auth_caller))
+                    })?;
+
+                if let Some(auth_hook) = maybe_auth_hook {
+                    self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Withdraw)?;
+                }
+
                 self.tracker.write_with(|state| {
-                    let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
-
-                    let vault = state.get_vault(&vault_lock)?;
-                    let resource_address = *vault.resource_address();
-                    let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
-
-                    let resource = state.get_resource(&resource_lock)?;
-
-                    state.authorization().check_resource_access_rules(
-                        ResourceAuthAction::Withdraw,
-                        resource.as_ownership(),
-                        resource.access_rules(),
-                    )?;
-
                     let resource = state.get_resource(&resource_lock)?;
                     let maybe_view_key = resource.view_key().cloned();
 
@@ -1017,7 +1238,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                     // Emit a builtin event for the withdraw
                     self.emit_vault_events(
-                        VAULT_WITHDRAW_TOPIC.to_owned(),
+                        VAULT_WITHDRAW_TOPIC,
                         vault_id,
                         &vault_lock,
                         amount,
@@ -1045,6 +1266,20 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.write_with(|state| {
                     let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Read)?;
                     let balance = state.get_vault(&vault_lock)?.balance();
+                    state.unlock_substate(vault_lock)?;
+                    Ok(InvokeResult::encode(&balance)?)
+                })
+            },
+            VaultAction::GetLockedBalance => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "GetBalance vault action requires a vault id".to_string(),
+                })?;
+                args.assert_no_args("Vault::GetBalance")?;
+
+                self.tracker.write_with(|state| {
+                    let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Read)?;
+                    let balance = state.get_vault(&vault_lock)?.locked_balance();
                     state.unlock_substate(vault_lock)?;
                     Ok(InvokeResult::encode(&balance)?)
                 })
@@ -1101,18 +1336,33 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 let arg: ConfidentialRevealArg = args.assert_one_arg()?;
 
-                self.tracker.write_with(|state| {
-                    let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
-                    let resource_address = state.get_vault(&vault_lock)?.resource_address();
-                    let resource_lock =
-                        state.lock_substate(&SubstateId::Resource(*resource_address), LockFlag::Read)?;
-                    let resource = state.get_resource(&resource_lock)?;
+                let (vault_lock, resource_lock, maybe_auth_hook, auth_caller) =
+                    self.tracker.write_with(|state_mut| {
+                        let vault_lock = state_mut.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
 
-                    state.authorization().check_resource_access_rules(
-                        ResourceAuthAction::Withdraw,
-                        resource.as_ownership(),
-                        resource.access_rules(),
-                    )?;
+                        let resource_address = state_mut.get_vault(&vault_lock)?.resource_address();
+
+                        let resource_lock =
+                            state_mut.lock_substate(&SubstateId::Resource(*resource_address), LockFlag::Read)?;
+
+                        let resource = state_mut.get_resource(&resource_lock)?;
+
+                        state_mut.authorization().check_resource_access_rules(
+                            ResourceAuthAction::Withdraw,
+                            resource.as_ownership(),
+                            resource.access_rules(),
+                        )?;
+
+                        let auth_caller = state_mut.get_auth_caller()?;
+                        Ok::<_, RuntimeError>((vault_lock, resource_lock, resource.auth_hook().cloned(), auth_caller))
+                    })?;
+
+                if let Some(auth_hook) = maybe_auth_hook {
+                    self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Withdraw)?;
+                }
+
+                self.tracker.write_with(|state| {
+                    let resource = state.get_resource(&resource_lock)?;
                     let view_key = resource.view_key().cloned();
 
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
@@ -1144,7 +1394,16 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.write_with(|state| {
                     let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
                     let resource_address = *state.get_vault(&vault_lock)?.resource_address();
-                    let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
+                    if resource_address != XTR2 {
+                        return Err(RuntimeError::InvalidArgument {
+                            argument: "vault_ref",
+                            reason: format!(
+                                "Fees can only be paid using XTR, however the vault contained resource {}",
+                                resource_address
+                            ),
+                        });
+                    }
+                    let resource_lock = state.lock_substate(&SubstateId::Resource(XTR2), LockFlag::Read)?;
                     let resource = state.get_resource(&resource_lock)?;
 
                     state.authorization().check_resource_access_rules(
@@ -1156,8 +1415,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
 
-                    let mut container =
-                        ResourceContainer::confidential(*vault_mut.resource_address(), None, Amount::zero());
+                    let mut container = ResourceContainer::confidential(XTR2, None, Amount::zero());
                     if !arg.amount.is_zero() {
                         let withdrawn = vault_mut.withdraw(arg.amount)?;
                         container.deposit(withdrawn)?;
@@ -1188,19 +1446,32 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 })?;
                 args.assert_no_args("CreateProofByResource")?;
 
+                let (vault_lock, resource_lock, maybe_auth_hook, auth_caller) =
+                    self.tracker.write_with(|state_mut| {
+                        let vault_lock = state_mut.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
+
+                        let resource_address = state_mut.get_vault(&vault_lock)?.resource_address();
+
+                        let resource_lock =
+                            state_mut.lock_substate(&SubstateId::Resource(*resource_address), LockFlag::Read)?;
+
+                        let resource = state_mut.get_resource(&resource_lock)?;
+
+                        state_mut.authorization().check_resource_access_rules(
+                            ResourceAuthAction::Withdraw,
+                            resource.as_ownership(),
+                            resource.access_rules(),
+                        )?;
+
+                        let auth_caller = state_mut.get_auth_caller()?;
+                        Ok::<_, RuntimeError>((vault_lock, resource_lock, resource.auth_hook().cloned(), auth_caller))
+                    })?;
+
+                if let Some(auth_hook) = maybe_auth_hook {
+                    self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Withdraw)?;
+                }
+
                 self.tracker.write_with(|state| {
-                    let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
-                    let vault = state.get_vault(&vault_lock)?;
-                    let resource_address = *vault.resource_address();
-                    let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
-                    let resource = state.get_resource(&resource_lock)?;
-
-                    state.authorization().check_resource_access_rules(
-                        ResourceAuthAction::Withdraw,
-                        resource.as_ownership(),
-                        resource.access_rules(),
-                    )?;
-
                     let proof_id = state.id_provider()?.new_proof_id();
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
                     let locked_funds = vault_mut.lock_all(vault_id)?;
@@ -1219,19 +1490,32 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 })?;
                 let arg: VaultCreateProofByFungibleAmountArg = args.assert_one_arg()?;
 
+                let (vault_lock, resource_lock, maybe_auth_hook, auth_caller) =
+                    self.tracker.write_with(|state_mut| {
+                        let vault_lock = state_mut.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
+
+                        let resource_address = state_mut.get_vault(&vault_lock)?.resource_address();
+
+                        let resource_lock =
+                            state_mut.lock_substate(&SubstateId::Resource(*resource_address), LockFlag::Read)?;
+
+                        let resource = state_mut.get_resource(&resource_lock)?;
+
+                        state_mut.authorization().check_resource_access_rules(
+                            ResourceAuthAction::Withdraw,
+                            resource.as_ownership(),
+                            resource.access_rules(),
+                        )?;
+
+                        let auth_caller = state_mut.get_auth_caller()?;
+                        Ok::<_, RuntimeError>((vault_lock, resource_lock, resource.auth_hook().cloned(), auth_caller))
+                    })?;
+
+                if let Some(auth_hook) = maybe_auth_hook {
+                    self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Withdraw)?;
+                }
+
                 self.tracker.write_with(|state| {
-                    let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
-                    let vault = state.get_vault(&vault_lock)?;
-                    let resource_address = *vault.resource_address();
-                    let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
-                    let resource = state.get_resource(&resource_lock)?;
-
-                    state.authorization().check_resource_access_rules(
-                        ResourceAuthAction::Withdraw,
-                        resource.as_ownership(),
-                        resource.access_rules(),
-                    )?;
-
                     let proof_id = state.id_provider()?.new_proof_id();
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
                     let locked_funds = vault_mut.lock_by_amount(vault_id, arg.amount)?;
@@ -1250,19 +1534,32 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 })?;
                 let arg: VaultCreateProofByNonFungiblesArg = args.assert_one_arg()?;
 
+                let (vault_lock, resource_lock, maybe_auth_hook, auth_caller) =
+                    self.tracker.write_with(|state_mut| {
+                        let vault_lock = state_mut.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
+
+                        let resource_address = state_mut.get_vault(&vault_lock)?.resource_address();
+
+                        let resource_lock =
+                            state_mut.lock_substate(&SubstateId::Resource(*resource_address), LockFlag::Read)?;
+
+                        let resource = state_mut.get_resource(&resource_lock)?;
+
+                        state_mut.authorization().check_resource_access_rules(
+                            ResourceAuthAction::Withdraw,
+                            resource.as_ownership(),
+                            resource.access_rules(),
+                        )?;
+
+                        let auth_caller = state_mut.get_auth_caller()?;
+                        Ok::<_, RuntimeError>((vault_lock, resource_lock, resource.auth_hook().cloned(), auth_caller))
+                    })?;
+
+                if let Some(auth_hook) = maybe_auth_hook {
+                    self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Withdraw)?;
+                }
+
                 self.tracker.write_with(|state| {
-                    let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
-                    let vault = state.get_vault(&vault_lock)?;
-                    let resource_address = *vault.resource_address();
-                    let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
-                    let resource = state.get_resource(&resource_lock)?;
-
-                    state.authorization().check_resource_access_rules(
-                        ResourceAuthAction::Withdraw,
-                        resource.as_ownership(),
-                        resource.access_rules(),
-                    )?;
-
                     let proof_id = state.id_provider()?.new_proof_id();
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
                     let locked_funds = vault_mut.lock_by_non_fungible_ids(vault_id, arg.ids)?;
@@ -1408,20 +1705,30 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     reason: "Burn bucket action requires a bucket id".to_string(),
                 })?;
 
-                self.tracker.write_with(|state| {
-                    let bucket = state.take_bucket(bucket_id)?;
-                    let resource_address = *bucket.resource_address();
+                let (resource_lock, maybe_auth_hook, auth_caller) = self.tracker.write_with(|state_mut| {
+                    let bucket = state_mut.get_bucket(bucket_id)?;
 
                     let resource_lock =
-                        state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Write)?;
-                    let resource = state.get_resource(&resource_lock)?;
+                        state_mut.lock_substate(&SubstateId::Resource(*bucket.resource_address()), LockFlag::Write)?;
 
-                    state.authorization().check_resource_access_rules(
+                    let resource = state_mut.get_resource(&resource_lock)?;
+
+                    state_mut.authorization().check_resource_access_rules(
                         ResourceAuthAction::Burn,
                         resource.as_ownership(),
                         resource.access_rules(),
                     )?;
 
+                    let auth_caller = state_mut.get_auth_caller()?;
+                    Ok::<_, RuntimeError>((resource_lock, resource.auth_hook().cloned(), auth_caller))
+                })?;
+
+                if let Some(auth_hook) = maybe_auth_hook {
+                    self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Burn)?;
+                }
+
+                self.tracker.write_with(|state| {
+                    let bucket = state.take_bucket(bucket_id)?;
                     let burnt_amount = bucket.amount();
                     state.burn_bucket(bucket)?;
 
@@ -1441,22 +1748,36 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 args.assert_no_args("Bucket::CreateProof")?;
 
-                self.tracker.write_with(|state| {
-                    let locked_funds = state.get_bucket_mut(bucket_id)?.lock_all()?;
-                    let resource_address = *locked_funds.resource_address();
-                    let resource_lock = state.lock_substate(&SubstateId::Resource(resource_address), LockFlag::Read)?;
-                    let resource = state.get_resource(&resource_lock)?;
+                let (maybe_auth_hook, auth_caller) = self.tracker.write_with(|state_mut| {
+                    let bucket = state_mut.get_bucket(bucket_id)?;
 
-                    state.authorization().check_resource_access_rules(
+                    let resource_lock =
+                        state_mut.lock_substate(&SubstateId::Resource(*bucket.resource_address()), LockFlag::Read)?;
+
+                    let resource = state_mut.get_resource(&resource_lock)?;
+
+                    state_mut.authorization().check_resource_access_rules(
                         ResourceAuthAction::Withdraw,
                         resource.as_ownership(),
                         resource.access_rules(),
                     )?;
 
+                    let auth_hook = resource.auth_hook().cloned();
+                    let auth_caller = state_mut.get_auth_caller()?;
+
+                    state_mut.unlock_substate(resource_lock)?;
+                    Ok::<_, RuntimeError>((auth_hook, auth_caller))
+                })?;
+
+                if let Some(auth_hook) = maybe_auth_hook {
+                    self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Withdraw)?;
+                }
+
+                self.tracker.write_with(|state| {
+                    let locked_funds = state.get_bucket_mut(bucket_id)?.lock_all()?;
+
                     let proof_id = state.id_provider()?.new_proof_id();
                     state.new_proof(proof_id, locked_funds)?;
-
-                    state.unlock_substate(resource_lock)?;
 
                     Ok(InvokeResult::encode(&proof_id)?)
                 })
@@ -1749,51 +2070,24 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             args,
         );
 
-        // we are initializing a new runtime for the nested call
-        let call_runtime = Runtime::new(Arc::new(self.clone()));
-
         let exec_result = match action {
             CallAction::CallFunction => {
-                // extract the args from the invoke operation
                 let CallFunctionArg {
                     template_address,
                     function,
                     args,
                 } = args.assert_one_arg()?;
 
-                TransactionProcessor::call_function(
-                    &*self.template_provider,
-                    &call_runtime,
-                    &template_address,
-                    &function,
-                    args,
-                )
-                .map_err(|e| RuntimeError::CrossTemplateCallFunctionError {
-                    template_address,
-                    function,
-                    details: e.to_string(),
-                })?
+                self.invoke_template_function(&template_address, &function, args)?
             },
             CallAction::CallMethod => {
-                // extract the args from the invoke operation
                 let CallMethodArg {
                     component_address,
                     method,
                     args,
                 } = args.assert_one_arg()?;
 
-                TransactionProcessor::call_method(
-                    &*self.template_provider,
-                    &call_runtime,
-                    &component_address,
-                    &method,
-                    args,
-                )
-                .map_err(|e| RuntimeError::CrossTemplateCallMethodError {
-                    component_address,
-                    method,
-                    details: e.to_string(),
-                })?
+                self.invoke_component_method(&component_address, &method, args)?
             },
         };
 

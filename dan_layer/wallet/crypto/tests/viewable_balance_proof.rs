@@ -8,7 +8,7 @@ use tari_crypto::{
     keys::{PublicKey, SecretKey},
     ristretto::{pedersen::PedersenCommitment, RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_dan_wallet_crypto::{create_confidential_proof, AlwaysMissLookupTable, ConfidentialProofStatement};
+use tari_dan_wallet_crypto::{create_confidential_output_statement, AlwaysMissLookupTable, ConfidentialProofStatement};
 use tari_engine_types::confidential::validate_elgamal_verifiable_balance_proof;
 use tari_template_lib::models::Amount;
 use tari_utilities::ByteArray;
@@ -44,7 +44,7 @@ fn it_errors_no_balance_proof_with_view_key() {
     let (_, view_key) = keypair_from_seed(1);
     let output_statement = create_output_statement(123.into(), &view_key);
 
-    let proof = create_confidential_proof(&output_statement, None).unwrap();
+    let proof = create_confidential_output_statement(&output_statement, None).unwrap();
     let output_statement = proof.output_statement.as_ref().unwrap();
     let viewable_balance_proof = proof
         .output_statement
@@ -69,7 +69,7 @@ fn it_generates_a_valid_proof() {
     let output_statement = create_output_statement(123.into(), &view_key);
 
     let timer = Instant::now();
-    let proof = create_confidential_proof(&output_statement, None).unwrap();
+    let proof = create_confidential_output_statement(&output_statement, None).unwrap();
     let gen_proof_time = timer.elapsed();
 
     let output_statement = proof.output_statement.as_ref().unwrap();

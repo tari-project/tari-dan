@@ -10,7 +10,7 @@ use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard},
+    committee::{Committee, CommitteeShard, NetworkCommitteeInfo},
     shard::Shard,
     Epoch,
     SubstateAddress,
@@ -143,5 +143,8 @@ pub enum EpochManagerRequest<TAddr> {
     SetFeeClaimPublicKey {
         public_key: PublicKey,
         reply: Reply<()>,
+    },
+    GetNetworkCommittees {
+        reply: Reply<NetworkCommitteeInfo<TAddr>>,
     },
 }

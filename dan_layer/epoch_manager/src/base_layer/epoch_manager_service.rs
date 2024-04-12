@@ -217,6 +217,9 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::GetBaseLayerBlockHeight { hash, reply } => {
                 handle(reply, self.inner.get_base_layer_block_height(hash).await)
             },
+            EpochManagerRequest::GetNetworkCommittees { reply } => {
+                handle(reply, self.inner.get_network_committees().await)
+            },
         }
     }
 }

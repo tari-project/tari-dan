@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Form } from "react-router-dom";
 import Button from "@mui/material/Button";
 import CheckBox from "@mui/material/Checkbox";
@@ -90,6 +90,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
     publicKey: false,
     amount: false,
   });
+  const [allValid, setAllValid] = useState(false);
 
   const { accountName, setPopup } = useAccountStore();
 
@@ -212,7 +213,9 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
     }
   };
 
-  const allValid = Object.values(validity).every((v) => v);
+  useEffect(() => {
+    setAllValid(Object.values(validity).every((v) => v));
+  }, [validity]);
 
   return (
     <Dialog open={props.open} onClose={handleClose}>
@@ -247,6 +250,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
             label="Public Key"
             value={transferFormState.publicKey}
             inputProps={{ pattern: "^[0-9a-fA-F]*$" }}
+            required
             onChange={setFormValue}
             style={{ flexGrow: 1 }}
             disabled={disabled}

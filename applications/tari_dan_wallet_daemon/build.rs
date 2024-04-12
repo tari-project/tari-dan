@@ -28,6 +28,12 @@ fn exit_on_ci() {
     }
 }
 
+const BUILD: &[(&str, &str)] = &[
+    ("../../bindings", "tsc"),
+    ("../../clients/javascript/wallet_daemon_client", "build"),
+    ("../tari_dan_wallet_web_ui", "build"),
+];
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../tari_dan_wallet_web_ui/src");
     println!("cargo:rerun-if-changed=../tari_dan_wallet_web_ui/public");
@@ -39,31 +45,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
 
-    if let Err(error) = Command::new(npm)
-        .arg("ci")
-        .current_dir("../tari_dan_wallet_web_ui")
-        .status()
-    {
-        println!("cargo:warning='npm ci' error : {:?}", error);
-        exit_on_ci();
-    }
-    match Command::new(npm)
-        .args(["run", "build"])
-        .current_dir("../tari_dan_wallet_web_ui")
-        .output()
-    {
-        Ok(output) if !output.status.success() => {
-            println!("cargo:warning='npm run build' exited with non-zero status code");
-            println!("cargo:warning=Output: {}", String::from_utf8_lossy(&output.stdout));
-            println!("cargo:warning=Error: {}", String::from_utf8_lossy(&output.stderr));
+    for (target, build_cmd) in BUILD {
+        if let Err(error) = Command::new(npm).arg("ci").current_dir(target).status() {
+            println!("cargo:warning='npm ci' error : {:?}", error);
             exit_on_ci();
-        },
-        Err(error) => {
-            println!("cargo:warning='npm run build' error : {:?}", error);
-            println!("cargo:warning=The web ui will not be included!");
-            exit_on_ci();
-        },
-        _ => {},
+        }
+        match Command::new(npm).args(["run", build_cmd]).current_dir(target).output() {
+            Ok(output) if !output.status.success() => {
+                println!("cargo:warning='npm run build' exited with non-zero status code");
+                println!("cargo:warning=Output: {}", String::from_utf8_lossy(&output.stdout));
+                println!("cargo:warning=Error: {}", String::from_utf8_lossy(&output.stderr));
+                exit_on_ci();
+                break;
+            },
+            Err(error) => {
+                println!("cargo:warning='npm run build' error : {:?}", error);
+                println!("cargo:warning=The web ui will not be included!");
+                exit_on_ci();
+                break;
+            },
+            _ => {},
+        }
     }
     Ok(())
 }

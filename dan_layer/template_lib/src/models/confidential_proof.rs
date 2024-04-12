@@ -11,22 +11,25 @@ use crate::{
     models::Amount,
 };
 
-/// A zero-knowledge proof of a confidential transfer
+/// A statement for confidential and revealed outputs. A statement must contain either confidential outputs or non-zero
+/// revealed funds or both.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
-pub struct ConfidentialOutputProof {
+pub struct ConfidentialOutputStatement {
     /// Proof of the confidential resources that are going to be transferred to the receiver
     pub output_statement: Option<ConfidentialStatement>,
     /// Proof of the transaction change, which goes back to the sender's vault
     pub change_statement: Option<ConfidentialStatement>,
-    // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
-    /// Needed to prove that no coins were created
+    /// Bulletproof range proof for the output and change commitments proving that values are in the range
+    /// [minimum_value_promise, 2^64)
     pub range_proof: Vec<u8>,
+    /// The amount of revealed funds to output
     pub output_revealed_amount: Amount,
+    /// The amount of revealed funds to return to the sender
     pub change_revealed_amount: Amount,
 }
 
-impl ConfidentialOutputProof {
+impl ConfidentialOutputStatement {
     /// Creates an output proof for minting which only mints a revealed amount.
     pub fn mint_revealed(amount: Amount) -> Self {
         Self {
@@ -125,7 +128,7 @@ pub struct ViewableBalanceProofChallengeFields<'a> {
     pub r_prime: &'a RistrettoPublicKeyBytes,
 }
 
-/// A zero-knowledge proof that a withdrawal of confidential resources from a vault is valid
+/// A zero-knowledge proof that a transfer of confidential resources is valid
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ConfidentialWithdrawProof {
@@ -134,7 +137,7 @@ pub struct ConfidentialWithdrawProof {
     /// The amount to withdraw from revealed funds i.e. the revealed funds as inputs
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub input_revealed_amount: Amount,
-    pub output_proof: ConfidentialOutputProof,
+    pub output_proof: ConfidentialOutputStatement,
     /// Balance proof
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub balance_proof: BalanceProofSignature,
@@ -150,7 +153,7 @@ impl ConfidentialWithdrawProof {
         Self {
             inputs: vec![],
             input_revealed_amount: amount,
-            output_proof: ConfidentialOutputProof::mint_revealed(amount),
+            output_proof: ConfidentialOutputStatement::mint_revealed(amount),
             balance_proof,
         }
     }

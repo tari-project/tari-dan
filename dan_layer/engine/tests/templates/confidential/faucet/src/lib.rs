@@ -31,7 +31,7 @@ mod faucet_template {
     }
 
     impl ConfidentialFaucet {
-        pub fn mint(confidential_proof: ConfidentialOutputProof) -> Component<Self> {
+        pub fn mint(confidential_proof: ConfidentialOutputStatement) -> Component<Self> {
             let coins = ResourceBuilder::confidential()
                 .mintable(AccessRule::AllowAll)
                 .initial_supply(confidential_proof)
@@ -45,7 +45,7 @@ mod faucet_template {
         }
 
         pub fn mint_with_view_key(
-            confidential_proof: ConfidentialOutputProof,
+            confidential_proof: ConfidentialOutputStatement,
             view_key: RistrettoPublicKeyBytes,
         ) -> Component<Self> {
             let coins = ResourceBuilder::confidential()
@@ -62,19 +62,19 @@ mod faucet_template {
         }
 
         pub fn mint_revealed(&mut self, amount: Amount) {
-            let proof = ConfidentialOutputProof::mint_revealed(amount);
+            let proof = ConfidentialOutputStatement::mint_revealed(amount);
             let bucket = ResourceManager::get(self.vault.resource_address()).mint_confidential(proof);
             self.vault.deposit(bucket);
         }
 
         pub fn mint_revealed_with_range_proof(&mut self, amount: Amount) {
-            let mut proof = ConfidentialOutputProof::mint_revealed(amount);
+            let mut proof = ConfidentialOutputStatement::mint_revealed(amount);
             proof.range_proof = vec![1, 2, 3];
             let bucket = ResourceManager::get(self.vault.resource_address()).mint_confidential(proof);
             self.vault.deposit(bucket);
         }
 
-        pub fn mint_more(&mut self, proof: ConfidentialOutputProof) {
+        pub fn mint_more(&mut self, proof: ConfidentialOutputStatement) {
             let bucket = ResourceManager::get(self.vault.resource_address()).mint_confidential(proof);
             self.vault.deposit(bucket);
         }
