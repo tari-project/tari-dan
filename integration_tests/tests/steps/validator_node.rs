@@ -176,6 +176,7 @@ async fn all_vns_send_registration(world: &mut TariWorld) {
 
 #[when(expr = "base wallet {word} registers the template \"{word}\"")]
 async fn register_template(world: &mut TariWorld, wallet_name: String, template_name: String) {
+    world.mark_point_in_logs("Start register template");
     let template_address = match send_template_registration(world, template_name.clone(), wallet_name).await {
         Ok(resp) => resp,
         Err(e) => {
@@ -195,6 +196,7 @@ async fn register_template(world: &mut TariWorld, wallet_name: String, template_
     world
         .wait_until_base_nodes_have_transaction_in_mempool(1, Duration::from_secs(10))
         .await;
+    world.mark_point_in_logs("End register template");
 }
 
 #[then(expr = "all validator nodes are listed as registered")]

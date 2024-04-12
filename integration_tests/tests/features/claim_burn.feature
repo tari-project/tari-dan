@@ -3,7 +3,7 @@
 
 Feature: Claim Burn
 
-  @serial
+  @serial @fixed
   Scenario: Claim base layer burn funds with wallet daemon
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE

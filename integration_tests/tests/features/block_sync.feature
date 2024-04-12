@@ -3,7 +3,7 @@
 
 Feature: Block Sync
 
-  @serial
+  @serial @fixed @current
   Scenario: New validator node registers and syncs
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE

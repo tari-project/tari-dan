@@ -27,6 +27,7 @@ pub async fn send_template_registration(
     template_name: String,
     wallet_name: String,
 ) -> anyhow::Result<TemplateAddress> {
+    dbg!("here");
     let binary_sha = compile_wasm_template(template_name.clone())?;
 
     // publish the wasm file into http to be able to be fetched by the VN later
@@ -58,12 +59,15 @@ pub async fn send_template_registration(
         fee_per_gram: 1,
     };
 
+    dbg!("here 2");
     // send the template registration request
     let wallet = world.get_wallet(&wallet_name);
     let mut client = wallet.create_client().await;
 
+    dbg!("here3");
     // store the template address for future reference
     let resp = client.create_template_registration(request).await?.into_inner();
+    dbg!("here4");
     Ok(TemplateAddress::try_from_vec(resp.template_address).unwrap())
 }
 
