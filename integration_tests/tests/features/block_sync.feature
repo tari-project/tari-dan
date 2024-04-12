@@ -3,7 +3,7 @@
 
 Feature: Block Sync
 
-  @serial @fixed @current
+  @serial @fixed
   Scenario: New validator node registers and syncs
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -12,11 +12,8 @@ Feature: Block Sync
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
-
     # Initialize the wallet daemon
     Given a wallet daemon WALLET_D connected to indexer IDX
-    When I create a key named K1 for WALLET_D
-
     # Initialize a VN
     Given a seed validator node VN connected to base node BASE and wallet daemon WALLET_D
     When miner MINER mines 4 new blocks
