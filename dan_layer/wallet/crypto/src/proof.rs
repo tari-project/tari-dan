@@ -32,7 +32,7 @@ use tari_crypto::{
     tari_utilities::ByteArray,
 };
 use tari_engine_types::confidential::{challenges, get_commitment_factory, get_range_proof_service};
-use tari_hash_domains::TransactionSecureNonceKdfDomain;
+use tari_hashing::TransactionSecureNonceKdfDomain;
 use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
     models::{

@@ -25,7 +25,7 @@
 
 use blake2::{digest::consts::U32, Blake2b};
 use tari_crypto::{hash_domain, hashing::DomainSeparatedHasher};
-use tari_hash_domains::ValidatorNodeBmtHashDomain;
+use tari_hashing::ValidatorNodeBmtHashDomain;
 use tari_mmr::{BalancedBinaryMerkleProof, BalancedBinaryMerkleTree, MergedBalancedBinaryMerkleProof};
 
 use crate::hasher::{tari_hasher, TariHasher};

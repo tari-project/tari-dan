@@ -30,7 +30,7 @@ use digest::{
 };
 use tari_common::configuration::Network;
 use tari_crypto::hashing::{DomainSeparatedHasher, DomainSeparation};
-use tari_hash_domains::{ConfidentialOutputHashDomain, WalletOutputEncryptionKeysDomain};
+use tari_hashing::{ConfidentialOutputHashDomain, WalletOutputEncryptionKeysDomain};
 
 fn confidential_hasher64(network: Network, label: &'static str) -> TariBaseLayerHasher64 {
     TariBaseLayerHasher64::new_with_label::<ConfidentialOutputHashDomain>(network, label)
