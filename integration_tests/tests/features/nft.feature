@@ -3,7 +3,7 @@
 
 Feature: NFTs
 
-  @serial
+  @serial @current
   Scenario: Mint, mutate and burn non fungible tokens
     Given fees are disabled
     # Initialize a base node, wallet, miner and VN
