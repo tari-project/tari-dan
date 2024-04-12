@@ -3,4 +3,11 @@ import type { Decision } from "./Decision";
 import type { TransactionAtom } from "./TransactionAtom";
 import type { TransactionPoolStage } from "./TransactionPoolStage";
 
-export interface TransactionPoolRecord { transaction: TransactionAtom, stage: TransactionPoolStage, pending_stage: TransactionPoolStage | null, local_decision: Decision | null, remote_decision: Decision | null, is_ready: boolean, }
+export interface TransactionPoolRecord {
+  transaction: TransactionAtom;
+  stage: TransactionPoolStage;
+  pending_stage: TransactionPoolStage | null;
+  local_decision: Decision | null;
+  remote_decision: Decision | null;
+  is_ready: boolean;
+}

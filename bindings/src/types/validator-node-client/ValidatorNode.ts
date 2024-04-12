@@ -2,4 +2,11 @@
 import type { Epoch } from "..\\Epoch";
 import type { SubstateAddress } from "..\\SubstateAddress";
 
-export interface ValidatorNode { address: string, public_key: string, shard_key: SubstateAddress, epoch: Epoch, committee_shard: number | null, fee_claim_public_key: string, }
+export interface ValidatorNode {
+  address: string;
+  public_key: string;
+  shard_key: SubstateAddress;
+  epoch: Epoch;
+  committee_shard: number | null;
+  fee_claim_public_key: string;
+}
