@@ -78,6 +78,9 @@ Feature: Claim Fees
     When miner MINER mines 10 new blocks
     Then VN has scanned to height 27
 
+    # Can't claim fees with difference account
+    When I claim fees for validator VN and epoch 1 into account ACC1 using the wallet daemon WALLET_D, it fails
+
     # Claim fees into ACC2
     When I claim fees for validator VN and epoch 1 into account ACC2 using the wallet daemon WALLET_D
     When I check the balance of ACC2 on wallet daemon WALLET_D the amount is at least 10300

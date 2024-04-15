@@ -34,14 +34,10 @@ use tari_dan_wallet_daemon::{
 use tari_shutdown::Shutdown;
 use tari_wallet_daemon_client::{
     types::{
-        AccountsCreateFreeTestCoinsRequest,
-        AccountsCreateRequest,
         AuthLoginAcceptRequest,
         AuthLoginRequest,
         AuthLoginResponse,
-        KeyBranch,
     },
-    ComponentAddressOrName,
     WalletDaemonClient,
 };
 use tokio::task;

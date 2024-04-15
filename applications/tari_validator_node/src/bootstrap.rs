@@ -34,7 +34,6 @@ use tari_common::{
     configuration::Network,
     exit_codes::{ExitCode, ExitError},
 };
-use tari_common_types::types::PublicKey;
 #[cfg(not(feature = "metrics"))]
 use tari_consensus::traits::hooks::NoopHooks;
 use tari_core::transactions::transaction_components::ValidatorNodeSignature;

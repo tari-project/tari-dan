@@ -70,7 +70,7 @@ impl ValidatorNodeProcess {
 
     pub fn get_registration_info(&self) -> ValidatorRegistrationFile {
         let registration_file_path = self.temp_dir_path.join("registration.json");
-        let registration_file = fs::read_to_string(&registration_file_path).expect("Could not read file");
+        let registration_file = fs::read_to_string(registration_file_path).expect("Could not read file");
         serde_json::from_str(&registration_file).expect("Could not parse file")
     }
 }

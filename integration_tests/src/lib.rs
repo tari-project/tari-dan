@@ -23,7 +23,6 @@
 use std::{
     fmt::{Debug, Formatter},
     fs,
-    path::Path,
     time::{Duration, Instant},
 };
 
@@ -53,7 +52,7 @@ use validator_node::ValidatorNodeProcess;
 use wallet::WalletProcess;
 use wallet_daemon::DanWalletDaemonProcess;
 
-use crate::logging::{get_base_dir, get_base_dir_for_scenario};
+use crate::logging::{get_base_dir};
 
 pub mod base_node;
 pub mod helpers;

@@ -28,7 +28,6 @@ use integration_tests::{
     http_server::{spawn_template_http_server, MockHttpServer},
     logging::{create_log_config_file, get_base_dir},
     miner::{mine_blocks, register_miner_process},
-    validator_node::spawn_validator_node,
     validator_node_cli,
     wallet::spawn_wallet,
     wallet_daemon::spawn_wallet_daemon,

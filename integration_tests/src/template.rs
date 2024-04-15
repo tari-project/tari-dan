@@ -7,16 +7,14 @@ use minotari_app_grpc::tari_rpc::{
     template_type,
     BuildInfo,
     CreateTemplateRegistrationRequest,
-    TemplateRegistration,
     TemplateType,
     WasmInfo,
 };
 use tari_dan_engine::wasm::compile::compile_template;
 use tari_engine_types::{hashing::template_hasher32, TemplateAddress};
 use tari_template_lib::Hash;
-use tari_transaction::TransactionId;
 
-use crate::{template::template_type::TemplateType::Wasm, TariWorld};
+use crate::{TariWorld};
 
 #[derive(Debug)]
 pub struct RegisteredTemplate {

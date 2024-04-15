@@ -17,13 +17,10 @@ use integration_tests::{
 use libp2p::Multiaddr;
 use minotari_app_grpc::tari_rpc::{RegisterValidatorNodeRequest, Signature};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
-use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{optional::Optional, Epoch, SubstateAddress};
 use tari_engine_types::substate::SubstateId;
-use tari_template_lib::Hash;
 use tari_validator_node_client::types::{AddPeerRequest, GetStateRequest, GetTemplateRequest, ListBlocksRequest};
-use tari_wallet_daemon_client::types::KeyBranch;
 
 #[given(expr = "a validator node {word} connected to base node {word} and wallet daemon {word}")]
 async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_daemon_name: String) {
@@ -152,7 +149,7 @@ async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: Stri
 
 #[when(expr = "validator node {word} sends a registration transaction to base wallet {word}")]
 async fn send_vn_registration_with_claim_wallet(world: &mut TariWorld, vn_name: String, base_wallet_name: String) {
-    let mut vn = world.get_validator_node(&vn_name);
+    let vn = world.get_validator_node(&vn_name);
 
     let mut base_layer_wallet = world.get_wallet(&base_wallet_name).create_client().await;
     world.mark_point_in_logs("before get_registration_info");
