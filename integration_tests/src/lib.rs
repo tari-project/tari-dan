@@ -52,7 +52,7 @@ use validator_node::ValidatorNodeProcess;
 use wallet::WalletProcess;
 use wallet_daemon::DanWalletDaemonProcess;
 
-use crate::logging::{get_base_dir};
+use crate::logging::get_base_dir;
 
 pub mod base_node;
 pub mod helpers;

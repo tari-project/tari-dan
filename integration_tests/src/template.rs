@@ -14,7 +14,7 @@ use tari_dan_engine::wasm::compile::compile_template;
 use tari_engine_types::{hashing::template_hasher32, TemplateAddress};
 use tari_template_lib::Hash;
 
-use crate::{TariWorld};
+use crate::TariWorld;
 
 #[derive(Debug)]
 pub struct RegisteredTemplate {

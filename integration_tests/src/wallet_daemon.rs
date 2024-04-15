@@ -33,11 +33,7 @@ use tari_dan_wallet_daemon::{
 };
 use tari_shutdown::Shutdown;
 use tari_wallet_daemon_client::{
-    types::{
-        AuthLoginAcceptRequest,
-        AuthLoginRequest,
-        AuthLoginResponse,
-    },
+    types::{AuthLoginAcceptRequest, AuthLoginRequest, AuthLoginResponse},
     WalletDaemonClient,
 };
 use tokio::task;

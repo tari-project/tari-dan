@@ -25,9 +25,7 @@ use std::{ops::RangeInclusive, time::Duration};
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use tari_base_node_client::types::BaseLayerValidatorNode;
-use tari_common_types::{
-    types::{FixedHash, PublicKey},
-};
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     shard::Shard,

@@ -5,9 +5,8 @@ use std::{
     fmt,
     marker::PhantomData,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
-use std::time::Instant;
 
 use diesel::{sql_query, Connection, RunQueryDsl, SqliteConnection};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
