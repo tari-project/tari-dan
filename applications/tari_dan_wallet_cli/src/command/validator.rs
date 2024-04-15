@@ -28,7 +28,6 @@ pub struct ClaimFeesArgs {
     pub dest_account_name: Option<String>,
     #[clap(long, short = 'v')]
     pub validator_public_key: FromHex<RistrettoPublicKeyBytes>,
-    pub claim_fees_public_key: FromHex<RistrettoPublicKeyBytes>,
     #[clap(long, short = 'e')]
     pub epoch: u64,
     #[clap(long)]
@@ -78,7 +77,6 @@ pub async fn handle_claim_validator_fees(
     let ClaimFeesArgs {
         dest_account_name,
         validator_public_key,
-        claim_fees_public_key,
         epoch,
         max_fee,
         dry_run,
@@ -93,8 +91,6 @@ pub async fn handle_claim_validator_fees(
                 .transpose()?,
             max_fee: max_fee.map(Amount::from),
             validator_public_key: PublicKey::from_canonical_bytes(validator_public_key.into_inner().as_bytes())
-                .map_err(anyhow::Error::msg)?,
-            claim_fees_public_key: PublicKey::from_canonical_bytes(claim_fees_public_key.into_inner().as_bytes())
                 .map_err(anyhow::Error::msg)?,
             epoch: Epoch(epoch),
             dry_run,

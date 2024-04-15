@@ -112,13 +112,10 @@ pub async fn claim_fees(
 
     let vn = world.get_validator_node(&validator_name);
 
-    let reg_info = vn.get_registration_info();
-
     let request = ClaimValidatorFeesRequest {
         account: Some(ComponentAddressOrName::Name(account_name)),
         max_fee: None,
         validator_public_key: vn.public_key.clone(),
-        claim_fees_public_key: reg_info.claim_fees_public_key.clone(),
         epoch: Epoch(epoch),
         dry_run,
     };
