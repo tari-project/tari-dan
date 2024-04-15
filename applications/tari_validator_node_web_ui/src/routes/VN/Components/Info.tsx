@@ -21,14 +21,12 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState } from "react";
-import { registerValidatorNode } from "../../../utils/json_rpc";
 import "./Info.css";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableRow from "@mui/material/TableRow";
-import Button from "@mui/material/Button";
 import { DataTableCell } from "../../../Components/StyledComponents";
 import { TextField } from "@mui/material";
 import type {
