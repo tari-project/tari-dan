@@ -102,7 +102,6 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
         shutdown,
     };
 
-
     world.wallet_daemons.insert(wallet_daemon_name, wallet_daemon_process);
 }
 

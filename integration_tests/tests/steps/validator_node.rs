@@ -174,7 +174,6 @@ async fn send_vn_registration_with_claim_wallet(world: &mut TariWorld, vn_name: 
         .unwrap();
     assert!(response.into_inner().transaction_id != 0);
     world.mark_point_in_logs("after register_validator_node");
-
 }
 
 #[when(expr = "base wallet {word} registers the template \"{word}\"")]
