@@ -2,21 +2,16 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    future::Future,
     io,
     path::{Path, PathBuf},
-    process::Output,
 };
 
 use anyhow::{anyhow, Context};
 use futures::{stream::FuturesUnordered, StreamExt};
-use tokio::process::Command;
+use tokio::process::{Child, Command};
 
 use super::executable::Executable;
-use crate::{
-    config::{ExecutableConfig, InstanceType},
-    process_manager::utils::{log_error_output, log_output},
-};
+use crate::config::{ExecutableConfig, InstanceType};
 
 pub struct ExecutableManager {
     config: Vec<ExecutableConfig>,
@@ -62,28 +57,26 @@ impl ExecutableManager {
                     exec.instance_type,
                     compile.working_dir().display()
                 );
+                let mut child = cargo_build(
+                    compile
+                        .working_dir()
+                        .canonicalize()
+                        .context("working_dir does not exist")?,
+                    &compile.package_name,
+                )?;
                 tasks.push(async move {
-                    let output = cargo_build(
-                        compile
-                            .working_dir()
-                            .canonicalize()
-                            .context("working_dir does not exist")?,
-                        &compile.package_name,
-                    )
-                    .await?;
-                    Ok::<_, anyhow::Error>((output, exec))
+                    let status = child.wait().await?;
+                    Ok::<_, anyhow::Error>((status, exec))
                 });
             }
         }
 
         while let Some(output) = tasks.next().await {
-            let (output, exec) = output?;
-            if !output.status.success() {
-                log_error_output(&output);
+            let (status, exec) = output?;
+            if !status.success() {
                 return Err(anyhow!("Failed to compile {:?}", exec.instance_type));
             }
 
-            log_output(log::Level::Debug, &output);
             log::info!("🟢 Successfully compiled {}", exec.instance_type);
 
             let compile = exec
@@ -109,13 +102,17 @@ impl ExecutableManager {
             executables: &self.prepared,
         })
     }
+
+    pub fn get_executable(&self, instance_type: InstanceType) -> Option<&Executable> {
+        self.prepared.iter().find(|e| e.instance_type == instance_type)
+    }
 }
 
-fn cargo_build<P: AsRef<Path>>(working_dir: P, package: &str) -> impl Future<Output = io::Result<Output>> {
+fn cargo_build<P: AsRef<Path>>(working_dir: P, package: &str) -> io::Result<Child> {
     Command::new("cargo")
         .args(["build", "--release", "--bin", package])
         .current_dir(working_dir)
-        .output()
+        .spawn()
 }
 
 pub struct Executables<'a> {

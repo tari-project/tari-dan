@@ -6,11 +6,15 @@ import { useParams } from "react-router";
 import { jsonRpc } from "../utils/json_rpc";
 
 export default function Log() {
-  const { name } = useParams<{ name: string }>();
-  const { format } = useParams<{ format: string }>();
+  const { name, format } = useParams<{ name: string, format: string }>();
+  console.log(name, format);
   const [content, setContent] = useState(undefined);
+
+  if (!name) {
+    return <div>No name provided {format}</div>;
+  }
   useEffect(() => {
-    jsonRpc("get_file", atob(name || "no_name_provided"))
+    jsonRpc("get_file", atob(name))
       .then((resp) => {
         console.log(format);
         if (format == "normal") {

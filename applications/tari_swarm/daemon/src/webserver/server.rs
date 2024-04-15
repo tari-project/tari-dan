@@ -1,31 +1,59 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{net::SocketAddr, str::FromStr, sync::Arc};
+use std::{io, str::FromStr, sync::Arc};
 
 use axum::{
+    extract::{multipart::MultipartError, Multipart},
+    handler::HandlerWithoutStateExt,
     http::{HeaderValue, Response, Uri},
     response::IntoResponse,
     routing::post,
     Extension,
     Router,
 };
-use axum_jrpc::{JrpcResult, JsonRpcExtractor, JsonRpcResponse};
+use axum_jrpc::{
+    error::{JsonRpcError, JsonRpcErrorReason},
+    JrpcResult,
+    JsonRpcAnswer,
+    JsonRpcExtractor,
+    JsonRpcResponse,
+};
 use include_dir::{include_dir, Dir};
 use log::*;
 use reqwest::{header, StatusCode};
+use serde::{de::DeserializeOwned, Serialize};
+use serde_json::json;
+use tari_crypto::tari_utilities::hex;
+use tari_engine_types::calculate_template_binary_hash;
+use tokio::{fs, io::AsyncWriteExt};
+use tower_http::{cors::CorsLayer, services::ServeDir};
+use url::Url;
 
-use crate::webserver::context::HandlerContext;
+use crate::{
+    process_manager::TemplateData,
+    webserver::{context::HandlerContext, error::HandlerError, handler::JrpcHandler, rpc, templates},
+};
 
 const LOG_TARGET: &str = "tari::dan::swarm::webserver";
 
 pub async fn run(context: HandlerContext) -> anyhow::Result<()> {
-    let bind_address = context.config().bind_address.clone();
-    let bind_address = SocketAddr::from_str(&bind_address)?;
+    let bind_address = context.config().webserver.bind_address.clone();
+
+    async fn not_found() -> (StatusCode, &'static str) {
+        (StatusCode::NOT_FOUND, "Resource not found")
+    }
+
+    let serve_templates =
+        ServeDir::new(context.config().base_dir.join("templates")).not_found_service(not_found.into_service());
+
     let router = Router::new()
-        .layer(Extension(Arc::new(context)))
+        .route("/json_rpc/upload_template", post(templates::upload))
         .route("/json_rpc", post(json_rpc_handler))
-        .fallback(handler);
+        .nest_service("/templates", serve_templates)
+        .fallback(handler)
+        .layer(Extension(Arc::new(context)))
+        .layer(CorsLayer::permissive());
 
     let server = axum::Server::try_bind(&bind_address).or_else(|_| {
         error!(
@@ -70,69 +98,70 @@ async fn handler(uri: Uri) -> impl IntoResponse {
         .unwrap()
 }
 
-async fn json_rpc_handler(Extension(_context): Extension<Arc<HandlerContext>>, value: JsonRpcExtractor) -> JrpcResult {
+async fn json_rpc_handler(Extension(context): Extension<Arc<HandlerContext>>, value: JsonRpcExtractor) -> JrpcResult {
     info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
     debug!(target: LOG_TARGET, "🌐 JSON-RPC request: {:?}", value);
-    let method_parts = value
-        .method
-        .as_str()
-        .split_once('.')
-        .map(|(l, r)| (l, Some(r)))
-        .unwrap_or((value.method.as_str(), None));
-    match method_parts {
-        ("ping", None) => Ok(JsonRpcResponse::success(value.get_answer_id(), "pong")),
+    match value.method.as_str() {
+        "ping" => Ok(JsonRpcResponse::success(value.get_answer_id(), "pong")),
+        "add_base_node" => call_handler(context, value, rpc::base_nodes::create).await,
+        "vns" => call_handler(context, value, rpc::validator_nodes::list).await,
+        "dan_wallets" => call_handler(context, value, rpc::dan_wallets::list).await,
+        "indexers" => call_handler(context, value, rpc::indexers::list).await,
+        "get_logs" => call_handler(context, value, rpc::logs::list_log_files).await,
+        "get_stdout" => call_handler(context, value, rpc::logs::list_stdout_files).await,
+        "get_file" => call_handler(context, value, rpc::logs::get_log_file).await,
+        "mine" => call_handler(context, value, rpc::miners::mine).await,
         _ => Ok(value.method_not_found(&value.method)),
     }
 }
 
-// TODO: implement handlers
-// async fn call_handler<H, TReq, TResp>(
-//     context: Arc<HandlerContext>,
-//     value: JsonRpcExtractor,
-//     mut handler: H,
-// ) -> JrpcResult
-// where
-//     TReq: DeserializeOwned,
-//     TResp: Serialize,
-//     H: for<'a> JrpcHandler<'a, TReq, Response = TResp>,
-// {
-//     let answer_id = value.get_answer_id();
-//     let params = value.parse_params().map_err(|e| {
-//         match &e.result {
-//             JsonRpcAnswer::Result(_) => {
-//                 unreachable!("parse_params() error should not return a result")
-//             },
-//             JsonRpcAnswer::Error(e) => {
-//                 warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);
-//             },
-//         }
-//         e
-//     })?;
-//     let resp = handler
-//         .handle(&context, params)
-//         .await
-//         .map_err(|e| resolve_handler_error(answer_id, &e))?;
-//     Ok(JsonRpcResponse::success(answer_id, resp))
-// }
-//
-// fn resolve_handler_error(answer_id: i64, e: &HandlerError) -> JsonRpcResponse {
-//     match e {
-//         HandlerError::Anyhow(e) => resolve_any_error(answer_id, e),
-//         HandlerError::NotFound => JsonRpcResponse::error(
-//             answer_id,
-//             JsonRpcError::new(JsonRpcErrorReason::ApplicationError(404), e.to_string(), json!({})),
-//         ),
-//     }
-// }
-//
-// fn resolve_any_error(answer_id: i64, e: &anyhow::Error) -> JsonRpcResponse {
-//     warn!(target: LOG_TARGET, "🌐 JSON-RPC error: {}", e);
-//     if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
-//         return resolve_handler_error(answer_id, handler_err);
-//     }
-//
-//     JsonRpcResponse::error(
-//         answer_id,
-//         JsonRpcError::new(JsonRpcErrorReason::ApplicationError(500), e.to_string(), json!({})),
-//     )
-// }
+async fn call_handler<H, TReq, TResp>(
+    context: Arc<HandlerContext>,
+    value: JsonRpcExtractor,
+    mut handler: H,
+) -> JrpcResult
+where
+    TReq: DeserializeOwned,
+    TResp: Serialize,
+    H: for<'a> JrpcHandler<'a, TReq, Response = TResp>,
+{
+    let answer_id = value.get_answer_id();
+    let params = value.parse_params().map_err(|e| {
+        match &e.result {
+            JsonRpcAnswer::Result(_) => {
+                unreachable!("parse_params() error should not return a result")
+            },
+            JsonRpcAnswer::Error(e) => {
+                warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);
+            },
+        }
+        e
+    })?;
+    let resp = handler
+        .handle(&context, params)
+        .await
+        .map_err(|e| resolve_handler_error(answer_id, &e))?;
+    Ok(JsonRpcResponse::success(answer_id, resp))
+}
+
+fn resolve_handler_error(answer_id: i64, e: &HandlerError) -> JsonRpcResponse {
+    match e {
+        HandlerError::Anyhow(e) => resolve_any_error(answer_id, e),
+        HandlerError::NotFound => JsonRpcResponse::error(
+            answer_id,
+            JsonRpcError::new(JsonRpcErrorReason::ApplicationError(404), e.to_string(), json!({})),
+        ),
+    }
+}
+
+fn resolve_any_error(answer_id: i64, e: &anyhow::Error) -> JsonRpcResponse {
+    warn!(target: LOG_TARGET, "🌐 JSON-RPC error: {}", e);
+    if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
+        return resolve_handler_error(answer_id, handler_err);
+    }
+
+    JsonRpcResponse::error(
+        answer_id,
+        JsonRpcError::new(JsonRpcErrorReason::ApplicationError(500), e.to_string(), json!({})),
+    )
+}

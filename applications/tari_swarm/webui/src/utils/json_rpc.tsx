@@ -27,7 +27,7 @@ let json_id = 0;
 // const mutex_token = new Mutex();
 // const mutex_id = new Mutex();
 
-export async function jsonRpc(method: string, ...args: any[]) {
+export async function jsonRpc(method: string, args: any = {}) {
   const id = json_id;
   // await mutex_id.runExclusive(() => {
   //   id = json_id;
@@ -41,7 +41,7 @@ export async function jsonRpc(method: string, ...args: any[]) {
   //   }
   // } catch {
   // }
-  const address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || "localhost:9000";
+  const address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || "/json_rpc";
   const headers: { [key: string]: string } = { "Content-Type": "application/json" };
   const response = await fetch(`http://${address}`, {
     method: "POST",
@@ -49,14 +49,14 @@ export async function jsonRpc(method: string, ...args: any[]) {
       method: method,
       jsonrpc: "2.0",
       id: id,
-      params: [...args],
+      params: args,
     }),
     headers: headers,
   });
   const json = await response.json();
   if (json.error) {
     console.error(method);
-    console.error(...args);
+    console.error(args);
     console.error(json.error);
     throw new Error(json.error);
   }

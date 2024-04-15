@@ -2,15 +2,17 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use async_trait::async_trait;
+use log::debug;
 use tokio::process::Command;
 
-use crate::processes::definition::{ProcessContext, ProcessDefinition};
+use crate::process_definitions::{ProcessContext, ProcessDefinition};
 
-pub struct MinotariNode {}
+#[derive(Debug, Default)]
+pub struct MinotariNode;
 
 impl MinotariNode {
     pub fn new() -> Self {
-        Self {}
+        Self
     }
 }
 
@@ -24,10 +26,18 @@ impl ProcessDefinition for MinotariNode {
 
         let public_address = format!("/ip4/{local_ip}/tcp/{p2p_port}");
 
+        let base_nodes = context.get_minotari_nodes();
+        let mut base_node_addresses = Vec::new();
+        for base_node in base_nodes {
+            let identity = base_node.get_identity().await?;
+            debug!("Base node identity: {identity}");
+            base_node_addresses.push(identity);
+        }
+
         command
             .envs(context.environment())
             .arg("-b")
-            .arg(context.base_path().join("base_node"))
+            .arg(context.base_path())
             .arg("--network")
             .arg(context.network().to_string())
             .arg("-pbase_node.p2p.transport.type=tcp")
@@ -38,7 +48,9 @@ impl ProcessDefinition for MinotariNode {
             .arg(format!("-pbase_node.grpc_address=/ip4/{local_ip}/tcp/{grpc_port}"))
             .args([
                 "--non-interactive",
-                "-pbase_node.grpc_enabled=true",
+                "--enable-grpc",
+                "--enable-mining",
+                "--enable-second-layer",
                 "-pbase_node.p2p.allow_test_addresses=true",
                 "-pbase_node.metadata_auto_ping_interval=3",
                 "-pbase_node.report_grpc_error=true",
@@ -50,4 +62,8 @@ impl ProcessDefinition for MinotariNode {
 
         Ok(command)
     }
+
+    // fn get_relative_data_path(&self) -> Option<PathBuf> {
+    //     Some(Path::new("network/data"))
+    // }
 }

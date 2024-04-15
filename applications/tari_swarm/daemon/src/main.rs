@@ -1,11 +1,12 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{fs, future::Future, pin::Pin};
+use std::{future::Future, io, pin::Pin};
 
 use anyhow::Context;
+use tari_common::configuration::Network;
 use tari_shutdown::Shutdown;
-use tokio::signal::unix::SignalKind;
+use tokio::{fs, signal::unix::SignalKind};
 
 use crate::{
     cli::{Cli, Commands},
@@ -14,8 +15,8 @@ use crate::{
 
 mod cli;
 mod config;
+mod process_definitions;
 mod process_manager;
-mod processes;
 mod webserver;
 
 #[tokio::main]
@@ -33,39 +34,11 @@ async fn main() -> anyhow::Result<()> {
             // }
 
             if let Some(parent) = config_path.parent() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).await?;
             }
-            let file = fs::File::create(&config_path)?;
-            Config {
-                base_dir: cli
-                    .common
-                    .base_dir
-                    .or_else(|| config_path.parent().map(|p| p.to_path_buf()))
-                    .unwrap_or_else(|| std::env::current_dir().unwrap())
-                    .canonicalize()?,
-                webserver: WebserverConfig::default(),
-                processes: ProcessesConfig {
-                    always_compile: false,
-                    instances: vec![InstanceConfig {
-                        name: "Minotari Nodes".to_string(),
-                        instance_type: InstanceType::MinoTariNode,
-                        num_instances: 1,
-                    }],
-                    executables: vec![ExecutableConfig {
-                        instance_type: InstanceType::MinoTariNode,
-                        // Default to compile.package_name(.exe)?
-                        execuable_path: None,
-                        compile: Some(CompileConfig {
-                            working_dir: Some("../tari".into()),
-                            package_name: "minotari_node".to_string(),
-                            // Default is "{working_dir}/target/release"
-                            target_dir: None,
-                        }),
-                        env: vec![],
-                    }],
-                },
-            }
-            .write(file)?;
+            let config = get_initial_config(&cli)?;
+            let file = fs::File::create(&config_path).await?;
+            config.write(file).await?;
             let config_path = config_path
                 .canonicalize()
                 .context("Failed to canonicalize config_path")?;
@@ -78,15 +51,115 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn get_initial_config(cli: &Cli) -> io::Result<Config> {
+    let executables = vec![
+        ExecutableConfig {
+            instance_type: InstanceType::MinoTariNode,
+            // If None, Defaults to the target directory relative to the compile.working_dir for the package
+            // We provide this here so that it appears in the config file
+            execuable_path: Some("target/release/minotari_node".into()),
+            compile: Some(CompileConfig {
+                working_dir: Some("../tari".into()),
+                package_name: "minotari_node".to_string(),
+                // Default is "{working_dir}/target/release"
+                target_dir: None,
+            }),
+            env: vec![],
+        },
+        ExecutableConfig {
+            instance_type: InstanceType::MinoTariConsoleWallet,
+            execuable_path: Some("target/release/minotari_console_wallet".into()),
+            compile: Some(CompileConfig {
+                working_dir: Some("../tari".into()),
+                package_name: "minotari_console_wallet".to_string(),
+                target_dir: None,
+            }),
+            env: vec![],
+        },
+        ExecutableConfig {
+            instance_type: InstanceType::MinoTariMiner,
+            execuable_path: Some("target/release/minotari_miner".into()),
+            compile: Some(CompileConfig {
+                working_dir: Some("../tari".into()),
+                package_name: "minotari_miner".to_string(),
+                target_dir: None,
+            }),
+            env: vec![],
+        },
+        ExecutableConfig {
+            instance_type: InstanceType::TariValidatorNode,
+            execuable_path: Some("target/release/tari_validator_node".into()),
+            compile: Some(CompileConfig {
+                working_dir: Some(".".into()),
+                package_name: "tari_validator_node".to_string(),
+                target_dir: None,
+            }),
+            env: vec![],
+        },
+        ExecutableConfig {
+            instance_type: InstanceType::TariWalletDaemon,
+            execuable_path: Some("target/release/tari_wallet_daemon".into()),
+            compile: Some(CompileConfig {
+                working_dir: Some(".".into()),
+                package_name: "tari_dan_wallet_daemon".to_string(),
+                target_dir: None,
+            }),
+            env: vec![],
+        },
+        ExecutableConfig {
+            instance_type: InstanceType::TariIndexer,
+            execuable_path: Some("target/release/tari_indexer".into()),
+            compile: Some(CompileConfig {
+                working_dir: Some(".".into()),
+                package_name: "tari_indexer".to_string(),
+                target_dir: None,
+            }),
+            env: vec![],
+        },
+    ];
+    let instances = vec![
+        InstanceConfig::new(InstanceType::MinoTariNode).with_name("Minotari Node"),
+        InstanceConfig::new(InstanceType::MinoTariConsoleWallet).with_name("Minotari Wallet"),
+        // Let's mine 10 blocks on startup by default.
+        InstanceConfig::new(InstanceType::MinoTariMiner)
+            .with_name("Minotari Miner")
+            .with_arg("max_blocks", "10"),
+        InstanceConfig::new(InstanceType::TariValidatorNode)
+            .with_name("Validator node")
+            .with_num_instances(1),
+        InstanceConfig::new(InstanceType::TariIndexer).with_name("Indexer"),
+        InstanceConfig::new(InstanceType::TariWalletDaemon).with_name("Wallet Daemon"),
+    ];
+
+    Ok(Config {
+        network: Network::LocalNet,
+        base_dir: cli
+            .common
+            .base_dir
+            .clone()
+            .or_else(|| cli.get_config_path().parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .canonicalize()?,
+        webserver: WebserverConfig::default(),
+        processes: ProcessesConfig {
+            always_compile: false,
+            instances,
+            executables,
+        },
+    })
+}
+
 async fn start(cli: &Cli) -> anyhow::Result<()> {
-    let config = Config::load_with_cli(cli)?;
+    let config = Config::load_with_cli(cli).await?;
     let _pid = lockfile::Lockfile::create(config.base_dir.join("tari_swarm.pid"))
         .context("Failed to acquire lockfile. Is another instance already running?")?;
 
+    create_paths(&config).await?;
+
     let shutdown = Shutdown::new();
     let signal = shutdown.to_signal().select(exit_signal()?);
-    let webserver = webserver::spawn(config.webserver, shutdown.to_signal());
-    let pm_handle = process_manager::spawn(config.base_dir.clone(), config.processes, shutdown.to_signal());
+    let (task_handle, pm_handle) = process_manager::spawn(&config, shutdown.to_signal());
+    let webserver = webserver::spawn(config, shutdown.to_signal(), pm_handle.clone());
 
     tokio::select! {
         _ = signal => {
@@ -96,12 +169,19 @@ async fn start(cli: &Cli) -> anyhow::Result<()> {
             result??;
             log::info!("Webserver exited");
         },
-        result = pm_handle => {
+        result = task_handle => {
             result??;
             log::info!("Process manager exited");
         }
     }
 
+    Ok(())
+}
+
+async fn create_paths(config: &Config) -> anyhow::Result<()> {
+    fs::create_dir_all(&config.base_dir.join("templates"))
+        .await
+        .context("Failed to create templates directory")?;
     Ok(())
 }
 

@@ -248,19 +248,19 @@ function ShowInfo(params: any) {
   const jrpcInfo = node?.jrpc && (
     <div>
       <b>JRPC</b>
-      <span className="select">http://{node.jrpc}</span>
+      <a href={`${node.jrpc}/json_rpc`} target="_blank">{node.jrpc}/json_rpc</a>
     </div>
   );
   const grpcInfo = node?.grpc && (
     <div>
       <b>GRPC</b>
-      <span className="select">http://{node.grpc}</span>
+      <span className="select">{node.grpc}</span>
     </div>
   );
-  const httpInfo = node?.http && (
+  const httpInfo = node?.web && (
     <div>
       <b>HTTP</b>
-      <a href={`http://${node.http}`}>{`http://${node.http}`}</a>
+      <a href={node.web} target="_blank">{node.web}</a>
     </div>
   );
   const logInfo = logs && (
@@ -299,7 +299,7 @@ function ShowInfo(params: any) {
       {grpcInfo}
       {showLogs && logInfo}
       {executable === Executable.ValidatorNode && node?.jrpc &&
-        <ExtraInfoVN name={name} url={`http://${node.jrpc}`} setRow={(new_row: any) => {
+        <ExtraInfoVN name={name} url={node.jrpc} setRow={(new_row: any) => {
           if (new_row != row) setRow(new_row);
         }} addTxToPool={addTxToPool} autoRefresh={autoRefresh} state={state} horizontal={horizontal} />}
       {children}
@@ -333,7 +333,7 @@ function ShowInfos(params: any) {
   return (
     <div className="infos" style={{ display: "grid" }}>
       {Object.keys(nodes).map((index) =>
-        <ShowInfo key={index} executable={executable} name={`${name}_${index}`} node={nodes[index]}
+        <ShowInfo key={index} executable={executable} name={nodes[index].name} node={nodes[index]}
                   logs={logs?.[`${name} ${index}`]} stdoutLogs={stdoutLogs?.[`${name} ${index}`]} showLogs={showLogs}
                   autoRefresh={autoRefresh} updateState={updateState} state={state} horizontal={horizontal} />)}
     </div>
@@ -357,8 +357,8 @@ export default function Main() {
   useEffect(() => {
     jsonRpc("vns")
       .then((resp) => {
-        setVns(resp);
-        Object.keys(resp).map((index) => {
+        setVns(resp.nodes);
+        Object.keys(resp.nodes).map((index) => {
           jsonRpc("get_logs", `vn ${index}`)
             .then((resp) => {
               setLogs((state: any) => ({ ...state, [`vn ${index}`]: resp }));
@@ -376,8 +376,8 @@ export default function Main() {
       });
     jsonRpc("dan_wallets")
       .then((resp) => {
-        setDanWallets(resp);
-        Object.keys(resp).map((index) => {
+        setDanWallets(resp.nodes);
+        Object.keys(resp.nodes).map((index) => {
           jsonRpc("get_logs", `dan ${index}`)
             .then((resp) => {
               setLogs((state: any) => ({ ...state, [`dan ${index}`]: resp }));
@@ -395,8 +395,8 @@ export default function Main() {
       });
     jsonRpc("indexers")
       .then((resp) => {
-        setIndexers(resp);
-        Object.keys(resp).map((index) => {
+        setIndexers(resp.nodes);
+        Object.keys(resp.nodes).map((index) => {
           jsonRpc("get_logs", `indexer ${index}`)
             .then((resp) => {
               setLogs((state: any) => ({ ...state, [`indexer ${index}`]: resp }));
@@ -471,7 +471,7 @@ export default function Main() {
                   stdoutLogs={stdoutLogs?.wallet} showLogs={showLogs} horizontal={horizontal} />
         <ShowInfo executable={Executable.Miner} name="miner" node={null} logs={logs?.miner}
                   stdoutLogs={stdoutLogs?.miner} showLogs={showLogs} horizontal={horizontal}>
-          <button onClick={() => jsonRpc("mine", 1)}>Mine</button>
+          <button onClick={() => jsonRpc("mine", { num_blocks: 1 })}>Mine</button>
         </ShowInfo>
       </div>
       <div>

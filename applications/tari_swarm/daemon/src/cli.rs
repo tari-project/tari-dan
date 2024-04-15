@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use tari_common::configuration::Network;
 
 #[derive(Debug, Clone, Parser)]
 pub struct Cli {
@@ -36,6 +37,8 @@ pub struct CommonCli {
     pub base_dir: Option<PathBuf>,
     #[clap(short = 'c', long, parse(from_os_str), default_value = "config.toml")]
     pub config_path: PathBuf,
+    #[clap(short = 'n', long)]
+    pub network: Option<Network>,
 }
 
 #[derive(Debug, Clone, clap::Subcommand)]
