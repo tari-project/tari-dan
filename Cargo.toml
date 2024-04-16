@@ -156,7 +156,7 @@ ciborium-io = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a6
 clap = "3.2.25"
 chacha20poly1305 = "0.10.1"
 chrono = "0.4.24"
-config = "0.13.4"
+config = "0.14.0"
 convert_case = "0.6.0"
 cucumber = "0.18.0"
 d3ne = { git = "https://github.com/stringhandler/d3ne-rs.git", tag = "v0.8.0-pre.3" }
