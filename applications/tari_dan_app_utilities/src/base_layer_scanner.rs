@@ -30,14 +30,17 @@ use tari_base_node_client::{
     BaseNodeClientError,
 };
 use tari_common::configuration::Network;
-use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
+use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError, PublicKey};
 use tari_core::transactions::transaction_components::{
     CodeTemplateRegistration,
     SideChainFeature,
     TransactionOutput,
     ValidatorNodeRegistration,
 };
-use tari_crypto::tari_utilities::ByteArray;
+use tari_crypto::{
+    ristretto::RistrettoPublicKey,
+    tari_utilities::{hex::Hex, ByteArray},
+};
 use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, SubstateRecord},
@@ -74,6 +77,9 @@ pub fn spawn<TAddr: NodeAddressable + 'static>(
     shard_store: SqliteStateStore<TAddr>,
     scan_base_layer: bool,
     base_layer_scanning_interval: Duration,
+    validator_node_sidechain_id: Option<RistrettoPublicKey>,
+    template_sidechain_id: Option<RistrettoPublicKey>,
+    burnt_utxo_sidechain_id: Option<RistrettoPublicKey>,
 ) -> JoinHandle<anyhow::Result<()>> {
     task::spawn(async move {
         let base_layer_scanner = BaseLayerScanner::new(
@@ -87,6 +93,9 @@ pub fn spawn<TAddr: NodeAddressable + 'static>(
             shard_store,
             scan_base_layer,
             base_layer_scanning_interval,
+            validator_node_sidechain_id,
+            template_sidechain_id,
+            burnt_utxo_sidechain_id,
         );
 
         base_layer_scanner.start().await?;
@@ -110,6 +119,9 @@ pub struct BaseLayerScanner<TAddr> {
     scan_base_layer: bool,
     base_layer_scanning_interval: Duration,
     has_attempted_scan: bool,
+    validator_node_sidechain_id: Option<PublicKey>,
+    template_sidechain_id: Option<PublicKey>,
+    burnt_utxo_sidechain_id: Option<PublicKey>,
 }
 
 impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
@@ -124,6 +136,9 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         state_store: SqliteStateStore<TAddr>,
         scan_base_layer: bool,
         base_layer_scanning_interval: Duration,
+        validator_node_sidechain_id: Option<PublicKey>,
+        template_sidechain_id: Option<PublicKey>,
+        burnt_utxo_sidechain_id: Option<PublicKey>,
     ) -> Self {
         Self {
             network,
@@ -141,6 +156,9 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
             scan_base_layer,
             base_layer_scanning_interval,
             has_attempted_scan: false,
+            validator_node_sidechain_id,
+            template_sidechain_id,
+            burnt_utxo_sidechain_id,
         }
     }
 
@@ -316,10 +334,26 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
                 };
                 match sidechain_feature {
                     SideChainFeature::ValidatorNodeRegistration(reg) => {
-                        self.register_validator_node_registration(current_height, reg.clone())
-                            .await?;
+                        if reg.sidechain_id() == self.validator_node_sidechain_id.as_ref() {
+                            self.register_validator_node_registration(current_height, reg.clone())
+                                .await?;
+                        } else {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Ignoring validator node registration for sidechain ID {:?}. Expected sidechain ID: {:?}",
+                                reg.sidechain_id().map(|v| v.to_hex()),
+                                self.validator_node_sidechain_id.as_ref().map(|v| v.to_hex()));
+                        }
                     },
                     SideChainFeature::CodeTemplateRegistration(reg) => {
+                        if reg.sidechain_id != self.template_sidechain_id {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Ignoring code template registration for sidechain ID {:?}. Expected sidechain ID: {:?}",
+                                reg.sidechain_id.as_ref().map(|v| v.to_hex()),
+                                self.template_sidechain_id.as_ref().map(|v| v.to_hex()));
+                            continue;
+                        }
                         self.register_code_template_registration(
                             reg.template_name.to_string(),
                             (*output_hash).into(),
@@ -328,7 +362,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
                         )
                         .await?;
                     },
-                    SideChainFeature::ConfidentialOutput(_data) => {
+                    SideChainFeature::ConfidentialOutput(data) => {
                         // Should be checked by the base layer
                         if !output.is_burned() {
                             warn!(
@@ -337,6 +371,14 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
                                 output_hash,
                                 output.commitment.as_public_key()
                             );
+                            continue;
+                        }
+                        if data.sidechain_id.as_ref() != self.burnt_utxo_sidechain_id.as_ref() {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Ignoring burnt UTXO for sidechain ID {:?}. Expected sidechain ID: {:?}",
+                                data.sidechain_id.as_ref().map(|v| v.to_hex()),
+                                self.burnt_utxo_sidechain_id.as_ref().map(|v| v.to_hex()));
                             continue;
                         }
                         info!(
