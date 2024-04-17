@@ -346,7 +346,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
                         }
                     },
                     SideChainFeature::CodeTemplateRegistration(reg) => {
-                        if &reg.sidechain_id != &self.template_sidechain_id {
+                        if reg.sidechain_id != self.template_sidechain_id {
                             warn!(
                                 target: LOG_TARGET,
                                 "Ignoring code template registration for sidechain ID {:?}. Expected sidechain ID: {:?}",
