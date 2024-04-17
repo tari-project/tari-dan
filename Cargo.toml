@@ -252,24 +252,24 @@ overflow-checks = true
 
 ## Make a copy of this code, uncomment and replace account and my-branch with the name of your fork and the branch you want to temporarily use
 #[patch."https://github.com/tari-project/tari.git"]
-#minotari_app_grpc = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#minotari_wallet_grpc_client= { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#minotari_node_grpc_client = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_common = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_common_types = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_comms = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_comms_rpc_macros = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_core = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_key_manager = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_mmr = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_p2p = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_shutdown = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_storage = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_script = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#minotari_wallet = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#minotari_console_wallet = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_service_framework = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_comms_dht = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#minotari_app_utilities = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#minotari_node = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
-#tari_metrics = { git = "https://github.com/stringhandler/tari.git", branch = "st-refactor-code-template" }
+#minotari_app_grpc = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_wallet_grpc_client= { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_node_grpc_client = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_common = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_common_types = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_comms = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_comms_rpc_macros = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_core = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_key_manager = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_mmr = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_p2p = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_shutdown = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_storage = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_script = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_wallet = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_console_wallet = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_service_framework = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_comms_dht = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_app_utilities = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_node = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_metrics = { git = "https://github.com/account/tari.git", branch = "my-branch" }
