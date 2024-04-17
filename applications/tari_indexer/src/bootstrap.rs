@@ -115,6 +115,7 @@ pub async fn spawn_services(
         EpochManagerConfig {
             base_layer_confirmations: consensus_constants.base_layer_confirmations,
             committee_size: consensus_constants.committee_size,
+            validator_node_sidechain_id: config.indexer.sidechain_id.clone()
         },
         global_db.clone(),
         base_node_client.clone(),
@@ -143,6 +144,9 @@ pub async fn spawn_services(
         ))?,
         true,
         config.indexer.base_layer_scanning_interval,
+        config.indexer.sidechain_id.clone(),
+        config.indexer.templates_sidechain_id.clone(),
+        config.indexer.burnt_utxo_sidechain_id.clone(),
     );
 
     // Save final node identity after comms has initialized. This is required because the public_address can be

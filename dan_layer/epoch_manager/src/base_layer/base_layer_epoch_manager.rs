@@ -46,6 +46,8 @@ use tari_utilities::byte_array::ByteArray;
 use tokio::sync::broadcast;
 
 use crate::{base_layer::config::EpochManagerConfig, error::EpochManagerError, EpochManagerEvent};
+use tari_utilities::hex::Hex;
+
 
 const LOG_TARGET: &str = "tari::dan::epoch_manager::base_layer";
 
@@ -187,6 +189,12 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         block_height: u64,
         registration: ValidatorNodeRegistration,
     ) -> Result<(), EpochManagerError> {
+        if registration.sidechain_id() != self.config.validator_node_sidechain_id.as_ref() {
+            return Err(EpochManagerError::ValidatorNodeRegistrationSidechainIdMismatch {
+                expected: self.config.validator_node_sidechain_id.as_ref().map(|v| v.to_hex()),
+                actual: registration.sidechain_id().map(|v| v.to_hex())
+            });
+        }
         let constants = self.get_base_layer_consensus_constants().await?;
         let next_epoch = constants.height_to_epoch(block_height) + Epoch(1);
         let next_epoch_height = constants.epoch_to_height(next_epoch);

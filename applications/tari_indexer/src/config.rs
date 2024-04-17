@@ -34,6 +34,7 @@ use tari_common::{
     DefaultConfigLoader,
     SubConfigPath,
 };
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_app_utilities::{
     p2p_config::{P2pConfig, PeerSeedsConfig},
     template_manager::implementation::TemplateConfig,
@@ -95,6 +96,12 @@ pub struct IndexerConfig {
     pub dan_layer_scanning_internal: Duration,
     /// Template config
     pub templates: TemplateConfig,
+    /// The sidechain to listen on.
+    pub sidechain_id: Option<RistrettoPublicKey>,
+    /// The templates sidechain id
+    pub templates_sidechain_id: Option<RistrettoPublicKey>,
+    /// the burnt utxos sidechain id
+    pub burnt_utxo_sidechain_id: Option<RistrettoPublicKey>,
 }
 
 impl IndexerConfig {
@@ -132,6 +139,9 @@ impl Default for IndexerConfig {
             address_watchlist: vec![],
             dan_layer_scanning_internal: Duration::from_secs(10),
             templates: TemplateConfig::default(),
+            sidechain_id: None,
+            templates_sidechain_id: None,
+            burnt_utxo_sidechain_id: None,
         }
     }
 }
