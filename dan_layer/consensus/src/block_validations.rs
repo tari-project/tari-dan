@@ -134,7 +134,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
 
         return Ok(());
     }
-    if candidate_block.height() < qc.block_height() {
+    if candidate_block.height() <= qc.block_height() {
         return Err(ProposalValidationError::CandidateBlockNotHigherThanJustify {
             justify_block_height: qc.block_height(),
             candidate_block_height: candidate_block.height(),
