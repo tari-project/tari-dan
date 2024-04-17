@@ -127,31 +127,39 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     vote_signing_service: &TConsensusSpec::SignatureService,
     epoch_manager: &TConsensusSpec::EpochManager,
 ) -> Result<(), HotStuffError> {
-    if candidate_block.justify().epoch().as_u64() == 0 {
-        // Ignore genesis block.
+    let qc = candidate_block.justify();
+    if qc.is_genesis() {
+        // This is potentially dangerous. There should be a check
+        // to make sure this is the start of the chain.
+
         return Ok(());
     }
-    if candidate_block.height() < candidate_block.justify().block_height() {
+    if candidate_block.height() < qc.block_height() {
         return Err(ProposalValidationError::CandidateBlockNotHigherThanJustify {
-            justify_block_height: candidate_block.justify().block_height(),
+            justify_block_height: qc.block_height(),
             candidate_block_height: candidate_block.height(),
         }
         .into());
     }
+
     let mut vns = vec![];
-    for signature in candidate_block.justify().signatures() {
+    for signature in qc.signatures() {
         let vn = epoch_manager
-            .get_validator_node_by_public_key(candidate_block.justify().epoch(), signature.public_key())
+            .get_validator_node_by_public_key(qc.epoch(), signature.public_key())
             .await?;
+        let actual_shard = epoch_manager
+            .get_committee_shard(qc.epoch(), vn.shard_key)
+            .await?
+            .shard();
+        if actual_shard != qc.shard() {
+            return Err(ProposalValidationError::ValidatorNotInCommittee {
+                validator: signature.public_key().to_string(),
+                expected_shard: qc.shard().to_string(),
+                actual_shard: actual_shard.to_string(),
+            }
+            .into());
+        }
         vns.push(vn.get_node_hash(candidate_block.network()));
-    }
-    let merkle_root = epoch_manager
-        .get_validator_node_merkle_root(candidate_block.justify().epoch())
-        .await?;
-    let qc = candidate_block.justify();
-    let proof = qc.merged_proof().clone();
-    if !proof.verify_consume(&merkle_root, vns.iter().map(|hash| hash.to_vec()).collect())? {
-        return Err(ProposalValidationError::QCisNotValid { qc: qc.clone() }.into());
     }
 
     for (sign, leaf) in qc.signatures().iter().zip(vns.iter()) {
@@ -171,7 +179,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         .await?;
 
     if committee_shard.quorum_threshold() >
-        u32::try_from(qc.signatures().len()).map_err(|_| ProposalValidationError::QCisNotValid { qc: qc.clone() })?
+        u32::try_from(qc.signatures().len()).map_err(|_| ProposalValidationError::QCConversionError)?
     {
         return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
     }

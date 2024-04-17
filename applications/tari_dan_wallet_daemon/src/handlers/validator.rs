@@ -68,6 +68,8 @@ pub async fn handle_claim_validator_fees(
         },
     ]);
 
+    // TODO: At the moment fees can only be claimed by the account of the wallet.
+    // In future we should change it to allow a separate public key
     let account_secret_key = sdk
         .key_manager_api()
         .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;

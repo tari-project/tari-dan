@@ -7,19 +7,13 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_dan_common_types::{
-    hashing::{
-        quorum_certificate_hasher,
-        MergedValidatorNodeMerkleProof,
-        ValidatorNodeBalancedMerkleTree,
-        ValidatorNodeBmtHasherBlake2b,
-        ValidatorNodeMerkleProof,
-    },
+    hashing::quorum_certificate_hasher,
     optional::Optional,
     serde_with,
+    shard::Shard,
     Epoch,
     NodeHeight,
 };
-use tari_mmr::MergedBalancedBinaryMerkleProof;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -41,9 +35,8 @@ pub struct QuorumCertificate {
     block_id: BlockId,
     block_height: NodeHeight,
     epoch: Epoch,
+    shard: Shard,
     signatures: Vec<ValidatorSignature>,
-    #[cfg_attr(feature = "ts", ts(type = "any"))]
-    merged_proof: MergedValidatorNodeMerkleProof,
     #[serde(with = "serde_with::hex::vec")]
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     leaf_hashes: Vec<FixedHash>,
@@ -55,8 +48,8 @@ impl QuorumCertificate {
         block: BlockId,
         block_height: NodeHeight,
         epoch: Epoch,
+        shard: Shard,
         signatures: Vec<ValidatorSignature>,
-        merged_proof: MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake2b>,
         mut leaf_hashes: Vec<FixedHash>,
         decision: QuorumDecision,
     ) -> Self {
@@ -66,8 +59,8 @@ impl QuorumCertificate {
             block_id: block,
             block_height,
             epoch,
+            shard,
             signatures,
-            merged_proof,
             leaf_hashes,
             decision,
         };
@@ -76,16 +69,12 @@ impl QuorumCertificate {
     }
 
     pub fn genesis() -> Self {
-        // TODO: Should be easy to create an empty proof. Nice to have: decoupled proof.
-        let bmt = ValidatorNodeBalancedMerkleTree::create(vec![]);
-        let proof = ValidatorNodeMerkleProof::generate_proof(&bmt, 0).unwrap();
-        let merged_proof = MergedBalancedBinaryMerkleProof::create_from_proofs(&[proof]).unwrap();
         Self::new(
             BlockId::genesis(),
             NodeHeight::zero(),
             Epoch(0),
+            Shard::from(0),
             vec![],
-            merged_proof,
             vec![],
             QuorumDecision::Accept,
         )
@@ -94,10 +83,10 @@ impl QuorumCertificate {
     pub fn calculate_id(&self) -> QcId {
         quorum_certificate_hasher()
             .chain(&self.epoch)
+            .chain(&self.shard)
             .chain(&self.block_id)
             .chain(&self.block_height)
             .chain(&self.signatures)
-            .chain(&self.merged_proof)
             .chain(&self.leaf_hashes)
             .chain(&self.decision)
             .result()
@@ -122,8 +111,8 @@ impl QuorumCertificate {
         self.epoch
     }
 
-    pub fn merged_proof(&self) -> &MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake2b> {
-        &self.merged_proof
+    pub fn shard(&self) -> Shard {
+        self.shard
     }
 
     pub fn leaf_hashes(&self) -> &[FixedHash] {

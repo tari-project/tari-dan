@@ -12,6 +12,7 @@ export interface Block {
   justify: QuorumCertificate;
   height: NodeHeight;
   epoch: Epoch;
+  shard: Shard;
   proposed_by: string;
   total_leader_fee: number;
   merkle_root: string;

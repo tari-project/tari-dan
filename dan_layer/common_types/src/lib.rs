@@ -4,6 +4,7 @@
 pub mod crypto;
 
 mod epoch;
+
 pub use epoch::Epoch;
 
 pub mod committee;

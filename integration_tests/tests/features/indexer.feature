@@ -13,18 +13,18 @@ Feature: Indexer node
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 6 new blocks
     When wallet WALLET has at least 2000000000 uT
 
     # VN registration
-    When validator node VN sends a registration transaction
+    When validator node VN sends a registration transaction to base wallet WALLET
 
     # Register some templates
-    When validator node VN registers the template "counter"
-    When validator node VN registers the template "basic_nft"
+    When base wallet WALLET registers the template "counter"
+    When base wallet WALLET registers the template "basic_nft"
     When miner MINER mines 10 new blocks
     Then VN has scanned to height 13
     Then the validator node VN is listed as registered
@@ -123,7 +123,7 @@ Feature: Indexer node
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
@@ -133,7 +133,7 @@ Feature: Indexer node
     When wallet WALLET has at least 2000000000 uT
 
     # VN registration
-    When validator node VN sends a registration transaction
+    When validator node VN sends a registration transaction to base wallet WALLET
 
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 19
@@ -162,7 +162,7 @@ Feature: Indexer node
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
@@ -172,10 +172,10 @@ Feature: Indexer node
     When wallet WALLET has at least 2000000000 uT
 
     # VN registration
-    When validator node VN sends a registration transaction
+    When validator node VN sends a registration transaction to base wallet WALLET
 
     # Register the "faucet" template
-    When validator node VN registers the template "faucet"
+    When base wallet WALLET registers the template "faucet"
 
     # Mine a few block for the VN and template registration
     When miner MINER mines 16 new blocks

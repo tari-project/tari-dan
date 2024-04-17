@@ -12,10 +12,10 @@ Feature: Account transfers
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
     When miner MINER mines 4 new blocks
     When wallet WALLET has at least 5000 T
-    When validator node VN sends a registration transaction
+    When validator node VN sends a registration transaction to base wallet WALLET
     When miner MINER mines 16 new blocks
     Then the validator node VN is listed as registered
 
@@ -26,7 +26,7 @@ Feature: Account transfers
     Given a wallet daemon WALLET_D connected to indexer IDX
 
     # Register the "faucet" template
-    When validator node VN registers the template "faucet"
+    When base wallet WALLET registers the template "faucet"
     # Mine some blocks until the UTXOs are scanned
     When miner MINER mines 15 new blocks
     Then the validator node VN is listed as registered
@@ -91,10 +91,10 @@ Feature: Account transfers
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
     When miner MINER mines 4 new blocks
     When wallet WALLET has at least 5000 T
-    When validator node VN sends a registration transaction
+    When validator node VN sends a registration transaction to base wallet WALLET
     When miner MINER mines 16 new blocks
     Then the validator node VN is listed as registered
 
@@ -105,7 +105,7 @@ Feature: Account transfers
     Given a wallet daemon WALLET_D connected to indexer IDX
 
     # Register the "faucet" template
-    When validator node VN registers the template "faucet"
+    When base wallet WALLET registers the template "faucet"
     # Mine some blocks until the UTXOs are scanned
     When miner MINER mines 15 new blocks
     Then the validator node VN is listed as registered
@@ -167,10 +167,10 @@ Feature: Account transfers
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
     When miner MINER mines 4 new blocks
     When wallet WALLET has at least 5000 T
-    When validator node VN sends a registration transaction
+    When validator node VN sends a registration transaction to base wallet WALLET
     When miner MINER mines 16 new blocks
     Then the validator node VN is listed as registered
 

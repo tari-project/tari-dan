@@ -12,7 +12,6 @@ use tari_dan_storage::{
 };
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::TransactionId;
-use tari_utilities::epoch_time::EpochTime;
 
 fn create_db() -> SqliteStateStore<String> {
     SqliteStateStore::connect(":memory:").unwrap()
@@ -31,6 +30,9 @@ fn create_tx_atom() -> TransactionAtom {
 }
 
 mod confirm_all_transitions {
+    use tari_dan_common_types::shard::Shard;
+    use tari_utilities::epoch_time::EpochTime;
+
     use super::*;
 
     #[test]
@@ -53,6 +55,7 @@ mod confirm_all_transitions {
             zero_block.justify().clone(),
             NodeHeight(1),
             Epoch(0),
+            Shard::from(0),
             Default::default(),
             // Need to have a command in, otherwise this block will not be included internally in the query because it
             // cannot cause a state change without any commands

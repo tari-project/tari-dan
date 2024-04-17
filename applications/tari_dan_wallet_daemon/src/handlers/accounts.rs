@@ -574,7 +574,6 @@ pub async fn handle_claim_burn(
             Some(commitment_substate_address.version),
         )
         .await?;
-    dbg!(&output);
     let output = output.into_unclaimed_confidential_output().unwrap();
     let unmasked_output = sdk.confidential_crypto_api().unblind_output(
         &output.commitment,

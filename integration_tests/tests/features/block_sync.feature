@@ -3,7 +3,7 @@
 
 Feature: Block Sync
 
-  @serial
+  @serial @fixed
   Scenario: New validator node registers and syncs
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -12,16 +12,13 @@ Feature: Block Sync
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
-
     # Initialize the wallet daemon
     Given a wallet daemon WALLET_D connected to indexer IDX
-    When I create a key named K1 for WALLET_D
-
     # Initialize a VN
-    Given a seed validator node VN connected to base node BASE and wallet WALLET
+    Given a seed validator node VN connected to base node BASE and wallet daemon WALLET_D
     When miner MINER mines 4 new blocks
     When wallet WALLET has at least 5000 T
-    When validator node VN sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
+    When validator node VN sends a registration transaction to base wallet WALLET
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17
     And indexer IDX has scanned to height 17
@@ -38,11 +35,11 @@ Feature: Block Sync
     When I wait for validator VN has leaf block height of at least 15
 
     # Start a new VN that needs to sync
-    Given a validator node VN2 connected to base node BASE and wallet WALLET
+    Given a validator node VN2 connected to base node BASE and wallet daemon WALLET_D
     Given validator VN2 nodes connect to all other validators
     When indexer IDX connects to all other validators
 
-    When validator node VN2 sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
+    When validator node VN2 sends a registration transaction to base wallet WALLET
     When miner MINER mines 20 new blocks
     Then VN has scanned to height 37
     Then VN2 has scanned to height 37

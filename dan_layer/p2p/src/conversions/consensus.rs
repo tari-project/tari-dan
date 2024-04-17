@@ -254,6 +254,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             network: value.network().as_byte().into(),
             height: value.height().as_u64(),
             epoch: value.epoch().as_u64(),
+            shard: value.shard().as_u32(),
             parent_id: value.parent().as_bytes().to_vec(),
             proposed_by: ByteArray::as_bytes(value.proposed_by()).to_vec(),
             merkle_root: value.merkle_root().as_slice().to_vec(),
@@ -286,6 +287,7 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
                 .try_into()?,
             NodeHeight(value.height),
             Epoch(value.epoch),
+            Shard::from(value.shard),
             PublicKey::from_canonical_bytes(&value.proposed_by)
                 .map_err(|_| anyhow!("Block conversion: Invalid proposed_by"))?,
             value
@@ -506,13 +508,12 @@ impl TryFrom<proto::consensus::Evidence> for Evidence {
 impl From<&QuorumCertificate> for proto::consensus::QuorumCertificate {
     fn from(source: &QuorumCertificate) -> Self {
         // TODO: unwrap
-        let merged_merkle_proof = encode(&source.merged_proof()).unwrap();
         Self {
             block_id: source.block_id().as_bytes().to_vec(),
             block_height: source.block_height().as_u64(),
             epoch: source.epoch().as_u64(),
+            shard: source.shard().as_u32(),
             signatures: source.signatures().iter().map(Into::into).collect(),
-            merged_proof: merged_merkle_proof,
             leaf_hashes: source.leaf_hashes().iter().map(|h| h.to_vec()).collect(),
             decision: i32::from(source.decision().as_u8()),
         }
@@ -523,17 +524,16 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::QuorumCertificate) -> Result<Self, Self::Error> {
-        let merged_proof = decode_exact(&value.merged_proof)?;
         Ok(Self::new(
             value.block_id.try_into()?,
             NodeHeight(value.block_height),
             Epoch(value.epoch),
+            Shard::from(value.shard),
             value
                 .signatures
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?,
-            merged_proof,
             value
                 .leaf_hashes
                 .into_iter()

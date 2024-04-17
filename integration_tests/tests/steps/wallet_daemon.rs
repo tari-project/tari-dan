@@ -244,6 +244,7 @@ async fn when_i_burn_funds_with_wallet_daemon(
             fee_per_gram: 1,
             message: "Burn".to_string(),
             claim_public_key: public_key.to_vec(),
+            sidechain_deployment_key: vec![],
         })
         .await
         .unwrap()
@@ -262,6 +263,7 @@ async fn when_i_burn_funds_with_wallet_daemon(
         ),
     );
     world.rangeproofs.insert(rangeproof_name, resp.range_proof);
+
     world.claim_public_keys.insert(
         claim_pubkey_name,
         PublicKey::from_canonical_bytes(&resp.reciprocal_claim_public_key).unwrap(),

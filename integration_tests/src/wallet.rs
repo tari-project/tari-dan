@@ -95,6 +95,21 @@ impl WalletProcess {
             ClientAuthenticationInterceptor::create(&GrpcAuthentication::default()).unwrap(),
         )
     }
+
+    pub fn mark_point_in_logs(&self, world: &TariWorld, point: &str) {
+        let temp_dir = get_base_dir_for_scenario(
+            "console_wallet",
+            world.current_scenario_name.as_ref().unwrap(),
+            &self.name,
+        );
+        let log_file = temp_dir.join("console_wallet_point.log");
+        if !log_file.exists() {
+            std::fs::write(&log_file, point).unwrap();
+        }
+        let log_content = std::fs::read_to_string(&log_file).unwrap();
+        let log_content = format!("{}\n{}", point, log_content);
+        std::fs::write(&log_file, log_content).unwrap();
+    }
 }
 
 pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_name: String) {

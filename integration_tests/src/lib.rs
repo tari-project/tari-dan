@@ -22,6 +22,7 @@
 
 use std::{
     fmt::{Debug, Formatter},
+    fs,
     time::{Duration, Instant},
 };
 
@@ -50,6 +51,8 @@ use template::RegisteredTemplate;
 use validator_node::ValidatorNodeProcess;
 use wallet::WalletProcess;
 use wallet_daemon::DanWalletDaemonProcess;
+
+use crate::logging::get_base_dir;
 
 pub mod base_node;
 pub mod helpers;
@@ -97,6 +100,33 @@ pub struct TariWorld {
 }
 
 impl TariWorld {
+    pub fn mark_point_in_logs(&self, point_name: &str) {
+        fn write_point(file_name: &str, point_name: &str) {
+            let base_dir = get_base_dir();
+            if !base_dir.exists() {
+                fs::create_dir_all(&base_dir).unwrap();
+            }
+            if base_dir.join(file_name).exists() {
+                let log_file = fs::read_to_string(base_dir.join(file_name)).unwrap();
+                fs::write(
+                    base_dir.join(file_name),
+                    format!(
+                        "{}\n\n------------------------------------------------\n\n{}\n\\
+                         n----------------------------------------------------------\n\n",
+                        log_file, point_name
+                    ),
+                )
+                .unwrap();
+            }
+        }
+
+        write_point("base_layer.log", point_name);
+        write_point("dan_layer.log", point_name);
+        write_point("wallet.log", point_name);
+        write_point("network.log", point_name);
+        write_point("wallet_daemon.log", point_name);
+    }
+
     pub fn get_mock_server(&self) -> &MockHttpServer {
         self.http_server.as_ref().unwrap()
     }

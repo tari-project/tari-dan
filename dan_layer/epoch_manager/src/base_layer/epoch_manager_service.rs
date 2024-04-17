@@ -20,9 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use log::error;
+use log::{error, info};
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
-use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{DerivableFromPublicKey, NodeAddressable};
 use tari_dan_storage::global::GlobalDb;
@@ -55,7 +54,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
     EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
 {
     pub fn spawn(
-        network: Network,
         config: EpochManagerConfig,
         rx_request: Receiver<EpochManagerRequest<TAddr>>,
         shutdown: ShutdownSignal,
@@ -67,14 +65,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             let (tx, _) = broadcast::channel(100);
             EpochManagerService {
                 rx_request,
-                inner: BaseLayerEpochManager::new(
-                    network,
-                    config,
-                    global_db,
-                    base_node_client,
-                    tx.clone(),
-                    node_public_key,
-                ),
+                inner: BaseLayerEpochManager::new(config, global_db, base_node_client, tx.clone(), node_public_key),
                 events: tx,
             }
             .run(shutdown)
@@ -84,12 +75,22 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
     }
 
     pub async fn run(&mut self, mut shutdown: ShutdownSignal) -> Result<(), EpochManagerError> {
+        info!(target: LOG_TARGET, "Starting epoch manager");
+        info!(target: LOG_TARGET, "Loading initial state");
         // first, load initial state
         self.inner.load_initial_state().await?;
 
         loop {
             tokio::select! {
-                Some(req) = self.rx_request.recv() => self.handle_request(req).await,
+                req = self.rx_request.recv() => {
+                    match req {
+                        Some(req) => self.handle_request(req).await,
+                        None => {
+                            error!(target: LOG_TARGET, "Channel closed. Shutting down epoch manager");
+                            break;
+                        }
+                    }
+                },
                 _ = shutdown.wait() => {
                     dbg!("Shutting down epoch manager");
                     break;
@@ -101,6 +102,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
 
     #[allow(clippy::too_many_lines)]
     async fn handle_request(&mut self, req: EpochManagerRequest<TAddr>) {
+        info!(target: LOG_TARGET, "Received request: {:?}", req);
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
             EpochManagerRequest::CurrentBlockInfo { reply } => handle(reply, Ok(self.inner.current_block_info())),
@@ -167,19 +169,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                 handle(reply, self.inner.is_validator_in_committee(epoch, shard, &identity));
             },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.subscribe())),
-            EpochManagerRequest::GetValidatorSetMergedMerkleProof {
-                epoch,
-                validator_set,
-                reply,
-            } => {
-                handle(
-                    reply,
-                    self.inner.get_validator_set_merged_merkle_proof(epoch, validator_set),
-                );
-            },
-            EpochManagerRequest::GetValidatorNodeMerkleRoot { epoch, reply } => {
-                handle(reply, self.inner.get_validator_node_merkle_root(epoch))
-            },
             EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply } => {
                 handle(reply, self.inner.get_validator_nodes_per_epoch(epoch))
             },

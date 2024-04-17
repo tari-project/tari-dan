@@ -31,13 +31,9 @@ use serde::Serialize;
 use sqlite_message_logger::SqliteMessageLogger;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
-    configuration::{
-        bootstrap::{grpc_default_port, ApplicationType},
-        Network,
-    },
+    configuration::Network,
     exit_codes::{ExitCode, ExitError},
 };
-use tari_common_types::types::PublicKey;
 #[cfg(not(feature = "metrics"))]
 use tari_consensus::traits::hooks::NoopHooks;
 use tari_core::transactions::transaction_components::ValidatorNodeSignature;
@@ -108,8 +104,8 @@ use crate::{
             messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, Gossip},
         },
     },
-    registration,
     substate_resolver::TariSubstateResolver,
+    validator_registration_file::ValidatorRegistrationFile,
     virtual_substate::VirtualSubstateManager,
     ApplicationConfig,
     ValidatorNodeConfig,
@@ -124,18 +120,12 @@ pub async fn spawn_services(
     keypair: RistrettoKeypair,
     global_db: GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>,
     consensus_constants: ConsensusConstants,
+    base_node_client: GrpcBaseNodeClient,
     #[cfg(feature = "metrics")] metrics_registry: &prometheus::Registry,
 ) -> Result<Services, anyhow::Error> {
     let mut handles = Vec::with_capacity(8);
 
     ensure_directories_exist(config)?;
-
-    // Connection to base node
-    let base_node_client =
-        GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.clone().unwrap_or_else(|| {
-            let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-            format!("127.0.0.1:{port}")
-        }));
 
     // Networking
     let (tx_consensus_messages, rx_consensus_messages) = mpsc::unbounded_channel();
@@ -182,17 +172,19 @@ pub async fn spawn_services(
     )?;
     handles.push(join_handle);
 
+    info!(target: LOG_TARGET, "Message logging initializing");
     // Spawn messaging
     let message_logger = SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
 
+    info!(target: LOG_TARGET, "State store initializing");
     // Connect to shard db
     let state_store =
         SqliteStateStore::connect(&format!("sqlite://{}", config.validator_node.state_db_path().display()))?;
     state_store.with_write_tx(|tx| bootstrap_state(tx, config.network))?;
 
+    info!(target: LOG_TARGET, "Epoch manager initializing");
     // Epoch manager
     let (epoch_manager, join_handle) = tari_epoch_manager::base_layer::spawn_service(
-        config.network,
         // TODO: We should be able to pass consensus constants here. However, these are currently located in dan_core
         // which depends on epoch_manager, so would be a circular dependency.
         EpochManagerConfig {
@@ -209,12 +201,14 @@ pub async fn spawn_services(
     // Create registration file
     create_registration_file(config, &epoch_manager, &keypair).await?;
 
+    info!(target: LOG_TARGET, "Template manager initializing");
     // Template manager
     let template_manager = TemplateManager::initialize(global_db.clone(), config.validator_node.templates.clone())?;
     let (template_manager_service, join_handle) =
         template_manager::implementation::spawn(template_manager.clone(), shutdown.clone());
     handles.push(join_handle);
 
+    info!(target: LOG_TARGET, "Payload processor initializing");
     // Payload processor
     let fee_table = if config.validator_node.no_fees {
         FeeTable::zero_rated()
@@ -337,14 +331,6 @@ pub async fn spawn_services(
     // changed by comms during initialization when using tor.
     save_identities(config, &keypair)?;
 
-    // Auto-registration
-    if config.validator_node.auto_register {
-        let handle = registration::spawn(config.clone(), keypair.clone(), epoch_manager.clone(), shutdown);
-        handles.push(handle);
-    } else {
-        info!(target: LOG_TARGET, "♽️ Node auto registration is disabled");
-    }
-
     let dry_run_transaction_processor =
         DryRunTransactionProcessor::new(epoch_manager.clone(), payload_processor, substate_resolver);
 
@@ -374,16 +360,11 @@ async fn create_registration_file(
         .await?;
 
     let signature = ValidatorNodeSignature::sign(keypair.secret_key(), &fee_claim_public_key, b"");
-    #[derive(Serialize)]
-    struct ValidatorRegistrationFile {
-        signature: ValidatorNodeSignature,
-        public_key: PublicKey,
-        claim_public_key: PublicKey,
-    }
+
     let registration = ValidatorRegistrationFile {
         signature,
         public_key: keypair.public_key().clone(),
-        claim_public_key: fee_claim_public_key,
+        claim_fees_public_key: fee_claim_public_key,
     };
     fs::write(
         config.common.base_path.join("registration.json"),

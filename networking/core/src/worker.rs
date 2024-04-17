@@ -134,7 +134,7 @@ where
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
-        debug!(target: LOG_TARGET, "🌐 Starting networking service {:?}", self.config);
+        info!(target: LOG_TARGET, "🌐 Starting networking service {:?}", self.config);
         // Listen on all interfaces TODO: Configure
         self.swarm.listen_on(
             format!("/ip4/0.0.0.0/tcp/{}", self.config.listener_port)
@@ -431,6 +431,7 @@ where
                 error,
                 ..
             } => {
+                warn!(target: LOG_TARGET, "🚨 Outgoing connection error: peer_id={}, error={}", peer_id, error);
                 let Some(waiters) = self.pending_dial_requests.remove(&peer_id) else {
                     debug!(target: LOG_TARGET, "No pending dial requests initiated by this service for peer {}", peer_id);
                     return Ok(());

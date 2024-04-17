@@ -68,7 +68,6 @@ async fn main_inner() -> Result<(), ExitError> {
     let config_path = cli.common.config_path();
     let cfg = load_configuration(config_path, true, &cli).map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
     let config = ApplicationConfig::load_from(&cfg)?;
-    println!("Starting validator node on network {}", config.network);
 
     // Remove the pid file if it exists
     let _file = fs::remove_file(config.common.base_path.join("pid"));
@@ -81,7 +80,15 @@ async fn main_inner() -> Result<(), ExitError> {
         eprintln!("{}", e);
     }
 
-    run_validator_node(&config, shutdown.to_signal()).await?;
+    info!(target: LOG_TARGET, "Starting validator node on network {}", config.network);
+    match run_validator_node(&config, shutdown.to_signal()).await {
+        Ok(_) => info!(target: LOG_TARGET, "Validator node shutdown successfully"),
+        Err(e) => {
+            error!(target: LOG_TARGET, "Validator node shutdown with an error: {:?}", e);
+            return Err(ExitError::new(ExitCode::UnknownError, e));
+        },
+    }
+
     shutdown.trigger();
 
     Ok(())

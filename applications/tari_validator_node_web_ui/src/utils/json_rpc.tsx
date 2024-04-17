@@ -58,12 +58,8 @@ import type {
   GetTxPoolResponse,
   ListBlocksRequest,
   ListBlocksResponse,
-  RegisterValidatorNodeRequest,
-  RegisterValidatorNodeResponse,
   SubmitTransactionRequest,
   SubmitTransactionResponse,
-  TemplateRegistrationRequest,
-  TemplateRegistrationResponse,
   VNGetValidatorFeesRequest,
   VNGetValidatorFeesResponse,
 } from "@tariproject/typescript-bindings/validator-node-client";
@@ -131,13 +127,10 @@ export const getTemplate = (request: GetTemplateRequest): Promise<GetTemplateRes
   jsonRpc("get_template", request);
 export const getTemplates = (request: GetTemplatesRequest): Promise<GetTemplatesResponse> =>
   jsonRpc("get_templates", request);
-export const registerTemplate = (request: TemplateRegistrationRequest): Promise<TemplateRegistrationResponse> =>
-  jsonRpc("register_template", request);
 
 // Validator Node
 export const getIdentity = (): Promise<GetIdentityResponse> => jsonRpc("get_identity");
-export const registerValidatorNode = (request: RegisterValidatorNodeRequest): Promise<RegisterValidatorNodeResponse> =>
-  jsonRpc("register_validator_node", request);
+
 export const getMempoolStats = (): Promise<GetMempoolStatsResponse> => jsonRpc("get_mempool_stats");
 export const getEpochManagerStats = (): Promise<GetEpochManagerStatsResponse> => jsonRpc("get_epoch_manager_stats");
 export const getShardKey = (request: GetShardKeyRequest): Promise<GetShardKeyResponse> =>

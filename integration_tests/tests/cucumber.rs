@@ -28,7 +28,6 @@ use integration_tests::{
     http_server::{spawn_template_http_server, MockHttpServer},
     logging::{create_log_config_file, get_base_dir},
     miner::{mine_blocks, register_miner_process},
-    validator_node::spawn_validator_node,
     validator_node_cli,
     wallet::spawn_wallet,
     wallet_daemon::spawn_wallet_daemon,
@@ -94,12 +93,6 @@ async fn main() {
 #[given(expr = "fees are disabled")]
 async fn fees_are_enabled(world: &mut TariWorld) {
     world.fees_enabled = false;
-}
-
-#[given(expr = "a validator node {word} connected to base node {word} and wallet {word}")]
-async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_name: String) {
-    let vn = spawn_validator_node(world, vn_name.clone(), bn_name, wallet_name).await;
-    world.validator_nodes.insert(vn_name, vn);
 }
 
 #[when(expr = "I stop validator node {word}")]

@@ -71,11 +71,11 @@ pub struct Block {
     justify: QuorumCertificate,
     height: NodeHeight,
     epoch: Epoch,
+    shard: Shard,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     proposed_by: PublicKey,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     total_leader_fee: u64,
-
     // Body
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     merkle_root: FixedHash,
@@ -113,6 +113,7 @@ impl Block {
         justify: QuorumCertificate,
         height: NodeHeight,
         epoch: Epoch,
+        shard: Shard,
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
         merkle_root: FixedHash,
@@ -130,6 +131,7 @@ impl Block {
             justify,
             height,
             epoch,
+            shard,
             proposed_by,
             merkle_root,
             commands,
@@ -156,6 +158,7 @@ impl Block {
         justify: QuorumCertificate,
         height: NodeHeight,
         epoch: Epoch,
+        shard: Shard,
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
         merkle_root: FixedHash,
@@ -178,6 +181,7 @@ impl Block {
             justify,
             height,
             epoch,
+            shard,
             proposed_by,
             merkle_root,
             commands,
@@ -202,6 +206,7 @@ impl Block {
             QuorumCertificate::genesis(),
             NodeHeight(0),
             Epoch(0),
+            Shard::from(0),
             PublicKey::default(),
             Default::default(),
             FixedHash::zero(),
@@ -223,6 +228,7 @@ impl Block {
             justify: QuorumCertificate::genesis(),
             height: NodeHeight(0),
             epoch: Epoch(0),
+            shard: Shard::from(0),
             proposed_by: PublicKey::default(),
             merkle_root: FixedHash::zero(),
             commands: Default::default(),
@@ -247,6 +253,7 @@ impl Block {
         node_height: NodeHeight,
         high_qc: QuorumCertificate,
         epoch: Epoch,
+        shard: Shard,
         parent_merkle_root: FixedHash,
         parent_timestamp: u64,
         parent_base_layer_block_height: u64,
@@ -258,6 +265,7 @@ impl Block {
             high_qc,
             node_height,
             epoch,
+            shard,
             proposed_by,
             Default::default(),
             parent_merkle_root,
@@ -281,6 +289,7 @@ impl Block {
             .chain(&self.height)
             .chain(&self.total_leader_fee)
             .chain(&self.epoch)
+            .chain(&self.shard)
             .chain(&self.proposed_by)
             .chain(&self.merkle_root)
             .chain(&self.commands)
@@ -370,6 +379,10 @@ impl Block {
 
     pub fn epoch(&self) -> Epoch {
         self.epoch
+    }
+
+    pub fn shard(&self) -> Shard {
+        self.shard
     }
 
     pub fn total_leader_fee(&self) -> u64 {

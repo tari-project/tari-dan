@@ -51,8 +51,8 @@ impl Cli {
 }
 
 impl ConfigOverrideProvider for Cli {
-    fn get_config_property_overrides(&self, default_network: Network) -> Vec<(String, String)> {
-        let mut overrides = self.common.get_config_property_overrides(default_network);
+    fn get_config_property_overrides(&self, network: &mut Network) -> Vec<(String, String)> {
+        let mut overrides = self.common.get_config_property_overrides(network);
         if let Some(json_rpc_address) = self.json_rpc_address {
             overrides.push((
                 "dan_wallet_daemon.json_rpc_address".to_string(),

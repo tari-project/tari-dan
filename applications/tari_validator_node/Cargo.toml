@@ -13,9 +13,7 @@ metrics = ["prometheus"]
 ts = []                  # this is just for the build script to skip the build
 
 [dependencies]
-minotari_app_grpc = { workspace = true }
 minotari_app_utilities = { workspace = true }
-minotari_wallet_grpc_client = { workspace = true }
 tari_common = { workspace = true }
 tari_common_types = { workspace = true }
 tari_core = { workspace = true, default-features = false, features = [
@@ -50,7 +48,6 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 axum-jrpc = { workspace = true, features = ["anyhow_error"] }
-blake2 = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 config = { workspace = true }
 futures = { workspace = true }
@@ -67,7 +64,6 @@ log4rs = { workspace = true, features = [
 ] }
 mime_guess = { workspace = true }
 prometheus = { workspace = true, optional = true }
-prost = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["default", "derive"] }
@@ -81,7 +77,6 @@ tokio = { workspace = true, features = [
     "sync",
     "rt-multi-thread",
 ] }
-tonic = { workspace = true }
 tower-http = { workspace = true, features = ["default", "cors"] }
 
 [build-dependencies]

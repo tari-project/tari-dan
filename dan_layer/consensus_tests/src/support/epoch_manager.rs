@@ -11,7 +11,6 @@ use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard, CommitteeShardInfo, NetworkCommitteeInfo},
-    hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
     shard::Shard,
     Epoch,
     SubstateAddress,
@@ -65,6 +64,7 @@ impl TestEpochManager {
             epoch: Epoch(0),
             committee_shard: None,
             fee_claim_public_key: PublicKey::default(),
+            sidechain_id: None,
         });
         copy
     }
@@ -77,7 +77,7 @@ impl TestEpochManager {
                 let substate_address = random_substate_in_bucket(shard, num_committees);
                 state.validator_shards.insert(
                     address.clone(),
-                    (shard, substate_address.to_substate_address(), pk.clone()),
+                    (shard, substate_address.to_substate_address(), pk.clone(), None),
                 );
                 state.address_shard.insert(address.clone(), shard);
             }
@@ -91,7 +91,13 @@ impl TestEpochManager {
             .await
             .validator_shards
             .iter()
-            .map(|(a, (shard, substate_address, pk))| (a.clone(), *shard, *substate_address, pk.clone()))
+            .filter_map(|(a, (shard, substate_address, pk, sidechain_id))| {
+                if sidechain_id.is_none() {
+                    Some((a.clone(), *shard, *substate_address, pk.clone()))
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
@@ -127,7 +133,7 @@ impl EpochManagerReader for TestEpochManager {
         epoch: Epoch,
         addr: &Self::Addr,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError> {
-        let (shard, shard_key, public_key) = self.state_lock().await.validator_shards[addr].clone();
+        let (shard, shard_key, public_key, sidechain_id) = self.state_lock().await.validator_shards[addr].clone();
 
         Ok(ValidatorNode {
             address: addr.clone(),
@@ -136,6 +142,7 @@ impl EpochManagerReader for TestEpochManager {
             epoch,
             committee_shard: Some(shard),
             fee_claim_public_key: PublicKey::default(),
+            sidechain_id,
         })
     }
 
@@ -162,23 +169,6 @@ impl EpochManagerReader for TestEpochManager {
 
     async fn get_num_committees(&self, _epoch: Epoch) -> Result<u32, EpochManagerError> {
         Ok(self.inner.lock().await.committees.len() as u32)
-    }
-
-    async fn get_validator_node_merkle_root(&self, _epoch: Epoch) -> Result<Vec<u8>, EpochManagerError> {
-        let leaves = vec![];
-        let tree = ValidatorNodeBalancedMerkleTree::create(leaves);
-        Ok(tree.get_merkle_root())
-    }
-
-    async fn get_validator_set_merged_merkle_proof(
-        &self,
-        _epoch: Epoch,
-        _validators: Vec<PublicKey>,
-    ) -> Result<MergedValidatorNodeMerkleProof, EpochManagerError> {
-        let leaves = vec![];
-        let tree = ValidatorNodeBalancedMerkleTree::create(leaves);
-        let proof = ValidatorNodeMerkleProof::generate_proof(&tree, 0).unwrap();
-        Ok(MergedValidatorNodeMerkleProof::create_from_proofs(&[proof]).unwrap())
     }
 
     async fn get_committees_by_shards(
@@ -236,8 +226,8 @@ impl EpochManagerReader for TestEpochManager {
         Ok(Committee::new(
             lock.validator_shards
                 .iter()
-                .filter(|(_, (_, s, _))| range.contains(s))
-                .map(|(a, (_, _, pk))| (a.clone(), pk.clone()))
+                .filter(|(_, (_, s, _, _))| range.contains(s))
+                .map(|(a, (_, _, pk, _))| (a.clone(), pk.clone()))
                 .collect(),
         ))
     }
@@ -248,10 +238,10 @@ impl EpochManagerReader for TestEpochManager {
         public_key: &PublicKey,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError> {
         let lock = self.state_lock().await;
-        let (address, (shard, shard_key, public_key)) = lock
+        let (address, (shard, shard_key, public_key, sidechain_id)) = lock
             .validator_shards
             .iter()
-            .find(|(_, (_, _, pk))| pk == public_key)
+            .find(|(_, (_, _, pk, _))| pk == public_key)
             .unwrap();
 
         Ok(ValidatorNode {
@@ -261,6 +251,7 @@ impl EpochManagerReader for TestEpochManager {
             epoch,
             committee_shard: Some(*shard),
             fee_claim_public_key: PublicKey::default(),
+            sidechain_id: sidechain_id.clone(),
         })
     }
 
@@ -299,7 +290,7 @@ pub struct TestEpochManagerState {
     pub current_epoch: Epoch,
     pub current_block_info: (u64, FixedHash),
     pub is_epoch_active: bool,
-    pub validator_shards: HashMap<TestAddress, (Shard, SubstateAddress, PublicKey)>,
+    pub validator_shards: HashMap<TestAddress, (Shard, SubstateAddress, PublicKey, Option<PublicKey>)>,
     pub committees: HashMap<Shard, Committee<TestAddress>>,
     pub address_shard: HashMap<TestAddress, Shard>,
 }

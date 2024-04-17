@@ -29,12 +29,10 @@ use std::{
 use indexmap::IndexMap;
 use log::*;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
-use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard, CommitteeShardInfo, NetworkCommitteeInfo},
-    hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
     optional::Optional,
     shard::Shard,
     DerivableFromPublicKey,
@@ -44,7 +42,7 @@ use tari_dan_common_types::{
 };
 use tari_dan_storage::global::{models::ValidatorNode, DbBaseLayerBlockInfo, DbEpoch, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
-use tari_mmr::MergedBalancedBinaryMerkleProof;
+use tari_utilities::byte_array::ByteArray;
 use tokio::sync::broadcast;
 
 use crate::{base_layer::config::EpochManagerConfig, error::EpochManagerError, EpochManagerEvent};
@@ -53,7 +51,6 @@ const LOG_TARGET: &str = "tari::dan::epoch_manager::base_layer";
 
 #[derive(Clone)]
 pub struct BaseLayerEpochManager<TGlobalStore, TBaseNodeClient> {
-    network: Network,
     global_db: GlobalDb<TGlobalStore>,
     base_node_client: TBaseNodeClient,
     config: EpochManagerConfig,
@@ -70,7 +67,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
 {
     pub fn new(
-        network: Network,
         config: EpochManagerConfig,
         global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
         base_node_client: GrpcBaseNodeClient,
@@ -78,7 +74,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         node_public_key: PublicKey,
     ) -> Self {
         Self {
-            network,
             global_db,
             base_node_client,
             config,
@@ -93,8 +88,10 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     }
 
     pub async fn load_initial_state(&mut self) -> Result<(), EpochManagerError> {
+        info!(target: LOG_TARGET, "Loading base layer constants");
         self.refresh_base_layer_consensus_constants().await?;
 
+        info!(target: LOG_TARGET, "Retrieving current epoch and block info from database");
         let mut tx = self.global_db.create_transaction()?;
         let mut metadata = self.global_db.metadata(&mut tx);
         self.current_epoch = metadata
@@ -210,6 +207,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             shard_key,
             next_epoch,
             registration.claim_public_key().clone(),
+            registration.sidechain_id().cloned(),
         )?;
 
         if *registration.public_key() == self.node_public_key {
@@ -492,62 +490,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             .get_all_within_epochs(start_epoch, end_epoch)?;
         let vns = db_vns.into_iter().map(Into::into).collect();
         Ok(vns)
-    }
-
-    pub fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError> {
-        let mut tx = self.global_db.create_transaction()?;
-
-        let query_res = self.global_db.epochs(&mut tx).get_epoch_data(epoch.0)?;
-
-        match query_res {
-            Some(db_epoch) => Ok(db_epoch.validator_node_mr),
-            None => Err(EpochManagerError::NoEpochFound(epoch)),
-        }
-    }
-
-    fn get_validator_node_balanced_merkle_tree(
-        &self,
-        epoch: Epoch,
-    ) -> Result<ValidatorNodeBalancedMerkleTree, EpochManagerError> {
-        let db = {
-            let mut tx = self.global_db.create_transaction()?;
-            self.global_db.bmt(&mut tx).get_bmt(epoch)
-        }?;
-        if let Some(bmt) = db {
-            return Ok(bmt);
-        }
-        let vns = self.get_validator_nodes_per_epoch(epoch)?;
-
-        let vn_bmt_leaves = vns.iter().map(|vn| vn.get_node_hash(self.network).to_vec()).collect();
-        let vn_bmt = ValidatorNodeBalancedMerkleTree::create(vn_bmt_leaves);
-        let mut tx = self.global_db.create_transaction()?;
-        self.global_db.bmt(&mut tx).insert_bmt(epoch.as_u64(), vn_bmt.clone())?;
-        tx.commit()?;
-        Ok(vn_bmt)
-    }
-
-    pub fn get_validator_set_merged_merkle_proof(
-        &self,
-        epoch: Epoch,
-        validators: Vec<PublicKey>,
-    ) -> Result<MergedValidatorNodeMerkleProof, EpochManagerError> {
-        let mut proofs = Vec::with_capacity(validators.len());
-        let bmt = self.get_validator_node_balanced_merkle_tree(epoch)?;
-
-        for validator in &validators {
-            let vn = self
-                .get_validator_node_by_public_key(epoch, validator)?
-                .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
-                    address: TAddr::derive_from_public_key(validator).to_string(),
-                    epoch,
-                })?;
-            let leaf_index = bmt.find_leaf_index_for_hash(&vn.get_node_hash(self.network).to_vec())?;
-
-            let proof = ValidatorNodeMerkleProof::generate_proof(&bmt, leaf_index as usize)?;
-            proofs.push(proof);
-        }
-
-        Ok(MergedBalancedBinaryMerkleProof::create_from_proofs(&proofs).unwrap())
     }
 
     pub async fn on_scanning_complete(&mut self) -> Result<(), EpochManagerError> {

@@ -190,6 +190,14 @@ pub enum ProposalValidationError {
         calculated: FixedHash,
         from_block: FixedHash,
     },
+    #[error("Problem converting values")]
+    QCConversionError,
+    #[error("Validator {validator} is not in committee for shard {expected_shard}. Actual shard: {actual_shard}")]
+    ValidatorNotInCommittee {
+        validator: String,
+        expected_shard: String,
+        actual_shard: String,
+    },
     #[error("Base layer block hash for block with height {proposed} too high, current height {current}")]
     BlockHeightTooHigh { proposed: u64, current: u64 },
     #[error("Base layer block hash for block with height {proposed} too small, current height {current}")]

@@ -3,7 +3,7 @@
 
 Feature: Committee scenarios
 
-  @serial
+  @serial @fixed
   Scenario: Template registration and invocation in a 2-VN committee
     Given fees are disabled
     # Initialize a base node, wallet and miner
@@ -12,9 +12,9 @@ Feature: Committee scenarios
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize two validator nodes
-    Given a seed validator node SEED_VN connected to base node BASE and wallet WALLET
-    Given a validator node VAL_1 connected to base node BASE and wallet WALLET
-    Given a validator node VAL_2 connected to base node BASE and wallet WALLET
+    Given a seed validator node SEED_VN connected to base node BASE and wallet daemon WALLET_D
+    Given a validator node VAL_1 connected to base node BASE and wallet daemon WALLET_D
+    Given a validator node VAL_2 connected to base node BASE and wallet daemon WALLET_D
     Given validator VAL_1 nodes connect to all other validators
 
     # The wallet must have some funds before the VN sends transactions
@@ -22,11 +22,11 @@ Feature: Committee scenarios
     When wallet WALLET has at least 20000 T
 
     # VN registration
-    When validator node VAL_1 sends a registration transaction
-    When validator node VAL_2 sends a registration transaction
+    When validator node VAL_1 sends a registration transaction to base wallet WALLET
+    When validator node VAL_2 sends a registration transaction to base wallet WALLET
 
     # Register the "counter" template
-    When validator node VAL_1 registers the template "counter"
+    When base wallet WALLET registers the template "counter"
     When miner MINER mines 15 new blocks
     Then VAL_1 has scanned to height 18
     Then VAL_2 has scanned to height 18
@@ -82,7 +82,7 @@ Feature: Committee scenarios
 #    When all validator nodes send registration transactions
 #
 #    # Register the "counter" template
-#    When validator node VAL_1 registers the template "counter"
+#    When base wallet WALLET registers the template "counter"
 #    When miner MINER mines 23 new blocks
 #    Then all validators have scanned to height 29
 #    Then all validator nodes are listed as registered

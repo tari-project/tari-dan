@@ -357,6 +357,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         shard_key: SubstateAddress,
         epoch: Epoch,
         fee_claim_public_key: PublicKey,
+        sidechain_id: Option<PublicKey>,
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
 
@@ -378,6 +379,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
                 validator_nodes::shard_key.eq(shard_key.as_bytes()),
                 validator_nodes::epoch.eq(epoch.as_u64() as i64),
                 validator_nodes::fee_claim_public_key.eq(ByteArray::as_bytes(&fee_claim_public_key)),
+                validator_nodes::sidechain_id.eq(sidechain_id.map(|id| id.to_vec())),
             ))
             .execute(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {

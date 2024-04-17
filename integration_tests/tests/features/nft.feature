@@ -3,7 +3,7 @@
 
 Feature: NFTs
 
-  @serial
+  @serial @current
   Scenario: Mint, mutate and burn non fungible tokens
     Given fees are disabled
     # Initialize a base node, wallet, miner and VN
@@ -12,17 +12,17 @@ Feature: NFTs
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 7 new blocks
     When wallet WALLET has at least 10000 T
 
     # VN registration
-    When validator node VN sends a registration transaction
+    When validator node VN sends a registration transaction to base wallet WALLET
 
     # Register the "basic_nft" template
-    When validator node VN registers the template "basic_nft"
+    When base wallet WALLET registers the template "basic_nft"
     When miner MINER mines 13 new blocks
     Then VN has scanned to height 17
     Then the validator node VN is listed as registered
@@ -78,17 +78,17 @@ Feature: NFTs
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 7 new blocks
     When wallet WALLET has at least 10000 T
 
     # VN registration
-    When validator node VN sends a registration transaction
+    When validator node VN sends a registration transaction to base wallet WALLET
 
     # Register the "basic_nft" template
-    When validator node VN registers the template "basic_nft"
+    When base wallet WALLET registers the template "basic_nft"
     When miner MINER mines 13 new blocks
     Then VN has scanned to height 17
     Then the validator node VN is listed as registered

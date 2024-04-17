@@ -87,22 +87,16 @@ use tari_validator_node_client::types::{
     GetValidatorFeesResponse,
     ListBlocksRequest,
     ListBlocksResponse,
-    RegisterValidatorNodeRequest,
-    RegisterValidatorNodeResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
     SubstateStatus,
     TemplateMetadata,
-    TemplateRegistrationRequest,
-    TemplateRegistrationResponse,
 };
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
-    grpc::base_layer_wallet::GrpcWalletClient,
     json_rpc::jrpc_errors::{internal_error, not_found},
     p2p::services::mempool::MempoolHandle,
-    registration,
     Services,
 };
 
@@ -110,7 +104,6 @@ const LOG_TARGET: &str = "tari::validator_node::json_rpc::handlers";
 
 pub struct JsonRpcHandlers {
     keypair: RistrettoKeypair,
-    wallet_grpc_client: GrpcWalletClient,
     mempool: MempoolHandle,
     template_manager: TemplateManagerHandle,
     epoch_manager: EpochManagerHandle<PeerAddress>,
@@ -121,14 +114,9 @@ pub struct JsonRpcHandlers {
 }
 
 impl JsonRpcHandlers {
-    pub fn new(
-        wallet_grpc_client: GrpcWalletClient,
-        base_node_client: GrpcBaseNodeClient,
-        services: &Services,
-    ) -> Self {
+    pub fn new(base_node_client: GrpcBaseNodeClient, services: &Services) -> Self {
         Self {
             keypair: services.keypair.clone(),
-            wallet_grpc_client,
             mempool: services.mempool.clone(),
             epoch_manager: services.epoch_manager.clone(),
             template_manager: services.template_manager.clone(),
@@ -137,10 +125,6 @@ impl JsonRpcHandlers {
             state_store: services.state_store.clone(),
             dry_run_transaction_processor: services.dry_run_transaction_processor.clone(),
         }
-    }
-
-    pub fn wallet_client(&self) -> GrpcWalletClient {
-        self.wallet_grpc_client.clone()
     }
 
     pub fn base_node_client(&self) -> GrpcBaseNodeClient {
@@ -469,52 +453,6 @@ impl JsonRpcHandlers {
             .map_err(internal_error(answer_id))?;
         let res = GetBlocksResponse { blocks };
         Ok(JsonRpcResponse::success(answer_id, res))
-    }
-
-    pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
-        let answer_id = value.get_answer_id();
-        let req: RegisterValidatorNodeRequest = value.parse_params()?;
-
-        // Ensure that the fee claim pk is set before registering
-        self.epoch_manager
-            .set_fee_claim_public_key(req.fee_claim_public_key)
-            .await
-            .map_err(internal_error(answer_id))?;
-
-        let resp = registration::register(self.wallet_client(), &self.keypair, &self.epoch_manager)
-            .await
-            .map_err(internal_error(answer_id))?;
-
-        if !resp.is_success {
-            return Err(JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::ApplicationError(1),
-                    format!("Failed to register validator node: {}", resp.failure_message),
-                    json::Value::Null,
-                ),
-            ));
-        }
-
-        Ok(JsonRpcResponse::success(answer_id, RegisterValidatorNodeResponse {
-            transaction_id: resp.transaction_id.into(),
-        }))
-    }
-
-    pub async fn register_template(&self, value: JsonRpcExtractor) -> JrpcResult {
-        let answer_id = value.get_answer_id();
-        let data: TemplateRegistrationRequest = value.parse_params()?;
-
-        let resp = self
-            .wallet_client()
-            .register_template(&self.keypair, data)
-            .await
-            .map_err(internal_error(answer_id))?;
-
-        Ok(JsonRpcResponse::success(answer_id, TemplateRegistrationResponse {
-            template_address: resp.template_address,
-            transaction_id: resp.tx_id,
-        }))
     }
 
     pub async fn get_templates(&self, value: JsonRpcExtractor) -> JrpcResult {

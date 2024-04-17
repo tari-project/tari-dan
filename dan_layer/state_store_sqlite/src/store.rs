@@ -5,7 +5,7 @@ use std::{
     fmt,
     marker::PhantomData,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use diesel::{sql_query, Connection, RunQueryDsl, SqliteConnection};
@@ -14,7 +14,6 @@ use log::log;
 use serde::{de::DeserializeOwned, Serialize};
 use tari_dan_common_types::NodeAddressable;
 use tari_dan_storage::{StateStore, StorageError};
-use time::Instant;
 
 use crate::{
     error::SqliteStorageError,
@@ -93,7 +92,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStore for Sqlit
         log!(
             target: LOG_TARGET,
             level,
-            "Write transaction obtained in {:.2}", elapsed
+            "Write transaction obtained in {:?}", elapsed
         );
         Ok(tx)
     }

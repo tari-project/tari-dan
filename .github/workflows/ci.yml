@@ -20,6 +20,8 @@ env:
   stable_toolchain: stable
   CARGO_HTTP_MULTIPLEXING: false
   CARGO_TERM_COLOR: always
+  TARI_TARGET_NETWORK: localnet
+  TARI_NETWORK: localnet
   PROTOC: protoc
   TERM: unknown
 

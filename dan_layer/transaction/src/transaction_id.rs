@@ -44,6 +44,10 @@ impl TransactionId {
     pub fn into_receipt_address(self) -> TransactionReceiptAddress {
         self.into_array().into()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.id.iter().all(|&b| b == 0)
+    }
 }
 
 impl AsRef<[u8]> for TransactionId {

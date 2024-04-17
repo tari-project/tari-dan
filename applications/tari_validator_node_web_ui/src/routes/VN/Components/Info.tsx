@@ -21,14 +21,12 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState } from "react";
-import { registerValidatorNode } from "../../../utils/json_rpc";
 import "./Info.css";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableRow from "@mui/material/TableRow";
-import Button from "@mui/material/Button";
 import { DataTableCell } from "../../../Components/StyledComponents";
 import { TextField } from "@mui/material";
 import type {
@@ -48,12 +46,7 @@ function Info({
   const [registering, setRegistering] = useState(false);
   const [registerMessage, setRegisterMessage] = useState("");
   const [feeClaimPublicKey, setRegisterFeeClaimPublicKey] = useState("");
-  const register = () => {
-    setRegistering(true);
-    registerValidatorNode({ fee_claim_public_key: feeClaimPublicKey }).then((response) => {
-      setRegisterMessage(`Registration successful, the TxId ${response.transaction_id}`);
-    });
-  };
+
   const renderShardKey = () => {
     if (shardKey === null)
       return (
@@ -82,9 +75,6 @@ function Info({
                 value={feeClaimPublicKey}
                 onChange={(e) => setRegisterFeeClaimPublicKey(e.target.value)}
               />
-              <Button disabled={registering} variant="contained" onClick={registering ? () => {} : register}>
-                Register
-              </Button>
               {registerMessage ? <span style={{ marginLeft: "20px" }}>{registerMessage}</span> : null}
             </DataTableCell>
           </TableRow>
