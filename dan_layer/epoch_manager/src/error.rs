@@ -40,7 +40,10 @@ pub enum EpochManagerError {
     #[error("Invalid epoch: {epoch}")]
     InvalidEpoch { epoch: Epoch },
     #[error("Validator node registration sidechain id mismatch. Actual: {actual:?}, Expected: {expected:?}")]
-    ValidatorNodeRegistrationSidechainIdMismatch {  actual: Option<String>, expected: Option<String>}
+    ValidatorNodeRegistrationSidechainIdMismatch {
+        actual: Option<String>,
+        expected: Option<String>,
+    },
 }
 
 impl EpochManagerError {

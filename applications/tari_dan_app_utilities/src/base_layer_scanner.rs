@@ -37,9 +37,10 @@ use tari_core::transactions::transaction_components::{
     TransactionOutput,
     ValidatorNodeRegistration,
 };
-use tari_crypto::ristretto::RistrettoPublicKey;
-use tari_crypto::tari_utilities::ByteArray;
-use tari_crypto::tari_utilities::hex::Hex;
+use tari_crypto::{
+    ristretto::RistrettoPublicKey,
+    tari_utilities::{hex::Hex, ByteArray},
+};
 use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, SubstateRecord},
@@ -94,7 +95,7 @@ pub fn spawn<TAddr: NodeAddressable + 'static>(
             base_layer_scanning_interval,
             validator_node_sidechain_id,
             template_sidechain_id,
-            burnt_utxo_sidechain_id
+            burnt_utxo_sidechain_id,
         );
 
         base_layer_scanner.start().await?;
@@ -120,7 +121,7 @@ pub struct BaseLayerScanner<TAddr> {
     has_attempted_scan: bool,
     validator_node_sidechain_id: Option<PublicKey>,
     template_sidechain_id: Option<PublicKey>,
-    burnt_utxo_sidechain_id: Option<PublicKey>
+    burnt_utxo_sidechain_id: Option<PublicKey>,
 }
 
 impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
@@ -137,7 +138,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         base_layer_scanning_interval: Duration,
         validator_node_sidechain_id: Option<PublicKey>,
         template_sidechain_id: Option<PublicKey>,
-        burnt_utxo_sidechain_id: Option<PublicKey>
+        burnt_utxo_sidechain_id: Option<PublicKey>,
     ) -> Self {
         Self {
             network,
@@ -157,7 +158,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
             has_attempted_scan: false,
             validator_node_sidechain_id,
             template_sidechain_id,
-            burnt_utxo_sidechain_id
+            burnt_utxo_sidechain_id,
         }
     }
 

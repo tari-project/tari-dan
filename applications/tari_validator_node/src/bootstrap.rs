@@ -190,7 +190,7 @@ pub async fn spawn_services(
         EpochManagerConfig {
             base_layer_confirmations: consensus_constants.base_layer_confirmations,
             committee_size: consensus_constants.committee_size,
-            validator_node_sidechain_id: config.validator_node.validator_node_sidechain_id.clone()
+            validator_node_sidechain_id: config.validator_node.validator_node_sidechain_id.clone(),
         },
         global_db.clone(),
         base_node_client.clone(),
@@ -319,7 +319,7 @@ pub async fn spawn_services(
         config.validator_node.base_layer_scanning_interval,
         config.validator_node.validator_node_sidechain_id.clone(),
         config.validator_node.template_sidechain_id.clone(),
-        config.validator_node.burnt_utxo_sidechain_id.clone()
+        config.validator_node.burnt_utxo_sidechain_id.clone(),
     );
     handles.push(join_handle);
 

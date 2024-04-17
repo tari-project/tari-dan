@@ -107,7 +107,7 @@ pub struct ValidatorNodeConfig {
     /// The templates sidechain id
     pub template_sidechain_id: Option<RistrettoPublicKey>,
     /// The burnt utxo sidechain id
-    pub burnt_utxo_sidechain_id: Option<RistrettoPublicKey>
+    pub burnt_utxo_sidechain_id: Option<RistrettoPublicKey>,
 }
 
 impl ValidatorNodeConfig {
@@ -151,7 +151,7 @@ impl Default for ValidatorNodeConfig {
             dont_create_id: false,
             validator_node_sidechain_id: None,
             template_sidechain_id: None,
-            burnt_utxo_sidechain_id: None
+            burnt_utxo_sidechain_id: None,
         }
     }
 }
