@@ -185,4 +185,3 @@ If the transaction was successful, there should be some data in the `substates` 
 
 
 
-
