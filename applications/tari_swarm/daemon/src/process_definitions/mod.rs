@@ -7,6 +7,7 @@ mod indexer;
 mod minotari_miner;
 mod minotari_node;
 mod minotari_wallet;
+mod signalling_server;
 mod validator_node;
 mod wallet_daemon;
 
@@ -23,5 +24,6 @@ pub fn get_definition(instance_type: InstanceType) -> Box<dyn ProcessDefinition 
         InstanceType::TariValidatorNode => Box::new(validator_node::ValidatorNode::new()),
         InstanceType::TariWalletDaemon => Box::new(wallet_daemon::WalletDaemon::new()),
         InstanceType::TariIndexer => Box::new(indexer::Indexer::new()),
+        InstanceType::TariSignallingServer => Box::new(signalling_server::SignallingServer::new()),
     }
 }

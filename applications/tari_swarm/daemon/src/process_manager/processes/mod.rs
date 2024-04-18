@@ -5,6 +5,7 @@ mod indexer;
 mod minotari_miner;
 mod minotari_node;
 mod minotari_wallet;
+mod signalling_server;
 mod validator_node;
 mod wallet_daemon;
 
@@ -12,5 +13,6 @@ pub use indexer::*;
 pub use minotari_miner::*;
 pub use minotari_node::*;
 pub use minotari_wallet::*;
+pub use signalling_server::*;
 pub use validator_node::*;
 pub use wallet_daemon::*;

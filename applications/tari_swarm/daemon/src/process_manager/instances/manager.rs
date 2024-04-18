@@ -29,6 +29,7 @@ use crate::{
         processes::{MinoTariMinerProcess, MinoTariNodeProcess, MinoTariWalletProcess, ValidatorNodeProcess},
         IndexerProcess,
         Instance,
+        SignallingServerProcess,
         WalletDaemonProcess,
     },
 };
@@ -43,12 +44,13 @@ pub struct InstanceManager {
     validator_nodes: HashMap<InstanceId, ValidatorNodeProcess>,
     indexers: HashMap<InstanceId, IndexerProcess>,
     wallet_daemons: HashMap<InstanceId, WalletDaemonProcess>,
+    signalling_servers: HashMap<InstanceId, SignallingServerProcess>,
     port_allocator: PortAllocator,
     instance_id: InstanceId,
 }
 
 impl InstanceManager {
-    pub fn new(base_path: PathBuf, network: Network, config: Vec<InstanceConfig>) -> Self {
+    pub fn new(base_path: PathBuf, network: Network, config: Vec<InstanceConfig>, start_port: u16) -> Self {
         Self {
             base_path,
             config,
@@ -59,7 +61,8 @@ impl InstanceManager {
             validator_nodes: HashMap::new(),
             indexers: HashMap::new(),
             wallet_daemons: HashMap::new(),
-            port_allocator: PortAllocator::new(),
+            signalling_servers: HashMap::new(),
+            port_allocator: PortAllocator::new(start_port),
             instance_id: 0,
         }
     }
@@ -211,6 +214,10 @@ impl InstanceManager {
             InstanceType::TariWalletDaemon => {
                 self.wallet_daemons
                     .insert(instance_id, WalletDaemonProcess::new(instance));
+            },
+            InstanceType::TariSignallingServer => {
+                self.signalling_servers
+                    .insert(instance_id, SignallingServerProcess::new(instance));
             },
         }
 

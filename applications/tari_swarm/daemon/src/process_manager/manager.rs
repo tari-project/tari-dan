@@ -1,19 +1,18 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, path::PathBuf, time::Duration};
+use std::{collections::HashMap, time::Duration};
 
 use anyhow::anyhow;
 use log::info;
 use minotari_node_grpc_client::grpc;
-use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_engine_types::TemplateAddress;
 use tari_shutdown::ShutdownSignal;
 use tokio::{sync::mpsc, time::sleep};
 
 use crate::{
-    config::{InstanceType, ProcessesConfig},
+    config::{Config, InstanceType},
     process_manager::{
         executables::ExecutableManager,
         handle::{ProcessManagerHandle, ProcessManagerRequest},
@@ -31,16 +30,19 @@ pub struct ProcessManager {
 }
 
 impl ProcessManager {
-    pub fn new(
-        base_dir: PathBuf,
-        config: ProcessesConfig,
-        network: Network,
-        shutdown_signal: ShutdownSignal,
-    ) -> (Self, ProcessManagerHandle) {
+    pub fn new(config: &Config, shutdown_signal: ShutdownSignal) -> (Self, ProcessManagerHandle) {
         let (tx_request, rx_request) = mpsc::channel(1);
         let this = Self {
-            executable_manager: ExecutableManager::new(config.executables, config.always_compile),
-            instance_manager: InstanceManager::new(base_dir, network, config.instances),
+            executable_manager: ExecutableManager::new(
+                config.processes.executables.clone(),
+                config.processes.force_compile,
+            ),
+            instance_manager: InstanceManager::new(
+                config.base_dir.clone(),
+                config.network,
+                config.processes.instances.clone(),
+                config.start_port,
+            ),
             rx_request,
             shutdown_signal,
         };

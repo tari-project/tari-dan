@@ -13,10 +13,10 @@ pub struct PortAllocator {
 }
 
 impl PortAllocator {
-    pub fn new() -> Self {
+    pub fn new(start_port: u16) -> Self {
         Self {
             instances: HashMap::new(),
-            current_port: 12000,
+            current_port: start_port,
         }
     }
 

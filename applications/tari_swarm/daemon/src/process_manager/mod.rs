@@ -22,12 +22,7 @@ pub fn spawn(
     config: &Config,
     shutdown: tari_shutdown::ShutdownSignal,
 ) -> (task::JoinHandle<anyhow::Result<()>>, ProcessManagerHandle) {
-    let (manager, handle) = manager::ProcessManager::new(
-        config.base_dir.clone(),
-        config.processes.clone(),
-        config.network,
-        shutdown,
-    );
+    let (manager, handle) = manager::ProcessManager::new(config, shutdown);
 
     let task_handle = tokio::spawn(manager.start());
 

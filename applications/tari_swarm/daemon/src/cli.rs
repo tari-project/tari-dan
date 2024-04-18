@@ -1,17 +1,19 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::path::PathBuf;
+use std::{io, net::SocketAddr, path::PathBuf};
 
 use clap::Parser;
 use tari_common::configuration::Network;
+
+use crate::config::{Config, InstanceType};
 
 #[derive(Debug, Clone, Parser)]
 pub struct Cli {
     #[clap(flatten)]
     pub common: CommonCli,
     #[clap(subcommand)]
-    pub commands: Commands,
+    pub command: Commands,
 }
 
 impl Cli {
@@ -43,8 +45,71 @@ pub struct CommonCli {
 
 #[derive(Debug, Clone, clap::Subcommand)]
 pub enum Commands {
-    Init,
-    Start,
-    // #[clap(name = "stop")]
-    // Stop(Stop),
+    Init(InitArgs),
+    Start(Overrides),
+}
+
+#[derive(Debug, Clone, clap::Args)]
+pub struct InitArgs {
+    /// Overwrite the config file even if it exists
+    #[clap(long)]
+    pub force: bool,
+    #[clap(flatten)]
+    pub overrides: Overrides,
+}
+
+#[derive(Debug, Clone, clap::Args)]
+pub struct Overrides {
+    #[clap(long)]
+    pub webui_listen_address: Option<SocketAddr>,
+    #[clap(long)]
+    pub no_compile: bool,
+    #[clap(long)]
+    pub binaries_root: Option<PathBuf>,
+    #[clap(long)]
+    pub start_port: Option<u16>,
+}
+
+impl Overrides {
+    pub fn apply(&self, config: &mut Config) -> io::Result<()> {
+        for exec_mut in &mut config.processes.executables {
+            if let Some(ref root) = self.binaries_root {
+                let package = exec_mut
+                    .compile
+                    .as_ref()
+                    .map(|c| c.package_name.clone())
+                    .unwrap_or_else(|| instance_type_to_package_name(exec_mut.instance_type));
+                exec_mut.execuable_path = Some(root.canonicalize()?.join(package));
+            }
+            if self.no_compile {
+                exec_mut.compile = None;
+            }
+        }
+
+        if self.no_compile {
+            config.processes.force_compile = false;
+        }
+
+        if let Some(listen_addr) = self.webui_listen_address {
+            config.webserver.bind_address = listen_addr;
+        }
+
+        if let Some(port) = self.start_port {
+            config.start_port = port;
+        }
+
+        Ok(())
+    }
+}
+
+fn instance_type_to_package_name(instance_type: InstanceType) -> String {
+    match instance_type {
+        InstanceType::MinoTariNode => "minotari_node".to_string(),
+        InstanceType::MinoTariConsoleWallet => "minotari_console_wallet".to_string(),
+        InstanceType::MinoTariMiner => "minotari_miner".to_string(),
+        InstanceType::TariValidatorNode => "tari_validator_node".to_string(),
+        InstanceType::TariIndexer => "tari_indexer".to_string(),
+        InstanceType::TariWalletDaemon => "tari_wallet_daemon".to_string(),
+        InstanceType::TariSignallingServer => "tari_signalling_server".to_string(),
+    }
 }

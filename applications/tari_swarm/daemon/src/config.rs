@@ -21,6 +21,7 @@ use crate::cli::Cli;
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Config {
     pub base_dir: PathBuf,
+    pub start_port: u16,
     pub network: Network,
     pub webserver: WebserverConfig,
     #[serde(flatten)]
@@ -77,7 +78,8 @@ impl Default for WebserverConfig {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ProcessesConfig {
-    pub always_compile: bool,
+    /// If true, the executables will be compiled even if the target binary file exists
+    pub force_compile: bool,
     pub instances: Vec<InstanceConfig>,
     pub executables: Vec<ExecutableConfig>,
 }
@@ -124,6 +126,7 @@ pub enum InstanceType {
     TariValidatorNode,
     TariIndexer,
     TariWalletDaemon,
+    TariSignallingServer,
 }
 
 impl Display for InstanceType {

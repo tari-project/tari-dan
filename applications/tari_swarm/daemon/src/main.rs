@@ -9,7 +9,7 @@ use tari_shutdown::Shutdown;
 use tokio::{fs, signal::unix::SignalKind};
 
 use crate::{
-    cli::{Cli, Commands},
+    cli::{Cli, Commands, InitArgs},
     config::{CompileConfig, Config, ExecutableConfig, InstanceConfig, InstanceType, ProcessesConfig, WebserverConfig},
 };
 
@@ -26,17 +26,21 @@ async fn main() -> anyhow::Result<()> {
 
     init_logger()?;
 
-    match cli.commands {
-        Commands::Init => {
-            // if config_path.exists() {
-            //     log::info!("Config file exists at {}", config_path.display());
-            //     return Ok(());
-            // }
+    match cli.command {
+        Commands::Init(ref args) => {
+            if config_path.exists() {
+                if args.force {
+                    log::warn!("Overwriting existing config file at {}", config_path.display());
+                } else {
+                    log::info!("Config file exists at {}", config_path.display());
+                    return Ok(());
+                }
+            }
 
             if let Some(parent) = config_path.parent() {
                 fs::create_dir_all(parent).await?;
             }
-            let config = get_initial_config(&cli)?;
+            let config = get_initial_config(&cli, args)?;
             let file = fs::File::create(&config_path).await?;
             config.write(file).await?;
             let config_path = config_path
@@ -44,14 +48,21 @@ async fn main() -> anyhow::Result<()> {
                 .context("Failed to canonicalize config_path")?;
             log::info!("Config file created at {}", config_path.display());
         },
-        Commands::Start => {
+        Commands::Start(_) => {
             start(&cli).await?;
         },
     }
     Ok(())
 }
 
-fn get_initial_config(cli: &Cli) -> io::Result<Config> {
+fn get_initial_config(cli: &Cli, args: &InitArgs) -> io::Result<Config> {
+    let mut config = get_base_config(cli)?;
+    args.overrides.apply(&mut config)?;
+    Ok(config)
+}
+
+#[allow(clippy::too_many_lines)]
+fn get_base_config(cli: &Cli) -> io::Result<Config> {
     let executables = vec![
         ExecutableConfig {
             instance_type: InstanceType::MinoTariNode,
@@ -116,6 +127,16 @@ fn get_initial_config(cli: &Cli) -> io::Result<Config> {
             }),
             env: vec![],
         },
+        ExecutableConfig {
+            instance_type: InstanceType::TariSignallingServer,
+            execuable_path: Some("target/release/tari_signalling_server".into()),
+            compile: Some(CompileConfig {
+                working_dir: Some(".".into()),
+                package_name: "tari_signalling_server".to_string(),
+                target_dir: None,
+            }),
+            env: vec![],
+        },
     ];
     let instances = vec![
         InstanceConfig::new(InstanceType::MinoTariNode).with_name("Minotari Node"),
@@ -134,10 +155,12 @@ fn get_initial_config(cli: &Cli) -> io::Result<Config> {
             .with_num_instances(1),
         InstanceConfig::new(InstanceType::TariIndexer).with_name("Indexer"),
         InstanceConfig::new(InstanceType::TariWalletDaemon).with_name("Wallet Daemon"),
+        InstanceConfig::new(InstanceType::TariSignallingServer).with_name("Signalling server"),
     ];
 
     Ok(Config {
-        network: Network::LocalNet,
+        network: cli.common.network.unwrap_or(Network::LocalNet),
+        start_port: 12000,
         base_dir: cli
             .common
             .base_dir
@@ -147,7 +170,7 @@ fn get_initial_config(cli: &Cli) -> io::Result<Config> {
             .canonicalize()?,
         webserver: WebserverConfig::default(),
         processes: ProcessesConfig {
-            always_compile: false,
+            force_compile: false,
             instances,
             executables,
         },
@@ -155,7 +178,10 @@ fn get_initial_config(cli: &Cli) -> io::Result<Config> {
 }
 
 async fn start(cli: &Cli) -> anyhow::Result<()> {
-    let config = Config::load_with_cli(cli).await?;
+    let mut config = Config::load_with_cli(cli).await?;
+    if let Commands::Start(ref overrides) = cli.command {
+        overrides.apply(&mut config)?;
+    }
     let _pid = lockfile::Lockfile::create(config.base_dir.join("tari_swarm.pid"))
         .context("Failed to acquire lockfile. Is another instance already running?")?;
 
