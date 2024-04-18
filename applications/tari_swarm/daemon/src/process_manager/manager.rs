@@ -10,7 +10,7 @@ use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_engine_types::TemplateAddress;
 use tari_shutdown::ShutdownSignal;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, time::sleep};
 
 use crate::{
     config::{InstanceType, ProcessesConfig},
@@ -18,6 +18,7 @@ use crate::{
         executables::ExecutableManager,
         handle::{ProcessManagerHandle, ProcessManagerRequest},
         instances::InstanceManager,
+        InstanceId,
         TemplateData,
     },
 };
@@ -47,9 +48,13 @@ impl ProcessManager {
     }
 
     pub async fn start(mut self) -> anyhow::Result<()> {
-        log::info!("Starting process manager");
-        let executables = self.executable_manager.prepare().await?;
+        info!("Starting process manager");
+        let executables = self.executable_manager.prepare_all().await?;
         self.instance_manager.fork_all(executables).await?;
+
+        // Mine some initial funds
+        self.mine(20).await?;
+        self.wait_for_wallet_funds().await?;
 
         self.register_all_validator_nodes().await?;
 
@@ -61,12 +66,8 @@ impl ProcessManager {
                     }
                 }
 
-                // res = self.instance_manager.wait() => {
-                //     res?;
-                // }
-
                 _ = self.shutdown_signal.wait() => {
-                    log::info!("Shutting down process manager");
+                    info!("Shutting down process manager");
                     break;
                 }
             }
@@ -76,31 +77,41 @@ impl ProcessManager {
     }
 
     async fn handle_request(&mut self, req: ProcessManagerRequest) -> anyhow::Result<()> {
+        use ProcessManagerRequest::*;
         match req {
-            ProcessManagerRequest::CreateInstance {
+            CreateInstance {
                 name,
                 instance_type,
                 args,
                 reply,
             } => {
+                if self.instance_manager.instances().any(|i| i.name() == name) {
+                    if reply
+                        .send(Err(anyhow!(
+                            "Instance with name '{name}' already exists. Please choose a different name",
+                        )))
+                        .is_err()
+                    {
+                        log::warn!("Request cancelled before response could be sent")
+                    }
+                    return Ok(());
+                }
+
                 let executable = self.executable_manager.get_executable(instance_type).ok_or_else(|| {
                     anyhow!(
                         "No configuration for instance type '{instance_type}'. Please add this to the configuration",
                     )
                 })?;
-                let instance_id = self
+                let result = self
                     .instance_manager
-                    .fork(executable, instance_type, name, &args)
-                    .await?;
-                if reply.send(Ok(instance_id)).is_err() {
+                    .fork_new(executable, instance_type, name, args)
+                    .await;
+
+                if reply.send(result).is_err() {
                     log::warn!("Request cancelled before response could be sent")
                 }
             },
-            ProcessManagerRequest::DestroyInstance => {
-                // self.instance_manager.kill_all().await?;
-                unimplemented!();
-            },
-            ProcessManagerRequest::ListInstances { by_type, reply } => {
+            ListInstances { by_type, reply } => {
                 let instances = self
                     .instance_manager
                     .instances()
@@ -112,14 +123,47 @@ impl ProcessManager {
                     log::warn!("Request cancelled before response could be sent")
                 }
             },
-            ProcessManagerRequest::MineBlocks { blocks, reply } => {
+            StartInstance { instance_id, reply } => {
+                let executable = {
+                    let instance = self
+                        .instance_manager
+                        .instances()
+                        .find(|i| i.id() == instance_id)
+                        .ok_or_else(|| anyhow!("Instance with ID '{}' not found", instance_id))?;
+                    let instance_type = instance.instance_type();
+                    self.executable_manager.get_executable(instance_type).ok_or_else(|| {
+                        anyhow!(
+                            "No configuration for instance type '{instance_type}'. Please add this to the \
+                             configuration",
+                        )
+                    })?
+                };
+
+                let result = self.instance_manager.start_instance(instance_id, executable).await;
+                if reply.send(result).is_err() {
+                    log::warn!("Request cancelled before response could be sent")
+                }
+            },
+            StopInstance { instance_id, reply } => {
+                let result = self.instance_manager.stop_instance(instance_id).await;
+                if reply.send(result).is_err() {
+                    log::warn!("Request cancelled before response could be sent")
+                }
+            },
+            MineBlocks { blocks, reply } => {
                 let result = self.mine(blocks).await;
                 if reply.send(result).is_err() {
                     log::warn!("Request cancelled before response could be sent")
                 }
             },
-            ProcessManagerRequest::RegisterTemplate { data, reply } => {
+            RegisterTemplate { data, reply } => {
                 let result = self.register_template(data).await;
+                if reply.send(result).is_err() {
+                    log::warn!("Request cancelled before response could be sent")
+                }
+            },
+            RegisterValidatorNode { instance_id, reply } => {
+                let result = self.register_validator_node(instance_id).await;
                 if reply.send(result).is_err() {
                     log::warn!("Request cancelled before response could be sent")
                 }
@@ -131,7 +175,7 @@ impl ProcessManager {
 
     async fn register_all_validator_nodes(&mut self) -> anyhow::Result<()> {
         for vn in self.instance_manager.validator_nodes_mut() {
-            if !vn.instance_mut().is_running() {
+            if !vn.instance_mut().check_running() {
                 log::error!(
                     "Skipping registration for validator node {}: {} since it is not running",
                     vn.instance().id(),
@@ -141,11 +185,16 @@ impl ProcessManager {
             }
         }
 
-        let wallet = self.instance_manager.minotari_wallets().next().ok_or_else(|| {
-            anyhow!(
-                "No MinoTariConsoleWallet instances found. Please start a wallet before registering validator nodes"
-            )
-        })?;
+        let wallet = self
+            .instance_manager
+            .minotari_wallets()
+            .find(|w| w.instance().is_running())
+            .ok_or_else(|| {
+                anyhow!(
+                    "No running MinoTariConsoleWallet instances found. Please start a wallet before registering \
+                     validator nodes"
+                )
+            })?;
 
         for vn in self.instance_manager.validator_nodes() {
             if let Err(err) = vn.wait_for_startup(Duration::from_secs(10)).await {
@@ -164,6 +213,43 @@ impl ProcessManager {
         Ok(())
     }
 
+    async fn register_validator_node(&mut self, instance_id: InstanceId) -> anyhow::Result<()> {
+        let vn = self
+            .instance_manager
+            .validator_nodes()
+            .find(|vn| vn.instance().id() == instance_id)
+            .ok_or_else(|| anyhow!("Validator node with ID '{}' not found", instance_id))?;
+
+        if !vn.instance().is_running() {
+            log::error!(
+                "Skipping registration for validator node {}: {} since it is not running",
+                vn.instance().id(),
+                vn.instance().name()
+            );
+            return Ok(());
+        }
+
+        if let Err(err) = vn.wait_for_startup(Duration::from_secs(10)).await {
+            log::error!(
+                "Skipping registration for validator node {}: {} since it is not responding",
+                vn.instance().id(),
+                err
+            );
+            return Ok(());
+        }
+
+        let wallet = self.instance_manager.minotari_wallets().next().ok_or_else(|| {
+            anyhow!(
+                "No MinoTariConsoleWallet instances found. Please start a wallet before registering validator nodes"
+            )
+        })?;
+
+        let reg_info = vn.get_registration_info().await?;
+        wallet.register_validator_node(reg_info).await?;
+        self.mine(20).await?;
+        Ok(())
+    }
+
     async fn mine(&mut self, blocks: u64) -> anyhow::Result<()> {
         let executable = self
             .executable_manager
@@ -175,7 +261,7 @@ impl ProcessManager {
         let args = HashMap::from([("max_blocks".to_string(), blocks.to_string())]);
         let id = self
             .instance_manager
-            .fork(executable, InstanceType::MinoTariMiner, "miner".to_string(), &args)
+            .fork_new(executable, InstanceType::MinoTariMiner, "miner".to_string(), args)
             .await?;
 
         let status = self.instance_manager.wait(id).await?;
@@ -213,8 +299,27 @@ impl ProcessManager {
             .await?
             .into_inner();
         let template_address = TemplateAddress::try_from_vec(resp.template_address).unwrap();
-        info!("🟢 Registered template {}. Mining some blocks", template_address);
+        info!("🟢 Registered template {template_address}. Mining some blocks");
         self.mine(10).await?;
+
+        Ok(())
+    }
+
+    async fn wait_for_wallet_funds(&mut self) -> anyhow::Result<()> {
+        // WARN: Assumes one wallet
+        let wallet = self.instance_manager.minotari_wallets().next().ok_or_else(|| {
+            anyhow!("No MinoTariConsoleWallet instances found. Please start a wallet before waiting for funds")
+        })?;
+
+        loop {
+            let resp = wallet.get_balance().await?;
+            if resp.available_balance > 0 {
+                info!("💰 Wallet has funds. Available balance: {}", resp.available_balance);
+                break;
+            }
+            sleep(Duration::from_secs(2)).await;
+            info!("💱 Waiting for wallet to mine some funds");
+        }
 
         Ok(())
     }

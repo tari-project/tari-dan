@@ -19,8 +19,4 @@ impl WalletDaemonProcess {
     pub fn instance_mut(&mut self) -> &mut Instance {
         &mut self.instance
     }
-
-    pub async fn connect_client(&self) -> anyhow::Result<()> {
-        unimplemented!()
-    }
 }

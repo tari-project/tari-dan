@@ -1,8 +1,6 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common::configuration::Network;
-
 use crate::{config::Config, process_manager::ProcessManagerHandle};
 
 #[derive(Debug, Clone)]
@@ -22,9 +20,5 @@ impl HandlerContext {
 
     pub fn process_manager(&self) -> &ProcessManagerHandle {
         &self.pm_handle
-    }
-
-    pub fn network(&self) -> Network {
-        self.config.network
     }
 }

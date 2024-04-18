@@ -27,7 +27,7 @@ impl ProcessDefinition for MinotariWallet {
 
         let public_address = format!("/ip4/{local_ip}/tcp/{p2p_port}");
 
-        let base_nodes = context.get_minotari_nodes().collect::<Vec<_>>();
+        let base_nodes = context.minotari_nodes().collect::<Vec<_>>();
 
         if base_nodes.is_empty() {
             return Err(anyhow!("Base nodes should be started before the console wallet"));

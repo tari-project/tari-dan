@@ -26,7 +26,7 @@ impl ProcessDefinition for MinotariNode {
 
         let public_address = format!("/ip4/{local_ip}/tcp/{p2p_port}");
 
-        let base_nodes = context.get_minotari_nodes();
+        let base_nodes = context.minotari_nodes();
         let mut base_node_addresses = Vec::new();
         for base_node in base_nodes {
             let identity = base_node.get_identity().await?;

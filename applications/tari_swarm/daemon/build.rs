@@ -32,7 +32,6 @@ const BUILD: &[(&str, &str)] = &[("../webui", "build")];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../webui/src");
-    println!("cargo:rerun-if-changed=../webui/public");
 
     if env::var("CARGO_FEATURE_TS").is_ok() {
         println!("cargo:warning=The web ui is not being compiled when we are generating typescript types/interfaces.");

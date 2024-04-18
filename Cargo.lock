@@ -5848,6 +5848,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab2156c4fce2f8df6c499cc1c763e4394b7482525bf2a9701c9d79d215f519e4"
+dependencies = [
+ "bitflags 2.5.0",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8567,7 +8579,7 @@ dependencies = [
  "mime_guess",
  "minotari_node_grpc_client",
  "minotari_wallet_grpc_client",
- "rand",
+ "nix 0.28.0",
  "reqwest",
  "serde",
  "serde_json",
@@ -8582,7 +8594,6 @@ dependencies = [
  "tokio",
  "toml 0.8.12",
  "tonic 0.8.3",
- "tower",
  "tower-http",
  "url",
 ]

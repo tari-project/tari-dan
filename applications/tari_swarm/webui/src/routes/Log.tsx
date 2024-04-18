@@ -2,7 +2,7 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 
 import { useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { useParams } from "react-router-dom";
 import { jsonRpc } from "../utils/json_rpc";
 
 export default function Log() {
@@ -17,7 +17,7 @@ export default function Log() {
     jsonRpc("get_file", atob(name))
       .then((resp) => {
         console.log(format);
-        if (format == "normal") {
+        if (!format || format == "normal") {
           resp = resp.replace(/(\d{4}-\d{2}-\d{2} \d+:\d{2}:\d{2}.\d+)/gi, "<span class=\"time\">$1</span>");
           resp = resp.replace(/(\[tari::.*?\])/gi, "<span class=\"target\">$1</span>");
         } else {

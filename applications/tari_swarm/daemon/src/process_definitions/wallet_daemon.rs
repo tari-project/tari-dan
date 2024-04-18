@@ -29,7 +29,7 @@ impl ProcessDefinition for WalletDaemon {
         let web_ui_address = format!("{local_ip}:{web_ui_port}");
 
         let indexer = context
-            .get_indexers()
+            .indexers()
             .next()
             .ok_or_else(|| anyhow!("Indexer should be started before wallet daemon"))?;
         let indexer_url = format!(

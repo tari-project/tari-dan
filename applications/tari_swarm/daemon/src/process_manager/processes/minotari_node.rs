@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use anyhow::{anyhow, Context};
-use minotari_node_grpc_client::BaseNodeGrpcClient;
 use tokio::{fs::File, io::AsyncReadExt};
 
 use crate::process_manager::Instance;
@@ -24,15 +23,15 @@ impl MinoTariNodeProcess {
         &mut self.instance
     }
 
-    pub async fn connect_client(&self) -> anyhow::Result<BaseNodeGrpcClient<tonic::transport::Channel>> {
-        let port = self
-            .instance
-            .allocated_ports()
-            .get("grpc")
-            .ok_or_else(|| anyhow!("No grpc port allocated"))?;
-        let client = BaseNodeGrpcClient::connect(format!("http://localhost:{}", port)).await?;
-        Ok(client)
-    }
+    // pub async fn connect_client(&self) -> anyhow::Result<BaseNodeGrpcClient<tonic::transport::Channel>> {
+    //     let port = self
+    //         .instance
+    //         .allocated_ports()
+    //         .get("grpc")
+    //         .ok_or_else(|| anyhow!("No grpc port allocated"))?;
+    //     let client = BaseNodeGrpcClient::connect(format!("http://localhost:{}", port)).await?;
+    //     Ok(client)
+    // }
 
     pub async fn get_identity(&self) -> anyhow::Result<String> {
         // We cannot call identify because we'd need to override the allowed methods via cli, and this is not

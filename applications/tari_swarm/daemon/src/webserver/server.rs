@@ -1,10 +1,9 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{io, str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc};
 
 use axum::{
-    extract::{multipart::MultipartError, Multipart},
     handler::HandlerWithoutStateExt,
     http::{HeaderValue, Response, Uri},
     response::IntoResponse,
@@ -24,21 +23,14 @@ use log::*;
 use reqwest::{header, StatusCode};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::json;
-use tari_crypto::tari_utilities::hex;
-use tari_engine_types::calculate_template_binary_hash;
-use tokio::{fs, io::AsyncWriteExt};
 use tower_http::{cors::CorsLayer, services::ServeDir};
-use url::Url;
 
-use crate::{
-    process_manager::TemplateData,
-    webserver::{context::HandlerContext, error::HandlerError, handler::JrpcHandler, rpc, templates},
-};
+use crate::webserver::{context::HandlerContext, error::HandlerError, handler::JrpcHandler, rpc, templates};
 
 const LOG_TARGET: &str = "tari::dan::swarm::webserver";
 
 pub async fn run(context: HandlerContext) -> anyhow::Result<()> {
-    let bind_address = context.config().webserver.bind_address.clone();
+    let bind_address = context.config().webserver.bind_address;
 
     async fn not_found() -> (StatusCode, &'static str) {
         (StatusCode::NOT_FOUND, "Resource not found")
@@ -103,7 +95,6 @@ async fn json_rpc_handler(Extension(context): Extension<Arc<HandlerContext>>, va
     debug!(target: LOG_TARGET, "🌐 JSON-RPC request: {:?}", value);
     match value.method.as_str() {
         "ping" => Ok(JsonRpcResponse::success(value.get_answer_id(), "pong")),
-        "add_base_node" => call_handler(context, value, rpc::base_nodes::create).await,
         "vns" => call_handler(context, value, rpc::validator_nodes::list).await,
         "dan_wallets" => call_handler(context, value, rpc::dan_wallets::list).await,
         "indexers" => call_handler(context, value, rpc::indexers::list).await,
@@ -111,6 +102,13 @@ async fn json_rpc_handler(Extension(context): Extension<Arc<HandlerContext>>, va
         "get_stdout" => call_handler(context, value, rpc::logs::list_stdout_files).await,
         "get_file" => call_handler(context, value, rpc::logs::get_log_file).await,
         "mine" => call_handler(context, value, rpc::miners::mine).await,
+        "add_base_node" | "add_minotari_node" => call_handler(context, value, rpc::minotari_nodes::create).await,
+        "add_base_wallet" | "add_minotari_wallet" => call_handler(context, value, rpc::minotari_wallets::create).await,
+        "add_asset_wallet" | "add_wallet_daemon" => call_handler(context, value, rpc::dan_wallets::create).await,
+        "add_indexer" => call_handler(context, value, rpc::indexers::create).await,
+        "add_validator_node" => call_handler(context, value, rpc::validator_nodes::create).await,
+        "start" => call_handler(context, value, rpc::instances::start).await,
+        "stop" => call_handler(context, value, rpc::instances::stop).await,
         _ => Ok(value.method_not_found(&value.method)),
     }
 }
@@ -147,10 +145,10 @@ where
 fn resolve_handler_error(answer_id: i64, e: &HandlerError) -> JsonRpcResponse {
     match e {
         HandlerError::Anyhow(e) => resolve_any_error(answer_id, e),
-        HandlerError::NotFound => JsonRpcResponse::error(
-            answer_id,
-            JsonRpcError::new(JsonRpcErrorReason::ApplicationError(404), e.to_string(), json!({})),
-        ),
+        // HandlerError::NotFound => JsonRpcResponse::error(
+        //     answer_id,
+        //     JsonRpcError::new(JsonRpcErrorReason::ApplicationError(404), e.to_string(), json!({})),
+        // ),
     }
 }
 

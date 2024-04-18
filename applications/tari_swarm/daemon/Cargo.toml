@@ -32,7 +32,6 @@ json5 = { workspace = true }
 lockfile = "0.4.0"
 log = { workspace = true }
 mime_guess = { workspace = true }
-rand = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -40,6 +39,9 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "process", "time", "fs"] }
 toml = "0.8.12"
 tonic = { workspace = true }
-tower = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 url = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.28.0", default-features = false, features = ["signal"] }
+

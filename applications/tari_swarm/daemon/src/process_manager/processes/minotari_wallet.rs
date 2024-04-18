@@ -58,4 +58,10 @@ impl MinoTariWalletProcess {
         log::info!("🟢 Registered validator node with tx_id: {}", resp.transaction_id);
         Ok(())
     }
+
+    pub async fn get_balance(&self) -> anyhow::Result<grpc::GetBalanceResponse> {
+        let mut client = self.connect_client().await?;
+        let balance = client.get_balance(grpc::GetBalanceRequest {}).await?.into_inner();
+        Ok(balance)
+    }
 }

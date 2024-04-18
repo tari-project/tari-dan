@@ -1,10 +1,12 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::collections::HashMap;
+
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
-use crate::webserver::context::HandlerContext;
+use crate::{config::InstanceType, process_manager::InstanceId, webserver::context::HandlerContext};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListDanWalletsRequest {}
@@ -43,12 +45,32 @@ pub async fn list(
                 name: instance.name,
                 web,
                 jrpc,
-                // TODO
-                // is_running: status == InstanceStatus::Running
-                is_running: true,
+                is_running: instance.is_running,
             })
         })
         .collect::<anyhow::Result<_>>()?;
 
     Ok(ListDanWalletsResponse { nodes })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletDaemonCreateRequest {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletDaemonCreateResponse {
+    pub instance_id: InstanceId,
+}
+
+pub async fn create(
+    context: &HandlerContext,
+    req: WalletDaemonCreateRequest,
+) -> Result<WalletDaemonCreateResponse, anyhow::Error> {
+    let instance_id = context
+        .process_manager()
+        .create_instance(req.name, InstanceType::TariWalletDaemon, HashMap::new())
+        .await?;
+
+    Ok(WalletDaemonCreateResponse { instance_id })
 }

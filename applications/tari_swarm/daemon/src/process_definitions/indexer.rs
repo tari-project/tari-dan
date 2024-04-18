@@ -29,7 +29,7 @@ impl ProcessDefinition for Indexer {
         let web_ui_address = format!("{local_ip}:{web_ui_port}");
 
         let base_node = context
-            .get_minotari_nodes()
+            .minotari_nodes()
             .next()
             .ok_or_else(|| anyhow!("Base nodes should be started before validator nodes"))?;
 

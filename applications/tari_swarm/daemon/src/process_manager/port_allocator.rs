@@ -1,10 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{hash_map, HashMap},
-    net::SocketAddr,
-};
+use std::{collections::HashMap, net::SocketAddr};
 
 use tokio::net::TcpListener;
 
@@ -23,20 +20,9 @@ impl PortAllocator {
         }
     }
 
-    // pub async fn next_port(&mut self, instance_id: InstanceId, name: &'static str) -> u16 {
-    //     loop {
-    //         let port = self.current_port;
-    //         self.current_port += 1;
-    //         if check_local_port(port).await {
-    //             self.instances.entry(instance_id).or_default().insert(name, port);
-    //             return port;
-    //         }
-    //     }
+    // pub fn get_ports(&self, instance_id: InstanceId) -> Option<&AllocatedPorts> {
+    //     self.instances.get(&instance_id)
     // }
-
-    pub fn get_ports(&self, instance_id: InstanceId) -> Option<&AllocatedPorts> {
-        self.instances.get(&instance_id)
-    }
 
     pub fn create(&mut self) -> AllocatedPorts {
         AllocatedPorts {
@@ -58,27 +44,12 @@ pub struct AllocatedPorts {
 }
 
 impl AllocatedPorts {
-    pub fn new(current_port: u16) -> Self {
-        Self {
-            current_port,
-            ports: HashMap::new(),
-        }
-    }
-
-    pub fn insert(&mut self, name: &'static str, port: u16) {
-        self.ports.insert(name, port);
-    }
-
     pub fn get(&self, name: &'static str) -> Option<u16> {
         self.ports.get(name).copied()
     }
 
     pub fn expect(&self, name: &'static str) -> u16 {
         self.ports[name]
-    }
-
-    pub fn entry(&mut self, name: &'static str) -> hash_map::Entry<&'static str, u16> {
-        self.ports.entry(name)
     }
 
     pub async fn next_port(&mut self, name: &'static str) -> u16 {

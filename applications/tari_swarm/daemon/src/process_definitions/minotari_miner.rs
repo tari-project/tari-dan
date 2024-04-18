@@ -26,12 +26,12 @@ impl ProcessDefinition for MinotariMiner {
         let mut command = Command::new(context.bin());
         let local_ip = context.local_ip();
         let base_node = context
-            .get_minotari_nodes()
+            .minotari_nodes()
             .next()
             .ok_or_else(|| anyhow!("Base nodes should be started before the miner"))?;
 
         let wallet = context
-            .get_minotari_wallets()
+            .minotari_wallets()
             .next()
             .ok_or_else(|| anyhow!("Wallets should be started before the miner"))?;
 

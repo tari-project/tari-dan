@@ -21,10 +21,17 @@ pub enum ProcessManagerRequest {
         args: HashMap<String, String>,
         reply: Reply<InstanceId>,
     },
-    DestroyInstance,
     ListInstances {
         by_type: Option<InstanceType>,
         reply: Reply<Vec<InstanceInfo>>,
+    },
+    StartInstance {
+        instance_id: InstanceId,
+        reply: Reply<()>,
+    },
+    StopInstance {
+        instance_id: InstanceId,
+        reply: Reply<()>,
     },
     MineBlocks {
         blocks: u64,
@@ -32,6 +39,10 @@ pub enum ProcessManagerRequest {
     },
     RegisterTemplate {
         data: TemplateData,
+        reply: Reply<()>,
+    },
+    RegisterValidatorNode {
+        instance_id: InstanceId,
         reply: Reply<()>,
     },
 }
@@ -49,6 +60,7 @@ pub struct InstanceInfo {
     pub ports: AllocatedPorts,
     pub base_path: PathBuf,
     pub instance_type: InstanceType,
+    pub is_running: bool,
 }
 
 impl From<&Instance> for InstanceInfo {
@@ -59,6 +71,7 @@ impl From<&Instance> for InstanceInfo {
             ports: instance.allocated_ports().clone(),
             base_path: instance.base_path().clone(),
             instance_type: instance.instance_type(),
+            is_running: instance.is_running(),
         }
     }
 }
@@ -104,21 +117,35 @@ impl ProcessManagerHandle {
         rx_reply.await?
     }
 
-    pub async fn list_minotari_nodes(&self) -> anyhow::Result<Vec<InstanceInfo>> {
-        self.list_instances(Some(InstanceType::MinoTariNode)).await
+    pub async fn get_instance_by_name(&self, name: String) -> anyhow::Result<Option<InstanceInfo>> {
+        let (tx_reply, rx_reply) = oneshot::channel();
+        // TODO: consider optimizing this by adding a new request variant
+        self.tx_request
+            .send(ProcessManagerRequest::ListInstances {
+                by_type: None,
+                reply: tx_reply,
+            })
+            .await?;
+
+        let intances = rx_reply.await??;
+        Ok(intances.into_iter().find(|i| i.name == name))
     }
 
-    pub async fn list_minotari_console_wallets(&self) -> anyhow::Result<Vec<InstanceInfo>> {
-        self.list_instances(Some(InstanceType::MinoTariConsoleWallet)).await
-    }
+    // pub async fn list_minotari_nodes(&self) -> anyhow::Result<Vec<InstanceInfo>> {
+    //     self.list_instances(Some(InstanceType::MinoTariNode)).await
+    // }
+    //
+    // pub async fn list_minotari_console_wallets(&self) -> anyhow::Result<Vec<InstanceInfo>> {
+    //     self.list_instances(Some(InstanceType::MinoTariConsoleWallet)).await
+    // }
 
     pub async fn list_validator_nodes(&self) -> anyhow::Result<Vec<InstanceInfo>> {
         self.list_instances(Some(InstanceType::TariValidatorNode)).await
     }
 
-    pub async fn list_minotari_miners(&self) -> anyhow::Result<Vec<InstanceInfo>> {
-        self.list_instances(Some(InstanceType::MinoTariMiner)).await
-    }
+    // pub async fn list_minotari_miners(&self) -> anyhow::Result<Vec<InstanceInfo>> {
+    //     self.list_instances(Some(InstanceType::MinoTariMiner)).await
+    // }
 
     pub async fn list_indexers(&self) -> anyhow::Result<Vec<InstanceInfo>> {
         self.list_instances(Some(InstanceType::TariIndexer)).await
@@ -147,5 +174,50 @@ impl ProcessManagerHandle {
             .await?;
 
         rx_reply.await?
+    }
+
+    pub async fn start_instance(&self, instance_id: InstanceId) -> anyhow::Result<()> {
+        let (tx_reply, rx_reply) = oneshot::channel();
+        self.tx_request
+            .send(ProcessManagerRequest::StartInstance {
+                instance_id,
+                reply: tx_reply,
+            })
+            .await?;
+
+        rx_reply.await?
+    }
+
+    pub async fn stop_instance(&self, instance_id: InstanceId) -> anyhow::Result<()> {
+        let (tx_reply, rx_reply) = oneshot::channel();
+        self.tx_request
+            .send(ProcessManagerRequest::StopInstance {
+                instance_id,
+                reply: tx_reply,
+            })
+            .await?;
+
+        rx_reply.await?
+    }
+
+    pub async fn register_validator_node(&self, instance_id: InstanceId) -> anyhow::Result<()> {
+        let (tx_reply, rx_reply) = oneshot::channel();
+        self.tx_request
+            .send(ProcessManagerRequest::RegisterValidatorNode {
+                instance_id,
+                reply: tx_reply,
+            })
+            .await?;
+
+        rx_reply.await?
+    }
+
+    pub(crate) async fn terminate_all(&self) -> anyhow::Result<usize> {
+        let instances = self.list_instances(None).await?;
+        let num_instances = instances.len();
+        for instance in instances {
+            self.stop_instance(instance.id).await?;
+        }
+        Ok(num_instances)
     }
 }

@@ -119,7 +119,12 @@ fn get_initial_config(cli: &Cli) -> io::Result<Config> {
     ];
     let instances = vec![
         InstanceConfig::new(InstanceType::MinoTariNode).with_name("Minotari Node"),
-        InstanceConfig::new(InstanceType::MinoTariConsoleWallet).with_name("Minotari Wallet"),
+        // WARN: more than one wallet will break things because a random wallet is selected each time (hashmaps) for
+        // mining and registrations, so a given wallet is not guaranteed to have funds. There is no big need to fix
+        // at the moment this as we typically only need one wallet.
+        InstanceConfig::new(InstanceType::MinoTariConsoleWallet)
+            .with_name("Minotari Wallet")
+            .with_num_instances(1),
         // Let's mine 10 blocks on startup by default.
         InstanceConfig::new(InstanceType::MinoTariMiner)
             .with_name("Minotari Miner")
@@ -163,7 +168,9 @@ async fn start(cli: &Cli) -> anyhow::Result<()> {
 
     tokio::select! {
         _ = signal => {
-            log::info!("Shutting down...");
+            log::info!("Terminating all instances...");
+            let num_instances = pm_handle.terminate_all().await?;
+            log::info!("Terminated {num_instances} instances");
         },
         result = webserver => {
             result??;
@@ -240,9 +247,17 @@ fn start_windows() -> anyhow::Result<BoxFuture<()>> {
 }
 
 fn init_logger() -> Result<(), log::SetLoggerError> {
+    fn should_skip(target: &str) -> bool {
+        const SKIP: [&str; 3] = ["hyper::", "h2::", "tower::"];
+        SKIP.iter().any(|s| target.starts_with(s))
+    }
+
     let colors = fern::colors::ColoredLevelConfig::new().info(fern::colors::Color::Green);
     fern::Dispatch::new()
         .format(move |out, message, record| {
+            if should_skip(record.target()) {
+                return;
+            }
             out.finish(format_args!(
                 "{} [{}] {} {}",
                 humantime::format_rfc3339(std::time::SystemTime::now()),

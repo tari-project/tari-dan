@@ -65,8 +65,8 @@ function ExtraInfoVN({ name, url, setRow, addTxToPool, autoRefresh, state, horiz
   }, [tick, autoRefresh]);
   useEffect(() => {
     jsonRpc2(url, "get_epoch_manager_stats").then((resp) => {
-      setRow(resp.committee_shard.bucket + 1);
-      setBucket(resp.committee_shard.bucket);
+      setRow(resp.committee_shard.shard + 1);
+      setBucket(resp.committee_shard.shard);
       setHeight(resp.current_block_height);
       setEpoch(resp.current_epoch);
     }).catch((resp) => {

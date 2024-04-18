@@ -28,47 +28,49 @@ impl ExecutableManager {
         }
     }
 
-    pub async fn prepare(&mut self) -> anyhow::Result<Executables<'_>> {
-        log::info!("Preparing {} executables", self.config.len());
+    pub async fn prepare_all(&mut self) -> anyhow::Result<Executables<'_>> {
+        log::info!("Compiling {} executables", self.config.len());
         self.prepared.clear();
 
         let mut tasks = FuturesUnordered::new();
 
         for exec in &self.config {
-            if let Some(exec_path) = exec.get_executable_path() {
-                if !self.always_compile && exec_path.exists() {
-                    self.prepared.push(Executable {
-                        instance_type: exec.instance_type,
-                        path: exec_path,
-                        env: exec.env.clone(),
-                    });
-                    continue;
-                }
+            let Some(exec_path) = exec.get_executable_path() else {
+                continue;
+            };
 
-                let Some(ref compile) = exec.compile else {
-                    return Err(anyhow!(
-                        "Attempted to compile {} however no compile config was provided",
-                        exec.instance_type
-                    ));
-                };
-
-                log::info!(
-                    "Compiling {} in working dir {}",
-                    exec.instance_type,
-                    compile.working_dir().display()
-                );
-                let mut child = cargo_build(
-                    compile
-                        .working_dir()
-                        .canonicalize()
-                        .context("working_dir does not exist")?,
-                    &compile.package_name,
-                )?;
-                tasks.push(async move {
-                    let status = child.wait().await?;
-                    Ok::<_, anyhow::Error>((status, exec))
+            if !self.always_compile && exec_path.exists() {
+                self.prepared.push(Executable {
+                    instance_type: exec.instance_type,
+                    path: exec_path,
+                    env: exec.env.clone(),
                 });
+                continue;
             }
+
+            let Some(ref compile) = exec.compile else {
+                return Err(anyhow!(
+                    "Attempted to compile {} however no compile config was provided",
+                    exec.instance_type
+                ));
+            };
+
+            log::info!(
+                "Compiling {} in working dir {}",
+                exec.instance_type,
+                compile.working_dir().display()
+            );
+            let mut child = cargo_build(
+                compile
+                    .working_dir()
+                    .canonicalize()
+                    .context("working_dir does not exist")?,
+                &compile.package_name,
+            )?;
+            tasks.push(async move {
+                let status = child.wait().await?;
+                Ok::<_, anyhow::Error>((status, exec))
+            });
         }
 
         while let Some(output) = tasks.next().await {

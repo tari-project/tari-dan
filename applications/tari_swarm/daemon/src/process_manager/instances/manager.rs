@@ -14,7 +14,7 @@ use tari_common::configuration::Network;
 use tokio::{
     fs,
     fs::File,
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
     task,
     time::sleep,
 };
@@ -75,11 +75,11 @@ impl InstanceManager {
             })?;
 
             for i in 0..instance.num_instances {
-                self.fork(
+                self.fork_new(
                     executable,
                     instance.instance_type,
                     format!("{}-#{}", instance.name, i),
-                    &instance.extra_args,
+                    instance.extra_args.clone(),
                 )
                 .await?;
             }
@@ -87,19 +87,32 @@ impl InstanceManager {
         Ok(())
     }
 
-    pub async fn fork(
+    pub async fn fork_new(
         &mut self,
         executable: &Executable,
         instance_type: InstanceType,
         instance_name: String,
-        extra_args: &HashMap<String, String>,
+        extra_args: HashMap<String, String>,
+    ) -> anyhow::Result<InstanceId> {
+        let instance_id = self.next_instance_id();
+        self.fork(instance_id, executable, instance_type, instance_name, extra_args)
+            .await
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn fork(
+        &mut self,
+        instance_id: InstanceId,
+        executable: &Executable,
+        instance_type: InstanceType,
+        instance_name: String,
+        extra_args: HashMap<String, String>,
     ) -> anyhow::Result<InstanceId> {
         let local_ip = IpAddr::V4(Ipv4Addr::from([127, 0, 0, 1]));
         let definition = get_definition(instance_type);
 
-        let instance_id = self.next_instance_id();
         log::info!(
-            "Starting {} (id: {}, exec path: {})",
+            "🚀 Starting {} (id: {}, exec path: {})",
             instance_type,
             instance_id,
             executable.path.display()
@@ -121,7 +134,7 @@ impl InstanceManager {
             local_ip,
             &mut allocated_ports,
             self,
-            extra_args,
+            &extra_args,
         );
 
         let mut command = definition.get_command(context).await?;
@@ -137,47 +150,34 @@ impl InstanceManager {
 
         self.port_allocator.register(instance_id, allocated_ports.clone());
 
-        if let Some(stdout) = child.stdout.take().map(BufReader::new) {
-            let mut lines = stdout.lines();
-            task::spawn(async move {
-                let mut stdout_log = File::create(stdout_log_path).await.unwrap();
-                while let Some(output) = lines.next_line().await.unwrap() {
-                    log::debug!("[#{instance_id} {instance_type}] {}", output);
-                    stdout_log.write_all(output.as_bytes()).await.unwrap();
-                    stdout_log.write_all(b"\n").await.unwrap();
-                    stdout_log.flush().await.unwrap();
-                }
-                log::debug!("Process exited (instance_id={instance_id}, type={instance_type})");
-            });
+        if let Some(stdout) = child.stdout.take() {
+            forward_logs(stdout_log_path, stdout, format!("{instance_type}#{instance_id}"));
         }
-        if let Some(stderr) = child.stderr.take().map(BufReader::new) {
-            let mut lines = stderr.lines();
-            task::spawn(async move {
-                let mut stdout_log = File::create(stderr_log_path).await.unwrap();
-                while let Some(output) = lines.next_line().await.unwrap() {
-                    log::debug!("[{instance_type}#{instance_id}] {output}");
-                    stdout_log.write_all(output.as_bytes()).await.unwrap();
-                    stdout_log.write_all(b"\n").await.unwrap();
-                    stdout_log.flush().await.unwrap();
-                }
-            });
+        if let Some(stderr) = child.stderr.take() {
+            forward_logs(stderr_log_path, stderr, format!("{instance_type}#{instance_id}"));
         }
 
-        let mut instance = Instance::new(
+        let mut instance = Instance::new_started(
             instance_id,
             instance_name,
             instance_type,
             child,
             allocated_ports,
-            // This saves us from having to join the network string to the path since everything we want is under
-            // {base_dir}/{network}
+            // This saves us from having to join the network string to the path all over the place, since everything we
+            // want is under {base_dir}/{network}
             base_path.join(self.network.to_string()),
+            extra_args,
         );
 
-        // Check if the instance is still running after 1 second
-        sleep(Duration::from_secs(1)).await;
-        if !instance.is_running() {
-            return Err(anyhow!("Failed to start instance {instance_id} {instance_type}"));
+        // Check if the instance is still running after 2 seconds (except miner *cough*)
+        if matches!(instance_type, InstanceType::MinoTariMiner) {
+            // Update the miners is_running status
+            instance.check_running();
+        } else {
+            sleep(Duration::from_secs(2)).await;
+            if !instance.check_running() {
+                return Err(anyhow!("Failed to start instance {instance_id} {instance_type}"));
+            }
         }
 
         log::info!(
@@ -233,17 +233,17 @@ impl InstanceManager {
         self.validator_nodes.values_mut()
     }
 
-    pub fn minotari_miners(&self) -> impl Iterator<Item = &MinoTariMinerProcess> + Sized {
-        self.minotari_miners.values()
-    }
+    // pub fn minotari_miners(&self) -> impl Iterator<Item = &MinoTariMinerProcess> + Sized {
+    //     self.minotari_miners.values()
+    // }
 
     pub fn indexers(&self) -> impl Iterator<Item = &IndexerProcess> + Sized {
         self.indexers.values()
     }
 
-    pub fn wallet_daemons(&self) -> impl Iterator<Item = &WalletDaemonProcess> + Sized {
-        self.wallet_daemons.values()
-    }
+    // pub fn wallet_daemons(&self) -> impl Iterator<Item = &WalletDaemonProcess> + Sized {
+    //     self.wallet_daemons.values()
+    // }
 
     pub fn get_instance_mut(&mut self, id: InstanceId) -> Option<&mut Instance> {
         self.instances_mut().find(|i| i.id() == id)
@@ -253,6 +253,33 @@ impl InstanceManager {
         let instance = self.get_instance_mut(id).ok_or_else(|| anyhow!("Instance not found"))?;
         let status = instance.child_mut().wait().await?;
         Ok(status)
+    }
+
+    pub async fn start_instance(&mut self, id: InstanceId, executable: &Executable) -> anyhow::Result<()> {
+        let instance = self
+            .instances()
+            .find(|i| i.id() == id)
+            .ok_or_else(|| anyhow!("Instance not found"))?;
+
+        let instance_type = instance.instance_type();
+        let instance_name = instance.name().to_string();
+        let extra_args = instance.extra_args().clone();
+
+        // This will just overwrite the previous instance
+        self.fork(id, executable, instance_type, instance_name, extra_args)
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn stop_instance(&mut self, id: InstanceId) -> anyhow::Result<()> {
+        let instance = self
+            .instances_mut()
+            .find(|i| i.id() == id)
+            .ok_or_else(|| anyhow!("Instance not found"))?;
+
+        instance.terminate().await?;
+        Ok(())
     }
 
     pub fn instances_mut(&mut self) -> impl Iterator<Item = &mut Instance> {
@@ -282,4 +309,18 @@ impl InstanceManager {
         self.instance_id += 1;
         id
     }
+}
+
+fn forward_logs<R: AsyncRead + Unpin + Send + 'static>(path: PathBuf, reader: R, target: String) {
+    let mut lines = BufReader::new(reader).lines();
+    task::spawn(async move {
+        let mut log_file = File::create(path).await.unwrap();
+        while let Some(output) = lines.next_line().await.unwrap() {
+            log::debug!("[{target}] {output}");
+            log_file.write_all(output.as_bytes()).await.unwrap();
+            log_file.write_all(b"\n").await.unwrap();
+            log_file.flush().await.unwrap();
+        }
+        log::debug!("Process exited ({target})");
+    });
 }

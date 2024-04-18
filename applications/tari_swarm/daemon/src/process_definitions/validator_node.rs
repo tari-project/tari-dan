@@ -3,6 +3,7 @@
 
 use anyhow::anyhow;
 use async_trait::async_trait;
+use log::debug;
 use tokio::process::Command;
 
 use crate::process_definitions::{ProcessContext, ProcessDefinition};
@@ -29,7 +30,7 @@ impl ProcessDefinition for ValidatorNode {
         let web_ui_address = format!("{local_ip}:{web_ui_port}");
 
         let base_node = context
-            .get_minotari_nodes()
+            .minotari_nodes()
             .next()
             .ok_or_else(|| anyhow!("Base nodes should be started before validator nodes"))?;
 
@@ -39,6 +40,12 @@ impl ProcessDefinition for ValidatorNode {
             .get("grpc")
             .map(|port| format!("{local_ip}:{port}"))
             .ok_or_else(|| anyhow!("grpc port not found for base node"))?;
+
+        debug!(
+            "Starting validator node #{} with base node grpc address: {}",
+            context.instance_id(),
+            base_node_grpc_address
+        );
 
         command
             .envs(context.environment())

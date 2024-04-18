@@ -10,11 +10,8 @@ use crate::process_manager::{
     IndexerProcess,
     InstanceId,
     InstanceManager,
-    MinoTariMinerProcess,
     MinoTariNodeProcess,
     MinoTariWalletProcess,
-    ValidatorNodeProcess,
-    WalletDaemonProcess,
 };
 
 pub struct ProcessContext<'a> {
@@ -83,27 +80,15 @@ impl<'a> ProcessContext<'a> {
         vec![]
     }
 
-    pub fn get_minotari_nodes(&self) -> impl Iterator<Item = &MinoTariNodeProcess> {
+    pub fn minotari_nodes(&self) -> impl Iterator<Item = &MinoTariNodeProcess> {
         self.instances.minotari_nodes()
     }
 
-    pub fn get_minotari_wallets(&self) -> impl Iterator<Item = &MinoTariWalletProcess> {
+    pub fn minotari_wallets(&self) -> impl Iterator<Item = &MinoTariWalletProcess> {
         self.instances.minotari_wallets()
     }
 
-    pub fn get_minotari_miners(&self) -> impl Iterator<Item = &MinoTariMinerProcess> {
-        self.instances.minotari_miners()
-    }
-
-    pub fn get_validator_nodes(&self) -> impl Iterator<Item = &ValidatorNodeProcess> {
-        self.instances.validator_nodes()
-    }
-
-    pub fn get_indexers(&self) -> impl Iterator<Item = &IndexerProcess> {
+    pub fn indexers(&self) -> impl Iterator<Item = &IndexerProcess> {
         self.instances.indexers()
-    }
-
-    pub fn get_wallet_daemons(&self) -> impl Iterator<Item = &WalletDaemonProcess> {
-        self.instances.wallet_daemons()
     }
 }
