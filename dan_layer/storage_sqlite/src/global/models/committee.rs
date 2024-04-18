@@ -1,4 +1,4 @@
-//  Copyright 2022, The Tari Project
+//  Copyright 2022. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,33 +20,30 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// use serde::Serialize;
-// use tari_common_types::types::FixedHash;
-// use tari_dan_common_types::{vn_node_hash, NodeAddressable, SubstateAddress};
-//
-// #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-// pub struct ValidatorNode<TAddr> {
-//     pub shard_key: SubstateAddress,
-//     pub public_key: TAddr,
-// }
-//
-// impl<TAddr: NodeAddressable> ValidatorNode<TAddr> {
-//     pub fn node_hash(&self) -> FixedHash {
-//         vn_node_hash(&self.public_key, &self.shard_key)
-//     }
-// }
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{vn_node_hash, Epoch, NodeAddressable, SubstateAddress};
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, SubstateAddress};
+use tari_dan_storage::global::models::ValidatorNode;
+use tari_utilities::ByteArray;
 
-#[derive(Debug, Clone)]
-pub struct ValidatorNode<TAddr> {
-    pub address: TAddr,
-    pub shard_key: SubstateAddress,
-    pub epoch: Epoch,
+use crate::{
+    error::SqliteStorageError,
+    global::{schema::*, serialization::deserialize_json},
+};
+
+#[derive(Queryable, Identifiable)]
+#[diesel(table_name = committees)]
+pub struct DbCommittee {
+    pub id: i32,
+    pub public_key: Vec<u8>,
+    pub epoch: i64,
+    pub bucket: i64,
 }
 
-impl<TAddr: NodeAddressable> ValidatorNode<TAddr> {
-    pub fn node_hash(&self) -> FixedHash {
-        vn_node_hash(&self.address, &self.shard_key)
-    }
+#[derive(Insertable)]
+#[diesel(table_name = committees)]
+pub struct NewValidatorNode {
+    pub vn_id: i32,
+    pub public_key: Vec<u8>,
+    pub epoch: i64,
+    pub bucket: i64,
 }

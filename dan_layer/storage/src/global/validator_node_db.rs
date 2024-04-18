@@ -68,14 +68,9 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
-    pub fn count_in_bucket(
-        &mut self,
-        start_epoch: Epoch,
-        end_epoch: Epoch,
-        bucket: Shard,
-    ) -> Result<u64, TGlobalDbAdapter::Error> {
+    pub fn count_in_bucket(&mut self, epoch: Epoch, bucket: Shard) -> Result<u64, TGlobalDbAdapter::Error> {
         self.backend
-            .validator_nodes_count_for_bucket(self.tx, start_epoch, end_epoch, bucket)
+            .validator_nodes_count_for_bucket(self.tx, epoch, bucket)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
@@ -137,9 +132,10 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         &mut self,
         substate_address: SubstateAddress,
         committee_bucket: Shard,
+        epoch: Epoch,
     ) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend
-            .validator_nodes_set_committee_bucket(self.tx, substate_address, committee_bucket)
+            .validator_nodes_set_committee_bucket(self.tx, substate_address, committee_bucket, epoch)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 }

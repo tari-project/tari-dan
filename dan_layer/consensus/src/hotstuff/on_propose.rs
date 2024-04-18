@@ -22,6 +22,7 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         Command,
+        EpochEvent,
         ForeignProposal,
         ForeignSendCounters,
         HighQc,
@@ -141,8 +142,29 @@ where TConsensusSpec: ConsensusSpec
             current_base_layer_block_hash
         };
 
-        let base_layer_block_height =
-            std::cmp::max(qc_block.base_layer_block_height(), current_base_layer_block_height);
+        let locked_block = self.store.with_read_tx(|tx| {
+            let locked_block = LockedBlock::get(tx)?;
+            Block::get(tx, locked_block.block_id())
+        })?;
+        // If epoch has changed, we should first end the epoch with an EpochEvent::End
+        let epoch_end = !locked_block.is_epoch_end() && // If we didn't locked block with an EpochEvent::End
+            (qc_block.epoch() < epoch || qc_block.is_epoch_end()) && // The last block is from previous epoch or it is an EpochEnd block
+            !qc_block.is_genesis(); // If the previous epoch is the genesis epoch, we don't need to end it (there was no committee at epoch 0)
+
+        // If the epoch is changed, we use the current epoch
+        let epoch = if epoch_end { qc_block.epoch() } else { epoch };
+        let base_layer_block_hash = if epoch_end {
+            self.epoch_manager.get_last_block_of_current_epoch().await?
+        } else {
+            base_layer_block_hash
+        };
+        let base_layer_block_height = self
+            .epoch_manager
+            .get_base_layer_block_height(base_layer_block_hash)
+            .await?
+            .unwrap();
+        // The epoch is greater only when the EpochEnd event is locked.
+        let epoch_start = qc_block.epoch() < epoch;
 
         let next_block = self.store.with_write_tx(|tx| {
             let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
@@ -158,6 +180,8 @@ where TConsensusSpec: ConsensusSpec
                 is_newview_propose,
                 base_layer_block_height,
                 base_layer_block_hash,
+                epoch_start,
+                epoch_end,
             )?;
 
             next_block.as_last_proposed().set(tx)?;
@@ -216,10 +240,12 @@ where TConsensusSpec: ConsensusSpec
         empty_block: bool,
         base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
+        epoch_start: bool,
+        epoch_end: bool,
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
-        let batch = if empty_block {
+        let batch = if empty_block | epoch_end | epoch_start {
             vec![]
         } else {
             self.transaction_pool.get_batch_for_next_block(tx, TARGET_BLOCK_SIZE)?
@@ -231,33 +257,37 @@ where TConsensusSpec: ConsensusSpec
         let mut substate_changes = vec![];
         let locked_block = LockedBlock::get(tx)?;
         let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
-        let commands = ForeignProposal::get_all_new(tx)?
-            .into_iter()
-            .filter(|foreign_proposal| {
-                // If the foreign proposal is already pending, don't propose it again
-                !pending_proposals.iter().any(|pending_proposal| {
-                    pending_proposal.bucket == foreign_proposal.bucket &&
-                        pending_proposal.block_id == foreign_proposal.block_id
-                }) && foreign_proposal.base_layer_block_height <= base_layer_block_height
-                // If the proposal base layer
-                // height is too high, ignore
-                // for now.
-            })
-            .map(|mut foreign_proposal| {
-                foreign_proposal.set_proposed_height(parent_block.height().saturating_add(NodeHeight(1)));
-                Ok(Command::ForeignProposal(foreign_proposal))
-            })
-            .chain(batch.into_iter().map(|t| {
-                let command = transaction_pool_record_to_command(tx, &t, local_committee_shard, &mut substate_changes)?;
-                total_leader_fee += command
-                    .committing()
-                    .and_then(|tx| tx.leader_fee.as_ref())
-                    .map(|f| f.fee)
-                    .unwrap_or(0);
-                Ok::<_, HotStuffError>(command)
-            }))
-            .collect::<Result<BTreeSet<_>, HotStuffError>>()?;
-
+        let commands = if epoch_start {
+            BTreeSet::from_iter(vec![Command::EpochEvent(EpochEvent::Start)])
+        } else if epoch_end {
+            BTreeSet::from_iter(vec![Command::EpochEvent(EpochEvent::End)])
+        } else {
+            ForeignProposal::get_all_new(tx)?
+                .into_iter()
+                .filter(|foreign_proposal| {
+                    // If the foreign proposal is already pending, don't propose it again
+                    !pending_proposals.iter().any(|pending_proposal| {
+                        pending_proposal.bucket == foreign_proposal.bucket &&
+                            pending_proposal.block_id == foreign_proposal.block_id
+                    })// If the proposal base layer height is too high, ignore for now.
+                    && foreign_proposal.base_layer_block_height <= base_layer_block_height
+                })
+                .map(|mut foreign_proposal| {
+                    foreign_proposal.set_proposed_height(parent_block.height().saturating_add(NodeHeight(1)));
+                    Ok(Command::ForeignProposal(foreign_proposal))
+                })
+                .chain(batch.into_iter().map(|t| {
+                    let command =
+                        transaction_pool_record_to_command(tx, &t, local_committee_shard, &mut substate_changes)?;
+                    total_leader_fee += command
+                        .committing()
+                        .and_then(|tx| tx.leader_fee.as_ref())
+                        .map(|f| f.fee)
+                        .unwrap_or(0);
+                    Ok::<_, HotStuffError>(command)
+                }))
+                .collect::<Result<BTreeSet<_>, HotStuffError>>()?
+        };
         debug!(
             target: LOG_TARGET,
             "command(s) for next block: [{}]",

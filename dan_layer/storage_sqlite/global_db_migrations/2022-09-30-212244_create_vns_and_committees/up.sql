@@ -28,3 +28,4 @@ create table validator_nodes (
 );
 
 create index validator_nodes_epoch_index on validator_nodes (epoch);
+create unique index validator_nodes_public_key_unique_index on validator_nodes (public_key);

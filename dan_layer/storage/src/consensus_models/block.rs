@@ -107,6 +107,7 @@ pub struct Block {
 }
 
 impl Block {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         network: Network,
         parent: BlockId,
@@ -151,6 +152,7 @@ impl Block {
         block
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn load(
         id: BlockId,
         network: Network,
@@ -304,6 +306,14 @@ impl Block {
 impl Block {
     pub fn is_genesis(&self) -> bool {
         self.id.is_genesis()
+    }
+
+    pub fn is_epoch_start(&self) -> bool {
+        self.commands.iter().any(|c| c.is_epoch_start())
+    }
+
+    pub fn is_epoch_end(&self) -> bool {
+        self.commands.iter().any(|c| c.is_epoch_end())
     }
 
     pub fn all_transaction_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {

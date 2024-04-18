@@ -163,6 +163,14 @@ impl EpochManagerReader for TestEpochManager {
         Ok(self.inner.lock().await.current_block_info)
     }
 
+    async fn get_last_block_of_current_epoch(&self) -> Result<FixedHash, EpochManagerError> {
+        Ok(self.inner.lock().await.last_block_of_current_epoch)
+    }
+
+    async fn is_last_block_of_epoch(&self, _block_height: u64) -> Result<bool, EpochManagerError> {
+        Ok(false)
+    }
+
     async fn is_epoch_active(&self, _epoch: Epoch) -> Result<bool, EpochManagerError> {
         Ok(self.inner.lock().await.is_epoch_active)
     }
@@ -289,6 +297,7 @@ impl EpochManagerReader for TestEpochManager {
 pub struct TestEpochManagerState {
     pub current_epoch: Epoch,
     pub current_block_info: (u64, FixedHash),
+    pub last_block_of_current_epoch: FixedHash,
     pub is_epoch_active: bool,
     pub validator_shards: HashMap<TestAddress, (Shard, SubstateAddress, PublicKey, Option<PublicKey>)>,
     pub committees: HashMap<Shard, Committee<TestAddress>>,
@@ -300,6 +309,7 @@ impl Default for TestEpochManagerState {
         Self {
             current_epoch: Epoch(0),
             current_block_info: (0, FixedHash::default()),
+            last_block_of_current_epoch: FixedHash::default(),
             validator_shards: HashMap::new(),
             is_epoch_active: false,
             committees: HashMap::new(),

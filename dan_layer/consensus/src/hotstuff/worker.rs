@@ -9,9 +9,9 @@ use std::{
 
 use log::*;
 use tari_common::configuration::Network;
-use tari_dan_common_types::{optional::Optional, NodeHeight};
+use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
-    consensus_models::{Block, HighQc, LastSentVote, LastVoted, LeafBlock, TransactionPool},
+    consensus_models::{Block, HighQc, LastVoted, LeafBlock, LockedBlock, TransactionPool},
     StateStore,
 };
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
@@ -324,22 +324,23 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     return Err(HotStuffError::NotRegisteredForCurrentEpoch { epoch });
                 }
 
+                // TODO: This is breaking my testing right now (division by zero, from time to time)
                 // Send the last vote to the leader at the next epoch so that they can justify the current tip.
-                if let Some(last_voted) = self.state_store.with_read_tx(|tx| LastSentVote::get(tx)).optional()? {
-                    info!(
-                        target: LOG_TARGET,
-                        "💌 Sending last vote to the leader at epoch {}: {}",
-                        epoch,
-                        last_voted
-                    );
-                    let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
-                    let leader = self
-                        .leader_strategy
-                        .get_leader_for_next_block(&local_committee, last_voted.block_height);
-                    self.outbound_messaging
-                        .send(leader.clone(), HotstuffMessage::Vote(last_voted.into()))
-                        .await?;
-                }
+                // if let Some(last_voted) = self.state_store.with_read_tx(|tx| LastSentVote::get(tx)).optional()? {
+                //     info!(
+                //         target: LOG_TARGET,
+                //         "💌 Sending last vote to the leader at epoch {}: {}",
+                //         epoch,
+                //         last_voted
+                //     );
+                //     let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
+                //     let leader = self
+                //         .leader_strategy
+                //         .get_leader_for_next_block(&local_committee, last_voted.block_height);
+                //     self.outbound_messaging
+                //         .send(leader.clone(), HotstuffMessage::Vote(last_voted.into()))
+                //         .await?;
+                // }
             },
             EpochManagerEvent::ThisValidatorIsRegistered { .. } => {},
         }
@@ -415,8 +416,16 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             Some(leaf_block) => leaf_block,
             None => self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?,
         };
+        let locked_block = self
+            .state_store
+            .with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
         let current_epoch = self.epoch_manager.current_epoch().await?;
-        let local_committee = self.epoch_manager.get_local_committee(current_epoch).await?;
+        let epoch = if locked_block.is_epoch_end() || locked_block.is_genesis() {
+            current_epoch
+        } else {
+            locked_block.epoch()
+        };
+        let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
 
         let is_leader =
             self.leader_strategy

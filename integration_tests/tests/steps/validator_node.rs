@@ -441,3 +441,54 @@ async fn when_i_wait_for_validator_leaf_block_at_least(world: &mut TariWorld, na
         );
     }
 }
+
+#[when(expr = "Block count on VN {word} is at least {int}")]
+async fn when_count(world: &mut TariWorld, vn_name: String, count: u64) {
+    let vn = world.get_validator_node(&vn_name);
+    let mut client = vn.create_client();
+    for _ in 0..20 {
+        if client.get_blocks_count().await.unwrap().count as u64 >= count {
+            return;
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+    panic!("Block count on VN {vn_name} is less than {count}");
+}
+
+#[then(expr = "the validator node {word} switches to epoch {int}")]
+async fn then_validator_node_switches_epoch(world: &mut TariWorld, vn_name: String, epoch: u64) {
+    let vn = world.get_validator_node(&vn_name);
+    let mut client = vn.create_client();
+    for _ in 0..200 {
+        let list_block = client
+            .list_blocks(ListBlocksRequest {
+                from_id: None,
+                limit: 4,
+            })
+            .await;
+        let blocks = list_block.unwrap().blocks;
+        let newest = blocks.first().expect("Couldn't get blocks");
+        if newest.epoch().as_u64() == epoch {
+            // The newest block as expected should be the EpochStart event.
+            assert!(newest
+                .commands()
+                .contains(&tari_dan_storage::consensus_models::Command::EpochEvent(
+                    tari_dan_storage::consensus_models::EpochEvent::Start
+                )));
+            // The 3 blocks before it should be all End events. 3 because we need to bury the epoch start to locked
+            // block.
+            for block in &blocks[1..] {
+                assert!(block
+                    .commands()
+                    .contains(&tari_dan_storage::consensus_models::Command::EpochEvent(
+                        tari_dan_storage::consensus_models::EpochEvent::End
+                    )));
+                // All the epoch ends should be in previous epoch.
+                assert_eq!(block.epoch().as_u64() + 1, epoch);
+            }
+            return;
+        }
+        tokio::time::sleep(Duration::from_secs(8)).await;
+    }
+    panic!("Validator node {vn_name} did not switch to epoch {epoch}");
+}

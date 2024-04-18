@@ -273,7 +273,15 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             )));
         }
 
-        task::spawn(BlockSyncTask::new(self.shard_state_store.clone(), start_block, sender).run());
+        task::spawn(
+            BlockSyncTask::new(
+                self.shard_state_store.clone(),
+                start_block,
+                req.up_to_epoch.map(|epoch| epoch.into()),
+                sender,
+            )
+            .run(),
+        );
 
         Ok(Streaming::new(receiver))
     }

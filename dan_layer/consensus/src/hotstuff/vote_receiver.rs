@@ -80,24 +80,23 @@ where TConsensusSpec: ConsensusSpec
         message: VoteMessage,
         check_leadership: bool,
     ) -> Result<bool, HotStuffError> {
-        let current_epoch = self.epoch_manager.current_epoch().await?;
         // Is a committee member sending us this vote?
-        let committee = self.epoch_manager.get_local_committee(current_epoch).await?;
+        let committee = self.epoch_manager.get_local_committee(message.epoch).await?;
         if !committee.contains(&from) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
-                epoch: current_epoch,
+                epoch: message.epoch,
                 sender: from.to_string(),
                 context: "OnReceiveVote".to_string(),
             });
         }
 
         // Are we the leader for the block being voted for?
-        let our_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
+        let our_vn = self.epoch_manager.get_our_validator_node(message.epoch).await?;
 
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_shard(message.epoch).await?;
 
         // Get the sender shard, and check that they are in the local committee
-        let sender_vn = self.epoch_manager.get_validator_node(current_epoch, &from).await?;
+        let sender_vn = self.epoch_manager.get_validator_node(message.epoch, &from).await?;
         if message.signature.public_key != sender_vn.public_key {
             return Err(HotStuffError::RejectingVoteNotSentBySigner {
                 address: from.to_string(),
@@ -107,7 +106,7 @@ where TConsensusSpec: ConsensusSpec
 
         if !local_committee_shard.includes_substate_address(&sender_vn.shard_key) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
-                epoch: current_epoch,
+                epoch: message.epoch,
                 sender: message.signature.public_key.to_string(),
                 context: "OnReceiveVote".to_string(),
             });

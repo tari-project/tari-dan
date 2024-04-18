@@ -52,11 +52,19 @@ diesel::table! {
         public_key -> Binary,
         shard_key -> Binary,
         epoch -> BigInt,
-        committee_bucket -> Nullable<BigInt>,
         fee_claim_public_key -> Binary,
         address -> Text,
         sidechain_id -> Nullable<Binary>,
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(bmt_cache, epochs, metadata, templates, validator_nodes,);
+diesel::table! {
+    committees (id) {
+        id -> Integer,
+        public_key -> Binary,
+        epoch -> BigInt,
+        committee_bucket -> BigInt,
+    }
+}
+
+diesel::allow_tables_to_appear_in_same_query!(bmt_cache, committees, epochs, metadata, templates, validator_nodes);
