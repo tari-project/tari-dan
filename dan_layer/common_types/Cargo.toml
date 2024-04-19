@@ -13,7 +13,7 @@ tari_common = { workspace = true }
 tari_common_types = { workspace = true }
 tari_crypto = { workspace = true, features = ["borsh"] }
 tari_engine_types = { workspace = true }
-tari_hashing = {workspace = true }
+tari_hashing = { workspace = true }
 tari_mmr = { workspace = true }
 
 libp2p-identity = { workspace = true, features = [
