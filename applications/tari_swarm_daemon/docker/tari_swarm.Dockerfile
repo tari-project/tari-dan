@@ -65,16 +65,17 @@ RUN if [ "${BUILDARCH}" != "${TARGETARCH}" ] && [ "${ARCH}" = "native" ] ; then 
       echo "!! Cross-compile and native ARCH not a good idea !! " ; \
       fi
 
-WORKDIR /tari
 
-ADD tari .
-ADD cross-compile-aarch64.sh .
 
-RUN /tari/scripts/install_ubuntu_dependencies.sh
+ADD sources/tari /home/tari/sources/tari
+
+WORKDIR /home/tari/sources/tari
+
+RUN ./scripts/install_ubuntu_dependencies.sh
 RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; then \
       # Hardcoded ARM64 envs for cross-compiling - FixMe soon
       # source /tari/cross-compile-aarch64.sh
-      . /tari/cross-compile-aarch64.sh ; \
+      . ../cross-compile-aarch64.sh ; \
       fi && \
       if [ -n "${RUST_TOOLCHAIN}" ] ; then \
       # Install a non-standard toolchain if it has been requested.
@@ -90,9 +91,9 @@ RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; 
       --bin minotari_console_wallet \
       --bin minotari_miner && \
       # Copy executable out of the cache so it is available in the runtime image.
-      cp -v /tari/target/${BUILD_TARGET}release/minotari_node /usr/local/bin/ && \
-      cp -v /tari/target/${BUILD_TARGET}release/minotari_console_wallet /usr/local/bin/ && \
-      cp -v /tari/target/${BUILD_TARGET}release/minotari_miner /usr/local/bin/minotari_sha && \
+      cp -v ./target/${BUILD_TARGET}release/minotari_node /usr/local/bin/ && \
+      cp -v ./target/${BUILD_TARGET}release/minotari_console_wallet /usr/local/bin/ && \
+      cp -v ./target/${BUILD_TARGET}release/minotari_miner /usr/local/bin/minotari_sha && \
       echo "Tari Build Done"
 
 # rust source compile with cross platform build support
@@ -147,30 +148,31 @@ RUN if [ "${BUILDARCH}" != "${TARGETARCH}" ] && [ "${ARCH}" = "native" ] ; then 
       echo "!! Cross-compile and native ARCH not a good idea !! " ; \
       fi
 
-WORKDIR /tari-dan
+ADD sources/tari-dan /home/tari/sources/tari-dan
 
-ADD tari-dan .
-ADD cross-compile-aarch64.sh .
-
-RUN /tari-dan/scripts/install_ubuntu_dependencies.sh
+WORKDIR /home/tari/sources/tari-dan
+RUN ./scripts/install_ubuntu_dependencies.sh
 RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; then \
       # Hardcoded ARM64 envs for cross-compiling - FixMe soon
       # source /tari-dan/cross-compile-aarch64.sh
-      . /tari-dan/cross-compile-aarch64.sh ; \
-      fi && \
-      if [ -n "${RUST_TOOLCHAIN}" ] ; then \
+      . ../cross-compile-aarch64.sh ; \
+      fi
+
+RUN if [ -n "${RUST_TOOLCHAIN}" ] ; then \
       # Install a non-standard toolchain if it has been requested.
       # By default we use the toolchain specified in rust-toolchain.toml
       rustup toolchain install ${RUST_TOOLCHAIN} --force-non-host ; \
-      fi && \
-      cd /tari-dan/applications/tari_indexer_web_ui && \
+      fi
+
+RUN  cd ./applications/tari_indexer_web_ui && \
       npm install react-scripts && \
-      npm run build && \
-      cd /tari-dan/applications/tari_validator_node_web_ui && \
+      npm run build
+
+RUN   cd ./applications/tari_validator_node_web_ui && \
       npm install react-scripts && \
-      npm run build && \
-      cd /tari-dan/ && \
-      rustup target add wasm32-unknown-unknown && \
+      npm run build
+
+RUN      rustup target add wasm32-unknown-unknown && \
       rustup target list --installed && \
       rustup toolchain list && \
       rustup show && \
@@ -184,13 +186,13 @@ RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; 
       --bin tari_validator_node_cli \
       --bin tari_swarm_daemon && \
       # Copy executable out of the cache so it is available in the runtime image.
-      cp -v /tari-dan/target/${BUILD_TARGET}release/tari_indexer /usr/local/bin/ && \
-      cp -v /tari-dan/target/${BUILD_TARGET}release/tari_dan_wallet_daemon /usr/local/bin/ && \
-      cp -v /tari-dan/target/${BUILD_TARGET}release/tari_dan_wallet_cli /usr/local/bin/ && \
-      cp -v /tari-dan/target/${BUILD_TARGET}release/tari_signaling_server /usr/local/bin/ && \
-      cp -v /tari-dan/target/${BUILD_TARGET}release/tari_validator_node /usr/local/bin/ && \
-      cp -v /tari-dan/target/${BUILD_TARGET}release/tari_validator_node_cli /usr/local/bin/ && \
-      cp -v /tari-dan/target/${BUILD_TARGET}release/tari_swarm /usr/local/bin/ && \
+      cp -v ./target/${BUILD_TARGET}release/tari_indexer /usr/local/bin/ && \
+      cp -v ./target/${BUILD_TARGET}release/tari_dan_wallet_daemon /usr/local/bin/ && \
+      cp -v ./target/${BUILD_TARGET}release/tari_dan_wallet_cli /usr/local/bin/ && \
+      cp -v ./target/${BUILD_TARGET}release/tari_signaling_server /usr/local/bin/ && \
+      cp -v ./target/${BUILD_TARGET}release/tari_validator_node /usr/local/bin/ && \
+      cp -v ./target/${BUILD_TARGET}release/tari_validator_node_cli /usr/local/bin/ && \
+      cp -v ./target/${BUILD_TARGET}release/tari_swarm_daemon /usr/local/bin/ && \
       echo "Tari Dan Build Done"
 
 # Create runtime base minimal image for the target platform executables
@@ -240,22 +242,22 @@ RUN rustup target list --installed && \
       rustup toolchain list && \
       rustup show
 
-RUN groupadd --gid 1000 tari && \
-      useradd --create-home --no-log-init --shell /bin/bash \
-      --home-dir /home/tari \
-      --uid 1000 --gid 1000 tari
-
 ENV dockerfile_target_platform=$TARGETPLATFORM
 ENV dockerfile_version=$VERSION
 ENV dockerfile_build_platform=$BUILDPLATFORM
 ENV rust_version=$RUST_VERSION
+
+RUN groupadd --gid 1000 tari && \
+      useradd --create-home --no-log-init --shell /bin/bash \
+      --home-dir /home/tari \
+      --uid 1000 --gid 1000 tari
 
 # Setup some folder structure
 RUN mkdir -p "/home/tari/sources/tari-connector" && \
       mkdir -p "/home/tari/sources/tari" && \
       mkdir -p "/home/tari/sources/tari-dan" && \
       mkdir -p "/home/tari/data" && \
-      chown -R tari:tari "/home/tari/" && \
+      chown -R tari:tari "/home/tari/sources" && \
       ln -vsf "/home/tari/sources/tari-connector/" "/usr/lib/node_modules/tari-connector" && \
       mkdir -p "/usr/local/lib/node_modules" && \
       chown -R tari:tari "/usr/local/lib/node_modules"
@@ -274,7 +276,7 @@ RUN rustup target list --installed && \
 WORKDIR /home/tari/sources
 #ADD --chown=tari:tari tari tari
 #ADD --chown=tari:tari tari-dan tari-dan
-ADD --chown=tari:tari tari-connector tari-connector
+ADD --chown=tari:tari sources/tari-connector /home/tari/sources/tari-connector
 
 WORKDIR /home/tari/sources/tari-connector
 RUN npm link
