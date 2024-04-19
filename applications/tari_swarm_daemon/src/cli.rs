@@ -1,8 +1,9 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{io, net::SocketAddr, path::PathBuf};
+use std::{net::SocketAddr, path::PathBuf};
 
+use anyhow::Context;
 use clap::Parser;
 use tari_common::configuration::Network;
 
@@ -37,7 +38,7 @@ impl Cli {
 pub struct CommonCli {
     #[clap(short = 'b', long, parse(from_os_str))]
     pub base_dir: Option<PathBuf>,
-    #[clap(short = 'c', long, parse(from_os_str), default_value = "config.toml")]
+    #[clap(short = 'c', long, parse(from_os_str), default_value = "./config.toml")]
     pub config_path: PathBuf,
     #[clap(short = 'n', long)]
     pub network: Option<Network>,
@@ -71,7 +72,7 @@ pub struct Overrides {
 }
 
 impl Overrides {
-    pub fn apply(&self, config: &mut Config) -> io::Result<()> {
+    pub fn apply(&self, config: &mut Config) -> anyhow::Result<()> {
         for exec_mut in &mut config.processes.executables {
             if let Some(ref root) = self.binaries_root {
                 let package = exec_mut
@@ -79,7 +80,11 @@ impl Overrides {
                     .as_ref()
                     .map(|c| c.package_name.clone())
                     .unwrap_or_else(|| instance_type_to_package_name(exec_mut.instance_type));
-                exec_mut.execuable_path = Some(root.canonicalize()?.join(package));
+                exec_mut.execuable_path = Some(
+                    root.canonicalize()
+                        .context("Root override path does not exist")?
+                        .join(package),
+                );
             }
             if self.no_compile {
                 exec_mut.compile = None;

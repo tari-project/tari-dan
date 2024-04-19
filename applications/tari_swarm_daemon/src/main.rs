@@ -1,9 +1,9 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{future::Future, io, pin::Pin};
+use std::{future::Future, pin::Pin};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use tari_common::configuration::Network;
 use tari_shutdown::Shutdown;
 use tokio::{fs, signal::unix::SignalKind};
@@ -41,8 +41,10 @@ async fn main() -> anyhow::Result<()> {
                 fs::create_dir_all(parent).await?;
             }
             let config = get_initial_config(&cli, args)?;
-            let file = fs::File::create(&config_path).await?;
-            config.write(file).await?;
+            let file = fs::File::create(&config_path)
+                .await
+                .with_context(|| anyhow!("Failed to open config path {}", config_path.display()))?;
+            config.write(file).await.context("Writing config failed")?;
             let config_path = config_path
                 .canonicalize()
                 .context("Failed to canonicalize config_path")?;
@@ -55,14 +57,14 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn get_initial_config(cli: &Cli, args: &InitArgs) -> io::Result<Config> {
+fn get_initial_config(cli: &Cli, args: &InitArgs) -> anyhow::Result<Config> {
     let mut config = get_base_config(cli)?;
     args.overrides.apply(&mut config)?;
     Ok(config)
 }
 
 #[allow(clippy::too_many_lines)]
-fn get_base_config(cli: &Cli) -> io::Result<Config> {
+fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
     let executables = vec![
         ExecutableConfig {
             instance_type: InstanceType::MinoTariNode,
@@ -158,16 +160,24 @@ fn get_base_config(cli: &Cli) -> io::Result<Config> {
         InstanceConfig::new(InstanceType::TariSignallingServer).with_name("Signalling server"),
     ];
 
+    let base_dir = cli
+        .common
+        .base_dir
+        .clone()
+        .or_else(|| {
+            cli.get_config_path()
+                .canonicalize()
+                .ok()
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        })
+        .unwrap_or_else(|| std::env::current_dir().unwrap());
+
     Ok(Config {
         network: cli.common.network.unwrap_or(Network::LocalNet),
         start_port: 12000,
-        base_dir: cli
-            .common
-            .base_dir
-            .clone()
-            .or_else(|| cli.get_config_path().parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| std::env::current_dir().unwrap())
-            .canonicalize()?,
+        base_dir: base_dir
+            .canonicalize()
+            .with_context(|| anyhow!("Base path '{}' does not exist", base_dir.display()))?,
         webserver: WebserverConfig::default(),
         processes: ProcessesConfig {
             force_compile: false,

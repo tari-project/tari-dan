@@ -287,6 +287,8 @@ RUN npm link tari-connector
 COPY --from=builder-tari /usr/local/bin/minotari_* /usr/local/bin/
 COPY --from=builder-tari-dan /usr/local/bin/tari_* /usr/local/bin/
 
+ARG DAN_TESTING_WEBUI_PORT=18000
+
 ENV DAN_TESTING_STEPS_CREATE_ACCOUNT=True
 ENV DAN_TESTING_STEPS_RUN_TARI_CONNECTOR_TEST_SITE=True
 ENV DAN_TESTING_USE_BINARY_EXECUTABLE=True
@@ -299,6 +301,10 @@ EXPOSE $DAN_TESTING_WEBUI_PORT
 EXPOSE 18001-18025
 
 # TODO: We should put the config in a volume to allow custom configuration but we apply these overrides anyway, so leaving as a TODO
-RUN [ "/usr/local/bin/tari_swarm", "init", "--webui-listen-address=0.0.0.0:${DAN_TESTING_WEBUI_PORT}", "--no-compile", "--binaries-root=/usr/local/bin", "--start-port=18001" ]
+RUN /usr/local/bin/tari_swarm_daemon init \
+    --webui-listen-address=0.0.0.0:$DAN_TESTING_WEBUI_PORT \
+    --no-compile --binaries-root=/usr/local/bin --start-port=18001
 # Set the config overrides on docker start incase they differ from the config
-CMD [ "/usr/local/bin/tari_swarm", "start", "--webui-listen-address=0.0.0.0:${DAN_TESTING_WEBUI_PORT}", "--no-compile", "--binaries-root=/usr/local/bin", "--start-port=18001" ]
+CMD /usr/local/bin/tari_swarm_daemon start \
+    --webui-listen-address=0.0.0.0:$DAN_TESTING_WEBUI_PORT \
+    --no-compile --binaries-root=/usr/local/bin --start-port=18001
