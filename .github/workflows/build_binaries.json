@@ -34,7 +34,8 @@
     "target": "aarch64-apple-darwin",
     "cross": false,
     "target_cpu": "generic",
-    "features": ""
+    "features": "",
+    "build_enabled": false
   },
   {
     "name": "windows-x64",
