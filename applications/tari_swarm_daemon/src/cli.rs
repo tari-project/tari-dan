@@ -61,7 +61,7 @@ pub struct InitArgs {
 
 #[derive(Debug, Clone, clap::Args)]
 pub struct Overrides {
-    #[clap(long)]
+    #[clap(long, env = "TARI_SWARM_WEBUI_LISTEN_ADDRESS")]
     pub webui_listen_address: Option<SocketAddr>,
     #[clap(long)]
     pub no_compile: bool,

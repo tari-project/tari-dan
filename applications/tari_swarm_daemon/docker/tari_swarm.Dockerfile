@@ -293,6 +293,7 @@ ENV DAN_TESTING_STEPS_CREATE_ACCOUNT=True
 ENV DAN_TESTING_STEPS_RUN_TARI_CONNECTOR_TEST_SITE=True
 ENV DAN_TESTING_USE_BINARY_EXECUTABLE=True
 ENV DAN_TESTING_NONINTERACTIVE=True
+ENV TARI_SWARM_WEBUI_LISTEN_ADDRESS="0.0.0.0:${DAN_TESTING_WEBUI_PORT}"
 ENV DAN_TESTING_DATA_FOLDER=/home/tari/data
 ENV TARI_BINS_FOLDER=/usr/local/bin/
 ENV TARI_DAN_BINS_FOLDER=/usr/local/bin/
@@ -305,6 +306,4 @@ RUN /usr/local/bin/tari_swarm_daemon init \
     --webui-listen-address=0.0.0.0:$DAN_TESTING_WEBUI_PORT \
     --no-compile --binaries-root=/usr/local/bin --start-port=18001
 # Set the config overrides on docker start incase they differ from the config
-CMD /usr/local/bin/tari_swarm_daemon start \
-    --webui-listen-address=0.0.0.0:$DAN_TESTING_WEBUI_PORT \
-    --no-compile --binaries-root=/usr/local/bin --start-port=18001
+CMD /usr/local/bin/tari_swarm_daemon start --no-compile --binaries-root=/usr/local/bin --start-port=18001
