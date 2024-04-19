@@ -29,7 +29,7 @@ use crate::{
         processes::{MinoTariMinerProcess, MinoTariNodeProcess, MinoTariWalletProcess, ValidatorNodeProcess},
         IndexerProcess,
         Instance,
-        SignallingServerProcess,
+        SignalingServerProcess,
         WalletDaemonProcess,
     },
 };
@@ -44,7 +44,7 @@ pub struct InstanceManager {
     validator_nodes: HashMap<InstanceId, ValidatorNodeProcess>,
     indexers: HashMap<InstanceId, IndexerProcess>,
     wallet_daemons: HashMap<InstanceId, WalletDaemonProcess>,
-    signalling_servers: HashMap<InstanceId, SignallingServerProcess>,
+    signaling_servers: HashMap<InstanceId, SignalingServerProcess>,
     port_allocator: PortAllocator,
     instance_id: InstanceId,
 }
@@ -61,7 +61,7 @@ impl InstanceManager {
             validator_nodes: HashMap::new(),
             indexers: HashMap::new(),
             wallet_daemons: HashMap::new(),
-            signalling_servers: HashMap::new(),
+            signaling_servers: HashMap::new(),
             port_allocator: PortAllocator::new(start_port),
             instance_id: 0,
         }
@@ -215,9 +215,9 @@ impl InstanceManager {
                 self.wallet_daemons
                     .insert(instance_id, WalletDaemonProcess::new(instance));
             },
-            InstanceType::TariSignallingServer => {
-                self.signalling_servers
-                    .insert(instance_id, SignallingServerProcess::new(instance));
+            InstanceType::TariSignalingServer => {
+                self.signaling_servers
+                    .insert(instance_id, SignalingServerProcess::new(instance));
             },
         }
 

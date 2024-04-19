@@ -115,6 +115,6 @@ fn instance_type_to_package_name(instance_type: InstanceType) -> String {
         InstanceType::TariValidatorNode => "tari_validator_node".to_string(),
         InstanceType::TariIndexer => "tari_indexer".to_string(),
         InstanceType::TariWalletDaemon => "tari_dan_wallet_daemon".to_string(),
-        InstanceType::TariSignallingServer => "tari_signalling_server".to_string(),
+        InstanceType::TariSignalingServer => "tari_signaling_server".to_string(),
     }
 }

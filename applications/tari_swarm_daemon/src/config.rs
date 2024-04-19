@@ -126,7 +126,7 @@ pub enum InstanceType {
     TariValidatorNode,
     TariIndexer,
     TariWalletDaemon,
-    TariSignallingServer,
+    TariSignalingServer,
 }
 
 impl Display for InstanceType {

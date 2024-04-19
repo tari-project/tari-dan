@@ -3,11 +3,11 @@
 
 use crate::process_manager::Instance;
 
-pub struct SignallingServerProcess {
+pub struct SignalingServerProcess {
     instance: Instance,
 }
 
-impl SignallingServerProcess {
+impl SignalingServerProcess {
     pub fn new(instance: Instance) -> Self {
         Self { instance }
     }
