@@ -1,6 +1,6 @@
 # NOTE: When editing this version, also edit the versions in template_built_in/templates/account and account_nft
 [workspace.package]
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 authors = ["The Tari Development Community"]
 repository = "https://github.com/tari-project/tari-dan"
@@ -71,7 +71,7 @@ proto_builder = { path = "networking/proto_builder" }
 sqlite_message_logger = { path = "networking/sqlite_message_logger" }
 tari_base_node_client = { path = "clients/base_node_client" }
 # avoid including default features so each crate can choose which ones to import
-tari_bor = { version = "0.5.0", path = "dan_layer/tari_bor", default-features = false }
+tari_bor = { version = "0.5", path = "dan_layer/tari_bor", default-features = false }
 tari_rpc_state_sync = { path = "dan_layer/rpc_state_sync" }
 tari_consensus = { path = "dan_layer/consensus" }
 tari_dan_app_utilities = { path = "applications/tari_dan_app_utilities" }
@@ -95,10 +95,10 @@ tari_rpc_macros = { path = "networking/rpc_macros" }
 tari_state_store_sqlite = { path = "dan_layer/state_store_sqlite" }
 tari_state_tree = { path = "dan_layer/state_tree" }
 tari_swarm = { path = "networking/swarm" }
-tari_template_abi = { version = "0.5.0", path = "dan_layer/template_abi" }
+tari_template_abi = { version = "0.5", path = "dan_layer/template_abi" }
 tari_template_builtin = { path = "dan_layer/template_builtin" }
 tari_template_lib = { path = "dan_layer/template_lib" }
-tari_template_macros = { version = "0.5.0", path = "dan_layer/template_macros" }
+tari_template_macros = { version = "0.5", path = "dan_layer/template_macros" }
 tari_template_test_tooling = { path = "dan_layer/template_test_tooling" }
 tari_transaction = { path = "dan_layer/transaction" }
 tari_transaction_manifest = { path = "dan_layer/transaction_manifest" }
