@@ -27,4 +27,4 @@ mod error;
 // mod json_encoding;
 mod server;
 
-pub use server::run_json_rpc;
+pub use server::spawn_json_rpc;

@@ -23,6 +23,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json::json;
 use tari_dan_wallet_sdk::apis::jwt::JwtApiError;
 use tari_shutdown::ShutdownSignal;
+use tokio::task;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use super::handlers::{substates, templates, HandlerContext};
@@ -57,12 +58,12 @@ async fn extract_token<B>(mut request: Request<B>, next: Next<B>) -> Result<Resp
     Ok(response)
 }
 
-pub async fn listen(
+pub fn spawn_listener(
     preferred_address: SocketAddr,
     signaling_server_address: SocketAddr,
     context: HandlerContext,
     shutdown_signal: ShutdownSignal,
-) -> Result<(), anyhow::Error> {
+) -> anyhow::Result<(SocketAddr, task::JoinHandle<anyhow::Result<()>>)> {
     let router = Router::new()
         .route("/", post(handler))
         .route("/json_rpc", post(handler))
@@ -76,12 +77,16 @@ pub async fn listen(
 
     let server = axum::Server::try_bind(&preferred_address)?;
     let server = server.serve(router.into_make_service());
-    info!(target: LOG_TARGET, "🌐 JSON-RPC listening on {}", server.local_addr());
+    let listen_addr = server.local_addr();
+    info!(target: LOG_TARGET, "🌐 JSON-RPC listening on {listen_addr}");
     let server = server.with_graceful_shutdown(shutdown_signal);
-    server.await?;
+    let task = tokio::spawn(async move {
+        server.await?;
+        Ok(())
+    });
 
     info!(target: LOG_TARGET, "💤 Stopping JSON-RPC");
-    Ok(())
+    Ok((listen_addr, task))
 }
 
 async fn handler(
