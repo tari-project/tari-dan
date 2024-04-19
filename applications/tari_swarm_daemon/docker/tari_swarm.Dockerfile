@@ -182,7 +182,7 @@ RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "${TARGETARCH}" ] ; 
       --bin tari_signaling_server \
       --bin tari_validator_node \
       --bin tari_validator_node_cli \
-      --bin tari_swarm && \
+      --bin tari_swarm_daemon && \
       # Copy executable out of the cache so it is available in the runtime image.
       cp -v /tari-dan/target/${BUILD_TARGET}release/tari_indexer /usr/local/bin/ && \
       cp -v /tari-dan/target/${BUILD_TARGET}release/tari_dan_wallet_daemon /usr/local/bin/ && \

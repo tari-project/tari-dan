@@ -8561,44 +8561,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "171758edb47aa306a78dfa4ab9aeb5167405bd4e3dc2b64e88f6a84bbe98bd63"
 
 [[package]]
-name = "swarm_daemon"
-version = "0.4.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "axum-jrpc",
- "clap 3.2.25",
- "fern",
- "futures 0.3.30",
- "humantime 2.1.0",
- "include_dir",
- "json5",
- "lockfile",
- "log",
- "mime_guess",
- "minotari_node_grpc_client",
- "minotari_wallet_grpc_client",
- "nix 0.28.0",
- "reqwest",
- "serde",
- "serde_json",
- "tari_common",
- "tari_common_types",
- "tari_core",
- "tari_crypto",
- "tari_engine_types",
- "tari_shutdown",
- "tari_validator_node_client",
- "thiserror",
- "tokio",
- "toml 0.8.12",
- "tonic 0.8.3",
- "tower-http",
- "url",
-]
-
-[[package]]
 name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9912,6 +9874,44 @@ dependencies = [
  "libp2p-substream",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "tari_swarm_daemon"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "axum-jrpc",
+ "clap 3.2.25",
+ "fern",
+ "futures 0.3.30",
+ "humantime 2.1.0",
+ "include_dir",
+ "json5",
+ "lockfile",
+ "log",
+ "mime_guess",
+ "minotari_node_grpc_client",
+ "minotari_wallet_grpc_client",
+ "nix 0.28.0",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tari_common",
+ "tari_common_types",
+ "tari_core",
+ "tari_crypto",
+ "tari_engine_types",
+ "tari_shutdown",
+ "tari_validator_node_client",
+ "thiserror",
+ "tokio",
+ "toml 0.8.12",
+ "tonic 0.8.3",
+ "tower-http",
+ "url",
 ]
 
 [[package]]

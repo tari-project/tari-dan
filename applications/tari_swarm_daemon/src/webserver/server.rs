@@ -62,7 +62,7 @@ pub async fn run(context: HandlerContext) -> anyhow::Result<()> {
     Ok(())
 }
 
-static WEB_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../webui/dist");
+static WEB_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/webui/dist");
 
 async fn handler(uri: Uri) -> impl IntoResponse {
     let path = uri.path();
