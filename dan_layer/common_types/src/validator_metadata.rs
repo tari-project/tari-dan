@@ -4,11 +4,8 @@
 use serde::{Deserialize, Serialize};
 use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
-use tari_crypto::hash_domain;
 use tari_engine_types::base_layer_hashing::TariBaseLayerHasher32;
-
-// TODO: add to tari_hash_domains
-hash_domain!(TransactionHashDomain, "com.tari.base_layer.core.transactions", 0);
+use tari_hashing::TransactionHashDomain;
 
 use crate::SubstateAddress;
 
