@@ -225,8 +225,10 @@ where TStore: PeerStore
             self.pending_events.shrink_to_fit();
         }
 
-        // If we've synced from the peer already, there's nothing further to do except release the semaphore lock
+        // If we've synced from the peer already or if the sync failed, there's nothing further to do
         if self.is_complete {
+            // Ensure that the semaphore is released
+            self.aquired = None;
             return Poll::Pending;
         }
 
@@ -273,6 +275,8 @@ where TStore: PeerStore
     }
 
     fn on_behaviour_event(&mut self, want_list: Self::FromBehaviour) {
+        // Sync from existing connections if there are more want-peers
+        self.is_complete = !want_list.is_empty();
         self.current_want_list = want_list;
     }
 
