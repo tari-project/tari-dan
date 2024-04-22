@@ -125,17 +125,27 @@ where TConsensusSpec: ConsensusSpec
         let mut finalized_transactions = Vec::new();
         let qc_block = self
             .store
-            .with_read_tx(|tx| Block::get(tx, valid_block.block().justify().block_id()))?;
+            .with_read_tx(|tx| valid_block.block().justify().get_block(tx))?;
         let locked_block = self.store.with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
         // If the previous qc block was in different epoch, we have to have EpochEvent::Start
-        let epoch_start = qc_block.epoch() < valid_block.epoch();
+        let epoch_should_start = qc_block.epoch() < valid_block.epoch();
 
-        let epoch_end = qc_block.epoch() == valid_block.epoch() &&// If we didn't locked block with an EpochEvent::End
-            (qc_block.is_epoch_end() && !locked_block.is_epoch_end()) && // The last block is from previous epoch or it is an EpochEnd block
-            !qc_block.is_genesis(); // If the previous epoch is the genesis epoch, we don't need to end it (there was no committee at epoch 0)
+        let epoch_should_end =
+            // If the epoch has not changed yet
+            qc_block.epoch() == valid_block.epoch() &&
+            // If the last justified block or locked block proposes to end the epoch
+            qc_block.is_epoch_end() && !locked_block.is_epoch_end() &&
+            // If the previous epoch is the genesis epoch, we don't need to end it (there was no committee at epoch 0)
+            !qc_block.is_genesis();
+
         let maybe_decision = self.store.with_write_tx(|tx| {
-            let mut maybe_decision =
-                self.decide_on_block(tx, &local_committee_shard, valid_block.block(), epoch_start, epoch_end)?;
+            let mut maybe_decision = self.decide_on_block(
+                tx,
+                &local_committee_shard,
+                valid_block.block(),
+                epoch_should_start,
+                epoch_should_end,
+            )?;
 
             let is_accept_decision = maybe_decision.map(|d| d.is_accept()).unwrap_or(false);
             // Update nodes
@@ -208,12 +218,13 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         local_committee_shard: &CommitteeShard,
         block: &Block,
-        epoch_start: bool,
-        epoch_end: bool,
+        epoch_should_start: bool,
+        epoch_should_end: bool,
     ) -> Result<Option<QuorumDecision>, HotStuffError> {
         let mut maybe_decision = None;
         if self.should_vote(tx.deref_mut(), block)? {
-            maybe_decision = self.decide_what_to_vote(tx, block, local_committee_shard, epoch_start, epoch_end)?;
+            maybe_decision =
+                self.decide_what_to_vote(tx, block, local_committee_shard, epoch_should_start, epoch_should_end)?;
         }
 
         Ok(maybe_decision)
@@ -454,8 +465,8 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
         local_committee_shard: &CommitteeShard,
-        epoch_start: bool,
-        epoch_end: bool,
+        epoch_should_start: bool,
+        epoch_should_end: bool,
     ) -> Result<Option<QuorumDecision>, HotStuffError> {
         let mut total_leader_fee = 0;
         let mut locked_inputs = HashSet::new();
@@ -465,7 +476,7 @@ where TConsensusSpec: ConsensusSpec
         // It lives through the entire block so multiple transactions can be "chained" together in the same block
         let mut executor = self.transaction_executor_builder.build();
 
-        if epoch_start && !block.is_epoch_start() {
+        if epoch_should_start && !block.is_epoch_start() {
             warn!(
                 target: LOG_TARGET,
                 "❌ EpochEvent::Start command expected for block {} but not found",
@@ -474,7 +485,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(None);
         }
 
-        if epoch_end && !block.is_epoch_end() {
+        if epoch_should_end && !block.is_epoch_end() {
             warn!(
                 target: LOG_TARGET,
                 "❌ EpochEvent::End command expected for block {} but not found",
@@ -498,7 +509,7 @@ where TConsensusSpec: ConsensusSpec
             if let Command::EpochEvent(event) = cmd {
                 match event {
                     EpochEvent::Start => {
-                        if !epoch_start {
+                        if !epoch_should_start {
                             warn!(
                                 target: LOG_TARGET,
                                 "❌ EpochEvent::Start command received for block {} but it is not the start of the epoch",

@@ -147,7 +147,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
     ) -> Result<(), StorageError> {
         if let Some(up_to_epoch) = self.up_to_epoch {
             // Wait for the end of epoch block if the requested epoch has not yet completed
-            // TODO: handle this case more elegantly
+            // TODO: We should consider streaming blocks as they come in from consensus
             loop {
                 let block = self.store.with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
                 if block.is_epoch_end() && block.epoch() + Epoch(1) >= up_to_epoch {

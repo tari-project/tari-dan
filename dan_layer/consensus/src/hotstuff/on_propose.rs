@@ -144,7 +144,7 @@ where TConsensusSpec: ConsensusSpec
 
         let locked_block = self.store.with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
         // If epoch has changed, we should first end the epoch with an EpochEvent::End
-        let epoch_end =
+        let propose_epoch_end =
             // If we didn't locked block with an EpochEvent::End
             !locked_block.is_epoch_end() &&
             // The last block is from previous epoch or it is an EpochEnd block
@@ -153,8 +153,8 @@ where TConsensusSpec: ConsensusSpec
             !qc_block.is_genesis();
 
         // If the epoch is changed, we use the current epoch
-        let epoch = if epoch_end { qc_block.epoch() } else { epoch };
-        let base_layer_block_hash = if epoch_end {
+        let epoch = if propose_epoch_end { qc_block.epoch() } else { epoch };
+        let base_layer_block_hash = if propose_epoch_end {
             self.epoch_manager.get_last_block_of_current_epoch().await?
         } else {
             base_layer_block_hash
@@ -165,7 +165,7 @@ where TConsensusSpec: ConsensusSpec
             .await?
             .unwrap();
         // The epoch is greater only when the EpochEnd event is locked.
-        let epoch_start = qc_block.epoch() < epoch;
+        let propose_epoch_start = qc_block.epoch() < epoch;
 
         let next_block = self.store.with_write_tx(|tx| {
             let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
@@ -181,8 +181,8 @@ where TConsensusSpec: ConsensusSpec
                 is_newview_propose,
                 base_layer_block_height,
                 base_layer_block_hash,
-                epoch_start,
-                epoch_end,
+                propose_epoch_start,
+                propose_epoch_end,
             )?;
 
             next_block.as_last_proposed().set(tx)?;
@@ -241,12 +241,12 @@ where TConsensusSpec: ConsensusSpec
         empty_block: bool,
         base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
-        epoch_start: bool,
-        epoch_end: bool,
+        propose_epoch_start: bool,
+        propose_epoch_end: bool,
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
-        let batch = if empty_block | epoch_end | epoch_start {
+        let batch = if empty_block || propose_epoch_end || propose_epoch_start {
             vec![]
         } else {
             self.transaction_pool.get_batch_for_next_block(tx, TARGET_BLOCK_SIZE)?
@@ -258,9 +258,9 @@ where TConsensusSpec: ConsensusSpec
         let mut substate_changes = vec![];
         let locked_block = LockedBlock::get(tx)?;
         let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
-        let commands = if epoch_start {
+        let commands = if propose_epoch_start {
             BTreeSet::from_iter([Command::EpochEvent(EpochEvent::Start)])
-        } else if epoch_end {
+        } else if propose_epoch_end {
             BTreeSet::from_iter([Command::EpochEvent(EpochEvent::End)])
         } else {
             ForeignProposal::get_all_new(tx)?
