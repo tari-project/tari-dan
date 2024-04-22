@@ -113,7 +113,6 @@ impl Instance {
             return Ok(());
         };
 
-        self.child_mut().kill().await?;
         let pid = Pid::from_raw(pid as i32);
         kill(pid, Signal::SIGINT)?;
         self.child_mut().wait().await?;

@@ -205,14 +205,14 @@ async fn start(cli: &Cli) -> anyhow::Result<()> {
     tokio::select! {
         _ = signal => {
             log::info!("Terminating all instances...");
-            let num_instances = pm_handle.terminate_all().await?;
+            let num_instances = pm_handle.stop_all().await?;
             log::info!("Terminated {num_instances} instances");
         },
         result = webserver => {
-            result??;
             log::info!("Terminating all instances...");
-            let num_instances = pm_handle.terminate_all().await?;
+            let num_instances = pm_handle.stop_all().await?;
             log::info!("Terminated {num_instances} instances");
+            result??;
             log::info!("Webserver exited");
         },
         result = task_handle => {

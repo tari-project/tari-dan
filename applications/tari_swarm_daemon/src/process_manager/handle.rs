@@ -212,7 +212,7 @@ impl ProcessManagerHandle {
         rx_reply.await?
     }
 
-    pub(crate) async fn terminate_all(&self) -> anyhow::Result<usize> {
+    pub(crate) async fn stop_all(&self) -> anyhow::Result<usize> {
         let instances = self.list_instances(None).await?;
         let num_instances = instances.len();
         for instance in instances {
