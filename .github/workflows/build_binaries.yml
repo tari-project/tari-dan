@@ -19,6 +19,8 @@ on:
 env:
   TN_FILENAME: "tari_network_suite"
   TBN_BUNDLEID_BASE: "com.tari.network.pkg"
+  TARI_TARGET_NETWORK: igor
+  TARI_NETWORK: igor
   toolchain: stable
   matrix-json-file: ".github/workflows/build_binaries.json"
 
