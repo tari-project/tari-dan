@@ -47,7 +47,7 @@ export default function BlockDetails() {
   const [prepare, setPrepare] = useState<TransactionAtom[]>([]);
   const [localPrepared, setLocalPrepared] = useState<TransactionAtom[]>([]);
   const [accept, setAccept] = useState<TransactionAtom[]>([]);
-  const [epochEvent, setEpochEvent] = useState<EpochEvent>([]);
+  const [epochEvents, setEpochEvents] = useState<EpochEvent[]>([]);
   const [identity, setIdentity] = useState<GetIdentityResponse>();
   const [blockTime, setBlockTime] = useState<number>(0);
 
@@ -70,7 +70,7 @@ export default function BlockDetails() {
           setPrepare([]);
           setLocalPrepared([]);
           setAccept([]);
-          setEpochEvent([]);
+          setEpochEvents([]);
           for (let command of resp.block.commands) {
             if ("LocalOnly" in command) {
               let newLocalOnly = command.LocalOnly;
@@ -85,7 +85,8 @@ export default function BlockDetails() {
               let newAccept = command.Accept;
               setAccept((accept: TransactionAtom[]) => [...accept, newAccept]);
             } else if ("EpochEvent" in command) {
-              setEpochEvent(command.EpochEvent);
+              const newEpochEvent = command.EpochEvent;
+              setEpochEvents((epochEvents: EpochEvent[]) => [...epochEvents, newEpochEvent]);
             }
           }
         })
@@ -225,13 +226,13 @@ export default function BlockDetails() {
                     </div>
                   </>
                 )}
-                {epochEvent.length > 0 && (
+                {epochEvents.length > 0 && (
                   <Accordion expanded={expandedPanels.includes("panel1")} onChange={handleChange("panel1")}>
                     <AccordionSummary aria-controls="panel1bh-content" id="panel1bh-header">
                       <Typography>EpochEvent</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
-                      {epochEvent.toLowerCase() == "start" ? "Start of epoch" : "End of epoch"}
+                      <ul>{epochEvents.map((evt, i) => <li key={i}>{evt}</li>)}</ul>
                     </AccordionDetails>
                   </Accordion>
                 )}
