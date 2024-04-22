@@ -146,12 +146,11 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         current_block_id: &BlockId,
     ) -> Result<(), StorageError> {
         if let Some(up_to_epoch) = self.up_to_epoch {
+            // Wait for the end of epoch block if the requested epoch has not yet completed
+            // TODO: handle this case more elegantly
             loop {
-                let block = self.store.with_read_tx(|tx| {
-                    let locked_block = LockedBlock::get(tx)?;
-                    Block::get(tx, locked_block.block_id())
-                })?;
-                if block.is_epoch_end() && block.epoch().0 + 1 == up_to_epoch.0 {
+                let block = self.store.with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
+                if block.is_epoch_end() && block.epoch() + Epoch(1) >= up_to_epoch {
                     // If found the epoch end block, break.
                     break;
                 }
@@ -159,8 +158,9 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
             }
         }
         self.store.with_read_tx(|tx| {
-            // TODO: if there are any transactions this will break the syncing node.
+            // TODO: if there are any transactions in the block the syncing node will reject the block
 
+            // If syncing to epoch, sync to the leaf block
             let up_to_block = if self.up_to_epoch.is_none() {
                 let locked_block = LockedBlock::get(tx)?;
                 *locked_block.block_id()

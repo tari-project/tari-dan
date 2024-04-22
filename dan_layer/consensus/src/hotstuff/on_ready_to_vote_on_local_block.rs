@@ -126,10 +126,7 @@ where TConsensusSpec: ConsensusSpec
         let qc_block = self
             .store
             .with_read_tx(|tx| Block::get(tx, valid_block.block().justify().block_id()))?;
-        let locked_block = self.store.with_read_tx(|tx| {
-            let locked_block = LockedBlock::get(tx)?;
-            Block::get(tx, locked_block.block_id())
-        })?;
+        let locked_block = self.store.with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
         // If the previous qc block was in different epoch, we have to have EpochEvent::Start
         let epoch_start = qc_block.epoch() < valid_block.epoch();
 

@@ -142,14 +142,15 @@ where TConsensusSpec: ConsensusSpec
             current_base_layer_block_hash
         };
 
-        let locked_block = self.store.with_read_tx(|tx| {
-            let locked_block = LockedBlock::get(tx)?;
-            Block::get(tx, locked_block.block_id())
-        })?;
+        let locked_block = self.store.with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
         // If epoch has changed, we should first end the epoch with an EpochEvent::End
-        let epoch_end = !locked_block.is_epoch_end() && // If we didn't locked block with an EpochEvent::End
-            (qc_block.epoch() < epoch || qc_block.is_epoch_end()) && // The last block is from previous epoch or it is an EpochEnd block
-            !qc_block.is_genesis(); // If the previous epoch is the genesis epoch, we don't need to end it (there was no committee at epoch 0)
+        let epoch_end =
+            // If we didn't locked block with an EpochEvent::End
+            !locked_block.is_epoch_end() &&
+            // The last block is from previous epoch or it is an EpochEnd block
+            (qc_block.epoch() < epoch || qc_block.is_epoch_end()) &&
+            // If the previous epoch is the genesis epoch, we don't need to end it (there was no committee at epoch 0)
+            !qc_block.is_genesis();
 
         // If the epoch is changed, we use the current epoch
         let epoch = if epoch_end { qc_block.epoch() } else { epoch };
@@ -258,9 +259,9 @@ where TConsensusSpec: ConsensusSpec
         let locked_block = LockedBlock::get(tx)?;
         let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
         let commands = if epoch_start {
-            BTreeSet::from_iter(vec![Command::EpochEvent(EpochEvent::Start)])
+            BTreeSet::from_iter([Command::EpochEvent(EpochEvent::Start)])
         } else if epoch_end {
-            BTreeSet::from_iter(vec![Command::EpochEvent(EpochEvent::End)])
+            BTreeSet::from_iter([Command::EpochEvent(EpochEvent::End)])
         } else {
             ForeignProposal::get_all_new(tx)?
                 .into_iter()

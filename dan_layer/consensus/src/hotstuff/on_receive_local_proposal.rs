@@ -456,7 +456,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 if transaction.map_or(false, |t| t.final_decision().is_some()) {
                     // We don't know the transaction at all, or we know it but it's not finalised.
                     let mut tx_rec = self.transaction_pool.get(tx, candidate_block.as_leaf_block(), &tx_id)?;
-                    // If the transaction is still in the pool we have to check if it was at least localy prepared,
+                    // If the transaction is still in the pool we have to check if it was at least locally prepared,
                     // otherwise abort it.
                     if tx_rec.stage() == TransactionPoolStage::New || tx_rec.stage() == TransactionPoolStage::Prepared {
                         tx_rec.update_local_decision(tx, Decision::Abort)?;
