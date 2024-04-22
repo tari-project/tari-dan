@@ -22,7 +22,6 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-// import { transactionsGet } from '../../utils/json_rpc';
 import { Accordion, AccordionDetails, AccordionSummary } from "../../Components/Accordion";
 import { Grid, Table, TableContainer, TableBody, TableRow, TableCell, Button, Fade, Alert } from "@mui/material";
 import Typography from "@mui/material/Typography";
@@ -35,7 +34,7 @@ import Loading from "../../Components/Loading";
 import { getBlock, getIdentity } from "../../utils/json_rpc";
 import Transactions from "./Transactions";
 import { primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../utils/helpers";
-import type { Block, TransactionAtom } from "@tariproject/typescript-bindings";
+import type { Block, EpochEvent, TransactionAtom } from "@tariproject/typescript-bindings";
 import type { GetIdentityResponse } from "@tariproject/typescript-bindings/validator-node-client";
 
 export default function BlockDetails() {
@@ -48,6 +47,7 @@ export default function BlockDetails() {
   const [prepare, setPrepare] = useState<TransactionAtom[]>([]);
   const [localPrepared, setLocalPrepared] = useState<TransactionAtom[]>([]);
   const [accept, setAccept] = useState<TransactionAtom[]>([]);
+  const [epochEvent, setEpochEvent] = useState<EpochEvent>([]);
   const [identity, setIdentity] = useState<GetIdentityResponse>();
   const [blockTime, setBlockTime] = useState<number>(0);
 
@@ -70,6 +70,7 @@ export default function BlockDetails() {
           setPrepare([]);
           setLocalPrepared([]);
           setAccept([]);
+          setEpochEvent([]);
           for (let command of resp.block.commands) {
             if ("LocalOnly" in command) {
               let newLocalOnly = command.LocalOnly;
@@ -83,6 +84,8 @@ export default function BlockDetails() {
             } else if ("Accept" in command) {
               let newAccept = command.Accept;
               setAccept((accept: TransactionAtom[]) => [...accept, newAccept]);
+            } else if ("EpochEvent" in command) {
+              setEpochEvent(command.EpochEvent);
             }
           }
         })
@@ -222,9 +225,19 @@ export default function BlockDetails() {
                     </div>
                   </>
                 )}
-                {localOnly.length > 0 && (
+                {epochEvent.length > 0 && (
                   <Accordion expanded={expandedPanels.includes("panel1")} onChange={handleChange("panel1")}>
                     <AccordionSummary aria-controls="panel1bh-content" id="panel1bh-header">
+                      <Typography>EpochEvent</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      {epochEvent.toLowerCase() == "start" ? "Start of epoch" : "End of epoch"}
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+                {localOnly.length > 0 && (
+                  <Accordion expanded={expandedPanels.includes("panel2")} onChange={handleChange("panel2")}>
+                    <AccordionSummary aria-controls="panel2bh-content" id="panel2bh-header">
                       <Typography>LocalOnly</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
@@ -233,8 +246,8 @@ export default function BlockDetails() {
                   </Accordion>
                 )}
                 {prepare.length > 0 && (
-                  <Accordion expanded={expandedPanels.includes("panel1")} onChange={handleChange("panel1")}>
-                    <AccordionSummary aria-controls="panel1bh-content" id="panel1bh-header">
+                  <Accordion expanded={expandedPanels.includes("panel3")} onChange={handleChange("panel3")}>
+                    <AccordionSummary aria-controls="panel3bh-content" id="panel3bh-header">
                       <Typography>Prepare</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
@@ -243,8 +256,8 @@ export default function BlockDetails() {
                   </Accordion>
                 )}
                 {localPrepared.length > 0 && (
-                  <Accordion expanded={expandedPanels.includes("panel2")} onChange={handleChange("panel2")}>
-                    <AccordionSummary aria-controls="panel2bh-content" id="panel2bh-header">
+                  <Accordion expanded={expandedPanels.includes("panel4")} onChange={handleChange("panel4")}>
+                    <AccordionSummary aria-controls="panel4bh-content" id="panel4bh-header">
                       <Typography>Local prepared</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
@@ -253,8 +266,8 @@ export default function BlockDetails() {
                   </Accordion>
                 )}
                 {accept.length > 0 && (
-                  <Accordion expanded={expandedPanels.includes("panel3")} onChange={handleChange("panel3")}>
-                    <AccordionSummary aria-controls="panel3bh-content" id="panel3bh-header">
+                  <Accordion expanded={expandedPanels.includes("panel5")} onChange={handleChange("panel5")}>
+                    <AccordionSummary aria-controls="panel5bh-content" id="panel5bh-header">
                       <Typography>Accept</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
