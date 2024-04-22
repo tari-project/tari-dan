@@ -43,6 +43,7 @@ RUN apt-get update && apt-get install -y \
       libsqlite3-0 \
       openssl \
       cmake \
+      protobuf-compiler \
       nodejs
 
 # https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html
