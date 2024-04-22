@@ -16,6 +16,7 @@ members = [
     "applications/tari_indexer",
     "applications/tari_scaffolder",
     "applications/tari_signaling_server",
+    "applications/tari_swarm_daemon",
     "applications/tari_validator_node_cli",
     "applications/tari_validator_node",
     "clients/base_node_client",
@@ -228,7 +229,7 @@ tokio-stream = "0.1.7"
 tokio-util = "0.7.10"
 tonic = "0.8.3"
 tower = "0.4"
-tower-http = { version = "0.3.5", default-features = false }
+tower-http = { version = "0.4", default-features = false }
 tower-layer = "0.3"
 tracing = "0.1.40"
 ts-rs = { version = "7.1", features = [

@@ -28,6 +28,6 @@ impl Cli {
     pub fn base_dir(&self) -> PathBuf {
         self.base_dir
             .clone()
-            .unwrap_or_else(|| dirs::home_dir().unwrap().join(".tari/signallingserver"))
+            .unwrap_or_else(|| dirs::home_dir().unwrap().join(".tari/signalingserver"))
     }
 }
