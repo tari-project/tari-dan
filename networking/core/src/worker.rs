@@ -345,7 +345,7 @@ where
             },
             NetworkingRequest::SetWantPeers(peers) => {
                 info!(target: LOG_TARGET, "🧭 Setting want peers to {:?}", peers);
-                self.swarm.behaviour_mut().peer_sync.want_peers(peers)?;
+                self.swarm.behaviour_mut().peer_sync.want_peers(peers).await?;
             },
         }
 
@@ -440,6 +440,14 @@ where
 
                 for waiter in waiters {
                     let _ignore = waiter.send(Err(NetworkingError::OutgoingConnectionError(error.to_string())));
+                }
+
+                if matches!(error, DialError::NoAddresses) {
+                    self.swarm
+                        .behaviour_mut()
+                        .peer_sync
+                        .add_want_peers(Some(peer_id))
+                        .await?;
                 }
             },
             SwarmEvent::ExternalAddrConfirmed { address } => {

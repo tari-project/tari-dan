@@ -58,7 +58,6 @@ pub fn spawn_json_rpc(
     info!(target: LOG_TARGET, "🌐 JSON-RPC listening on {}", addr);
     tokio::spawn(server);
 
-    info!(target: LOG_TARGET, "💤 Stopping JSON-RPC");
     Ok(addr)
 }
 
