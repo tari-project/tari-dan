@@ -210,6 +210,9 @@ async fn start(cli: &Cli) -> anyhow::Result<()> {
         },
         result = webserver => {
             result??;
+            log::info!("Terminating all instances...");
+            let num_instances = pm_handle.terminate_all().await?;
+            log::info!("Terminated {num_instances} instances");
             log::info!("Webserver exited");
         },
         result = task_handle => {
