@@ -118,7 +118,7 @@ where TPeerStore: PeerStore
         self.handle_update_local_record();
     }
 
-    pub fn want_peers<I: IntoIterator<Item = PeerId>>(&mut self, peers: I) -> Result<(), Error> {
+    pub async fn want_peers<I: IntoIterator<Item = PeerId>>(&mut self, peers: I) -> Result<(), Error> {
         self.want_peers.clear();
         self.want_peers.extend(peers);
         shrink_hash_set_if_required(&mut self.want_peers);
@@ -128,9 +128,18 @@ where TPeerStore: PeerStore
             return Ok(());
         }
 
-        tracing::debug!("want peers: {:?}", self.want_peers);
-        self.remaining_want_peers =
-            block_on(self.store().difference(&self.want_peers)).map_err(|e| Error::StoreError(e.to_string()))?;
+        // None - no more to add, we've already added them above
+        self.add_want_peers(None).await?;
+        Ok(())
+    }
+
+    pub async fn add_want_peers<I: IntoIterator<Item = PeerId>>(&mut self, peers: I) -> Result<(), Error> {
+        self.want_peers.extend(peers);
+        self.remaining_want_peers = self
+            .store()
+            .difference(&self.want_peers)
+            .await
+            .map_err(|e| Error::StoreError(e.to_string()))?;
         tracing::debug!("Remaining want peers: {:?}", self.remaining_want_peers);
         if !self.remaining_want_peers.is_empty() {
             let list = Arc::new(self.remaining_want_peers.clone());
