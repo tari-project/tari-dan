@@ -84,7 +84,8 @@ pub async fn run_tari_dan_wallet_daemon(
         services.account_monitor_handle.clone(),
         config.dan_wallet_daemon.clone(),
     );
-    let listen_fut = jrpc_server::listen(jrpc_address, signaling_server_address, handlers, shutdown_signal);
+    let (jrpc_address, listen_fut) =
+        jrpc_server::spawn_listener(jrpc_address, signaling_server_address, handlers, shutdown_signal)?;
 
     // Run the http ui
     if let Some(http_address) = config.dan_wallet_daemon.http_ui_address {
@@ -111,7 +112,7 @@ pub async fn run_tari_dan_wallet_daemon(
     // Wait for shutdown, or for any service to error
     tokio::select! {
         res = listen_fut => {
-            res?;
+            res??;
         },
         res = services.services_fut => {
             res?;

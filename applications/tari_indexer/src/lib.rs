@@ -67,7 +67,7 @@ use crate::{
     dry_run::processor::DryRunTransactionProcessor,
     event_manager::EventManager,
     graphql::server::run_graphql,
-    json_rpc::{run_json_rpc, JsonRpcHandlers},
+    json_rpc::{spawn_json_rpc, JsonRpcHandlers},
     transaction_manager::TransactionManager,
 };
 
@@ -149,7 +149,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
             services.template_manager.clone(),
             dry_run_transaction_processor,
         );
-        task::spawn(run_json_rpc(jrpc_address, handlers));
+        let jrpc_address = spawn_json_rpc(jrpc_address, handlers)?;
         // Run the http ui
         if let Some(address) = config.indexer.http_ui_address {
             task::spawn(run_http_ui_server(
