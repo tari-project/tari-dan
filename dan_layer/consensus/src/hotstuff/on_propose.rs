@@ -129,8 +129,12 @@ where TConsensusSpec: ConsensusSpec
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
         let (current_base_layer_block_height, current_base_layer_block_hash) =
             self.epoch_manager.current_base_layer_block_info().await?;
-        let high_qc = self.store.with_read_tx(|tx| HighQc::get(tx))?;
-        let qc_block = self.store.with_read_tx(|tx| Block::get(tx, high_qc.block_id()))?;
+        let (high_qc, qc_block, locked_block) = self.store.with_read_tx(|tx| {
+            let high_qc = HighQc::get(tx)?;
+            let qc_block = high_qc.get_block(tx)?;
+            let locked_block = LockedBlock::get(tx)?.get_block(tx)?;
+            Ok::<_, HotStuffError>((high_qc, qc_block, locked_block))
+        })?;
 
         let parent_base_layer_block_hash = qc_block.base_layer_block_hash();
 
@@ -142,7 +146,6 @@ where TConsensusSpec: ConsensusSpec
             current_base_layer_block_hash
         };
 
-        let locked_block = self.store.with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
         // If epoch has changed, we should first end the epoch with an EpochEvent::End
         let propose_epoch_end =
             // If we didn't locked block with an EpochEvent::End
