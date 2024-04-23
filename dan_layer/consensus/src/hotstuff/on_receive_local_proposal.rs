@@ -26,10 +26,10 @@ use tari_dan_storage::{
         PendingStateTreeDiff,
         TransactionPool,
         TransactionPoolStage,
+        TransactionRecord,
         ValidBlock,
     },
     StateStore,
-    StateStoreReadTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_state_tree::StateHashTreeDiff;
@@ -199,7 +199,11 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         local_committee_shard: &CommitteeShard,
     ) -> Result<Option<(ValidBlock, StateHashTreeDiff)>, HotStuffError> {
         let result = self
-            .validate_local_proposed_block(tx, block, local_committee, local_committee_shard)
+            .validate_local_proposed_block(tx.deref_mut(), block, local_committee, local_committee_shard)
+            .and_then(|valid_block| {
+                self.update_foreign_proposal_transactions(tx, valid_block.block())?;
+                Ok(valid_block)
+            })
             .and_then(|valid_block| {
                 let diff = self.check_state_merkle_root(tx, valid_block.block())?;
                 Ok((valid_block, diff))
@@ -219,6 +223,40 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             },
             Err(e) => Err(e),
         }
+    }
+
+    fn update_foreign_proposal_transactions(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        block: &Block,
+    ) -> Result<(), HotStuffError> {
+        // TODO: Move this to consensus constants
+        const FOREIGN_PROPOSAL_TIMEOUT: u64 = 1000;
+        let all_proposed = ForeignProposal::get_all_proposed(
+            tx.deref_mut(),
+            block.height().saturating_sub(NodeHeight(FOREIGN_PROPOSAL_TIMEOUT)),
+        )?;
+        for proposal in all_proposed {
+            let mut has_unresolved_transactions = false;
+
+            let (transactions, _missing) = TransactionRecord::get_any(tx.deref_mut(), &proposal.transactions)?;
+            for transaction in transactions {
+                if transaction.is_finalized() {
+                    // We don't know the transaction at all, or we know it but it's not finalised.
+                    let mut tx_rec = self.transaction_pool.get(tx, block.as_leaf_block(), transaction.id())?;
+                    // If the transaction is still in the pool we have to check if it was at least locally prepared,
+                    // otherwise abort it.
+                    if tx_rec.stage() == TransactionPoolStage::New || tx_rec.stage() == TransactionPoolStage::Prepared {
+                        tx_rec.update_local_decision(tx, Decision::Abort)?;
+                        has_unresolved_transactions = true;
+                    }
+                }
+            }
+            if !has_unresolved_transactions {
+                proposal.delete(tx)?;
+            }
+        }
+        Ok(())
     }
 
     fn check_state_merkle_root(
@@ -327,12 +365,12 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
     #[allow(clippy::too_many_lines)]
     fn validate_local_proposed_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         candidate_block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
     ) -> Result<ValidBlock, HotStuffError> {
-        if Block::has_been_processed(tx.deref_mut(), candidate_block.id())? {
+        if Block::has_been_processed(tx, candidate_block.id())? {
             return Err(ProposalValidationError::BlockAlreadyProcessed {
                 block_id: *candidate_block.id(),
                 height: candidate_block.height(),
@@ -341,7 +379,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         }
 
         // Check that details included in the justify match previously added blocks
-        let Some(justify_block) = candidate_block.justify().get_block(tx.deref_mut()).optional()? else {
+        let Some(justify_block) = candidate_block.justify().get_block(tx).optional()? else {
             // This will trigger a sync
             return Err(ProposalValidationError::JustifyBlockNotFound {
                 proposed_by: candidate_block.proposed_by().to_string(),
@@ -435,38 +473,12 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         // Now that we have all dummy blocks (if any) in place, we can check if the candidate block is safe.
         // Specifically, it should extend the locked block via the dummy blocks.
-        if !candidate_block.is_safe(tx.deref_mut())? {
+        if !candidate_block.is_safe(tx)? {
             return Err(ProposalValidationError::NotSafeBlock {
                 proposed_by: candidate_block.proposed_by().to_string(),
                 hash: *candidate_block.id(),
             }
             .into());
-        }
-
-        // TODO: Move this to consensus constants
-        const TIMEOUT: u64 = 1000;
-        let all_proposed = ForeignProposal::get_all_proposed(
-            tx.deref_mut(),
-            candidate_block.height().saturating_sub(NodeHeight(TIMEOUT)),
-        )?;
-        for proposal in all_proposed {
-            let mut has_unresolved_transactions = false;
-            for tx_id in proposal.transactions.clone() {
-                let transaction = tx.transactions_get(&tx_id).optional()?;
-                if transaction.map_or(false, |t| t.final_decision().is_some()) {
-                    // We don't know the transaction at all, or we know it but it's not finalised.
-                    let mut tx_rec = self.transaction_pool.get(tx, candidate_block.as_leaf_block(), &tx_id)?;
-                    // If the transaction is still in the pool we have to check if it was at least locally prepared,
-                    // otherwise abort it.
-                    if tx_rec.stage() == TransactionPoolStage::New || tx_rec.stage() == TransactionPoolStage::Prepared {
-                        tx_rec.update_local_decision(tx, Decision::Abort)?;
-                        has_unresolved_transactions = true;
-                    }
-                }
-            }
-            if !has_unresolved_transactions {
-                proposal.delete(tx)?;
-            }
         }
 
         Ok(ValidBlock::new(candidate_block))
