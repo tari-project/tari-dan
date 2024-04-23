@@ -35,7 +35,7 @@ impl MinoTariWalletProcess {
         Ok(client)
     }
 
-    pub async fn register_validator_node(&self, info: ValidatorRegistrationInfo) -> anyhow::Result<()> {
+    pub async fn register_validator_node(&self, info: ValidatorRegistrationInfo) -> anyhow::Result<u64> {
         let mut client = self.connect_client().await?;
         let resp = client
             .register_validator_node(grpc::RegisterValidatorNodeRequest {
@@ -55,8 +55,7 @@ impl MinoTariWalletProcess {
             return Err(anyhow!("Failed to register validator node: {}", resp.failure_message));
         }
 
-        log::info!("🟢 Registered validator node with tx_id: {}", resp.transaction_id);
-        Ok(())
+        Ok(resp.transaction_id)
     }
 
     pub async fn get_balance(&self) -> anyhow::Result<grpc::GetBalanceResponse> {

@@ -54,9 +54,10 @@ impl ProcessManager {
         let executables = self.executable_manager.prepare_all().await?;
         self.instance_manager.fork_all(executables).await?;
 
-        // Mine some initial funds
-        self.mine(20).await?;
-        self.wait_for_wallet_funds().await?;
+        let num_vns = self.instance_manager.num_validator_nodes();
+        // Mine some initial funds, guessing 10 blocks to allow for coinbase maturity
+        self.mine(num_vns + 5).await?;
+        self.wait_for_wallet_funds(num_vns).await?;
 
         self.register_all_validator_nodes().await?;
 
@@ -199,6 +200,7 @@ impl ProcessManager {
             })?;
 
         for vn in self.instance_manager.validator_nodes() {
+            info!("🟡 Registering validator node {}", vn.instance().name());
             if let Err(err) = vn.wait_for_startup(Duration::from_secs(10)).await {
                 log::error!(
                     "Skipping registration for validator node {}: {} since it is not responding",
@@ -209,7 +211,11 @@ impl ProcessManager {
             }
 
             let reg_info = vn.get_registration_info().await?;
-            wallet.register_validator_node(reg_info).await?;
+            let tx_id = wallet.register_validator_node(reg_info).await?;
+            info!("🟢 Registered validator node with tx_id: {tx_id}");
+            // Just wait a bit :shrug: This could be a bug in the console wallet. If we submit too quickly it uses 0
+            // inputs for a transaction.
+            sleep(Duration::from_secs(2)).await;
         }
         self.mine(20).await?;
         Ok(())
@@ -307,7 +313,7 @@ impl ProcessManager {
         Ok(())
     }
 
-    async fn wait_for_wallet_funds(&mut self) -> anyhow::Result<()> {
+    async fn wait_for_wallet_funds(&mut self, min_expected_blocks: u64) -> anyhow::Result<()> {
         // WARN: Assumes one wallet
         let wallet = self.instance_manager.minotari_wallets().next().ok_or_else(|| {
             anyhow!("No MinoTariConsoleWallet instances found. Please start a wallet before waiting for funds")
@@ -315,7 +321,8 @@ impl ProcessManager {
 
         loop {
             let resp = wallet.get_balance().await?;
-            if resp.available_balance > 0 {
+            // Total guess of the minimum funds
+            if resp.available_balance > min_expected_blocks * 5000000 {
                 info!("💰 Wallet has funds. Available balance: {}", resp.available_balance);
                 break;
             }
