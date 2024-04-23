@@ -451,10 +451,10 @@ export default function Main() {
     if (!selectedFile) {
       return;
     }
-    const address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || "localhost:9000";
+    const address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || ""; //Current host
     const formData = new FormData();
     formData.append("file", selectedFile);
-    fetch(`http://${address}/upload_template`, { method: "POST", body: formData }).then((resp) => {
+    fetch(`${address}/upload_template`, { method: "POST", body: formData }).then((resp) => {
       console.log("resp", resp);
     });
   };
