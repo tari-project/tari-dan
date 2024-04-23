@@ -133,8 +133,10 @@ where TConsensusSpec: ConsensusSpec
         let epoch_should_end =
             // If the epoch has not changed yet
             qc_block.epoch() == valid_block.epoch() &&
-            // If the last justified block or locked block proposes to end the epoch
-            qc_block.is_epoch_end() && !locked_block.is_epoch_end() &&
+            // If the last justified block is an epoch end
+            qc_block.is_epoch_end() &&
+            // if the locked block is an epoch end, then we do not expect this block to be an epoch end
+            !locked_block.is_epoch_end() &&
             // If the previous epoch is the genesis epoch, we don't need to end it (there was no committee at epoch 0)
             !qc_block.is_genesis();
 
