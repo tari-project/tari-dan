@@ -134,12 +134,9 @@ impl ProcessManager {
                         .find(|i| i.id() == instance_id)
                         .ok_or_else(|| anyhow!("Instance with ID '{}' not found", instance_id))?;
                     let instance_type = instance.instance_type();
-                    self.executable_manager.get_executable(instance_type).ok_or_else(|| {
-                        anyhow!(
-                            "No configuration for instance type '{instance_type}'. Please add this to the \
-                             configuration",
-                        )
-                    })?
+                    self.executable_manager
+                        .compile_executable_if_required(instance_type)
+                        .await?
                 };
 
                 let result = self.instance_manager.start_instance(instance_id, executable).await;
