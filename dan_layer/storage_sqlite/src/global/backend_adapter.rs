@@ -408,7 +408,8 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
             .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
             .filter(validator_nodes::public_key.eq(ByteArray::as_bytes(public_key)))
-            .order_by(committees::epoch.asc())
+            // Ensure that the latest validator node is returned for each public key
+            .order_by((committees::epoch.asc(), validator_nodes::id.desc()))
             .first::<DbValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -470,8 +471,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         let public_key = validator_nodes::table
             .select(validator_nodes::public_key)
             .filter(validator_nodes::shard_key.eq(shard_key.as_bytes()))
-            .limit(1)
-            .get_result::<Vec<u8>>(tx.connection())
+            .first::<Vec<u8>>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "validator_nodes_set_committee_bucket".to_string(),
@@ -517,7 +517,8 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             // the same way convert shard IDs to 256-bit integers when allocating committee shards.
             .filter(validator_nodes::shard_key.ge(shard_range.start().as_bytes()))
             .filter(validator_nodes::shard_key.le(shard_range.end().as_bytes()))
-            .order_by(committees::epoch.asc())
+            // Ensure that the latest validator node is returned for each public key
+            .order_by((committees::epoch.asc(), validator_nodes::id.desc()))
             .get_results(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -551,7 +552,8 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
             .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
             .filter(committees::committee_bucket.eq_any(buckets.iter().map(|b| i64::from(b.as_u32()))))
-            .order_by(committees::epoch.asc())
+            // Ensure that the latest validator node is returned for each public key
+            .order_by((committees::epoch.asc(), validator_nodes::id.desc()))
             .get_results::<DbValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -599,7 +601,8 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             ))
             .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
             .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
-            .order_by(committees::epoch.asc())
+            // Ensure that the latest validator node is returned for each public key
+            .order_by((committees::epoch.asc(), validator_nodes::id.desc()))
             .load::<DbValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -634,7 +637,8 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             .filter(committees::epoch.ge(start_epoch.as_u64() as i64))
             .filter(committees::epoch.le(end_epoch.as_u64() as i64))
             .filter(validator_nodes::address.eq(serialize_json(address)?))
-            .order_by(committees::epoch.asc())
+            // Ensure that the latest validator node is returned for each public key
+            .order_by((committees::epoch.asc(), validator_nodes::id.desc()))
             .first::<DbValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,

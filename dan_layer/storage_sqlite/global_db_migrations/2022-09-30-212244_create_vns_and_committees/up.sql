@@ -20,12 +20,12 @@
 --  // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 --  // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-create table validator_nodes (
-    id integer primary key autoincrement not null,
-    public_key blob not null,
-    shard_key blob not null,
-    epoch bigint not null
+create table validator_nodes
+(
+    id         integer primary key autoincrement not null,
+    public_key blob                              not null,
+    shard_key  blob                              not null,
+    epoch      bigint                            not null
 );
 
 create index validator_nodes_epoch_index on validator_nodes (epoch);
-create unique index validator_nodes_public_key_unique_index on validator_nodes (public_key);
