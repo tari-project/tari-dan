@@ -42,9 +42,7 @@ pub async fn list(context: &HandlerContext, _req: ListIndexersRequest) -> Result
                 name: instance.name,
                 web,
                 jrpc,
-                // TODO
-                // is_running: status == InstanceStatus::Running
-                is_running: true,
+                is_running: instance.is_running,
             })
         })
         .collect::<anyhow::Result<_>>()?;

@@ -235,6 +235,7 @@ function ShowInfo(params: any) {
     updateState,
     state,
     horizontal,
+    onReload,
   } = params;
   const [row, setRow] = useState(1);
   // const [unprocessedTx, setUnprocessedTx] = useState([]);
@@ -291,6 +292,20 @@ function ShowInfo(params: any) {
   const addTxToPool = (tx: any) => {
     updateState({ name: name, state: tx });
   };
+
+  const handleOnStart = () => {
+    jsonRpc("start", name).then(onReload);
+  };
+
+  const handleOnStop = () => {
+    jsonRpc("stop", name).then(onReload);
+  };
+
+  const handleDeleteData = () => {
+    console.log("Sorry not implemented");
+  };
+
+
   return (
     <div className="info" key={name} style={{ gridRow: row }}>
       {nameInfo}
@@ -302,13 +317,35 @@ function ShowInfo(params: any) {
         <ExtraInfoVN name={name} url={node.jrpc} setRow={(new_row: any) => {
           if (new_row != row) setRow(new_row);
         }} addTxToPool={addTxToPool} autoRefresh={autoRefresh} state={state} horizontal={horizontal} />}
+      {executable !== Executable.Templates &&
+        <NodeControls
+          isRunning={node?.is_running || false}
+          onStart={() => handleOnStart()}
+          onStop={() => handleOnStop()}
+          onDeleteData={() => handleDeleteData()}
+        />}
       {children}
     </div>
   );
 }
 
+interface NodeControlsProps {
+  isRunning: bool,
+  onStart: () => void;
+  onStop: () => void;
+  onDeleteData: () => void;
+}
+
+function NodeControls({ isRunning, onStart, onStop, onDeleteData }: NodeControlsProps) {
+  return <>
+    <button onClick={onStart} disabled={isRunning}>Start</button>
+    <button onClick={onStop} disabled={!isRunning}>Stop</button>
+    <button onClick={onDeleteData}>Delete data</button>
+  </>;
+}
+
 function ShowInfos(params: any) {
-  const { nodes, logs, stdoutLogs, name, showLogs, autoRefresh, horizontal } = params;
+  const { nodes, logs, stdoutLogs, name, showLogs, autoRefresh, horizontal, onReload } = params;
   const [state, setState] = useState<{ [key: string]: any }>({});
   let executable: Executable;
   switch (name) {
@@ -335,7 +372,8 @@ function ShowInfos(params: any) {
       {Object.keys(nodes).map((index) =>
         <ShowInfo key={index} executable={executable} name={nodes[index].name} node={nodes[index]}
                   logs={logs?.[`${name} ${index}`]} stdoutLogs={stdoutLogs?.[`${name} ${index}`]} showLogs={showLogs}
-                  autoRefresh={autoRefresh} updateState={updateState} state={state} horizontal={horizontal} />)}
+                  autoRefresh={autoRefresh} updateState={updateState} state={state} horizontal={horizontal}
+                  onReload={onReload} />)}
     </div>
   );
 }
@@ -354,7 +392,8 @@ export default function Main() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [horizontal, setHorizontal] = useState(false);
 
-  useEffect(() => {
+
+  const getInfo = () => {
     jsonRpc("vns")
       .then((resp) => {
         setVns(resp.nodes);
@@ -438,7 +477,9 @@ export default function Main() {
       setStdoutLogs((state: any) => ({ ...state, miner: resp }));
     });
     jsonRpc("grpc_node").then((resp) => setNode({ grpc: resp }));
-  }, []);
+  };
+
+  useEffect(getInfo, []);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.item(0);
@@ -466,10 +507,10 @@ export default function Main() {
       <div className="label">Base layer</div>
       <div className="infos">
         <ShowInfo executable={Executable.BaseNode} name="node" node={node} logs={logs?.node}
-                  stdoutLogs={stdoutLogs?.node} showLogs={showLogs} horizontal={horizontal} />
+                  stdoutLogs={stdoutLogs?.node} showLogs={showLogs} horizontal={horizontal} onReload={getInfo} />
         <ShowInfo executable={Executable.Wallet} name="wallet" node={wallet} logs={logs?.wallet}
                   stdoutLogs={stdoutLogs?.wallet} showLogs={showLogs} horizontal={horizontal} />
-        <ShowInfo executable={Executable.Miner} name="miner" node={null} logs={logs?.miner}
+        <ShowInfo executable={Executable.Miner} name="miner" logs={logs?.miner}
                   stdoutLogs={stdoutLogs?.miner} showLogs={showLogs} horizontal={horizontal}>
           <button onClick={() => jsonRpc("mine", { num_blocks: 1 })}>Mine</button>
         </ShowInfo>
@@ -477,17 +518,17 @@ export default function Main() {
       <div>
         <div className="label">Validator Nodes</div>
         <ShowInfos nodes={vns} logs={logs} stdoutLogs={stdoutLogs} name={"vn"} showLogs={showLogs}
-                   autoRefresh={autoRefresh} horizontal={horizontal} />
+                   autoRefresh={autoRefresh} horizontal={horizontal} onReload={getInfo} />
       </div>
       <div>
         <div className="label">Dan Wallets</div>
         <ShowInfos nodes={danWallet} logs={logs} stdoutLogs={stdoutLogs} name={"dan"} showLogs={showLogs}
-                   autoRefresh={autoRefresh} horizontal={horizontal} />
+                   autoRefresh={autoRefresh} horizontal={horizontal} onReload={getInfo} />
       </div>
       <div>
         <div className="label">Indexers</div>
         <ShowInfos nodes={indexers} logs={logs} stdoutLogs={stdoutLogs} name={"indexer"} showLogs={showLogs}
-                   autoRefresh={autoRefresh} horizontal={horizontal} />
+                   autoRefresh={autoRefresh} horizontal={horizontal} onReload={getInfo} />
       </div>
       <div className="label">Templates</div>
       <div className="infos">
