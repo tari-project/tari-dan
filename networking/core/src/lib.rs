@@ -32,7 +32,10 @@ pub use connection::*;
 pub use handle::*;
 pub use message::*;
 pub use spawn::*;
-pub use tari_swarm::{is_supported_multiaddr, Config as SwarmConfig};
+pub use tari_swarm::{
+    config::{Config as SwarmConfig, LimitPerInterval, RelayCircuitLimits, RelayReservationLimits},
+    is_supported_multiaddr,
+};
 
 #[async_trait]
 pub trait NetworkingService<TMsg: MessageSpec> {

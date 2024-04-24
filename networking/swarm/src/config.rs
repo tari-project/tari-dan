@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::time::Duration;
+use std::{num::NonZeroU32, time::Duration};
 
 use libp2p::ping;
 
@@ -18,6 +18,8 @@ pub struct Config {
     pub enable_relay: bool,
     pub enable_messaging: bool,
     pub idle_connection_timeout: Duration,
+    pub relay_circuit_limits: RelayCircuitLimits,
+    pub relay_reservation_limits: RelayReservationLimits,
 }
 
 impl Default for Config {
@@ -32,6 +34,108 @@ impl Default for Config {
             enable_relay: false,
             enable_messaging: true,
             idle_connection_timeout: Duration::from_secs(10 * 60),
+            relay_circuit_limits: RelayCircuitLimits::default(),
+            relay_reservation_limits: RelayReservationLimits::default(),
         }
     }
+}
+#[derive(Debug, Clone)]
+pub struct RelayCircuitLimits {
+    pub max_limit: usize,
+    pub max_per_peer: usize,
+    pub max_duration: Duration,
+    pub per_peer: Option<LimitPerInterval>,
+    pub per_ip: Option<LimitPerInterval>,
+    pub max_byte_limit: u64,
+}
+
+impl RelayCircuitLimits {
+    pub fn high() -> Self {
+        Self {
+            max_limit: 64,
+            max_per_peer: 8,
+            max_duration: Duration::from_secs(4 * 60),
+            per_peer: Some(LimitPerInterval {
+                limit: NonZeroU32::new(60).expect("30 > 0"),
+                interval: Duration::from_secs(2 * 60),
+            }),
+            per_ip: Some(LimitPerInterval {
+                limit: NonZeroU32::new(120).expect("60 > 0"),
+                interval: Duration::from_secs(60),
+            }),
+            max_byte_limit: 1 << 19, // 512KB
+        }
+    }
+}
+
+impl Default for RelayCircuitLimits {
+    fn default() -> Self {
+        // These reflect the default circuit limits in libp2p relay
+        Self {
+            max_limit: 16,
+            max_per_peer: 4,
+            max_duration: Duration::from_secs(2 * 60),
+            per_peer: Some(LimitPerInterval {
+                limit: NonZeroU32::new(30).expect("30 > 0"),
+                interval: Duration::from_secs(2 * 60),
+            }),
+            per_ip: Some(LimitPerInterval {
+                limit: NonZeroU32::new(60).expect("60 > 0"),
+                interval: Duration::from_secs(60),
+            }),
+            max_byte_limit: 1 << 17, // 128KB
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RelayReservationLimits {
+    pub max_limit: usize,
+    pub max_per_peer: usize,
+    pub max_duration: Duration,
+    pub per_peer: Option<LimitPerInterval>,
+    pub per_ip: Option<LimitPerInterval>,
+}
+
+impl RelayReservationLimits {
+    pub fn high() -> Self {
+        Self {
+            max_limit: 128,
+            max_per_peer: 8,
+            max_duration: Duration::from_secs(4 * 60),
+            per_peer: Some(LimitPerInterval {
+                limit: NonZeroU32::new(60).expect("30 > 0"),
+                interval: Duration::from_secs(2 * 60),
+            }),
+            per_ip: Some(LimitPerInterval {
+                limit: NonZeroU32::new(120).expect("60 > 0"),
+                interval: Duration::from_secs(60),
+            }),
+        }
+    }
+}
+
+impl Default for RelayReservationLimits {
+    fn default() -> Self {
+        // These reflect the default reservation limits in libp2p relay
+        Self {
+            max_limit: 128,
+            max_per_peer: 4,
+            max_duration: Duration::from_secs(60 * 60),
+            per_peer: Some(LimitPerInterval {
+                limit: NonZeroU32::new(30).expect("30 > 0"),
+                interval: Duration::from_secs(2 * 60),
+            }),
+            per_ip: Some(LimitPerInterval {
+                limit: NonZeroU32::new(60).expect("60 > 0"),
+                interval: Duration::from_secs(60),
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LimitPerInterval {
+    pub limit: NonZeroU32,
+    pub interval: Duration,
 }
