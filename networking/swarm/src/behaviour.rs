@@ -80,7 +80,7 @@ where
             yamux::Config::default,
         )?
         .with_quic()
-        .with_relay_client(noise::Config::new, yamux::Config::default)?
+        .with_relay_client(noise_config, yamux::Config::default)?
         .with_behaviour(|keypair, relay_client| {
             let local_peer_id = keypair.public().to_peer_id();
 
