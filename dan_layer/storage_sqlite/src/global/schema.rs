@@ -1,6 +1,13 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    base_layer_block_info (hash) {
+        hash -> Binary,
+        height -> BigInt,
+    }
+}
+
+diesel::table! {
     bmt_cache (epoch) {
         epoch -> BigInt,
         bmt -> Binary,
@@ -8,16 +15,18 @@ diesel::table! {
 }
 
 diesel::table! {
-    epochs (epoch) {
+    committees (id) {
+        id -> Integer,
+        public_key -> Binary,
         epoch -> BigInt,
-        validator_node_mr -> Binary,
+        committee_bucket -> BigInt,
     }
 }
 
 diesel::table! {
-    base_layer_block_info (hash) {
-        hash -> Binary,
-        height -> BigInt,
+    epochs (epoch) {
+        epoch -> BigInt,
+        validator_node_mr -> Binary,
     }
 }
 
@@ -58,13 +67,12 @@ diesel::table! {
     }
 }
 
-diesel::table! {
-    committees (id) {
-        id -> Integer,
-        public_key -> Binary,
-        epoch -> BigInt,
-        committee_bucket -> BigInt,
-    }
-}
-
-diesel::allow_tables_to_appear_in_same_query!(bmt_cache, committees, epochs, metadata, templates, validator_nodes);
+diesel::allow_tables_to_appear_in_same_query!(
+    base_layer_block_info,
+    bmt_cache,
+    committees,
+    epochs,
+    metadata,
+    templates,
+    validator_nodes,
+);

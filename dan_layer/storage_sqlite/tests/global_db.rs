@@ -11,6 +11,8 @@ use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_utilities::ByteArray;
 
 fn create_db() -> GlobalDb<SqliteGlobalDbAdapter<PeerAddress>> {
+    // std::fs::remove_file("/tmp/tmptmp.db").ok();
+    // let conn = SqliteConnection::establish("file:///tmp/tmptmp.db").unwrap();
     let conn = SqliteConnection::establish(":memory:").unwrap();
     let db = GlobalDb::new(SqliteGlobalDbAdapter::new(conn));
     db.adapter().migrate().unwrap();
@@ -110,6 +112,10 @@ fn insert_and_get_within_shard_range_duplicate_public_keys() {
     update_committee_bucket(&mut validator_nodes, &pk2, Shard::from(1), Epoch(1));
     update_committee_bucket(&mut validator_nodes, &pk2, Shard::from(3), Epoch(3));
 
+    tx.commit().unwrap();
+    let mut tx = db.create_transaction().unwrap();
+    let mut validator_nodes = db.validator_nodes(&mut tx);
+
     let shard_id = derived_substate_address(&pk);
     let shard_id2 = derived_substate_address(&pk2);
     let (start, end) = if shard_id > shard_id2 {
@@ -124,13 +130,21 @@ fn insert_and_get_within_shard_range_duplicate_public_keys() {
     if shard_id > shard_id2 {
         assert_eq!(vns[0].public_key, pk2);
         assert_eq!(vns[0].committee_shard, Some(Shard::from(3)));
+        assert_eq!(vns[0].epoch, Epoch(3));
         assert_eq!(vns[1].public_key, pk);
         assert_eq!(vns[1].committee_shard, Some(Shard::from(2)));
+        assert_eq!(vns[1].epoch, Epoch(2));
     } else {
         assert_eq!(vns[0].public_key, pk);
         assert_eq!(vns[0].committee_shard, Some(Shard::from(2)));
+        assert_eq!(vns[0].epoch, Epoch(2));
         assert_eq!(vns[1].public_key, pk2);
         assert_eq!(vns[1].committee_shard, Some(Shard::from(3)));
+        assert_eq!(vns[1].epoch, Epoch(3));
     }
     assert_eq!(vns.len(), 2);
+
+    let vn = validator_nodes.get_by_public_key(Epoch(0), Epoch(10), &pk).unwrap();
+    assert_eq!(vn.epoch, Epoch(2));
+    assert_eq!(vn.committee_shard, Some(Shard::from(2)));
 }
