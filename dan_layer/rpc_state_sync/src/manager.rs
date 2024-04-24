@@ -264,6 +264,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         transactions: Vec<TransactionRecord>,
         pending_state_updates: &mut HashMap<BlockId, Vec<SubstateUpdate>>,
     ) -> Result<(), CommsRpcConsensusSyncError> {
+        info!(target: LOG_TARGET, "🌐 Processing block {}. {} substate update(s)", block, updates.len());
         // Note: this is only used for dummy block calculation, so we avoid the epoch manager call unless it is needed.
         // Otherwise, the committee is empty.
         let local_committee = if block.justifies_parent() {
@@ -279,15 +280,18 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
             block.justify().save(tx)?;
 
+            let justify_block = block.justify().get_block(tx.deref_mut())?;
+
             // Check if we need to calculate dummy blocks
             // TODO: Validate before doing this. e.g. block.height() is maliciously larger then block.justify().block_height()
             if !block.justifies_parent() {
                 let mut last_dummy_block = BlockIdAndHeight {id: *block.justify().block_id(), height: block.justify().block_height()};
+                info!(target: LOG_TARGET, "🍼 START DUMMY BLOCK: {}. ", last_dummy_block, );
                 // if the block parent is not the justify parent, then we have experienced a leader failure
                 // and should make dummy blocks to fill in the gaps.
                 while last_dummy_block.id != *block.parent() {
                     if last_dummy_block.height >= block.height() {
-                        warn!(target: LOG_TARGET, "🔥 Bad proposal, dummy block height {} is greater than new height {}", last_dummy_block, block);
+                        warn!(target: LOG_TARGET, "🔥 Bad proposal, no dummy block parent hash matches between block height {} and new block height {}.", last_dummy_block, block);
                         return Err( ProposalValidationError::CandidateBlockDoesNotExtendJustify {
                             justify_block_height: block.justify().block_height(),
                             candidate_block_height: block.height(),
@@ -306,13 +310,13 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         block.epoch(),
                         block.shard(),
                         *block.merkle_root(),
-                        block.timestamp(),
-                        block.base_layer_block_height(),
-                        *block.base_layer_block_hash(),
+                        justify_block.timestamp(),
+                        justify_block.base_layer_block_height(),
+                        *justify_block.base_layer_block_hash(),
                     );
                     dummy_block.save(tx)?;
                     last_dummy_block = BlockIdAndHeight { id: *dummy_block.id(), height: next_height };
-                    debug!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", last_dummy_block, leader);
+                    info!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", last_dummy_block, leader);
                 }
             }
 

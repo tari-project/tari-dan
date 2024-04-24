@@ -1324,6 +1324,7 @@ where TConsensusSpec: ConsensusSpec
 
     async fn propose_newly_locked_blocks(&mut self, blocks: Vec<Block>) -> Result<(), HotStuffError> {
         for block in blocks {
+            debug!(target:LOG_TARGET,"Broadcast new locked block: {block}");
             let local_committee = self
                 .epoch_manager
                 .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
@@ -1341,7 +1342,6 @@ where TConsensusSpec: ConsensusSpec
                 );
                 continue;
             };
-            info!(target:LOG_TARGET,"WTF epoch: {:?}",block.epoch());
             let leader_index = self.leader_strategy.calculate_leader(&local_committee, block.height());
             let my_index = local_committee
                 .addresses()
@@ -1355,7 +1355,7 @@ where TConsensusSpec: ConsensusSpec
             // f+1 nodes (always including the leader) send the proposal to the foreign committee
             // if diff_from_leader <= (local_committee.len() - 1) / 3 + 1 {
             if diff_from_leader <= local_committee.len() / 3 {
-                self.proposer.broadcast_proposal_foreignly(block).await?;
+                self.proposer.broadcast_foreign_proposal_if_required(block).await?;
             }
         }
         Ok(())

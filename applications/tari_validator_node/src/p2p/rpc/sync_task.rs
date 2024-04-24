@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, time::Duration};
+use std::collections::HashSet;
 
 use log::*;
 use tari_dan_common_types::Epoch;
@@ -145,18 +145,18 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         buffer: &mut BlockBuffer,
         current_block_id: &BlockId,
     ) -> Result<(), StorageError> {
-        if let Some(up_to_epoch) = self.up_to_epoch {
-            // Wait for the end of epoch block if the requested epoch has not yet completed
-            // TODO: We should consider streaming blocks as they come in from consensus
-            loop {
-                let block = self.store.with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
-                if block.is_epoch_end() && block.epoch() + Epoch(1) >= up_to_epoch {
-                    // If found the epoch end block, break.
-                    break;
-                }
-                tokio::time::sleep(Duration::from_secs(10)).await;
-            }
-        }
+        // if let Some(up_to_epoch) = self.up_to_epoch {
+        //     // Wait for the end of epoch block if the requested epoch has not yet completed
+        //     // TODO: We should consider streaming blocks as they come in from consensus
+        //     loop {
+        //         let block = self.store.with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
+        //         if block.is_epoch_end() && block.epoch() + Epoch(1) >= up_to_epoch {
+        //             // If found the epoch end block, break.
+        //             break;
+        //         }
+        //         tokio::time::sleep(Duration::from_secs(10)).await;
+        //     }
+        // }
         self.store.with_read_tx(|tx| {
             // TODO: if there are any transactions in the block the syncing node will reject the block
 

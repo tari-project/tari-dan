@@ -109,6 +109,10 @@ impl LocalPeerRecord {
         }
     }
 
+    pub fn to_peer_id(&self) -> PeerId {
+        self.keypair.public().to_peer_id()
+    }
+
     pub fn add_address(&mut self, address: Multiaddr) {
         self.addresses.insert(address);
         self.sign();
