@@ -344,19 +344,23 @@ impl StateTracker {
         self.write_with(|state| state.take_mutated_substates())
     }
 
+    pub fn with_substates_to_persist<F: FnMut(&IndexMap<SubstateId, SubstateValue>) -> R, R>(&self, mut f: F) -> R {
+        self.write_with(|state| f(state.mutated_substates()))
+    }
+
     pub fn are_fees_paid_in_full(&self) -> bool {
         self.read_with(|state| {
             let total_payments = state.fee_state().total_payments();
-            let total_charges = Amount::try_from(state.fee_state().total_charges()).expect("fee overflowed i64::MAX");
+            let total_charges = state.fee_state().total_charges();
             total_payments >= total_charges
         })
     }
 
-    pub fn total_payments(&self) -> Amount {
+    pub fn total_fee_payments(&self) -> Amount {
         self.read_with(|state| state.fee_state().total_payments())
     }
 
-    pub fn total_charges(&self) -> Amount {
+    pub fn total_fee_charges(&self) -> Amount {
         self.read_with(|state| Amount::try_from(state.fee_state().total_charges()).expect("fee overflowed i64::MAX"))
     }
 

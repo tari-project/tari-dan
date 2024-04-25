@@ -7,11 +7,11 @@ use tari_dan_engine::runtime::{ActionIdent, RuntimeError};
 use tari_engine_types::{commit_result::RejectReason, resource_container::ResourceError};
 
 pub fn assert_reject_reason<B: Borrow<RejectReason>, E: Display>(reason: B, error: E) {
-    match reason.borrow() {
-        // TODO: Would be great if we could enumerate specific reasons from within the engine rather than simply
-        //       turning RuntimeError into a string
-        RejectReason::ExecutionFailure(s) if s.contains(&error.to_string()) => {},
-        r => panic!("Expected reject reason \"{}\" but got \"{}\"", error, r),
+    let s = reason.borrow().to_string();
+    // TODO: Would be great if we could enumerate specific reasons from within the engine rather than simply
+    //       turning RuntimeError into a string
+    if !s.contains(&error.to_string()) {
+        panic!("Expected reject reason \"{}\" but got \"{}\"", error, s)
     }
 }
 

@@ -135,6 +135,10 @@ impl WorkingStateStore {
         mem::take(&mut self.new_substates)
     }
 
+    pub fn mutated_substates(&self) -> &IndexMap<SubstateId, SubstateValue> {
+        &self.new_substates
+    }
+
     pub fn new_vaults(&self) -> impl Iterator<Item = (VaultId, &Vault)> + '_ {
         self.new_substates
             .iter()

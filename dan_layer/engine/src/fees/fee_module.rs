@@ -3,12 +3,8 @@
 
 use std::io;
 
-use indexmap::IndexMap;
 use tari_bor::encode_into;
-use tari_engine_types::{
-    fees::FeeSource,
-    substate::{SubstateId, SubstateValue},
-};
+use tari_engine_types::fees::FeeSource;
 
 use super::FeeTable;
 use crate::runtime::{RuntimeModule, RuntimeModuleError, StateTracker};
@@ -38,24 +34,21 @@ impl RuntimeModule for FeeModule {
         Ok(())
     }
 
-    fn on_before_finalize(
-        &self,
-        track: &StateTracker,
-        changes: &IndexMap<SubstateId, SubstateValue>,
-    ) -> Result<(), RuntimeModuleError> {
-        let total_storage = changes
-            .values()
-            .map(|substate| {
-                let mut counter = ByteCounter::new();
+    fn on_before_finalize(&self, track: &StateTracker) -> Result<(), RuntimeModuleError> {
+        let total_storage = track.with_substates_to_persist(|changes| {
+            let mut counter = ByteCounter::new();
+            for substate in changes.values() {
                 encode_into(substate, &mut counter)?;
-                Ok(counter.get())
-            })
-            .sum::<Result<usize, RuntimeModuleError>>()?;
+            }
+            Ok::<_, RuntimeModuleError>(counter.get())
+        })?;
 
+        // TODO: Cost per byte of storage is reduced by a pretty arbitrarily chosen factor (floor(cost/0.333...))
+        const STORAGE_COST_REDUCTION_DIVISOR: u64 = 3;
         track.add_fee_charge(
             FeeSource::Storage,
-            // Divide by 3 to account for CBOR
-            self.fee_table.per_byte_storage_cost() * total_storage as u64 / 3,
+            // Divide a storage cost reduction factor
+            self.fee_table.per_byte_storage_cost() * total_storage as u64 / STORAGE_COST_REDUCTION_DIVISOR,
         );
 
         track.add_fee_charge(FeeSource::Logs, track.num_logs() as u64 * self.fee_table.per_log_cost());

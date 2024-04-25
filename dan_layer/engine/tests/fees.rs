@@ -9,7 +9,7 @@ use tari_template_lib::{
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{Amount, ComponentAddress},
 };
-use tari_template_test_tooling::{test_faucet_component, TemplateTest};
+use tari_template_test_tooling::{support::assert_error::assert_reject_reason, test_faucet_component, TemplateTest};
 use tari_transaction::Transaction;
 
 #[test]
@@ -251,7 +251,7 @@ fn fail_pay_less_fees_than_fee_transaction() {
             Transaction::builder()
                 .with_fee_instructions(
                     // Run up a bill to push it up over the loan
-                    (0u32..=10).map(|i| {
+                    (0u32..=0).map(|i| {
                         Instruction::CallMethod {
                             component_address: state,
                             method: "set".to_string(),
@@ -263,7 +263,7 @@ fn fail_pay_less_fees_than_fee_transaction() {
                  Instruction::CallMethod {
                             component_address: account,
                             method: "pay_fee".to_string(),
-                            args: args![Amount(1)],
+                            args: args![Amount(100)],
                         }
                     ))
                     .collect()
@@ -283,8 +283,11 @@ fn fail_pay_less_fees_than_fee_transaction() {
 
     test.disable_fees();
 
-    let reason = result.expect_finalization_failure();
-    assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
+    let (diff, reason) = result.expect_fee_accept_transaction_reject();
+    assert_reject_reason(reason, RejectReason::FeesNotPaid(String::new()));
+
+    let (_, s) = diff.up_iter().find(|(id, _)| id.is_vault()).expect("Account not found");
+    assert_eq!(s.substate_value().as_vault().unwrap().balance(), orig_balance - 100);
 
     // Fee was not deducted
     let new_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
