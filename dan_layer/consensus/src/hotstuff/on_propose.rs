@@ -365,6 +365,23 @@ fn transaction_pool_record_to_command<TTx: StateStoreReadTransaction>(
         let involved = NonZeroU64::new(involved as u64).expect("involved is 1");
         let leader_fee = t.calculate_leader_fee(involved, EXHAUST_DIVISOR);
         let tx_atom = t.get_final_transaction_atom(leader_fee);
+        if tx_atom.decision.is_commit() {
+            let transaction = t.get_transaction(tx)?;
+            let result = transaction.result().ok_or_else(|| {
+                HotStuffError::InvariantError(format!(
+                    "Transaction {} is committed but has no result when proposing",
+                    t.transaction_id(),
+                ))
+            })?;
+
+            let diff = result.finalize.result.accept().ok_or_else(|| {
+                HotStuffError::InvariantError(format!(
+                    "Transaction {} has COMMIT decision but execution failed when proposing",
+                    t.transaction_id(),
+                ))
+            })?;
+            substate_changes.extend(diff_to_substate_changes(diff));
+        }
         return Ok(Command::LocalOnly(tx_atom));
     }
 

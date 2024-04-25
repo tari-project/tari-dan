@@ -650,7 +650,7 @@ impl Block {
         let committed = self
             .commands()
             .iter()
-            .filter_map(|c| c.accept())
+            .filter_map(|c| c.local_only().or_else(|| c.accept()))
             .filter(|t| t.decision.is_commit())
             .collect::<Vec<_>>();
 
@@ -811,7 +811,7 @@ impl Block {
         let transactions = self
             .commands()
             .iter()
-            .filter_map(|c| c.accept())
+            .filter_map(|c| c.local_only().or_else(|| c.accept()))
             .filter(|t| t.decision.is_commit())
             .map(|t| tx.transactions_get(t.id()))
             .collect::<Result<Vec<_>, _>>()?;

@@ -266,6 +266,13 @@ impl Command {
         }
     }
 
+    pub fn local_only(&self) -> Option<&TransactionAtom> {
+        match self {
+            Command::LocalOnly(tx) => Some(tx),
+            _ => None,
+        }
+    }
+
     pub fn committing(&self) -> Option<&TransactionAtom> {
         let committing = match self {
             Command::Accept(tx) => Some(tx),

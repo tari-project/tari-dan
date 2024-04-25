@@ -427,6 +427,9 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         if justify_block.id() != candidate_block.parent() {
             let mut dummy_blocks =
                 Vec::with_capacity((candidate_block.height().as_u64() - justify_block_height.as_u64() - 1) as usize);
+            let timestamp = justify_block.timestamp();
+            let base_layer_block_height = justify_block.base_layer_block_height();
+            let base_layer_block_hash = *justify_block.base_layer_block_hash();
             dummy_blocks.push(justify_block);
             let mut last_dummy_block = dummy_blocks.last().unwrap();
             // if the block parent is not the justify parent, then we have experienced a leader failure
@@ -454,9 +457,9 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     candidate_block.epoch(),
                     local_committee_shard.shard(),
                     *candidate_block.merkle_root(),
-                    candidate_block.timestamp(),
-                    candidate_block.base_layer_block_height(),
-                    *candidate_block.base_layer_block_hash(),
+                    timestamp,
+                    base_layer_block_height,
+                    base_layer_block_hash,
                 ));
                 last_dummy_block = dummy_blocks.last().unwrap();
                 debug!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", last_dummy_block, leader);
