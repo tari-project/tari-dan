@@ -106,12 +106,16 @@ loggers:
       - stdout
     additive: false
 
+  tari::dan::networking:
+    level: debug
+    appenders:
+      - network
+    additive: true
+
   tari::dan:
     level: info
     appenders:
       - dan_layer
-      - stdout
-    additive: false
 
   tari::indexer:
     level: info
