@@ -180,7 +180,7 @@ fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
             .with_context(|| anyhow!("Base path '{}' does not exist", base_dir.display()))?,
         webserver: WebserverConfig::default(),
         processes: ProcessesConfig {
-            force_compile: false,
+            force_compile: true,
             instances,
             executables,
         },

@@ -108,6 +108,70 @@ impl ExecutableManager {
     pub fn get_executable(&self, instance_type: InstanceType) -> Option<&Executable> {
         self.prepared.iter().find(|e| e.instance_type == instance_type)
     }
+
+    pub async fn compile_executable_if_required(&mut self, instance_type: InstanceType) -> anyhow::Result<&Executable> {
+        if self.always_compile {
+            let exec = self
+                .config
+                .iter()
+                .find(|e| e.instance_type == instance_type)
+                .ok_or_else(|| anyhow!("No executable config found for instance type '{}'", instance_type))?;
+
+            let compile = exec
+                .compile
+                .as_ref()
+                .ok_or_else(|| anyhow!("No compile config found for instance type '{}'", instance_type))?;
+
+            let working_dir = compile
+                .working_dir()
+                .canonicalize()
+                .context("working_dir does not exist")?;
+            let package = &compile.package_name;
+
+            let mut child = cargo_build(&working_dir, package)?;
+            let status = child.wait().await?;
+
+            if !status.success() {
+                return Err(anyhow!("Failed to compile {:?}", instance_type));
+            }
+
+            let exec = if let Some(i) = self
+                .prepared
+                .iter()
+                .position(|exec| exec.instance_type == instance_type)
+            {
+                &self.prepared[i]
+            } else {
+                let bin_path = add_ext(
+                    compile
+                        .working_dir()
+                        .join(compile.target_dir())
+                        .join(&compile.package_name),
+                );
+                self.prepared.push(Executable {
+                    instance_type,
+                    path: bin_path.canonicalize().with_context(|| {
+                        anyhow!("The compiled binary at path '{}' does not exist.", bin_path.display())
+                    })?,
+                    env: exec.env.clone(),
+                });
+                self.prepared.last().unwrap()
+            };
+
+            log::info!("🟢 Successfully compiled {}", instance_type);
+
+            Ok(exec)
+        } else {
+            // We cant just check this and return early in the function, so we need an else
+            // because of https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
+            // Put simply: returning a reference early confuses the borrow checker, which disallows mutation after the
+            // return.
+            let exec = self
+                .get_executable(instance_type)
+                .ok_or_else(|| anyhow!("No executable found for instance type '{}'", instance_type))?;
+            Ok(exec)
+        }
+    }
 }
 
 fn cargo_build<P: AsRef<Path>>(working_dir: P, package: &str) -> io::Result<Child> {
