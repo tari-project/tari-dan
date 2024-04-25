@@ -102,7 +102,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
 
     #[allow(clippy::too_many_lines)]
     async fn handle_request(&mut self, req: EpochManagerRequest<TAddr>) {
-        info!(target: LOG_TARGET, "Received request: {:?}", req);
+        debug!(target: LOG_TARGET, "Received request: {:?}", req);
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
             EpochManagerRequest::CurrentBlockInfo { reply } => handle(reply, Ok(self.inner.current_block_info())),
