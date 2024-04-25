@@ -8,4 +8,5 @@ export interface Connection {
   direction: ConnectionDirection;
   age: { secs: number; nanos: number };
   ping_latency: { secs: number; nanos: number } | null;
+  user_agent: string | null;
 }

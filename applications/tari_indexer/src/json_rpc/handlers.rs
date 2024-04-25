@@ -256,6 +256,7 @@ impl JsonRpcHandlers {
                 },
                 age: conn.age(),
                 ping_latency: conn.ping_latency,
+                user_agent: conn.user_agent,
             })
             .collect();
 

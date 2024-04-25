@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{ops::RangeInclusive, time::Duration};
+use std::{ops::RangeInclusive, sync::Arc, time::Duration};
 
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
@@ -731,6 +731,7 @@ pub struct Connection {
     pub age: Duration,
     #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number} | null"))]
     pub ping_latency: Option<Duration>,
+    pub user_agent: Option<Arc<String>>,
 }
 
 #[derive(Serialize, Debug)]
