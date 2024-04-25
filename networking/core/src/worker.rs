@@ -861,6 +861,7 @@ where
         let Some(dialled_address) = relay.dialled_address.as_ref() else {
             return false;
         };
+
         let circuit_addr = dialled_address.clone().with(Protocol::P2pCircuit);
 
         match self.swarm.listen_on(circuit_addr.clone()) {
