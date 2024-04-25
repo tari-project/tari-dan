@@ -227,17 +227,6 @@ impl Command {
         }
     }
 
-    pub fn decision(&self) -> Decision {
-        match self {
-            Command::Prepare(tx) => tx.decision,
-            Command::LocalPrepared(tx) => tx.decision,
-            Command::Accept(tx) => tx.decision,
-            Command::LocalOnly(tx) => tx.decision,
-            Command::ForeignProposal(_) => panic!("ForeignProposal does not have a decision"),
-            Command::EpochEvent(_) => panic!("EpochEvent does not have a decision"),
-        }
-    }
-
     pub fn prepare(&self) -> Option<&TransactionAtom> {
         match self {
             Command::Prepare(tx) => Some(tx),
@@ -280,7 +269,7 @@ impl Command {
             _ => None,
         };
 
-        committing.filter(|_| self.decision().is_commit())
+        committing.filter(|t| t.decision.is_commit())
     }
 
     pub fn is_epoch_start(&self) -> bool {
