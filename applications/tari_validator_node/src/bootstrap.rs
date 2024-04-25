@@ -63,7 +63,7 @@ use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_engine_types::{resource::Resource, substate::SubstateId};
 use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
 use tari_indexer_lib::substate_scanner::SubstateScanner;
-use tari_networking::{MessagingMode, NetworkingHandle, SwarmConfig};
+use tari_networking::{MessagingMode, NetworkingHandle, RelayCircuitLimits, RelayReservationLimits, SwarmConfig};
 use tari_rpc_framework::RpcServer;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -161,6 +161,10 @@ pub async fn spawn_services(
                 protocol_version: format!("/tari/{}/0.0.1", config.network).parse().unwrap(),
                 user_agent: "/tari/validator/0.0.1".to_string(),
                 enable_mdns: config.validator_node.p2p.enable_mdns,
+                enable_relay: true,
+                // TODO: allow node operator to configure
+                relay_circuit_limits: RelayCircuitLimits::high(),
+                relay_reservation_limits: RelayReservationLimits::high(),
                 ..Default::default()
             },
             reachability_mode: config.validator_node.p2p.reachability_mode.into(),

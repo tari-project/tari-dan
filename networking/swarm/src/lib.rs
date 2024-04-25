@@ -2,12 +2,12 @@
 //   SPDX-License-Identifier: BSD-4-Clause
 
 mod behaviour;
-mod config;
+pub mod config;
 mod error;
 mod protocol_version;
 
 pub use behaviour::*;
-pub use config::*;
+pub use config::Config;
 pub use error::*;
 pub use protocol_version::*;
 
