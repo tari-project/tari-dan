@@ -330,7 +330,7 @@ function ShowInfo(params: any) {
 }
 
 interface NodeControlsProps {
-  isRunning: bool,
+  isRunning: boolean,
   onStart: () => void;
   onStop: () => void;
   onDeleteData: () => void;
