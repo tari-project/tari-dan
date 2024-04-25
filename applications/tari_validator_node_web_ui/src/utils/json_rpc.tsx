@@ -65,13 +65,15 @@ import type {
 } from "@tariproject/typescript-bindings/validator-node-client";
 
 
-const DEFAULT_ADDRESS = new URL("http://localhost:18200");
+const DEFAULT_ADDRESS = new URL("http://127.0.0.1:18200");
 
 export async function getClientAddress(): Promise<URL> {
   try {
     let resp = await fetch("/json_rpc_address");
     if (resp.status === 200) {
-      return new URL(await resp.text());
+      let url = await resp.text();
+      console.log("Got URL from server:", url);
+      return new URL(`http://${url}`);
     }
   } catch (e) {
     console.warn(e);
@@ -89,7 +91,7 @@ async function jsonRpc(method: string, params: any = null) {
     body: JSON.stringify({
       method: method,
       jsonrpc: "2.0",
-      id: id,
+      id,
       params: params,
     }),
     headers: {

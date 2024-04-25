@@ -40,7 +40,7 @@ pub async fn run(context: HandlerContext) -> anyhow::Result<()> {
         ServeDir::new(context.config().base_dir.join("templates")).not_found_service(not_found.into_service());
 
     let router = Router::new()
-        .route("/json_rpc/upload_template", post(templates::upload))
+        .route("/upload_template", post(templates::upload))
         .route("/json_rpc", post(json_rpc_handler))
         .nest_service("/templates", serve_templates)
         .fallback(handler)
