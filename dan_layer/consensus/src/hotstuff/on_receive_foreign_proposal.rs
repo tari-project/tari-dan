@@ -167,7 +167,7 @@ where TConsensusSpec: ConsensusSpec
                 continue;
             }
 
-            let remote_decision = cmd.decision();
+            let remote_decision = t.decision;
             let local_decision = tx_rec.current_local_decision();
             if remote_decision.is_abort() && local_decision.is_commit() {
                 info!(

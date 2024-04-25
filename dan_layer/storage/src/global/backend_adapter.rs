@@ -118,8 +118,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
     fn validator_nodes_count_for_bucket(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        start_epoch: Epoch,
-        end_epoch: Epoch,
+        epoch: Epoch,
         bucket: Shard,
     ) -> Result<u64, Self::Error>;
 
@@ -128,6 +127,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         shard_key: SubstateAddress,
         bucket: Shard,
+        epoch: Epoch,
     ) -> Result<(), Self::Error>;
 
     fn validator_nodes_get_by_shard_range(

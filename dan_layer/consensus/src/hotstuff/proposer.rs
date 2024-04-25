@@ -42,7 +42,7 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    pub async fn broadcast_proposal_foreignly(&mut self, block: Block) -> Result<(), HotStuffError> {
+    pub async fn broadcast_foreign_proposal_if_required(&mut self, block: Block) -> Result<(), HotStuffError> {
         let num_committees = self.epoch_manager.get_num_committees(block.epoch()).await?;
 
         let validator = self.epoch_manager.get_our_validator_node(block.epoch()).await?;

@@ -1,7 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{env, process::Command};
+use std::{env, fs, process::Command};
 
 fn exit_on_ci() {
     if option_env!("CI").is_some() {
@@ -13,6 +13,10 @@ const BUILD: &[(&str, &str)] = &[("./webui", "build")];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=./webui/src");
+
+    // Ensure that dist path exists
+    fs::create_dir_all("./webui/dist")?;
+    fs::File::create("./webui/dist/.gitkeep")?;
 
     if env::var("CARGO_FEATURE_TS").is_ok() {
         println!("cargo:warning=The web ui is not being compiled when we are generating typescript types/interfaces.");
@@ -43,5 +47,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ => {},
         }
     }
+
+    // Ensure that .gitkeep exists
+    // This is a hack because the build removes .gitkeep
+    fs::File::create("./webui/dist/.gitkeep")?;
+
     Ok(())
 }

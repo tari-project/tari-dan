@@ -56,6 +56,7 @@ pub struct BaseLayerEpochManager<TGlobalStore, TBaseNodeClient> {
     config: EpochManagerConfig,
     current_epoch: Epoch,
     current_block_info: (u64, FixedHash),
+    last_block_of_current_epoch: FixedHash,
     tx_events: broadcast::Sender<EpochManagerEvent>,
     node_public_key: PublicKey,
     current_shard_key: Option<SubstateAddress>,
@@ -79,6 +80,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             config,
             current_epoch: Epoch(0),
             current_block_info: (0, Default::default()),
+            last_block_of_current_epoch: Default::default(),
             tx_events,
             node_public_key,
             current_shard_key: None,
@@ -101,7 +103,9 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         self.current_block_info = metadata
             .get_metadata(MetadataKey::EpochManagerCurrentBlockHeight)?
             .unwrap_or((0, Default::default()));
-
+        self.last_block_of_current_epoch = metadata
+            .get_metadata(MetadataKey::EpochManagerLastBlockOfCurrentEpoch)?
+            .unwrap_or(Default::default());
         Ok(())
     }
 
@@ -109,11 +113,14 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let base_layer_constants = self.base_node_client.get_consensus_constants(block_height).await?;
         let epoch = base_layer_constants.height_to_epoch(block_height);
         self.add_base_layer_block_info(block_height, block_hash)?;
+        let previous_block = self.current_block_info.1;
         self.update_current_block_info(block_height, block_hash)?;
         if self.current_epoch >= epoch {
             // no need to update the epoch
             return Ok(());
         }
+        // When epoch is changing we store the last block of current epoch for the EpochEvents
+        self.update_last_block_of_current_epoch(previous_block)?;
 
         info!(target: LOG_TARGET, "🌟 A new epoch {} is upon us", epoch);
         // extract and store in database the MMR of the epoch's validator nodes
@@ -142,7 +149,11 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
 
         for vn in &vns {
-            validator_nodes.set_committee_bucket(vn.shard_key, vn.shard_key.to_committee_shard(num_committees))?;
+            validator_nodes.set_committee_bucket(
+                vn.shard_key,
+                vn.shard_key.to_committee_shard(num_committees),
+                self.current_epoch,
+            )?;
         }
         tx.commit()?;
 
@@ -295,12 +306,33 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(())
     }
 
+    fn update_last_block_of_current_epoch(&mut self, block_hash: FixedHash) -> Result<(), EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        self.global_db
+            .metadata(&mut tx)
+            .set_metadata(MetadataKey::EpochManagerLastBlockOfCurrentEpoch, &block_hash)?;
+        tx.commit()?;
+        self.last_block_of_current_epoch = block_hash;
+        Ok(())
+    }
+
     pub fn current_epoch(&self) -> Epoch {
         self.current_epoch
     }
 
     pub fn current_block_info(&self) -> (u64, FixedHash) {
         self.current_block_info
+    }
+
+    pub fn last_block_of_current_epoch(&self) -> FixedHash {
+        self.last_block_of_current_epoch
+    }
+
+    pub async fn is_last_block_of_epoch(&mut self, block_height: u64) -> Result<bool, EpochManagerError> {
+        let base_layer_constants_now = self.base_node_client.get_consensus_constants(block_height).await?;
+        let base_layer_constants_next_block = self.base_node_client.get_consensus_constants(block_height + 1).await?;
+        Ok(base_layer_constants_now.height_to_epoch(block_height) !=
+            base_layer_constants_next_block.height_to_epoch(block_height + 1))
     }
 
     pub fn get_validator_node_by_public_key(
@@ -610,8 +642,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let shard = substate_address.to_committee_shard(num_committees);
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
-        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        let num_validators = validator_node_db.count_in_bucket(start_epoch, end_epoch, shard)?;
+        let num_validators = validator_node_db.count_in_bucket(epoch, shard)?;
         let num_validators = u32::try_from(num_validators).map_err(|_| EpochManagerError::IntegerOverflow {
             func: "get_committee_shard",
         })?;

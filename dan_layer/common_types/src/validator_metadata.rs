@@ -28,7 +28,7 @@ impl ValidatorMetadata {
 
 pub fn vn_node_hash(network: Network, public_key: &PublicKey, substate_address: &SubstateAddress) -> FixedHash {
     // TODO: TariBaseLayerHasher32 is the same as the consensus hasher in tari_core. The consensus hasher should be part
-    // of the common hashing crate, currently called tari_hash_domains. Should rename it to tari_hasher/tari_hashing
+    // of the common hashing crate, currently called tari_hashing. Should rename it to tari_hasher/tari_hashing
     // and include the consensus hasher. This is done to remove the dependency on tari_core which has a bunch of
     // dependencies e.g. tari_comms, dht etc. "Type" crates should always have minimal dependencies.
     TariBaseLayerHasher32::new_with_label::<TransactionHashDomain>(network, "validator_node")

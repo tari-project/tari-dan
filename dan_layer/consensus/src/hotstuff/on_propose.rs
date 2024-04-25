@@ -22,6 +22,7 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         Command,
+        EpochEvent,
         ForeignProposal,
         ForeignSendCounters,
         HighQc,
@@ -128,8 +129,12 @@ where TConsensusSpec: ConsensusSpec
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
         let (current_base_layer_block_height, current_base_layer_block_hash) =
             self.epoch_manager.current_base_layer_block_info().await?;
-        let high_qc = self.store.with_read_tx(|tx| HighQc::get(tx))?;
-        let qc_block = self.store.with_read_tx(|tx| Block::get(tx, high_qc.block_id()))?;
+        let (high_qc, qc_block, locked_block) = self.store.with_read_tx(|tx| {
+            let high_qc = HighQc::get(tx)?;
+            let qc_block = high_qc.get_block(tx)?;
+            let locked_block = LockedBlock::get(tx)?.get_block(tx)?;
+            Ok::<_, HotStuffError>((high_qc, qc_block, locked_block))
+        })?;
 
         let parent_base_layer_block_hash = qc_block.base_layer_block_hash();
 
@@ -141,8 +146,29 @@ where TConsensusSpec: ConsensusSpec
             current_base_layer_block_hash
         };
 
-        let base_layer_block_height =
-            std::cmp::max(qc_block.base_layer_block_height(), current_base_layer_block_height);
+        // If epoch has changed, we should first end the epoch with an EpochEvent::End
+        let propose_epoch_end =
+            // If we didn't locked block with an EpochEvent::End
+            !locked_block.is_epoch_end() &&
+            // The last block is from previous epoch or it is an EpochEnd block
+            (qc_block.epoch() < epoch || qc_block.is_epoch_end()) &&
+            // If the previous epoch is the genesis epoch, we don't need to end it (there was no committee at epoch 0)
+            !qc_block.is_genesis();
+
+        // If the epoch is changed, we use the current epoch
+        let epoch = if propose_epoch_end { qc_block.epoch() } else { epoch };
+        let base_layer_block_hash = if propose_epoch_end {
+            self.epoch_manager.get_last_block_of_current_epoch().await?
+        } else {
+            base_layer_block_hash
+        };
+        let base_layer_block_height = self
+            .epoch_manager
+            .get_base_layer_block_height(base_layer_block_hash)
+            .await?
+            .unwrap();
+        // The epoch is greater only when the EpochEnd event is locked.
+        let propose_epoch_start = qc_block.epoch() < epoch;
 
         let next_block = self.store.with_write_tx(|tx| {
             let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
@@ -158,6 +184,8 @@ where TConsensusSpec: ConsensusSpec
                 is_newview_propose,
                 base_layer_block_height,
                 base_layer_block_hash,
+                propose_epoch_start,
+                propose_epoch_end,
             )?;
 
             next_block.as_last_proposed().set(tx)?;
@@ -216,10 +244,12 @@ where TConsensusSpec: ConsensusSpec
         empty_block: bool,
         base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
+        propose_epoch_start: bool,
+        propose_epoch_end: bool,
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
-        let batch = if empty_block {
+        let batch = if empty_block || propose_epoch_end || propose_epoch_start {
             vec![]
         } else {
             self.transaction_pool.get_batch_for_next_block(tx, TARGET_BLOCK_SIZE)?
@@ -231,33 +261,37 @@ where TConsensusSpec: ConsensusSpec
         let mut substate_changes = vec![];
         let locked_block = LockedBlock::get(tx)?;
         let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
-        let commands = ForeignProposal::get_all_new(tx)?
-            .into_iter()
-            .filter(|foreign_proposal| {
-                // If the foreign proposal is already pending, don't propose it again
-                !pending_proposals.iter().any(|pending_proposal| {
-                    pending_proposal.bucket == foreign_proposal.bucket &&
-                        pending_proposal.block_id == foreign_proposal.block_id
-                }) && foreign_proposal.base_layer_block_height <= base_layer_block_height
-                // If the proposal base layer
-                // height is too high, ignore
-                // for now.
-            })
-            .map(|mut foreign_proposal| {
-                foreign_proposal.set_proposed_height(parent_block.height().saturating_add(NodeHeight(1)));
-                Ok(Command::ForeignProposal(foreign_proposal))
-            })
-            .chain(batch.into_iter().map(|t| {
-                let command = transaction_pool_record_to_command(tx, &t, local_committee_shard, &mut substate_changes)?;
-                total_leader_fee += command
-                    .committing()
-                    .and_then(|tx| tx.leader_fee.as_ref())
-                    .map(|f| f.fee)
-                    .unwrap_or(0);
-                Ok::<_, HotStuffError>(command)
-            }))
-            .collect::<Result<BTreeSet<_>, HotStuffError>>()?;
-
+        let commands = if propose_epoch_start {
+            BTreeSet::from_iter([Command::EpochEvent(EpochEvent::Start)])
+        } else if propose_epoch_end {
+            BTreeSet::from_iter([Command::EpochEvent(EpochEvent::End)])
+        } else {
+            ForeignProposal::get_all_new(tx)?
+                .into_iter()
+                .filter(|foreign_proposal| {
+                    // If the foreign proposal is already pending, don't propose it again
+                    !pending_proposals.iter().any(|pending_proposal| {
+                        pending_proposal.bucket == foreign_proposal.bucket &&
+                            pending_proposal.block_id == foreign_proposal.block_id
+                    })// If the proposal base layer height is too high, ignore for now.
+                    && foreign_proposal.base_layer_block_height <= base_layer_block_height
+                })
+                .map(|mut foreign_proposal| {
+                    foreign_proposal.set_proposed_height(parent_block.height().saturating_add(NodeHeight(1)));
+                    Ok(Command::ForeignProposal(foreign_proposal))
+                })
+                .chain(batch.into_iter().map(|t| {
+                    let command =
+                        transaction_pool_record_to_command(tx, &t, local_committee_shard, &mut substate_changes)?;
+                    total_leader_fee += command
+                        .committing()
+                        .and_then(|tx| tx.leader_fee.as_ref())
+                        .map(|f| f.fee)
+                        .unwrap_or(0);
+                    Ok::<_, HotStuffError>(command)
+                }))
+                .collect::<Result<BTreeSet<_>, HotStuffError>>()?
+        };
         debug!(
             target: LOG_TARGET,
             "command(s) for next block: [{}]",
@@ -331,6 +365,23 @@ fn transaction_pool_record_to_command<TTx: StateStoreReadTransaction>(
         let involved = NonZeroU64::new(involved as u64).expect("involved is 1");
         let leader_fee = t.calculate_leader_fee(involved, EXHAUST_DIVISOR);
         let tx_atom = t.get_final_transaction_atom(leader_fee);
+        if tx_atom.decision.is_commit() {
+            let transaction = t.get_transaction(tx)?;
+            let result = transaction.result().ok_or_else(|| {
+                HotStuffError::InvariantError(format!(
+                    "Transaction {} is committed but has no result when proposing",
+                    t.transaction_id(),
+                ))
+            })?;
+
+            let diff = result.finalize.result.accept().ok_or_else(|| {
+                HotStuffError::InvariantError(format!(
+                    "Transaction {} has COMMIT decision but execution failed when proposing",
+                    t.transaction_id(),
+                ))
+            })?;
+            substate_changes.extend(diff_to_substate_changes(diff));
+        }
         return Ok(Command::LocalOnly(tx_atom));
     }
 

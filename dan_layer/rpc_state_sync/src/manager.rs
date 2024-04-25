@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Display,
     ops::{Deref, DerefMut},
 };
@@ -15,13 +15,14 @@ use tari_consensus::{
     hotstuff::{calculate_state_merkle_diff, hash_substate, ProposalValidationError},
     traits::{ConsensusSpec, LeaderStrategy, SyncManager, SyncStatus},
 };
-use tari_dan_common_types::{committee::Committee, optional::Optional, NodeHeight, PeerAddress};
+use tari_dan_common_types::{committee::Committee, optional::Optional, shard::Shard, Epoch, NodeHeight, PeerAddress};
 use tari_dan_p2p::proto::rpc::{GetHighQcRequest, SyncBlocksRequest};
 use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockId,
         HighQc,
+        LeafBlock,
         LockedBlock,
         PendingStateTreeDiff,
         QuorumCertificate,
@@ -87,13 +88,14 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         &mut self,
         addr: &TConsensusSpec::Addr,
         locked_block: &LockedBlock,
+        up_to_epoch: Option<Epoch>,
     ) -> Result<(), CommsRpcConsensusSyncError> {
         self.create_zero_block_if_required()?;
         let mut rpc_client = self.client_factory.create_client(addr);
         let mut client = rpc_client.client_connection().await?;
 
         info!(target: LOG_TARGET, "🌐 Syncing blocks from peer '{}' from Locked block {}", addr, locked_block);
-        self.sync_blocks(&mut client, locked_block).await?;
+        self.sync_blocks(&mut client, locked_block, up_to_epoch).await?;
 
         Ok(())
     }
@@ -124,10 +126,12 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         &mut self,
         client: &mut ValidatorNodeRpcClient,
         locked_block: &LockedBlock,
+        up_to_epoch: Option<Epoch>,
     ) -> Result<(), CommsRpcConsensusSyncError> {
         let mut stream = client
             .sync_blocks(SyncBlocksRequest {
                 start_block_id: locked_block.block_id.as_bytes().to_vec(),
+                up_to_epoch: up_to_epoch.map(|epoch| epoch.into()),
             })
             .await?;
 
@@ -260,6 +264,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         transactions: Vec<TransactionRecord>,
         pending_state_updates: &mut HashMap<BlockId, Vec<SubstateUpdate>>,
     ) -> Result<(), CommsRpcConsensusSyncError> {
+        info!(target: LOG_TARGET, "🌐 Processing block {}. {} substate update(s)", block, updates.len());
         // Note: this is only used for dummy block calculation, so we avoid the epoch manager call unless it is needed.
         // Otherwise, the committee is empty.
         let local_committee = if block.justifies_parent() {
@@ -275,15 +280,18 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
             block.justify().save(tx)?;
 
+            let justify_block = block.justify().get_block(tx.deref_mut())?;
+
             // Check if we need to calculate dummy blocks
             // TODO: Validate before doing this. e.g. block.height() is maliciously larger then block.justify().block_height()
             if !block.justifies_parent() {
                 let mut last_dummy_block = BlockIdAndHeight {id: *block.justify().block_id(), height: block.justify().block_height()};
+                info!(target: LOG_TARGET, "🍼 START DUMMY BLOCK: {}. ", last_dummy_block, );
                 // if the block parent is not the justify parent, then we have experienced a leader failure
                 // and should make dummy blocks to fill in the gaps.
                 while last_dummy_block.id != *block.parent() {
                     if last_dummy_block.height >= block.height() {
-                        warn!(target: LOG_TARGET, "🔥 Bad proposal, dummy block height {} is greater than new height {}", last_dummy_block, block);
+                        warn!(target: LOG_TARGET, "🔥 Bad proposal, no dummy block parent hash matches between block height {} and new block height {}.", last_dummy_block, block);
                         return Err( ProposalValidationError::CandidateBlockDoesNotExtendJustify {
                             justify_block_height: block.justify().block_height(),
                             candidate_block_height: block.height(),
@@ -302,13 +310,13 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         block.epoch(),
                         block.shard(),
                         *block.merkle_root(),
-                        block.timestamp(),
-                        block.base_layer_block_height(),
-                        *block.base_layer_block_hash(),
+                        justify_block.timestamp(),
+                        justify_block.base_layer_block_height(),
+                        *justify_block.base_layer_block_hash(),
                     );
                     dummy_block.save(tx)?;
                     last_dummy_block = BlockIdAndHeight { id: *dummy_block.id(), height: next_height };
-                    debug!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", last_dummy_block, leader);
+                    info!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", last_dummy_block, leader);
                 }
             }
 
@@ -439,16 +447,11 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         debug!(target: LOG_TARGET, "✅ COMMIT block {}", block);
         Ok(())
     }
-}
 
-#[async_trait]
-impl<TConsensusSpec> SyncManager for RpcStateSyncManager<TConsensusSpec>
-where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
-{
-    type Error = CommsRpcConsensusSyncError;
-
-    async fn check_sync(&self) -> Result<SyncStatus, Self::Error> {
-        let committee = self.get_sync_peers().await?;
+    async fn check_sync_from_committee(
+        &self,
+        committee: Committee<TConsensusSpec::Addr>,
+    ) -> Result<SyncStatus, CommsRpcConsensusSyncError> {
         if committee.is_empty() {
             warn!(target: LOG_TARGET, "No peers available for sync");
             return Ok(SyncStatus::UpToDate);
@@ -527,22 +530,24 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
         Ok(SyncStatus::UpToDate)
     }
 
-    async fn sync(&mut self) -> Result<(), Self::Error> {
-        let committee = self.get_sync_peers().await?;
-        if committee.is_empty() {
-            warn!(target: LOG_TARGET, "No peers available for sync");
-            return Ok(());
-        }
-
+    async fn sync_from_committee(
+        &mut self,
+        committee: Committee<TConsensusSpec::Addr>,
+        up_to_epoch: Option<Epoch>,
+        this_vn_address: PeerAddress,
+    ) -> Result<Option<CommsRpcConsensusSyncError>, CommsRpcConsensusSyncError> {
         let mut sync_error = None;
         for member in committee.addresses() {
+            if *member == this_vn_address {
+                continue;
+            }
             // Refresh the HighQC each time because a partial sync could have been achieved from a peer
             let locked_block = self
                 .state_store
                 .with_read_tx(|tx| LockedBlock::get(tx).optional())?
                 .unwrap_or_else(|| Block::zero_block(self.network).as_locked_block());
 
-            match self.sync_with_peer(member, &locked_block).await {
+            match self.sync_with_peer(member, &locked_block, up_to_epoch).await {
                 Ok(()) => {
                     sync_error = None;
                     break;
@@ -553,6 +558,122 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
                     continue;
                 },
             }
+        }
+        Ok(sync_error)
+    }
+}
+
+#[async_trait]
+impl<TConsensusSpec> SyncManager for RpcStateSyncManager<TConsensusSpec>
+where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
+{
+    type Error = CommsRpcConsensusSyncError;
+
+    async fn check_sync(&self) -> Result<SyncStatus, Self::Error> {
+        let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx).optional())?;
+        let leaf_epoch = match leaf_block {
+            Some(leaf_block) => {
+                let block = self
+                    .state_store
+                    .with_read_tx(|tx| Block::get(tx, leaf_block.block_id()))?;
+                block.epoch()
+            },
+            None => Epoch(0),
+        };
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        if current_epoch > leaf_epoch {
+            info!(target: LOG_TARGET, "We are behind at least one epoch");
+            // We are behind at least one epoch.
+            // We get the current substate range, and we asks committees from previous epoch in this range to give us
+            // data.
+            let local_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+            let current_num_committee = self.epoch_manager.get_num_committees(current_epoch).await?;
+            let range = local_shard.shard().to_substate_address_range(current_num_committee);
+            let prev_epoch = current_epoch.saturating_sub(Epoch(1));
+            info!(target: LOG_TARGET,"Previous epoch is {}", prev_epoch);
+            let prev_num_committee = self.epoch_manager.get_num_committees(prev_epoch).await?;
+            info!(target: LOG_TARGET,"Previous num committee {}", prev_num_committee);
+            let start = range.start().to_committee_shard(prev_num_committee);
+            let end = range.end().to_committee_shard(prev_num_committee);
+            info!(target: LOG_TARGET,"Start: {}, End: {}", start, end);
+            let this_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
+            let committees = self
+                .epoch_manager
+                .get_committees_by_shards(
+                    prev_epoch,
+                    (start.as_u32()..=end.as_u32()).map(Shard::from).collect::<HashSet<_>>(),
+                )
+                .await?;
+            for (shard, mut committee) in committees {
+                info!(target: LOG_TARGET, "Syncing shard {} from previous epoch. Committee : {:?}", shard, committee);
+                committee.members.retain(|(addr, _)| *addr != this_vn.address);
+                committee.shuffle();
+                if self.check_sync_from_committee(committee).await? == SyncStatus::Behind {
+                    return Ok(SyncStatus::Behind);
+                }
+            }
+        }
+
+        let committee: Committee<PeerAddress> = self.get_sync_peers().await?;
+        self.check_sync_from_committee(committee).await
+    }
+
+    async fn sync(&mut self) -> Result<(), Self::Error> {
+        info!(target: LOG_TARGET, "Syncing");
+        let mut sync_error = None;
+        let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx).optional())?;
+        let leaf_epoch = match leaf_block {
+            Some(leaf_block) => {
+                let block = self
+                    .state_store
+                    .with_read_tx(|tx| Block::get(tx, leaf_block.block_id()))?;
+                block.epoch()
+            },
+            None => Epoch(0),
+        };
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        let this_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
+        if current_epoch > leaf_epoch {
+            info!(target: LOG_TARGET, "We are behind at least one epoch..sync");
+            // We are behind at least one epoch.
+            // We get the current substate range, and we asks committees from previous epoch in this range to give us
+            // data.
+            let local_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+            let current_num_committee = self.epoch_manager.get_num_committees(current_epoch).await?;
+            let range = local_shard.shard().to_substate_address_range(current_num_committee);
+            let prev_epoch = current_epoch.saturating_sub(Epoch(1));
+            info!(target: LOG_TARGET,"Previous epoch is {}", prev_epoch);
+            let prev_num_committee = self.epoch_manager.get_num_committees(prev_epoch).await?;
+            info!(target: LOG_TARGET,"Previous num committee {}", prev_num_committee);
+            let start = range.start().to_committee_shard(prev_num_committee);
+            let end = range.end().to_committee_shard(prev_num_committee);
+            info!(target: LOG_TARGET,"Start: {}, End: {}", start, end);
+            let committees = self
+                .epoch_manager
+                .get_committees_by_shards(
+                    prev_epoch,
+                    (start.as_u32()..=end.as_u32()).map(Shard::from).collect::<HashSet<_>>(),
+                )
+                .await?;
+            for (_shard, committee) in committees {
+                info!(target:LOG_TARGET,"Syncing from committee {:?}",committee);
+                if let Some(error) = self
+                    .sync_from_committee(committee, Some(current_epoch), this_vn.address)
+                    .await?
+                {
+                    sync_error = Some(error);
+                }
+            }
+        }
+
+        let committee = self.get_sync_peers().await?;
+        if committee.is_empty() {
+            warn!(target: LOG_TARGET, "No peers available for sync");
+            return Ok(());
+        }
+
+        if let Some(error) = self.sync_from_committee(committee, None, this_vn.address).await? {
+            sync_error = Some(error);
         }
 
         if let Some(err) = sync_error {

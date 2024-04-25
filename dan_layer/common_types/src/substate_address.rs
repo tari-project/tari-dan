@@ -132,9 +132,12 @@ impl SubstateAddress {
         }
         let shard_size = U256::MAX / U256::from(num_committees);
         // 4,294,967,295 committees.
-        u32::try_from(self.to_u256() / shard_size)
-            .expect("to_committee_shard: num_committees is a u32, so this cannot fail")
-            .into()
+        std::cmp::min(
+            u32::try_from(self.to_u256() / shard_size)
+                .expect("to_committee_shard: num_committees is a u32, so this cannot fail"),
+            num_committees - 1,
+        )
+        .into()
     }
 
     pub fn to_committee_range(&self, num_committees: u32) -> RangeInclusive<SubstateAddress> {
@@ -241,7 +244,8 @@ mod tests {
     #[test]
     fn max_committees() {
         let shard = SubstateAddress::max().to_committee_shard(u32::MAX);
-        assert_eq!(shard, u32::MAX);
+        // When we have n committees, the last committee is n-1.
+        assert_eq!(shard, u32::MAX - 1);
     }
 
     fn shard(shard: u32, of: u32) -> SubstateAddress {

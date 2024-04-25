@@ -42,6 +42,7 @@ use tari_dan_storage::consensus_models::{
     BlockId,
     Command,
     Decision,
+    EpochEvent,
     Evidence,
     ForeignProposal,
     ForeignProposalState,
@@ -318,6 +319,9 @@ impl From<&Command> for proto::consensus::Command {
             Command::ForeignProposal(foreign_proposal) => {
                 proto::consensus::command::Command::ForeignProposal(foreign_proposal.into())
             },
+            Command::EpochEvent(event) => {
+                proto::consensus::command::Command::EpochEvent(proto::consensus::EpochEvent::from(event).into())
+            },
         };
 
         Self { command: Some(command) }
@@ -337,6 +341,11 @@ impl TryFrom<proto::consensus::Command> for Command {
             proto::consensus::command::Command::ForeignProposal(foreign_proposal) => {
                 Command::ForeignProposal(foreign_proposal.try_into()?)
             },
+            proto::consensus::command::Command::EpochEvent(event) => Command::EpochEvent(
+                proto::consensus::EpochEvent::try_from(event)
+                    .map_err(|_| anyhow!("Invalid epoch event value {}", event))?
+                    .try_into()?,
+            ),
         })
     }
 }
@@ -458,6 +467,29 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
                 .collect::<Result<_, _>>()?,
             base_layer_block_height: value.base_layer_block_height,
         })
+    }
+}
+
+// ------------------------------- EpochEvent ------------------------------- //
+
+impl From<&EpochEvent> for proto::consensus::EpochEvent {
+    fn from(value: &EpochEvent) -> Self {
+        match value {
+            EpochEvent::Start => proto::consensus::EpochEvent::Start,
+            EpochEvent::End => proto::consensus::EpochEvent::End,
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::EpochEvent> for EpochEvent {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::EpochEvent) -> Result<Self, Self::Error> {
+        match value {
+            proto::consensus::EpochEvent::Start => Ok(EpochEvent::Start),
+            proto::consensus::EpochEvent::End => Ok(EpochEvent::End),
+            proto::consensus::EpochEvent::UnknownEvent => Err(anyhow!("Epoch event not provided")),
+        }
     }
 }
 

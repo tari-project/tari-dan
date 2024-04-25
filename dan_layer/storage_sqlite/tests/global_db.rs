@@ -5,12 +5,14 @@ use diesel::{Connection, SqliteConnection};
 use rand::rngs::OsRng;
 use tari_common_types::types::PublicKey;
 use tari_crypto::keys::PublicKey as _;
-use tari_dan_common_types::{Epoch, PeerAddress, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, PeerAddress, SubstateAddress};
 use tari_dan_storage::global::{GlobalDb, ValidatorNodeDb};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_utilities::ByteArray;
 
 fn create_db() -> GlobalDb<SqliteGlobalDbAdapter<PeerAddress>> {
+    // std::fs::remove_file("/tmp/tmptmp.db").ok();
+    // let conn = SqliteConnection::establish("file:///tmp/tmptmp.db").unwrap();
     let conn = SqliteConnection::establish(":memory:").unwrap();
     let db = GlobalDb::new(SqliteGlobalDbAdapter::new(conn));
     db.adapter().migrate().unwrap();
@@ -54,6 +56,17 @@ fn insert_vn_with_public_key(
         .unwrap()
 }
 
+fn update_committee_bucket(
+    validator_nodes: &mut ValidatorNodeDb<'_, '_, SqliteGlobalDbAdapter<PeerAddress>>,
+    public_key: &PublicKey,
+    committee_bucket: Shard,
+    epoch: Epoch,
+) {
+    validator_nodes
+        .set_committee_bucket(derived_substate_address(public_key), committee_bucket, epoch)
+        .unwrap();
+}
+
 #[test]
 fn insert_and_get_within_epoch() {
     let db = create_db();
@@ -67,18 +80,18 @@ fn insert_and_get_within_epoch() {
 }
 
 #[test]
-fn insert_and_get_within_epoch_duplicate_public_keys() {
+fn change_committee_bucket() {
     let db = create_db();
     let mut tx = db.create_transaction().unwrap();
     let mut validator_nodes = db.validator_nodes(&mut tx);
-    insert_vns(&mut validator_nodes, 2, Epoch(0), None);
-    insert_vns(&mut validator_nodes, 1, Epoch(10), None);
     let pk = new_public_key();
     insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(0), None);
-    insert_vn_with_public_key(&mut validator_nodes, pk, Epoch(1), None);
-
+    update_committee_bucket(&mut validator_nodes, &pk, Shard::from(1), Epoch(0));
+    update_committee_bucket(&mut validator_nodes, &pk, Shard::from(3), Epoch(1));
+    update_committee_bucket(&mut validator_nodes, &pk, Shard::from(7), Epoch(2));
+    update_committee_bucket(&mut validator_nodes, &pk, Shard::from(4), Epoch(3));
     let vns = validator_nodes.get_all_within_epochs(Epoch(0), Epoch(10)).unwrap();
-    assert_eq!(vns.len(), 4);
+    assert_eq!(vns[0].committee_shard, Some(Shard::from(4)));
 }
 
 #[test]
@@ -92,9 +105,16 @@ fn insert_and_get_within_shard_range_duplicate_public_keys() {
 
     let pk = new_public_key();
     insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(0), None);
-    insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(1), None);
+    update_committee_bucket(&mut validator_nodes, &pk, Shard::from(0), Epoch(0));
+    update_committee_bucket(&mut validator_nodes, &pk, Shard::from(2), Epoch(2));
     let pk2 = new_public_key();
     insert_vn_with_public_key(&mut validator_nodes, pk2.clone(), Epoch(1), None);
+    update_committee_bucket(&mut validator_nodes, &pk2, Shard::from(1), Epoch(1));
+    update_committee_bucket(&mut validator_nodes, &pk2, Shard::from(3), Epoch(3));
+
+    tx.commit().unwrap();
+    let mut tx = db.create_transaction().unwrap();
+    let mut validator_nodes = db.validator_nodes(&mut tx);
 
     let shard_id = derived_substate_address(&pk);
     let shard_id2 = derived_substate_address(&pk2);
@@ -109,10 +129,22 @@ fn insert_and_get_within_shard_range_duplicate_public_keys() {
         .unwrap();
     if shard_id > shard_id2 {
         assert_eq!(vns[0].public_key, pk2);
+        assert_eq!(vns[0].committee_shard, Some(Shard::from(3)));
+        assert_eq!(vns[0].epoch, Epoch(3));
         assert_eq!(vns[1].public_key, pk);
+        assert_eq!(vns[1].committee_shard, Some(Shard::from(2)));
+        assert_eq!(vns[1].epoch, Epoch(2));
     } else {
         assert_eq!(vns[0].public_key, pk);
+        assert_eq!(vns[0].committee_shard, Some(Shard::from(2)));
+        assert_eq!(vns[0].epoch, Epoch(2));
         assert_eq!(vns[1].public_key, pk2);
+        assert_eq!(vns[1].committee_shard, Some(Shard::from(3)));
+        assert_eq!(vns[1].epoch, Epoch(3));
     }
     assert_eq!(vns.len(), 2);
+
+    let vn = validator_nodes.get_by_public_key(Epoch(0), Epoch(10), &pk).unwrap();
+    assert_eq!(vn.epoch, Epoch(2));
+    assert_eq!(vn.committee_shard, Some(Shard::from(2)));
 }

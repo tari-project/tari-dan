@@ -4,9 +4,10 @@
 use std::collections::HashSet;
 
 use log::*;
+use tari_dan_common_types::Epoch;
 use tari_dan_p2p::proto::rpc::{sync_blocks_response::SyncData, QuorumCertificates, SyncBlocksResponse, Transactions};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, LockedBlock, QuorumCertificate, SubstateUpdate, TransactionRecord},
+    consensus_models::{Block, BlockId, LeafBlock, LockedBlock, QuorumCertificate, SubstateUpdate, TransactionRecord},
     StateStore,
     StateStoreReadTransaction,
     StorageError,
@@ -29,6 +30,7 @@ type BlockBuffer = Vec<BlockData>;
 pub struct BlockSyncTask<TStateStore: StateStore> {
     store: TStateStore,
     start_block: Block,
+    up_to_epoch: Option<Epoch>,
     sender: mpsc::Sender<Result<SyncBlocksResponse, RpcStatus>>,
 }
 
@@ -36,11 +38,13 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
     pub fn new(
         store: TStateStore,
         start_block: Block,
+        up_to_epoch: Option<Epoch>,
         sender: mpsc::Sender<Result<SyncBlocksResponse, RpcStatus>>,
     ) -> Self {
         Self {
             store,
             start_block,
+            up_to_epoch,
             sender,
         }
     }
@@ -73,14 +77,14 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                 self.send_block_data(data).await?;
             }
 
-            // If we didnt fill up the buffer, send the final blocks
+            // If we didn't fill up the buffer, send the final blocks
             if num_items < buffer.capacity() {
                 debug!( target: LOG_TARGET, "Sync to last commit complete. Streamed {} item(s)", counter);
                 break;
             }
         }
 
-        match self.fetch_last_blocks(&mut buffer, &current_block_id) {
+        match self.fetch_last_blocks(&mut buffer, &current_block_id).await {
             Ok(_) => (),
             Err(err) => {
                 self.send(Err(RpcStatus::log_internal_error(LOG_TARGET)(err))).await?;
@@ -136,11 +140,36 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         })
     }
 
-    fn fetch_last_blocks(&self, buffer: &mut BlockBuffer, current_block_id: &BlockId) -> Result<(), StorageError> {
+    async fn fetch_last_blocks(
+        &self,
+        buffer: &mut BlockBuffer,
+        current_block_id: &BlockId,
+    ) -> Result<(), StorageError> {
+        // if let Some(up_to_epoch) = self.up_to_epoch {
+        //     // Wait for the end of epoch block if the requested epoch has not yet completed
+        //     // TODO: We should consider streaming blocks as they come in from consensus
+        //     loop {
+        //         let block = self.store.with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
+        //         if block.is_epoch_end() && block.epoch() + Epoch(1) >= up_to_epoch {
+        //             // If found the epoch end block, break.
+        //             break;
+        //         }
+        //         tokio::time::sleep(Duration::from_secs(10)).await;
+        //     }
+        // }
         self.store.with_read_tx(|tx| {
-            // TODO: if there are any transactions this will break the syncing node.
-            let locked_block = LockedBlock::get(tx)?;
-            let blocks = Block::get_all_blocks_between(tx, current_block_id, locked_block.block_id(), false)?;
+            // TODO: if there are any transactions in the block the syncing node will reject the block
+
+            // If syncing to epoch, sync to the leaf block
+            let up_to_block = if self.up_to_epoch.is_none() {
+                let locked_block = LockedBlock::get(tx)?;
+                *locked_block.block_id()
+            } else {
+                let leaf_block = LeafBlock::get(tx)?;
+                *leaf_block.block_id()
+            };
+
+            let blocks = Block::get_all_blocks_between(tx, current_block_id, &up_to_block, false)?;
             for block in blocks {
                 debug!(
                     target: LOG_TARGET,

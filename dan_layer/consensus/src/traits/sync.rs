@@ -12,7 +12,7 @@ pub trait SyncManager {
     async fn sync(&mut self) -> Result<(), Self::Error>;
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SyncStatus {
     UpToDate,
     Behind,

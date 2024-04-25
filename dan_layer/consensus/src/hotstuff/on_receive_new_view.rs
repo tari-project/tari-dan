@@ -95,13 +95,14 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
-        if !self.epoch_manager.is_validator_in_local_committee(&from, epoch).await? {
-            return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
-                epoch,
-                sender: from.to_string(),
-                context: format!("Received NEWVIEW from {}", from),
-            });
-        }
+        // TODO: This prevents syncing the blocks from previous epoch.
+        // if !self.epoch_manager.is_validator_in_local_committee(&from, epoch).await? {
+        //     return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
+        //         epoch,
+        //         sender: from.to_string(),
+        //         context: format!("Received NEWVIEW from {}", from),
+        //     });
+        // }
 
         // We can never accept NEWVIEWS for heights that are lower than the locked block height
         let locked = self.store.with_read_tx(|tx| LockedBlock::get(tx))?;

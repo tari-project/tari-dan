@@ -22,7 +22,7 @@
 
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 
-use minotari_node::{run_base_node, BaseNodeConfig};
+use minotari_node::{config::GrpcMethod, run_base_node, BaseNodeConfig};
 use rand::rngs::OsRng;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{configuration::CommonConfig, exit_codes::ExitError};
@@ -114,8 +114,25 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
                 database_url: DbConnectionUrl::File(temp_dir.join("dht.sqlite")),
                 ..DhtConfig::default_local_test()
             };
-            base_node_config.base_node.second_layer_grpc_enabled = true;
-            base_node_config.base_node.mining_enabled = true;
+            base_node_config.base_node.grpc_server_allow_methods = vec![
+                GrpcMethod::GetVersion,
+                GrpcMethod::GetNewBlockTemplate,
+                GrpcMethod::GetNewBlock,
+                GrpcMethod::GetNewBlockBlob,
+                GrpcMethod::SubmitBlock,
+                GrpcMethod::SubmitBlockBlob,
+                GrpcMethod::GetTipInfo,
+                GrpcMethod::GetVersion,
+                GrpcMethod::GetConstants,
+                GrpcMethod::GetMempoolTransactions,
+                GrpcMethod::GetMempoolStats,
+                GrpcMethod::GetTipInfo,
+                GrpcMethod::GetActiveValidatorNodes,
+                GrpcMethod::GetShardKey,
+                GrpcMethod::GetTemplateRegistrations,
+                GrpcMethod::GetHeaderByHash,
+                GrpcMethod::GetSideChainUtxos,
+            ];
 
             let result = run_base_node(shutdown, Arc::new(base_node_identity), Arc::new(base_node_config)).await;
             if let Err(e) = result {

@@ -343,6 +343,29 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
+    async fn get_last_block_of_current_epoch(&self) -> Result<FixedHash, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetLastBlockOfTheEpoch { reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    async fn is_last_block_of_epoch(&self, block_height: u64) -> Result<bool, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::IsLastBlockOfTheEpoch {
+                block_height,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
     async fn is_epoch_active(&self, epoch: Epoch) -> Result<bool, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
