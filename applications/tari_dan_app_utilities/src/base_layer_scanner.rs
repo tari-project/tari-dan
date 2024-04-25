@@ -241,7 +241,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
             },
         }
 
-        self.has_attempted_scan = false;
+        self.has_attempted_scan = true;
 
         Ok(())
     }
