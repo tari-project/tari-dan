@@ -121,10 +121,12 @@ export function displayDuration(duration: Duration) {
     return `${duration.nanos}ns`;
   }
   if (duration.secs >= 60 * 60) {
-    return `${(duration.secs / 60 / 60).toFixed(0)}h${(duration.secs / 60).toFixed(0)}m`;
+    const minutes_secs = duration.secs - Math.floor(duration.secs / 60 / 60) * 60 * 60;
+    return `${(duration.secs / 60 / 60).toFixed(0)}h${Math.floor(minutes_secs / 60)}m`;
   }
   if (duration.secs >= 60) {
-    return `${(duration.secs / 60).toFixed(0)}m${(duration.secs % 60).toFixed(0)}s`;
+    const secs = duration.secs - Math.floor(duration.secs / 60) * 60;
+    return `${(duration.secs / 60).toFixed(0)}m${secs.toFixed(0)}s`;
   }
-  return `${duration.secs}.${(duration.nanos / 1000000).toFixed(0).padStart(3, "0").replace(/0+$/, "")}s`;
+  return `${duration.secs}s`;
 }

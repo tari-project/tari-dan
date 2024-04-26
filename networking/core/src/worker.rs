@@ -4,6 +4,7 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
     hash::Hash,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -764,6 +765,7 @@ where
             num_concurrent_dial_errors,
             established_in,
             ping_latency: None,
+            user_agent: None,
         });
 
         let Some(waiters) = self.pending_dial_requests.remove(&peer_id) else {
@@ -792,6 +794,8 @@ where
             warn!(target: LOG_TARGET, "Dialled ourselves");
             return Ok(());
         }
+
+        self.update_connected_peers(&peer_id, &info);
 
         let is_relay = info.protocols.iter().any(|p| *p == relay::HOP_PROTOCOL_NAME);
 
@@ -838,6 +842,17 @@ where
             supported_protocols: info.protocols,
         });
         Ok(())
+    }
+
+    fn update_connected_peers(&mut self, peer_id: &PeerId, info: &identify::Info) {
+        let Some(conns_mut) = self.active_connections.get_mut(peer_id) else {
+            return;
+        };
+
+        let user_agent = Arc::new(info.agent_version.clone());
+        for conn_mut in conns_mut {
+            conn_mut.user_agent = Some(user_agent.clone());
+        }
     }
 
     /// Establishes a relay circuit for the given peer if the it is the selected relay peer. Returns true if the circuit
