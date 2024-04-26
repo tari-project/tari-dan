@@ -22,7 +22,6 @@
 
 use std::sync::Arc;
 
-use indexmap::IndexMap;
 use log::{warn, *};
 use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
@@ -30,7 +29,7 @@ use tari_crypto::{range_proof::RangeProofService, ristretto::RistrettoPublicKey,
 use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
     base_layer_hashing::ownership_proof_hasher64,
-    commit_result::FinalizeResult,
+    commit_result::{FinalizeResult, RejectReason, TransactionResult},
     component::ComponentHeader,
     confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
     entity_id_provider::EntityIdProvider,
@@ -173,12 +172,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         Ok(())
     }
 
-    fn invoke_modules_on_before_finalize(
-        &self,
-        substates_to_persist: &IndexMap<SubstateId, SubstateValue>,
-    ) -> Result<(), RuntimeError> {
+    fn invoke_modules_on_before_finalize(&self) -> Result<(), RuntimeError> {
         for module in &self.modules {
-            module.on_before_finalize(&self.tracker, substates_to_persist)?;
+            module.on_before_finalize(&self.tracker)?;
         }
         Ok(())
     }
@@ -2199,11 +2195,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         })
     }
 
-    fn fee_checkpoint(&self) -> Result<(), RuntimeError> {
-        if self.tracker.total_payments() < self.tracker.total_charges() {
+    fn set_fee_checkpoint(&self) -> Result<(), RuntimeError> {
+        if self.tracker.total_fee_payments() < self.tracker.total_fee_charges() {
             return Err(RuntimeError::InsufficientFeesPaid {
-                required_fee: self.tracker.total_charges(),
-                fees_paid: self.tracker.total_payments(),
+                required_fee: self.tracker.total_fee_charges(),
+                fees_paid: self.tracker.total_fee_payments(),
             });
         }
         self.tracker.fee_checkpoint()
@@ -2217,17 +2213,28 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError> {
         self.invoke_modules_on_runtime_call("finalize")?;
 
-        // TODO: this should not be checked here because it will silently fail
-        // and the transaction will think it succeeds. Rather move this check to the transaction
-        // processor and reset to fee checkpoint there.
+        // If the fee module is present, this will add substate storage fees
+        self.invoke_modules_on_before_finalize()?;
+
         if !self.tracker.are_fees_paid_in_full() {
             self.reset_to_fee_checkpoint()?;
         }
 
         let substates_to_persist = self.tracker.take_substates_to_persist();
-        self.invoke_modules_on_before_finalize(&substates_to_persist)?;
+        let mut finalized = self.tracker.finalize(substates_to_persist)?;
 
-        let finalized = self.tracker.finalize(substates_to_persist)?;
+        if !finalized.fee_receipt.is_paid_in_full() {
+            let reason = RejectReason::FeesNotPaid(format!(
+                "Required fees {} but {} paid",
+                finalized.fee_receipt.total_fees_charged(),
+                finalized.fee_receipt.total_fees_paid()
+            ));
+            finalized.result = if let Some(accept) = finalized.result.accept() {
+                TransactionResult::AcceptFeeRejectRest(accept.clone(), reason)
+            } else {
+                TransactionResult::Reject(reason)
+            };
+        }
 
         Ok(finalized)
     }

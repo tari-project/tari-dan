@@ -83,7 +83,6 @@ pub(super) struct WorkingState {
     store: WorkingStateStore,
 
     claimed_confidential_outputs: Vec<UnclaimedConfidentialOutputAddress>,
-    new_fee_claims: HashMap<FeeClaimAddress, FeeClaim>,
     virtual_substates: VirtualSubstates,
 
     last_instruction_output: Option<IndexedValue>,
@@ -117,7 +116,6 @@ impl WorkingState {
 
             workspace: Workspace::default(),
             virtual_substates,
-            new_fee_claims: HashMap::default(),
             call_frames: Vec::new(),
             initial_call_scope,
             fee_state: FeeState::new(),
@@ -753,12 +751,17 @@ impl WorkingState {
         let fee_claim_addr = FeeClaimAddress::from_addr(epoch.as_u64(), validator_public_key.as_bytes());
         let claim = self.take_fee_claim(epoch, validator_public_key.clone())?;
         let amount = claim.amount;
-        if self.new_fee_claims.insert(fee_claim_addr, claim).is_some() {
-            return Err(RuntimeError::DoubleClaimedFee {
-                address: validator_public_key,
-                epoch,
-            });
-        }
+        self.store.insert(fee_claim_addr.into(), claim.into()).map_err(|err| {
+            if matches!(err, RuntimeError::DuplicateSubstate { .. }) {
+                // Specific error for double fee claim
+                RuntimeError::DoubleClaimedFee {
+                    address: validator_public_key,
+                    epoch,
+                }
+            } else {
+                err
+            }
+        })?;
         Ok(ResourceContainer::confidential(
             CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
             None,
@@ -815,14 +818,11 @@ impl WorkingState {
     }
 
     pub fn take_mutated_substates(&mut self) -> IndexMap<SubstateId, SubstateValue> {
-        let mut up_states = self.store.take_mutated_substates();
-        // TODO: Add fee claims to store
-        up_states.extend(
-            self.new_fee_claims
-                .drain()
-                .map(|(addr, claim)| (addr.into(), claim.into())),
-        );
-        up_states
+        self.store.take_mutated_substates()
+    }
+
+    pub fn mutated_substates(&mut self) -> &IndexMap<SubstateId, SubstateValue> {
+        self.store.mutated_substates()
     }
 
     pub fn fee_state(&self) -> &FeeState {
@@ -841,18 +841,16 @@ impl WorkingState {
         &mut self,
         substates_to_persist: &mut IndexMap<SubstateId, SubstateValue>,
     ) -> Result<TransactionReceipt, RuntimeError> {
-        let total_fees = self
-            .fee_state
-            .fee_charges
-            .iter()
-            .map(|breakdown| Amount::try_from(breakdown.amount).expect("fee overflowed i64::MAX"))
-            .sum::<Amount>();
-        let total_fee_payment = self
-            .fee_state
-            .fee_payments
-            .iter()
-            .map(|(resx, _)| resx.amount())
-            .sum::<Amount>();
+        let total_fees =
+            Amount::try_from(self.fee_state.total_charges()).map_err(|_| RuntimeError::InvariantError {
+                function: "finalize_fees",
+                details: format!(
+                    "Total fees {} could not be converted to Amount",
+                    self.fee_state.total_charges()
+                ),
+            })?;
+
+        let total_fee_payment = self.fee_state.total_payments();
 
         let mut fee_resource =
             ResourceContainer::confidential(CONFIDENTIAL_TARI_RESOURCE_ADDRESS, None, Amount::zero());
