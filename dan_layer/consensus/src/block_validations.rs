@@ -11,6 +11,35 @@ use crate::{
     traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
 };
 
+pub async fn check_block<TConsensusSpec: ConsensusSpec>(
+    candidate_block: &Block,
+    epoch_manager: &TConsensusSpec::EpochManager,
+    config: &HotstuffConfig,
+    network: Network,
+
+    leader_strategy: &TConsensusSpec::LeaderStrategy,
+    vote_signing_service: &TConsensusSpec::SignatureService,
+) -> Result<(), HotStuffError> {
+    check_base_layer_block_hash::<TConsensusSpec>(&candidate_block, &epoch_manager, &config).await?;
+    check_network(candidate_block, network)?;
+    check_hash_and_height(&candidate_block)?;
+    let committee_for_block = epoch_manager
+        .get_committee_by_validator_public_key(candidate_block.epoch(), candidate_block.proposed_by())
+        .await?;
+    // TODO: Check shard matches
+    // TODO: Check base layer height rules
+    // TODO: Check if dummy block is correct
+    // TODO: Why do we have processed and committed in this struct
+    check_proposed_by_leader::<TConsensusSpec::Addr, TConsensusSpec::LeaderStrategy>(
+        &leader_strategy,
+        &committee_for_block,
+        &candidate_block,
+    )?;
+    check_signature(&candidate_block)?;
+    check_quorum_certificate::<TConsensusSpec>(&candidate_block, &vote_signing_service, &epoch_manager).await?;
+    Ok(())
+}
+
 pub fn check_network(candidate_block: &Block, network: Network) -> Result<(), ProposalValidationError> {
     if candidate_block.network() != network {
         return Err(ProposalValidationError::InvalidNetwork {

@@ -67,6 +67,40 @@ pub enum HotStuffError {
     },
     #[error("Pacemaker channel dropped: {details}")]
     PacemakerChannelDropped { details: String },
+
+    #[error("BUG Invariant error occurred: {0}")]
+    InvariantError(String),
+    #[error("Sync error: {0}")]
+    SyncError(anyhow::Error),
+    #[error("Fallen behind: local_height={local_height}, qc_height={qc_height}, detected during: {detected_at}")]
+    FallenBehind {
+        local_height: NodeHeight,
+        qc_height: NodeHeight,
+        detected_at: String,
+    },
+    #[error("Transaction executor error: {0}")]
+    TransactionExecutorError(String),
+    #[error("Invalid sync request: {details}")]
+    InvalidSyncRequest { details: String },
+    #[error("New view validation error: {0}")]
+    NewViewValidationError(#[from] NewViewValidationError),
+}
+
+impl From<EpochManagerError> for HotStuffError {
+    fn from(err: EpochManagerError) -> Self {
+        Self::EpochManagerError(err.into())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum NewViewValidationError {
+    #[error(
+        "NEWVIEW for height less than the locked block, locked block: {locked_height} new height: {new_view_height}"
+    )]
+    NewViewHeightLessThanLockedBlock {
+        locked_height: NodeHeight,
+        new_view_height: NodeHeight,
+    },
     #[error(
         "Bad new view message: HighQC height {high_qc_height}, received new height {received_new_height}: {details}"
     )]
@@ -75,25 +109,6 @@ pub enum HotStuffError {
         received_new_height: NodeHeight,
         details: String,
     },
-    #[error("BUG Invariant error occurred: {0}")]
-    InvariantError(String),
-    #[error("Sync error: {0}")]
-    SyncError(anyhow::Error),
-    #[error("Fallen behind: local_height={local_height}, qc_height={qc_height}")]
-    FallenBehind {
-        local_height: NodeHeight,
-        qc_height: NodeHeight,
-    },
-    #[error("Transaction executor error: {0}")]
-    TransactionExecutorError(String),
-    #[error("Invalid sync request: {details}")]
-    InvalidSyncRequest { details: String },
-}
-
-impl From<EpochManagerError> for HotStuffError {
-    fn from(err: EpochManagerError) -> Self {
-        Self::EpochManagerError(err.into())
-    }
 }
 
 #[derive(Debug, thiserror::Error)]

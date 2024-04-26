@@ -6,7 +6,7 @@ use std::{future::Future, pin::Pin};
 use anyhow::{anyhow, Context};
 use tari_common::configuration::Network;
 use tari_shutdown::Shutdown;
-use tokio::{fs, signal::unix::SignalKind};
+use tokio::fs;
 
 use crate::{
     cli::{Cli, Commands, InitArgs},
@@ -244,6 +244,7 @@ fn exit_signal() -> anyhow::Result<BoxFuture<()>> {
 
 #[cfg(unix)]
 fn unix_exit_signal() -> anyhow::Result<BoxFuture<()>> {
+    use tokio::signal::unix::SignalKind;
     let mut sighup = tokio::signal::unix::signal(SignalKind::hangup())?;
     let mut sigint = tokio::signal::unix::signal(SignalKind::interrupt())?;
 

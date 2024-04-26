@@ -4,4 +4,5 @@
 mod block_validations;
 pub mod hotstuff;
 pub mod messages;
+mod new_view_validations;
 pub mod traits;

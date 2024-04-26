@@ -122,7 +122,7 @@ impl Instance {
     #[cfg(target_family = "windows")]
     async fn terminate_win(&mut self) -> anyhow::Result<()> {
         // Should probably also implement a clean exit
-        self.child().kill().await?;
+        self.child_mut().kill().await?;
         Ok(())
     }
 }

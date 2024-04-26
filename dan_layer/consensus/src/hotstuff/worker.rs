@@ -477,6 +477,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     return Err(HotStuffError::FallenBehind {
                         local_height,
                         qc_height,
+                        detected_at: "DISPATCH_HOTSTUFF_MESSAGE".to_string(),
                     });
                 }
                 self.on_catch_up_sync(&from).await?;
