@@ -1,0 +1,99 @@
+@font-face {
+  src: url("./fonts/AvenirLTStd-Book.otf");
+  font-family: "AvenirRegular";
+}
+
+@font-face {
+  src: url("./fonts/AvenirLTStd-Medium.otf");
+  font-family: "AvenirMedium";
+}
+
+@font-face {
+  src: url("./fonts/AvenirLTStd-Heavy.otf");
+  font-family: "AvenirHeavy";
+}
+
+body {
+  margin: 0;
+  font-family: "AvenirMedium", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f5f5f7;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+.add-confirm-form {
+  display: flex;
+  flex-direction: column;
+  align-content: center;
+  gap: 8px;
+}
+
+.flex-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: stretch;
+  width: 100%;
+  gap: 8px;
+}
+
+.flex-container-vertical {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.heading-menu {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 5px;
+}
+
+.dialog-content {
+  width: 600px;
+}
+
+@media screen and (max-width: 767px) {
+  .flex-container > * {
+    width: 100%;
+  }
+}
+
+@media screen and (min-width: 768px) {
+  .add-confirm-form {
+    flex-direction: row;
+  }
+  .flex-container {
+    flex-direction: row;
+    align-items: stretch;
+  }
+}
+
+.MuiDataGrid-columnHeaderTitle {
+  font-family: "AvenirHeavy", sans-serif;
+}
+
+@keyframes purple-flash {
+  0% {
+    background-color: rgb(159, 66, 255, 0);
+  }
+  25% {
+    background-color: rgb(159, 66, 255, 0.1);
+  }
+  75% {
+    background-color: rgb(159, 66, 255, 0.1);
+  }
+  100% {
+    background-color: rgb(159, 66, 255, 0);
+  }
+}
+
+.purple-flash {
+  animation: purple-flash 0.5s ease-in-out;
+}

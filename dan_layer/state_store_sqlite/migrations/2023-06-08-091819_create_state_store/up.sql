@@ -269,7 +269,7 @@ CREATE TABLE foreign_proposals
     bucket                  int       not NULL,
     block_id                text      not NULL,
     state                   text      not NULL,
-    proposed_height         bigint    NULL,
+    proposed_height         bigint        NULL,
     transactions            text      not NULL,
     base_layer_block_height bigint    not NULL,
     created_at              timestamp not NULL DEFAULT CURRENT_TIMESTAMP,

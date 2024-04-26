@@ -43,7 +43,6 @@ pub struct ValidatorNode<TAddr> {
     pub address: TAddr,
     pub shard_key: SubstateAddress,
     pub epoch: Epoch,
-    pub committee_bucket: Option<u32>,
 }
 
 impl<TAddr: NodeAddressable> ValidatorNode<TAddr> {

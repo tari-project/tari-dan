@@ -134,7 +134,9 @@ where TPeerStore: PeerStore
     }
 
     pub async fn add_want_peers<I: IntoIterator<Item = PeerId>>(&mut self, peers: I) -> Result<(), Error> {
-        self.want_peers.extend(peers);
+        let local_peer_id = self.local_peer_record.to_peer_id();
+        self.want_peers
+            .extend(peers.into_iter().filter(|id| *id != local_peer_id));
         self.remaining_want_peers = self
             .store()
             .difference(&self.want_peers)

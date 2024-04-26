@@ -2,7 +2,7 @@
 # Must be run from the repo root
 
 rg -i "Copyright.*The Tari Project" --files-without-match \
-    -g '!*.{Dockerfile,asc,bat,config,config.js,css,csv,drawio,env,gitkeep,hbs,html,ini,iss,json,lock,md,min.js,ps1,py,rc,scss,sh,sql,svg,toml,txt,yml,vue,liquid}' . \
+    -g '!*.{Dockerfile,asc,bat,config,config.js,css,csv,drawio,env,gitkeep,hbs,html,ini,iss,json,lock,md,min.js,ps1,py,rc,scss,sh,sql,svg,toml,txt,yml,vue,liquid,otf,d.ts,mjs}' . \
     -g '!bindings/src/types/*' | sort > /tmp/rgtemp
 
 # sort the .license.ignore file as sorting seems to behave differently on different platforms

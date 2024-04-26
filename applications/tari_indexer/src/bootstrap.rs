@@ -42,7 +42,7 @@ use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
-use tari_networking::{MessagingMode, NetworkingHandle, SwarmConfig};
+use tari_networking::{MessagingMode, NetworkingHandle, RelayCircuitLimits, RelayReservationLimits, SwarmConfig};
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
@@ -96,6 +96,9 @@ pub async fn spawn_services(
                 protocol_version: format!("/tari/{}/0.0.1", config.network).parse().unwrap(),
                 user_agent: "/tari/indexer/0.0.1".to_string(),
                 enable_mdns: config.indexer.p2p.enable_mdns,
+                enable_relay: true,
+                relay_circuit_limits: RelayCircuitLimits::high(),
+                relay_reservation_limits: RelayReservationLimits::high(),
                 ..Default::default()
             },
             reachability_mode: config.indexer.p2p.reachability_mode.into(),

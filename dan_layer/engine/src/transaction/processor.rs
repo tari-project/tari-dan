@@ -139,7 +139,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             Ok(execution_results) => {
                 // Checkpoint the tracker state after the fee instructions have been executed in case of transaction
                 // failure.
-                if let Err(err) = runtime.interface().fee_checkpoint() {
+                if let Err(err) = runtime.interface().set_fee_checkpoint() {
                     let mut finalize =
                         FinalizeResult::new_rejected(transaction_hash, RejectReason::ExecutionFailure(err.to_string()));
                     finalize.execution_results = execution_results;
@@ -161,24 +161,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
 
         match instruction_result {
             Ok(execution_results) => {
-                let mut finalized = runtime.interface().finalize()?;
-
-                if !finalized.fee_receipt.is_paid_in_full() {
-                    let reason = RejectReason::FeesNotPaid(format!(
-                        "Required fees {} but {} paid",
-                        finalized.fee_receipt.total_fees_charged(),
-                        finalized.fee_receipt.total_fees_paid()
-                    ));
-                    finalized.result = if let Some(accept) = finalized.result.accept() {
-                        TransactionResult::AcceptFeeRejectRest(accept.clone(), reason)
-                    } else {
-                        TransactionResult::Reject(reason)
-                    };
-                    return Ok(ExecuteResult { finalize: finalized });
+                let mut finalize = runtime.interface().finalize()?;
+                if finalize.fee_receipt.is_paid_in_full() {
+                    finalize.execution_results = execution_results;
+                } else {
+                    finalize.execution_results = fee_exec_result;
                 }
-                finalized.execution_results = execution_results;
-
-                Ok(ExecuteResult { finalize: finalized })
+                Ok(ExecuteResult { finalize })
             },
             // This can happen e.g if you have dangling buckets after running the instructions
             Err(err) => {
@@ -186,17 +175,17 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 // successful instructions are still charged even though the transaction failed.
                 runtime.interface().reset_to_fee_checkpoint()?;
                 // Finalize will now contain the fee payments and vault refunds only
-                let mut finalized = runtime.interface().finalize()?;
-                finalized.execution_results = fee_exec_result;
-                finalized.result = TransactionResult::AcceptFeeRejectRest(
-                    finalized
+                let mut finalize = runtime.interface().finalize()?;
+                finalize.execution_results = fee_exec_result;
+                finalize.result = TransactionResult::AcceptFeeRejectRest(
+                    finalize
                         .result
                         .accept()
                         .cloned()
                         .expect("The fee transaction should be there"),
                     RejectReason::ExecutionFailure(err.to_string()),
                 );
-                Ok(ExecuteResult { finalize: finalized })
+                Ok(ExecuteResult { finalize })
             },
         }
     }

@@ -58,6 +58,7 @@ pub struct ForeignProposal {
     pub proposed_height: Option<NodeHeight>,
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub transactions: Vec<TransactionId>,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub base_layer_block_height: u64,
 }
 

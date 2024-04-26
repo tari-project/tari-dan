@@ -164,7 +164,7 @@ pub trait RuntimeInterface: Send + Sync {
         revealed_amount: Amount,
         confidential_output: Option<ConfidentialOutput>,
     ) -> Result<BucketId, RuntimeError>;
-    fn fee_checkpoint(&self) -> Result<(), RuntimeError>;
+    fn set_fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError>;
 

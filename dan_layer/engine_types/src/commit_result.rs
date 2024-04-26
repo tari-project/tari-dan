@@ -70,6 +70,16 @@ impl ExecuteResult {
         }
     }
 
+    pub fn expect_fee_accept_transaction_reject(&self) -> (&SubstateDiff, &RejectReason) {
+        match self.finalize.result {
+            TransactionResult::AcceptFeeRejectRest(ref diff, ref reason) => (diff, reason),
+            _ => panic!(
+                "Expected fee accept, transaction reject but got {:?}",
+                self.finalize.result
+            ),
+        }
+    }
+
     pub fn expect_transaction_failure(&self) -> &RejectReason {
         if let Some(reason) = self.finalize.full_reject() {
             reason
@@ -155,6 +165,10 @@ impl FinalizeResult {
         self.result.full_reject()
     }
 
+    pub fn fee_accept_transaction_reject(&self) -> Option<(&SubstateDiff, &RejectReason)> {
+        self.result.fee_accept_transaction_reject()
+    }
+
     pub fn is_full_accept(&self) -> bool {
         matches!(self.result, TransactionResult::Accept(_))
     }
@@ -202,6 +216,13 @@ impl TransactionResult {
             Self::Accept(_) => None,
             Self::AcceptFeeRejectRest(_, _) => None,
             Self::Reject(reject_result) => Some(reject_result),
+        }
+    }
+
+    pub fn fee_accept_transaction_reject(&self) -> Option<(&SubstateDiff, &RejectReason)> {
+        match self {
+            Self::AcceptFeeRejectRest(substate_diff, reject_result) => Some((substate_diff, reject_result)),
+            _ => None,
         }
     }
 

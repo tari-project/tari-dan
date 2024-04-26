@@ -379,6 +379,7 @@ impl EventManager {
         let mut stream = client
             .sync_blocks(SyncBlocksRequest {
                 start_block_id: start_block_id.as_bytes().to_vec(),
+                up_to_epoch: None,
             })
             .await?;
         while let Some(resp) = stream.next().await {

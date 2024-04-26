@@ -30,7 +30,10 @@ use libp2p_peersync as peer_sync;
 use libp2p_peersync::store::MemoryPeerStore;
 use libp2p_substream as substream;
 
-use crate::{config::Config, error::TariSwarmError};
+use crate::{
+    config::{Config, RelayCircuitLimits, RelayReservationLimits},
+    error::TariSwarmError,
+};
 
 #[derive(NetworkBehaviour)]
 pub struct TariNodeBehaviour<TCodec>
@@ -104,18 +107,21 @@ where
             // Dcutr
             let dcutr = dcutr::Behaviour::new(local_peer_id);
 
+            // Relay
+            let maybe_relay = if config.enable_relay {
+                Some(relay::Behaviour::new(
+                    local_peer_id,
+                    create_relay_config(&config.relay_circuit_limits, &config.relay_reservation_limits),
+                ))
+            } else {
+                None
+            };
+
             // Identify
             let identify = identify::Behaviour::new(
                 identify::Config::new(config.protocol_version.to_string(), keypair.public())
                     .with_agent_version(config.user_agent),
             );
-
-            // Relay
-            let maybe_relay = if config.enable_relay {
-                Some(relay::Behaviour::new(local_peer_id, relay::Config::default()))
-            } else {
-                None
-            };
 
             // Messaging
             let messaging = if config.enable_messaging {
@@ -169,6 +175,39 @@ where
         .build();
 
     Ok(swarm)
+}
+
+fn create_relay_config(circuit: &RelayCircuitLimits, reservations: &RelayReservationLimits) -> relay::Config {
+    let mut config = relay::Config {
+        reservation_rate_limiters: vec![],
+        circuit_src_rate_limiters: vec![],
+        ..Default::default()
+    };
+
+    config.max_circuits = circuit.max_limit;
+    config.max_circuits_per_peer = circuit.max_per_peer;
+    config.max_circuit_duration = circuit.max_duration;
+    config.max_circuit_bytes = circuit.max_byte_limit;
+    if let Some(ref limits) = circuit.per_peer {
+        config = config.circuit_src_per_peer(limits.limit, limits.interval);
+    }
+
+    if let Some(ref limits) = circuit.per_ip {
+        config = config.circuit_src_per_ip(limits.limit, limits.interval);
+    }
+
+    config.max_reservations = reservations.max_limit;
+    config.max_reservations_per_peer = reservations.max_per_peer;
+    config.reservation_duration = reservations.max_duration;
+    if let Some(ref limits) = reservations.per_peer {
+        config = config.reservation_rate_per_peer(limits.limit, limits.interval);
+    }
+
+    if let Some(ref limits) = reservations.per_ip {
+        config = config.reservation_rate_per_ip(limits.limit, limits.interval);
+    }
+
+    config
 }
 
 /// Generates a hash of contents of the message

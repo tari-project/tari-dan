@@ -140,15 +140,15 @@ where TConsensusSpec: ConsensusSpec
             current_height,
         );
 
-        if block.height() < current_height {
-            info!(
-                target: LOG_TARGET,
-                "🔥 Block {} is lower than current height {}. Ignoring.",
-                block,
-                current_height
-            );
-            return Ok(());
-        }
+        // if block.height() < current_height {
+        //     info!(
+        //         target: LOG_TARGET,
+        //         "🔥 Block {} is lower than current height {}. Ignoring.",
+        //         block,
+        //         current_height
+        //     );
+        //     return Ok(());
+        // }
 
         let Some(ready_block) = self.check_proposal(block).await? else {
             // Block not ready
