@@ -150,7 +150,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             }
 
             let Some((valid_block, tree_diff)) =
-                self.validate_block(tx, block, &local_committee, &local_committee_shard)?
+                self.validate_block_header(tx, block, &local_committee, &local_committee_shard)?
             else {
                 return Ok(None);
             };
@@ -190,7 +190,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         Ok(high_qc)
     }
 
-    fn validate_block(
+    fn validate_block_header(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: Block,
@@ -385,13 +385,14 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         )?;
 
         let justify_block_height = justify_block.height();
+        // if the block parent is not the justify parent, then we have experienced a leader failure
+        // and should make dummy blocks to fill in the gaps.
         if justify_block.id() != candidate_block.parent() {
             let mut dummy_blocks =
                 Vec::with_capacity((candidate_block.height().as_u64() - justify_block_height.as_u64() - 1) as usize);
             dummy_blocks.push(justify_block);
             let mut last_dummy_block = dummy_blocks.last().unwrap();
-            // if the block parent is not the justify parent, then we have experienced a leader failure
-            // and should make dummy blocks to fill in the gaps.
+
             while last_dummy_block.id() != candidate_block.parent() {
                 if last_dummy_block.height() > candidate_block.height() {
                     warn!(target: LOG_TARGET, "🔥 Bad proposal, dummy block height {} is greater than new height {}", last_dummy_block, candidate_block);
