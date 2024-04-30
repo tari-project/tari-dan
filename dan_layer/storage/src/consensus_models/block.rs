@@ -313,10 +313,7 @@ impl Block {
             .chain(&self.base_layer_block_hash)
             .result();
 
-        hashing::block_hasher()
-            .chain(&self.parent)
-            .chain(&inner_hash)
-            .result()
+        hashing::block_hasher().chain(&self.parent).chain(&inner_hash).result()
     }
 }
 
