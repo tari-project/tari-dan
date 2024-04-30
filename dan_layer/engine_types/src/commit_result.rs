@@ -145,6 +145,8 @@ impl FinalizeResult {
         }
     }
 
+    /// Returns the accept diff if the transaction was accepted, otherwise None.
+    /// Acceptance includes fee-only acceptance.
     pub fn accept(&self) -> Option<&SubstateDiff> {
         self.result.accept()
     }

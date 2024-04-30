@@ -15,6 +15,7 @@ tari_crypto = { workspace = true, features = ["borsh"] }
 tari_template_lib = { workspace = true }
 
 rand = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
 serde = { workspace = true, default-features = true }
 thiserror = { workspace = true }
 ts-rs = { workspace = true, optional = true }

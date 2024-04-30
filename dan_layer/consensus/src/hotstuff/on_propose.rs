@@ -109,7 +109,7 @@ where TConsensusSpec: ConsensusSpec
                             next_block.justify().block_height(),
                             next_block.parent(),
                         );
-                        self.broadcast_proposal_locally(next_block, local_committee).await?;
+                        self.broadcast_local_proposal(next_block, local_committee).await?;
                         return Ok(());
                     }
                 }
@@ -194,7 +194,7 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "🌿 PROPOSING locally new block {} to {} validators. justify: {} ({}), parent: {}",
+            "🌿 PROPOSING new local block {} to {} validators. justify: {} ({}), parent: {}",
             next_block,
             local_committee.len(),
             next_block.justify().block_id(),
@@ -202,19 +202,19 @@ where TConsensusSpec: ConsensusSpec
             next_block.parent()
         );
 
-        self.broadcast_proposal_locally(next_block, local_committee).await?;
+        self.broadcast_local_proposal(next_block, local_committee).await?;
 
         Ok(())
     }
 
-    pub async fn broadcast_proposal_locally(
+    pub async fn broadcast_local_proposal(
         &mut self,
         next_block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         info!(
             target: LOG_TARGET,
-            "🌿 Broadcasting locally proposal {} to {} local committees",
+            "🌿 Broadcasting local proposal {} to {} local committees",
             next_block,
             local_committee.len(),
         );
@@ -269,12 +269,13 @@ where TConsensusSpec: ConsensusSpec
             ForeignProposal::get_all_new(tx)?
                 .into_iter()
                 .filter(|foreign_proposal| {
+                    // If the proposal base layer height is too high, ignore for now.
+                    foreign_proposal.base_layer_block_height <= base_layer_block_height &&
                     // If the foreign proposal is already pending, don't propose it again
                     !pending_proposals.iter().any(|pending_proposal| {
                         pending_proposal.bucket == foreign_proposal.bucket &&
                             pending_proposal.block_id == foreign_proposal.block_id
-                    })// If the proposal base layer height is too high, ignore for now.
-                    && foreign_proposal.base_layer_block_height <= base_layer_block_height
+                    })
                 })
                 .map(|mut foreign_proposal| {
                     foreign_proposal.set_proposed_height(parent_block.height().saturating_add(NodeHeight(1)));
@@ -355,7 +356,7 @@ fn transaction_pool_record_to_command<TTx: StateStoreReadTransaction>(
     local_committee_shard: &CommitteeShard,
     substate_changes: &mut Vec<SubstateChange>,
 ) -> Result<Command, HotStuffError> {
-    let involved = local_committee_shard.count_distinct_shards(t.transaction().evidence.shards_iter());
+    let involved = local_committee_shard.count_distinct_shards(t.transaction().evidence.substate_addresses_iter());
     if involved == 1 {
         info!(
             target: LOG_TARGET,

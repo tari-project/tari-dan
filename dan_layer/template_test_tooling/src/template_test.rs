@@ -53,7 +53,7 @@ use tari_template_lib::{
     prelude::{ComponentAccessRules, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::{Transaction, VersionedSubstateId};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
 use crate::{read_only_state_store::ReadOnlyStateStore, track_calls::TrackCallsModule, Package};
@@ -476,8 +476,8 @@ impl TemplateTest {
             transaction.filled_inputs_mut().extend(
                 access
                     .iter_raw()
-                    .map(|(k, _)| SubstateId::from_bytes(k).unwrap())
-                    .map(|s| SubstateRequirement::new(s, None)),
+                    .map(|(k, s)| (SubstateId::from_bytes(k).unwrap(), Substate::from_bytes(s).unwrap()))
+                    .map(|(id, s)| VersionedSubstateId::new(id, s.version())),
             );
         }
 

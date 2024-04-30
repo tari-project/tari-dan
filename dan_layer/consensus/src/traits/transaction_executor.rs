@@ -2,13 +2,13 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore, StorageError};
+use tari_engine_types::substate::SubstateId;
 use tari_transaction::Transaction;
 
-// TODO: more refined errors
 #[derive(thiserror::Error, Debug)]
 pub enum BlockTransactionExecutorError {
-    #[error("Placeholder error")]
-    PlaceHolderError,
+    #[error("Unable to resolve substate id: {substate_id}")]
+    UnableToResolveSubstateId { substate_id: SubstateId },
     #[error("Execution thread failure: {0}")]
     ExecutionThreadFailure(String),
     #[error(transparent)]
@@ -16,6 +16,8 @@ pub enum BlockTransactionExecutorError {
     // TODO: remove this variant when we have a remote substate implementation
     #[error("Remote substates are now allowed")]
     RemoteSubstatesNotAllowed,
+    #[error("State store error: {0}")]
+    StateStoreError(String),
 }
 
 pub trait BlockTransactionExecutor<TStateStore: StateStore> {
@@ -27,5 +29,6 @@ pub trait BlockTransactionExecutor<TStateStore: StateStore> {
 }
 
 pub trait BlockTransactionExecutorBuilder<TStateStore: StateStore> {
-    fn build(&self) -> Box<dyn BlockTransactionExecutor<TStateStore>>;
+    type Executor: BlockTransactionExecutor<TStateStore>;
+    fn build(&self) -> Self::Executor;
 }
