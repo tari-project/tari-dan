@@ -22,6 +22,7 @@
 
 use tari_dan_app_utilities::transaction_executor::TransactionProcessorError;
 use tari_dan_common_types::{Epoch, SubstateAddress};
+use tari_dan_engine::state_store::StateStoreError;
 use tari_engine_types::substate::SubstateId;
 use tari_epoch_manager::EpochManagerError;
 use tari_indexer_lib::{error::IndexerError, transaction_autofiller::TransactionAutofillerError};
@@ -30,6 +31,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DryRunTransactionProcessorError {
+    #[error("Cannot resolve transaction input {substate_id}")]
+    CannotResolveTransactionInput { substate_id: SubstateId },
     #[error(transparent)]
     TransactionAutofillerError(#[from] TransactionAutofillerError),
     #[error("Substate {id} v{version} is DOWN")]
@@ -53,4 +56,6 @@ pub enum DryRunTransactionProcessorError {
     },
     #[error("Indexer error : {0}")]
     IndexerError(#[from] IndexerError),
+    #[error("StateStore error: {0}")]
+    StateStoreError(#[from] StateStoreError),
 }

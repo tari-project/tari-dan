@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut, time::Duration};
+use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut};
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::*;
@@ -28,13 +28,8 @@ use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, Transact
 use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, PeerAddress, SubstateAddress};
 use tari_dan_p2p::{DanMessage, NewTransactionMessage};
 use tari_dan_storage::{
-    consensus_models::{ExecutedTransaction, SubstateRecord, TransactionPool, TransactionRecord},
+    consensus_models::{ExecutedTransaction, SubstateRecord, TransactionRecord},
     StateStore,
-};
-use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
-    fees::FeeReceipt,
-    substate::SubstateDiff,
 };
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerEvent, EpochManagerReader};
 use tari_state_store_sqlite::SqliteStateStore;
@@ -48,7 +43,7 @@ use crate::{
     consensus::ConsensusHandle,
     p2p::services::{
         mempool::{
-            executor::{execute_transaction, ExecutionResult},
+            executor::execute_transaction,
             gossip::MempoolGossip,
             handle::MempoolRequest,
             traits::SubstateResolver,
@@ -63,9 +58,24 @@ const LOG_TARGET: &str = "tari::validator_node::mempool::service";
 
 /// Data returned from a pending execution.
 struct MempoolTransactionExecution {
-    result: Result<ExecutionResult, MempoolError>,
+    transaction_id: TransactionId,
+    execution: TransactionExecution,
     should_propagate: bool,
     sender_shard: Option<Shard>,
+}
+
+pub enum TransactionExecution {
+    /// The transaction was executed in the mempool
+    Executed {
+        result: Result<ExecutedTransaction, MempoolError>,
+    },
+    /// Mempool execution failed due to an error that is unrelated to the transaction. IO, resources, database etc
+    ExecutionFailure {
+        error: MempoolError,
+        transaction: Transaction,
+    },
+    /// Execution cannot occur in the mempool and is deferred to consensus
+    Deferred { transaction: Transaction },
 }
 
 #[derive(Debug)]
@@ -80,7 +90,6 @@ pub struct MempoolService<TValidator, TExecutedValidator, TExecutor, TSubstateRe
     transaction_executor: TExecutor,
     substate_resolver: TSubstateResolver,
     state_store: SqliteStateStore<PeerAddress>,
-    transaction_pool: TransactionPool<SqliteStateStore<PeerAddress>>,
     gossip: MempoolGossip<PeerAddress>,
     rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
     consensus_handle: ConsensusHandle,
@@ -122,7 +131,6 @@ where
             before_execute_validator,
             after_execute_validator,
             state_store,
-            transaction_pool: TransactionPool::new(),
             rx_consensus_to_mempool,
             consensus_handle,
             #[cfg(feature = "metrics")]
@@ -137,7 +145,7 @@ where
             tokio::select! {
                 Some(req) = self.mempool_requests.recv() => self.handle_request(req).await,
                 Some(result) = self.pending_executions.next() => {
-                    if  let Err(e) = self.handle_execution_complete(result).await {
+                    if  let Err(e) = self.handle_execution_task_complete(result).await {
                         error!(target: LOG_TARGET, "Possible bug: handle_execution_complete failed: {}", e);
                     }
                 },
@@ -274,10 +282,11 @@ where
             };
             let mut is_input_shard = transaction
                 .all_inputs_iter()
-                .any(|s| s.to_committee_shard(num_committees) == sender_shard);
+                .filter_map(|s| s.to_committee_shard(num_committees))
+                .any(|s| s == sender_shard);
             // Special temporary case: if there are no input shards an output shard will also propagate. No inputs is
             // invalid, however we must support them for now because of CreateFreeTestCoin transactions.
-            is_input_shard |= transaction.inputs().len() + transaction.input_refs().len() == 0;
+            is_input_shard |= transaction.inputs().is_empty() && transaction.filled_inputs().is_empty();
             if !is_input_shard {
                 warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input shard. Ignoring message.");
                 return Ok(());
@@ -329,7 +338,7 @@ where
             validator_nodes.values().map(|vn| vn.shard_key).collect::<HashSet<_>>()
         };
 
-        if transaction.num_involved_shards() == 0 && claim_shards.is_empty() && unverified_output_shards.is_empty() {
+        if transaction.num_unique_inputs() == 0 && claim_shards.is_empty() && unverified_output_shards.is_empty() {
             warn!(target: LOG_TARGET, "⚠ No involved shards for payload");
         }
 
@@ -337,11 +346,11 @@ where
         let tx_substate_address = SubstateAddress::for_transaction_receipt(transaction.id().into_receipt_address());
 
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
-        let transaction_inputs = transaction.all_inputs_iter().map(|i| i.to_substate_address());
+        let transaction_inputs = transaction.all_inputs_iter().filter_map(|i| i.to_substate_address());
         let mut is_input_shard = local_committee_shard.includes_any_shard(transaction_inputs);
         // Special temporary case: if there are no input shards an output shard will also propagate. No inputs is
         // invalid, however we must support them for now because of CreateFreeTestCoin transactions.
-        is_input_shard |= transaction.inputs().len() + transaction.input_refs().len() == 0;
+        is_input_shard |= transaction.inputs().is_empty() && transaction.filled_inputs().is_empty();
         let is_output_shard = local_committee_shard.includes_any_shard(
             // Known output shards
             // This is to allow for the txreceipt output
@@ -357,8 +366,22 @@ where
             // The transactions has one or more of its inputs with no version
             // This means we skip transaction execution in the mempool, as the execution will happen on consensus
             if transaction.has_inputs_without_version() {
-                self.handle_no_version_transaction(&transaction, should_propagate, sender_shard)
-                    .await?;
+                info!(
+                    target: LOG_TARGET,
+                    "✅ Transaction {} has inputs without versions. Execution is deferred to consensus to allow input substates to be resolved",
+                    transaction.id(),
+                );
+
+                let result = MempoolTransactionExecution {
+                    transaction_id: *transaction.id(),
+                    execution: TransactionExecution::Deferred {
+                        transaction: transaction.clone(),
+                    },
+                    should_propagate,
+                    sender_shard,
+                };
+
+                self.handle_execution_task_complete(result).await?;
             } else {
                 // All the inputs in the transaction have specific versions, so we execute immediately
                 self.queue_transaction_for_execution(
@@ -449,40 +472,6 @@ where
         Ok(())
     }
 
-    async fn handle_no_version_transaction(
-        &mut self,
-        transaction: &Transaction,
-        should_propagate: bool,
-        sender_shard: Option<Shard>,
-    ) -> Result<(), MempoolError> {
-        // TODO: for now we just skip execution, we may want to store the transaction in a new DB table
-        // TODO: do we need some sort of validation at this stage?
-
-        info!(
-            target: LOG_TARGET,
-            "✅ Transaction {} has inputs without versions, it goes directly to consensus",
-            transaction.id(),
-        );
-
-        let finalize = FinalizeResult::new(
-            transaction.hash(),
-            vec![],
-            vec![],
-            TransactionResult::Accept(SubstateDiff::new()),
-            FeeReceipt::default(),
-        );
-        let executed_transaction =
-            ExecutedTransaction::new(transaction.clone(), ExecuteResult { finalize }, vec![], Duration::ZERO);
-        let execution_result = (*transaction.id(), Ok(executed_transaction));
-        let result = MempoolTransactionExecution {
-            result: Ok(execution_result),
-            should_propagate,
-            sender_shard,
-        };
-
-        self.handle_execution_complete(result).await
-    }
-
     fn queue_transaction_for_execution(
         &mut self,
         transaction: Transaction,
@@ -492,28 +481,92 @@ where
     ) {
         let substate_resolver = self.substate_resolver.clone();
         let executor = self.transaction_executor.clone();
+        let transaction_id = *transaction.id();
 
         self.pending_executions.push(Box::pin(
-            execute_transaction(transaction, substate_resolver, executor, current_epoch).map(move |result| {
-                MempoolTransactionExecution {
-                    result,
-                    should_propagate,
-                    sender_shard,
+            execute_transaction(transaction.clone(), substate_resolver, executor, current_epoch).map(move |result| {
+                match result {
+                    Ok(execution_result) => MempoolTransactionExecution {
+                        transaction_id,
+                        execution: TransactionExecution::Executed {
+                            result: execution_result,
+                        },
+                        should_propagate,
+                        sender_shard,
+                    },
+                    Err(error) => MempoolTransactionExecution {
+                        transaction_id,
+                        // IO, Database, etc errors
+                        execution: TransactionExecution::ExecutionFailure { error, transaction },
+                        should_propagate,
+                        sender_shard,
+                    },
                 }
             }),
         ));
     }
 
-    #[allow(clippy::too_many_lines)]
-    async fn handle_execution_complete(&mut self, result: MempoolTransactionExecution) -> Result<(), MempoolError> {
+    async fn handle_execution_task_complete(
+        &mut self,
+        result: MempoolTransactionExecution,
+    ) -> Result<(), MempoolError> {
         let MempoolTransactionExecution {
-            result,
+            transaction_id,
+            execution,
             should_propagate,
             sender_shard,
         } = result;
-        // This is due to a bug or possibly db failure only
-        let (transaction_id, exec_result) = result?;
 
+        match execution {
+            TransactionExecution::Executed { result } => {
+                self.handle_execution_complete(transaction_id, result, should_propagate, sender_shard)
+                    .await
+            },
+            // Bubble the error up
+            TransactionExecution::ExecutionFailure { error, .. } => {
+                // TODO: should we retry this transaction at some point?
+                self.transactions.remove(&transaction_id);
+                Err(error)
+            },
+            TransactionExecution::Deferred { transaction } => self.handle_deferred_execution(transaction).await,
+        }
+    }
+
+    async fn handle_deferred_execution(&mut self, transaction: Transaction) -> Result<(), MempoolError> {
+        let transaction_id = *transaction.id();
+
+        let is_consensus_running = self.consensus_handle.get_current_state().is_running();
+
+        // Store the transaction to be later executed in consensus
+        self.state_store
+            .with_write_tx(|tx| TransactionRecord::new(transaction).insert(tx))?;
+
+        let pending_exec_size = self.pending_executions.len();
+        if is_consensus_running &&
+            // Notify consensus about the transaction
+            self.tx_executed_transactions
+                .send((transaction_id, pending_exec_size))
+                .await
+                .is_err()
+        {
+            debug!(
+                target: LOG_TARGET,
+                "Executed transaction channel closed before executed transaction could be sent"
+            );
+        }
+
+        self.transactions.remove(&transaction_id);
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn handle_execution_complete(
+        &mut self,
+        transaction_id: TransactionId,
+        exec_result: Result<ExecutedTransaction, MempoolError>,
+        should_propagate: bool,
+        sender_shard: Option<Shard>,
+    ) -> Result<(), MempoolError> {
         #[cfg(feature = "metrics")]
         self.metrics.on_transaction_executed(&transaction_id, &exec_result);
 
@@ -522,6 +575,8 @@ where
         // 2. The node switches to sync mode
         // 3. Sync completes (some transactions that were finalized in sync may have been busy executing)
         // 4. Execution completes and the transaction is added to the pool even though it is finalized via sync
+        // TODO: This is not guaranteed to work and is subject to races. The mempool should pause processing executed
+        // transactions until consensus is in sync.
         if self
             .state_store
             .with_read_tx(|tx| SubstateRecord::exists_for_transaction(tx, &transaction_id))?
@@ -545,7 +600,7 @@ where
                     executed.result().finalize.result,
                     executed.execution_time()
                 );
-                let has_involved_shards = executed.num_involved_shards() > 0;
+                let has_involved_shards = executed.num_inputs_and_outputs() > 0;
 
                 match self.after_execute_validator.validate(&executed).await {
                     Ok(_) => {
@@ -570,12 +625,9 @@ where
                                 return Ok::<_, MempoolError>(());
                             }
 
+                            log::error!(target: LOG_TARGET, "🐞 resolved inputs: {:?}", executed.resolved_inputs());
+                            assert!(executed.resolved_inputs().is_some(), "Resolved inputs must be set");
                             executed.update(tx)?;
-                            if is_consensus_running &&
-                                !SubstateRecord::exists_for_transaction(tx.deref_mut(), &transaction_id)?
-                            {
-                                self.transaction_pool.insert(tx, executed.to_atom())?;
-                            }
                             Ok::<_, MempoolError>(())
                         })?;
                     },
@@ -602,12 +654,6 @@ where
                                 },
                             }
 
-                            if has_involved_shards &&
-                                is_consensus_running &&
-                                !SubstateRecord::exists_for_transaction(tx.deref_mut(), &transaction_id)?
-                            {
-                                self.transaction_pool.insert(tx, executed.to_atom())?;
-                            }
                             Ok::<_, MempoolError>(())
                         })?;
                         // We want this to go though to consensus, because validation may only fail in this shard (e.g
@@ -651,23 +697,20 @@ where
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
 
-        self.epoch_manager.get_local_committee_shard(current_epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
-        let all_inputs_iter = executed
-            .transaction()
-            .all_inputs_iter()
-            .map(|i| i.to_substate_address());
+        let all_inputs_iter = executed.all_inputs_iter().map(|i| i.to_substate_address());
         let is_input_shard = local_committee_shard.includes_any_shard(all_inputs_iter) |
-            (executed.transaction().inputs().len() + executed.transaction().input_refs().len() == 0);
+            (executed.transaction().inputs().is_empty() && executed.transaction().filled_inputs().is_empty());
 
         if should_propagate && is_input_shard {
             // Forward the transaction to any output shards that are not part of the input shard set as these have
             // already been forwarded
             let num_committees = self.epoch_manager.get_num_committees(current_epoch).await?;
-            let input_shards: HashSet<Shard> = executed
-                .transaction()
-                .all_inputs_iter()
-                .map(|s| s.to_committee_shard(num_committees))
+            let input_shards = executed
+                .resolved_inputs()
+                .into_iter()
+                .flatten()
+                .map(|s| s.versioned_substate_id().to_committee_shard(num_committees))
                 .collect::<HashSet<_>>();
             let tx_substate_address = SubstateAddress::for_transaction_receipt(executed.id().into_receipt_address());
             let output_shards = executed

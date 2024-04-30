@@ -162,7 +162,7 @@ impl JsonRpcHandlers {
             target: LOG_TARGET,
             "Transaction {} has {} involved shards",
             transaction.hash(),
-            transaction.num_involved_shards()
+            transaction.num_unique_inputs()
         );
 
         let tx_id = *transaction.id();

@@ -118,7 +118,8 @@ impl DryRunTransactionProcessor {
             .resolve_virtual_substates(&transaction, current_epoch)
             .await?;
 
-        self.substate_resolver.resolve(&transaction, &temp_state_store).await?;
+        let inputs = self.substate_resolver.resolve(&transaction).await?;
+        temp_state_store.set_many(inputs)?;
 
         // execute the payload in the WASM engine and return the result
         let executed = task::block_in_place(|| {

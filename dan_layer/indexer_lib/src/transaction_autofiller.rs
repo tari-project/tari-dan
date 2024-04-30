@@ -3,6 +3,7 @@
 
 use std::{collections::HashMap, sync::Arc};
 
+use futures::{stream::FuturesOrdered, StreamExt};
 use log::*;
 use tari_dan_common_types::NodeAddressable;
 use tari_engine_types::{
@@ -10,7 +11,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateId},
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::{SubstateRequirement, Transaction, VersionedSubstateId};
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory};
 use tokio::task::JoinError;
 
@@ -58,33 +59,27 @@ where
         let mut autofilled_transaction = original_transaction;
 
         // scan the network in parallel to fetch all the substates for each required input
-        let mut input_shards = vec![];
+        let mut versioned_inputs = vec![];
         let mut found_substates = HashMap::new();
         let substate_scanner_ref = self.substate_scanner.clone();
         let transaction_ref = Arc::new(autofilled_transaction.clone());
-        let mut handles = Vec::new();
+        let mut tasks = FuturesOrdered::new();
         for requirement in &substate_requirements {
-            let handle = tokio::spawn(get_substate_requirement(
+            tasks.push_back(get_substate_requirement(
                 substate_scanner_ref.clone(),
                 transaction_ref.clone(),
                 requirement.clone(),
             ));
-            handles.push(handle);
         }
-        for handle in handles {
-            let res = handle.await??;
-            if let Some((address, substate)) = res {
-                let shard = SubstateRequirement::new(address.clone(), Some(substate.version()));
-                if autofilled_transaction.input_refs().contains(&shard) {
-                    // Shard is already an input as a ref
-                    continue;
-                }
-                input_shards.push(shard);
+        while let Some(result) = tasks.next().await {
+            if let Some((address, substate)) = result? {
+                let versioned_substate_id = VersionedSubstateId::new(address.clone(), substate.version());
+                versioned_inputs.push(versioned_substate_id);
                 found_substates.insert(address, substate);
             }
         }
         info!(target: LOG_TARGET, "✏️️ Found {} input substates", found_substates.len());
-        autofilled_transaction.filled_inputs_mut().extend(input_shards);
+        autofilled_transaction.filled_inputs_mut().extend(versioned_inputs);
 
         // let mut found_this_round = 0;
 
@@ -125,15 +120,7 @@ where
                         id,
                         substate.version()
                     );
-                    let substate_requirement = SubstateRequirement::new(id.clone(), Some(substate.version()));
-                    if autofilled_transaction
-                        .all_inputs_iter()
-                        .any(|s| *s == substate_requirement)
-                    {
-                        // Shard is already an input (TODO: what a waste)
-                        continue;
-                    }
-                    autofilled_inputs.push(SubstateRequirement::new(id, Some(substate.version())));
+                    autofilled_inputs.push(VersionedSubstateId::new(id, substate.version()));
                     found_substates.insert(address, substate);
                 //       found_this_round += 1;
                 } else {
@@ -165,14 +152,16 @@ where
     TAddr: NodeAddressable,
     TSubstateCache: SubstateCache,
 {
+    if transaction
+        .all_inputs_iter()
+        .any(|s| s.version.is_some() && s.substate_id == *req.substate_id())
+    {
+        // Input for this substate has a specified version, so we do not autofill it
+        return Ok(None);
+    }
+
     let mut version = req.version().unwrap_or(0);
     loop {
-        let shard = SubstateRequirement::new(req.substate_id().clone(), Some(version));
-        if transaction.all_inputs_iter().any(|s| *s == shard) {
-            // Shard is already an input
-            return Ok(None);
-        }
-
         let scan_res = substate_scanner.get_substate(req.substate_id(), Some(version)).await?;
 
         match scan_res {
@@ -187,11 +176,6 @@ where
                     id,
                     substate.version()
                 );
-                let shard = SubstateRequirement::new(req.substate_id().clone(), Some(version));
-                if transaction.all_inputs_iter().any(|s| *s == shard) {
-                    // Shard is already an input (TODO: what a waste)
-                    return Ok(None);
-                }
 
                 return Ok(Some((id, substate)));
             },

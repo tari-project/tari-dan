@@ -47,8 +47,6 @@ pub enum MempoolError {
     InvalidTemplateAddress(#[from] TemplateManagerError),
     #[error("No fee instructions")]
     NoFeeInstructions,
-    #[error("Input refs downed")]
-    InputRefsDowned,
     #[error("Output substate exists in transaction {transaction_id}")]
     OutputSubstateExists { transaction_id: TransactionId },
     #[error("Validator fee claim instruction in transaction {transaction_id} contained invalid epoch {given_epoch}")]

@@ -115,8 +115,8 @@ where TSubstateCache: SubstateCache + 'static
 
         let virtual_substates = self.get_virtual_substates(&transaction, epoch).await?;
 
-        let mut state_store = new_state_store();
-        state_store.extend(found_substates);
+        let state_store = new_state_store();
+        state_store.set_many(found_substates)?;
 
         // execute the payload in the WASM engine and return the result
         let result = task::block_in_place(|| payload_processor.execute(transaction, state_store, virtual_substates))?;
@@ -155,13 +155,20 @@ where TSubstateCache: SubstateCache + 'static
     ) -> Result<HashMap<SubstateId, Substate>, DryRunTransactionProcessorError> {
         let mut substates = HashMap::new();
 
-        for address in transaction.inputs().iter().chain(transaction.input_refs()) {
+        // Fetch explicit inputs that may not have been resolved by the autofiller
+        for requirement in transaction.inputs() {
+            let address = requirement.to_substate_address().ok_or(
+                DryRunTransactionProcessorError::CannotResolveTransactionInput {
+                    substate_id: requirement.substate_id.clone(),
+                },
+            )?;
             // If the input has been filled, we've already fetched the substate
-            if transaction.filled_inputs().contains(address) {
+            // Note: this works because VersionedSubstateId hashes the same as SubstateId internally.
+            if transaction.filled_inputs().contains(&requirement.substate_id) {
                 continue;
             }
 
-            let (id, substate) = self.fetch_substate(address.to_substate_address(), epoch).await?;
+            let (id, substate) = self.fetch_substate(address, epoch).await?;
             substates.insert(id, substate);
         }
 

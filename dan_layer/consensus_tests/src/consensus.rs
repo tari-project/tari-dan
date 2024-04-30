@@ -17,11 +17,12 @@ use tari_dan_storage::{
     StateStore,
     StateStoreReadTransaction,
 };
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateRequirement, Transaction};
 
 use crate::support::{
     build_transaction,
     build_transaction_from,
+    build_transaction_with_inputs,
     change_decision,
     logging::setup_logger,
     Test,
@@ -133,7 +134,11 @@ async fn propose_blocks_with_new_transactions_until_all_committed() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn node_requests_missing_transaction_from_local_leader() {
     setup_logger();
-    let mut test = Test::builder().add_committee(0, vec!["1", "2"]).start().await;
+    let mut test = Test::builder()
+        .disable_timeout()
+        .add_committee(0, vec!["1", "2"])
+        .start()
+        .await;
     // First get all transactions in the mempool of node "2". We send to "2" because it is the leader for the next
     // block. We could send to "1" but the test would have to wait for the block time to be hit and block 1 to be
     // proposed before node "1" can propose block 2 with all the transactions.
@@ -263,8 +268,8 @@ async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() 
     test.assert_clean_shutdown().await;
 }
 
-#[ignore = "FIXME: This test is very flaky"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "FIXME: This test is very flaky"]
 async fn foreign_shard_decides_to_abort() {
     setup_logger();
     let mut test = Test::builder()
@@ -278,7 +283,7 @@ async fn foreign_shard_decides_to_abort() {
     test.network()
         .send_transaction(TestNetworkDestination::Bucket(0), tx1.clone())
         .await;
-    let tx2 = change_decision(tx1.clone(), Decision::Abort);
+    let tx2 = change_decision(tx1.clone().try_into().unwrap(), Decision::Abort);
     test.network()
         .send_transaction(TestNetworkDestination::Bucket(1), tx2.clone())
         .await;
@@ -478,5 +483,60 @@ async fn foreign_block_distribution() {
     log::info!("total messages filtered: {}", test.network().total_messages_filtered());
     // Each leader sends 3 proposals to the both foreign committees, so 6 messages per leader. 18 in total.
     assert_eq!(test.network().total_messages_filtered(), 18);
+    test.assert_clean_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "this test requires some mechanism/'pledging' round for resolving inputs for proposal which has not been \
+            implemented"]
+async fn deferred_execution() {
+    setup_logger();
+    let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
+    // First get transaction in the mempool
+    let inputs = test.create_substates_on_all_vns(1);
+    // Remove versions from inputs to allow deferred transactions
+    let inputs = inputs
+        .into_iter()
+        .map(|i| SubstateRequirement::new(i.substate_id, None));
+    let tx = build_transaction_with_inputs(Decision::Deferred, 1, inputs);
+    test.network().send_transaction(TestNetworkDestination::All, tx).await;
+
+    test.wait_until_new_pool_count(1).await;
+    test.start_epoch(Epoch(0)).await;
+
+    loop {
+        test.on_block_committed().await;
+
+        if test.is_transaction_pool_empty() {
+            break;
+        }
+        let leaf = test.get_validator(&TestAddress::new("1")).get_leaf_block();
+        if leaf.height >= NodeHeight(10) {
+            panic!("Not all transaction committed after {} blocks", leaf.height);
+        }
+    }
+
+    test.assert_all_validators_at_same_height().await;
+    test.assert_all_validators_committed();
+
+    // Assert all LocalOnly
+    test.get_validator(&TestAddress::new("1"))
+        .state_store
+        .with_read_tx(|tx| {
+            let mut block = Some(Block::get_tip(tx)?);
+            loop {
+                block = block.as_ref().unwrap().get_parent(tx).optional()?;
+                let Some(b) = block.as_ref() else {
+                    break;
+                };
+
+                for cmd in b.commands() {
+                    assert!(matches!(cmd, Command::LocalOnly(_)));
+                }
+            }
+            Ok::<_, HotStuffError>(())
+        })
+        .unwrap();
+
     test.assert_clean_shutdown().await;
 }

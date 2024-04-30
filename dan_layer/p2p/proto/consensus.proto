@@ -108,6 +108,7 @@ enum Decision {
   UNKNOWN = 0;
   COMMIT = 1;
   ABORT = 2;
+  DEFERRED = 3;
 }
 
 message Evidence {

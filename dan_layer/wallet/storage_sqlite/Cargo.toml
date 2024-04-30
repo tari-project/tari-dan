@@ -19,13 +19,13 @@ tari_utilities = { workspace = true }
 # Just used for QuorumCertificate
 tari_dan_storage = { workspace = true }
 
-serde = { workspace = true, default-features = true }
-serde_json = { workspace = true }
+bigdecimal = { workspace = true }
+chrono = { workspace = true }
 diesel = { workspace = true, features = ["default", "sqlite", "chrono"] }
 diesel_migrations = { workspace = true }
 log = { workspace = true }
-chrono = { workspace = true }
-bigdecimal = { workspace = true }
+serde = { workspace = true, default-features = true }
+serde_json = { workspace = true }
 
 # Bundle libsqlite3
 libsqlite3-sys = { workspace = true, features = ["bundled"] }

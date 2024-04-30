@@ -108,7 +108,7 @@ diesel::table! {
         signature -> Text,
         sender_public_key -> Text,
         fee_instructions -> Text,
-        meta -> Text,
+        inputs -> Text,
         result -> Nullable<Text>,
         qcs -> Nullable<Text>,
         final_fee -> Nullable<BigInt>,

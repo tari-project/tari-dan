@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use indexmap::IndexSet;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{PublicKey, Signature};
@@ -67,8 +68,7 @@ impl TransactionSignature {
 struct TransactionSignatureFields<'a> {
     fee_instructions: &'a [Instruction],
     instructions: &'a [Instruction],
-    inputs: &'a [SubstateRequirement],
-    input_refs: &'a [SubstateRequirement],
+    inputs: &'a IndexSet<SubstateRequirement>,
     min_epoch: Option<Epoch>,
     max_epoch: Option<Epoch>,
 }
@@ -79,7 +79,6 @@ impl<'a> From<&'a UnsignedTransaction> for TransactionSignatureFields<'a> {
             fee_instructions: &transaction.fee_instructions,
             instructions: &transaction.instructions,
             inputs: &transaction.inputs,
-            input_refs: &transaction.input_refs,
             min_epoch: transaction.min_epoch,
             max_epoch: transaction.max_epoch,
         }

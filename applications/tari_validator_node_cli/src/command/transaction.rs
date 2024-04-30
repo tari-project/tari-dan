@@ -90,8 +90,6 @@ pub struct CommonSubmitArgs {
     pub wait_for_result_timeout: Option<u64>,
     #[clap(long, short = 'i')]
     pub inputs: Vec<SubstateRequirement>,
-    #[clap(long, alias = "ref")]
-    pub input_refs: Vec<SubstateRequirement>,
     #[clap(long, short = 'v')]
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -231,15 +229,12 @@ pub async fn submit_transaction(
     // Convert to shard id
     let inputs = inputs.into_iter().collect::<Vec<_>>();
 
-    let input_refs = common.input_refs.into_iter().collect::<Vec<_>>();
-
     summarize_request(&instructions, &inputs, 1, common.dry_run);
     println!();
 
     let transaction = Transaction::builder()
         .with_instructions(instructions)
         .with_inputs(inputs)
-        .with_input_refs(input_refs)
         .sign(&key.secret_key)
         .build();
 

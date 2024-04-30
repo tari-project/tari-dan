@@ -66,7 +66,7 @@ impl Evidence {
         self.evidence.iter_mut()
     }
 
-    pub fn shards_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
+    pub fn substate_addresses_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
         self.evidence.keys()
     }
 
@@ -282,10 +282,10 @@ impl Command {
 
     pub fn involved_shards(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
         match self {
-            Command::Prepare(tx) => tx.evidence.shards_iter(),
-            Command::LocalPrepared(tx) => tx.evidence.shards_iter(),
-            Command::Accept(tx) => tx.evidence.shards_iter(),
-            Command::LocalOnly(tx) => tx.evidence.shards_iter(),
+            Command::Prepare(tx) => tx.evidence.substate_addresses_iter(),
+            Command::LocalPrepared(tx) => tx.evidence.substate_addresses_iter(),
+            Command::Accept(tx) => tx.evidence.substate_addresses_iter(),
+            Command::LocalOnly(tx) => tx.evidence.substate_addresses_iter(),
             Command::ForeignProposal(_) => panic!("ForeignProposal does not have involved shards"),
             Command::EpochEvent(_) => panic!("EpochEvent does not have involved shards"),
         }

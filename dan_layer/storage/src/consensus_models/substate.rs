@@ -12,13 +12,14 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, SubstateAddress};
-use tari_engine_types::substate::{Substate, SubstateId, SubstateValue};
+use tari_engine_types::{
+    lock::LockFlag,
+    substate::{Substate, SubstateId, SubstateValue},
+};
 use tari_transaction::{TransactionId, VersionedSubstateId};
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
 use crate::{
-    consensus_models::{Block, BlockId, QcId, QuorumCertificate},
+    consensus_models::{Block, BlockId, QcId, QuorumCertificate, VersionedSubstateIdLockIntent},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -27,7 +28,11 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::storage::consensus_models::substate";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct SubstateRecord {
     pub substate_id: SubstateId,
     pub version: u32,
@@ -46,7 +51,11 @@ pub struct SubstateRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct SubstateDestroyed {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub by_transaction: TransactionId,
@@ -136,7 +145,7 @@ impl SubstateRecord {
 }
 
 impl SubstateRecord {
-    pub fn try_lock_all<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a SubstateAddress>>(
+    pub fn try_lock_all<TTx: StateStoreWriteTransaction, B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
         tx: &mut TTx,
         locked_by_tx: &TransactionId,
         inputs: I,
@@ -145,7 +154,28 @@ impl SubstateRecord {
         tx.substates_try_lock_many(locked_by_tx, inputs, lock_flag)
     }
 
-    pub fn check_lock_all<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a SubstateAddress>>(
+    pub fn try_lock_all2<
+        'a,
+        TTx: StateStoreWriteTransaction,
+        I: IntoIterator<Item = &'a VersionedSubstateIdLockIntent>,
+    >(
+        tx: &mut TTx,
+        locked_by_tx: &TransactionId,
+        inputs: I,
+    ) -> Result<SubstateLockState, StorageError> {
+        // TODO
+        for input in inputs {
+            tx.substates_try_lock_many(
+                locked_by_tx,
+                iter::once(&input.to_substate_address()),
+                input.lock_flag(),
+            )?;
+        }
+
+        Ok(SubstateLockState::LockAcquired)
+    }
+
+    pub fn check_lock_all<TTx: StateStoreReadTransaction, B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
         tx: &mut TTx,
         inputs: I,
         lock_flag: SubstateLockFlag,
@@ -153,7 +183,7 @@ impl SubstateRecord {
         tx.substates_check_lock_many(inputs, lock_flag)
     }
 
-    pub fn try_unlock_many<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a SubstateAddress>>(
+    pub fn try_unlock_many<TTx: StateStoreWriteTransaction, B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
         tx: &mut TTx,
         locked_by_tx: &TransactionId,
         inputs: I,
@@ -402,11 +432,33 @@ impl From<SubstateCreatedProof> for SubstateUpdate {
 }
 
 /// Substate lock flags
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub enum SubstateLockFlag {
     Read = 0x01,
     Write = 0x02,
+}
+
+impl SubstateLockFlag {
+    pub fn is_write(&self) -> bool {
+        matches!(self, Self::Write)
+    }
+
+    pub fn is_read(&self) -> bool {
+        matches!(self, Self::Read)
+    }
+
+    pub fn as_lock_flag(&self) -> LockFlag {
+        match self {
+            Self::Read => LockFlag::Read,
+            Self::Write => LockFlag::Write,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
