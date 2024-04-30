@@ -6,11 +6,6 @@ use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey};
 use tari_dan_storage::consensus_models::Block;
 use tari_epoch_manager::EpochManagerReader;
 
-use crate::{
-    hotstuff::{HotStuffError, HotstuffConfig, ProposalValidationError},
-    traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
-};
-
 pub async fn check_block<TConsensusSpec: ConsensusSpec>(
     candidate_block: &Block,
     epoch_manager: &TConsensusSpec::EpochManager,

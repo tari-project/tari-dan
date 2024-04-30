@@ -20,7 +20,7 @@ use tokio::{sync::mpsc, time};
 
 use super::config::HotstuffConfig;
 use crate::{
-    block_validations::check_block,
+    validations::block_validations::check_block,
     hotstuff::error::HotStuffError,
     messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage},
     traits::{ConsensusSpec, OutboundMessaging},

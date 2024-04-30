@@ -19,7 +19,7 @@ use super::vote_receiver::VoteReceiver;
 use crate::{
     hotstuff::{common::calculate_last_dummy_block, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::NewViewMessage,
-    new_view_validations::check_new_view_message,
+    validations::new_view_validations::check_new_view_message,
     traits::{ConsensusSpec, LeaderStrategy},
 };
 
