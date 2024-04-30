@@ -134,11 +134,7 @@ async fn propose_blocks_with_new_transactions_until_all_committed() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn node_requests_missing_transaction_from_local_leader() {
     setup_logger();
-    let mut test = Test::builder()
-        .disable_timeout()
-        .add_committee(0, vec!["1", "2"])
-        .start()
-        .await;
+    let mut test = Test::builder().add_committee(0, vec!["1", "2"]).start().await;
     // First get all transactions in the mempool of node "2". We send to "2" because it is the leader for the next
     // block. We could send to "1" but the test would have to wait for the block time to be hit and block 1 to be
     // proposed before node "1" can propose block 2 with all the transactions.
