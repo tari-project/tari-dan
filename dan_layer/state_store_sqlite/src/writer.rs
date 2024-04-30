@@ -51,7 +51,7 @@ use tari_dan_storage::{
     StateStoreWriteTransaction,
     StorageError,
 };
-use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
+use tari_transaction::{TransactionId, VersionedSubstateId};
 use tari_utilities::ByteArray;
 use time::{OffsetDateTime, PrimitiveDateTime};
 
@@ -556,18 +556,37 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn transactions_insert(&mut self, transaction: &Transaction) -> Result<(), StorageError> {
+    fn transactions_insert(&mut self, tx_rec: &TransactionRecord) -> Result<(), StorageError> {
         use crate::schema::transactions;
 
+        let transaction = tx_rec.transaction();
         let insert = (
             transactions::transaction_id.eq(serialize_hex(transaction.id())),
             transactions::fee_instructions.eq(serialize_json(transaction.fee_instructions())?),
             transactions::instructions.eq(serialize_json(transaction.instructions())?),
             transactions::signature.eq(serialize_json(transaction.signature())?),
             transactions::inputs.eq(serialize_json(transaction.inputs())?),
-            transactions::input_refs.eq(serialize_json(transaction.input_refs())?),
             transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
-            transactions::resulting_outputs.eq(serialize_json(&serde_json::Value::Array(vec![]))?),
+            transactions::resolved_inputs.eq(tx_rec.resolved_inputs().map(serialize_json).transpose()?),
+            transactions::resulting_outputs.eq(serialize_json(tx_rec.resulting_outputs())?),
+            transactions::result.eq(tx_rec.result().map(serialize_json).transpose()?),
+            transactions::execution_time_ms.eq(tx_rec
+                .execution_time()
+                .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))),
+            transactions::final_decision.eq(tx_rec.final_decision().map(|d| d.to_string())),
+            transactions::finalized_at.eq(tx_rec
+                .finalized_time()
+                .map(|t| {
+                    let now = OffsetDateTime::now_utc().saturating_sub(t.try_into()?);
+                    Ok(PrimitiveDateTime::new(now.date(), now.time()))
+                })
+                .transpose()
+                .map_err(|e: time::error::ConversionRange| StorageError::QueryError {
+                    reason: format!("Cannot convert finalize time into PrimitiveDateTime: {e}"),
+                })?),
+            transactions::abort_details.eq(tx_rec.abort_details()),
+            transactions::min_epoch.eq(transaction.min_epoch().map(|e| e.as_u64() as i64)),
+            transactions::max_epoch.eq(transaction.max_epoch().map(|e| e.as_u64() as i64)),
         );
 
         diesel::insert_into(transactions::table)
@@ -589,30 +608,31 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         #[derive(AsChangeset)]
         #[diesel(table_name = transactions)]
         struct Changes {
-            result: Option<Option<String>>,
-            filled_inputs: Option<String>,
-            resulting_outputs: Option<String>,
-            execution_time_ms: Option<Option<i64>>,
-            final_decision: Option<Option<String>>,
-            finalized_at: Option<Option<PrimitiveDateTime>>,
-            abort_details: Option<Option<String>>,
+            result: Option<String>,
+            filled_inputs: String,
+            resulting_outputs: String,
+            resolved_inputs: Option<String>,
+            execution_time_ms: Option<i64>,
+            final_decision: Option<String>,
+            finalized_at: Option<PrimitiveDateTime>,
+            abort_details: Option<String>,
         }
 
         let change_set = Changes {
-            result: Some(transaction_rec.result().map(serialize_json).transpose()?),
-            filled_inputs: Some(serialize_json(transaction.filled_inputs())?),
-            resulting_outputs: Some(serialize_json(transaction_rec.resulting_outputs())?),
-            execution_time_ms: Some(
-                transaction_rec
-                    .execution_time()
-                    .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)),
-            ),
-            final_decision: Some(transaction_rec.final_decision().map(|d| d.to_string())),
-            finalized_at: Some(transaction_rec.final_decision().map(|_| {
+            result: transaction_rec.result().map(serialize_json).transpose()?,
+            filled_inputs: serialize_json(transaction.filled_inputs())?,
+            resulting_outputs: serialize_json(transaction_rec.resulting_outputs())?,
+            resolved_inputs: transaction_rec.resolved_inputs().map(serialize_json).transpose()?,
+            execution_time_ms: transaction_rec
+                .execution_time()
+                .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)),
+
+            final_decision: transaction_rec.final_decision().map(|d| d.to_string()),
+            finalized_at: transaction_rec.final_decision().map(|_| {
                 let now = OffsetDateTime::now_utc();
                 PrimitiveDateTime::new(now.date(), now.time())
-            })),
-            abort_details: Some(transaction_rec.abort_details.clone()),
+            }),
+            abort_details: transaction_rec.abort_details.clone(),
         };
 
         let num_affected = diesel::update(transactions::table)
@@ -650,7 +670,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                     transactions::instructions.eq(serialize_json(transaction.instructions())?),
                     transactions::signature.eq(serialize_json(transaction.signature())?),
                     transactions::inputs.eq(serialize_json(transaction.inputs())?),
-                    transactions::input_refs.eq(serialize_json(transaction.input_refs())?),
+                    transactions::resolved_inputs.eq(rec.resolved_inputs().map(serialize_json).transpose()?),
                     transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
                     transactions::resulting_outputs.eq(serialize_json(rec.resulting_outputs())?),
                     transactions::result.eq(rec.result().map(serialize_json).transpose()?),
@@ -696,6 +716,40 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 operation: "transaction_pool_insert",
                 source: e,
             })?;
+
+        Ok(())
+    }
+
+    fn transaction_pool_set_atom(&mut self, transaction: TransactionAtom) -> Result<(), StorageError> {
+        use crate::schema::transaction_pool;
+
+        let transaction_id = serialize_hex(transaction.id);
+
+        let change_set = (
+            transaction_pool::original_decision.eq(transaction.decision.to_string()),
+            transaction_pool::transaction_fee.eq(transaction.transaction_fee as i64),
+            transaction_pool::evidence.eq(serialize_json(&transaction.evidence)?),
+            transaction_pool::leader_fee.eq(transaction.leader_fee.as_ref().map(|f| f.fee as i64)),
+            transaction_pool::global_exhaust_burn
+                .eq(transaction.leader_fee.as_ref().map(|f| f.global_exhaust_burn as i64)),
+            transaction_pool::updated_at.eq(now()),
+        );
+
+        let num_affected = diesel::update(transaction_pool::table)
+            .filter(transaction_pool::transaction_id.eq(&transaction_id))
+            .set(change_set)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_set_atom",
+                source: e,
+            })?;
+
+        if num_affected == 0 {
+            return Err(StorageError::NotFound {
+                item: "transaction".to_string(),
+                key: transaction.id.to_string(),
+            });
+        }
 
         Ok(())
     }
@@ -918,20 +972,13 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     ) -> Result<(), StorageError> {
         use crate::schema::missing_transactions;
 
-        let missing_transaction_ids = missing_transaction_ids
-            .into_iter()
-            .map(serialize_hex)
-            .collect::<Vec<_>>();
-        let awaiting_transaction_ids = awaiting_transaction_ids
-            .into_iter()
-            .map(serialize_hex)
-            .collect::<Vec<_>>();
+        let missing_transaction_ids = missing_transaction_ids.into_iter().map(serialize_hex);
+        let awaiting_transaction_ids = awaiting_transaction_ids.into_iter().map(serialize_hex);
         let block_id_hex = serialize_hex(block.id());
 
         self.parked_blocks_insert(block)?;
 
         let values = missing_transaction_ids
-            .iter()
             .map(|tx_id| {
                 (
                     missing_transactions::block_id.eq(&block_id_hex),
@@ -940,7 +987,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                     missing_transactions::is_awaiting_execution.eq(false),
                 )
             })
-            .chain(awaiting_transaction_ids.iter().map(|tx_id| {
+            .chain(awaiting_transaction_ids.map(|tx_id| {
                 (
                     missing_transactions::block_id.eq(&block_id_hex),
                     missing_transactions::block_height.eq(block.height().as_u64() as i64),
@@ -966,16 +1013,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         current_height: NodeHeight,
         transaction_id: &TransactionId,
     ) -> Result<Option<Block>, StorageError> {
-        use crate::schema::{missing_transactions, transactions};
-
-        // delete all entries that are for previous heights
-        diesel::delete(missing_transactions::table)
-            .filter(missing_transactions::block_height.lt(current_height.as_u64().saturating_sub(1) as i64))
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "missing_transactions_remove",
-                source: e,
-            })?;
+        use crate::schema::missing_transactions;
 
         let transaction_id = serialize_hex(transaction_id);
         let block_id = missing_transactions::table
@@ -999,7 +1037,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 operation: "missing_transactions_remove",
                 source: e,
             })?;
-        let mut missing_transactions = missing_transactions::table
+        let missing_transactions = missing_transactions::table
             .select(missing_transactions::transaction_id)
             .filter(missing_transactions::block_id.eq(&block_id))
             .get_results::<String>(self.connection())
@@ -1009,33 +1047,16 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             })?;
 
         if missing_transactions.is_empty() {
-            return self.parked_blocks_remove(&block_id).map(Some);
-        }
-
-        // Make double sure that we dont have these transactions due to a race condition between inserting
-        // missing transactions and them completing execution.
-        let found_transaction_ids = transactions::table
-            .select(transactions::transaction_id)
-            .filter(transactions::transaction_id.eq_any(&missing_transactions))
-            .filter(transactions::result.is_not_null())
-            .get_results::<String>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transactions_get_many",
-                source: e,
-            })?;
-
-        diesel::delete(missing_transactions::table)
-            .filter(missing_transactions::transaction_id.eq_any(&found_transaction_ids))
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "missing_transactions_remove",
-                source: e,
-            })?;
-
-        missing_transactions.retain(|id| found_transaction_ids.iter().all(|found| found != id));
-
-        if missing_transactions.is_empty() {
-            return self.parked_blocks_remove(&block_id).map(Some);
+            // delete all entries that are for previous heights
+            diesel::delete(missing_transactions::table)
+                .filter(missing_transactions::block_height.lt(current_height.as_u64() as i64))
+                .execute(self.connection())
+                .map_err(|e| SqliteStorageError::DieselError {
+                    operation: "missing_transactions_remove",
+                    source: e,
+                })?;
+            let block = self.parked_blocks_remove(&block_id)?;
+            return Ok(Some(block));
         }
 
         Ok(None)
@@ -1064,7 +1085,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
+    fn substates_try_lock_many<'a, B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
         &mut self,
         locked_by_tx: &TransactionId,
         objects: I,
@@ -1073,7 +1094,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         use crate::schema::substates;
 
         // Lock unique shards
-        let objects: HashSet<String> = objects.into_iter().map(serialize_hex).collect();
+        let objects = objects
+            .into_iter()
+            .map(|v| serialize_hex(v.borrow()))
+            .collect::<HashSet<_>>();
 
         let locked_details = substates::table
             .select((substates::is_locked_w, substates::destroyed_by_transaction))
@@ -1133,7 +1157,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(SubstateLockState::LockAcquired)
     }
 
-    fn substates_try_unlock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
+    fn substates_try_unlock_many<B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
         &mut self,
         locked_by_tx: &TransactionId,
         objects: I,
@@ -1141,7 +1165,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     ) -> Result<(), StorageError> {
         use crate::schema::substates;
 
-        let objects: HashSet<String> = objects.into_iter().map(serialize_hex).collect();
+        let objects = objects
+            .into_iter()
+            .map(|v| serialize_hex(v.borrow()))
+            .collect::<HashSet<_>>();
 
         match lock_flag {
             SubstateLockFlag::Write => {

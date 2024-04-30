@@ -10,7 +10,7 @@ use tari_dan_storage::{
 use tari_epoch_manager::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_state_tree::StateTreeError;
-use tari_transaction::TransactionId;
+use tari_transaction::{TransactionId, VersionedSubstateIdError};
 
 use crate::traits::{InboundMessagingError, OutboundMessagingError};
 
@@ -84,6 +84,8 @@ pub enum HotStuffError {
     InvalidSyncRequest { details: String },
     #[error("New view validation error: {0}")]
     NewViewValidationError(#[from] NewViewValidationError),
+    #[error("Some input versions were not resolved at execution time: {0}")]
+    VersionedSubstateIdError(#[from] VersionedSubstateIdError),
 }
 
 impl From<EpochManagerError> for HotStuffError {

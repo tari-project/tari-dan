@@ -11,16 +11,19 @@ use itertools::Itertools;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::shard::Shard;
 use tari_dan_storage::{
-    consensus_models::{ExecutedTransaction, TransactionPool},
+    consensus_models::{TransactionPool, TransactionRecord},
     StateStore,
 };
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
-use tokio::sync::{
-    mpsc::{self},
-    watch,
-    RwLock,
+use tokio::{
+    sync::{
+        mpsc::{self},
+        watch,
+        RwLock,
+    },
+    task,
 };
 
 use crate::support::{address::TestAddress, ValidatorChannels};
@@ -63,7 +66,7 @@ pub fn spawn_network(
 
     let offline_destinations = Arc::new(RwLock::new(Vec::new()));
 
-    TestNetworkWorker {
+    let network_task_handle = TestNetworkWorker {
         network_status,
         rx_new_transaction: Some(rx_new_transaction),
         tx_new_transactions,
@@ -82,6 +85,7 @@ pub fn spawn_network(
     .spawn();
 
     TestNetwork {
+        network_task_handle,
         tx_new_transaction,
         network_status: tx_network_status,
         offline_destinations,
@@ -104,7 +108,8 @@ impl NetworkStatus {
 }
 
 pub struct TestNetwork {
-    tx_new_transaction: mpsc::Sender<(TestNetworkDestination, ExecutedTransaction)>,
+    network_task_handle: task::JoinHandle<()>,
+    tx_new_transaction: mpsc::Sender<(TestNetworkDestination, TransactionRecord)>,
     network_status: watch::Sender<NetworkStatus>,
     offline_destinations: Arc<RwLock<Vec<TestNetworkDestination>>>,
     num_sent_messages: Arc<AtomicUsize>,
@@ -115,6 +120,10 @@ pub struct TestNetwork {
 impl TestNetwork {
     pub fn start(&self) {
         self.network_status.send(NetworkStatus::Started).unwrap();
+    }
+
+    pub fn task_handle(&self) -> &task::JoinHandle<()> {
+        &self.network_task_handle
     }
 
     pub async fn go_offline(&self, destination: TestNetworkDestination) -> &Self {
@@ -136,7 +145,7 @@ impl TestNetwork {
         self.network_status.send(NetworkStatus::Paused).unwrap();
     }
 
-    pub async fn send_transaction(&self, destination: TestNetworkDestination, tx: ExecutedTransaction) {
+    pub async fn send_transaction(&self, destination: TestNetworkDestination, tx: TransactionRecord) {
         self.tx_new_transaction.send((destination, tx)).await.unwrap();
     }
 
@@ -171,7 +180,7 @@ impl TestNetworkDestination {
 }
 
 pub struct TestNetworkWorker {
-    rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, ExecutedTransaction)>>,
+    rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, TransactionRecord)>>,
     #[allow(clippy::type_complexity)]
     tx_new_transactions: HashMap<
         TestAddress,
@@ -191,7 +200,7 @@ pub struct TestNetworkWorker {
     on_message: watch::Sender<Option<HotstuffMessage>>,
     num_sent_messages: Arc<AtomicUsize>,
     num_filtered_messages: Arc<AtomicUsize>,
-    transaction_store: Arc<RwLock<HashMap<TransactionId, ExecutedTransaction>>>,
+    transaction_store: Arc<RwLock<HashMap<TransactionId, TransactionRecord>>>,
 
     offline_destinations: Arc<RwLock<Vec<TestNetworkDestination>>>,
     shutdown_signal: ShutdownSignal,
@@ -199,8 +208,8 @@ pub struct TestNetworkWorker {
 }
 
 impl TestNetworkWorker {
-    pub fn spawn(self) {
-        tokio::spawn(self.run());
+    pub fn spawn(self) -> task::JoinHandle<()> {
+        tokio::spawn(self.run())
     }
 
     async fn run(mut self) {
@@ -213,18 +222,20 @@ impl TestNetworkWorker {
         let transaction_store = self.transaction_store.clone();
 
         // Handle transactions that come in from the test. This behaves like a mempool.
-        tokio::spawn(async move {
-            while let Some((dest, executed)) = rx_new_transaction.recv().await {
+        let mut mempool_task = tokio::spawn(async move {
+            while let Some((dest, tx_record)) = rx_new_transaction.recv().await {
                 transaction_store
                     .write()
                     .await
-                    .insert(*executed.transaction().id(), executed.clone());
+                    .insert(*tx_record.transaction().id(), tx_record.clone());
                 for (addr, (bucket, tx_new_transaction_to_consensus, state_store)) in &tx_new_transactions {
                     if dest.is_for(addr, *bucket) {
                         state_store
                             .with_write_tx(|tx| {
-                                executed.upsert(tx)?;
-                                let atom = executed.to_atom();
+                                tx_record.upsert(tx)?;
+                                // Inserting in the pool here allows us to wait for all transactions have made it to
+                                // consensus before starting consensus.
+                                let atom = tx_record.to_atom();
                                 let pool = TransactionPool::<SqliteStateStore<TestAddress>>::new();
                                 if !pool.exists(tx, &atom.id)? {
                                     pool.insert(tx, atom)?;
@@ -232,8 +243,11 @@ impl TestNetworkWorker {
                                 Ok::<_, anyhow::Error>(())
                             })
                             .unwrap();
-                        log::info!("🐞 New transaction {}", executed.id());
-                        tx_new_transaction_to_consensus.send((*executed.id(), 0)).await.unwrap();
+                        log::info!("🐞 New transaction {}", tx_record.id());
+                        tx_new_transaction_to_consensus
+                            .send((*tx_record.id(), 0))
+                            .await
+                            .unwrap();
                     }
                 }
             }
@@ -267,6 +281,10 @@ impl TestNetworkWorker {
                 biased;
 
                   _ = self.shutdown_signal.wait() => {
+                    break;
+                }
+                result = &mut mempool_task => {
+                    result.expect("Mempool task failed");
                     break;
                 }
 
@@ -346,20 +364,17 @@ impl TestNetworkWorker {
             .get(&from)
             .unwrap_or_else(|| panic!("No new transaction channel for {}", from));
 
-        // In the normal case, we need to provide the same execution results to consensus. In future we could add code
+        // In the normal case, we need to provide the same execution results to consensus. In future, we could add code
         // here to make a local decision to ABORT.
-        let existing_executed_tx = self.transaction_store.read().await.get(msg.id()).unwrap().clone();
+        let existing_tx = self.transaction_store.read().await.get(msg.id()).unwrap().clone();
         state_store
             .with_write_tx(|tx| {
-                existing_executed_tx.upsert(tx)?;
-                let pool = TransactionPool::<SqliteStateStore<TestAddress>>::new();
-                if !pool.exists(tx, existing_executed_tx.id())? {
-                    pool.insert(tx, existing_executed_tx.to_atom())?;
-                }
+                // Add the transaction from the store to the node's db
+                existing_tx.upsert(tx)?;
                 Ok::<_, anyhow::Error>(())
             })
             .unwrap();
 
-        sender.send((*existing_executed_tx.id(), 0)).await.unwrap();
+        sender.send((*existing_tx.id(), 0)).await.unwrap();
     }
 }

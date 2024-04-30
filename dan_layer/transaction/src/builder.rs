@@ -1,16 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::borrow::Borrow;
-
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_dan_common_types::Epoch;
-use tari_engine_types::{
-    confidential::ConfidentialClaim,
-    instruction::Instruction,
-    substate::SubstateId,
-    TemplateAddress,
-};
+use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, TemplateAddress};
 use tari_template_lib::{
     args,
     args::Arg,
@@ -166,53 +159,16 @@ impl TransactionBuilder {
         self
     }
 
-    /// Add an input to be consumed
-    pub fn add_input(mut self, input_object: SubstateRequirement) -> Self {
-        self.unsigned_transaction.inputs.push(input_object);
+    /// Add an input to use in the transaction
+    pub fn add_input<I: Into<SubstateRequirement>>(mut self, input_object: I) -> Self {
+        self.unsigned_transaction.inputs.insert(input_object.into());
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
-    }
-
-    pub fn with_substate_inputs<I: IntoIterator<Item = (B, Option<u32>)>, B: Borrow<SubstateId>>(
-        self,
-        inputs: I,
-    ) -> Self {
-        self.with_inputs(
-            inputs
-                .into_iter()
-                .map(|(a, v)| SubstateRequirement::new(a.borrow().clone(), v)),
-        )
     }
 
     pub fn with_inputs<I: IntoIterator<Item = SubstateRequirement>>(mut self, inputs: I) -> Self {
         self.unsigned_transaction.inputs.extend(inputs);
-        // Reset the signature as it is no longer valid
-        self.signature = None;
-        self
-    }
-
-    /// Add an input to be used without mutation
-    pub fn add_input_ref(mut self, input_object: SubstateRequirement) -> Self {
-        self.unsigned_transaction.input_refs.push(input_object);
-        // Reset the signature as it is no longer valid
-        self.signature = None;
-        self
-    }
-
-    pub fn with_substate_input_refs<I: IntoIterator<Item = (B, Option<u32>)>, B: Borrow<SubstateId>>(
-        self,
-        inputs: I,
-    ) -> Self {
-        self.with_input_refs(
-            inputs
-                .into_iter()
-                .map(|(a, v)| SubstateRequirement::new(a.borrow().clone(), v)),
-        )
-    }
-
-    pub fn with_input_refs<I: IntoIterator<Item = SubstateRequirement>>(mut self, inputs: I) -> Self {
-        self.unsigned_transaction.input_refs.extend(inputs);
         // Reset the signature as it is no longer valid
         self.signature = None;
         self
@@ -241,7 +197,6 @@ impl TransactionBuilder {
             fee_instructions,
             instructions,
             inputs,
-            input_refs,
             filled_inputs,
             min_epoch,
             max_epoch,
@@ -252,7 +207,6 @@ impl TransactionBuilder {
             instructions,
             self.signature.expect("not signed"),
             inputs,
-            input_refs,
             filled_inputs,
             min_epoch,
             max_epoch,

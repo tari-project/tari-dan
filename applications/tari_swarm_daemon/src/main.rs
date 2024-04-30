@@ -245,6 +245,7 @@ fn exit_signal() -> anyhow::Result<BoxFuture<()>> {
 #[cfg(unix)]
 fn unix_exit_signal() -> anyhow::Result<BoxFuture<()>> {
     use tokio::signal::unix::SignalKind;
+
     let mut sighup = tokio::signal::unix::signal(SignalKind::hangup())?;
     let mut sigint = tokio::signal::unix::signal(SignalKind::interrupt())?;
 

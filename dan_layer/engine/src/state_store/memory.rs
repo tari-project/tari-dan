@@ -42,13 +42,15 @@ impl MemoryStateStore {
         Self::default()
     }
 
-    pub fn set_all<T: IntoIterator<Item = (K, V)>, K: Serialize, V: Serialize>(&self, iter: T) {
-        // MemoryStateStore is infallible
-        let mut state = self.write_access().unwrap();
+    pub fn set_many<T: IntoIterator<Item = (K, V)>, K: Serialize, V: Serialize>(
+        &self,
+        iter: T,
+    ) -> Result<(), StateStoreError> {
+        let mut state = self.write_access()?;
         for (k, v) in iter {
-            state.set_state(&k, v).unwrap();
+            state.set_state(&k, v)?;
         }
-        state.commit().unwrap()
+        state.commit()
     }
 }
 
@@ -70,10 +72,12 @@ pub struct MemoryTransaction<T> {
 
 impl MemoryTransaction<RwLockReadGuard<'_, InnerKvMap>> {
     pub fn iter_raw(&self) -> impl Iterator<Item = (&[u8], &[u8])> {
-        self.pending
-            .iter()
-            .map(|(k, v)| (k.as_slice(), v.as_slice()))
-            .chain(self.guard.iter().map(|(k, v)| (k.as_slice(), v.as_slice())))
+        self.pending.iter().map(|(k, v)| (k.as_slice(), v.as_slice())).chain(
+            self.guard
+                .iter()
+                .filter(|(k, _)| !self.pending.contains_key(*k))
+                .map(|(k, v)| (k.as_slice(), v.as_slice())),
+        )
     }
 }
 
@@ -156,12 +160,6 @@ impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
     fn commit(mut self) -> Result<(), StateStoreError> {
         self.guard.extend(self.pending);
         Ok(())
-    }
-}
-
-impl<K: Serialize, V: Serialize> Extend<(K, V)> for MemoryStateStore {
-    fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, iter: T) {
-        self.set_all(iter)
     }
 }
 

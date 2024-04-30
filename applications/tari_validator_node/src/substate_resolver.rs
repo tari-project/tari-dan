@@ -4,14 +4,15 @@
 use std::{collections::HashSet, time::Instant};
 
 use async_trait::async_trait;
+use indexmap::IndexMap;
 use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, SubstateAddress};
-use tari_dan_engine::state_store::memory::MemoryStateStore;
+use tari_dan_engine::state_store::StateStoreError;
 use tari_dan_storage::{consensus_models::SubstateRecord, StateStore, StorageError};
 use tari_engine_types::{
     instruction::Instruction,
-    substate::SubstateId,
+    substate::{Substate, SubstateId},
     virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates},
 };
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
@@ -59,7 +60,7 @@ where
     fn resolve_local_substates(
         &self,
         transaction: &Transaction,
-        out: &MemoryStateStore,
+        out: &mut IndexMap<SubstateId, Substate>,
     ) -> Result<HashSet<SubstateAddress>, SubstateResolverError> {
         let inputs = transaction.all_input_addresses_iter();
         let (local_substates, missing_shards) = self.store.with_read_tx(|tx| SubstateRecord::get_any(tx, inputs))?;
@@ -70,7 +71,7 @@ where
             local_substates.len(),
             missing_shards.len());
 
-        out.set_all(
+        out.extend(
             local_substates
                 .into_iter()
                 .map(|s| (s.substate_id.clone(), s.into_substate())),
@@ -82,9 +83,9 @@ where
     async fn resolve_remote_substates(
         &self,
         substate_addresses: HashSet<SubstateAddress>,
-        out: &MemoryStateStore,
+        out: &mut IndexMap<SubstateId, Substate>,
     ) -> Result<(), SubstateResolverError> {
-        let mut retrieved_substates = Vec::with_capacity(substate_addresses.len());
+        out.reserve(substate_addresses.len());
         for substate_address in substate_addresses {
             let timer = Instant::now();
             let substate_result = self
@@ -100,7 +101,7 @@ where
                         id,
                         timer.elapsed().as_millis()
                     );
-                    retrieved_substates.push((id, substate));
+                    out.insert(id, substate);
                 },
                 SubstateResult::Down { id, version, .. } => {
                     return Err(SubstateResolverError::InputSubstateDowned { id, version });
@@ -112,8 +113,6 @@ where
                 },
             }
         }
-
-        out.set_all(retrieved_substates);
 
         Ok(())
     }
@@ -159,15 +158,17 @@ where
 {
     type Error = SubstateResolverError;
 
-    async fn resolve(&self, transaction: &Transaction, out: &MemoryStateStore) -> Result<(), Self::Error> {
-        let missing_shards = self.resolve_local_substates(transaction, out)?;
+    async fn resolve(&self, transaction: &Transaction) -> Result<IndexMap<SubstateId, Substate>, Self::Error> {
+        let mut substates = IndexMap::new();
+
+        let missing_shards = self.resolve_local_substates(transaction, &mut substates)?;
 
         // TODO: If any of the missing shards are local we should error early here rather than asking the local
         //       committee
 
-        self.resolve_remote_substates(missing_shards, out).await?;
+        self.resolve_remote_substates(missing_shards, &mut substates).await?;
 
-        Ok(())
+        Ok(substates)
     }
 
     async fn resolve_virtual_substates(
@@ -256,4 +257,6 @@ pub enum SubstateResolverError {
     EpochManagerError(#[from] EpochManagerError),
     #[error("Unauthorized fee claim: validator node {validator_address} (transaction signed by: {signer})")]
     UnauthorizedFeeClaim { validator_address: String, signer: String },
+    #[error("State store error: {0}")]
+    StateStorageError(#[from] StateStoreError),
 }

@@ -76,7 +76,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
 
         let processor = TransactionProcessor::new(
             self.template_provider.clone(),
-            state_store,
+            state_store.clone(),
             auth_params,
             virtual_substates,
             modules,

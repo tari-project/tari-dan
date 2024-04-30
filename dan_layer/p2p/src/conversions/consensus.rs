@@ -500,6 +500,7 @@ impl From<Decision> for proto::consensus::Decision {
         match value {
             Decision::Commit => proto::consensus::Decision::Commit,
             Decision::Abort => proto::consensus::Decision::Abort,
+            Decision::Deferred => proto::consensus::Decision::Deferred,
         }
     }
 }
@@ -511,6 +512,7 @@ impl TryFrom<proto::consensus::Decision> for Decision {
         match value {
             proto::consensus::Decision::Commit => Ok(Decision::Commit),
             proto::consensus::Decision::Abort => Ok(Decision::Abort),
+            proto::consensus::Decision::Deferred => Ok(Decision::Deferred),
             proto::consensus::Decision::Unknown => Err(anyhow!("Decision not provided")),
         }
     }

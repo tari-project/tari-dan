@@ -63,7 +63,6 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         wait_for_result: true,
         wait_for_result_timeout: Some(120),
         inputs: vec![],
-        input_refs: vec![],
         version: None,
         dump_outputs_into: None,
         account_template_address: None,
@@ -114,7 +113,6 @@ pub async fn create_component(
             wait_for_result: true,
             wait_for_result_timeout: Some(300),
             inputs: vec![],
-            input_refs: vec![],
             version: None,
             dump_outputs_into: None,
             account_template_address: None,
@@ -299,7 +297,6 @@ pub async fn call_method(
             wait_for_result: true,
             wait_for_result_timeout: Some(60),
             inputs: vec![component],
-            input_refs: vec![],
             version: None,
             dump_outputs_into: None,
             account_template_address: None,
@@ -342,7 +339,6 @@ async fn call_method_inner(
             wait_for_result: true,
             wait_for_result_timeout: Some(60),
             inputs: vec![component],
-            input_refs: vec![],
             version: None,
             dump_outputs_into: None,
             account_template_address: None,
@@ -410,28 +406,10 @@ pub async fn submit_manifest(
     // Remove inputs that have been downed
     let inputs = select_latest_version(inputs);
 
-    let input_refs = input_str
-        .split(',')
-        .map(|s| s.trim())
-        .filter(|s| s.starts_with("ref:"))
-        .flat_map(|s| {
-            world
-                .outputs
-                .get(s)
-                .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
-        })
-        .filter(|(_, addr)| !addr.substate_id.is_transaction_receipt())
-        .map(|(_, addr)| addr.clone())
-        .collect::<Vec<_>>();
-
-    // Remove inputs that have been downed
-    let inputs = select_latest_version(inputs);
-
     let args = CommonSubmitArgs {
         wait_for_result: true,
         wait_for_result_timeout: Some(60),
         inputs,
-        input_refs,
         version: None,
         dump_outputs_into: None,
         account_template_address: None,

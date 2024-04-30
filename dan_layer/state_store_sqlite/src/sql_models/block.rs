@@ -34,11 +34,11 @@ pub struct Block {
     pub is_dummy: bool,
     pub foreign_indexes: String,
     pub signature: Option<String>,
-    pub created_at: PrimitiveDateTime,
     pub block_time: Option<i64>,
     pub timestamp: i64,
     pub base_layer_block_height: i64,
     pub base_layer_block_hash: String,
+    pub created_at: PrimitiveDateTime,
 }
 
 impl Block {
@@ -97,11 +97,11 @@ pub struct ParkedBlock {
     pub total_leader_fee: i64,
     pub foreign_indexes: String,
     pub signature: Option<String>,
-    pub created_at: PrimitiveDateTime,
     pub block_time: Option<i64>,
     pub timestamp: i64,
     pub base_layer_block_height: i64,
     pub base_layer_block_hash: String,
+    pub created_at: PrimitiveDateTime,
 }
 
 impl TryFrom<ParkedBlock> for consensus_models::Block {
