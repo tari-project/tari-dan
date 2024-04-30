@@ -22,9 +22,10 @@
 
 import { Chip, Avatar } from "@mui/material";
 import { IoCheckmarkOutline, IoHourglassOutline, IoCloseOutline, IoBandageOutline } from "react-icons/io5";
+import { Decision } from "@tariproject/typescript-bindings";
 
 interface StatusChipProps {
-  status: "Commit" | "Abort" | "Loading" | "Dummy";
+  status: Decision | "Loading" | "Dummy";
   showTitle?: boolean;
 }
 
