@@ -31,8 +31,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DryRunTransactionProcessorError {
-    #[error("Cannot resolve transaction input {substate_id}")]
-    CannotResolveTransactionInput { substate_id: SubstateId },
     #[error(transparent)]
     TransactionAutofillerError(#[from] TransactionAutofillerError),
     #[error("Substate {id} v{version} is DOWN")]

@@ -157,11 +157,10 @@ where TSubstateCache: SubstateCache + 'static
 
         // Fetch explicit inputs that may not have been resolved by the autofiller
         for requirement in transaction.inputs() {
-            let address = requirement.to_substate_address().ok_or(
-                DryRunTransactionProcessorError::CannotResolveTransactionInput {
-                    substate_id: requirement.substate_id.clone(),
-                },
-            )?;
+            let Some(address) = requirement.to_substate_address() else {
+                // No version, we cant fetch it
+                continue;
+            };
             // If the input has been filled, we've already fetched the substate
             // Note: this works because VersionedSubstateId hashes the same as SubstateId internally.
             if transaction.filled_inputs().contains(&requirement.substate_id) {

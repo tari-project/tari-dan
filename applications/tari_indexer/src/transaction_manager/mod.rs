@@ -76,39 +76,40 @@ where
         }
     }
 
-    pub async fn submit_transaction(
-        &self,
-        transaction: Transaction,
-        required_substates: Vec<SubstateRequirement>,
-    ) -> Result<TransactionId, TransactionManagerError> {
+    pub async fn submit_transaction(&self, transaction: Transaction) -> Result<TransactionId, TransactionManagerError> {
         let tx_hash = *transaction.id();
 
         info!(
             target: LOG_TARGET,
             "Submitting transaction with hash {} to the validator node", tx_hash
         );
-        // automatically scan the inputs and add all related involved objects
-        // note that this operation does not alter the transaction hash
-        let (autofilled_transaction, _) = self
-            .transaction_autofiller
-            .autofill_transaction(transaction, required_substates)
-            .await?;
-
         let transaction_substate_address = SubstateAddress::for_transaction_receipt(tx_hash.into_array().into());
 
-        if autofilled_transaction.involved_shards_iter().count() == 0 {
+        if transaction.involved_shards_iter().count() == 0 {
             self.try_with_committee(iter::once(transaction_substate_address), |mut client| {
-                let transaction = autofilled_transaction.clone();
+                let transaction = transaction.clone();
                 async move { client.submit_transaction(transaction).await }
             })
             .await
         } else {
-            self.try_with_committee(autofilled_transaction.involved_shards_iter(), |mut client| {
-                let transaction = autofilled_transaction.clone();
+            self.try_with_committee(transaction.involved_shards_iter(), |mut client| {
+                let transaction = transaction.clone();
                 async move { client.submit_transaction(transaction).await }
             })
             .await
         }
+    }
+
+    pub async fn autofill_transaction(
+        &self,
+        transaction: Transaction,
+        required_substates: Vec<SubstateRequirement>,
+    ) -> Result<Transaction, TransactionManagerError> {
+        let (transaction, _) = self
+            .transaction_autofiller
+            .autofill_transaction(transaction, required_substates)
+            .await?;
+        Ok(transaction)
     }
 
     pub async fn get_transaction_result(

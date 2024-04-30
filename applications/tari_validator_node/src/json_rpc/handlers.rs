@@ -165,6 +165,17 @@ impl JsonRpcHandlers {
             transaction.num_unique_inputs()
         );
 
+        if !transaction.check_id() {
+            return Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Transaction ID is invalid".to_string(),
+                    json!(null),
+                ),
+            ));
+        }
+
         let tx_id = *transaction.id();
 
         if is_dry_run {

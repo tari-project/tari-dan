@@ -85,6 +85,11 @@ impl Transaction {
         &self.id
     }
 
+    pub fn check_id(&self) -> bool {
+        let id = self.calculate_hash();
+        id == self.id
+    }
+
     pub fn hash(&self) -> Hash {
         self.id.into_array().into()
     }
@@ -332,6 +337,12 @@ impl Display for SubstateRequirement {
 impl From<VersionedSubstateId> for SubstateRequirement {
     fn from(value: VersionedSubstateId) -> Self {
         Self::with_version(value.substate_id, value.version)
+    }
+}
+
+impl<T: Into<SubstateId>> From<T> for SubstateRequirement {
+    fn from(value: T) -> Self {
+        Self::new(value.into(), None)
     }
 }
 

@@ -535,25 +535,28 @@ where
     async fn handle_deferred_execution(&mut self, transaction: Transaction) -> Result<(), MempoolError> {
         let transaction_id = *transaction.id();
 
-        let is_consensus_running = self.consensus_handle.get_current_state().is_running();
+        // TODO: allow deferred transactions - this just rejects the transaction immediately
+        self.state_store.with_write_tx(|tx| {
+            TransactionRecord::get(tx.deref_mut(), &transaction_id)?
+                .set_abort("Transaction requires deferred execution but that is not currently supported")
+                .update(tx)
+        })?;
 
-        // Store the transaction to be later executed in consensus
-        self.state_store
-            .with_write_tx(|tx| TransactionRecord::new(transaction).insert(tx))?;
-
-        let pending_exec_size = self.pending_executions.len();
-        if is_consensus_running &&
-            // Notify consensus about the transaction
-            self.tx_executed_transactions
-                .send((transaction_id, pending_exec_size))
-                .await
-                .is_err()
-        {
-            debug!(
-                target: LOG_TARGET,
-                "Executed transaction channel closed before executed transaction could be sent"
-            );
-        }
+        // let is_consensus_running = self.consensus_handle.get_current_state().is_running();
+        //
+        // let pending_exec_size = self.pending_executions.len();
+        // if is_consensus_running &&
+        //     // Notify consensus about the transaction
+        //     self.tx_executed_transactions
+        //         .send((transaction_id, pending_exec_size))
+        //         .await
+        //         .is_err()
+        // {
+        //     debug!(
+        //         target: LOG_TARGET,
+        //         "Executed transaction channel closed before executed transaction could be sent"
+        //     );
+        // }
 
         self.transactions.remove(&transaction_id);
         Ok(())
