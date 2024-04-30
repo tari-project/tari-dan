@@ -284,9 +284,21 @@ impl Block {
     }
 
     pub fn calculate_hash(&self) -> FixedHash {
-        hashing::block_hasher()
+        // Hash is created from the hash of the "body" and
+        // then hashed with the parent, so that you can
+        // create a merkle proof of a chain of blocks
+        // ```pre
+        // root
+        // |\
+        // |  block1
+        // |\
+        // |  block2
+        // |
+        // blockbody
+        // ```
+
+        let inner_hash = hashing::block_hasher()
             .chain(&self.network)
-            .chain(&self.parent)
             .chain(&self.justify)
             .chain(&self.height)
             .chain(&self.total_leader_fee)
@@ -299,6 +311,11 @@ impl Block {
             .chain(&self.timestamp)
             .chain(&self.base_layer_block_height)
             .chain(&self.base_layer_block_hash)
+            .result();
+
+        hashing::block_hasher()
+            .chain(&self.parent)
+            .chain(&inner_hash)
             .result()
     }
 }
