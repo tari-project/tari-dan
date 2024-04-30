@@ -1,8 +1,9 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
+use indexmap::IndexSet;
 use log::info;
 use tari_consensus::traits::{
     BlockTransactionExecutor,
@@ -15,10 +16,13 @@ use tari_dan_engine::{
     bootstrap_state,
     state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
 };
-use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore, StateStoreReadTransaction};
-use tari_engine_types::{commit_result::TransactionResult, substate::SubstateId, virtual_substate::VirtualSubstates};
+use tari_dan_storage::{
+    consensus_models::{ExecutedTransaction, SubstateLockFlag, SubstateRecord, VersionedSubstateIdLockIntent},
+    StateStore,
+};
+use tari_engine_types::{substate::SubstateId, virtual_substate::VirtualSubstates};
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::{Transaction, VersionedSubstateId};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::block_transaction_executor";
 
@@ -48,11 +52,10 @@ where
     TExecutor: TransactionExecutor + Clone + 'static,
     TEpochManager: EpochManagerReader + Clone + 'static,
 {
-    fn build(&self) -> Box<dyn BlockTransactionExecutor<TStateStore>> {
-        Box::new(TariDanBlockTransactionExecutor::new(
-            self.epoch_manager.clone(),
-            self.executor.clone(),
-        ))
+    type Executor = TariDanBlockTransactionExecutor<TEpochManager, TExecutor>;
+
+    fn build(&self) -> Self::Executor {
+        TariDanBlockTransactionExecutor::new(self.epoch_manager.clone(), self.executor.clone())
     }
 }
 
@@ -82,7 +85,7 @@ where
         let id: tari_transaction::TransactionId = *transaction.id();
 
         // Get the latest input substates
-        let inputs: HashSet<SubstateRequirement> = self.resolve_substates::<TStateStore>(&transaction, db_tx)?;
+        let inputs = self.resolve_substates::<TStateStore>(&transaction, db_tx)?;
         info!(target: LOG_TARGET, "Transaction {} executing. Inputs: {:?}", id, inputs);
 
         // Create a memory db with all the input substates, needed for the transaction execution
@@ -99,20 +102,33 @@ where
             .map_err(|e| BlockTransactionExecutorError::ExecutionThreadFailure(e.to_string()))?;
 
         // Store the output versions for future concurrent transactions in the same block
-        if let TransactionResult::Accept(diff) = &executed.result().finalize.result {
+        if let Some(diff) = executed.result().finalize.accept() {
             diff.up_iter().for_each(|s| {
                 self.output_versions.insert(s.0.clone(), s.1.version());
             });
         }
 
-        // Update the filled inputs to set the specific version, as we already know it after execution
-        let filled_inputs_mut = executed.transaction_mut().filled_inputs_mut();
-        inputs.into_iter().for_each(|input| {
-            filled_inputs_mut.push(input);
-        });
+        // Update the resolved inputs to set the specific version, as we know it after execution
+        let mut resolved_inputs = IndexSet::new();
+        if let Some(diff) = executed.result().finalize.accept() {
+            resolved_inputs = inputs
+                .into_iter()
+                .map(|versioned_id| {
+                    let lock_flag = if diff.down_iter().any(|(id, _)| *id == versioned_id.substate_id) {
+                        // Update all inputs that were DOWNed to be write locked
+                        SubstateLockFlag::Write
+                    } else {
+                        // Any input not downed, gets a read lock
+                        SubstateLockFlag::Read
+                    };
+                    VersionedSubstateIdLockIntent::new(versioned_id, lock_flag)
+                })
+                .collect::<IndexSet<_>>();
+        }
+
+        executed.set_resolved_inputs(resolved_inputs);
 
         info!(target: LOG_TARGET, "Transaction {} executed. result: {:?}", id, executed);
-
         Ok(executed)
     }
 }
@@ -130,49 +146,60 @@ impl<TEpochManager, TExecutor> TariDanBlockTransactionExecutor<TEpochManager, TE
         &self,
         transaction: &Transaction,
         db_tx: &mut <TStateStore as StateStore>::ReadTransaction<'_>,
-    ) -> Result<HashSet<SubstateRequirement>, BlockTransactionExecutorError> {
-        let mut resolved_substates = HashSet::new();
+    ) -> Result<IndexSet<VersionedSubstateId>, BlockTransactionExecutorError> {
+        let mut resolved_substates = IndexSet::with_capacity(transaction.num_unique_inputs());
         for input in transaction.all_inputs_iter() {
-            // We try to fetch each input from the block "cache", and only hit the DB if the input has not been used in
-            // the block before
-            let resolved_substate = match self.output_versions.get(input.substate_id()) {
-                Some(version) => SubstateRequirement::new(input.substate_id.clone(), Some(*version)),
-                None => self.resolve_local_substate::<TStateStore>(input.substate_id(), db_tx)?,
+            let address = match input.version() {
+                Some(version) => VersionedSubstateId::new(input.substate_id, version),
+                None => {
+                    // We try to fetch each input from the block "cache", and only hit the DB if the input has not been
+                    // used in the block before
+                    match self.output_versions.get(input.substate_id()) {
+                        Some(version) => VersionedSubstateId::new(input.substate_id, *version),
+                        None => self.resolve_local_substate::<TStateStore>(input.substate_id, db_tx)?,
+                    }
+                },
             };
-            resolved_substates.insert(resolved_substate);
+            resolved_substates.insert(address);
         }
-        // TODO: we assume local only transactions, we need to implement multi-shard transactions
+        // TODO: we assume local only transactions, we need to implement multi-shard transactions.
+        //       Suggest once we have pledges for foreign substates, we add them to a temporary pledge store and use
+        //       that to resolve inputs.
         Ok(resolved_substates)
     }
 
     fn resolve_local_substate<TStateStore: StateStore>(
         &self,
-        id: &SubstateId,
+        id: SubstateId,
         db_tx: &mut <TStateStore as StateStore>::ReadTransaction<'_>,
-    ) -> Result<SubstateRequirement, BlockTransactionExecutorError> {
-        let version = Self::get_last_substate_version::<TStateStore>(db_tx, id)
-            .ok_or(BlockTransactionExecutorError::PlaceHolderError)?;
-        Ok(SubstateRequirement::new(id.clone(), Some(version)))
+    ) -> Result<VersionedSubstateId, BlockTransactionExecutorError> {
+        let version = Self::get_last_substate_version::<TStateStore>(db_tx, &id)?.ok_or_else(|| {
+            BlockTransactionExecutorError::UnableToResolveSubstateId {
+                substate_id: id.clone(),
+            }
+        })?;
+        Ok(VersionedSubstateId::new(id, version))
     }
 
     fn add_substates_to_memory_db<TStateStore: StateStore>(
         &self,
         db_tx: &mut <TStateStore as StateStore>::ReadTransaction<'_>,
-        inputs: &HashSet<SubstateRequirement>,
+        inputs: &IndexSet<VersionedSubstateId>,
         out: &MemoryStateStore,
     ) -> Result<(), BlockTransactionExecutorError> {
-        let mut substates = vec![];
+        let mut access = out
+            .write_access()
+            .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
         for input in inputs {
             let address = input.to_substate_address();
-            let substate = db_tx.substates_get(&address)?;
-            substates.push(substate);
+            let substate = SubstateRecord::get(db_tx, &address)?;
+            access
+                .set_state(&input.substate_id, substate.into_substate())
+                .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
         }
-
-        out.set_all(
-            substates
-                .into_iter()
-                .map(|s| (s.substate_id.clone(), s.into_substate())),
-        );
+        access
+            .commit()
+            .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
 
         Ok(())
     }
@@ -180,24 +207,18 @@ impl<TEpochManager, TExecutor> TariDanBlockTransactionExecutor<TEpochManager, TE
     fn get_last_substate_version<TStateStore: StateStore>(
         db_tx: &mut <TStateStore as StateStore>::ReadTransaction<'_>,
         substate_id: &SubstateId,
-    ) -> Option<u32> {
-        // TODO: store in DB the substate_id and version so we can just fetch the latest one and we don't have to loop
-        // from 0
+    ) -> Result<Option<u32>, BlockTransactionExecutorError> {
+        // TODO: add a DB query to fetch the latest version
         let mut version = 0;
         loop {
             let address = SubstateAddress::from_address(substate_id, version);
             info!(target: LOG_TARGET, "get_last_substate_version {}:{}, address: {}", substate_id, version, address);
-            match db_tx.substates_get(&address) {
-                Ok(_) => {
-                    version += 1;
-                },
-                Err(_) => {
-                    if version > 0 {
-                        return Some(version - 1);
-                    } else {
-                        return None;
-                    }
-                },
+            if SubstateRecord::exists(db_tx, &address)? {
+                version += 1;
+            } else if version > 0 {
+                return Ok(Some(version - 1));
+            } else {
+                return Ok(None);
             }
         }
     }

@@ -29,7 +29,7 @@ where TConsensusSpec: ConsensusSpec
         from: TConsensusSpec::Addr,
         msg: RequestedTransactionMessage,
     ) -> Result<(), HotStuffError> {
-        info!(target: LOG_TARGET, "{:?} receiving {} requested transactions for block {}", from, msg.transactions.len(), msg.block_id);
+        info!(target: LOG_TARGET, "Receiving {} requested transactions for block {} from {:?}", msg.transactions.len(), msg.block_id, from, );
         // TODO: Check that we requested this
         for tx in msg.transactions {
             self.tx_mempool

@@ -178,7 +178,7 @@ where TConsensusSpec: ConsensusSpec
             .with_write_tx(|tx| tx.missing_transactions_remove(current_height, transaction_id))?;
 
         if let Some(unparked_block) = maybe_unparked_block {
-            info!(target: LOG_TARGET, "♻️ all transactions for block {unparked_block} have been executed");
+            info!(target: LOG_TARGET, "♻️ all transactions for block {unparked_block} are ready for consensus");
 
             let vn = self
                 .epoch_manager
@@ -212,16 +212,16 @@ where TConsensusSpec: ConsensusSpec
                 "🔥 Block {} has {} missing transactions and {} awaiting execution", block, missing_tx_ids.len(), awaiting_execution.len(),
             );
 
-            let block_id = *block.id();
-            let epoch = block.epoch();
-            let block_proposed_by = block.proposed_by().clone();
-
-            let vn = self
-                .epoch_manager
-                .get_validator_node_by_public_key(epoch, &block_proposed_by)
-                .await?;
-
             if !missing_tx_ids.is_empty() {
+                let block_id = *block.id();
+                let epoch = block.epoch();
+                let block_proposed_by = block.proposed_by().clone();
+
+                let vn = self
+                    .epoch_manager
+                    .get_validator_node_by_public_key(epoch, &block_proposed_by)
+                    .await?;
+
                 self.outbound_messaging
                     .send(
                         vn.address,

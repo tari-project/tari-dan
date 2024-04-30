@@ -44,7 +44,7 @@ use tari_template_lib::{
         ViewableBalanceProof,
     },
 };
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::{SubstateRequirement, Transaction, VersionedSubstateId};
 
 use crate::{
     proto::{
@@ -108,11 +108,6 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
-        let input_refs = request
-            .input_refs
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, _>>()?;
         let filled_inputs = request
             .filled_inputs
             .into_iter()
@@ -125,7 +120,6 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             instructions,
             signature,
             inputs,
-            input_refs,
             filled_inputs,
             min_epoch,
             max_epoch,
@@ -139,7 +133,6 @@ impl From<&Transaction> for proto::transaction::Transaction {
     fn from(transaction: &Transaction) -> Self {
         let signature = transaction.signature().clone().into();
         let inputs = transaction.inputs().iter().map(Into::into).collect();
-        let input_refs = transaction.input_refs().iter().map(Into::into).collect();
         let filled_inputs = transaction.filled_inputs().iter().map(Into::into).collect();
         let fee_instructions = transaction.fee_instructions().to_vec();
         let instructions = transaction.instructions().to_vec();
@@ -156,7 +149,6 @@ impl From<&Transaction> for proto::transaction::Transaction {
             instructions,
             signature: Some(signature),
             inputs,
-            input_refs,
             filled_inputs,
             min_epoch,
             max_epoch,
@@ -371,10 +363,7 @@ impl TryFrom<proto::transaction::SubstateRequirement> for SubstateRequirement {
 
 impl From<SubstateRequirement> for proto::transaction::SubstateRequirement {
     fn from(val: SubstateRequirement) -> Self {
-        Self {
-            substate_id: val.substate_id().to_bytes(),
-            version: val.version().map(|v| OptionalVersion { version: v }),
-        }
+        (&val).into()
     }
 }
 
@@ -383,6 +372,33 @@ impl From<&SubstateRequirement> for proto::transaction::SubstateRequirement {
         Self {
             substate_id: val.substate_id().to_bytes(),
             version: val.version().map(|v| OptionalVersion { version: v }),
+        }
+    }
+}
+
+// -------------------------------- VersionedSubstate -------------------------------- //
+
+impl TryFrom<proto::transaction::VersionedSubstateId> for VersionedSubstateId {
+    type Error = anyhow::Error;
+
+    fn try_from(val: proto::transaction::VersionedSubstateId) -> Result<Self, Self::Error> {
+        let substate_id = SubstateId::from_bytes(&val.substate_id)?;
+        let substate_specification = VersionedSubstateId::new(substate_id, val.version);
+        Ok(substate_specification)
+    }
+}
+
+impl From<VersionedSubstateId> for proto::transaction::VersionedSubstateId {
+    fn from(val: VersionedSubstateId) -> Self {
+        (&val).into()
+    }
+}
+
+impl From<&VersionedSubstateId> for proto::transaction::VersionedSubstateId {
+    fn from(val: &VersionedSubstateId) -> Self {
+        Self {
+            substate_id: val.substate_id().to_bytes(),
+            version: val.version,
         }
     }
 }

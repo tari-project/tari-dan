@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_state_tree::{TreeStore, TreeStoreReader, Version};
-use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
+use tari_transaction::{TransactionId, VersionedSubstateId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -236,7 +236,7 @@ pub trait StateStoreReadTransaction {
         &mut self,
         transaction_id: &TransactionId,
     ) -> Result<Vec<SubstateRecord>, StorageError>;
-    fn substates_check_lock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
+    fn substates_check_lock_many<B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
         &mut self,
         objects: I,
         lock_flag: SubstateLockFlag,
@@ -295,7 +295,7 @@ pub trait StateStoreWriteTransaction {
     ) -> Result<(), StorageError>;
 
     // -------------------------------- Transaction -------------------------------- //
-    fn transactions_insert(&mut self, transaction: &Transaction) -> Result<(), StorageError>;
+    fn transactions_insert(&mut self, transaction: &TransactionRecord) -> Result<(), StorageError>;
     fn transactions_update(&mut self, transaction: &TransactionRecord) -> Result<(), StorageError>;
     fn transactions_save_all<'a, I: IntoIterator<Item = &'a TransactionRecord>>(
         &mut self,
@@ -308,6 +308,7 @@ pub trait StateStoreWriteTransaction {
         stage: TransactionPoolStage,
         is_ready: bool,
     ) -> Result<(), StorageError>;
+    fn transaction_pool_set_atom(&mut self, transaction: TransactionAtom) -> Result<(), StorageError>;
     fn transaction_pool_add_pending_update(
         &mut self,
         pool_update: TransactionPoolStatusUpdate,
@@ -349,14 +350,14 @@ pub trait StateStoreWriteTransaction {
     fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;
 
     //---------------------------------- Substates --------------------------------------------//
-    fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
+    fn substates_try_lock_many<B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
         &mut self,
         locked_by_tx: &TransactionId,
         objects: I,
         lock_flag: SubstateLockFlag,
     ) -> Result<SubstateLockState, StorageError>;
 
-    fn substates_try_unlock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
+    fn substates_try_unlock_many<B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
         &mut self,
         locked_by_tx: &TransactionId,
         objects: I,

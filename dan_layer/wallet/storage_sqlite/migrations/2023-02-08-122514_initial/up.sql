@@ -36,7 +36,7 @@ CREATE TABLE transactions
     signature         TEXT     NOT NULL,
     sender_public_key TEXT     NOT NULL,
     fee_instructions  TEXT     NOT NULL,
-    meta              TEXT     NOT NULL,
+    inputs            TEXT     NOT NULL,
     result            TEXT     NULL,
     qcs               TEXT     NULL,
     final_fee         BIGINT   NULL,

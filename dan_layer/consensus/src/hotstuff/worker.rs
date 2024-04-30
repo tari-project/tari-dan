@@ -11,7 +11,7 @@ use log::*;
 use tari_common::configuration::Network;
 use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
-    consensus_models::{Block, HighQc, LastVoted, LeafBlock, LockedBlock, TransactionPool},
+    consensus_models::{Block, HighQc, LastVoted, LeafBlock, LockedBlock, TransactionPool, TransactionRecord},
     StateStore,
 };
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
@@ -259,14 +259,9 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 },
 
                 Some((tx_id, pending)) = self.rx_new_transactions.recv() => {
-                    self.hooks.on_transaction_ready(&tx_id);
-                    if let Err(err) = self.on_inbound_message.update_parked_blocks(current_height, &tx_id).await {
+                    if let Err(err) = self.on_new_transaction(tx_id, pending, current_height).await {
                         self.hooks.on_error(&err);
-                        error!(target: LOG_TARGET, "Error checking parked blocks: {}", err);
-                    }
-                    // Only propose now if there are no pending transactions
-                    if pending == 0 {
-                        self.pacemaker.beat();
+                        error!(target: LOG_TARGET, "Error handling new transaction: {}", err);
                     }
                 },
 
@@ -308,6 +303,46 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         // This only happens if we're shutting down.
         if let Err(err) = self.pacemaker.stop().await {
             debug!(target: LOG_TARGET, "Pacemaker channel dropped: {}", err);
+        }
+
+        Ok(())
+    }
+
+    async fn on_new_transaction(
+        &mut self,
+        tx_id: TransactionId,
+        num_pending_txs: usize,
+        current_height: NodeHeight,
+    ) -> Result<(), HotStuffError> {
+        let exists = self.state_store.with_write_tx(|tx| {
+            if self.transaction_pool.exists(tx.deref_mut(), &tx_id)? {
+                return Ok(true);
+            }
+            let transaction = TransactionRecord::get(tx.deref_mut(), &tx_id)?;
+            self.transaction_pool.insert(tx, transaction.to_atom())?;
+            Ok::<_, HotStuffError>(false)
+        })?;
+
+        debug!(
+            target: LOG_TARGET,
+            "🔥 new transaction ready for consensus: {} ({} pending)",
+            tx_id,
+            num_pending_txs
+        );
+
+        self.hooks.on_transaction_ready(&tx_id);
+        if let Err(err) = self
+            .on_inbound_message
+            .update_parked_blocks(current_height, &tx_id)
+            .await
+        {
+            self.hooks.on_error(&err);
+            error!(target: LOG_TARGET, "Error checking parked blocks: {}", err);
+        }
+        // There are num_pending_txs transactions in the queue. If we have no pending transactions, we'll propose now if
+        // able.
+        if !exists && num_pending_txs == 0 {
+            self.pacemaker.beat();
         }
 
         Ok(())

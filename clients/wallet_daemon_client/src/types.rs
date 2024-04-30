@@ -720,6 +720,7 @@ pub struct ConfidentialViewVaultBalanceResponse {
 pub struct ClaimBurnRequest {
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
+    // TODO: make this a type
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub claim_proof: serde_json::Value,
     pub max_fee: Option<Amount>,
