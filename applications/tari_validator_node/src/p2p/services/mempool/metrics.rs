@@ -4,8 +4,8 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 use prometheus::{Histogram, HistogramOpts, IntCounter, Registry};
-use tari_dan_storage::consensus_models::{ExecutedTransaction, TransactionRecord};
-use tari_transaction::TransactionId;
+use tari_dan_storage::consensus_models::ExecutedTransaction;
+use tari_transaction::{Transaction, TransactionId};
 
 use crate::{metrics::CollectorRegister, p2p::services::mempool::MempoolError};
 
@@ -49,7 +49,7 @@ impl PrometheusMempoolMetrics {
         }
     }
 
-    pub fn on_transaction_received(&mut self, _transaction: &TransactionRecord) {
+    pub fn on_transaction_received(&mut self, _transaction: &Transaction) {
         self.transactions_received.inc();
     }
 

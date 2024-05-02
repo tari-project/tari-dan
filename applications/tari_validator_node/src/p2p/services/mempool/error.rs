@@ -1,15 +1,19 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
+use std::collections::HashSet;
+
+use indexmap::IndexMap;
 use tari_dan_app_utilities::{
     template_manager::interface::TemplateManagerError,
     transaction_executor::TransactionProcessorError,
 };
 use tari_dan_common_types::Epoch;
 use tari_dan_storage::{consensus_models::TransactionPoolError, StorageError};
+use tari_engine_types::substate::{Substate, SubstateId};
 use tari_epoch_manager::EpochManagerError;
 use tari_networking::NetworkingError;
-use tari_transaction::TransactionId;
+use tari_transaction::{SubstateRequirement, TransactionId};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
@@ -30,7 +34,12 @@ pub enum MempoolError {
     #[error("DryRunTransactionProcessor Error: {0}")]
     DryRunTransactionProcessorError(#[from] DryRunTransactionProcessorError),
     #[error("Execution thread failure: {0}")]
-    ExecutionThreadFailure(String),
+    ExecutionThreadPanicked(String),
+    #[error("Requires consensus for local substates: {local_substates:?}")]
+    MustDeferExecution {
+        local_substates: IndexMap<SubstateId, Substate>,
+        foreign_substates: HashSet<SubstateRequirement>,
+    },
     #[error("SubstateResolver Error: {0}")]
     SubstateResolverError(#[from] SubstateResolverError),
     #[error("Transaction Execution Error: {0}")]
