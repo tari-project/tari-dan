@@ -284,9 +284,12 @@ async fn scaffold(args: ScaffoldArgs) -> anyhow::Result<()> {
         output_path: "output/".into(),
         liquid: Some(generators::LiquidGeneratorOpts {
             skip_format: false,
-            variables: vec![("template_address".to_string(), Value::String(args.template_address.clone()))]
-                .into_iter()
-                .collect(),
+            variables: vec![(
+                "template_address".to_string(),
+                Value::String(args.template_address.clone()),
+            )]
+            .into_iter()
+            .collect(),
         }),
     };
 
