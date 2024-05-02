@@ -17,6 +17,7 @@ use crate::{
     hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::VoteMessage,
     traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
+    validations,
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_vote";
@@ -80,50 +81,24 @@ where TConsensusSpec: ConsensusSpec
         message: VoteMessage,
         check_leadership: bool,
     ) -> Result<bool, HotStuffError> {
-        // Is a committee member sending us this vote?
         let committee = self.epoch_manager.get_local_committee(message.epoch).await?;
-        if !committee.contains(&from) {
-            return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
-                epoch: message.epoch,
-                sender: from.to_string(),
-                context: "OnReceiveVote".to_string(),
-            });
-        }
-
-        // Are we the leader for the block being voted for?
         let our_vn = self.epoch_manager.get_our_validator_node(message.epoch).await?;
-
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(message.epoch).await?;
-
-        // Get the sender shard, and check that they are in the local committee
-        let sender_vn = self.epoch_manager.get_validator_node(message.epoch, &from).await?;
-        if message.signature.public_key != sender_vn.public_key {
-            return Err(HotStuffError::RejectingVoteNotSentBySigner {
-                address: from.to_string(),
-                signer_public_key: message.signature.public_key.to_string(),
-            });
-        }
-
-        if !local_committee_shard.includes_substate_address(&sender_vn.shard_key) {
-            return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
-                epoch: message.epoch,
-                sender: message.signature.public_key.to_string(),
-                context: "OnReceiveVote".to_string(),
-            });
-        }
-
-        let sender_leaf_hash = sender_vn.get_node_hash(self.network);
-
-        self.validate_vote_message(&message, &sender_leaf_hash)?;
-
         let from = message.signature.public_key.clone();
+        validations::vote_validations::check_vote_message::<TConsensusSpec>(
+            &from,
+            &message,
+            &committee,
+            &local_committee_shard,
+            &our_vn,
+            &self.vote_signature_service,
+        )?;
 
         let count = self.store.with_write_tx(|tx| {
             Vote {
                 epoch: message.epoch,
                 block_id: message.block_id,
                 decision: message.decision,
-                sender_leaf_hash,
                 signature: message.signature,
             }
             .save(tx)?;
@@ -205,21 +180,18 @@ where TConsensusSpec: ConsensusSpec
             }
 
             let mut signatures = Vec::with_capacity(votes.len());
-            let mut leaf_hashes = Vec::with_capacity(votes.len());
             for vote in votes {
                 if vote.decision != quorum_decision {
                     // We don't include votes that don't match the quorum decision
                     continue;
                 }
                 signatures.push(vote.signature);
-                leaf_hashes.push(vote.sender_leaf_hash);
             }
 
             signatures.sort_by(|a, b| a.public_key.cmp(&b.public_key));
 
             vote_data = VoteData {
                 signatures,
-                leaf_hashes,
                 quorum_decision,
                 block,
             };
@@ -255,26 +227,11 @@ where TConsensusSpec: ConsensusSpec
 
         None
     }
-
-    fn validate_vote_message(&self, message: &VoteMessage, sender_leaf_hash: &FixedHash) -> Result<(), HotStuffError> {
-        if !self.vote_signature_service.verify(
-            &message.signature,
-            sender_leaf_hash,
-            &message.block_id,
-            &message.decision,
-        ) {
-            return Err(HotStuffError::InvalidVoteSignature {
-                signer_public_key: message.signature.public_key().to_string(),
-            });
-        }
-        Ok(())
-    }
 }
 
 fn create_qc(vote_data: VoteData) -> QuorumCertificate {
     let VoteData {
         signatures,
-        leaf_hashes,
         quorum_decision,
         block,
     } = vote_data;
@@ -284,14 +241,12 @@ fn create_qc(vote_data: VoteData) -> QuorumCertificate {
         block.epoch(),
         block.shard(),
         signatures,
-        leaf_hashes,
         quorum_decision,
     )
 }
 
 struct VoteData {
     signatures: Vec<ValidatorSignature>,
-    leaf_hashes: Vec<FixedHash>,
     quorum_decision: QuorumDecision,
     block: Block,
 }

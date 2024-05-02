@@ -37,9 +37,6 @@ pub struct QuorumCertificate {
     epoch: Epoch,
     shard: Shard,
     signatures: Vec<ValidatorSignature>,
-    #[serde(with = "serde_with::hex::vec")]
-    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
-    leaf_hashes: Vec<FixedHash>,
     decision: QuorumDecision,
 }
 
@@ -50,10 +47,8 @@ impl QuorumCertificate {
         epoch: Epoch,
         shard: Shard,
         signatures: Vec<ValidatorSignature>,
-        mut leaf_hashes: Vec<FixedHash>,
         decision: QuorumDecision,
     ) -> Self {
-        leaf_hashes.sort();
         let mut qc = Self {
             qc_id: QcId::genesis(),
             block_id: block,
@@ -61,7 +56,6 @@ impl QuorumCertificate {
             epoch,
             shard,
             signatures,
-            leaf_hashes,
             decision,
         };
         qc.qc_id = qc.calculate_id();
@@ -75,7 +69,6 @@ impl QuorumCertificate {
             Epoch(0),
             Shard::from(0),
             vec![],
-            vec![],
             QuorumDecision::Accept,
         )
     }
@@ -87,7 +80,6 @@ impl QuorumCertificate {
             .chain(&self.block_id)
             .chain(&self.block_height)
             .chain(&self.signatures)
-            .chain(&self.leaf_hashes)
             .chain(&self.decision)
             .result()
             .into()
@@ -113,10 +105,6 @@ impl QuorumCertificate {
 
     pub fn shard(&self) -> Shard {
         self.shard
-    }
-
-    pub fn leaf_hashes(&self) -> &[FixedHash] {
-        &self.leaf_hashes
     }
 
     pub fn signatures(&self) -> &[ValidatorSignature] {

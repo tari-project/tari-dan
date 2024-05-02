@@ -199,7 +199,7 @@ pub trait StateStoreReadTransaction {
     fn votes_get_by_block_and_sender(
         &mut self,
         block_id: &BlockId,
-        sender_leaf_hash: &FixedHash,
+        sender_public_key: &PublicKey,
     ) -> Result<Vote, StorageError>;
     fn votes_count_for_block(&mut self, block_id: &BlockId) -> Result<u64, StorageError>;
     fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError>;

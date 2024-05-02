@@ -6,6 +6,11 @@ use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey};
 use tari_dan_storage::consensus_models::Block;
 use tari_epoch_manager::EpochManagerReader;
 
+use crate::{
+    hotstuff::{HotStuffError, HotstuffConfig, ProposalValidationError},
+    traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
+};
+
 pub async fn check_block<TConsensusSpec: ConsensusSpec>(
     candidate_block: &Block,
     epoch_manager: &TConsensusSpec::EpochManager,
@@ -172,7 +177,6 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         .into());
     }
 
-    let mut vns = vec![];
     for signature in qc.signatures() {
         let vn = epoch_manager
             .get_validator_node_by_public_key(qc.epoch(), signature.public_key())
@@ -189,11 +193,10 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
             }
             .into());
         }
-        vns.push(vn.get_node_hash(candidate_block.network()));
     }
 
-    for (sign, leaf) in qc.signatures().iter().zip(vns.iter()) {
-        let challenge = vote_signing_service.create_challenge(leaf, qc.block_id(), &qc.decision());
+    for sign in qc.signatures().iter() {
+        let challenge = vote_signing_service.create_challenge(qc.block_id(), &qc.decision());
         if !sign.verify(challenge) {
             return Err(ProposalValidationError::QCInvalidSignature { qc: qc.clone() }.into());
         }

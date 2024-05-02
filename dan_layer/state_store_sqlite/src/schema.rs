@@ -310,7 +310,7 @@ diesel::table! {
         epoch -> BigInt,
         block_id -> Text,
         decision -> Integer,
-        sender_leaf_hash -> Text,
+        signer_public_key -> Text,
         signature -> Text,
         created_at -> Timestamp,
     }

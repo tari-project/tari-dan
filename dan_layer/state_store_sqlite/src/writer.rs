@@ -1069,7 +1069,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             votes::hash.eq(serialize_hex(vote.calculate_hash())),
             votes::epoch.eq(vote.epoch.as_u64() as i64),
             votes::block_id.eq(serialize_hex(vote.block_id)),
-            votes::sender_leaf_hash.eq(serialize_hex(vote.sender_leaf_hash)),
             votes::decision.eq(i32::from(vote.decision.as_u8())),
             votes::signature.eq(serialize_json(&vote.signature)?),
         );
