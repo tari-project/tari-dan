@@ -43,7 +43,7 @@ use thiserror::Error;
 use tokio::task;
 
 use crate::{
-    p2p::services::mempool::SubstateResolver,
+    p2p::services::mempool::{ResolvedSubstates, SubstateResolver},
     substate_resolver::{SubstateResolverError, TariSubstateResolver},
     virtual_substate::VirtualSubstateError,
 };
@@ -68,6 +68,8 @@ pub enum DryRunTransactionProcessorError {
     SubstateResoverError(#[from] SubstateResolverError),
     #[error("Virtual substate error: {0}")]
     VirtualSubstateError(#[from] VirtualSubstateError),
+    #[error("Execution thread failed: {0}")]
+    ExecutionThreadFailed(#[from] task::JoinError),
 }
 
 #[derive(Clone, Debug)]
@@ -118,14 +120,20 @@ impl DryRunTransactionProcessor {
             .resolve_virtual_substates(&transaction, current_epoch)
             .await?;
 
-        let inputs = self.substate_resolver.resolve(&transaction).await?;
+        let ResolvedSubstates {
+            local: inputs,
+            unresolved_foreign: foreign,
+        } = self.substate_resolver.try_resolve_local(&transaction)?;
         temp_state_store.set_many(inputs)?;
+        // Dry-run we can request the foreign inputs from validator nodes. The execution result may vary if inputs are
+        // mutated between the dry-run and live execution.
+        let foreign_inputs = self.substate_resolver.try_resolve_foreign(&foreign).await?;
+        temp_state_store.set_many(foreign_inputs)?;
 
         // execute the payload in the WASM engine and return the result
-        let executed = task::block_in_place(|| {
-            self.payload_processor
-                .execute(transaction, temp_state_store, virtual_substates)
-        })?;
+        let processor = self.payload_processor.clone();
+        let executed =
+            task::spawn_blocking(move || processor.execute(transaction, temp_state_store, virtual_substates)).await??;
         let result = executed.into_result();
 
         let fees = &result.finalize.fee_receipt;

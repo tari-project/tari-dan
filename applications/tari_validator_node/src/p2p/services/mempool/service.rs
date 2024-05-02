@@ -307,25 +307,21 @@ where
         should_propagate: bool,
         sender_shard: Option<Shard>,
     ) -> Result<(), MempoolError> {
-        let mut transaction = TransactionRecord::new(transaction);
-        self.state_store.with_write_tx(|tx| transaction.insert(tx))?;
-
         #[cfg(feature = "metrics")]
         self.metrics.on_transaction_received(&transaction);
 
-        if let Err(e) = self.before_execute_validator.validate(transaction.transaction()).await {
+        if let Err(e) = self.before_execute_validator.validate(&transaction).await {
+            let transaction_id = *transaction.id();
             self.state_store.with_write_tx(|tx| {
-                transaction
-                    .set_abort(format!("Mempool validation failed: {}", e))
+                TransactionRecord::new(transaction)
+                    .set_abort(format!("Mempool validation failed: {e}"))
                     .update(tx)
             })?;
 
             #[cfg(feature = "metrics")]
-            self.metrics.on_transaction_validation_error(transaction.id(), &e);
+            self.metrics.on_transaction_validation_error(&transaction_id, &e);
             return Err(e);
         }
-
-        let transaction = transaction.into_transaction();
 
         // Get the shards involved in claim fees.
         let fee_claims = transaction.fee_claims().collect::<Vec<_>>();
@@ -361,36 +357,12 @@ where
 
         if is_input_shard || is_output_shard {
             debug!(target: LOG_TARGET, "🎱 New transaction {} in mempool", transaction.id());
+            let transaction = TransactionRecord::new(transaction);
+            self.state_store.with_write_tx(|tx| transaction.insert(tx))?;
+            let transaction = transaction.into_transaction();
             self.transactions.insert(*transaction.id());
 
-            // The transactions has one or more of its inputs with no version
-            // This means we skip transaction execution in the mempool, as the execution will happen on consensus
-            if transaction.has_inputs_without_version() {
-                info!(
-                    target: LOG_TARGET,
-                    "✅ Transaction {} has inputs without versions. Execution is deferred to consensus to allow input substates to be resolved",
-                    transaction.id(),
-                );
-
-                let result = MempoolTransactionExecution {
-                    transaction_id: *transaction.id(),
-                    execution: TransactionExecution::Deferred {
-                        transaction: transaction.clone(),
-                    },
-                    should_propagate,
-                    sender_shard,
-                };
-
-                self.handle_execution_task_complete(result).await?;
-            } else {
-                // All the inputs in the transaction have specific versions, so we execute immediately
-                self.queue_transaction_for_execution(
-                    transaction.clone(),
-                    current_epoch,
-                    should_propagate,
-                    sender_shard,
-                );
-            }
+            self.queue_transaction_for_execution(transaction.clone(), current_epoch, should_propagate, sender_shard);
 
             if should_propagate {
                 // This validator is involved, we to send the transaction to local replicas
@@ -407,7 +379,7 @@ where
                     )
                     .await
                 {
-                    error!(
+                    warn!(
                         target: LOG_TARGET,
                         "Unable to propagate transaction among peers: {}",
                         e
@@ -419,7 +391,10 @@ where
                     // Forward to foreign replicas.
                     // We assume that at least f other local replicas receive this transaction and also forward to their
                     // matching replica(s)
-                    let substate_addresses = transaction.involved_shards_iter().collect();
+                    let substate_addresses = transaction
+                        .all_inputs_iter()
+                        .map(|i| i.or_zero_version().to_substate_address())
+                        .collect();
                     if let Err(e) = self
                         .gossip
                         .forward_to_foreign_replicas(
@@ -433,7 +408,7 @@ where
                         )
                         .await
                     {
-                        error!(
+                        warn!(
                             target: LOG_TARGET,
                             "Unable to propagate transaction among peers: {}",
                             e
@@ -460,7 +435,7 @@ where
                     })
                     .await
                 {
-                    error!(
+                    warn!(
                         target: LOG_TARGET,
                         "Unable to propagate transaction among peers: {}",
                         e
@@ -491,6 +466,12 @@ where
                         execution: TransactionExecution::Executed {
                             result: execution_result,
                         },
+                        should_propagate,
+                        sender_shard,
+                    },
+                    Err(MempoolError::MustDeferExecution { .. }) => MempoolTransactionExecution {
+                        transaction_id,
+                        execution: TransactionExecution::Deferred { transaction },
                         should_propagate,
                         sender_shard,
                     },
@@ -535,28 +516,21 @@ where
     async fn handle_deferred_execution(&mut self, transaction: Transaction) -> Result<(), MempoolError> {
         let transaction_id = *transaction.id();
 
-        // TODO: allow deferred transactions - this just rejects the transaction immediately
-        self.state_store.with_write_tx(|tx| {
-            TransactionRecord::get(tx.deref_mut(), &transaction_id)?
-                .set_abort("Transaction requires deferred execution but that is not currently supported")
-                .update(tx)
-        })?;
+        let is_consensus_running = self.consensus_handle.get_current_state().is_running();
 
-        // let is_consensus_running = self.consensus_handle.get_current_state().is_running();
-        //
-        // let pending_exec_size = self.pending_executions.len();
-        // if is_consensus_running &&
-        //     // Notify consensus about the transaction
-        //     self.tx_executed_transactions
-        //         .send((transaction_id, pending_exec_size))
-        //         .await
-        //         .is_err()
-        // {
-        //     debug!(
-        //         target: LOG_TARGET,
-        //         "Executed transaction channel closed before executed transaction could be sent"
-        //     );
-        // }
+        let pending_exec_size = self.pending_executions.len();
+        if is_consensus_running &&
+            // Notify consensus about the transaction
+            self.tx_executed_transactions
+                .send((transaction_id, pending_exec_size))
+                .await
+                .is_err()
+        {
+            debug!(
+                target: LOG_TARGET,
+                "Executed transaction channel closed before executed transaction could be sent"
+            );
+        }
 
         self.transactions.remove(&transaction_id);
         Ok(())
@@ -628,8 +602,6 @@ where
                                 return Ok::<_, MempoolError>(());
                             }
 
-                            log::error!(target: LOG_TARGET, "🐞 resolved inputs: {:?}", executed.resolved_inputs());
-                            assert!(executed.resolved_inputs().is_some(), "Resolved inputs must be set");
                             executed.update(tx)?;
                             Ok::<_, MempoolError>(())
                         })?;

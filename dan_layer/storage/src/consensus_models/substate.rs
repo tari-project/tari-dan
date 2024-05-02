@@ -4,6 +4,7 @@
 use std::{
     borrow::Borrow,
     collections::HashSet,
+    hash::Hash,
     iter,
     ops::{DerefMut, RangeInclusive},
 };
@@ -16,7 +17,7 @@ use tari_engine_types::{
     lock::LockFlag,
     substate::{Substate, SubstateId, SubstateValue},
 };
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 
 use crate::{
     consensus_models::{Block, BlockId, QcId, QuorumCertificate, VersionedSubstateIdLockIntent},
@@ -95,6 +96,10 @@ impl SubstateRecord {
         SubstateAddress::from_address(&self.substate_id, self.version)
     }
 
+    pub fn to_substate_requirement(&self) -> SubstateRequirement {
+        SubstateRequirement::with_version(self.substate_id.clone(), self.version)
+    }
+
     pub fn substate_id(&self) -> &SubstateId {
         &self.substate_id
     }
@@ -141,6 +146,10 @@ impl SubstateRecord {
 
     pub fn is_destroyed(&self) -> bool {
         self.destroyed.is_some()
+    }
+
+    pub fn is_up(&self) -> bool {
+        !self.is_destroyed()
     }
 }
 
@@ -241,17 +250,30 @@ impl SubstateRecord {
         tx.substates_get(shard)
     }
 
-    pub fn get_any<TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = SubstateAddress>>(
+    pub fn get_any<TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = SubstateRequirement>>(
         tx: &mut TTx,
         shards: I,
-    ) -> Result<(Vec<SubstateRecord>, HashSet<SubstateAddress>), StorageError> {
-        let mut shards = shards.into_iter().collect::<HashSet<_>>();
-        let found = tx.substates_get_any(&shards)?;
+    ) -> Result<(Vec<SubstateRecord>, HashSet<SubstateRequirement>), StorageError> {
+        let mut substate_ids = shards.into_iter().collect::<HashSet<_>>();
+        let found = tx.substates_get_any(&substate_ids)?;
         for f in &found {
-            shards.remove(&f.to_substate_address());
+            substate_ids.remove(&f.to_substate_requirement());
         }
 
-        Ok((found, shards))
+        Ok((found, substate_ids))
+    }
+
+    pub fn get_any_max_version<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a SubstateId>>(
+        tx: &mut TTx,
+        substate_ids: I,
+    ) -> Result<(Vec<SubstateRecord>, HashSet<&'a SubstateId>), StorageError> {
+        let mut substate_ids = substate_ids.into_iter().collect::<HashSet<_>>();
+        let found = tx.substates_get_any_max_version(substate_ids.iter().copied())?;
+        for f in &found {
+            substate_ids.remove(&f.substate_id);
+        }
+
+        Ok((found, substate_ids))
     }
 
     pub fn get_many_within_range<TTx: StateStoreReadTransaction, B: Borrow<RangeInclusive<SubstateAddress>>>(
