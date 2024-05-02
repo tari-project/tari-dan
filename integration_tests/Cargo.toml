@@ -48,33 +48,18 @@ anyhow = { workspace = true }
 # if we set this version in the workspace it would break other crates
 base64 = "0.21.0"
 config = { workspace = true }
-cucumber = { workspace = true, features = [
-    "default",
-    "libtest",
-    "output-junit",
-] }
+cucumber = { workspace = true, features = ["default", "libtest", "output-junit"] }
 httpmock = { workspace = true }
 indexmap = { workspace = true }
 libp2p = { workspace = true }
 log = { workspace = true, features = ["std"] }
-log4rs = { workspace = true, features = [
-    "rolling_file_appender",
-    "compound_policy",
-    "size_trigger",
-    "fixed_window_roller",
-] }
+log4rs = { workspace = true, features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
 rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["default", "derive"] }
 serde_json = { workspace = true }
 time = { workspace = true }
-tokio = { workspace = true, features = [
-    "default",
-    "macros",
-    "time",
-    "sync",
-    "rt-multi-thread",
-] }
+tokio = { workspace = true, features = ["default", "macros", "time", "sync", "rt-multi-thread", "signal"] }
 tonic = { workspace = true }
 
 [[test]]
