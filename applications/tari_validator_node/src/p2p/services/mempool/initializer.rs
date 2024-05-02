@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use log::*;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
 use tari_dan_common_types::PeerAddress;
 use tari_dan_storage::consensus_models::ExecutedTransaction;
@@ -38,6 +39,8 @@ use crate::{
     },
     substate_resolver::SubstateResolverError,
 };
+
+const LOG_TARGET: &str = "tari::dan::validator_node::mempool";
 
 pub fn spawn<TExecutor, TValidator, TExecutedValidator, TSubstateResolver>(
     gossip: Gossip,
@@ -82,6 +85,7 @@ where
     let handle = MempoolHandle::new(tx_mempool_request);
 
     let join_handle = task::spawn(mempool.run());
+    debug!(target: LOG_TARGET, "Spawning mempool service (task: {:?})", join_handle);
 
     (handle, join_handle)
 }

@@ -86,7 +86,7 @@ where TConsensusSpec: ConsensusSpec
                 self.process_local_proposal(current_height, msg).await?;
             },
             HotstuffMessage::ForeignProposal(ref proposal) => {
-                self.check_proposal(proposal.block.clone()).await?;
+                self.check_proposal(&proposal.block).await?;
                 self.report_message_ready(from, msg)?;
             },
             msg => {
@@ -111,18 +111,18 @@ where TConsensusSpec: ConsensusSpec
         self.message_buffer.clear_buffer();
     }
 
-    async fn check_proposal(&mut self, block: Block) -> Result<Option<Block>, HotStuffError> {
-        check_base_layer_block_hash::<TConsensusSpec>(&block, &self.epoch_manager, &self.config).await?;
-        check_network(&block, self.network)?;
-        check_hash_and_height(&block)?;
+    async fn check_proposal(&self, block: &Block) -> Result<(), HotStuffError> {
+        check_base_layer_block_hash::<TConsensusSpec>(block, &self.epoch_manager, &self.config).await?;
+        check_network(block, self.network)?;
+        check_hash_and_height(block)?;
         let committee_for_block = self
             .epoch_manager
             .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
-        check_proposed_by_leader(&self.leader_strategy, &committee_for_block, &block)?;
-        check_signature(&block)?;
-        check_quorum_certificate::<TConsensusSpec>(&block, &self.vote_signing_service, &self.epoch_manager).await?;
-        self.handle_missing_transactions(block).await
+        check_proposed_by_leader(&self.leader_strategy, &committee_for_block, block)?;
+        check_signature(block)?;
+        check_quorum_certificate::<TConsensusSpec>(block, &self.vote_signing_service, &self.epoch_manager).await?;
+        Ok(())
     }
 
     async fn process_local_proposal(
@@ -140,17 +140,18 @@ where TConsensusSpec: ConsensusSpec
             current_height,
         );
 
-        // if block.height() < current_height {
-        //     info!(
-        //         target: LOG_TARGET,
-        //         "🔥 Block {} is lower than current height {}. Ignoring.",
-        //         block,
-        //         current_height
-        //     );
-        //     return Ok(());
-        // }
+        if block.height() < current_height {
+            info!(
+                target: LOG_TARGET,
+                "🔥 Block {} is lower than current height {}. Ignoring.",
+                block,
+                current_height
+            );
+            return Ok(());
+        }
 
-        let Some(ready_block) = self.check_proposal(block).await? else {
+        self.check_proposal(&block).await?;
+        let Some(ready_block) = self.handle_missing_transactions(block).await? else {
             // Block not ready
             return Ok(());
         };

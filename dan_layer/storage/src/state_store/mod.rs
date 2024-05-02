@@ -10,8 +10,9 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, SubstateAddress};
+use tari_engine_types::substate::SubstateId;
 use tari_state_tree::{TreeStore, TreeStoreReader, Version};
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -207,7 +208,11 @@ pub trait StateStoreReadTransaction {
     fn substates_get(&mut self, substate_id: &SubstateAddress) -> Result<SubstateRecord, StorageError>;
     fn substates_get_any(
         &mut self,
-        substate_ids: &HashSet<SubstateAddress>,
+        substate_ids: &HashSet<SubstateRequirement>,
+    ) -> Result<Vec<SubstateRecord>, StorageError>;
+    fn substates_get_any_max_version<'a, I: IntoIterator<Item = &'a SubstateId>>(
+        &mut self,
+        substate_ids: I,
     ) -> Result<Vec<SubstateRecord>, StorageError>;
     fn substates_any_exist<I, S>(&mut self, substates: I) -> Result<bool, StorageError>
     where
