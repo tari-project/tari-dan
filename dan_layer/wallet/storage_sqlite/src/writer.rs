@@ -36,7 +36,7 @@ use tari_utilities::hex::Hex;
 
 use crate::{
     diesel::ExpressionMethods,
-    models::{self, TransactionInputs},
+    models::{self},
     reader::ReadTransaction,
     serialization::serialize_json,
 };
@@ -278,10 +278,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 transactions::instructions.eq(serialize_json(transaction.instructions())?),
                 transactions::sender_public_key.eq(transaction.signer_public_key().to_hex()),
                 transactions::signature.eq(serialize_json(transaction.signature().signature())?),
-                transactions::meta.eq(serialize_json(&TransactionInputs {
-                    inputs: transaction.inputs().to_vec(),
-                    input_refs: transaction.input_refs().to_vec(),
-                })?),
+                transactions::inputs.eq(serialize_json(transaction.inputs())?),
                 transactions::status.eq(TransactionStatus::New.as_key_str()),
                 transactions::required_substates.eq(serialize_json(&required_substates)?),
                 transactions::new_account_info.eq(new_account_info.map(serialize_json).transpose()?),

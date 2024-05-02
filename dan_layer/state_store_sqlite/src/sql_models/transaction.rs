@@ -18,8 +18,8 @@ pub struct Transaction {
     pub instructions: String,
     pub signature: String,
     pub inputs: String,
-    pub input_refs: String,
     pub filled_inputs: String,
+    pub resolved_inputs: Option<String>,
     pub resulting_outputs: Option<String>,
     pub result: Option<String>,
     pub execution_time_ms: Option<i64>,
@@ -40,7 +40,7 @@ impl TryFrom<Transaction> for tari_transaction::Transaction {
         let signature = deserialize_json(&value.signature)?;
 
         let inputs = deserialize_json(&value.inputs)?;
-        let input_refs = deserialize_json(&value.input_refs)?;
+
         let filled_inputs = deserialize_json(&value.filled_inputs)?;
         let min_epoch = value.min_epoch.map(|epoch| Epoch(epoch as u64));
         let max_epoch = value.max_epoch.map(|epoch| Epoch(epoch as u64));
@@ -50,7 +50,6 @@ impl TryFrom<Transaction> for tari_transaction::Transaction {
             instructions,
             signature,
             inputs,
-            input_refs,
             filled_inputs,
             min_epoch,
             max_epoch,
@@ -83,6 +82,7 @@ impl TryFrom<Transaction> for consensus_models::TransactionRecord {
             .map(deserialize_json)
             .transpose()?
             .unwrap_or_default();
+        let resolved_inputs = value.resolved_inputs.as_deref().map(deserialize_json).transpose()?;
         let abort_details = value.abort_details.clone();
 
         let finalized_time = value
@@ -93,6 +93,7 @@ impl TryFrom<Transaction> for consensus_models::TransactionRecord {
         Ok(Self::load(
             value.try_into()?,
             result,
+            resolved_inputs,
             execution_time,
             final_decision,
             finalized_time,

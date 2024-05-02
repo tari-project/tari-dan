@@ -2,13 +2,13 @@
 import type { Epoch } from "./Epoch";
 import type { Instruction } from "./Instruction";
 import type { SubstateRequirement } from "./SubstateRequirement";
+import type { VersionedSubstateId } from "./VersionedSubstateId";
 
 export interface UnsignedTransaction {
   fee_instructions: Array<Instruction>;
   instructions: Array<Instruction>;
   inputs: Array<SubstateRequirement>;
-  input_refs: Array<SubstateRequirement>;
-  filled_inputs: Array<SubstateRequirement>;
+  filled_inputs: Array<VersionedSubstateId>;
   min_epoch: Epoch | null;
   max_epoch: Epoch | null;
 }

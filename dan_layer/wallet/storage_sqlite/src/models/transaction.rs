@@ -4,13 +4,12 @@
 use std::{str::FromStr, time::Duration};
 
 use chrono::NaiveDateTime;
-use serde::{Deserialize, Serialize};
 use tari_dan_common_types::Epoch;
 use tari_dan_wallet_sdk::{
     models::{TransactionStatus, WalletTransaction},
     storage::WalletStorageError,
 };
-use tari_transaction::{SubstateRequirement, TransactionSignature};
+use tari_transaction::TransactionSignature;
 use tari_utilities::hex::Hex;
 
 use crate::{schema::transactions, serialization::deserialize_json};
@@ -24,7 +23,7 @@ pub struct Transaction {
     pub signature: String,
     pub sender_public_key: String,
     pub fee_instructions: String,
-    pub meta: String,
+    pub inputs: String,
     pub result: Option<String>,
     pub qcs: Option<String>,
     pub final_fee: Option<i64>,
@@ -40,13 +39,6 @@ pub struct Transaction {
     pub new_account_info: Option<String>,
 }
 
-/// Struct used to keep inputs and outputs in a single field as json
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransactionInputs {
-    pub inputs: Vec<SubstateRequirement>,
-    pub input_refs: Vec<SubstateRequirement>,
-}
-
 impl Transaction {
     pub fn try_into_wallet_transaction(self) -> Result<WalletTransaction, WalletStorageError> {
         let signature = deserialize_json(&self.signature)?;
@@ -57,7 +49,7 @@ impl Transaction {
                 details: e.to_string(),
             })?;
         let signature = TransactionSignature::new(sender_public_key, signature);
-        let TransactionInputs { inputs, input_refs } = deserialize_json(&self.meta)?;
+        let inputs = deserialize_json(&self.inputs)?;
 
         Ok(WalletTransaction {
             transaction: tari_transaction::Transaction::new(
@@ -65,8 +57,8 @@ impl Transaction {
                 deserialize_json(&self.instructions)?,
                 signature,
                 inputs,
-                input_refs,
-                vec![],
+                // empty - We do not know filled inputs
+                Default::default(),
                 self.min_epoch.map(|epoch| Epoch(epoch as u64)),
                 self.max_epoch.map(|epoch| Epoch(epoch as u64)),
             ),

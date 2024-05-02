@@ -65,8 +65,7 @@ impl Runner {
             for (i, tariswap) in tariswaps.iter().enumerate().skip(i * 200).take(200) {
                 let account = &accounts[i % accounts.len()];
                 let transaction = Transaction::builder()
-                    .with_input_refs(vec![
-                        // Use resources as input refs to allow concurrent access.
+                    .with_inputs(vec![
                         SubstateRequirement::new(faucet.resource_address.into(), Some(0)),
                         SubstateRequirement::new(XTR2.into(), Some(0)),
                     ])
@@ -121,7 +120,7 @@ impl Runner {
                 let tariswap = &tariswaps[i % tariswaps.len()];
                 let transaction = Transaction::builder()
                     // Use resources as input refs to allow concurrent access.
-                    .with_input_refs(vec![
+                    .with_inputs(vec![
                         SubstateRequirement::new(faucet.resource_address.into(), Some(0)),
                         SubstateRequirement::new(XTR2.into(), Some(0)),
                     ])
@@ -169,7 +168,7 @@ impl Runner {
                 let tariswap = &tariswaps[i % tariswaps.len()];
                 let transaction = Transaction::builder()
                     // Use resources as input refs to allow concurrent access.
-                    .with_input_refs(vec![
+                    .with_inputs(vec![
                         SubstateRequirement::new(faucet.resource_address.into(), Some(0)),
                         SubstateRequirement::new(XTR2.into(), Some(0)),
                     ])

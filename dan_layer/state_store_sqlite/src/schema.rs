@@ -20,11 +20,11 @@ diesel::table! {
         is_dummy -> Bool,
         foreign_indexes -> Text,
         signature -> Nullable<Text>,
-        created_at -> Timestamp,
         block_time -> Nullable<BigInt>,
         timestamp -> BigInt,
         base_layer_block_height -> BigInt,
         base_layer_block_hash -> Text,
+        created_at -> Timestamp,
     }
 }
 
@@ -163,11 +163,11 @@ diesel::table! {
         total_leader_fee -> BigInt,
         foreign_indexes -> Text,
         signature -> Nullable<Text>,
-        created_at -> Timestamp,
         block_time -> Nullable<BigInt>,
         timestamp -> BigInt,
         base_layer_block_height -> BigInt,
         base_layer_block_hash -> Text,
+        created_at -> Timestamp,
     }
 }
 
@@ -289,8 +289,8 @@ diesel::table! {
         instructions -> Text,
         signature -> Text,
         inputs -> Text,
-        input_refs -> Text,
         filled_inputs -> Text,
+        resolved_inputs -> Nullable<Text>,
         resulting_outputs -> Nullable<Text>,
         result -> Nullable<Text>,
         execution_time_ms -> Nullable<BigInt>,

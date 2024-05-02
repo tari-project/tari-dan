@@ -37,11 +37,8 @@ import { Form } from "react-router-dom";
 import Fade from "@mui/material/Fade";
 import CopyToClipboard from "../../../Components/CopyToClipboard";
 import type { Connection } from "@tariproject/typescript-bindings/tari-indexer-client";
+import { displayDuration } from "../../../utils/helpers";
 
-interface Duration {
-  secs: number;
-  nanos: number;
-}
 
 const useInterval = (fn: () => Promise<unknown>, ms: number) => {
   const timeout = useRef<number>();
@@ -132,16 +129,17 @@ function Connections() {
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell>Peer id</TableCell>
+            <TableCell>Peer ID</TableCell>
             <TableCell>Address</TableCell>
             <TableCell>Age</TableCell>
             <TableCell>Direction</TableCell>
             <TableCell>Latency</TableCell>
+            <TableCell>User Agent</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {connections &&
-            connections.map(({ connection_id, address, age, direction, peer_id, ping_latency }) => (
+            connections.map(({ connection_id, address, age, direction, peer_id, ping_latency, user_agent }) => (
               <TableRow key={connection_id}>
                 <DataTableCell>
                   {peer_id ? shortenString(peer_id) : "--"}
@@ -151,31 +149,13 @@ function Connections() {
                 <DataTableCell>{displayDuration(age)}</DataTableCell>
                 <DataTableCell>{direction}</DataTableCell>
                 <DataTableCell>{ping_latency ? displayDuration(ping_latency) : "--"}</DataTableCell>
+                <DataTableCell>{user_agent ? user_agent.replace(/^\/tari\//, "") : "--"}</DataTableCell>
               </TableRow>
             ))}
         </TableBody>
       </Table>
     </TableContainer>
   );
-}
-
-function displayDuration(duration: Duration) {
-  if (duration.secs === 0) {
-    if (duration.nanos > 1000000) {
-      return `${(duration.nanos / 1000000).toFixed(2)}ms`;
-    }
-    if (duration.nanos > 1000) {
-      return `${(duration.nanos / 1000).toFixed(2)}µs`;
-    }
-    return `${duration.nanos / 1000}ns`;
-  }
-  if (duration.secs > 60 * 60) {
-    return `${(duration.secs / 60 / 60).toFixed(0)}h${(duration.secs / 60).toFixed(0)}m`;
-  }
-  if (duration.secs > 60) {
-    return `${(duration.secs / 60).toFixed(0)}m${(duration.secs % 60).toFixed(0)}s`;
-  }
-  return `${duration.secs}.${(duration.nanos / 1000000).toFixed(0)}s`;
 }
 
 export default Connections;

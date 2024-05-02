@@ -65,9 +65,21 @@ impl Display for HotstuffMessage {
             HotstuffMessage::ForeignProposal(msg) => write!(f, "ForeignProposal({})", msg.block.height()),
             HotstuffMessage::Vote(msg) => write!(f, "Vote({}, {}, {})", msg.block_height, msg.block_id, msg.decision),
             HotstuffMessage::RequestMissingTransactions(msg) => {
-                write!(f, "RequestMissingTransactions({})", msg.transactions.len())
+                write!(
+                    f,
+                    "RequestMissingTransactions({} transaction(s), block: {}, epoch: {})",
+                    msg.transactions.len(),
+                    msg.block_id,
+                    msg.epoch
+                )
             },
-            HotstuffMessage::RequestedTransaction(msg) => write!(f, "RequestedTransaction({})", msg.transactions.len()),
+            HotstuffMessage::RequestedTransaction(msg) => write!(
+                f,
+                "RequestedTransaction({} transaction(s), block: {}, epoch: {})",
+                msg.transactions.len(),
+                msg.block_id,
+                msg.epoch
+            ),
             HotstuffMessage::SyncRequest(msg) => write!(f, "SyncRequest({})", msg.high_qc),
             HotstuffMessage::SyncResponse(msg) => write!(f, "SyncResponse({} block(s))", msg.blocks.len()),
         }

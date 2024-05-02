@@ -256,6 +256,7 @@ impl JsonRpcHandlers {
                 },
                 age: conn.age(),
                 ping_latency: conn.ping_latency,
+                user_agent: conn.user_agent,
             })
             .collect();
 
@@ -544,9 +545,31 @@ impl JsonRpcHandlers {
             }));
         }
 
+        // If there are no requested substates, we skip auto-filling altogether
+        let transaction = if request.required_substates.is_empty() {
+            request.transaction
+        } else {
+            // automatically scan the inputs and add all related involved objects
+            // note that this operation does not alter the transaction hash
+            self.transaction_manager
+                .autofill_transaction(request.transaction, request.required_substates)
+                .await
+                .map_err(|e| match e {
+                    TransactionManagerError::AllValidatorsFailed { .. } => JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            JsonRpcErrorReason::ApplicationError(400),
+                            format!("All validators failed: {}", e),
+                            json::Value::Null,
+                        ),
+                    ),
+                    e => Self::internal_error(answer_id, e),
+                })?
+        };
+
         let transaction_id = self
             .transaction_manager
-            .submit_transaction(request.transaction, request.required_substates)
+            .submit_transaction(transaction)
             .await
             .map_err(|e| match e {
                 TransactionManagerError::AllValidatorsFailed { .. } => JsonRpcResponse::error(

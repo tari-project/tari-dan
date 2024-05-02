@@ -1374,25 +1374,38 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         let tx_ids = transaction_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
 
-        let involved_shards = transactions::table
-            .select((transactions::inputs, transactions::input_refs))
-            .filter(transactions::transaction_id.eq_any(tx_ids))
-            .load::<(String, String)>(self.connection())
+        let inputs_per_tx = transactions::table
+            .select(transactions::resolved_inputs)
+            .filter(transactions::transaction_id.eq_any(&tx_ids))
+            .load::<Option<String>>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transaction_pools_fetch_involved_shards",
                 source: e,
             })?;
 
-        let shards = involved_shards
+        if inputs_per_tx.len() != tx_ids.len() {
+            return Err(SqliteStorageError::NotAllItemsFound {
+                items: "Transactions",
+                operation: "transactions_fetch_involved_shards",
+                details: format!(
+                    "transactions_fetch_involved_shards: expected {} transactions, got {}",
+                    tx_ids.len(),
+                    inputs_per_tx.len()
+                ),
+            }
+            .into());
+        }
+
+        let shards = inputs_per_tx
             .into_iter()
-            .map(|(inputs, input_refs)| {
-                (
-                    // a Result is very inconvenient with flat_map
-                    deserialize_json::<HashSet<SubstateAddress>>(&inputs).unwrap(),
-                    deserialize_json::<HashSet<SubstateAddress>>(&input_refs).unwrap(),
-                )
+            .filter_map(|inputs| {
+                // a Result is very inconvenient with flat_map
+                inputs.map(|inputs| {
+                    deserialize_json::<HashSet<SubstateAddress>>(&inputs)
+                        .expect("[transactions_fetch_involved_shards] Failed to deserialize involved shards")
+                })
             })
-            .flat_map(|(inputs, input_refs)| inputs.into_iter().chain(input_refs).collect::<HashSet<_>>())
+            .flatten()
             .collect();
 
         Ok(shards)
@@ -1627,7 +1640,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         Ok(substates)
     }
 
-    fn substates_check_lock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
+    fn substates_check_lock_many<B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
         &mut self,
         objects: I,
         lock_flag: SubstateLockFlag,
@@ -1635,7 +1648,10 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         use crate::schema::substates;
 
         // Lock unique shards
-        let objects: HashSet<String> = objects.into_iter().map(serialize_hex).collect();
+        let objects = objects
+            .into_iter()
+            .map(|v| serialize_hex(v.borrow()))
+            .collect::<HashSet<_>>();
 
         let locked_details = substates::table
             .select((substates::is_locked_w, substates::destroyed_by_transaction))

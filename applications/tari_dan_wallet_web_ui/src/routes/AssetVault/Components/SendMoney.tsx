@@ -79,12 +79,12 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
     outputToConfidential: false,
     inputSelection: "PreferRevealed",
     amount: "",
+    fee: "",
     badge: null,
   };
   const isConfidential = props.resource_type === "Confidential";
   const [useBadge, setUseBadge] = useState(false);
   const [disabled, setDisabled] = useState(false);
-  const [estimatedFee, setEstimatedFee] = useState(0);
   const [transferFormState, setTransferFormState] = useState(INITIAL_VALUES);
   const [validity, setValidity] = useState<object>({
     publicKey: false,
@@ -108,7 +108,8 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
     // HACK: default to XTR2 because the resource is only set when open==true, and we cannot conditionally call hooks i.e. when props.resource_address is set
     props.resource_address || XTR2,
     transferFormState.publicKey,
-    estimatedFee,
+    parseInt(transferFormState.fee),
+    // estimatedFee,
     props.resource_type === "Confidential",
     !transferFormState.outputToConfidential,
     transferFormState.inputSelection as ConfidentialTransferInputSelection,
@@ -140,7 +141,6 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
         [e.target.name]: e.target.validity.valid,
       });
     }
-    setEstimatedFee(0);
   }
 
   function setSelectFormValue(e: SelectChangeEvent<unknown>) {
@@ -148,7 +148,6 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
       ...transferFormState,
       [e.target.name]: e.target.value,
     });
-    setEstimatedFee(0);
   }
 
   function setCheckboxFormValue(e: React.ChangeEvent<HTMLInputElement>) {
@@ -156,13 +155,12 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
       ...transferFormState,
       [e.target.name]: e.target.checked,
     });
-    setEstimatedFee(0);
   }
 
   const onTransfer = async () => {
     if (accountName) {
       setDisabled(true);
-      if (estimatedFee) {
+      if (!isNaN(parseInt(transferFormState.fee))) {
         sendIt?.()
           .then(() => {
             setTransferFormState(INITIAL_VALUES);
@@ -187,7 +185,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
               });
               return;
             }
-            setEstimatedFee(result.fee);
+            setTransferFormState({ ...transferFormState, fee: result.fee.toString() });
           })
           .catch((e) => {
             setPopup({ title: "Fee estimate failed", error: true, message: e.message });
@@ -303,10 +301,11 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
           <TextField
             name="fee"
             label="Fee"
-            value={estimatedFee || "Press fee estimate to calculate"}
-            style={{ flexGrow: 1 }}
+            value={transferFormState.fee}
+            placeholder="Enter fee or press Estimate Fee to calculate"
+            onChange={setFormValue}
             disabled={disabled}
-            InputProps={{ readOnly: true }}
+            style={{ flexGrow: 1 }}
           />
           <Box
             className="flex-container"
@@ -318,7 +317,7 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
               Cancel
             </Button>
             <Button variant="contained" type="submit" disabled={disabled || !allValid}>
-              {estimatedFee ? "Send" : "Estimate fee"}
+              {isNaN(parseInt(transferFormState.fee)) ? "Estimate fee" : "Send"}
             </Button>
           </Box>
         </Form>

@@ -162,8 +162,19 @@ impl JsonRpcHandlers {
             target: LOG_TARGET,
             "Transaction {} has {} involved shards",
             transaction.hash(),
-            transaction.num_involved_shards()
+            transaction.num_unique_inputs()
         );
+
+        if !transaction.check_id() {
+            return Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Transaction ID is invalid".to_string(),
+                    json!(null),
+                ),
+            ));
+        }
 
         let tx_id = *transaction.id();
 
@@ -528,6 +539,7 @@ impl JsonRpcHandlers {
                 },
                 age: conn.age(),
                 ping_latency: conn.ping_latency,
+                user_agent: conn.user_agent,
             })
             .collect();
 

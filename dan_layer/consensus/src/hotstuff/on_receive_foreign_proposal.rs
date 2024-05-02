@@ -97,7 +97,7 @@ where TConsensusSpec: ConsensusSpec
             .iter()
             .filter_map(|command| {
                 if let Some(tx) = command.local_prepared() {
-                    if !committee_shard.includes_any_shard(command.evidence().shards_iter()) {
+                    if !committee_shard.includes_any_shard(command.evidence().substate_addresses_iter()) {
                         return None;
                     }
                     // We are interested in the commands that are for us, they will be in local prepared and one of the

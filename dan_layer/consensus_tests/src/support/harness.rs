@@ -12,13 +12,19 @@ use tari_consensus::hotstuff::HotstuffEvent;
 use tari_crypto::keys::{PublicKey as _, SecretKey};
 use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, Decision, TransactionPoolStage, TransactionRecord},
+    consensus_models::{Block, BlockId, Decision, QcId, SubstateRecord, TransactionPoolStage, TransactionRecord},
     StateStore,
     StateStoreReadTransaction,
+    StorageError,
+};
+use tari_engine_types::{
+    component::{ComponentBody, ComponentHeader},
+    substate::{SubstateId, SubstateValue},
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_shutdown::{Shutdown, ShutdownSignal};
-use tari_transaction::TransactionId;
+use tari_template_lib::models::ComponentAddress;
+use tari_transaction::{TransactionId, VersionedSubstateId};
 use tokio::{sync::broadcast, task};
 
 use super::MessageFilter;
@@ -58,6 +64,58 @@ impl Test {
         let num_committees = self.epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
         let tx = build_transaction(decision, fee, num_shards, num_committees);
         self.network.send_transaction(TestNetworkDestination::All, tx).await;
+    }
+
+    pub fn create_substates_on_all_vns(&self, num: usize) -> Vec<VersionedSubstateId> {
+        assert!(
+            num <= u8::MAX as usize,
+            "Creating more than 255 substates is not supported"
+        );
+
+        let substates = (0..num)
+            .map(|i| {
+                let id = SubstateId::Component(ComponentAddress::from_array([i as u8; 28]));
+                let value = SubstateValue::Component(ComponentHeader {
+                    template_address: Default::default(),
+                    module_name: "Test".to_string(),
+                    owner_key: None,
+                    owner_rule: Default::default(),
+                    access_rules: Default::default(),
+                    entity_id: id.as_component_address().unwrap().entity_id(),
+                    body: ComponentBody {
+                        state: tari_bor::Value::Null,
+                    },
+                });
+                SubstateRecord::new(
+                    id,
+                    0,
+                    value,
+                    Epoch(0),
+                    NodeHeight(0),
+                    BlockId::genesis(),
+                    TransactionId::default(),
+                    QcId::genesis(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let ids = substates
+            .iter()
+            .map(|s| VersionedSubstateId::new(s.substate_id().clone(), s.version()))
+            .collect::<Vec<_>>();
+
+        self.validators.values().for_each(|v| {
+            v.state_store
+                .with_write_tx(|tx| {
+                    for substate in substates.clone() {
+                        substate.create(tx).unwrap();
+                    }
+                    Ok::<_, StorageError>(())
+                })
+                .unwrap();
+        });
+
+        ids
     }
 
     pub fn validators(&self) -> hash_map::Values<'_, TestAddress, Validator> {
@@ -185,7 +243,10 @@ impl Test {
             if complete.len() == self.validators.len() {
                 break;
             }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            if self.network.task_handle().is_finished() {
+                panic!("Network task exited while waiting for {}", description);
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
 
