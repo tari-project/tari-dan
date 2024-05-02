@@ -14,7 +14,7 @@ use tari_engine_types::{
 };
 use tari_transaction::{SubstateRequirement, Transaction, VersionedSubstateId};
 
-use crate::support::helpers::random_substate_in_bucket;
+use crate::support::helpers::random_substate_in_shard;
 
 pub fn build_transaction_from(
     tx: Transaction,
@@ -63,16 +63,21 @@ pub fn build_transaction_from(
     tx
 }
 
-pub fn build_transaction(decision: Decision, fee: u64, num_shards: usize, num_committees: u32) -> TransactionRecord {
+pub fn build_transaction(
+    decision: Decision,
+    fee: u64,
+    total_num_outputs: usize,
+    num_committees: u32,
+) -> TransactionRecord {
     let k = PrivateKey::default();
     let tx = Transaction::builder().sign(&k).build();
 
     // We create these outputs so that the test VNs dont have to have any UP substates
     // Equal potion of shards to each committee
     let outputs = (0..num_committees)
-        .flat_map(|bucket| {
-            iter::repeat_with(move || random_substate_in_bucket(bucket.into(), num_committees))
-                .take(num_shards / num_committees as usize)
+        .flat_map(|shard| {
+            iter::repeat_with(move || random_substate_in_shard(shard.into(), num_committees))
+                .take(total_num_outputs.div_ceil(num_committees as usize))
         })
         .collect::<Vec<_>>();
 
