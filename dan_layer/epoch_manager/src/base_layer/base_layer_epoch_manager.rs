@@ -349,7 +349,12 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let vn = self
             .global_db
             .validator_nodes(&mut tx)
-            .get_by_public_key(start_epoch, end_epoch, public_key)
+            .get_by_public_key(
+                start_epoch,
+                end_epoch,
+                public_key,
+                self.config.validator_node_sidechain_id.as_ref(),
+            )
             .optional()?;
 
         Ok(vn)
@@ -388,7 +393,12 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             let vn = self
                 .global_db
                 .validator_nodes(&mut tx)
-                .get_by_public_key(start_epoch, end_epoch, &public_key)
+                .get_by_public_key(
+                    start_epoch,
+                    end_epoch,
+                    &public_key,
+                    self.config.validator_node_sidechain_id.as_ref(),
+                )
                 .optional()?
                 .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
                     address: public_key.to_string(),

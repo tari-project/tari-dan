@@ -79,9 +79,10 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         start_epoch: Epoch,
         end_epoch: Epoch,
         public_key: &PublicKey,
+        sidechain_id: Option<&PublicKey>,
     ) -> Result<ValidatorNode<TGlobalDbAdapter::Addr>, TGlobalDbAdapter::Error> {
         self.backend
-            .get_validator_node_by_public_key(self.tx, start_epoch, end_epoch, public_key)
+            .get_validator_node_by_public_key(self.tx, start_epoch, end_epoch, public_key, sidechain_id)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 

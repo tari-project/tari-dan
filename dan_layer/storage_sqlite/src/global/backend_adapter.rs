@@ -30,7 +30,7 @@ use std::{
 
 use diesel::{
     sql_query,
-    sql_types::{BigInt, Bigint},
+    sql_types::{BigInt, Bigint, Binary},
     ExpressionMethods,
     JoinOnDsl,
     NullableExpressionMethods,
@@ -378,9 +378,9 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
                 validator_nodes::shard_key.eq(shard_key.as_bytes()),
                 validator_nodes::epoch.eq(epoch.as_u64() as i64),
                 validator_nodes::fee_claim_public_key.eq(ByteArray::as_bytes(&fee_claim_public_key)),
-                validator_nodes::sidechain_id.eq(sidechain_id.as_ref().map(|id| id.as_bytes())),
+                validator_nodes::sidechain_id.eq(sidechain_id.as_ref().map(|id| id.as_bytes()).unwrap_or(&[0u8; 32])),
             ))
-            .on_conflict(validator_nodes::public_key)
+            .on_conflict((validator_nodes::public_key, validator_nodes::sidechain_id))
             .do_update()
             .set((
                 validator_nodes::address.eq(&addr),
@@ -404,6 +404,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         start_epoch: Epoch,
         end_epoch: Epoch,
         public_key: &PublicKey,
+        sidechain_id: Option<&PublicKey>,
     ) -> Result<ValidatorNode<Self::Addr>, Self::Error> {
         use crate::global::schema::{committees, validator_nodes};
 
@@ -424,6 +425,9 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             )
             .filter(coalesce_bigint(committees::epoch.nullable(), validator_nodes::epoch).le(end_epoch.as_u64() as i64))
             .filter(validator_nodes::public_key.eq(ByteArray::as_bytes(public_key)))
+            .filter(
+                validator_nodes::sidechain_id.eq(sidechain_id.map(|id| ByteArray::as_bytes(id)).unwrap_or(&[0u8; 32])),
+            )
             .order_by(committees::epoch.desc())
             .first::<DbValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
