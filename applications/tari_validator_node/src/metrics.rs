@@ -18,6 +18,7 @@ impl<C: Collector + Clone + 'static> CollectorRegister for C {
 }
 
 pub trait LabelledCollector<T: MetricVecBuilder> {
+    #[allow(dead_code)]
     fn with_label<L: ToString + ?Sized>(&self, label: &L) -> T::M;
     fn with_two_labels<L1: ToString + ?Sized, L2: ToString + ?Sized>(&self, label1: &L1, label2: &L2) -> T::M;
 }

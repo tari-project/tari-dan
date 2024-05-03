@@ -136,8 +136,9 @@ impl EventManager {
         offset: u32,
         limit: u32,
     ) -> Result<Vec<Event>, anyhow::Error> {
-        let mut tx = self.substate_store.create_read_tx()?;
-        let rows = tx.get_events(substate_id, topic, offset, limit)?;
+        let rows = self
+            .substate_store
+            .with_read_tx(|tx| tx.get_events(substate_id, topic, offset, limit))?;
 
         let mut events = vec![];
         for row in rows {

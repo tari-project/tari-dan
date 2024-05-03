@@ -126,10 +126,10 @@ pub trait SubstateStore {
         }
     }
 
-    fn with_read_tx<F: FnOnce(&Self::ReadTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
+    fn with_read_tx<F: FnOnce(&mut Self::ReadTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
     where E: From<StorageError> {
-        let tx = self.create_read_tx()?;
-        let ret = f(&tx)?;
+        let mut tx = self.create_read_tx()?;
+        let ret = f(&mut tx)?;
         Ok(ret)
     }
 }
@@ -181,6 +181,7 @@ pub trait SubstateStoreReadTransaction {
     fn get_substate(&mut self, address: &SubstateId) -> Result<Option<Substate>, StorageError>;
     fn get_latest_version_for_substate(&mut self, address: &SubstateId) -> Result<Option<i64>, StorageError>;
     fn get_all_addresses(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
+    #[allow(dead_code)]
     fn get_all_substates(&mut self) -> Result<Vec<Substate>, StorageError>;
     fn get_non_fungible_collections(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
     fn get_non_fungible_count(&mut self, resource_address: String) -> Result<i64, StorageError>;
@@ -197,6 +198,7 @@ pub trait SubstateStoreReadTransaction {
         substate_id: &SubstateId,
         start_version: u32,
     ) -> Result<Vec<u32>, StorageError>;
+    #[allow(dead_code)]
     fn get_events_by_version(&mut self, substate_id: &SubstateId, version: u32)
         -> Result<Vec<EventData>, StorageError>;
     fn get_all_events(&mut self, substate_id: &SubstateId) -> Result<Vec<EventData>, StorageError>;
