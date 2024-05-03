@@ -13,4 +13,7 @@
 # - the CI files in .github folder
 # - the Makefile in base_layer/key_manager/Makefile
 [toolchain]
-channel = "stable"
+# 1.78 causes a mempory alignment panic in the version of wasmer we use. For now we'll lock to 1.77.
+# https://github.com/wasmerio/wasmer/blob/2.3.0/lib/vm/src/instance/mod.rs#L968
+# Error: unsafe precondition(s) violated: ptr::copy_nonoverlapping requires that both pointer arguments are aligned and non-null and the specified memory ranges do not overlap
+channel = "1.77"
