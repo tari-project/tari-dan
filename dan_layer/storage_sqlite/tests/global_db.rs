@@ -144,7 +144,7 @@ fn insert_and_get_within_shard_range_duplicate_public_keys() {
     }
     assert_eq!(vns.len(), 2);
 
-    let vn = validator_nodes.get_by_public_key(Epoch(0), Epoch(10), &pk).unwrap();
+    let vn = validator_nodes.get_by_public_key(Epoch(0), Epoch(10), &pk, None).unwrap();
     assert_eq!(vn.epoch, Epoch(2));
     assert_eq!(vn.committee_shard, Some(Shard::from(2)));
 }

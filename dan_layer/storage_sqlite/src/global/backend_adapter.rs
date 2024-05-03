@@ -30,7 +30,7 @@ use std::{
 
 use diesel::{
     sql_query,
-    sql_types::{BigInt, Bigint, Binary},
+    sql_types::{BigInt, Bigint},
     ExpressionMethods,
     JoinOnDsl,
     NullableExpressionMethods,
