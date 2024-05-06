@@ -18,7 +18,7 @@ on:
         default: "development-tag"
 
 env:
-  TN_FILENAME: "tari_network_suite"
+  TS_FILENAME: "tari_network_suite"
   TS_BUNDLE_ID_BASE: "com.tari.network.pkg"
   TS_SIG_FN: "sha256-unsigned.txt"
   ## Must be a JSon string
@@ -57,7 +57,7 @@ jobs:
         run: |
           #
           # build all targets images
-          # matrix=$( jq -s -c .[] .github/workflows/base_node_binaries.json )
+          # matrix=$( jq -s -c .[] .github/workflows/build_binaries.json )
           #
           # build only single target image
           # matrix_selection=$( jq -c '.[] | select( ."name" == "windows-x64" )' ${{ env.matrix-json-file }} )
@@ -330,7 +330,7 @@ jobs:
           # set -xo pipefail
           mkdir -p "$GITHUB_WORKSPACE${TS_DIST}"
           cd "$GITHUB_WORKSPACE${TS_DIST}"
-          BINFILE="${TN_FILENAME}-${TARI_VERSION}-${VSHA_SHORT}-${{ matrix.builds.name }}${TS_EXT}"
+          BINFILE="${TS_FILENAME}-${TARI_VERSION}-${VSHA_SHORT}-${{ matrix.builds.name }}${TS_EXT}"
           echo "BINFILE=${BINFILE}" >> $GITHUB_ENV
           echo "Copying files for ${BINFILE} to $(pwd)"
           echo "MTS_SOURCE=$(pwd)" >> $GITHUB_ENV
