@@ -21,7 +21,7 @@ env:
   TBN_BUNDLEID_BASE: "com.tari.network.pkg"
   TARI_TARGET_NETWORK: igor
   TARI_NETWORK: igor
-  toolchain: stable
+  toolchain: 1.77
   matrix-json-file: ".github/workflows/build_binaries.json"
 
 jobs:

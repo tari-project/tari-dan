@@ -144,7 +144,11 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_nodes = self.global_db.validator_nodes(&mut tx);
 
-        let vns = validator_nodes.get_all_within_epochs(start_epoch, end_epoch)?;
+        let vns = validator_nodes.get_all_within_epochs(
+            start_epoch,
+            end_epoch,
+            self.config.validator_node_sidechain_id.as_ref(),
+        )?;
 
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
 
@@ -152,6 +156,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             validator_nodes.set_committee_bucket(
                 vn.shard_key,
                 vn.shard_key.to_committee_shard(num_committees),
+                self.config.validator_node_sidechain_id.as_ref(),
                 self.current_epoch,
             )?;
         }
@@ -500,7 +505,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
         let mut tx = self.global_db.create_transaction()?;
         let mut vn_db = self.global_db.validator_nodes(&mut tx);
-        let num_vns = vn_db.count(start_epoch, end_epoch)?;
+        let num_vns = vn_db.count(start_epoch, end_epoch, self.config.validator_node_sidechain_id.as_ref())?;
         let vn = vn_db.get_by_address(start_epoch, end_epoch, identity)?;
         let num_committees = calculate_num_committees(num_vns, self.config.committee_size);
         let shard = substate_address.to_committee_shard(num_committees);
@@ -514,7 +519,11 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
 
         let mut tx = self.global_db.create_transaction()?;
-        let num_vns = self.global_db.validator_nodes(&mut tx).count(start_epoch, end_epoch)?;
+        let num_vns = self.global_db.validator_nodes(&mut tx).count(
+            start_epoch,
+            end_epoch,
+            self.config.validator_node_sidechain_id.as_ref(),
+        )?;
         Ok(calculate_num_committees(num_vns, self.config.committee_size))
     }
 
@@ -532,10 +541,11 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
 
         let mut tx = self.global_db.create_transaction()?;
-        let db_vns = self
-            .global_db
-            .validator_nodes(&mut tx)
-            .get_all_within_epochs(start_epoch, end_epoch)?;
+        let db_vns = self.global_db.validator_nodes(&mut tx).get_all_within_epochs(
+            start_epoch,
+            end_epoch,
+            self.config.validator_node_sidechain_id.as_ref(),
+        )?;
         let vns = db_vns.into_iter().map(Into::into).collect();
         Ok(vns)
     }
@@ -609,8 +619,12 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        let validators =
-            validator_node_db.get_by_shard_range(start_epoch, end_epoch, rounded_substate_address_range)?;
+        let validators = validator_node_db.get_by_shard_range(
+            start_epoch,
+            end_epoch,
+            self.config.validator_node_sidechain_id.as_ref(),
+            rounded_substate_address_range,
+        )?;
         Ok(Committee::new(
             validators.into_iter().map(|v| (v.address, v.public_key)).collect(),
         ))
@@ -632,7 +646,8 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        let num_validators = validator_node_db.count(start_epoch, end_epoch)?;
+        let num_validators =
+            validator_node_db.count(start_epoch, end_epoch, self.config.validator_node_sidechain_id.as_ref())?;
         Ok(num_validators)
     }
 
@@ -652,7 +667,8 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let shard = substate_address.to_committee_shard(num_committees);
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
-        let num_validators = validator_node_db.count_in_bucket(epoch, shard)?;
+        let num_validators =
+            validator_node_db.count_in_bucket(epoch, self.config.validator_node_sidechain_id.as_ref(), shard)?;
         let num_validators = u32::try_from(num_validators).map_err(|_| EpochManagerError::IntegerOverflow {
             func: "get_committee_shard",
         })?;
