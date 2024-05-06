@@ -23,7 +23,7 @@ env:
   TS_SIG_FN: "sha256-unsigned.txt"
   ## Must be a JSon string
   TS_FILES: '["tari_dan_wallet_cli","tari_dan_wallet_daemon","tari_indexer","tari_validator_node","tari_signaling_server","tari_generate"]'
-  TS_FEATURES: "default, safe"
+  TS_FEATURES: "default"
   TS_LIBRARIES: ""
   TARI_TARGET_NETWORK: igor
   TARI_NETWORK: igor
