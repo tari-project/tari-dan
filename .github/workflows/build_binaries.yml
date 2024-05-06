@@ -316,6 +316,7 @@ jobs:
             ${{ matrix.builds.flags }} --locked
 
       - name: Build release libraries
+        if: ${{ env.TS_LIBRARIES != '' }}
         shell: bash
         run: |
           ${{ env.CARGO }} build ${{ env.CARGO_OPTIONS }} \
