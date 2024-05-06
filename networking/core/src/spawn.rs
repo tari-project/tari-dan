@@ -14,7 +14,7 @@ use tokio::{
 
 use crate::{message::MessageSpec, worker::NetworkingWorker, NetworkingHandle};
 
-pub fn spawn<TMsg: MessageSpec>(
+pub fn spawn<TMsg>(
     identity: Keypair,
     messaging_mode: MessagingMode<TMsg>,
     mut config: crate::Config,
@@ -25,6 +25,7 @@ where
     TMsg: MessageSpec + 'static,
     TMsg::Message: messaging::prost::Message + Default + Clone + 'static,
     TMsg::GossipMessage: messaging::prost::Message + Default + Clone + 'static,
+    TMsg: MessageSpec,
 {
     for (_, addr) in &seed_peers {
         if !is_supported_multiaddr(addr) {

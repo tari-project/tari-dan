@@ -74,7 +74,7 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
         dan_wallet_daemon: WalletDaemonConfig::default(),
     };
 
-    config.common.base_path = base_dir.clone();
+    config.common.base_path.clone_from(&base_dir);
     config.dan_wallet_daemon.json_rpc_address = Some(json_rpc_address);
     config.dan_wallet_daemon.signaling_server_address = Some(signaling_server_addr);
     config.dan_wallet_daemon.indexer_node_json_rpc_url = indexer_url;
