@@ -368,8 +368,24 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f6fd5ddaf0351dff5b8da21b2fb4ff8e08ddd02857f0bf69c47639106c0fff0"
 dependencies = [
- "asn1-rs-derive",
- "asn1-rs-impl",
+ "asn1-rs-derive 0.4.0",
+ "asn1-rs-impl 0.1.0",
+ "displaydoc",
+ "nom",
+ "num-traits",
+ "rusticata-macros",
+ "thiserror",
+ "time",
+]
+
+[[package]]
+name = "asn1-rs"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22ad1373757efa0f70ec53939aabc7152e1591cb485208052993070ac8d2429d"
+dependencies = [
+ "asn1-rs-derive 0.5.0",
+ "asn1-rs-impl 0.2.0",
  "displaydoc",
  "nom",
  "num-traits",
@@ -387,7 +403,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
- "synstructure",
+ "synstructure 0.12.6",
+]
+
+[[package]]
+name = "asn1-rs-derive"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7378575ff571966e99a744addeff0bff98b8ada0dedf1956d59e634db95eaac1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.60",
+ "synstructure 0.13.1",
 ]
 
 [[package]]
@@ -399,6 +427,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "asn1-rs-impl"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b18050c2cd6fe86c3a76584ef5e0baf286d038cda203eb6223df2cc413565f7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -711,7 +750,7 @@ checksum = "16e62a023e7c117e27523144c5d2459f4397fcc3cab0085af8e2224f643a0193"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -728,7 +767,7 @@ checksum = "c6fa2087f2753a7da8cc1c0dbfcf89579dd57458e36769de5ac750b4671737ca"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -780,7 +819,7 @@ checksum = "3c87f3f15e7794432337fc718554eaa4dc8f04c9677a950ffe366f20a162ae42"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -1126,7 +1165,7 @@ dependencies = [
  "proc-macro-crate 3.1.0",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
  "syn_derive",
 ]
 
@@ -1565,7 +1604,7 @@ dependencies = [
  "heck 0.5.0",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -1971,7 +2010,7 @@ dependencies = [
  "futures-core",
  "libc",
  "mio 0.8.11",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "signal-hook",
  "signal-hook-mio",
  "winapi",
@@ -2077,7 +2116,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "regex",
- "syn 2.0.59",
+ "syn 2.0.60",
  "synthez",
 ]
 
@@ -2151,7 +2190,7 @@ checksum = "f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -2210,7 +2249,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "strsim 0.10.0",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -2232,7 +2271,7 @@ checksum = "a668eda54683121533a393014d8692171709ff57a7d61f187b6e782719f8933f"
 dependencies = [
  "darling_core 0.20.8",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -2250,9 +2289,9 @@ dependencies = [
 
 [[package]]
 name = "data-encoding"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e962a19be5cfc3f3bf6dd8f61eb50107f356ad6270fbb3ed41476571db78be5"
+checksum = "e8566979429cf69b49a5c740c60791108e86440e8be149bbea4fe54d2c32d6e2"
 
 [[package]]
 name = "data-encoding-macro"
@@ -2300,7 +2339,21 @@ version = "8.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dbd676fbbab537128ef0278adb5576cf363cff6aa22a7b24effe97347cfab61e"
 dependencies = [
- "asn1-rs",
+ "asn1-rs 0.5.2",
+ "displaydoc",
+ "nom",
+ "num-bigint",
+ "num-traits",
+ "rusticata-macros",
+]
+
+[[package]]
+name = "der-parser"
+version = "9.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5cd0a5c643689626bec213c4d8bd4d96acc8ffdb4ad4bb6bc16abf27d5f4b553"
+dependencies = [
+ "asn1-rs 0.6.1",
  "displaydoc",
  "nom",
  "num-bigint",
@@ -2438,7 +2491,7 @@ dependencies = [
  "diesel_table_macro_syntax",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -2458,7 +2511,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc5557efc453706fed5e4fa85006fe9817c224c3f480a34c7e5959fd700921c5"
 dependencies = [
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -2541,7 +2594,7 @@ checksum = "487585f4d0c6655fe74905e2504d8ad6908e4db67f744eb140876906c2f3175d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -2688,7 +2741,7 @@ dependencies = [
  "heck 0.4.1",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -2729,7 +2782,7 @@ dependencies = [
  "darling 0.20.8",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -3058,15 +3111,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "futures-bounded"
-version = "0.2.3"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
-dependencies = [
- "futures-timer",
- "futures-util",
-]
-
-[[package]]
 name = "futures-channel"
 version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3136,7 +3180,7 @@ checksum = "87750cf4b7a4c0625b1529e4c543c2182106e4dedc60a2a6455e00d212c489ac"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -3255,7 +3299,7 @@ dependencies = [
  "quote",
  "serde",
  "serde_json",
- "syn 2.0.59",
+ "syn 2.0.60",
  "textwrap 0.16.1",
  "thiserror",
  "typed-builder",
@@ -3544,7 +3588,7 @@ dependencies = [
  "ipconfig",
  "lru-cache",
  "once_cell",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "rand",
  "resolv-conf",
  "smallvec 1.13.2",
@@ -4320,7 +4364,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "regex",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -4388,8 +4432,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p"
-version = "0.53.2"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+version = "0.54.0"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "bytes 1.6.0",
  "either",
@@ -4425,7 +4469,7 @@ dependencies = [
 [[package]]
 name = "libp2p-allow-block-list"
 version = "0.3.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "libp2p-core",
  "libp2p-identity",
@@ -4436,7 +4480,7 @@ dependencies = [
 [[package]]
 name = "libp2p-autonat"
 version = "0.12.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "async-trait",
  "asynchronous-codec",
@@ -4448,7 +4492,7 @@ dependencies = [
  "libp2p-request-response",
  "libp2p-swarm",
  "quick-protobuf",
- "quick-protobuf-codec 0.3.1 (git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418)",
+ "quick-protobuf-codec 0.3.1 (git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4)",
  "rand",
  "tracing",
 ]
@@ -4456,7 +4500,7 @@ dependencies = [
 [[package]]
 name = "libp2p-connection-limits"
 version = "0.3.1"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "libp2p-core",
  "libp2p-identity",
@@ -4467,7 +4511,7 @@ dependencies = [
 [[package]]
 name = "libp2p-core"
 version = "0.41.2"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "either",
  "fnv",
@@ -4479,7 +4523,7 @@ dependencies = [
  "multihash 0.19.1",
  "multistream-select",
  "once_cell",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "pin-project 1.1.5",
  "quick-protobuf",
  "rand",
@@ -4494,12 +4538,12 @@ dependencies = [
 [[package]]
 name = "libp2p-dcutr"
 version = "0.11.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "asynchronous-codec",
  "either",
  "futures 0.3.30",
- "futures-bounded 0.2.3 (git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418)",
+ "futures-bounded",
  "futures-timer",
  "instant",
  "libp2p-core",
@@ -4507,7 +4551,7 @@ dependencies = [
  "libp2p-swarm",
  "lru",
  "quick-protobuf",
- "quick-protobuf-codec 0.3.1 (git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418)",
+ "quick-protobuf-codec 0.3.1 (git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4)",
  "thiserror",
  "tracing",
  "void",
@@ -4516,14 +4560,14 @@ dependencies = [
 [[package]]
 name = "libp2p-dns"
 version = "0.41.1"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "async-trait",
  "futures 0.3.30",
  "hickory-resolver",
  "libp2p-core",
  "libp2p-identity",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "smallvec 1.13.2",
  "tracing",
 ]
@@ -4531,10 +4575,10 @@ dependencies = [
 [[package]]
 name = "libp2p-gossipsub"
 version = "0.46.1"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "asynchronous-codec",
- "base64 0.21.7",
+ "base64 0.22.0",
  "byteorder",
  "bytes 1.6.0",
  "either",
@@ -4549,7 +4593,7 @@ dependencies = [
  "libp2p-swarm",
  "prometheus-client",
  "quick-protobuf",
- "quick-protobuf-codec 0.3.1 (git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418)",
+ "quick-protobuf-codec 0.3.1 (git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4)",
  "rand",
  "regex",
  "sha2",
@@ -4561,19 +4605,19 @@ dependencies = [
 [[package]]
 name = "libp2p-identify"
 version = "0.44.2"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "asynchronous-codec",
  "either",
  "futures 0.3.30",
- "futures-bounded 0.2.3 (git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418)",
+ "futures-bounded",
  "futures-timer",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
  "lru",
  "quick-protobuf",
- "quick-protobuf-codec 0.3.1 (git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418)",
+ "quick-protobuf-codec 0.3.1 (git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4)",
  "smallvec 1.13.2",
  "thiserror",
  "tracing",
@@ -4583,7 +4627,7 @@ dependencies = [
 [[package]]
 name = "libp2p-identity"
 version = "0.2.8"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "bs58 0.5.1",
  "ed25519-dalek",
@@ -4602,7 +4646,7 @@ dependencies = [
 [[package]]
 name = "libp2p-mdns"
 version = "0.45.1"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "data-encoding",
  "futures 0.3.30",
@@ -4624,7 +4668,7 @@ name = "libp2p-messaging"
 version = "0.5.1"
 dependencies = [
  "async-trait",
- "futures-bounded 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-bounded",
  "libp2p",
  "prost 0.12.4",
  "smallvec 2.0.0-alpha.5",
@@ -4634,7 +4678,7 @@ dependencies = [
 [[package]]
 name = "libp2p-metrics"
 version = "0.14.1"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "futures 0.3.30",
  "instant",
@@ -4653,7 +4697,7 @@ dependencies = [
 [[package]]
 name = "libp2p-noise"
 version = "0.44.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "asynchronous-codec",
  "bytes 1.6.0",
@@ -4683,7 +4727,7 @@ dependencies = [
  "async-trait",
  "asynchronous-codec",
  "blake2",
- "futures-bounded 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-bounded",
  "libp2p",
  "pb-rs",
  "quick-protobuf",
@@ -4694,8 +4738,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-ping"
-version = "0.44.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+version = "0.44.1"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "either",
  "futures 0.3.30",
@@ -4712,7 +4756,7 @@ dependencies = [
 [[package]]
 name = "libp2p-quic"
 version = "0.10.2"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "bytes 1.6.0",
  "futures 0.3.30",
@@ -4721,7 +4765,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "libp2p-tls",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "quinn",
  "rand",
  "ring 0.16.20",
@@ -4734,36 +4778,36 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.17.1"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+version = "0.17.2"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "asynchronous-codec",
  "bytes 1.6.0",
  "either",
  "futures 0.3.30",
- "futures-bounded 0.2.3 (git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418)",
+ "futures-bounded",
  "futures-timer",
- "instant",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
  "quick-protobuf",
- "quick-protobuf-codec 0.3.1 (git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418)",
+ "quick-protobuf-codec 0.3.1 (git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4)",
  "rand",
  "static_assertions",
  "thiserror",
  "tracing",
  "void",
+ "web-time",
 ]
 
 [[package]]
 name = "libp2p-request-response"
 version = "0.26.2"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "async-trait",
  "futures 0.3.30",
- "futures-bounded 0.2.3 (git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418)",
+ "futures-bounded",
  "futures-timer",
  "instant",
  "libp2p-core",
@@ -4787,7 +4831,7 @@ dependencies = [
 [[package]]
 name = "libp2p-swarm"
 version = "0.44.2"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "either",
  "fnv",
@@ -4809,19 +4853,19 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm-derive"
-version = "0.34.3"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+version = "0.34.2"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
 name = "libp2p-tcp"
 version = "0.41.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "futures 0.3.30",
  "futures-timer",
@@ -4837,7 +4881,7 @@ dependencies = [
 [[package]]
 name = "libp2p-tls"
 version = "0.3.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "futures 0.3.30",
  "futures-rustls",
@@ -4848,14 +4892,14 @@ dependencies = [
  "rustls 0.21.10",
  "rustls-webpki",
  "thiserror",
- "x509-parser",
+ "x509-parser 0.16.0",
  "yasna",
 ]
 
 [[package]]
 name = "libp2p-upnp"
-version = "0.2.1"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+version = "0.2.2"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "futures 0.3.30",
  "futures-timer",
@@ -4870,7 +4914,7 @@ dependencies = [
 [[package]]
 name = "libp2p-yamux"
 version = "0.45.1"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "either",
  "futures 0.3.30",
@@ -5008,7 +5052,7 @@ checksum = "fc2fb41a9bb4257a3803154bdf7e2df7d45197d1941c9b1a90ad815231630721"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -5086,7 +5130,7 @@ dependencies = [
  "log",
  "log-mdc",
  "once_cell",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "rand",
  "serde",
  "serde-value",
@@ -5257,7 +5301,7 @@ checksum = "49e7bc1560b95a3c4a25d03de42fe76ca718ab92d1a22a55b9b4cf67b3ae635c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -5643,7 +5687,7 @@ dependencies = [
 [[package]]
 name = "multiaddr"
 version = "0.18.1"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "arrayref",
  "byteorder",
@@ -5701,7 +5745,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
- "synstructure",
+ "synstructure 0.12.6",
 ]
 
 [[package]]
@@ -5719,7 +5763,7 @@ checksum = "defc4c55412d89136f966bbb339008b474350e5e6e78d2714439c386b3137a03"
 [[package]]
 name = "multistream-select"
 version = "0.13.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "bytes 1.6.0",
  "futures 0.3.30",
@@ -5973,7 +6017,7 @@ checksum = "ed3955f1a9c7c0c15e092f9c887db08b1fc683305fdf6eb6684f22555355e202"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -6064,7 +6108,16 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9bedf36ffb6ba96c2eb7144ef6270557b52e54b20c0a8e1eb2ff99a6c6959bff"
 dependencies = [
- "asn1-rs",
+ "asn1-rs 0.5.2",
+]
+
+[[package]]
+name = "oid-registry"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c958dd45046245b9c3c2547369bb634eb461670b2e7e0de552905801a648d1d"
+dependencies = [
+ "asn1-rs 0.6.1",
 ]
 
 [[package]]
@@ -6106,7 +6159,7 @@ checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -6231,9 +6284,9 @@ dependencies = [
 
 [[package]]
 name = "parking_lot"
-version = "0.12.1"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3742b2c103b9f06bc9fff0a37ff4912935851bee6d36f3c02bcc755bcfec228f"
+checksum = "7e4af0ca4f6caed20e900d564c242b8e5d4903fdacf31d3daf527b66fe6f42fb"
 dependencies = [
  "lock_api",
  "parking_lot_core 0.9.9",
@@ -6399,7 +6452,7 @@ dependencies = [
  "pest_meta",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -6527,7 +6580,7 @@ checksum = "2f38a4412a78282e09a2cf38d195ea5420d15ba0602cb375210efbc877243965"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -6681,7 +6734,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ac2cf0f2e4f42b49f5ffd07dae8d746508ef7526c13940e5f524012ae6c6550"
 dependencies = [
  "proc-macro2",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -6776,7 +6829,7 @@ dependencies = [
  "fnv",
  "lazy_static",
  "memchr",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "protobuf",
  "thiserror",
 ]
@@ -6789,7 +6842,7 @@ checksum = "c1ca959da22a332509f2a73ae9e5f23f9dcfc31fd3a54d71f159495bd5909baa"
 dependencies = [
  "dtoa",
  "itoa",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "prometheus-client-derive-encode",
 ]
 
@@ -6801,7 +6854,7 @@ checksum = "440f724eba9f6996b75d63681b0a92b06947f1457076d503a4d2e2c8f56442b8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -6889,7 +6942,7 @@ dependencies = [
  "prost 0.12.4",
  "prost-types 0.12.4",
  "regex",
- "syn 2.0.59",
+ "syn 2.0.60",
  "tempfile",
 ]
 
@@ -6929,7 +6982,7 @@ dependencies = [
  "itertools 0.12.1",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -7052,7 +7105,7 @@ dependencies = [
 [[package]]
 name = "quick-protobuf-codec"
 version = "0.3.1"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "asynchronous-codec",
  "bytes 1.6.0",
@@ -7134,7 +7187,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51de85fb3fb6524929c8a2eb85e6b6d363de4e8c48f9e2c2eac4944abc181c93"
 dependencies = [
  "log",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "scheduled-thread-pool",
 ]
 
@@ -7233,7 +7286,7 @@ dependencies = [
  "pem 3.0.4",
  "ring 0.16.20",
  "time",
- "x509-parser",
+ "x509-parser 0.15.1",
  "yasna",
 ]
 
@@ -7811,7 +7864,7 @@ dependencies = [
 [[package]]
 name = "rw-stream-sink"
 version = "0.4.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=49ca2a88961f7131d3e496b579b522a823ae0418#49ca2a88961f7131d3e496b579b522a823ae0418"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=0dccc6ca09651f6cc76ca08c58c31e34626d26c4#0dccc6ca09651f6cc76ca08c58c31e34626d26c4"
 dependencies = [
  "futures 0.3.30",
  "pin-project 1.1.5",
@@ -7848,7 +7901,7 @@ version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3cbc66816425a074528352f5789333ecff06ca41b36b0b0efdfbb29edc391a19"
 dependencies = [
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
 ]
 
 [[package]]
@@ -7894,7 +7947,7 @@ dependencies = [
  "heck 0.4.1",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -7997,7 +8050,7 @@ checksum = "7eb0b34b42edc17f6b7cac84a52a1c5f0e1bb2227e997ca9011ea3dd34e8610b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -8039,7 +8092,7 @@ checksum = "6c64451ba24fc7a6a2d60fc75dd9c83c90903b19028d4eff35e88fc1e86564e9"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -8088,7 +8141,7 @@ dependencies = [
  "darling 0.20.8",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -8294,7 +8347,7 @@ checksum = "0eb01866308440fc64d6c44d9e86c5cc17adfe33c4d6eed55da9145044d0ffc1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -8460,7 +8513,7 @@ checksum = "f91138e76242f575eb1d3b38b4f1362f10d3a43f47d182a5b359af488a02293b"
 dependencies = [
  "new_debug_unreachable",
  "once_cell",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "phf_shared",
  "precomputed-hash",
 ]
@@ -8590,9 +8643,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.59"
+version = "2.0.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a6531ffc7b071655e4ce2e04bd464c4830bb585a61cabb96cf808f05172615a"
+checksum = "909518bc7b1c9b779f1bbf07f2929d35af9f0f37e47c6e9ef7f9dddc1e1821f3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8608,7 +8661,7 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -8630,12 +8683,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "synstructure"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8af7666ab7b6390ab78131fb5b0fce11d6b7a6951602017c35fa82800708971"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.60",
+]
+
+[[package]]
 name = "synthez"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3d2c2202510a1e186e63e596d9318c91a8cbe85cd1a56a7be0c333e5f59ec8d"
 dependencies = [
- "syn 2.0.59",
+ "syn 2.0.60",
  "synthez-codegen",
  "synthez-core",
 ]
@@ -8646,7 +8710,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f724aa6d44b7162f3158a57bccd871a77b39a4aef737e01bcdff41f4772c7746"
 dependencies = [
- "syn 2.0.59",
+ "syn 2.0.60",
  "synthez-core",
 ]
 
@@ -8659,7 +8723,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "sealed",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -10284,22 +10348,22 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.58"
+version = "1.0.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03468839009160513471e86a034bb2c5c0e4baae3b43f79ffc55c4a5427b3297"
+checksum = "f0126ad08bff79f29fc3ae6a55cc72352056dfff61e3ff8bb7129476d44b23aa"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.58"
+version = "1.0.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c61f3ba182994efc43764a46c018c347bc492c79f024e705f46567b418f6d4f7"
+checksum = "d1cd413b5d558b4c5bf3680e324a6fa5014e7b7c067a51e69dbdf47eb7148b66"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -10388,7 +10452,7 @@ dependencies = [
  "libc",
  "mio 0.8.11",
  "num_cpus",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2 0.5.6",
@@ -10415,7 +10479,7 @@ checksum = "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -10750,7 +10814,7 @@ checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -10905,7 +10969,7 @@ dependencies = [
  "Inflector",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
  "termcolor",
 ]
 
@@ -10987,7 +11051,7 @@ checksum = "29a3151c41d0b13e3d011f98adc24434560ef06673a155a6c7f66b9879eecce2"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -11302,7 +11366,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
  "wasm-bindgen-shared",
 ]
 
@@ -11336,7 +11400,7 @@ checksum = "e94f17b526d0a461a191c78ea52bbce64071ed5c04c9ffe424dcb38f74171bb7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -11638,6 +11702,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-time"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "webpki"
 version = "0.22.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11717,7 +11791,7 @@ dependencies = [
  "byteorder",
  "cbc",
  "ccm",
- "der-parser",
+ "der-parser 8.2.0",
  "hkdf",
  "hmac",
  "log",
@@ -11737,7 +11811,7 @@ dependencies = [
  "tokio",
  "webrtc-util",
  "x25519-dalek",
- "x509-parser",
+ "x509-parser 0.15.1",
 ]
 
 [[package]]
@@ -11957,7 +12031,7 @@ checksum = "f6fc35f58ecd95a9b71c4f2329b911016e6bec66b3f2e6a4aad86bd2e99e2f9b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -11968,7 +12042,7 @@ checksum = "08990546bf4edef8f431fa6326e032865f27138718c587dc21bc0265bbcb57cc"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -12217,13 +12291,30 @@ version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7069fba5b66b9193bd2c5d3d4ff12b839118f6bcbef5328efafafb5395cf63da"
 dependencies = [
- "asn1-rs",
+ "asn1-rs 0.5.2",
  "data-encoding",
- "der-parser",
+ "der-parser 8.2.0",
  "lazy_static",
  "nom",
- "oid-registry",
+ "oid-registry 0.6.1",
  "ring 0.16.20",
+ "rusticata-macros",
+ "thiserror",
+ "time",
+]
+
+[[package]]
+name = "x509-parser"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcbc162f30700d6f3f82a24bf7cc62ffe7caea42c0b2cba8bf7f3ae50cf51f69"
+dependencies = [
+ "asn1-rs 0.6.1",
+ "data-encoding",
+ "der-parser 9.0.0",
+ "lazy_static",
+ "nom",
+ "oid-registry 0.7.0",
  "rusticata-macros",
  "thiserror",
  "time",
@@ -12268,7 +12359,7 @@ dependencies = [
  "futures 0.3.30",
  "log",
  "nohash-hasher",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "rand",
  "static_assertions",
 ]
@@ -12282,7 +12373,7 @@ dependencies = [
  "futures 0.3.30",
  "log",
  "nohash-hasher",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "pin-project 1.1.5",
  "rand",
  "static_assertions",
@@ -12298,7 +12389,7 @@ dependencies = [
  "instant",
  "log",
  "nohash-hasher",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.2",
  "pin-project 1.1.5",
  "rand",
  "static_assertions",
@@ -12330,7 +12421,7 @@ checksum = "9ce1b18ccd8e73a9321186f97e46f9f04b778851177567b1975109d26a08d2a6"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
@@ -12350,7 +12441,7 @@ checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.59",
+ "syn 2.0.60",
 ]
 
 [[package]]
