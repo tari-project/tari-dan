@@ -10,6 +10,8 @@ name: Build docker images
     branches:
       - 'development'
       - 'build_dockers*'
+      - 'build-all-*'
+      - 'build-dockers-*'
   schedule:
     - cron: '05 00 * * *'
   workflow_dispatch:
