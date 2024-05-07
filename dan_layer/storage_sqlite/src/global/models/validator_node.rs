@@ -63,7 +63,7 @@ impl<TAddr: NodeAddressable> TryFrom<DbValidatorNode> for ValidatorNode<TAddr> {
                     vn.id
                 ))
             })?,
-            sidechain_id: if vn.sidechain_id == &[0u8; 32] {
+            sidechain_id: if vn.sidechain_id == [0u8; 32] {
                 None
             } else {
                 Some(PublicKey::from_canonical_bytes(&vn.sidechain_id).map_err(|_| {
