@@ -315,7 +315,7 @@ where
             self.state_store.with_write_tx(|tx| {
                 TransactionRecord::new(transaction)
                     .set_abort(format!("Mempool validation failed: {e}"))
-                    .update(tx)
+                    .insert(tx)
             })?;
 
             #[cfg(feature = "metrics")]
