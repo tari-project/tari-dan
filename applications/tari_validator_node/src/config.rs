@@ -108,6 +108,8 @@ pub struct ValidatorNodeConfig {
     pub template_sidechain_id: Option<RistrettoPublicKey>,
     /// The burnt utxo sidechain id
     pub burnt_utxo_sidechain_id: Option<RistrettoPublicKey>,
+    /// If true, the node will run in listener mode. Default is false
+    pub is_listener_mode: bool
 }
 
 impl ValidatorNodeConfig {
@@ -152,6 +154,7 @@ impl Default for ValidatorNodeConfig {
             validator_node_sidechain_id: None,
             template_sidechain_id: None,
             burnt_utxo_sidechain_id: None,
+            is_listener_mode: false
         }
     }
 }

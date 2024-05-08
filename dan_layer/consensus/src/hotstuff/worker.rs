@@ -384,6 +384,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     }
 
     async fn request_initial_catch_up_sync(&mut self) -> Result<(), HotStuffError> {
+        debug!(target: LOG_TARGET, "🔥 Requesting initial catch-up sync");
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let committee = self.epoch_manager.get_local_committee(current_epoch).await?;
         for member in committee.shuffled() {

@@ -9,6 +9,7 @@ use crate::hotstuff::HotStuffError;
 
 #[derive(Debug)]
 pub enum ConsensusStateEvent {
+    ListenerMode,
     RegisteredForEpoch { epoch: Epoch },
     NotRegisteredForEpoch { epoch: Epoch },
     NeedSync,
@@ -24,6 +25,7 @@ impl Display for ConsensusStateEvent {
         #[allow(clippy::enum_glob_use)]
         use ConsensusStateEvent::*;
         match self {
+            ListenerMode => write!(f, "Listener mode"),
             RegisteredForEpoch { epoch } => write!(f, "Registered for epoch {}", epoch),
             NotRegisteredForEpoch { epoch } => write!(f, "Not registered for epoch {}", epoch),
             NeedSync => write!(f, "Behind peers"),

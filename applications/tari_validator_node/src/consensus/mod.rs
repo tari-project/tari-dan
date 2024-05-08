@@ -23,6 +23,8 @@ use crate::{
     },
     event_subscription::EventSubscription,
 };
+use tari_consensus::hotstuff::ConsensusWorkerContextConfig;
+
 
 mod block_transaction_executor;
 mod handle;
@@ -64,6 +66,7 @@ pub async fn spawn(
         TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
     >,
     consensus_constants: ConsensusConstants,
+    is_listener_mode : bool
 ) -> (
     JoinHandle<Result<(), anyhow::Error>>,
     ConsensusHandle,
@@ -107,6 +110,9 @@ pub async fn spawn(
         hotstuff: hotstuff_worker,
         state_sync: RpcStateSyncManager::new(network, epoch_manager, store, leader_strategy, client_factory),
         tx_current_state,
+        config: ConsensusWorkerContextConfig {
+            is_listener_mode
+        }
     };
 
     let handle = ConsensusWorker::new(shutdown_signal).spawn(context);

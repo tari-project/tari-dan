@@ -28,12 +28,18 @@ pub struct ConsensusWorker<TSpec> {
     _spec: PhantomData<TSpec>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ConsensusWorkerContextConfig {
+    pub is_listener_mode: bool,
+}
+
 #[derive(Debug)]
 pub struct ConsensusWorkerContext<TSpec: ConsensusSpec> {
     pub epoch_manager: TSpec::EpochManager,
     pub hotstuff: HotstuffWorker<TSpec>,
     pub state_sync: TSpec::SyncManager,
     pub tx_current_state: watch::Sender<ConsensusCurrentState>,
+    pub config : ConsensusWorkerContextConfig
 }
 
 impl<TSpec> ConsensusWorker<TSpec>
@@ -41,7 +47,7 @@ where
     TSpec: ConsensusSpec,
     HotStuffError: From<<TSpec::SyncManager as SyncManager>::Error>,
 {
-    pub fn new(shutdown_signal: ShutdownSignal) -> Self {
+    pub fn new( shutdown_signal: ShutdownSignal) -> Self {
         Self {
             shutdown_signal,
             _spec: PhantomData,
@@ -75,6 +81,9 @@ where
 
         let next_state = match (state, event) {
             (ConsensusState::Idle(state), ConsensusStateEvent::RegisteredForEpoch { .. }) => {
+                ConsensusState::CheckSync(state.into())
+            },
+            (ConsensusState::Idle(state), ConsensusStateEvent::ListenerMode) => {
                 ConsensusState::CheckSync(state.into())
             },
             (ConsensusState::CheckSync(state), ConsensusStateEvent::NeedSync) => ConsensusState::Syncing(state.into()),

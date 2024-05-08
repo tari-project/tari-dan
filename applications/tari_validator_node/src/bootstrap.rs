@@ -263,6 +263,7 @@ pub async fn spawn_services(
         shutdown.clone(),
         transaction_executor_builder,
         consensus_constants.clone(),
+        config.validator_node.is_listener_mode
     )
     .await;
     handles.push(consensus_join_handle);

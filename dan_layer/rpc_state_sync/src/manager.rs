@@ -456,6 +456,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             warn!(target: LOG_TARGET, "No peers available for sync");
             return Ok(SyncStatus::UpToDate);
         }
+
+        dbg!(&committee);
         let mut highest_qc: Option<QuorumCertificate> = None;
         let mut num_succeeded = 0;
         let max_failures = committee.max_failures();
@@ -605,6 +607,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
                 )
                 .await?;
             for (shard, mut committee) in committees {
+                dbg!(&committee);
                 info!(target: LOG_TARGET, "Syncing shard {} from previous epoch. Committee : {:?}", shard, committee);
                 committee.members.retain(|(addr, _)| *addr != this_vn.address);
                 committee.shuffle();

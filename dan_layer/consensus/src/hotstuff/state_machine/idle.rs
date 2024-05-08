@@ -35,6 +35,10 @@ where TSpec: ConsensusSpec
         // Subscribe before checking if we're registered to eliminate the chance that we miss the epoch event
         let mut epoch_events = context.epoch_manager.subscribe().await?;
         let current_epoch = context.epoch_manager.current_epoch().await?;
+        if context.config.is_listener_mode  {
+            debug!(target: LOG_TARGET, "Idle state is in listener mode");
+            return Ok(ConsensusStateEvent::ListenerMode);
+        }
         if self.is_registered_for_epoch(context, current_epoch).await? {
             return Ok(ConsensusStateEvent::RegisteredForEpoch { epoch: current_epoch });
         }
