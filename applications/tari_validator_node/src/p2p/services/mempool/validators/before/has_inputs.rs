@@ -36,7 +36,7 @@ impl Validator<Transaction> for HasInputs {
                 return Ok(());
             }
 
-            debug!(target: LOG_TARGET, "HasInputs - FAIL: No input shards");
+            warn!(target: LOG_TARGET, "HasInputs - FAIL: No input shards");
             return Err(MempoolError::NoInputs {
                 transaction_id: *transaction.id(),
             });
