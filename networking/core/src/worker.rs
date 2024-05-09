@@ -520,6 +520,7 @@ where
                     relay_peer_id, renewal, limit
                 );
             },
+
             RelayClient(event) => {
                 info!(target: LOG_TARGET, "🌎️ RelayClient event: {:?}", event);
             },
@@ -921,7 +922,7 @@ where
                 let _ignore = reply.send(Ok(NegotiatedSubstream::new(peer_id, protocol, stream)));
             },
             InboundSubstreamOpen { notification } => {
-                info!(target: LOG_TARGET, "📥 Inbound substream open: protocol={}", notification.protocol);
+                debug!(target: LOG_TARGET, "📥 Inbound substream open: protocol={}", notification.protocol);
                 self.substream_notifiers.notify(notification);
             },
             InboundFailure {

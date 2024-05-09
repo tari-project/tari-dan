@@ -40,7 +40,7 @@ pub enum SqliteStorageError {
         source: diesel::result::Error,
         operation: String,
     },
-    #[error("Could not migrate the database")]
+    #[error("Could not migrate the database: {source}")]
     MigrationError {
         #[from]
         source: Box<dyn Error + Send + Sync>,

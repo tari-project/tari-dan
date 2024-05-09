@@ -27,7 +27,7 @@ env:
   TS_LIBRARIES: ""
   TARI_TARGET_NETWORK: igor
   TARI_NETWORK: igor
-  toolchain: stable
+  toolchain: 1.77
   matrix-json-file: ".github/workflows/build_binaries.json"
   CARGO_HTTP_MULTIPLEXING: false
   CARGO_UNSTABLE_SPARSE_REGISTRY: true

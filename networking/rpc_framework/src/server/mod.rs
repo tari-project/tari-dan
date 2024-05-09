@@ -368,7 +368,7 @@ where
     }
 
     fn on_session_complete(&mut self, node_id: &PeerId) {
-        info!(target: LOG_TARGET, "Session complete for {}", node_id);
+        debug!(target: LOG_TARGET, "Session complete for {}", node_id);
         if let Some(v) = self.sessions.get_mut(node_id) {
             *v -= 1;
             if *v == 0 {
@@ -416,7 +416,7 @@ where
 
         match self.new_session_for(peer_id) {
             Ok(num_sessions) => {
-                info!(
+                debug!(
                     target: LOG_TARGET,
                     "NEW SESSION for {} ({} active) ", peer_id, num_sessions
                 );
@@ -446,7 +446,7 @@ where
                 #[cfg(feature = "metrics")]
                 num_sessions.inc();
                 service.start().await;
-                info!(target: LOG_TARGET, "END OF SESSION for {} ", peer_id,);
+                debug!(target: LOG_TARGET, "END OF SESSION for {} ", peer_id,);
                 #[cfg(feature = "metrics")]
                 num_sessions.dec();
 

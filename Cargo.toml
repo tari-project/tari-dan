@@ -1,6 +1,6 @@
 # NOTE: When editing this version, also edit the versions in template_built_in/templates/account and account_nft
 [workspace.package]
-version = "0.5.1"
+version = "0.5.3"
 edition = "2021"
 authors = ["The Tari Development Community"]
 repository = "https://github.com/tari-project/tari-dan"

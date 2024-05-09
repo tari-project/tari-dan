@@ -17,7 +17,7 @@ diesel::table! {
 diesel::table! {
     committees (id) {
         id -> Integer,
-        public_key -> Binary,
+        validator_node_id -> Integer,
         epoch -> BigInt,
         committee_bucket -> BigInt,
     }
@@ -63,7 +63,7 @@ diesel::table! {
         epoch -> BigInt,
         fee_claim_public_key -> Binary,
         address -> Text,
-        sidechain_id -> Nullable<Binary>,
+        sidechain_id -> Binary,
     }
 }
 

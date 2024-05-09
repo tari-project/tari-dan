@@ -2,7 +2,7 @@
   {
     "name": "linux-x86_64",
     "runs-on": "ubuntu-22.04",
-    "rust": "stable",
+    "rust": "1.77",
     "target": "x86_64-unknown-linux-gnu",
     "cross": false,
     "features": ""
@@ -10,7 +10,7 @@
   {
     "name": "linux-arm64",
     "runs-on": "ubuntu-20.04",
-    "rust": "stable",
+    "rust": "1.77",
     "target": "aarch64-unknown-linux-gnu",
     "cross": true,
     "features": "",
@@ -30,7 +30,7 @@
   {
     "name": "macos-x86_64",
     "runs-on": "macos-11",
-    "rust": "stable",
+    "rust": "1.77",
     "target": "x86_64-apple-darwin",
     "cross": false,
     "features": ""
@@ -38,7 +38,7 @@
   {
     "name": "macos-arm64",
     "runs-on": "macos-14",
-    "rust": "stable",
+    "rust": "1.77",
     "target": "aarch64-apple-darwin",
     "cross": false,
     "features": "",
@@ -48,7 +48,7 @@
   {
     "name": "windows-x64",
     "runs-on": "windows-2019",
-    "rust": "stable",
+    "rust": "1.77",
     "target": "x86_64-pc-windows-msvc",
     "cross": false,
     "features": ""
@@ -56,7 +56,7 @@
   {
     "name": "windows-arm64",
     "runs-on": "windows-latest",
-    "rust": "stable",
+    "rust": "1.77",
     "target": "aarch64-pc-windows-msvc",
     "cross": false,
     "target_bins": "tari_dan_wallet_cli, tari_dan_wallet_daemon, tari_indexer, tari_validator_node, tari_signaling_server",

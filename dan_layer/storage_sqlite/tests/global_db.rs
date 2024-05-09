@@ -63,7 +63,7 @@ fn update_committee_bucket(
     epoch: Epoch,
 ) {
     validator_nodes
-        .set_committee_bucket(derived_substate_address(public_key), committee_bucket, epoch)
+        .set_committee_bucket(derived_substate_address(public_key), committee_bucket, None, epoch)
         .unwrap();
 }
 
@@ -75,7 +75,9 @@ fn insert_and_get_within_epoch() {
     insert_vns(&mut validator_nodes, 2, Epoch(0), None);
     insert_vns(&mut validator_nodes, 1, Epoch(10), None);
 
-    let vns = validator_nodes.get_all_within_epochs(Epoch(0), Epoch(10)).unwrap();
+    let vns = validator_nodes
+        .get_all_within_epochs(Epoch(0), Epoch(10), None)
+        .unwrap();
     assert_eq!(vns.len(), 3);
 }
 
@@ -90,7 +92,9 @@ fn change_committee_bucket() {
     update_committee_bucket(&mut validator_nodes, &pk, Shard::from(3), Epoch(1));
     update_committee_bucket(&mut validator_nodes, &pk, Shard::from(7), Epoch(2));
     update_committee_bucket(&mut validator_nodes, &pk, Shard::from(4), Epoch(3));
-    let vns = validator_nodes.get_all_within_epochs(Epoch(0), Epoch(10)).unwrap();
+    let vns = validator_nodes
+        .get_all_within_epochs(Epoch(0), Epoch(10), None)
+        .unwrap();
     assert_eq!(vns[0].committee_shard, Some(Shard::from(4)));
 }
 
@@ -125,7 +129,7 @@ fn insert_and_get_within_shard_range_duplicate_public_keys() {
     };
 
     let vns = validator_nodes
-        .get_by_shard_range(Epoch(0), Epoch(10), start..=end)
+        .get_by_shard_range(Epoch(0), Epoch(10), None, start..=end)
         .unwrap();
     if shard_id > shard_id2 {
         assert_eq!(vns[0].public_key, pk2);
@@ -144,7 +148,9 @@ fn insert_and_get_within_shard_range_duplicate_public_keys() {
     }
     assert_eq!(vns.len(), 2);
 
-    let vn = validator_nodes.get_by_public_key(Epoch(0), Epoch(10), &pk).unwrap();
+    let vn = validator_nodes
+        .get_by_public_key(Epoch(0), Epoch(10), &pk, None)
+        .unwrap();
     assert_eq!(vn.epoch, Epoch(2));
     assert_eq!(vn.committee_shard, Some(Shard::from(2)));
 }

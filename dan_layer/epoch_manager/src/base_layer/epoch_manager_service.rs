@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use log::{error, info};
+use log::{debug, error, info};
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{DerivableFromPublicKey, NodeAddressable};
@@ -102,7 +102,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
 
     #[allow(clippy::too_many_lines)]
     async fn handle_request(&mut self, req: EpochManagerRequest<TAddr>) {
-        info!(target: LOG_TARGET, "Received request: {:?}", req);
+        debug!(target: LOG_TARGET, "Received request: {:?}", req);
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
             EpochManagerRequest::CurrentBlockInfo { reply } => handle(reply, Ok(self.inner.current_block_info())),

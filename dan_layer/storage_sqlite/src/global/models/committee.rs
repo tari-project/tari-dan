@@ -34,16 +34,8 @@ use crate::{
 #[diesel(table_name = committees)]
 pub struct DbCommittee {
     pub id: i32,
-    pub public_key: Vec<u8>,
+    pub validator_node_id: i32,
     pub epoch: i64,
     pub bucket: i64,
 }
 
-#[derive(Insertable)]
-#[diesel(table_name = committees)]
-pub struct NewValidatorNode {
-    pub vn_id: i32,
-    pub public_key: Vec<u8>,
-    pub epoch: i64,
-    pub bucket: i64,
-}

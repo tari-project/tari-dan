@@ -40,7 +40,7 @@ pub struct DbValidatorNode {
     pub committee_bucket: Option<i64>,
     pub fee_claim_public_key: Vec<u8>,
     pub address: String,
-    pub sidechain_id: Option<Vec<u8>>,
+    pub sidechain_id: Vec<u8>,
 }
 impl<TAddr: NodeAddressable> TryFrom<DbValidatorNode> for ValidatorNode<TAddr> {
     type Error = SqliteStorageError;
@@ -63,17 +63,16 @@ impl<TAddr: NodeAddressable> TryFrom<DbValidatorNode> for ValidatorNode<TAddr> {
                     vn.id
                 ))
             })?,
-            sidechain_id: vn
-                .sidechain_id
-                .map(|v| {
-                    PublicKey::from_canonical_bytes(&v).map_err(|_| {
-                        SqliteStorageError::MalformedDbData(format!(
-                            "Invalid sidechain id in validator node record id={}",
-                            vn.id
-                        ))
-                    })
-                })
-                .transpose()?,
+            sidechain_id: if vn.sidechain_id == [0u8; 32] {
+                None
+            } else {
+                Some(PublicKey::from_canonical_bytes(&vn.sidechain_id).map_err(|_| {
+                    SqliteStorageError::MalformedDbData(format!(
+                        "Invalid sidechain id in validator node record id={}",
+                        vn.id
+                    ))
+                })?)
+            },
         })
     }
 }
