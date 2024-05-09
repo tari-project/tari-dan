@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use crate::{substate_address::END_SHARD_MAX, uint::U256, SubstateAddress};
+use crate::{uint::U256, SubstateAddress};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -20,7 +20,7 @@ impl Shard {
     }
 
     pub fn to_substate_address_range(self, num_shards: u32) -> RangeInclusive<SubstateAddress> {
-        if num_shards == 0 {
+        if num_shards <= 1 {
             return RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::max());
         }
 
@@ -29,39 +29,56 @@ impl Shard {
         let num_shards = num_shards.min(crate::substate_address::MAX_NUM_SHARDS);
 
         if num_shards.is_power_of_two() {
-            let shard_size = END_SHARD_MAX >> num_shards.trailing_zeros();
-            let start = U256::from(self.0) * shard_size;
-            let end = if self.0 == num_shards - 1 {
-                U256::MAX
-            } else {
-                start + shard_size - 1
-            };
+            let shard_size = (U256::MAX >> num_shards.trailing_zeros()) + 1;
+            if self.0 == 0 {
+                return RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::from_u256(shard_size));
+            }
+
+            // Add one to each start to account for remainder
+            let start = U256::from(self.0) * shard_size + 1;
+
+            if self.0 == num_shards - 1 {
+                return RangeInclusive::new(SubstateAddress::from_u256(start), SubstateAddress::max());
+            }
+
+            let next_shard = (self.0 + 1).min(num_shards - 1);
+            let end = U256::from(next_shard) * shard_size;
             return RangeInclusive::new(SubstateAddress::from_u256(start), SubstateAddress::from_u256(end));
         }
 
-        // Round down to the next power of two.
         let num_shards_next_pow2 = num_shards.next_power_of_two();
         // Half the next power of two i.e. num_shards rounded down to previous power of two
         let num_shards_prev_pow2 = num_shards_next_pow2 >> 1;
+        let num_shards_next_pow2 = U256::from(num_shards_next_pow2);
+        // Power of two division using bit shifts, +1 to account for remainders
+        let half_shard_size = (U256::MAX >> num_shards_next_pow2.trailing_zeros()) + 1;
+
+        if self.0 == 0 {
+            return RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::from_u256(half_shard_size));
+        }
+
+        // Calculate size of shard at previous power of two
+        let full_shard_size = (U256::MAX >> num_shards_prev_pow2.trailing_zeros()) + 1;
         // The "extra" half shards in the space
         let num_half_shards = num_shards % num_shards_prev_pow2;
-
-        let num_shards_next_pow2 = U256::from(num_shards_next_pow2);
-        // Power of two division using bit shifts
-        let half_shard_size = END_SHARD_MAX >> num_shards_next_pow2.trailing_zeros();
-        let full_shard_size = END_SHARD_MAX >> num_shards_prev_pow2.trailing_zeros();
 
         let start = U256::from(self.0.min(num_half_shards * 2)) * half_shard_size +
             U256::from(self.0.saturating_sub(num_half_shards * 2)) * full_shard_size;
 
-        let end = if self.0 == num_shards - 1 {
-            // Any remainder when dividing the shards into the shard-space is added to the last shard
-            U256::MAX
-        } else if self.0 >= num_half_shards * 2 {
-            start + full_shard_size - 1
+        let start = if self.0 == 0 {
+            U256::ZERO
         } else {
-            start + half_shard_size - 1
+            // Add one to each start to account for remainder
+            start + 1
         };
+
+        if self.0 == num_shards - 1 {
+            return RangeInclusive::new(SubstateAddress::from_u256(start), SubstateAddress::max());
+        }
+
+        let next_shard = (self.0 + 1).min(num_shards - 1);
+        let end = U256::from(next_shard.min(num_half_shards * 2)) * half_shard_size +
+            U256::from(next_shard.saturating_sub(num_half_shards * 2)) * full_shard_size;
 
         RangeInclusive::new(SubstateAddress::from_u256(start), SubstateAddress::from_u256(end))
     }
@@ -101,24 +118,27 @@ mod test {
 
     #[test]
     fn committee_is_properly_computed() {
+        // TODO: clean this up a bit, I wrote this very hastily
         let power_of_twos = iter::successors(Some(1), |x| Some(x * 2)).take(10);
-        let mut split_map = IndexMap::<_, Vec<U256>>::new();
+        let mut split_map = IndexMap::<_, Vec<_>>::new();
         for num_of_shards in power_of_twos {
-            let mut previous_end = U256::ZERO;
+            let mut last_end = U256::ZERO;
             for shard_index in 0..num_of_shards {
                 let shard = Shard::from(shard_index);
                 let range = shard.to_substate_address_range(num_of_shards);
-                if shard_index > 0 {
+                if shard_index == 0 {
+                    assert_eq!(range.start().to_u256(), U256::ZERO, "First shard should start at 0");
+                } else {
                     assert_eq!(
                         range.start().to_u256(),
-                        previous_end + U256_ONE,
-                        "Bucket should start where the previous one ended+1"
+                        last_end + U256_ONE,
+                        "Shard should start where the previous one ended+1"
                     );
                 }
-                split_map.entry(num_of_shards).or_default().push(range.end().to_u256());
-                previous_end = range.end().to_u256();
+                last_end = range.end().to_u256();
+                split_map.entry(num_of_shards).or_default().push(range);
             }
-            assert_eq!(previous_end, U256::MAX, "Last bucket should end at U256::MAX");
+            assert_eq!(last_end, U256::MAX, "Last shard should end at U256::MAX");
         }
 
         let mut i = 0usize;
@@ -138,7 +158,25 @@ mod test {
                     .filter(|(i, _)| i % 2 == 1)
                     .map(|(_, s)| s),
             ) {
-                assert_eq!(*split, *next_split, "Bucket should end where the next one starts-1");
+                assert_eq!(
+                    split.end().to_u256(),
+                    next_split.end().to_u256(),
+                    "Bucket should end where the next one starts-1"
+                );
+            }
+
+            if splits.len() >= 2 {
+                let mut size = None;
+                for split in splits.iter().skip(1).take(splits.len() - 2) {
+                    if let Some(size) = size {
+                        assert_eq!(
+                            split.end().to_u256() - split.start().to_u256(),
+                            size,
+                            "Shard size should be consistent"
+                        );
+                    }
+                    size = Some(split.end().to_u256() - split.start().to_u256());
+                }
             }
         }
 
