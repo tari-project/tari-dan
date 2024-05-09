@@ -76,12 +76,3 @@ impl<TAddr: NodeAddressable> TryFrom<DbValidatorNode> for ValidatorNode<TAddr> {
         })
     }
 }
-
-#[derive(Insertable)]
-#[diesel(table_name = validator_nodes)]
-pub struct NewValidatorNode {
-    pub public_key: Vec<u8>,
-    pub shard_key: Vec<u8>,
-    pub epoch: i64,
-    pub fee_claim_public_key: Vec<u8>,
-}

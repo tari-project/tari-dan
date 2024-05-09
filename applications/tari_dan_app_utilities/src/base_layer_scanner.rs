@@ -334,6 +334,13 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
                 };
                 match sidechain_feature {
                     SideChainFeature::ValidatorNodeRegistration(reg) => {
+                        info!(
+                            target: LOG_TARGET,
+                            "⛓️ Validator node registration UTXO for {} sidechain {} found at height {}",
+                            reg.public_key(),
+                            reg.sidechain_id().map(|v| v.to_hex()).unwrap_or("None".to_string()),
+                            current_height,
+                        );
                         if reg.sidechain_id() == self.validator_node_sidechain_id.as_ref() {
                             self.register_validator_node_registration(current_height, reg.clone())
                                 .await?;

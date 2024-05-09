@@ -273,6 +273,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             self.epoch_manager.get_local_committee(block.epoch()).await?
         };
 
+        // TODO: Validate before we save anything.
         self.state_store.with_write_tx(|tx| {
             for transaction in transactions {
                 transaction.save(tx)?;

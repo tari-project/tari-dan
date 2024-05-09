@@ -223,6 +223,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             })?;
 
         let mut tx = self.global_db.create_transaction()?;
+        info!(target: LOG_TARGET, "Registering validator node for epoch {}", next_epoch);
         self.global_db.validator_nodes(&mut tx).insert_validator_node(
             TAddr::derive_from_public_key(registration.public_key()),
             registration.public_key().clone(),
