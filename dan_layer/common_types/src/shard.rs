@@ -28,59 +28,60 @@ impl Shard {
         // num_shards.leading_zeros() == 0.
         let num_shards = num_shards.min(crate::substate_address::MAX_NUM_SHARDS);
 
+        let shard_u256 = U256::from(self.0);
+
         if num_shards.is_power_of_two() {
-            let shard_size = (U256::MAX >> num_shards.trailing_zeros()) + 1;
+            let shard_size = U256::MAX >> num_shards.trailing_zeros();
             if self.0 == 0 {
                 return RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::from_u256(shard_size));
             }
 
             // Add one to each start to account for remainder
-            let start = U256::from(self.0) * shard_size + 1;
+            let start = shard_u256 * shard_size;
 
             if self.0 == num_shards - 1 {
-                return RangeInclusive::new(SubstateAddress::from_u256(start), SubstateAddress::max());
+                return RangeInclusive::new(SubstateAddress::from_u256(start + shard_u256), SubstateAddress::max());
             }
 
-            let next_shard = (self.0 + 1).min(num_shards - 1);
-            let end = U256::from(next_shard) * shard_size;
-            return RangeInclusive::new(SubstateAddress::from_u256(start), SubstateAddress::from_u256(end));
+            let next_shard = shard_u256 + 1;
+            let end = next_shard * shard_size;
+            return RangeInclusive::new(
+                SubstateAddress::from_u256(start + shard_u256),
+                SubstateAddress::from_u256(end + shard_u256),
+            );
         }
 
         let num_shards_next_pow2 = num_shards.next_power_of_two();
         // Half the next power of two i.e. num_shards rounded down to previous power of two
         let num_shards_prev_pow2 = num_shards_next_pow2 >> 1;
         let num_shards_next_pow2 = U256::from(num_shards_next_pow2);
-        // Power of two division using bit shifts, +1 to account for remainders
-        let half_shard_size = (U256::MAX >> num_shards_next_pow2.trailing_zeros()) + 1;
+        // Power of two division using bit shifts
+        let half_shard_size = U256::MAX >> num_shards_next_pow2.trailing_zeros();
 
         if self.0 == 0 {
             return RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::from_u256(half_shard_size));
         }
 
         // Calculate size of shard at previous power of two
-        let full_shard_size = (U256::MAX >> num_shards_prev_pow2.trailing_zeros()) + 1;
+        let full_shard_size = U256::MAX >> num_shards_prev_pow2.trailing_zeros();
         // The "extra" half shards in the space
         let num_half_shards = num_shards % num_shards_prev_pow2;
 
         let start = U256::from(self.0.min(num_half_shards * 2)) * half_shard_size +
             U256::from(self.0.saturating_sub(num_half_shards * 2)) * full_shard_size;
 
-        let start = if self.0 == 0 {
-            U256::ZERO
-        } else {
-            // Add one to each start to account for remainder
-            start + 1
-        };
-
         if self.0 == num_shards - 1 {
-            return RangeInclusive::new(SubstateAddress::from_u256(start), SubstateAddress::max());
+            return RangeInclusive::new(SubstateAddress::from_u256(start + shard_u256), SubstateAddress::max());
         }
 
-        let next_shard = (self.0 + 1).min(num_shards - 1);
+        let next_shard = self.0 + 1;
         let end = U256::from(next_shard.min(num_half_shards * 2)) * half_shard_size +
             U256::from(next_shard.saturating_sub(num_half_shards * 2)) * full_shard_size;
 
-        RangeInclusive::new(SubstateAddress::from_u256(start), SubstateAddress::from_u256(end))
+        RangeInclusive::new(
+            SubstateAddress::from_u256(start + shard_u256),
+            SubstateAddress::from_u256(end + shard_u256),
+        )
     }
 }
 
@@ -114,7 +115,6 @@ mod test {
     use indexmap::IndexMap;
 
     use super::*;
-    use crate::uint::U256_ONE;
 
     #[test]
     fn committee_is_properly_computed() {
@@ -131,7 +131,7 @@ mod test {
                 } else {
                     assert_eq!(
                         range.start().to_u256(),
-                        last_end + U256_ONE,
+                        last_end + 1,
                         "Shard should start where the previous one ended+1"
                     );
                 }
