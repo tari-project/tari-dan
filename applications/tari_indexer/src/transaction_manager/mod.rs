@@ -172,7 +172,7 @@ where
         // Get all unique members. The hashset already "shuffles" items owing to the random hash function.
         let mut all_members = HashSet::new();
         for substate_address in substate_addresses {
-            let committee = self.epoch_manager.get_committee(epoch, substate_address).await?;
+            let committee = self.epoch_manager.get_committee_for_substate(epoch, substate_address).await?;
             all_members.extend(committee.into_addresses());
         }
 

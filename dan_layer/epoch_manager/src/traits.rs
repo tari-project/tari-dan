@@ -45,10 +45,15 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn subscribe(&self) -> Result<broadcast::Receiver<EpochManagerEvent>, EpochManagerError>;
 
-    async fn get_committee(
+
+    async fn get_all_validator_nodes(&self, epoch: Epoch) -> Result<Vec<ValidatorNode<Self::Addr>>, EpochManagerError>;
+
+    async fn get_committees(&self, epoch: Epoch) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError>;
+
+    async fn get_committee_for_substate(
         &self,
         epoch: Epoch,
-        shard: SubstateAddress,
+        substate_address: SubstateAddress,
     ) -> Result<Committee<Self::Addr>, EpochManagerError>;
     async fn get_committee_within_shard_range(
         &self,
@@ -115,7 +120,7 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn get_local_committee(&self, epoch: Epoch) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let validator = self.get_our_validator_node(epoch).await?;
-        let committee = self.get_committee(epoch, validator.shard_key).await?;
+        let committee = self.get_committee_for_substate(epoch, validator.shard_key).await?;
         Ok(committee)
     }
 
@@ -125,7 +130,7 @@ pub trait EpochManagerReader: Send + Sync {
         public_key: &PublicKey,
     ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let validator = self.get_validator_node_by_public_key(epoch, public_key).await?;
-        let committee = self.get_committee(epoch, validator.shard_key).await?;
+        let committee = self.get_committee_for_substate(epoch, validator.shard_key).await?;
         Ok(committee)
     }
 
@@ -145,7 +150,7 @@ pub trait EpochManagerReader: Send + Sync {
         shard: SubstateAddress,
     ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let current_epoch = self.current_epoch().await?;
-        self.get_committee(current_epoch, shard).await
+        self.get_committee_for_substate(current_epoch, shard).await
     }
 
     async fn get_local_threshold_for_epoch(&self, epoch: Epoch) -> Result<usize, EpochManagerError> {

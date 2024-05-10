@@ -389,6 +389,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         &self,
         epoch_validators: Vec<(Epoch, PublicKey)>,
     ) -> Result<HashMap<(Epoch, PublicKey), ValidatorNode<TAddr>>, EpochManagerError> {
+
         todo!()
         // let mut tx = self.global_db.create_transaction()?;
         // #[allow(clippy::mutable_key_type)]
@@ -442,19 +443,10 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     pub fn get_committees(
         &self,
         epoch: Epoch,
-        substate_addresses: &HashSet<SubstateAddress>,
     ) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
-        todo!()
-        // let num_committees = self.get_number_of_committees(epoch)?;
-        // let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        // let mut tx = self.global_db.create_transaction()?;
-        // let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
-        // let buckets = substate_addresses
-        //     .iter()
-        //     .map(|addr| addr.to_committee_shard(num_committees))
-        //     .collect();
-        // let result = validator_node_db.get_committees_by_buckets(start_epoch, end_epoch, buckets)?;
-        // Ok(result)
+        let mut tx = self.global_db.create_transaction()?;
+        let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
+Ok(        validator_node_db.get_committees(epoch, self.config.validator_node_sidechain_id.as_ref())?)
     }
 
     pub fn get_committee_vns_from_shard_key(

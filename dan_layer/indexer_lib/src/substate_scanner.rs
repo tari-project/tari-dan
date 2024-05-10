@@ -217,10 +217,10 @@ where
     /// Returns a specific version. If this is not found an error is returned.
     pub async fn get_specific_substate_from_committee_by_shard(
         &self,
-        shard: SubstateAddress,
+        substate_address: SubstateAddress,
     ) -> Result<SubstateResult, IndexerError> {
         let epoch = self.committee_provider.current_epoch().await?;
-        let mut committee = self.committee_provider.get_committee(epoch, shard).await?;
+        let mut committee = self.committee_provider.get_committee_for_substate(epoch, substate_address).await?;
 
         committee.shuffle();
 
@@ -229,11 +229,11 @@ where
         let mut last_error = None;
         for vn_addr in committee.addresses() {
             // TODO: we cannot request data from ourselves via p2p rpc - so we should exclude ourselves from requests
-            debug!(target: LOG_TARGET, "Getting substate {} from vn {}", shard, vn_addr);
+            debug!(target: LOG_TARGET, "Getting substate {} from vn {}", substate_address, vn_addr);
 
-            match self.get_substate_from_vn(vn_addr, shard).await {
+            match self.get_substate_from_vn(vn_addr, substate_address).await {
                 Ok(substate_result) => {
-                    debug!(target: LOG_TARGET, "Got substate result for {} from vn {}: {:?}", shard, vn_addr, substate_result);
+                    debug!(target: LOG_TARGET, "Got substate result for {} from vn {}: {:?}", substate_address, vn_addr, substate_result);
                     match substate_result {
                         SubstateResult::Up { .. } | SubstateResult::Down { .. } => return Ok(substate_result),
                         SubstateResult::DoesNotExist => {
@@ -248,7 +248,7 @@ where
                     // We ignore a single VN error and keep querying the rest of the committee
                     error!(
                         target: LOG_TARGET,
-                        "Could not get substate {} from vn {}: {}", shard, vn_addr, e
+                        "Could not get substate {} from vn {}: {}", substate_address, vn_addr, e
                     );
                     last_error = Some(e);
                 },
@@ -257,7 +257,7 @@ where
 
         error!(
             target: LOG_TARGET,
-            "Could not get substate for shard {} from any of the validator nodes", shard,
+            "Could not get substate for shard {} from any of the validator nodes", substate_address,
         );
 
         if let Some(e) = last_error {
@@ -272,7 +272,7 @@ where
         shard_location: SubstateAddress,
     ) -> Result<VirtualSubstate, IndexerError> {
         let epoch = self.committee_provider.current_epoch().await?;
-        let mut committee = self.committee_provider.get_committee(epoch, shard_location).await?;
+        let mut committee = self.committee_provider.get_committee_for_substate(epoch, shard_location).await?;
 
         committee.shuffle();
 
@@ -346,7 +346,7 @@ where
         let substate_address = SubstateAddress::from_address(substate_id, version);
 
         let epoch = self.committee_provider.current_epoch().await?;
-        let mut committee = self.committee_provider.get_committee(epoch, substate_address).await?;
+        let mut committee = self.committee_provider.get_committee_for_substate(epoch, substate_address).await?;
 
         committee.members.shuffle(&mut OsRng);
 

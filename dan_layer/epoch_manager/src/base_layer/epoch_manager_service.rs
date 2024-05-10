@@ -159,10 +159,10 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                 handle(reply, self.inner.update_last_registration_epoch(epoch));
             },
             EpochManagerRequest::IsEpochValid { epoch, reply } => handle(reply, Ok(self.inner.is_epoch_valid(epoch))),
-            EpochManagerRequest::GetCommittees { epoch, substate_addresses, reply } => {
-                handle(reply, self.inner.get_committees(epoch, &substate_addresses));
+            EpochManagerRequest::GetCommittees { epoch,  reply } => {
+                handle(reply, self.inner.get_committees(epoch));
             },
-            EpochManagerRequest::GetCommittee { epoch, substate_address, reply } => {
+            EpochManagerRequest::GetCommitteeForSubstate { epoch, substate_address, reply } => {
                 handle(reply, self.inner.get_committee(epoch, substate_address));
             },
             EpochManagerRequest::GetCommitteeForShardRange {

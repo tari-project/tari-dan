@@ -139,6 +139,16 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
+    pub fn get_committees(
+        &mut self,
+        epoch: Epoch,
+        sidechain_id: Option<&PublicKey>
+    ) -> Result<HashMap<Shard, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
+        self.backend
+            .validator_nodes_get_committees(self.tx, epoch, sidechain_id)
+            .map_err(TGlobalDbAdapter::Error::into)
+    }
+
     pub fn set_committee_bucket(
         &mut self,
         substate_address: SubstateAddress,

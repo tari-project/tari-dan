@@ -161,26 +161,16 @@ impl<TAddr: NodeAddressable> EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    pub async fn get_all_validator_nodes(&self, epoch: Epoch) -> Result<Vec<ValidatorNode<TAddr>>, EpochManagerError> {
-        let (tx, rx) = oneshot::channel();
-        self.tx_request
-            .send(EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply: tx })
-            .await
-            .map_err(|_| EpochManagerError::SendError)?;
 
-        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
-    }
 
-    pub async fn get_committees_by_shards(
+    pub async fn get_committees(
         &self,
         epoch: Epoch,
-        substate_addresses: HashSet<SubstateAddress>,
     ) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommittees {
                 epoch,
-                substate_addresses,
                 reply: tx,
             })
             .await
@@ -203,14 +193,34 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_committee(
+    async fn get_all_validator_nodes(&self, epoch: Epoch) -> Result<Vec<ValidatorNode<TAddr>>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    async fn get_committees(&self, epoch: Epoch) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetCommittees { epoch, reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    async fn get_committee_for_substate(
         &self,
         epoch: Epoch,
         substate_address: SubstateAddress,
     ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(EpochManagerRequest::GetCommittee {
+            .send(EpochManagerRequest::GetCommitteeForSubstate {
                 epoch,
                 substate_address,
                 reply: tx,

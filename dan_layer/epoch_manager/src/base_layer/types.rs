@@ -81,10 +81,9 @@ pub enum EpochManagerRequest<TAddr> {
     },
     GetCommittees {
         epoch: Epoch,
-        substate_addresses: HashSet<SubstateAddress>,
         reply: Reply<HashMap<Shard, Committee<TAddr>>>,
     },
-    GetCommittee {
+    GetCommitteeForSubstate {
         epoch: Epoch,
         substate_address: SubstateAddress,
         reply: Reply<Committee<TAddr>>,

@@ -696,7 +696,7 @@ impl JsonRpcHandlers {
         let request = value.parse_params::<GetCommitteeRequest>()?;
         if let Ok(committee) = self
             .epoch_manager
-            .get_committee(request.epoch, request.substate_address)
+            .get_committee_for_substate(request.epoch, request.substate_address)
             .await
         {
             Ok(JsonRpcResponse::success(answer_id, GetCommitteeResponse { committee }))
