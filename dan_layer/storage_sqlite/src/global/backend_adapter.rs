@@ -501,10 +501,15 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
     ) -> Result<(), Self::Error> {
         use crate::global::schema::{committees, validator_nodes};
         let db_sidechain_id = sidechain_id.map(|id| id.as_bytes()).unwrap_or(&[0u8; 32]);
+        // This is probably not the most robust way of doing this. Ideally you would pass the validator ID to the
+        // function and use that to insert into the committees table.
         let validator_id = validator_nodes::table
             .select(validator_nodes::id)
             .filter(validator_nodes::shard_key.eq(shard_key.as_bytes()))
+            .filter(validator_nodes::start_epoch.le(epoch.as_u64() as i64))
+            .filter(validator_nodes::end_epoch.ge(epoch.as_u64() as i64))
             .filter(validator_nodes::sidechain_id.eq(db_sidechain_id))
+            .order_by(validator_nodes::registered_at_base_height.desc())
             .first::<i32>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -826,9 +831,12 @@ fn distinct_validators<TAddr: NodeAddressable>(
 ) -> Result<Vec<ValidatorNode<TAddr>>, SqliteStorageError> {
     // first, sort by registration block height so that we get newer registrations first
     let mut db_vns = Vec::with_capacity(sqlite_vns.len());
-    sqlite_vns.sort_by(|a, b| a.registered_at_base_height.cmp(&b.registered_at_base_height));
+    sqlite_vns.sort_by(|a, b| a.registered_at_base_height.cmp(&b.registered_at_base_height).reverse());
     let mut dedup_map = HashSet::<Vec<u8>>::with_capacity(sqlite_vns.len());
     for vn in sqlite_vns {
+        dbg!(&vn.public_key);
+        dbg!(&vn.registered_at_base_height);
+        dbg!(&vn.public_key);
         if !dedup_map.contains(&vn.public_key) {
             dedup_map.insert(vn.public_key.clone());
             db_vns.push(ValidatorNode::try_from(vn)?);
