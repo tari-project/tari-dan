@@ -575,48 +575,35 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         epoch: Epoch,
         shards: HashSet<Shard>,
     ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error> {
-        todo!()
-        // use crate::global::schema::{committees, validator_nodes};
-        //
-        // let validators = validator_nodes::table
-        //     .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
-        //     .select((
-        //         validator_nodes::id,
-        //         validator_nodes::public_key,
-        //         validator_nodes::shard_key,
-        //         coalesce_bigint(committees::epoch.nullable(), validator_nodes::epoch),
-        //         committees::committee_bucket.nullable(),
-        //         validator_nodes::fee_claim_public_key,
-        //         validator_nodes::address,
-        //         validator_nodes::sidechain_id,
-        //     ))
-        //     .filter(
-        //         coalesce_bigint(committees::epoch.nullable(), validator_nodes::epoch).ge(start_epoch.as_u64() as i64),
-        //     )
-        //     .filter(coalesce_bigint(committees::epoch.nullable(), validator_nodes::epoch).le(end_epoch.as_u64() as i64))
-        //     .filter(committees::committee_bucket.eq_any(shards.iter().map(|b| i64::from(b.as_u32()))))
-        //     .order_by(committees::epoch.desc())
-        //     .get_results::<DbValidatorNode>(tx.connection())
-        //     .map_err(|source| SqliteStorageError::DieselError {
-        //         source,
-        //         operation: "validator_nodes_get_by_buckets".to_string(),
-        //     })?;
-        //
-        // let mut shards = shards
-        //     .into_iter()
-        //     .map(|b| (b, Committee::empty()))
-        //     .collect::<HashMap<_, _>>();
-        //
-        // for validator in distinct_validators_sorted(validators)? {
-        //     let Some(bucket) = validator.committee_shard else {
-        //         continue;
-        //     };
-        //     if let Some(committee_mut) = shards.get_mut(&bucket) {
-        //         committee_mut.members.push((validator.address, validator.public_key));
-        //     }
-        // }
-        //
-        // Ok(shards)
+        use crate::global::schema::{committees, validator_nodes};
+        let mut shards = shards
+            .into_iter()
+            .map(|b| (b, Committee::empty()))
+            .collect::<HashMap<_, _>>();
+
+        for (shard, committee) in shards.iter_mut() {
+            let validators = validator_nodes::table
+                .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
+                .select(
+                    validator_nodes::all_columns
+                )
+                .filter(
+                    committees::epoch.eq(epoch.as_u64() as i64),
+                )
+                .filter(committees::committee_bucket.eq(i64::from(shard.as_u32())))
+                .get_results::<DbValidatorNode>(tx.connection())
+                .map_err(|source| SqliteStorageError::DieselError {
+                    source,
+                    operation: "validator_nodes_get_by_buckets".to_string(),
+                })?;
+
+            for validator in validators {
+                    committee.members.push((DbValidatorNode::try_parse_address(&validator.address)?, PublicKey::from_canonical_bytes(&validator.public_key).map_err(|_| {
+                        SqliteStorageError::MalformedDbData(format!("Invalid public key in validator node record id={}", validator.id))
+                    })?));
+            }
+        }
+         Ok(shards)
     }
 
     fn get_validator_nodes_within_epoch(
@@ -834,9 +821,6 @@ fn distinct_validators<TAddr: NodeAddressable>(
     sqlite_vns.sort_by(|a, b| a.registered_at_base_height.cmp(&b.registered_at_base_height).reverse());
     let mut dedup_map = HashSet::<Vec<u8>>::with_capacity(sqlite_vns.len());
     for vn in sqlite_vns {
-        dbg!(&vn.public_key);
-        dbg!(&vn.registered_at_base_height);
-        dbg!(&vn.public_key);
         if !dedup_map.contains(&vn.public_key) {
             dedup_map.insert(vn.public_key.clone());
             db_vns.push(ValidatorNode::try_from(vn)?);

@@ -52,7 +52,7 @@ impl<TAddr: NodeAddressable> TryFrom<DbValidatorNode> for ValidatorNode<TAddr> {
             shard_key: SubstateAddress::try_from(vn.shard_key).map_err(|_| {
                 SqliteStorageError::MalformedDbData(format!("Invalid shard id in validator node record id={}", vn.id))
             })?,
-            address: deserialize_json(&vn.address)?,
+            address: DbValidatorNode::try_parse_address(&vn.address)?,
             public_key: PublicKey::from_canonical_bytes(&vn.public_key).map_err(|_| {
                 SqliteStorageError::MalformedDbData(format!("Invalid public key in validator node record id={}", vn.id))
             })?,
@@ -76,5 +76,12 @@ impl<TAddr: NodeAddressable> TryFrom<DbValidatorNode> for ValidatorNode<TAddr> {
                 })?)
             },
         })
+    }
+}
+
+
+impl DbValidatorNode {
+    pub fn try_parse_address<T: serde::de::DeserializeOwned>(address: &str) -> Result<T, SqliteStorageError> {
+        deserialize_json(address)
     }
 }
