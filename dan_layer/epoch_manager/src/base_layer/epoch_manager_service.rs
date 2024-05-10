@@ -181,6 +181,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::AddValidatorNodeRegistration {
                 block_height,
                 registration,
+                value,
                 reply,
             } => handle(
                 reply,

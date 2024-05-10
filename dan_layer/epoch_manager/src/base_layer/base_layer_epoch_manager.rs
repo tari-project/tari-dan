@@ -129,7 +129,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         // persist the epoch data including the validator node set
         self.insert_current_epoch(epoch, epoch_header)?;
         self.update_base_layer_consensus_constants(base_layer_constants)?;
-        self.assign_validators_for_epoch()?;
+        self.assign_validators_for_epoch(epoch)?;
 
         // Only publish an epoch change event if we have synced the base layer (see on_scanning_complete)
         if self.is_initial_base_layer_sync_complete {
@@ -139,37 +139,34 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(())
     }
 
-    fn assign_validators_for_epoch(&mut self) -> Result<(), EpochManagerError> {
-        let (start_epoch, end_epoch) = self.get_epoch_range(self.current_epoch)?;
+    fn assign_validators_for_epoch(&mut self, epoch: Epoch) -> Result<(), EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_nodes = self.global_db.validator_nodes(&mut tx);
 
-        let vns = validator_nodes.get_all_within_epochs(
-            start_epoch,
-            end_epoch,
-            self.config.validator_node_sidechain_id.as_ref(),
-        )?;
+        let vns = validator_nodes.get_all_within_epoch(
+           epoch,
+             self.config.validator_node_sidechain_id.as_ref(),
+         )?;
 
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
 
         for vn in &vns {
-            validator_nodes.set_committee_bucket(
-                vn.shard_key,
-                vn.shard_key.to_committee_shard(num_committees),
-                self.config.validator_node_sidechain_id.as_ref(),
-                self.current_epoch,
-            )?;
-        }
+             validator_nodes.set_committee_bucket(
+                 vn.shard_key,
+                 vn.shard_key.to_committee_shard(num_committees),
+                 self.config.validator_node_sidechain_id.as_ref(),
+                 epoch
+             )?;
+         }
         tx.commit()?;
+         if let Some(vn) = vns.iter().find(|vn| vn.public_key == self.node_public_key) {
+             self.publish_event(EpochManagerEvent::ThisValidatorIsRegistered {
+                 epoch: epoch,
+                 shard_key: vn.shard_key,
+             });
+         }
 
-        if let Some(vn) = vns.iter().find(|vn| vn.public_key == self.node_public_key) {
-            self.publish_event(EpochManagerEvent::ThisValidatorIsRegistered {
-                epoch: self.current_epoch,
-                shard_key: vn.shard_key,
-            });
-        }
-
-        Ok(())
+         Ok(())
     }
 
     pub async fn get_base_layer_consensus_constants(
@@ -212,6 +209,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let constants = self.get_base_layer_consensus_constants().await?;
         let next_epoch = constants.height_to_epoch(block_height) + Epoch(1);
         let next_epoch_height = constants.epoch_to_height(next_epoch);
+        let validator_node_expiry = constants.validator_node_registration_expiry;
 
         let shard_key = self
             .base_node_client
@@ -228,7 +226,9 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             TAddr::derive_from_public_key(registration.public_key()),
             registration.public_key().clone(),
             shard_key,
+            block_height,
             next_epoch,
+            next_epoch + Epoch(validator_node_expiry),
             registration.claim_public_key().clone(),
             registration.sidechain_id().cloned(),
         )?;
@@ -346,18 +346,16 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         epoch: Epoch,
         public_key: &PublicKey,
     ) -> Result<Option<ValidatorNode<TAddr>>, EpochManagerError> {
-        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
         debug!(
             target: LOG_TARGET,
-            "get_validator_node: epoch {}-{} with public key {}", start_epoch, end_epoch, public_key,
+            "get_validator_node: epoch {} with public key {}", epoch, public_key,
         );
         let mut tx = self.global_db.create_transaction()?;
         let vn = self
             .global_db
             .validator_nodes(&mut tx)
             .get_by_public_key(
-                start_epoch,
-                end_epoch,
+                epoch,
                 public_key,
                 self.config.validator_node_sidechain_id.as_ref(),
             )
@@ -371,50 +369,52 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         epoch: Epoch,
         address: &TAddr,
     ) -> Result<Option<ValidatorNode<TAddr>>, EpochManagerError> {
-        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        debug!(
-            target: LOG_TARGET,
-            "get_validator_node: epoch {}-{} with public key {}", start_epoch, end_epoch, address,
-        );
-        let mut tx = self.global_db.create_transaction()?;
-        let vn = self
-            .global_db
-            .validator_nodes(&mut tx)
-            .get_by_address(start_epoch, end_epoch, address)
-            .optional()?;
-
-        Ok(vn)
+        todo!()
+        // let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        // debug!(
+        //     target: LOG_TARGET,
+        //     "get_validator_node: epoch {}-{} with public key {}", start_epoch, end_epoch, address,
+        // );
+        // let mut tx = self.global_db.create_transaction()?;
+        // let vn = self
+        //     .global_db
+        //     .validator_nodes(&mut tx)
+        //     .get_by_address(start_epoch, end_epoch, address)
+        //     .optional()?;
+        //
+        // Ok(vn)
     }
 
     pub fn get_many_validator_nodes(
         &self,
         epoch_validators: Vec<(Epoch, PublicKey)>,
     ) -> Result<HashMap<(Epoch, PublicKey), ValidatorNode<TAddr>>, EpochManagerError> {
-        let mut tx = self.global_db.create_transaction()?;
-        #[allow(clippy::mutable_key_type)]
-        let mut validators = HashMap::with_capacity(epoch_validators.len());
-
-        for (epoch, public_key) in epoch_validators {
-            let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-            let vn = self
-                .global_db
-                .validator_nodes(&mut tx)
-                .get_by_public_key(
-                    start_epoch,
-                    end_epoch,
-                    &public_key,
-                    self.config.validator_node_sidechain_id.as_ref(),
-                )
-                .optional()?
-                .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
-                    address: public_key.to_string(),
-                    epoch,
-                })?;
-
-            validators.insert((epoch, public_key), vn);
-        }
-
-        Ok(validators)
+        todo!()
+        // let mut tx = self.global_db.create_transaction()?;
+        // #[allow(clippy::mutable_key_type)]
+        // let mut validators = HashMap::with_capacity(epoch_validators.len());
+        //
+        // for (epoch, public_key) in epoch_validators {
+        //     let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        //     let vn = self
+        //         .global_db
+        //         .validator_nodes(&mut tx)
+        //         .get_by_public_key(
+        //             start_epoch,
+        //             end_epoch,
+        //             &public_key,
+        //             self.config.validator_node_sidechain_id.as_ref(),
+        //         )
+        //         .optional()?
+        //         .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
+        //             address: public_key.to_string(),
+        //             epoch,
+        //         })?;
+        //
+        //     validators.insert((epoch, public_key), vn);
+        // }
+        //
+        // Ok(validators)
     }
 
     pub fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
@@ -444,16 +444,17 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         epoch: Epoch,
         substate_addresses: &HashSet<SubstateAddress>,
     ) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
-        let num_committees = self.get_number_of_committees(epoch)?;
-        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        let mut tx = self.global_db.create_transaction()?;
-        let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
-        let buckets = substate_addresses
-            .iter()
-            .map(|addr| addr.to_committee_shard(num_committees))
-            .collect();
-        let result = validator_node_db.get_committees_by_buckets(start_epoch, end_epoch, buckets)?;
-        Ok(result)
+        todo!()
+        // let num_committees = self.get_number_of_committees(epoch)?;
+        // let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        // let mut tx = self.global_db.create_transaction()?;
+        // let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
+        // let buckets = substate_addresses
+        //     .iter()
+        //     .map(|addr| addr.to_committee_shard(num_committees))
+        //     .collect();
+        // let result = validator_node_db.get_committees_by_buckets(start_epoch, end_epoch, buckets)?;
+        // Ok(result)
     }
 
     pub fn get_committee_vns_from_shard_key(
@@ -461,33 +462,34 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         epoch: Epoch,
         substate_address: SubstateAddress,
     ) -> Result<Vec<ValidatorNode<TAddr>>, EpochManagerError> {
-        // retrieve the validator nodes for this epoch from database, sorted by shard_key
-        let vns = self.get_validator_nodes_per_epoch(epoch)?;
-        if vns.is_empty() {
-            return Err(EpochManagerError::NoCommitteeVns {
-                substate_address,
-                epoch,
-            });
-        }
-
-        let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
-        if num_committees == 1 {
-            return Ok(vns);
-        }
-
-        // A shard a equal slice of the shard space that a validator fits into
-        let shard = substate_address.to_committee_shard(num_committees);
-
-        let selected_vns = vns
-            .into_iter()
-            .filter(|vn| {
-                vn.committee_shard
-                    .unwrap_or_else(|| vn.shard_key.to_committee_shard(num_committees)) ==
-                    shard
-            })
-            .collect();
-
-        Ok(selected_vns)
+        todo!()
+        // // retrieve the validator nodes for this epoch from database, sorted by shard_key
+        // let vns = self.get_validator_nodes_per_epoch(epoch)?;
+        // if vns.is_empty() {
+        //     return Err(EpochManagerError::NoCommitteeVns {
+        //         substate_address,
+        //         epoch,
+        //     });
+        // }
+        //
+        // let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
+        // if num_committees == 1 {
+        //     return Ok(vns);
+        // }
+        //
+        // // A shard a equal slice of the shard space that a validator fits into
+        // let shard = substate_address.to_committee_shard(num_committees);
+        //
+        // let selected_vns = vns
+        //     .into_iter()
+        //     .filter(|vn| {
+        //         vn.committee_shard
+        //             .unwrap_or_else(|| vn.shard_key.to_committee_shard(num_committees)) ==
+        //             shard
+        //     })
+        //     .collect();
+        //
+        // Ok(selected_vns)
     }
 
     pub fn get_committee(&self, epoch: Epoch, shard: SubstateAddress) -> Result<Committee<TAddr>, EpochManagerError> {
@@ -503,48 +505,38 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         substate_address: SubstateAddress,
         identity: &TAddr,
     ) -> Result<bool, EpochManagerError> {
-        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        let mut tx = self.global_db.create_transaction()?;
-        let mut vn_db = self.global_db.validator_nodes(&mut tx);
-        let num_vns = vn_db.count(start_epoch, end_epoch, self.config.validator_node_sidechain_id.as_ref())?;
-        let vn = vn_db.get_by_address(start_epoch, end_epoch, identity)?;
-        let num_committees = calculate_num_committees(num_vns, self.config.committee_size);
-        let shard = substate_address.to_committee_shard(num_committees);
-        match vn.committee_shard {
-            Some(s) => Ok(s == shard),
-            None => Ok(false),
-        }
+        todo!()
+        // let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        // let mut tx = self.global_db.create_transaction()?;
+        // let mut vn_db = self.global_db.validator_nodes(&mut tx);
+        // let num_vns = vn_db.count(start_epoch, end_epoch, self.config.validator_node_sidechain_id.as_ref())?;
+        // let vn = vn_db.get_by_address(start_epoch, end_epoch, identity)?;
+        // let num_committees = calculate_num_committees(num_vns, self.config.committee_size);
+        // let shard = substate_address.to_committee_shard(num_committees);
+        // match vn.committee_shard {
+        //     Some(s) => Ok(s == shard),
+        //     None => Ok(false),
+        // }
     }
 
     pub fn get_number_of_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError> {
-        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-
-        let mut tx = self.global_db.create_transaction()?;
-        let num_vns = self.global_db.validator_nodes(&mut tx).count(
-            start_epoch,
-            end_epoch,
-            self.config.validator_node_sidechain_id.as_ref(),
-        )?;
-        Ok(calculate_num_committees(num_vns, self.config.committee_size))
-    }
-
-    fn get_epoch_range(&self, end_epoch: Epoch) -> Result<(Epoch, Epoch), EpochManagerError> {
-        let consensus_constants = self
-            .base_layer_consensus_constants
-            .as_ref()
-            .ok_or(EpochManagerError::BaseLayerConsensusConstantsNotSet)?;
-
-        let start_epoch = end_epoch.saturating_sub(consensus_constants.validator_node_registration_expiry());
-        Ok((start_epoch, end_epoch))
+        // let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        //
+        // let mut tx = self.global_db.create_transaction()?;
+        // let num_vns = self.global_db.validator_nodes(&mut tx).count(
+        //     start_epoch,
+        //     end_epoch,
+        //     self.config.validator_node_sidechain_id.as_ref(),
+        // )?;
+        // Ok(calculate_num_committees(num_vns, self.config.committee_size))
+        todo!()
     }
 
     pub fn get_validator_nodes_per_epoch(&self, epoch: Epoch) -> Result<Vec<ValidatorNode<TAddr>>, EpochManagerError> {
-        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
 
         let mut tx = self.global_db.create_transaction()?;
-        let db_vns = self.global_db.validator_nodes(&mut tx).get_all_within_epochs(
-            start_epoch,
-            end_epoch,
+        let db_vns = self.global_db.validator_nodes(&mut tx).get_all_within_epoch(
+            epoch,
             self.config.validator_node_sidechain_id.as_ref(),
         )?;
         let vns = db_vns.into_iter().map(Into::into).collect();
@@ -607,28 +599,29 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         epoch: Epoch,
         substate_address_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Committee<TAddr>, EpochManagerError> {
-        let num_committees = self.get_number_of_committees(epoch)?;
-
-        // Since we have fixed boundaries for committees, we want to include all validators within any range "touching"
-        // the range we are searching for. For e.g. the committee for half a committee shard is the same committee as
-        // for a whole committee shard.
-        let rounded_substate_address_range = {
-            let start_range = substate_address_range.start().to_committee_range(num_committees);
-            let end_range = substate_address_range.end().to_committee_range(num_committees);
-            *start_range.start()..=*end_range.end()
-        };
-        let mut tx = self.global_db.create_transaction()?;
-        let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
-        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        let validators = validator_node_db.get_by_shard_range(
-            start_epoch,
-            end_epoch,
-            self.config.validator_node_sidechain_id.as_ref(),
-            rounded_substate_address_range,
-        )?;
-        Ok(Committee::new(
-            validators.into_iter().map(|v| (v.address, v.public_key)).collect(),
-        ))
+        // let num_committees = self.get_number_of_committees(epoch)?;
+        //
+        // // Since we have fixed boundaries for committees, we want to include all validators within any range "touching"
+        // // the range we are searching for. For e.g. the committee for half a committee shard is the same committee as
+        // // for a whole committee shard.
+        // let rounded_substate_address_range = {
+        //     let start_range = substate_address_range.start().to_committee_range(num_committees);
+        //     let end_range = substate_address_range.end().to_committee_range(num_committees);
+        //     *start_range.start()..=*end_range.end()
+        // };
+        // let mut tx = self.global_db.create_transaction()?;
+        // let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
+        // let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        // let validators = validator_node_db.get_by_shard_range(
+        //     start_epoch,
+        //     end_epoch,
+        //     self.config.validator_node_sidechain_id.as_ref(),
+        //     rounded_substate_address_range,
+        // )?;
+        // Ok(Committee::new(
+        //     validators.into_iter().map(|v| (v.address, v.public_key)).collect(),
+        // ))
+        todo!()
     }
 
     pub fn get_our_validator_node(&self, epoch: Epoch) -> Result<ValidatorNode<TAddr>, EpochManagerError> {
@@ -644,12 +637,9 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     }
 
     pub fn get_total_validator_count(&self, epoch: Epoch) -> Result<u64, EpochManagerError> {
-        let mut tx = self.global_db.create_transaction()?;
-        let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
-        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        let num_validators =
-            validator_node_db.count(start_epoch, end_epoch, self.config.validator_node_sidechain_id.as_ref())?;
-        Ok(num_validators)
+        self.get_validator_nodes_per_epoch(epoch)?.len().try_into().map_err(|_| EpochManagerError::IntegerOverflow {
+            func: "get_total_validator_count",
+        })
     }
 
     pub fn get_num_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError> {
@@ -691,11 +681,12 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         epoch: Epoch,
         buckets: HashSet<Shard>,
     ) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
-        let mut tx = self.global_db.create_transaction()?;
-        let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
-        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        let committees = validator_node_db.get_committees_by_buckets(start_epoch, end_epoch, buckets)?;
-        Ok(committees)
+        // let mut tx = self.global_db.create_transaction()?;
+        // let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
+        // let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        // let committees = validator_node_db.get_committees_by_buckets(start_epoch, end_epoch, buckets)?;
+        // Ok(committees)
+        todo!()
     }
 
     pub fn get_fee_claim_public_key(&self) -> Result<Option<PublicKey>, EpochManagerError> {
@@ -727,40 +718,41 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     }
 
     pub async fn get_network_committees(&self) -> Result<NetworkCommitteeInfo<TAddr>, EpochManagerError> {
-        let current_epoch = self.current_epoch;
-        let num_committees = self.get_num_committees(current_epoch)?;
-
-        let mut validators = self.get_validator_nodes_per_epoch(current_epoch)?;
-        validators.sort_by(|vn_a, vn_b| vn_b.committee_shard.cmp(&vn_a.committee_shard));
-
-        // Group by bucket, IndexMap used to preserve ordering
-        let mut validators_per_bucket = IndexMap::with_capacity(validators.len());
-        for validator in validators {
-            validators_per_bucket
-                .entry(
-                    validator
-                        .committee_shard
-                        .expect("validator committee bucket must have been populated within valid epoch"),
-                )
-                .or_insert_with(Vec::new)
-                .push(validator);
-        }
-
-        let committees = validators_per_bucket
-            .into_iter()
-            .map(|(bucket, validators)| CommitteeShardInfo {
-                shard: bucket,
-                substate_address_range: bucket.to_substate_address_range(num_committees),
-                validators: Committee::new(validators.into_iter().map(|v| (v.address, v.public_key)).collect()),
-            })
-            .collect();
-
-        let network_committee_info = NetworkCommitteeInfo {
-            epoch: current_epoch,
-            committees,
-        };
-
-        Ok(network_committee_info)
+        // let current_epoch = self.current_epoch;
+        // let num_committees = self.get_num_committees(current_epoch)?;
+        //
+        // let mut validators = self.get_validator_nodes_per_epoch(current_epoch)?;
+        // validators.sort_by(|vn_a, vn_b| vn_b.committee_shard.cmp(&vn_a.committee_shard));
+        //
+        // // Group by bucket, IndexMap used to preserve ordering
+        // let mut validators_per_bucket = IndexMap::with_capacity(validators.len());
+        // for validator in validators {
+        //     validators_per_bucket
+        //         .entry(
+        //             validator
+        //                 .committee_shard
+        //                 .expect("validator committee bucket must have been populated within valid epoch"),
+        //         )
+        //         .or_insert_with(Vec::new)
+        //         .push(validator);
+        // }
+        //
+        // let committees = validators_per_bucket
+        //     .into_iter()
+        //     .map(|(bucket, validators)| CommitteeShardInfo {
+        //         shard: bucket,
+        //         substate_address_range: bucket.to_substate_address_range(num_committees),
+        //         validators: Committee::new(validators.into_iter().map(|v| (v.address, v.public_key)).collect()),
+        //     })
+        //     .collect();
+        //
+        // let network_committee_info = NetworkCommitteeInfo {
+        //     epoch: current_epoch,
+        //     committees,
+        // };
+        //
+        // Ok(network_committee_info)
+        todo!()
     }
 }
 

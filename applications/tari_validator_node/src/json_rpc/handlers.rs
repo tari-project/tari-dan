@@ -731,33 +731,41 @@ impl JsonRpcHandlers {
             .await
             .map_err(internal_error(answer_id))?;
 
-        validators.sort_by(|vn_a, vn_b| vn_b.committee_shard.cmp(&vn_a.committee_shard));
-        // Group by bucket, IndexMap used to preserve ordering
-        let mut validators_per_bucket = IndexMap::with_capacity(validators.len());
-        for validator in validators {
-            validators_per_bucket
-                .entry(
-                    validator
-                        .committee_shard
-                        .expect("validator committee bucket must have been populated within valid epoch"),
-                )
-                .or_insert_with(Vec::new)
-                .push(validator);
-        }
-
-        let committees = validators_per_bucket
-            .into_iter()
-            .map(|(bucket, validators)| CommitteeShardInfo {
-                shard: bucket,
-                substate_address_range: bucket.to_substate_address_range(num_committees),
-                validators: validators.into_iter().map(Into::into).collect(),
-            })
-            .collect();
-
+        // TODO: Populate with actual info
         Ok(JsonRpcResponse::success(answer_id, GetNetworkCommitteeResponse {
             current_epoch,
-            committees,
+            committees: vec![],
         }))
+        // let committees = self.epoch_manager.get_committee
+
+        // validators.sort_by(|vn_a, vn_b| vn_b.committee_shard.cmp(&vn_a.committee_shard));
+        // Group by bucket, IndexMap used to preserve ordering
+        // let mut validators_per_bucket = IndexMap::with_capacity(validators.len());
+        // for validator in validators {
+        //     validators_per_bucket
+        //         .entry(
+        //             validator
+        //                 .committee_shard
+        //                 .expect("validator committee bucket must have been populated within valid epoch"),
+        //         )
+        //         .or_insert_with(Vec::new)
+        //         .push(validator);
+        // }
+        //
+        // let committees = validators_per_bucket
+        //     .into_iter()
+        //     .map(|(bucket, validators)| CommitteeShardInfo {
+        //         shard: bucket,
+        //         substate_address_range: bucket.to_substate_address_range(num_committees),
+        //         validators: validators.into_iter().map(Into::into).collect(),
+        //     })
+        //     .collect();
+        //
+        // Ok(JsonRpcResponse::success(answer_id, GetNetworkCommitteeResponse {
+        //     current_epoch,
+        //     committees,
+        // }))
+        // todo!()
     }
 
     pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {

@@ -8,6 +8,7 @@ use std::{
 
 use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
+use tari_core::transactions::tari_amount::MicroMinotari;
 use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard, NetworkCommitteeInfo},
@@ -54,6 +55,7 @@ pub enum EpochManagerRequest<TAddr> {
     AddValidatorNodeRegistration {
         block_height: u64,
         registration: ValidatorNodeRegistration,
+        value: MicroMinotari,
         reply: Reply<()>,
     },
     AddBlockHash {

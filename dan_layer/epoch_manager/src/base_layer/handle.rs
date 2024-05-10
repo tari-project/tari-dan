@@ -9,6 +9,7 @@ use std::{
 use async_trait::async_trait;
 use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
+use tari_core::transactions::tari_amount::MicroMinotari;
 use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard, NetworkCommitteeInfo},
@@ -105,12 +106,14 @@ impl<TAddr: NodeAddressable> EpochManagerHandle<TAddr> {
         &self,
         block_height: u64,
         registration: ValidatorNodeRegistration,
+        value_of_registration: MicroMinotari
     ) -> Result<(), EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::AddValidatorNodeRegistration {
                 block_height,
                 registration,
+                value: value_of_registration,
                 reply: tx,
             })
             .await
