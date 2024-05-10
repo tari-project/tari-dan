@@ -270,7 +270,11 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         let local_committee = if block.justifies_parent() {
             Committee::new(vec![])
         } else {
-            self.epoch_manager.get_local_committee(block.epoch()).await?
+            self.epoch_manager.get_committees_by_shards(block.epoch(), vec![block.shard()].into_iter().collect()).await?
+                .into_iter()
+                .next()
+                .map(|(_, committee)| committee)
+                .unwrap_or_else(Committee::empty)
         };
 
         // TODO: Validate before we save anything.

@@ -174,13 +174,13 @@ impl<TAddr: NodeAddressable> EpochManagerHandle<TAddr> {
     pub async fn get_committees_by_shards(
         &self,
         epoch: Epoch,
-        shards: HashSet<SubstateAddress>,
+        substate_addresses: HashSet<SubstateAddress>,
     ) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommittees {
                 epoch,
-                shards,
+                substate_addresses,
                 reply: tx,
             })
             .await
@@ -206,13 +206,13 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
     async fn get_committee(
         &self,
         epoch: Epoch,
-        shard: SubstateAddress,
+        substate_address: SubstateAddress,
     ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommittee {
                 epoch,
-                shard,
+                substate_address,
                 reply: tx,
             })
             .await
@@ -311,13 +311,13 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
     async fn get_committee_shard(
         &self,
         epoch: Epoch,
-        shard: SubstateAddress,
+        substate_address: SubstateAddress,
     ) -> Result<CommitteeShard, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommitteeShard {
                 epoch,
-                shard,
+                substate_address,
                 reply: tx,
             })
             .await

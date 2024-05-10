@@ -493,8 +493,8 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(res)
     }
 
-    pub fn get_committee(&self, epoch: Epoch, shard: SubstateAddress) -> Result<Committee<TAddr>, EpochManagerError> {
-        let result = self.get_committee_vns_from_shard_key(epoch, shard)?;
+    pub fn get_committee(&self, epoch: Epoch, substate_address: SubstateAddress) -> Result<Committee<TAddr>, EpochManagerError> {
+        let result = self.get_committee_vns_from_shard_key(epoch, substate_address)?;
         Ok(Committee::new(
             result.into_iter().map(|v| (v.address, v.public_key)).collect(),
         ))
