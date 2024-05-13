@@ -591,7 +591,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
             // We are behind at least one epoch.
             // We get the current substate range, and we asks committees from previous epoch in this range to give us
             // data.
-            let local_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+            let local_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
             let current_num_committee = self.epoch_manager.get_num_committees(current_epoch).await?;
             let range = local_shard.shard().to_substate_address_range(current_num_committee);
             let prev_epoch = current_epoch.saturating_sub(Epoch(1));
@@ -643,7 +643,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
             // We are behind at least one epoch.
             // We get the current substate range, and we asks committees from previous epoch in this range to give us
             // data.
-            let local_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+            let local_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
             let current_num_committee = self.epoch_manager.get_num_committees(current_epoch).await?;
             let range = local_shard.shard().to_substate_address_range(current_num_committee);
             let prev_epoch = current_epoch.saturating_sub(Epoch(1));

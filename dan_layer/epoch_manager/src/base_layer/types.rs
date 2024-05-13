@@ -11,7 +11,7 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::transactions::tari_amount::MicroMinotari;
 use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard, NetworkCommitteeInfo},
+    committee::{Committee, CommitteeInfo, NetworkCommitteeInfo},
     shard::Shard,
     Epoch,
     SubstateAddress,
@@ -123,22 +123,22 @@ pub enum EpochManagerRequest<TAddr> {
         epoch: Epoch,
         reply: Reply<ValidatorNode<TAddr>>,
     },
-    GetCommitteeShard {
+    GetCommitteeInfo {
         epoch: Epoch,
         substate_address: SubstateAddress,
-        reply: Reply<CommitteeShard>,
+        reply: Reply<CommitteeInfo>,
     },
-    GetLocalCommitteeShard {
+    GetLocalCommitteeInfo {
         epoch: Epoch,
-        reply: Reply<CommitteeShard>,
+        reply: Reply<CommitteeInfo>,
     },
     GetNumCommittees {
         epoch: Epoch,
         reply: Reply<u32>,
     },
-    GetCommitteesByBuckets {
+    GetCommitteesForShards {
         epoch: Epoch,
-        buckets: HashSet<Shard>,
+        shards: HashSet<Shard>,
         reply: Reply<HashMap<Shard, Committee<TAddr>>>,
     },
     GetBaseLayerBlockHeight {

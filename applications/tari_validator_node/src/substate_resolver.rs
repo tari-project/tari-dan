@@ -268,7 +268,7 @@ where
             return Ok(virtual_substates);
         }
 
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
         #[allow(clippy::mutable_key_type)]
         let validators = self
             .epoch_manager

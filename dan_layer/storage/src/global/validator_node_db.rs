@@ -118,26 +118,27 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
-    pub fn get_by_shard_range(
+    pub fn get_committees_for_shards(
         &mut self,
         epoch: Epoch,
-        sidechain_id: Option<&PublicKey>,
-        shard_range: RangeInclusive<SubstateAddress>,
-    ) -> Result<Vec<ValidatorNode<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
+        shards: HashSet<Shard>,
+    ) -> Result<HashMap<Shard, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
         self.backend
-            .validator_nodes_get_by_shard_range(self.tx, epoch, sidechain_id, shard_range)
+            .validator_nodes_get_for_shards(self.tx, epoch, shards)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
-    pub fn get_committees_by_buckets(
+    pub fn get_committee_for_shard(
         &mut self,
         epoch: Epoch,
-        buckets: HashSet<Shard>,
-    ) -> Result<HashMap<Shard, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
-        self.backend
-            .validator_nodes_get_by_buckets(self.tx, epoch, buckets)
-            .map_err(TGlobalDbAdapter::Error::into)
+        shard: Shard,
+    ) -> Result<Option<Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
+        let mut buckets = HashSet::new();
+        buckets.insert(shard);
+let res =        self.get_committees_for_shards(epoch, buckets)?;
+         Ok(res.get(&shard).cloned())
     }
+
 
     pub fn get_committees(
         &mut self,
@@ -145,7 +146,7 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         sidechain_id: Option<&PublicKey>
     ) -> Result<HashMap<Shard, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
         self.backend
-            .validator_nodes_get_committees(self.tx, epoch, sidechain_id)
+            .validator_nodes_get_committees_for_epoch(self.tx, epoch, sidechain_id)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 

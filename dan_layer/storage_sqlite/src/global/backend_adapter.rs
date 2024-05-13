@@ -491,7 +491,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         Ok(count as u64)
     }
 
-    fn validator_nodes_get_committees(&self, tx: &mut Self::DbTransaction<'_>, epoch: Epoch, sidechain_id: Option<&PublicKey>, ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error> {
+    fn validator_nodes_get_committees_for_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: Epoch, sidechain_id: Option<&PublicKey>, ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error> {
         use crate::global::schema::{committees, validator_nodes};
 
         let db_sidechain_id = sidechain_id.map(|id| id.as_bytes()).unwrap_or(&[0u8; 32]);
@@ -561,7 +561,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         Ok(())
     }
 
-    fn validator_nodes_get_by_shard_range(
+    fn validator_nodes_get_by_substate_range(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
@@ -601,7 +601,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         distinct_validators_sorted(validators)
     }
 
-    fn validator_nodes_get_by_buckets(
+    fn validator_nodes_get_for_shards(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,

@@ -163,7 +163,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                 handle(reply, self.inner.get_committees(epoch));
             },
             EpochManagerRequest::GetCommitteeForSubstate { epoch, substate_address, reply } => {
-                handle(reply, self.inner.get_committee(epoch, substate_address));
+                handle(reply, self.inner.get_committee_for_substate(epoch, substate_address));
             },
             EpochManagerRequest::GetCommitteeForShardRange {
                 epoch,
@@ -205,17 +205,17 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::GetOurValidatorNode { epoch, reply } => {
                 handle(reply, self.inner.get_our_validator_node(epoch))
             },
-            EpochManagerRequest::GetCommitteeShard { epoch, substate_address, reply } => {
-                handle(reply, self.inner.get_committee_shard(epoch, substate_address))
+            EpochManagerRequest::GetCommitteeInfo { epoch, substate_address, reply } => {
+                handle(reply, self.inner.get_committee_info_for_substate(epoch, substate_address))
             },
-            EpochManagerRequest::GetLocalCommitteeShard { epoch, reply } => {
-                handle(reply, self.inner.get_local_committee_shard(epoch))
+            EpochManagerRequest::GetLocalCommitteeInfo { epoch, reply } => {
+                handle(reply, self.inner.get_local_committee_info(epoch))
             },
             EpochManagerRequest::GetNumCommittees { epoch, reply } => {
                 handle(reply, self.inner.get_num_committees(epoch))
             },
-            EpochManagerRequest::GetCommitteesByBuckets { epoch, buckets, reply } => {
-                handle(reply, self.inner.get_committees_by_buckets(epoch, buckets))
+            EpochManagerRequest::GetCommitteesForShards { epoch, shards, reply } => {
+                handle(reply, self.inner.get_committees_for_shards(epoch, shards))
             },
             EpochManagerRequest::GetFeeClaimPublicKey { reply } => handle(reply, self.inner.get_fee_claim_public_key()),
             EpochManagerRequest::SetFeeClaimPublicKey { public_key, reply } => {

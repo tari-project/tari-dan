@@ -342,7 +342,7 @@ where
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let tx_substate_address = SubstateAddress::for_transaction_receipt(transaction.id().into_receipt_address());
 
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
         let transaction_inputs = transaction.all_inputs_iter().filter_map(|i| i.to_substate_address());
         let mut is_input_shard = local_committee_shard.includes_any_shard(transaction_inputs);
         // Special temporary case: if there are no input shards an output shard will also propagate. No inputs is
@@ -673,7 +673,7 @@ where
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
 
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
         let all_inputs_iter = executed.all_inputs_iter().map(|i| i.to_substate_address());
         let is_input_shard = local_committee_shard.includes_any_shard(all_inputs_iter) |
             (executed.transaction().inputs().is_empty() && executed.transaction().filled_inputs().is_empty());

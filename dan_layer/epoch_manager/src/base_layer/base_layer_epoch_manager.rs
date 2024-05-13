@@ -32,7 +32,7 @@ use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusC
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard, CommitteeShardInfo, NetworkCommitteeInfo},
+    committee::{Committee, CommitteeInfo, CommitteeShardInfo, NetworkCommitteeInfo},
     optional::Optional,
     shard::Shard,
     DerivableFromPublicKey,
@@ -449,7 +449,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
 Ok(        validator_node_db.get_committees(epoch, self.config.validator_node_sidechain_id.as_ref())?)
     }
 
-    pub fn get_committee_vns_from_shard_key(
+    pub(crate) fn get_committee_vns_from_shard_key(
         &self,
         epoch: Epoch,
         substate_address: SubstateAddress,
@@ -473,7 +473,7 @@ Ok(        validator_node_db.get_committees(epoch, self.config.validator_node_si
 
         let mut shards = HashSet::new();
         shards.insert(shard);
-        let selected = self.get_committees_by_buckets(epoch,  shards)?;
+        let selected = self.get_committees_for_shards(epoch,  shards)?;
         let shard_vns = selected.get(&shard).map(|c|c.members.clone()).unwrap_or_default();
 
         let mut res = vec![];
@@ -485,7 +485,7 @@ Ok(        validator_node_db.get_committees(epoch, self.config.validator_node_si
         Ok(res)
     }
 
-    pub fn get_committee(&self, epoch: Epoch, substate_address: SubstateAddress) -> Result<Committee<TAddr>, EpochManagerError> {
+    pub(crate) fn get_committee_for_substate(&self, epoch: Epoch, substate_address: SubstateAddress) -> Result<Committee<TAddr>, EpochManagerError> {
         let result = self.get_committee_vns_from_shard_key(epoch, substate_address)?;
         Ok(Committee::new(
             result.into_iter().map(|v| (v.address, v.public_key)).collect(),
@@ -634,11 +634,11 @@ Ok(        validator_node_db.get_committees(epoch, self.config.validator_node_si
         Ok(num_committees)
     }
 
-    pub fn get_committee_shard(
+    pub fn get_committee_info_for_substate(
         &self,
         epoch: Epoch,
         substate_address: SubstateAddress,
-    ) -> Result<CommitteeShard, EpochManagerError> {
+    ) -> Result<CommitteeInfo, EpochManagerError> {
         let num_committees = self.get_number_of_committees(epoch)?;
         let shard = substate_address.to_committee_shard(num_committees);
         let mut tx = self.global_db.create_transaction()?;
@@ -648,27 +648,27 @@ Ok(        validator_node_db.get_committees(epoch, self.config.validator_node_si
         let num_validators = u32::try_from(num_validators).map_err(|_| EpochManagerError::IntegerOverflow {
             func: "get_committee_shard",
         })?;
-        Ok(CommitteeShard::new(num_committees, num_validators, shard))
+        Ok(CommitteeInfo::new(num_committees, num_validators, shard))
     }
 
-    pub fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, EpochManagerError> {
+    pub fn get_local_committee_info(&self, epoch: Epoch) -> Result<CommitteeInfo, EpochManagerError> {
         let vn = self
             .get_validator_node_by_public_key(epoch, &self.node_public_key)?
             .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
                 address: self.node_public_key.to_string(),
                 epoch,
             })?;
-        self.get_committee_shard(epoch, vn.shard_key)
+        self.get_committee_info_for_substate(epoch, vn.shard_key)
     }
 
-    pub fn get_committees_by_buckets(
+    pub(crate) fn get_committees_for_shards(
         &self,
         epoch: Epoch,
-        buckets: HashSet<Shard>,
+        shards: HashSet<Shard>,
     ) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
-        let committees = validator_node_db.get_committees_by_buckets(epoch, buckets)?;
+        let committees = validator_node_db.get_committees_for_shards(epoch, shards)?;
         Ok(committees)
     }
 

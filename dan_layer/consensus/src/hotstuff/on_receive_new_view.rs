@@ -130,7 +130,7 @@ where TConsensusSpec: ConsensusSpec
         }
 
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_info(epoch).await?;
         let leader = self
             .leader_strategy
             .get_leader_for_next_block(&local_committee, new_height);

@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use tari_base_node_client::types::BaseLayerValidatorNode;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard},
+    committee::{Committee, CommitteeInfo},
     shard::Shard,
     Epoch,
     PeerAddress,
@@ -607,7 +607,7 @@ pub struct GetEpochManagerStatsResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub current_block_hash: FixedHash,
     pub is_valid: bool,
-    pub committee_shard: Option<CommitteeShard>,
+    pub committee_info: Option<CommitteeInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

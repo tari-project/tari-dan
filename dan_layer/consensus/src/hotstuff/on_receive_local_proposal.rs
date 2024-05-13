@@ -10,7 +10,7 @@ use std::ops::{Deref, DerefMut};
 use log::*;
 use tari_common::configuration::Network;
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard},
+    committee::{Committee, CommitteeInfo},
     optional::Optional,
     shard::Shard,
     NodeHeight,
@@ -141,7 +141,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .await?;
         let local_committee_shard = self
             .epoch_manager
-            .get_committee_shard_by_validator_public_key(block.epoch(), block.proposed_by())
+            .get_committee_info_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
 
         let maybe_high_qc_and_block = self.store.with_write_tx(|tx| {
@@ -196,10 +196,10 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
-        local_committee_shard: &CommitteeShard,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<Option<(ValidBlock, StateHashTreeDiff)>, HotStuffError> {
         let result = self
-            .validate_local_proposed_block(tx.deref_mut(), block, local_committee, local_committee_shard)
+            .validate_local_proposed_block(tx.deref_mut(), block, local_committee, local_committee_info)
             .and_then(|valid_block| {
                 self.update_foreign_proposal_transactions(tx, valid_block.block())?;
                 Ok(valid_block)
@@ -368,7 +368,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         candidate_block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
-        local_committee_shard: &CommitteeShard,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<ValidBlock, HotStuffError> {
         if Block::has_been_processed(tx, candidate_block.id())? {
             return Err(ProposalValidationError::BlockAlreadyProcessed {
@@ -417,8 +417,8 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         self.check_foreign_indexes(
             tx,
-            local_committee_shard.num_committees(),
-            local_committee_shard.shard(),
+            local_committee_info.num_committees(),
+            local_committee_info.shard(),
             &candidate_block,
             justify_block.id(),
         )?;
@@ -456,7 +456,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     next_height,
                     candidate_block.justify().clone(),
                     candidate_block.epoch(),
-                    local_committee_shard.shard(),
+                    local_committee_info.shard(),
                     *candidate_block.merkle_root(),
                     timestamp,
                     base_layer_block_height,

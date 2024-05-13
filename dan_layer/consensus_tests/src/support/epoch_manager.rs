@@ -10,7 +10,7 @@ use std::{
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard, CommitteeShardInfo, NetworkCommitteeInfo},
+    committee::{Committee, CommitteeInfo, CommitteeShardInfo, NetworkCommitteeInfo},
     shard::Shard,
     Epoch,
     SubstateAddress,
@@ -146,13 +146,13 @@ impl EpochManagerReader for TestEpochManager {
         })
     }
 
-    async fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, EpochManagerError> {
+    async fn get_local_committee_info(&self, epoch: Epoch) -> Result<CommitteeInfo, EpochManagerError> {
         let our_vn = self.get_our_validator_node(epoch).await?;
         let num_committees = self.get_num_committees(epoch).await?;
         let committee = self.get_committee(epoch, our_vn.shard_key).await?;
         let our_shard = our_vn.shard_key.to_committee_shard(num_committees);
 
-        Ok(CommitteeShard::new(num_committees, committee.len() as u32, our_shard))
+        Ok(CommitteeInfo::new(num_committees, committee.len() as u32, our_shard))
     }
 
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError> {
@@ -193,16 +193,16 @@ impl EpochManagerReader for TestEpochManager {
             .collect())
     }
 
-    async fn get_committee_shard(
+    async fn get_committee_info_for_substate(
         &self,
         epoch: Epoch,
         substate_address: SubstateAddress,
-    ) -> Result<CommitteeShard, EpochManagerError> {
+    ) -> Result<CommitteeInfo, EpochManagerError> {
         let num_committees = self.get_num_committees(epoch).await?;
         let committee = self.get_committee(epoch, substate_address).await?;
         let shard = substate_address.to_committee_shard(num_committees);
 
-        Ok(CommitteeShard::new(num_committees, committee.len() as u32, shard))
+        Ok(CommitteeInfo::new(num_committees, committee.len() as u32, shard))
     }
 
     // async fn get_committees_by_shards(

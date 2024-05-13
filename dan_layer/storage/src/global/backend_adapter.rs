@@ -133,23 +133,23 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         epoch: Epoch,
     ) -> Result<(), Self::Error>;
 
-    fn validator_nodes_get_by_shard_range(
+    fn validator_nodes_get_by_substate_range(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
-        shard_range: RangeInclusive<SubstateAddress>,
+        substate_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error>;
 
-    fn validator_nodes_get_by_buckets(
+    fn validator_nodes_get_for_shards(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
-        buckets: HashSet<Shard>,
+        shards: HashSet<Shard>,
     ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error>;
 
 
-    fn validator_nodes_get_committees(&self, tx: &mut Self::DbTransaction<'_>, epoch: Epoch, sidechain_id: Option<&PublicKey>) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error>;
+    fn validator_nodes_get_committees_for_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: Epoch, sidechain_id: Option<&PublicKey>) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error>;
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;
