@@ -22,7 +22,6 @@
 
 use std::{
     collections::{BTreeMap, HashSet},
-    ops::RangeInclusive,
     str::FromStr,
 };
 
@@ -33,11 +32,10 @@ use tari_bor::decode;
 use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShardInfo},
+    committee::{Committee },
     shard::Shard,
     Epoch,
     PeerAddress,
-    SubstateAddress,
 };
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
 use tari_dan_storage::consensus_models::{Block, BlockId, Command, Decision, TransactionRecord};

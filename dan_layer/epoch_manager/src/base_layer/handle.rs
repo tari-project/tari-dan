@@ -327,6 +327,20 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         Ok(rx.await.map_err(|_| EpochManagerError::ReceiveError).unwrap().unwrap())
     }
 
+    async fn get_committee_info_by_validator_address(&self, epoch: Epoch, address: &TAddr) -> Result<CommitteeInfo, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetCommitteeInfoByAddress {
+                epoch,
+                address: address.clone(),
+                reply: tx,
+            })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
@@ -412,15 +426,6 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetBaseLayerBlockHeight { hash, reply: tx })
-            .await
-            .map_err(|_| EpochManagerError::SendError)?;
-        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
-    }
-
-    async fn get_network_committees(&self) -> Result<NetworkCommitteeInfo<Self::Addr>, EpochManagerError> {
-        let (tx, rx) = oneshot::channel();
-        self.tx_request
-            .send(EpochManagerRequest::GetNetworkCommittees { reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?

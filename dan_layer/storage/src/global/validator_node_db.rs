@@ -22,7 +22,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    ops::RangeInclusive,
 };
 
 use tari_common_types::types::PublicKey;
@@ -98,9 +97,10 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         &mut self,
         epoch: Epoch,
         address: &TGlobalDbAdapter::Addr,
+        sidechain_id: Option<&PublicKey>,
     ) -> Result<ValidatorNode<TGlobalDbAdapter::Addr>, TGlobalDbAdapter::Error> {
         self.backend
-            .get_validator_node_by_address(self.tx, epoch, address)
+            .get_validator_node_by_address(self.tx, epoch, address, sidechain_id)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 

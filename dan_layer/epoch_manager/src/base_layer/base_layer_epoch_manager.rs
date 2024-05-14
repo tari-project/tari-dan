@@ -343,7 +343,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         epoch: Epoch,
         public_key: &PublicKey,
     ) -> Result<Option<ValidatorNode<TAddr>>, EpochManagerError> {
-        debug!(
+        trace!(
             target: LOG_TARGET,
             "get_validator_node: epoch {} with public key {}", epoch, public_key,
         );
@@ -362,26 +362,25 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         epoch: Epoch,
         address: &TAddr,
     ) -> Result<Option<ValidatorNode<TAddr>>, EpochManagerError> {
-        todo!()
-        // let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        // debug!(
-        //     target: LOG_TARGET,
-        //     "get_validator_node: epoch {}-{} with public key {}", start_epoch, end_epoch, address,
-        // );
-        // let mut tx = self.global_db.create_transaction()?;
-        // let vn = self
-        //     .global_db
-        //     .validator_nodes(&mut tx)
-        //     .get_by_address(start_epoch, end_epoch, address)
-        //     .optional()?;
-        //
-        // Ok(vn)
+        trace!(
+            target: LOG_TARGET,
+            "get_validator_node: epoch {} with public key {}", epoch, address,
+        );
+        let mut tx = self.global_db.create_transaction()?;
+        let vn = self
+            .global_db
+            .validator_nodes(&mut tx)
+            .get_by_address(epoch, address, self.config.validator_node_sidechain_id.as_ref())
+            .optional()?;
+
+        Ok(vn)
     }
 
     pub fn get_many_validator_nodes(
         &self,
         epoch_validators: Vec<(Epoch, PublicKey)>,
     ) -> Result<HashMap<(Epoch, PublicKey), ValidatorNode<TAddr>>, EpochManagerError> {
+        error!(target: LOG_TARGET, "get_many_validator_nodes not implemented");
         todo!()
         // let mut tx = self.global_db.create_transaction()?;
         // #[allow(clippy::mutable_key_type)]
@@ -438,6 +437,16 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(validator_node_db.get_committees(epoch, self.config.validator_node_sidechain_id.as_ref())?)
     }
 
+    pub fn get_committee_info_by_validator_address(&self, epoch: Epoch, validator_addr: TAddr) -> Result<CommitteeInfo, EpochManagerError> {
+        let vn = self.get_validator_node_by_address(epoch, &validator_addr)?.ok_or_else(|| {
+            EpochManagerError::ValidatorNodeNotRegistered {
+                address: validator_addr.to_string(),
+                epoch,
+            }
+        })?;
+        self.get_committee_info_for_substate(epoch, vn.shard_key)
+    }
+
     pub(crate) fn get_committee_vns_from_shard_key(
         &self,
         epoch: Epoch,
@@ -491,6 +500,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         substate_address: SubstateAddress,
         identity: &TAddr,
     ) -> Result<bool, EpochManagerError> {
+        error!(target: LOG_TARGET, "is_validator_in_committee not implemented");
         todo!()
         // let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
         // let mut tx = self.global_db.create_transaction()?;
@@ -551,31 +561,12 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(expiry.checked_sub(num_blocks_since_last_reg))
     }
 
-    pub fn get_local_shard_range(
-        &self,
-        epoch: Epoch,
-        addr: &TAddr,
-    ) -> Result<RangeInclusive<SubstateAddress>, EpochManagerError> {
-        let vn = self.get_validator_node_by_address(epoch, addr)?.ok_or_else(|| {
-            EpochManagerError::ValidatorNodeNotRegistered {
-                address: addr.to_string(),
-                epoch,
-            }
-        })?;
-
-        let num_committees = self.get_number_of_committees(epoch)?;
-        debug!(
-            target: LOG_TARGET,
-            "VN {} epoch: {}, num_committees: {}", addr, epoch, num_committees
-        );
-        Ok(vn.shard_key.to_committee_range(num_committees))
-    }
-
     pub fn get_committee_for_shard_range(
         &self,
         epoch: Epoch,
         substate_address_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Committee<TAddr>, EpochManagerError> {
+        error!(target: LOG_TARGET, "get_committee_for_shard_range not implemented");
         // let num_committees = self.get_number_of_committees(epoch)?;
         //
         // // Since we have fixed boundaries for committees, we want to include all validators within any range
@@ -696,6 +687,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     }
 
     pub async fn get_network_committees(&self) -> Result<NetworkCommitteeInfo<TAddr>, EpochManagerError> {
+        error!(target: LOG_TARGET, "get_network_committees not implemented");
         // let current_epoch = self.current_epoch;
         // let num_committees = self.get_num_committees(current_epoch)?;
         //

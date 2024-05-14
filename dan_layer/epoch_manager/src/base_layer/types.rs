@@ -92,12 +92,17 @@ pub enum EpochManagerRequest<TAddr> {
         shard_range: RangeInclusive<SubstateAddress>,
         reply: Reply<Committee<TAddr>>,
     },
+    GetCommitteeInfoByAddress {
+        epoch: Epoch,
+        address: TAddr,
+        reply: Reply<CommitteeInfo>,
+    },
     GetValidatorNodesPerEpoch {
         epoch: Epoch,
         reply: Reply<Vec<ValidatorNode<TAddr>>>,
     },
     IsValidatorInCommitteeForCurrentEpoch {
-        shard: SubstateAddress,
+        substate: SubstateAddress,
         identity: TAddr,
         reply: Reply<bool>,
     },
@@ -112,11 +117,6 @@ pub enum EpochManagerRequest<TAddr> {
     },
     GetBaseLayerConsensusConstants {
         reply: Reply<BaseLayerConsensusConstants>,
-    },
-    GetLocalShardRange {
-        epoch: Epoch,
-        for_addr: TAddr,
-        reply: Reply<RangeInclusive<SubstateAddress>>,
     },
     GetOurValidatorNode {
         epoch: Epoch,

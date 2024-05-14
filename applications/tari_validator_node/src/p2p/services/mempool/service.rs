@@ -265,39 +265,39 @@ where
             transaction
         );
 
-        // let current_epoch = self.epoch_manager.current_epoch().await?;
-        // let num_committees = self.epoch_manager.get_num_committees(current_epoch).await?;
-        // let maybe_sender_shard = self
-        //     .epoch_manager
-        //     .get_validator_node(current_epoch, &from)
-        //     .await
-        //     .optional()?
-        //     .and_then(|s| s.committee_shard);
-        //
-        // // Only input shards propagate transactions to output shards. Check that this is true.
-        // if !unverified_output_shards.is_empty() {
-        //     let Some(sender_shard) = maybe_sender_shard else {
-        //         debug!(target: LOG_TARGET, "Sender {from} isn't registered but tried to send a new transaction with
-        // output shards");         return Ok(());
-        //     };
-        //     let mut is_input_shard = transaction
-        //         .all_inputs_iter()
-        //         .filter_map(|s| s.to_committee_shard(num_committees))
-        //         .any(|s| s == sender_shard);
-        //     // Special temporary case: if there are no input shards an output shard will also propagate. No inputs is
-        //     // invalid, however we must support them for now because of CreateFreeTestCoin transactions.
-        //     is_input_shard |= transaction.inputs().is_empty() && transaction.filled_inputs().is_empty();
-        //     if !is_input_shard {
-        //         warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input
-        // shard. Ignoring message.");         return Ok(());
-        //     }
-        // }
-        //
-        // self.handle_new_transaction(transaction, unverified_output_shards, true, maybe_sender_shard)
-        //     .await?;
-        //
-        // Ok(())
-        todo!()
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        let num_committees = self.epoch_manager.get_num_committees(current_epoch).await?;
+        let maybe_sender_shard = self
+            .epoch_manager
+            .get_committee_info_by_validator_address(current_epoch, &from)
+            .await
+            .optional()?.map(|c| c.shard());
+
+        // Only input shards propagate transactions to output shards. Check that this is true.
+        if !unverified_output_shards.is_empty() {
+            let Some(sender_shard) = maybe_sender_shard else {
+                debug!(target: LOG_TARGET, "Sender {from} isn't registered but tried to send a new transaction with
+        output shards");
+                return Ok(());
+            };
+
+            let mut is_input_shard = transaction
+                .all_inputs_iter()
+                .filter_map(|s| s.to_committee_shard(num_committees))
+                .any(|s| s == sender_shard);
+            // Special temporary case: if there are no input shards an output shard will also propagate. No inputs is
+            // invalid, however we must support them for now because of CreateFreeTestCoin transactions.
+            is_input_shard |= transaction.inputs().is_empty() && transaction.filled_inputs().is_empty();
+            if !is_input_shard {
+                warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input
+        shard. Ignoring message.");         return Ok(());
+            }
+        }
+
+        self.handle_new_transaction(transaction, unverified_output_shards, true, maybe_sender_shard)
+            .await?;
+
+        Ok(())
     }
 
     #[allow(clippy::too_many_lines)]

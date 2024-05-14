@@ -33,7 +33,6 @@ use diesel::{
     sql_types::{BigInt, Bigint},
     ExpressionMethods,
     JoinOnDsl,
-    NullableExpressionMethods,
     OptionalExtension,
     QueryDsl,
     RunQueryDsl,
@@ -77,7 +76,7 @@ use crate::{
             TemplateModel,
             TemplateUpdateModel,
         },
-        schema::{templates, validator_nodes::dsl::validator_nodes},
+        schema::{templates},
         serialization::serialize_json,
     },
     SqliteTransaction,
@@ -402,6 +401,46 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         Ok(())
     }
 
+
+    fn get_validator_node_by_address(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+        address: &Self::Addr,
+        sidechain_id: Option<&PublicKey>,
+    ) -> Result<ValidatorNode<Self::Addr>, Self::Error> {
+        use crate::global::schema::{validator_nodes};
+
+        let vn = validator_nodes::table
+            // .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
+            .select((
+                validator_nodes::id,
+                validator_nodes::public_key,
+                validator_nodes::shard_key,
+                validator_nodes::registered_at_base_height,
+                validator_nodes::start_epoch,
+                validator_nodes::end_epoch,
+                validator_nodes::fee_claim_public_key,
+                validator_nodes::address,
+                validator_nodes::sidechain_id,
+            ))
+            .filter(
+                validator_nodes::start_epoch.le(epoch.as_u64() as i64),
+            )
+            .filter(validator_nodes::end_epoch.gt(epoch.as_u64() as i64))
+            .filter(validator_nodes::address.eq(serialize_json(address)?))
+            .filter(validator_nodes::sidechain_id.eq(sidechain_id.map(ByteArray::as_bytes).unwrap_or(&[0u8; 32])))
+            .order_by(validator_nodes::registered_at_base_height.desc())
+            .first::<DbValidatorNode>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "get::validator_node".to_string(),
+            })?;
+
+        let vn = vn.try_into()?;
+        Ok(vn)
+    }
+
     fn get_validator_node_by_public_key(
         &self,
         tx: &mut Self::DbTransaction<'_>,
@@ -409,7 +448,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         public_key: &PublicKey,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<ValidatorNode<Self::Addr>, Self::Error> {
-        use crate::global::schema::{committees, validator_nodes};
+        use crate::global::schema::{validator_nodes};
 
         let vn = validator_nodes::table
             // .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
@@ -522,8 +561,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
                 .map_err(|_| SqliteStorageError::MalformedDbData("Invalid public key".to_string()))?;
             committees
                 .entry(
-                    Shard::try_from(bucket as u32)
-                        .map_err(|_| SqliteStorageError::MalformedDbData("Invalid bucket".to_string()))?,
+                    Shard::from(bucket as u32)
                 )
                 .or_insert_with(Committee::empty)
                 .members
@@ -579,7 +617,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         shard_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error> {
         // TODO: is this method still needed? Most of this can be handled by the committees table
-        use crate::global::schema::{committees, validator_nodes};
+        use crate::global::schema::{validator_nodes};
 
         let db_sidechain_id = sidechain_id.map(|id| id.as_bytes()).unwrap_or(&[0u8; 32]);
         let validators = validator_nodes::table
@@ -601,7 +639,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             .filter(validator_nodes::shard_key.ge(shard_range.start().as_bytes()))
             .filter(validator_nodes::shard_key.le(shard_range.end().as_bytes()))
             .filter(validator_nodes::sidechain_id.eq(db_sidechain_id))
-            .order_by((validator_nodes::shard_key.asc()))
+            .order_by(validator_nodes::shard_key.asc())
             .get_results::<DbValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -623,7 +661,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             .map(|b| (b, Committee::empty()))
             .collect::<HashMap<_, _>>();
 
-        for (shard, committee) in shards.iter_mut() {
+        for (shard, committee) in &mut shards {
             let validators = validator_nodes::table
                 .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
                 .select(validator_nodes::all_columns)
@@ -656,7 +694,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error> {
-        use crate::global::schema::{committees, validator_nodes};
+        use crate::global::schema::{validator_nodes};
 
         let db_sidechain_id = sidechain_id.map(|id| id.as_bytes()).unwrap_or(&[0u8; 32]);
         let sqlite_vns = validator_nodes::table
@@ -681,43 +719,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             })?;
 
         distinct_validators_sorted(sqlite_vns)
-    }
-
-    fn get_validator_node_by_address(
-        &self,
-        tx: &mut Self::DbTransaction<'_>,
-        epoch: Epoch,
-        address: &Self::Addr,
-    ) -> Result<ValidatorNode<Self::Addr>, Self::Error> {
-        // use crate::global::schema::{committees, validator_nodes};
-        //
-        // let vn = validator_nodes::table
-        //     .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
-        //     .select((
-        //         validator_nodes::id,
-        //         validator_nodes::public_key,
-        //         validator_nodes::shard_key,
-        //         coalesce_bigint(committees::epoch.nullable(), validator_nodes::epoch),
-        //         committees::committee_bucket.nullable(),
-        //         validator_nodes::fee_claim_public_key,
-        //         validator_nodes::address,
-        //         validator_nodes::sidechain_id,
-        //     ))
-        //     .filter(
-        //         coalesce_bigint(committees::epoch.nullable(), validator_nodes::epoch).ge(start_epoch.as_u64() as
-        // i64),     )
-        //     .filter(coalesce_bigint(committees::epoch.nullable(), validator_nodes::epoch).le(end_epoch.as_u64() as
-        // i64))     .filter(validator_nodes::address.eq(serialize_json(address)?))
-        //     .order_by(committees::epoch.desc())
-        //     .first::<DbValidatorNode>(tx.connection())
-        //     .map_err(|source| SqliteStorageError::DieselError {
-        //         source,
-        //         operation: "get::validator_node".to_string(),
-        //     })?;
-        //
-        // let vn = vn.try_into()?;
-        // Ok(vn)
-        todo!()
     }
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error> {

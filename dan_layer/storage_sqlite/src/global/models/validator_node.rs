@@ -21,14 +21,14 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, SubstateAddress};
+use tari_dan_common_types::{Epoch, NodeAddressable, SubstateAddress};
 use tari_dan_storage::global::models::ValidatorNode;
 use tari_utilities::ByteArray;
 
 use crate::{
     error::SqliteStorageError,
     global::{
-        schema::{validator_nodes::registered_at_base_height, *},
+        schema::{*},
         serialization::deserialize_json,
     },
 };

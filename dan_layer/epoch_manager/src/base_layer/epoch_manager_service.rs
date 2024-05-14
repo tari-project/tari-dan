@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{DerivableFromPublicKey, NodeAddressable};
@@ -102,7 +102,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
 
     #[allow(clippy::too_many_lines)]
     async fn handle_request(&mut self, req: EpochManagerRequest<TAddr>) {
-        debug!(target: LOG_TARGET, "Received request: {:?}", req);
+        trace!(target: LOG_TARGET, "Received request: {:?}", req);
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
             EpochManagerRequest::CurrentBlockInfo { reply } => handle(reply, Ok(self.inner.current_block_info())),
@@ -162,6 +162,11 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::GetCommittees { epoch, reply } => {
                 handle(reply, self.inner.get_committees(epoch));
             },
+            EpochManagerRequest::GetCommitteeInfoByAddress {
+                epoch,
+                address,
+                reply,
+            } => handle(reply, self.inner.get_committee_info_by_validator_address(epoch, address)),
             EpochManagerRequest::GetCommitteeForSubstate {
                 epoch,
                 substate_address,
@@ -174,7 +179,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                 shard_range,
                 reply,
             } => handle(reply, self.inner.get_committee_for_shard_range(epoch, shard_range)),
-            EpochManagerRequest::IsValidatorInCommitteeForCurrentEpoch { shard, identity, reply } => {
+            EpochManagerRequest::IsValidatorInCommitteeForCurrentEpoch { substate: shard, identity, reply } => {
                 let epoch = self.inner.current_epoch();
                 handle(reply, self.inner.is_validator_in_committee(epoch, shard, &identity));
             },
@@ -202,9 +207,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             },
             EpochManagerRequest::GetBaseLayerConsensusConstants { reply } => {
                 handle(reply, self.inner.get_base_layer_consensus_constants().await.cloned())
-            },
-            EpochManagerRequest::GetLocalShardRange { epoch, for_addr, reply } => {
-                handle(reply, self.inner.get_local_shard_range(epoch, &for_addr))
             },
             EpochManagerRequest::GetOurValidatorNode { epoch, reply } => {
                 handle(reply, self.inner.get_our_validator_node(epoch))

@@ -10,7 +10,7 @@ use std::{
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeInfo, CommitteeShardInfo, NetworkCommitteeInfo},
+    committee::{Committee, CommitteeInfo, },
     shard::Shard,
     Epoch,
     SubstateAddress,
@@ -162,10 +162,10 @@ impl EpochManagerReader for TestEpochManager {
 
     async fn get_validator_node(
         &self,
-        epoch: Epoch,
+        _epoch: Epoch,
         addr: &Self::Addr,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError> {
-        let (shard, shard_key, public_key, sidechain_id, registered_at_base_height, start_epoch, end_epoch) =
+        let (_shard, shard_key, public_key, sidechain_id, registered_at_base_height, start_epoch, end_epoch) =
             self.state_lock().await.validator_shards[addr].clone();
 
         Ok(ValidatorNode {
@@ -180,7 +180,7 @@ impl EpochManagerReader for TestEpochManager {
         })
     }
 
-    async fn get_all_validator_nodes(&self, epoch: Epoch) -> Result<Vec<ValidatorNode<Self::Addr>>, EpochManagerError> {
+    async fn get_all_validator_nodes(&self, _epoch: Epoch) -> Result<Vec<ValidatorNode<Self::Addr>>, EpochManagerError> {
         todo!()
     }
 
@@ -217,10 +217,12 @@ impl EpochManagerReader for TestEpochManager {
         Ok(self.inner.lock().await.committees.len() as u32)
     }
 
-    async fn get_committees(&self, epoch: Epoch) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
+    async fn get_committees(&self, _epoch: Epoch) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
         todo!()
     }
-
+    async fn get_committee_info_for_validator_node(&self, epoch: Epoch, public_key: &Self::Addr) -> Result<CommitteeInfo, EpochManagerError> {
+        todo!()
+    }
     async fn get_committees_by_shards(
         &self,
         _epoch: Epoch,
@@ -284,11 +286,11 @@ impl EpochManagerReader for TestEpochManager {
 
     async fn get_validator_node_by_public_key(
         &self,
-        epoch: Epoch,
+        _epoch: Epoch,
         public_key: &PublicKey,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError> {
         let lock = self.state_lock().await;
-        let (address, (shard, shard_key, public_key, sidechain_id, registered_at, start_epoch, end_epoch)) = lock
+        let (address, (_shard, shard_key, public_key, sidechain_id, registered_at, start_epoch, end_epoch)) = lock
             .validator_shards
             .iter()
             .find(|(_, (_, _, pk, _, _, _, _))| pk == public_key)
@@ -310,30 +312,6 @@ impl EpochManagerReader for TestEpochManager {
         Ok(Some(self.inner.lock().await.current_block_info.0))
     }
 
-    async fn get_network_committees(&self) -> Result<NetworkCommitteeInfo<Self::Addr>, EpochManagerError> {
-        let lock = self.state_lock().await;
-        let commitees_lock = &lock.committees;
-        let num_committees = commitees_lock.len().try_into().unwrap();
-
-        let committees = commitees_lock
-            .iter()
-            .map(|s| {
-                let shard = s.0;
-                CommitteeShardInfo {
-                    shard: *shard,
-                    substate_address_range: shard.to_substate_address_range(num_committees),
-                    validators: s.1.clone(),
-                }
-            })
-            .collect();
-
-        let network_commitee_info = NetworkCommitteeInfo {
-            epoch: lock.current_epoch,
-            committees,
-        };
-
-        Ok(network_commitee_info)
-    }
 }
 
 #[derive(Debug, Clone)]
