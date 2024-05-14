@@ -66,11 +66,7 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
-    pub fn count(
-        &mut self,
-        epoch: Epoch,
-        sidechain_id: Option<&PublicKey>,
-    ) -> Result<u64, TGlobalDbAdapter::Error> {
+    pub fn count(&mut self, epoch: Epoch, sidechain_id: Option<&PublicKey>) -> Result<u64, TGlobalDbAdapter::Error> {
         self.backend
             .validator_nodes_count(self.tx, epoch, sidechain_id)
             .map_err(TGlobalDbAdapter::Error::into)
@@ -135,15 +131,14 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
     ) -> Result<Option<Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
         let mut buckets = HashSet::new();
         buckets.insert(shard);
-let res =        self.get_committees_for_shards(epoch, buckets)?;
-         Ok(res.get(&shard).cloned())
+        let res = self.get_committees_for_shards(epoch, buckets)?;
+        Ok(res.get(&shard).cloned())
     }
-
 
     pub fn get_committees(
         &mut self,
         epoch: Epoch,
-        sidechain_id: Option<&PublicKey>
+        sidechain_id: Option<&PublicKey>,
     ) -> Result<HashMap<Shard, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
         self.backend
             .validator_nodes_get_committees_for_epoch(self.tx, epoch, sidechain_id)

@@ -220,7 +220,10 @@ where
         substate_address: SubstateAddress,
     ) -> Result<SubstateResult, IndexerError> {
         let epoch = self.committee_provider.current_epoch().await?;
-        let mut committee = self.committee_provider.get_committee_for_substate(epoch, substate_address).await?;
+        let mut committee = self
+            .committee_provider
+            .get_committee_for_substate(epoch, substate_address)
+            .await?;
 
         committee.shuffle();
 
@@ -272,7 +275,10 @@ where
         shard_location: SubstateAddress,
     ) -> Result<VirtualSubstate, IndexerError> {
         let epoch = self.committee_provider.current_epoch().await?;
-        let mut committee = self.committee_provider.get_committee_for_substate(epoch, shard_location).await?;
+        let mut committee = self
+            .committee_provider
+            .get_committee_for_substate(epoch, shard_location)
+            .await?;
 
         committee.shuffle();
 
@@ -346,7 +352,10 @@ where
         let substate_address = SubstateAddress::from_address(substate_id, version);
 
         let epoch = self.committee_provider.current_epoch().await?;
-        let mut committee = self.committee_provider.get_committee_for_substate(epoch, substate_address).await?;
+        let mut committee = self
+            .committee_provider
+            .get_committee_for_substate(epoch, substate_address)
+            .await?;
 
         committee.members.shuffle(&mut OsRng);
 

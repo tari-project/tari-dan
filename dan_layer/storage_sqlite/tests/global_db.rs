@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::collections::HashSet;
+
 use diesel::{Connection, SqliteConnection};
 use rand::rngs::OsRng;
 use tari_common_types::types::PublicKey;
@@ -35,7 +36,13 @@ fn insert_vns(
     sidechain_id: Option<PublicKey>,
 ) {
     for _ in 0..num {
-        insert_vn_with_public_key(validator_nodes, new_public_key(), epoch, epoch + Epoch(1), sidechain_id.clone())
+        insert_vn_with_public_key(
+            validator_nodes,
+            new_public_key(),
+            epoch,
+            epoch + Epoch(1),
+            sidechain_id.clone(),
+        )
     }
 }
 
@@ -78,9 +85,7 @@ fn insert_and_get_within_epoch() {
     let mut validator_nodes = db.validator_nodes(&mut tx);
     insert_vns(&mut validator_nodes, 3, Epoch(0), None);
     insert_vns(&mut validator_nodes, 2, Epoch(1), None);
-    let vns = validator_nodes
-        .get_all_within_epoch(Epoch(0), None)
-        .unwrap();
+    let vns = validator_nodes.get_all_within_epoch(Epoch(0), None).unwrap();
     assert_eq!(vns.len(), 3);
 }
 
@@ -97,7 +102,8 @@ fn change_committee_bucket() {
     update_committee_bucket(&mut validator_nodes, &pk, Shard::from(4), Epoch(3));
     let vns = validator_nodes
         .get_committee_for_shard(Epoch(3), Shard::from(4))
-        .unwrap().unwrap();
+        .unwrap()
+        .unwrap();
     assert_eq!(vns.len(), 1);
 }
 

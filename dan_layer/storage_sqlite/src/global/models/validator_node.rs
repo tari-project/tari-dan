@@ -27,9 +27,11 @@ use tari_utilities::ByteArray;
 
 use crate::{
     error::SqliteStorageError,
-    global::{schema::*, serialization::deserialize_json},
+    global::{
+        schema::{validator_nodes::registered_at_base_height, *},
+        serialization::deserialize_json,
+    },
 };
-use crate::global::schema::validator_nodes::registered_at_base_height;
 
 #[derive(Queryable, Identifiable)]
 #[diesel(table_name = validator_nodes)]
@@ -78,7 +80,6 @@ impl<TAddr: NodeAddressable> TryFrom<DbValidatorNode> for ValidatorNode<TAddr> {
         })
     }
 }
-
 
 impl DbValidatorNode {
     pub fn try_parse_address<T: serde::de::DeserializeOwned>(address: &str) -> Result<T, SqliteStorageError> {

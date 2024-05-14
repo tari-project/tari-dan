@@ -159,10 +159,14 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                 handle(reply, self.inner.update_last_registration_epoch(epoch));
             },
             EpochManagerRequest::IsEpochValid { epoch, reply } => handle(reply, Ok(self.inner.is_epoch_valid(epoch))),
-            EpochManagerRequest::GetCommittees { epoch,  reply } => {
+            EpochManagerRequest::GetCommittees { epoch, reply } => {
                 handle(reply, self.inner.get_committees(epoch));
             },
-            EpochManagerRequest::GetCommitteeForSubstate { epoch, substate_address, reply } => {
+            EpochManagerRequest::GetCommitteeForSubstate {
+                epoch,
+                substate_address,
+                reply,
+            } => {
                 handle(reply, self.inner.get_committee_for_substate(epoch, substate_address));
             },
             EpochManagerRequest::GetCommitteeForShardRange {
@@ -205,9 +209,14 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::GetOurValidatorNode { epoch, reply } => {
                 handle(reply, self.inner.get_our_validator_node(epoch))
             },
-            EpochManagerRequest::GetCommitteeInfo { epoch, substate_address, reply } => {
-                handle(reply, self.inner.get_committee_info_for_substate(epoch, substate_address))
-            },
+            EpochManagerRequest::GetCommitteeInfo {
+                epoch,
+                substate_address,
+                reply,
+            } => handle(
+                reply,
+                self.inner.get_committee_info_for_substate(epoch, substate_address),
+            ),
             EpochManagerRequest::GetLocalCommitteeInfo { epoch, reply } => {
                 handle(reply, self.inner.get_local_committee_info(epoch))
             },

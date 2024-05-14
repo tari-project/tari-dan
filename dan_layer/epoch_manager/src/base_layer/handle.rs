@@ -9,8 +9,7 @@ use std::{
 use async_trait::async_trait;
 use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_core::transactions::tari_amount::MicroMinotari;
-use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
+use tari_core::transactions::{tari_amount::MicroMinotari, transaction_components::ValidatorNodeRegistration};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo, NetworkCommitteeInfo},
     shard::Shard,
@@ -106,7 +105,7 @@ impl<TAddr: NodeAddressable> EpochManagerHandle<TAddr> {
         &self,
         block_height: u64,
         registration: ValidatorNodeRegistration,
-        value_of_registration: MicroMinotari
+        value_of_registration: MicroMinotari,
     ) -> Result<(), EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
@@ -161,18 +160,10 @@ impl<TAddr: NodeAddressable> EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-
-
-    pub async fn get_committees(
-        &self,
-        epoch: Epoch,
-    ) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
+    pub async fn get_committees(&self, epoch: Epoch) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(EpochManagerRequest::GetCommittees {
-                epoch,
-                reply: tx,
-            })
+            .send(EpochManagerRequest::GetCommittees { epoch, reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 

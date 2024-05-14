@@ -31,12 +31,14 @@ use tari_base_node_client::{
 };
 use tari_common::configuration::Network;
 use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError, PublicKey};
-use tari_core::transactions::tari_amount::MicroMinotari;
-use tari_core::transactions::transaction_components::{
-    CodeTemplateRegistration,
-    SideChainFeature,
-    TransactionOutput,
-    ValidatorNodeRegistration,
+use tari_core::transactions::{
+    tari_amount::MicroMinotari,
+    transaction_components::{
+        CodeTemplateRegistration,
+        SideChainFeature,
+        TransactionOutput,
+        ValidatorNodeRegistration,
+    },
 };
 use tari_crypto::{
     ristretto::RistrettoPublicKey,
@@ -343,8 +345,12 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
                             current_height,
                         );
                         if reg.sidechain_id() == self.validator_node_sidechain_id.as_ref() {
-                            self.register_validator_node_registration(current_height, reg.clone(), output.minimum_value_promise)
-                                .await?;
+                            self.register_validator_node_registration(
+                                current_height,
+                                reg.clone(),
+                                output.minimum_value_promise,
+                            )
+                            .await?;
                         } else {
                             warn!(
                                 target: LOG_TARGET,
@@ -473,7 +479,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         &mut self,
         height: u64,
         registration: ValidatorNodeRegistration,
-        minimum_value_promise: MicroMinotari
+        minimum_value_promise: MicroMinotari,
     ) -> Result<(), BaseLayerScannerError> {
         info!(
             target: LOG_TARGET,

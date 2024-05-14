@@ -277,8 +277,8 @@ where
         // // Only input shards propagate transactions to output shards. Check that this is true.
         // if !unverified_output_shards.is_empty() {
         //     let Some(sender_shard) = maybe_sender_shard else {
-        //         debug!(target: LOG_TARGET, "Sender {from} isn't registered but tried to send a new transaction with output shards");
-        //         return Ok(());
+        //         debug!(target: LOG_TARGET, "Sender {from} isn't registered but tried to send a new transaction with
+        // output shards");         return Ok(());
         //     };
         //     let mut is_input_shard = transaction
         //         .all_inputs_iter()
@@ -288,8 +288,8 @@ where
         //     // invalid, however we must support them for now because of CreateFreeTestCoin transactions.
         //     is_input_shard |= transaction.inputs().is_empty() && transaction.filled_inputs().is_empty();
         //     if !is_input_shard {
-        //         warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input shard. Ignoring message.");
-        //         return Ok(());
+        //         warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input
+        // shard. Ignoring message.");         return Ok(());
         //     }
         // }
         //

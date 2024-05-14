@@ -28,7 +28,7 @@ use std::{
 
 use futures::StreamExt;
 use log::*;
-use rand::rngs::OsRng;
+use rand::{prelude::SliceRandom, rngs::OsRng};
 use tari_bor::decode;
 use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
@@ -56,8 +56,6 @@ use crate::substate_storage_sqlite::{
         SubstateStoreWriteTransaction,
     },
 };
-use rand::prelude::SliceRandom;
-
 
 const LOG_TARGET: &str = "tari::indexer::event_manager";
 
@@ -361,7 +359,11 @@ impl EventManager {
     async fn get_all_vns(&self) -> Result<Vec<PeerAddress>, anyhow::Error> {
         // get all the committees
         let epoch = self.epoch_manager.current_epoch().await?;
-        Ok(self.epoch_manager.get_all_validator_nodes(epoch).await.map(|v| v.iter().map(|m| m.address.clone()).collect())?)
+        Ok(self
+            .epoch_manager
+            .get_all_validator_nodes(epoch)
+            .await
+            .map(|v| v.iter().map(|m| m.address.clone()).collect())?)
         // let full_range = RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::max());
         // let mut committee = self
         //     .epoch_manager

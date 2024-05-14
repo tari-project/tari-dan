@@ -45,7 +45,6 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn subscribe(&self) -> Result<broadcast::Receiver<EpochManagerEvent>, EpochManagerError>;
 
-
     async fn get_all_validator_nodes(&self, epoch: Epoch) -> Result<Vec<ValidatorNode<Self::Addr>>, EpochManagerError>;
 
     async fn get_committees(&self, epoch: Epoch) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError>;
@@ -164,16 +163,13 @@ pub trait EpochManagerReader: Send + Sync {
         }
 
         // TODO: might want to improve this
-        self.get_local_committee_info(epoch)
-            .await
-            .map(|_| true)
-            .or_else(|err| {
-                if err.is_not_registered_error() {
-                    Ok(false)
-                } else {
-                    Err(err)
-                }
-            })
+        self.get_local_committee_info(epoch).await.map(|_| true).or_else(|err| {
+            if err.is_not_registered_error() {
+                Ok(false)
+            } else {
+                Err(err)
+            }
+        })
     }
 
     async fn get_base_layer_block_height(&self, hash: FixedHash) -> Result<Option<u64>, EpochManagerError>;

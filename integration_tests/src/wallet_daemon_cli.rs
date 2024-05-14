@@ -290,7 +290,6 @@ pub async fn create_account_with_free_coins(
             .get(&k)
             .unwrap_or_else(|| panic!("Wallet {} not found", wallet_daemon_name))
     });
-    dbg!(key_index);
     let request = AccountsCreateFreeTestCoinsRequest {
         account: Some(ComponentAddressOrName::Name(account_name.clone())),
         amount,
