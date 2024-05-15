@@ -108,6 +108,7 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         &mut self,
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
+        sidechain_id: Option<&PublicKey>,
     ) -> Result<Vec<ValidatorNode<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
         self.backend
             .get_validator_nodes_within_epoch(self.tx, epoch, sidechain_id)

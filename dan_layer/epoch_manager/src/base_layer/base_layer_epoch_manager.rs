@@ -152,6 +152,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
                 vn.shard_key,
                 vn.shard_key.to_committee_shard(num_committees),
                 self.config.validator_node_sidechain_id.as_ref(),
+                self.config.validator_node_sidechain_id.as_ref(),
                 epoch,
             )?;
         }
