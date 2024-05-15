@@ -383,15 +383,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
                 validator_nodes::fee_claim_public_key.eq(ByteArray::as_bytes(&fee_claim_public_key)),
                 validator_nodes::sidechain_id.eq(sidechain_id.as_ref().map(|id| id.as_bytes()).unwrap_or(&[0u8; 32])),
             ))
-            // .on_conflict((validator_nodes::public_key, validator_nodes::sidechain_id))
-            // .do_update()
-            // .set((
-            //     validator_nodes::address.eq(&addr),
-            //     validator_nodes::shard_key.eq(shard_key.as_bytes()),
-            //     validator_nodes::epoch.eq(epoch.as_u64() as i64),
-            //     validator_nodes::fee_claim_public_key.eq(ByteArray::as_bytes(&fee_claim_public_key)),
-            //     validator_nodes::sidechain_id.eq(sidechain_id.as_ref().map(|id| id.as_bytes()).unwrap_or(&[0u8; 32])),
-            // ))
             .execute(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -411,7 +402,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         use crate::global::schema::validator_nodes;
 
         let vn = validator_nodes::table
-            // .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
             .select((
                 validator_nodes::id,
                 validator_nodes::public_key,
@@ -423,9 +413,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
                 validator_nodes::address,
                 validator_nodes::sidechain_id,
             ))
-            .filter(
-                validator_nodes::start_epoch.le(epoch.as_u64() as i64),
-            )
+            .filter(validator_nodes::start_epoch.le(epoch.as_u64() as i64))
             .filter(validator_nodes::end_epoch.gt(epoch.as_u64() as i64))
             .filter(validator_nodes::address.eq(serialize_json(address)?))
             .filter(validator_nodes::sidechain_id.eq(sidechain_id.map(ByteArray::as_bytes).unwrap_or(&[0u8; 32])))
@@ -450,7 +438,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         use crate::global::schema::validator_nodes;
 
         let vn = validator_nodes::table
-            // .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
             .select((
                 validator_nodes::id,
                 validator_nodes::public_key,
@@ -462,9 +449,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
                 validator_nodes::address,
                 validator_nodes::sidechain_id,
             ))
-            .filter(
-                validator_nodes::start_epoch.le(epoch.as_u64() as i64),
-            )
+            .filter(validator_nodes::start_epoch.le(epoch.as_u64() as i64))
             .filter(validator_nodes::end_epoch.gt(epoch.as_u64() as i64))
             .filter(validator_nodes::public_key.eq(ByteArray::as_bytes(public_key)))
             .filter(validator_nodes::sidechain_id.eq(sidechain_id.map(ByteArray::as_bytes).unwrap_or(&[0u8; 32])))

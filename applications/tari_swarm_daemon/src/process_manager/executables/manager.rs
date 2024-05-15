@@ -80,7 +80,7 @@ impl ExecutableManager {
                 .as_ref()
                 .expect("BUG: Compiled but compile config was None");
 
-            let mut bin_path = compile
+            let bin_path = compile
                 .working_dir()
                 .join(compile.target_dir())
                 .join(&compile.package_name);
