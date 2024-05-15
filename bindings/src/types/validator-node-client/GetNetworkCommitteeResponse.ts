@@ -2,4 +2,7 @@
 import type { CommitteeShardInfo } from "./CommitteeShardInfo";
 import type { Epoch } from "..\\Epoch";
 
-export interface GetNetworkCommitteeResponse { current_epoch: Epoch, committees: Array<CommitteeShardInfo>, }
+export interface GetNetworkCommitteeResponse {
+  current_epoch: Epoch;
+  committees: Array<CommitteeShardInfo>;
+}

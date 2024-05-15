@@ -5,4 +5,13 @@ import type { SubstateRequirement } from "./SubstateRequirement";
 import type { TransactionSignature } from "./TransactionSignature";
 import type { VersionedSubstateId } from "./VersionedSubstateId";
 
-export interface Transaction { id: string, fee_instructions: Array<Instruction>, instructions: Array<Instruction>, signature: TransactionSignature, inputs: Array<SubstateRequirement>, filled_inputs: Array<VersionedSubstateId>, min_epoch: Epoch | null, max_epoch: Epoch | null, }
+export interface Transaction {
+  id: string;
+  fee_instructions: Array<Instruction>;
+  instructions: Array<Instruction>;
+  signature: TransactionSignature;
+  inputs: Array<SubstateRequirement>;
+  filled_inputs: Array<VersionedSubstateId>;
+  min_epoch: Epoch | null;
+  max_epoch: Epoch | null;
+}
