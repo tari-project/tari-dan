@@ -76,7 +76,7 @@ use crate::{
             TemplateModel,
             TemplateUpdateModel,
         },
-        schema::{templates},
+        schema::templates,
         serialization::serialize_json,
     },
     SqliteTransaction,
@@ -401,7 +401,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         Ok(())
     }
 
-
     fn get_validator_node_by_address(
         &self,
         tx: &mut Self::DbTransaction<'_>,
@@ -409,7 +408,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         address: &Self::Addr,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<ValidatorNode<Self::Addr>, Self::Error> {
-        use crate::global::schema::{validator_nodes};
+        use crate::global::schema::validator_nodes;
 
         let vn = validator_nodes::table
             // .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
@@ -448,7 +447,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         public_key: &PublicKey,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<ValidatorNode<Self::Addr>, Self::Error> {
-        use crate::global::schema::{validator_nodes};
+        use crate::global::schema::validator_nodes;
 
         let vn = validator_nodes::table
             // .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
@@ -560,9 +559,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             let pk = PublicKey::from_canonical_bytes(&public_key)
                 .map_err(|_| SqliteStorageError::MalformedDbData("Invalid public key".to_string()))?;
             committees
-                .entry(
-                    Shard::from(bucket as u32)
-                )
+                .entry(Shard::from(bucket as u32))
                 .or_insert_with(Committee::empty)
                 .members
                 .push((addr, pk));
@@ -617,7 +614,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         shard_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error> {
         // TODO: is this method still needed? Most of this can be handled by the committees table
-        use crate::global::schema::{validator_nodes};
+        use crate::global::schema::validator_nodes;
 
         let db_sidechain_id = sidechain_id.map(|id| id.as_bytes()).unwrap_or(&[0u8; 32]);
         let validators = validator_nodes::table
@@ -694,7 +691,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error> {
-        use crate::global::schema::{validator_nodes};
+        use crate::global::schema::validator_nodes;
 
         let db_sidechain_id = sidechain_id.map(|id| id.as_bytes()).unwrap_or(&[0u8; 32]);
         let sqlite_vns = validator_nodes::table

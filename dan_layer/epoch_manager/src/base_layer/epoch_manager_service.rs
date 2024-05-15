@@ -106,7 +106,9 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
         let context = &format!("{:?}", req);
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch()), context),
-            EpochManagerRequest::CurrentBlockInfo { reply } => handle(reply, Ok(self.inner.current_block_info()), context),
+            EpochManagerRequest::CurrentBlockInfo { reply } => {
+                handle(reply, Ok(self.inner.current_block_info()), context)
+            },
             EpochManagerRequest::GetLastBlockOfTheEpoch { reply } => {
                 handle(reply, Ok(self.inner.last_block_of_current_epoch()), context)
             },
@@ -120,7 +122,8 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                         address: addr.to_string(),
                         epoch,
                     })
-                }),context
+                }),
+                context,
             ),
             EpochManagerRequest::GetValidatorNodeByPublicKey {
                 epoch,
@@ -136,18 +139,21 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                             epoch,
                         })
                     }),
-                context
+                context,
             ),
             EpochManagerRequest::GetManyValidatorNodes { query, reply } => {
                 handle(reply, self.inner.get_many_validator_nodes(query), context);
-
             },
             EpochManagerRequest::AddBlockHash {
                 block_height,
                 block_hash,
                 reply,
             } => {
-                handle(reply, self.inner.add_base_layer_block_info(block_height, block_hash), context);
+                handle(
+                    reply,
+                    self.inner.add_base_layer_block_info(block_height, block_hash),
+                    context,
+                );
             },
             EpochManagerRequest::UpdateEpoch {
                 block_height,
@@ -156,35 +162,55 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             } => {
                 handle(reply, self.inner.update_epoch(block_height, block_hash).await, context);
             },
-            EpochManagerRequest::LastRegistrationEpoch { reply } => handle(reply, self.inner.last_registration_epoch(), context),
+            EpochManagerRequest::LastRegistrationEpoch { reply } => {
+                handle(reply, self.inner.last_registration_epoch(), context)
+            },
 
             EpochManagerRequest::UpdateLastRegistrationEpoch { epoch, reply } => {
                 handle(reply, self.inner.update_last_registration_epoch(epoch), context);
             },
-            EpochManagerRequest::IsEpochValid { epoch, reply } => handle(reply, Ok(self.inner.is_epoch_valid(epoch)), context),
+            EpochManagerRequest::IsEpochValid { epoch, reply } => {
+                handle(reply, Ok(self.inner.is_epoch_valid(epoch)), context)
+            },
             EpochManagerRequest::GetCommittees { epoch, reply } => {
                 handle(reply, self.inner.get_committees(epoch), context);
             },
-            EpochManagerRequest::GetCommitteeInfoByAddress {
-                epoch,
-                address,
+            EpochManagerRequest::GetCommitteeInfoByAddress { epoch, address, reply } => handle(
                 reply,
-            } => handle(reply, self.inner.get_committee_info_by_validator_address(epoch, address), context),
+                self.inner.get_committee_info_by_validator_address(epoch, address),
+                context,
+            ),
             EpochManagerRequest::GetCommitteeForSubstate {
                 epoch,
                 substate_address,
                 reply,
             } => {
-                handle(reply, self.inner.get_committee_for_substate(epoch, substate_address), context);
+                handle(
+                    reply,
+                    self.inner.get_committee_for_substate(epoch, substate_address),
+                    context,
+                );
             },
             EpochManagerRequest::GetCommitteeForShardRange {
                 epoch,
                 shard_range,
                 reply,
-            } => handle(reply, self.inner.get_committee_for_shard_range(epoch, shard_range), context),
-            EpochManagerRequest::IsValidatorInCommitteeForCurrentEpoch { substate: shard, identity, reply } => {
+            } => handle(
+                reply,
+                self.inner.get_committee_for_shard_range(epoch, shard_range),
+                context,
+            ),
+            EpochManagerRequest::IsValidatorInCommitteeForCurrentEpoch {
+                substate: shard,
+                identity,
+                reply,
+            } => {
                 let epoch = self.inner.current_epoch();
-                handle(reply, self.inner.is_validator_in_committee(epoch, shard, &identity), context);
+                handle(
+                    reply,
+                    self.inner.is_validator_in_committee(epoch, shard, &identity),
+                    context,
+                );
             },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.subscribe()), context),
             EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply } => {
@@ -200,18 +226,20 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                 self.inner
                     .add_validator_node_registration(block_height, registration)
                     .await,
-                context
+                context,
             ),
             // TODO: This should be rather be a state machine event
             EpochManagerRequest::NotifyScanningComplete { reply } => {
-                handle(reply, self.inner.on_scanning_complete().await,context)
+                handle(reply, self.inner.on_scanning_complete().await, context)
             },
             EpochManagerRequest::RemainingRegistrationEpochs { reply } => {
                 handle(reply, self.inner.remaining_registration_epochs().await, context)
             },
-            EpochManagerRequest::GetBaseLayerConsensusConstants { reply } => {
-                handle(reply, self.inner.get_base_layer_consensus_constants().await.cloned(), context)
-            },
+            EpochManagerRequest::GetBaseLayerConsensusConstants { reply } => handle(
+                reply,
+                self.inner.get_base_layer_consensus_constants().await.cloned(),
+                context,
+            ),
             EpochManagerRequest::GetOurValidatorNode { epoch, reply } => {
                 handle(reply, self.inner.get_our_validator_node(epoch), context)
             },
@@ -222,7 +250,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             } => handle(
                 reply,
                 self.inner.get_committee_info_for_substate(epoch, substate_address),
-                context
+                context,
             ),
             EpochManagerRequest::GetLocalCommitteeInfo { epoch, reply } => {
                 handle(reply, self.inner.get_local_committee_info(epoch), context)
@@ -233,7 +261,9 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::GetCommitteesForShards { epoch, shards, reply } => {
                 handle(reply, self.inner.get_committees_for_shards(epoch, shards), context)
             },
-            EpochManagerRequest::GetFeeClaimPublicKey { reply } => handle(reply, self.inner.get_fee_claim_public_key(), context),
+            EpochManagerRequest::GetFeeClaimPublicKey { reply } => {
+                handle(reply, self.inner.get_fee_claim_public_key(), context)
+            },
             EpochManagerRequest::SetFeeClaimPublicKey { public_key, reply } => {
                 handle(reply, self.inner.set_fee_claim_public_key(public_key), context)
             },
@@ -247,7 +277,11 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
     }
 }
 
-fn handle<T>(reply: oneshot::Sender<Result<T, EpochManagerError>>, result: Result<T, EpochManagerError>, context: &str) {
+fn handle<T>(
+    reply: oneshot::Sender<Result<T, EpochManagerError>>,
+    result: Result<T, EpochManagerError>,
+    context: &str,
+) {
     if let Err(ref e) = result {
         error!(target: LOG_TARGET, "Request {} failed with error: {}", context, e);
     }

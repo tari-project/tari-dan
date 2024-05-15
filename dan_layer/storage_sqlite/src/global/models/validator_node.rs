@@ -27,10 +27,7 @@ use tari_utilities::ByteArray;
 
 use crate::{
     error::SqliteStorageError,
-    global::{
-        schema::{*},
-        serialization::deserialize_json,
-    },
+    global::{schema::*, serialization::deserialize_json},
 };
 
 #[derive(Queryable, Identifiable)]

@@ -388,11 +388,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             let vn = self
                 .global_db
                 .validator_nodes(&mut tx)
-                .get_by_public_key(
-                    epoch,
-                    &public_key,
-                    self.config.validator_node_sidechain_id.as_ref(),
-                )
+                .get_by_public_key(epoch, &public_key, self.config.validator_node_sidechain_id.as_ref())
                 .optional()?
                 .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
                     address: public_key.to_string(),
@@ -433,13 +429,17 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(validator_node_db.get_committees(epoch, self.config.validator_node_sidechain_id.as_ref())?)
     }
 
-    pub fn get_committee_info_by_validator_address(&self, epoch: Epoch, validator_addr: TAddr) -> Result<CommitteeInfo, EpochManagerError> {
-        let vn = self.get_validator_node_by_address(epoch, &validator_addr)?.ok_or_else(|| {
-            EpochManagerError::ValidatorNodeNotRegistered {
+    pub fn get_committee_info_by_validator_address(
+        &self,
+        epoch: Epoch,
+        validator_addr: TAddr,
+    ) -> Result<CommitteeInfo, EpochManagerError> {
+        let vn = self
+            .get_validator_node_by_address(epoch, &validator_addr)?
+            .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
                 address: validator_addr.to_string(),
                 epoch,
-            }
-        })?;
+            })?;
         self.get_committee_info_for_substate(epoch, vn.shard_key)
     }
 

@@ -10,7 +10,7 @@ use std::{
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeInfo, },
+    committee::{Committee, CommitteeInfo},
     shard::Shard,
     Epoch,
     SubstateAddress,
@@ -180,7 +180,10 @@ impl EpochManagerReader for TestEpochManager {
         })
     }
 
-    async fn get_all_validator_nodes(&self, _epoch: Epoch) -> Result<Vec<ValidatorNode<Self::Addr>>, EpochManagerError> {
+    async fn get_all_validator_nodes(
+        &self,
+        _epoch: Epoch,
+    ) -> Result<Vec<ValidatorNode<Self::Addr>>, EpochManagerError> {
         todo!()
     }
 
@@ -220,9 +223,15 @@ impl EpochManagerReader for TestEpochManager {
     async fn get_committees(&self, _epoch: Epoch) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
         todo!()
     }
-    async fn get_committee_info_by_validator_address(&self, epoch: Epoch, address: &Self::Addr) -> Result<CommitteeInfo, EpochManagerError> {
+
+    async fn get_committee_info_by_validator_address(
+        &self,
+        epoch: Epoch,
+        address: &Self::Addr,
+    ) -> Result<CommitteeInfo, EpochManagerError> {
         todo!()
     }
+
     async fn get_committees_by_shards(
         &self,
         _epoch: Epoch,
@@ -311,7 +320,6 @@ impl EpochManagerReader for TestEpochManager {
     async fn get_base_layer_block_height(&self, _hash: FixedHash) -> Result<Option<u64>, EpochManagerError> {
         Ok(Some(self.inner.lock().await.current_block_info.0))
     }
-
 }
 
 #[derive(Debug, Clone)]

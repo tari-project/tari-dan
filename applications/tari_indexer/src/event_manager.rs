@@ -31,12 +31,7 @@ use rand::{prelude::SliceRandom, rngs::OsRng};
 use tari_bor::decode;
 use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
-use tari_dan_common_types::{
-    committee::{Committee },
-    shard::Shard,
-    Epoch,
-    PeerAddress,
-};
+use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, PeerAddress};
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
 use tari_dan_storage::consensus_models::{Block, BlockId, Command, Decision, TransactionRecord};
 use tari_engine_types::{commit_result::ExecuteResult, events::Event, substate::SubstateId};

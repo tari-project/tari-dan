@@ -103,9 +103,8 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
         address: &Self::Addr,
-        sidechain_id: Option<&PublicKey>
+        sidechain_id: Option<&PublicKey>,
     ) -> Result<ValidatorNode<Self::Addr>, Self::Error>;
-
 
     fn get_validator_node_by_public_key(
         &self,

@@ -271,7 +271,8 @@ where
             .epoch_manager
             .get_committee_info_by_validator_address(current_epoch, &from)
             .await
-            .optional()?.map(|c| c.shard());
+            .optional()?
+            .map(|c| c.shard());
 
         // Only input shards propagate transactions to output shards. Check that this is true.
         if !unverified_output_shards.is_empty() {
@@ -290,7 +291,8 @@ where
             is_input_shard |= transaction.inputs().is_empty() && transaction.filled_inputs().is_empty();
             if !is_input_shard {
                 warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input
-        shard. Ignoring message.");         return Ok(());
+        shard. Ignoring message.");
+                return Ok(());
             }
         }
 

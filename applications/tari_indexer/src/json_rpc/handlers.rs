@@ -780,7 +780,7 @@ impl JsonRpcHandlers {
     }
 
     fn internal_error<T: Display>(answer_id: i64, error: T) -> JsonRpcResponse {
-        let msg =    error.to_string();
+        let msg = error.to_string();
         Self::error_response(answer_id, JsonRpcErrorReason::InternalError, msg)
     }
 }

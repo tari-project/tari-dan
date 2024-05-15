@@ -48,7 +48,11 @@ pub trait EpochManagerReader: Send + Sync {
     async fn get_all_validator_nodes(&self, epoch: Epoch) -> Result<Vec<ValidatorNode<Self::Addr>>, EpochManagerError>;
 
     async fn get_committees(&self, epoch: Epoch) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError>;
-    async fn get_committee_info_by_validator_address(&self, epoch: Epoch, address: &Self::Addr) -> Result<CommitteeInfo, EpochManagerError> ;
+    async fn get_committee_info_by_validator_address(
+        &self,
+        epoch: Epoch,
+        address: &Self::Addr,
+    ) -> Result<CommitteeInfo, EpochManagerError>;
     async fn get_committee_for_substate(
         &self,
         epoch: Epoch,
@@ -173,5 +177,4 @@ pub trait EpochManagerReader: Send + Sync {
     }
 
     async fn get_base_layer_block_height(&self, hash: FixedHash) -> Result<Option<u64>, EpochManagerError>;
-
 }
