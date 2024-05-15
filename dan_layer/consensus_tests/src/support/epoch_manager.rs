@@ -277,7 +277,6 @@ impl EpochManagerReader for TestEpochManager {
     //     Ok(committees)
     // }
 
-
     async fn get_validator_node_by_public_key(
         &self,
         _epoch: Epoch,

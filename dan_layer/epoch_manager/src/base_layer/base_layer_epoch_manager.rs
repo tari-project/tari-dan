@@ -488,7 +488,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         ))
     }
 
-
     pub fn get_number_of_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError> {
         let num_vns = self.get_total_validator_count(epoch)?;
         Ok(calculate_num_committees(num_vns, self.config.committee_size))
