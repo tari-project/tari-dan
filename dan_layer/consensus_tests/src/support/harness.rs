@@ -413,7 +413,7 @@ impl TestBuilder {
             .all_validators()
             .await
             .into_iter()
-            .map(|(address, bucket, shard, pk)| {
+            .map(|(address, bucket, shard, pk, _, _, _)| {
                 let sql_address = self.sql_address.replace("{}", &address.0);
                 let (channels, validator) = Validator::builder()
                     .with_sql_url(sql_address)

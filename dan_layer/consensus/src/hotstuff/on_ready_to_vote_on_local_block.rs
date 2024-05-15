@@ -6,7 +6,7 @@ use std::{collections::HashSet, num::NonZeroU64, ops::DerefMut};
 use log::*;
 use tari_common::configuration::Network;
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard},
+    committee::{Committee, CommitteeInfo},
     optional::Optional,
     SubstateAddress,
 };
@@ -120,7 +120,7 @@ where TConsensusSpec: ConsensusSpec
 
         let local_committee_shard = self
             .epoch_manager
-            .get_committee_shard_by_validator_public_key(valid_block.epoch(), valid_block.proposed_by())
+            .get_committee_info_by_validator_public_key(valid_block.epoch(), valid_block.proposed_by())
             .await?;
         let mut locked_blocks = Vec::new();
         let mut finalized_transactions = Vec::new();
@@ -218,7 +218,7 @@ where TConsensusSpec: ConsensusSpec
     fn decide_on_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        local_committee_shard: &CommitteeShard,
+        local_committee_info: &CommitteeInfo,
         block: &Block,
         epoch_should_start: bool,
         epoch_should_end: bool,
@@ -226,7 +226,7 @@ where TConsensusSpec: ConsensusSpec
         let mut maybe_decision = None;
         if self.should_vote(tx.deref_mut(), block)? {
             maybe_decision =
-                self.decide_what_to_vote(tx, block, local_committee_shard, epoch_should_start, epoch_should_end)?;
+                self.decide_what_to_vote(tx, block, local_committee_info, epoch_should_start, epoch_should_end)?;
         }
 
         Ok(maybe_decision)
@@ -238,7 +238,7 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         high_qc: HighQc,
         tip_block: &Block,
-        local_committee_shard: &CommitteeShard,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<bool, HotStuffError> {
         let mut leaf = high_qc.get_block(tx.deref_mut())?;
         if leaf.is_processed() {
@@ -262,7 +262,7 @@ where TConsensusSpec: ConsensusSpec
                     if t.decision.is_commit() {
                         let transaction = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
                         // Lock all inputs for the transaction as part of Prepare
-                        let is_inputs_locked = self.lock_inputs(tx, &transaction, local_committee_shard)?;
+                        let is_inputs_locked = self.lock_inputs(tx, &transaction, local_committee_info)?;
                         let is_outputs_locked = is_inputs_locked && self.lock_outputs(tx, leaf.id(), &transaction)?;
 
                         // This should not be possible and may be due to a BUG. The failure to lock the leaf block
@@ -300,7 +300,7 @@ where TConsensusSpec: ConsensusSpec
                                 Decision::Abort
                             );
                             // Unlock any locked inputs because we are not voting
-                            self.unlock_inputs(tx, &transaction, local_committee_shard)?;
+                            self.unlock_inputs(tx, &transaction, local_committee_info)?;
                             // We change our decision to ABORT so that the next time we propose/receive a
                             // proposal we will check for ABORT
                             let mut tx_rec = self.transaction_pool.get(tx, tip_block.as_leaf_block(), t.id())?;
@@ -313,7 +313,7 @@ where TConsensusSpec: ConsensusSpec
                     if t.decision.is_commit() {
                         let transaction = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
                         // Lock all inputs for the transaction as part of Prepare
-                        let is_inputs_locked = self.lock_inputs(tx, &transaction, local_committee_shard)?;
+                        let is_inputs_locked = self.lock_inputs(tx, &transaction, local_committee_info)?;
                         let is_outputs_locked = is_inputs_locked && self.lock_outputs(tx, leaf.id(), &transaction)?;
 
                         if !is_inputs_locked {
@@ -347,7 +347,7 @@ where TConsensusSpec: ConsensusSpec
                                 Decision::Abort
                             );
                             // Unlock any locked inputs because we are not voting
-                            self.unlock_inputs(tx, &transaction, local_committee_shard)?;
+                            self.unlock_inputs(tx, &transaction, local_committee_info)?;
                             // We change our decision to ABORT so that the next time we propose/receive a
                             // proposal we will check for ABORT
                             let mut tx_rec = self.transaction_pool.get(tx, tip_block.as_leaf_block(), t.id())?;
@@ -464,7 +464,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
-        local_committee_shard: &CommitteeShard,
+        local_committee_info: &CommitteeInfo,
         epoch_should_start: bool,
         epoch_should_end: bool,
     ) -> Result<Option<QuorumDecision>, HotStuffError> {
@@ -558,7 +558,7 @@ where TConsensusSpec: ConsensusSpec
             //       part of the proposal DanMessage so that there is no race condition between receiving the
             //       proposed block and receiving the foreign proposals. Because this is only added on locked block,
             //       this should be less common.
-            tx_rec.add_evidence(local_committee_shard, *block.justify().id());
+            tx_rec.add_evidence(local_committee_info, *block.justify().id());
 
             debug!(
                 target: LOG_TARGET,
@@ -592,7 +592,7 @@ where TConsensusSpec: ConsensusSpec
 
                     if tx_rec.current_decision() == t.decision {
                         if tx_rec.current_decision().is_commit() {
-                            if !local_committee_shard.includes_all_substate_addresses(
+                            if !local_committee_info.includes_all_substate_addresses(
                                 tx_rec.transaction().evidence.substate_addresses_iter(),
                             ) {
                                 warn!(
@@ -607,7 +607,7 @@ where TConsensusSpec: ConsensusSpec
                             let executed = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
                             // Lock all inputs for the transaction as part of LocalOnly
                             let is_inputs_locked =
-                                self.check_lock_inputs(tx, &executed, local_committee_shard, &mut locked_inputs)?;
+                                self.check_lock_inputs(tx, &executed, local_committee_info, &mut locked_inputs)?;
                             let is_outputs_locked = is_inputs_locked &&
                                 self.check_lock_outputs(tx, &executed, &mut locked_outputs, &locked_inputs)?;
 
@@ -718,7 +718,7 @@ where TConsensusSpec: ConsensusSpec
 
                             // Lock all inputs for the transaction as part of Prepare
                             let is_inputs_locked =
-                                self.check_lock_inputs(tx, &executed, local_committee_shard, &mut locked_inputs)?;
+                                self.check_lock_inputs(tx, &executed, local_committee_info, &mut locked_inputs)?;
                             let is_outputs_locked = is_inputs_locked &&
                                 self.check_lock_outputs(tx, &executed, &mut locked_outputs, &locked_inputs)?;
 
@@ -890,7 +890,7 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(None);
                     }
 
-                    let distinct_shards = local_committee_shard
+                    let distinct_shards = local_committee_info
                         .count_distinct_shards(tx_rec.transaction().evidence.substate_addresses_iter());
                     let distinct_shards = NonZeroU64::new(distinct_shards as u64).ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
@@ -999,7 +999,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         transaction: &ExecutedTransaction,
-        local_committee_shard: &CommitteeShard,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<bool, HotStuffError> {
         let resolved_inputs = transaction.resolved_inputs().ok_or_else(|| {
             HotStuffError::InvariantError(format!(
@@ -1011,7 +1011,7 @@ where TConsensusSpec: ConsensusSpec
         let state = SubstateRecord::try_lock_all(
             tx,
             transaction.id(),
-            local_committee_shard.filter(
+            local_committee_info.filter(
                 resolved_inputs
                     .iter()
                     .filter(|i| i.lock_flag().is_write())
@@ -1032,7 +1032,7 @@ where TConsensusSpec: ConsensusSpec
         let state = SubstateRecord::try_lock_all(
             tx,
             transaction.id(),
-            local_committee_shard.filter(
+            local_committee_info.filter(
                 resolved_inputs
                     .iter()
                     .filter(|i| i.lock_flag().is_read())
@@ -1064,7 +1064,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         transaction: &ExecutedTransaction,
-        local_committee_shard: &CommitteeShard,
+        local_committee_info: &CommitteeInfo,
         locked_inputs: &mut HashSet<SubstateAddress>,
     ) -> Result<bool, HotStuffError> {
         let resolved_inputs = transaction.resolved_inputs().ok_or_else(|| {
@@ -1089,7 +1089,7 @@ where TConsensusSpec: ConsensusSpec
 
         let state = SubstateRecord::check_lock_all(
             tx,
-            local_committee_shard.filter(
+            local_committee_info.filter(
                 resolved_inputs
                     .iter()
                     .filter(|i| i.lock_flag().is_write())
@@ -1109,7 +1109,7 @@ where TConsensusSpec: ConsensusSpec
 
         let state = SubstateRecord::check_lock_all(
             tx,
-            local_committee_shard.filter(
+            local_committee_info.filter(
                 resolved_inputs
                     .iter()
                     .filter(|i| i.lock_flag().is_read())
@@ -1142,7 +1142,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         transaction: &ExecutedTransaction,
-        local_committee_shard: &CommitteeShard,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
         let inputs = transaction.resolved_inputs().ok_or_else(|| {
             HotStuffError::InvariantError(format!(
@@ -1154,7 +1154,7 @@ where TConsensusSpec: ConsensusSpec
         SubstateRecord::try_unlock_many(
             tx,
             transaction.id(),
-            local_committee_shard.filter(
+            local_committee_info.filter(
                 inputs
                     .iter()
                     .filter(|i| i.lock_flag().is_write())
@@ -1166,7 +1166,7 @@ where TConsensusSpec: ConsensusSpec
         SubstateRecord::try_unlock_many(
             tx,
             transaction.id(),
-            local_committee_shard.filter(
+            local_committee_info.filter(
                 inputs
                     .iter()
                     .filter(|i| i.lock_flag().is_read())
@@ -1255,11 +1255,11 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         transaction: &ExecutedTransaction,
-        local_committee_shard: &CommitteeShard,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
         LockedOutput::try_release_all(
             tx,
-            local_committee_shard.filter(transaction.resulting_outputs().iter().map(|v| v.to_substate_address())),
+            local_committee_info.filter(transaction.resulting_outputs().iter().map(|v| v.to_substate_address())),
         )?;
         Ok(())
     }
@@ -1291,9 +1291,9 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         last_executed: &LastExecuted,
         block: &Block,
-        local_committee_shard: &CommitteeShard,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<Vec<TransactionAtom>, HotStuffError> {
-        let committed_transactions = self.execute(tx, block, local_committee_shard)?;
+        let committed_transactions = self.execute(tx, block, local_committee_info)?;
         debug!(
             target: LOG_TARGET,
             "✅ COMMIT block {}, last executed height = {}",
@@ -1383,7 +1383,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
-        local_committee_shard: &CommitteeShard,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<Vec<TransactionAtom>, HotStuffError> {
         let mut finalized_transactions = Vec::with_capacity(
             block
@@ -1426,7 +1426,7 @@ where TConsensusSpec: ConsensusSpec
                         }
 
                         self.state_manager
-                            .commit_transaction(tx, block, &executed, local_committee_shard)
+                            .commit_transaction(tx, block, &executed, local_committee_info)
                             .map_err(|e| HotStuffError::StateManagerError(e.into()))?;
                     }
 
@@ -1434,9 +1434,9 @@ where TConsensusSpec: ConsensusSpec
                     if tx_rec.current_decision().is_commit() {
                         // We unlock just so that inputs that were not mutated are unlocked, even though those
                         // should be in input_refs
-                        self.unlock_inputs(tx, &executed, local_committee_shard)?;
+                        self.unlock_inputs(tx, &executed, local_committee_info)?;
                         // Unlock any outputs that were locked
-                        self.unlock_outputs(tx, &executed, local_committee_shard)?;
+                        self.unlock_outputs(tx, &executed, local_committee_info)?;
                     }
 
                     // We are accepting the transaction so can remove the transaction from the pool

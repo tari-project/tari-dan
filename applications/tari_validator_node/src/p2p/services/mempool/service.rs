@@ -269,17 +269,19 @@ where
         let num_committees = self.epoch_manager.get_num_committees(current_epoch).await?;
         let maybe_sender_shard = self
             .epoch_manager
-            .get_validator_node(current_epoch, &from)
+            .get_committee_info_by_validator_address(current_epoch, &from)
             .await
             .optional()?
-            .and_then(|s| s.committee_shard);
+            .map(|c| c.shard());
 
         // Only input shards propagate transactions to output shards. Check that this is true.
         if !unverified_output_shards.is_empty() {
             let Some(sender_shard) = maybe_sender_shard else {
-                debug!(target: LOG_TARGET, "Sender {from} isn't registered but tried to send a new transaction with output shards");
+                debug!(target: LOG_TARGET, "Sender {from} isn't registered but tried to send a new transaction with
+        output shards");
                 return Ok(());
             };
+
             let mut is_input_shard = transaction
                 .all_inputs_iter()
                 .filter_map(|s| s.to_committee_shard(num_committees))
@@ -288,7 +290,8 @@ where
             // invalid, however we must support them for now because of CreateFreeTestCoin transactions.
             is_input_shard |= transaction.inputs().is_empty() && transaction.filled_inputs().is_empty();
             if !is_input_shard {
-                warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input shard. Ignoring message.");
+                warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input
+        shard. Ignoring message.");
                 return Ok(());
             }
         }
@@ -341,7 +344,7 @@ where
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let tx_substate_address = SubstateAddress::for_transaction_receipt(transaction.id().into_receipt_address());
 
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
         let transaction_inputs = transaction.all_inputs_iter().filter_map(|i| i.to_substate_address());
         let mut is_input_shard = local_committee_shard.includes_any_shard(transaction_inputs);
         // Special temporary case: if there are no input shards an output shard will also propagate. No inputs is
@@ -672,7 +675,7 @@ where
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
 
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
         let all_inputs_iter = executed.all_inputs_iter().map(|i| i.to_substate_address());
         let is_input_shard = local_committee_shard.includes_any_shard(all_inputs_iter) |
             (executed.transaction().inputs().is_empty() && executed.transaction().filled_inputs().is_empty());

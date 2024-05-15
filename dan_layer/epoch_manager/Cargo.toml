@@ -19,7 +19,6 @@ tari_utilities = {workspace = true}
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-indexmap = { workspace = true }
 log = { workspace = true , optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["sync"] }

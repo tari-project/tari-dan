@@ -85,37 +85,38 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         address: Self::Addr,
         public_key: PublicKey,
         shard_key: SubstateAddress,
-        epoch: Epoch,
+        registered_at_base_height: u64,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
         fee_claim_public_key: PublicKey,
         sidechain_id: Option<PublicKey>,
     ) -> Result<(), Self::Error>;
-    fn get_validator_nodes_within_epochs(
+    fn get_validator_nodes_within_epoch(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        start_epoch: Epoch,
-        end_epoch: Epoch,
+        epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error>;
+
     fn get_validator_node_by_address(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        start_epoch: Epoch,
-        end_epoch: Epoch,
+        epoch: Epoch,
         address: &Self::Addr,
+        sidechain_id: Option<&PublicKey>,
     ) -> Result<ValidatorNode<Self::Addr>, Self::Error>;
+
     fn get_validator_node_by_public_key(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        start_epoch: Epoch,
-        end_epoch: Epoch,
+        epoch: Epoch,
         public_key: &PublicKey,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<ValidatorNode<Self::Addr>, Self::Error>;
     fn validator_nodes_count(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        start_epoch: Epoch,
-        end_epoch: Epoch,
+        epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<u64, Self::Error>;
     fn validator_nodes_count_for_bucket(
@@ -135,21 +136,26 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         epoch: Epoch,
     ) -> Result<(), Self::Error>;
 
-    fn validator_nodes_get_by_shard_range(
+    fn validator_nodes_get_by_substate_range(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        start_epoch: Epoch,
-        end_epoch: Epoch,
+        epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
-        shard_range: RangeInclusive<SubstateAddress>,
+        substate_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error>;
 
-    fn validator_nodes_get_by_buckets(
+    fn validator_nodes_get_for_shards(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        start_epoch: Epoch,
-        end_epoch: Epoch,
-        buckets: HashSet<Shard>,
+        epoch: Epoch,
+        shards: HashSet<Shard>,
+    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error>;
+
+    fn validator_nodes_get_committees_for_epoch(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+        sidechain_id: Option<&PublicKey>,
     ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error>;
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;

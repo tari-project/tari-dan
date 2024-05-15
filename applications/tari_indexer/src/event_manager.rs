@@ -22,22 +22,16 @@
 
 use std::{
     collections::{BTreeMap, HashSet},
-    ops::RangeInclusive,
     str::FromStr,
 };
 
 use futures::StreamExt;
 use log::*;
+use rand::{prelude::SliceRandom, rngs::OsRng};
 use tari_bor::decode;
 use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
-use tari_dan_common_types::{
-    committee::{Committee, CommitteeShardInfo},
-    shard::Shard,
-    Epoch,
-    PeerAddress,
-    SubstateAddress,
-};
+use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, PeerAddress};
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
 use tari_dan_storage::consensus_models::{Block, BlockId, Command, Decision, TransactionRecord};
 use tari_engine_types::{commit_result::ExecuteResult, events::Event, substate::SubstateId};
@@ -88,18 +82,20 @@ impl EventManager {
 
         let mut event_count = 0;
 
-        let network_committee_info = self.epoch_manager.get_network_committees().await?;
-        let epoch = network_committee_info.epoch;
-        for committee in network_committee_info.committees {
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        // let network_committee_info = self.epoch_manager.get_network_committees().await?;
+        // let epoch = network_committee_info.epoch;
+        let current_committees = self.epoch_manager.get_committees(current_epoch).await?;
+        for (shard, committee) in current_committees {
             info!(
                 target: LOG_TARGET,
                 "Scanning committee epoch={}, shard={}",
-                epoch,
-                committee.shard
+                current_epoch,
+                shard
             );
             // TODO: use the latest block id that we scanned for each committee
             let new_blocks = self
-                .get_new_blocks_from_committee(&mut committee.clone(), epoch)
+                .get_new_blocks_from_committee(shard, &mut committee.clone(), current_epoch)
                 .await?;
             info!(
                 target: LOG_TARGET,
@@ -185,7 +181,7 @@ impl EventManager {
     async fn get_events_for_transaction(&self, transaction_id: TransactionId) -> Result<Vec<Event>, anyhow::Error> {
         let committee = self.get_all_vns().await?;
 
-        for member in committee.addresses() {
+        for member in &committee {
             let resp = self.get_execute_result_from_vn(member, &transaction_id).await;
 
             match resp {
@@ -274,18 +270,18 @@ impl EventManager {
     #[allow(unused_assignments)]
     async fn get_new_blocks_from_committee(
         &self,
-        committee: &mut CommitteeShardInfo<PeerAddress>,
+        shard: Shard,
+        committee: &mut Committee<PeerAddress>,
         epoch: Epoch,
     ) -> Result<Vec<Block>, anyhow::Error> {
         // We start scanning from the last scanned block for this commitee
-        let shard = committee.shard;
         let start_block_id = {
             let mut tx = self.substate_store.create_read_tx()?;
             tx.get_last_scanned_block_id(epoch, shard)?
         };
         let start_block_id = start_block_id.unwrap_or(self.build_genesis_block_id());
 
-        committee.validators.shuffle();
+        committee.members.shuffle(&mut OsRng);
         let mut last_block_id = start_block_id;
 
         info!(
@@ -296,7 +292,7 @@ impl EventManager {
             shard
         );
 
-        for member in committee.validators.addresses() {
+        for (member, _) in &committee.members {
             let resp = self.get_blocks_from_vn(member, start_block_id).await;
 
             match resp {
@@ -353,18 +349,14 @@ impl EventManager {
         Ok(())
     }
 
-    async fn get_all_vns(&self) -> Result<Committee<PeerAddress>, anyhow::Error> {
+    async fn get_all_vns(&self) -> Result<Vec<PeerAddress>, anyhow::Error> {
         // get all the committees
-        // TODO: optimize by getting all individual CommiteeShards instead of all the VNs
         let epoch = self.epoch_manager.current_epoch().await?;
-        let full_range = RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::max());
-        let mut committee = self
+        Ok(self
             .epoch_manager
-            .get_committee_within_shard_range(epoch, full_range)
-            .await?;
-        committee.shuffle();
-
-        Ok(committee)
+            .get_all_validator_nodes(epoch)
+            .await
+            .map(|v| v.iter().map(|m| m.address).collect())?)
     }
 
     async fn get_blocks_from_vn(

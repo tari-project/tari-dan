@@ -1,16 +1,13 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{HashMap, HashSet},
-    ops::RangeInclusive,
-};
+use std::collections::{HashMap, HashSet};
 
 use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
+use tari_core::transactions::{tari_amount::MicroMinotari, transaction_components::ValidatorNodeRegistration};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard, NetworkCommitteeInfo},
+    committee::{Committee, CommitteeInfo},
     shard::Shard,
     Epoch,
     SubstateAddress,
@@ -54,6 +51,7 @@ pub enum EpochManagerRequest<TAddr> {
     AddValidatorNodeRegistration {
         block_height: u64,
         registration: ValidatorNodeRegistration,
+        value: MicroMinotari,
         reply: Reply<()>,
     },
     AddBlockHash {
@@ -79,27 +77,21 @@ pub enum EpochManagerRequest<TAddr> {
     },
     GetCommittees {
         epoch: Epoch,
-        shards: HashSet<SubstateAddress>,
         reply: Reply<HashMap<Shard, Committee<TAddr>>>,
     },
-    GetCommittee {
+    GetCommitteeForSubstate {
         epoch: Epoch,
-        shard: SubstateAddress,
+        substate_address: SubstateAddress,
         reply: Reply<Committee<TAddr>>,
     },
-    GetCommitteeForShardRange {
+    GetCommitteeInfoByAddress {
         epoch: Epoch,
-        shard_range: RangeInclusive<SubstateAddress>,
-        reply: Reply<Committee<TAddr>>,
+        address: TAddr,
+        reply: Reply<CommitteeInfo>,
     },
     GetValidatorNodesPerEpoch {
         epoch: Epoch,
         reply: Reply<Vec<ValidatorNode<TAddr>>>,
-    },
-    IsValidatorInCommitteeForCurrentEpoch {
-        shard: SubstateAddress,
-        identity: TAddr,
-        reply: Reply<bool>,
     },
     Subscribe {
         reply: Reply<broadcast::Receiver<EpochManagerEvent>>,
@@ -113,31 +105,26 @@ pub enum EpochManagerRequest<TAddr> {
     GetBaseLayerConsensusConstants {
         reply: Reply<BaseLayerConsensusConstants>,
     },
-    GetLocalShardRange {
-        epoch: Epoch,
-        for_addr: TAddr,
-        reply: Reply<RangeInclusive<SubstateAddress>>,
-    },
     GetOurValidatorNode {
         epoch: Epoch,
         reply: Reply<ValidatorNode<TAddr>>,
     },
-    GetCommitteeShard {
+    GetCommitteeInfo {
         epoch: Epoch,
-        shard: SubstateAddress,
-        reply: Reply<CommitteeShard>,
+        substate_address: SubstateAddress,
+        reply: Reply<CommitteeInfo>,
     },
-    GetLocalCommitteeShard {
+    GetLocalCommitteeInfo {
         epoch: Epoch,
-        reply: Reply<CommitteeShard>,
+        reply: Reply<CommitteeInfo>,
     },
     GetNumCommittees {
         epoch: Epoch,
         reply: Reply<u32>,
     },
-    GetCommitteesByBuckets {
+    GetCommitteesForShards {
         epoch: Epoch,
-        buckets: HashSet<Shard>,
+        shards: HashSet<Shard>,
         reply: Reply<HashMap<Shard, Committee<TAddr>>>,
     },
     GetBaseLayerBlockHeight {
@@ -150,8 +137,5 @@ pub enum EpochManagerRequest<TAddr> {
     SetFeeClaimPublicKey {
         public_key: PublicKey,
         reply: Reply<()>,
-    },
-    GetNetworkCommittees {
-        reply: Reply<NetworkCommitteeInfo<TAddr>>,
     },
 }

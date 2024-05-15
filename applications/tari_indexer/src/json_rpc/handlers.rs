@@ -29,7 +29,7 @@ use axum_jrpc::{
     JsonRpcResponse,
 };
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
-use log::{error, warn};
+use log::warn;
 use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_crypto::tari_utilities::hex::to_hex;
@@ -780,12 +780,7 @@ impl JsonRpcHandlers {
     }
 
     fn internal_error<T: Display>(answer_id: i64, error: T) -> JsonRpcResponse {
-        let msg = if cfg!(debug_assertions) || option_env!("CI").is_some() {
-            error.to_string()
-        } else {
-            error!(target: LOG_TARGET, "Internal error: {}", error);
-            "Something went wrong".to_string()
-        };
+        let msg = error.to_string();
         Self::error_response(answer_id, JsonRpcErrorReason::InternalError, msg)
     }
 }

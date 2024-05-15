@@ -6,7 +6,7 @@ use std::ops::DerefMut;
 use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{committee::CommitteeShard, optional::Optional};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional};
 use tari_dan_storage::{
     consensus_models::{Block, QuorumCertificate, QuorumDecision, ValidatorSignature, Vote},
     StateStore,
@@ -93,7 +93,7 @@ where TConsensusSpec: ConsensusSpec
         // Are we the leader for the block being voted for?
         let our_vn = self.epoch_manager.get_our_validator_node(message.epoch).await?;
 
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(message.epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_info(message.epoch).await?;
 
         // Get the sender shard, and check that they are in the local committee
         let sender_vn = self.epoch_manager.get_validator_node(message.epoch, &from).await?;
@@ -235,7 +235,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(true)
     }
 
-    fn calculate_threshold_decision(votes: &[Vote], local_committee_shard: &CommitteeShard) -> Option<QuorumDecision> {
+    fn calculate_threshold_decision(votes: &[Vote], local_committee_info: &CommitteeInfo) -> Option<QuorumDecision> {
         let mut count_accept = 0;
         let mut count_reject = 0;
         for vote in votes {
@@ -245,7 +245,7 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
-        let threshold = local_committee_shard.quorum_threshold() as usize;
+        let threshold = local_committee_info.quorum_threshold() as usize;
         if count_accept >= threshold {
             return Some(QuorumDecision::Accept);
         }

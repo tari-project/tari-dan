@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, SubstateAddress};
+use tari_dan_common_types::{Epoch, NodeAddressable, SubstateAddress};
 use tari_dan_storage::global::models::ValidatorNode;
 use tari_utilities::ByteArray;
 
@@ -36,8 +36,9 @@ pub struct DbValidatorNode {
     pub id: i32,
     pub public_key: Vec<u8>,
     pub shard_key: Vec<u8>,
-    pub epoch: i64,
-    pub committee_bucket: Option<i64>,
+    pub registered_at_base_height: i64,
+    pub start_epoch: i64,
+    pub end_epoch: i64,
     pub fee_claim_public_key: Vec<u8>,
     pub address: String,
     pub sidechain_id: Vec<u8>,
@@ -50,13 +51,13 @@ impl<TAddr: NodeAddressable> TryFrom<DbValidatorNode> for ValidatorNode<TAddr> {
             shard_key: SubstateAddress::try_from(vn.shard_key).map_err(|_| {
                 SqliteStorageError::MalformedDbData(format!("Invalid shard id in validator node record id={}", vn.id))
             })?,
-            address: deserialize_json(&vn.address)?,
+            address: DbValidatorNode::try_parse_address(&vn.address)?,
             public_key: PublicKey::from_canonical_bytes(&vn.public_key).map_err(|_| {
                 SqliteStorageError::MalformedDbData(format!("Invalid public key in validator node record id={}", vn.id))
             })?,
-            epoch: Epoch(vn.epoch as u64),
-            committee_shard: vn.committee_bucket.map(|v| v as u32).map(Shard::from),
-
+            registered_at_base_height: vn.registered_at_base_height as u64,
+            start_epoch: Epoch(vn.start_epoch as u64),
+            end_epoch: Epoch(vn.end_epoch as u64),
             fee_claim_public_key: PublicKey::from_canonical_bytes(&vn.fee_claim_public_key).map_err(|_| {
                 SqliteStorageError::MalformedDbData(format!(
                     "Invalid fee claim public key in validator node record id={}",
@@ -77,11 +78,8 @@ impl<TAddr: NodeAddressable> TryFrom<DbValidatorNode> for ValidatorNode<TAddr> {
     }
 }
 
-#[derive(Insertable)]
-#[diesel(table_name = validator_nodes)]
-pub struct NewValidatorNode {
-    pub public_key: Vec<u8>,
-    pub shard_key: Vec<u8>,
-    pub epoch: i64,
-    pub fee_claim_public_key: Vec<u8>,
+impl DbValidatorNode {
+    pub fn try_parse_address<T: serde::de::DeserializeOwned>(address: &str) -> Result<T, SqliteStorageError> {
+        deserialize_json(address)
+    }
 }

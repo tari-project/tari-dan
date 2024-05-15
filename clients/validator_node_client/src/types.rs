@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use tari_base_node_client::types::BaseLayerValidatorNode;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard},
+    committee::{Committee, CommitteeInfo},
     shard::Shard,
     Epoch,
     PeerAddress,
@@ -464,9 +464,8 @@ pub struct ValidatorNode {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub public_key: PublicKey,
     pub shard_key: SubstateAddress,
-    pub epoch: Epoch,
-    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
-    pub committee_shard: Option<Shard>,
+    pub start_epoch: Epoch,
+    pub end_epoch: Epoch,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub fee_claim_public_key: PublicKey,
 }
@@ -477,8 +476,8 @@ impl From<models::ValidatorNode<PeerAddress>> for ValidatorNode {
             address: value.address,
             public_key: value.public_key,
             shard_key: value.shard_key,
-            epoch: value.epoch,
-            committee_shard: value.committee_shard,
+            start_epoch: value.start_epoch,
+            end_epoch: value.end_epoch,
             fee_claim_public_key: value.fee_claim_public_key,
         }
     }
@@ -608,7 +607,7 @@ pub struct GetEpochManagerStatsResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub current_block_hash: FixedHash,
     pub is_valid: bool,
-    pub committee_shard: Option<CommitteeShard>,
+    pub committee_info: Option<CommitteeInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

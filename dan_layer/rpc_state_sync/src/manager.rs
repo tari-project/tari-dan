@@ -270,9 +270,16 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         let local_committee = if block.justifies_parent() {
             Committee::new(vec![])
         } else {
-            self.epoch_manager.get_local_committee(block.epoch()).await?
+            self.epoch_manager
+                .get_committees_by_shards(block.epoch(), vec![block.shard()].into_iter().collect())
+                .await?
+                .into_iter()
+                .next()
+                .map(|(_, committee)| committee)
+                .unwrap_or_else(Committee::empty)
         };
 
+        // TODO: Validate before we save anything.
         self.state_store.with_write_tx(|tx| {
             for transaction in transactions {
                 transaction.save(tx)?;
@@ -586,7 +593,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
             // We are behind at least one epoch.
             // We get the current substate range, and we asks committees from previous epoch in this range to give us
             // data.
-            let local_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+            let local_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
             let current_num_committee = self.epoch_manager.get_num_committees(current_epoch).await?;
             let range = local_shard.shard().to_substate_address_range(current_num_committee);
             let prev_epoch = current_epoch.saturating_sub(Epoch(1));
@@ -638,7 +645,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
             // We are behind at least one epoch.
             // We get the current substate range, and we asks committees from previous epoch in this range to give us
             // data.
-            let local_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+            let local_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
             let current_num_committee = self.epoch_manager.get_num_committees(current_epoch).await?;
             let range = local_shard.shard().to_substate_address_range(current_num_committee);
             let prev_epoch = current_epoch.saturating_sub(Epoch(1));
