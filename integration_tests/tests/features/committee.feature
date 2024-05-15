@@ -3,7 +3,7 @@
 
 Feature: Committee scenarios
 
-  @serial @fixed @current
+  @serial @fixed
   Scenario: Template registration and invocation in a 2-VN committee
     Given fees are disabled
     # Initialize a base node, wallet and miner

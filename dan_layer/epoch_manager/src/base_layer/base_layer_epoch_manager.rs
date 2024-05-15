@@ -380,33 +380,29 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         &self,
         epoch_validators: Vec<(Epoch, PublicKey)>,
     ) -> Result<HashMap<(Epoch, PublicKey), ValidatorNode<TAddr>>, EpochManagerError> {
-        error!(target: LOG_TARGET, "get_many_validator_nodes not implemented");
-        todo!()
-        // let mut tx = self.global_db.create_transaction()?;
-        // #[allow(clippy::mutable_key_type)]
-        // let mut validators = HashMap::with_capacity(epoch_validators.len());
-        //
-        // for (epoch, public_key) in epoch_validators {
-        //     let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        //     let vn = self
-        //         .global_db
-        //         .validator_nodes(&mut tx)
-        //         .get_by_public_key(
-        //             start_epoch,
-        //             end_epoch,
-        //             &public_key,
-        //             self.config.validator_node_sidechain_id.as_ref(),
-        //         )
-        //         .optional()?
-        //         .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
-        //             address: public_key.to_string(),
-        //             epoch,
-        //         })?;
-        //
-        //     validators.insert((epoch, public_key), vn);
-        // }
-        //
-        // Ok(validators)
+        let mut tx = self.global_db.create_transaction()?;
+        #[allow(clippy::mutable_key_type)]
+        let mut validators = HashMap::with_capacity(epoch_validators.len());
+
+        for (epoch, public_key) in epoch_validators {
+            let vn = self
+                .global_db
+                .validator_nodes(&mut tx)
+                .get_by_public_key(
+                    epoch,
+                    &public_key,
+                    self.config.validator_node_sidechain_id.as_ref(),
+                )
+                .optional()?
+                .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
+                    address: public_key.to_string(),
+                    epoch,
+                })?;
+
+            validators.insert((epoch, public_key), vn);
+        }
+
+        Ok(validators)
     }
 
     pub fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
