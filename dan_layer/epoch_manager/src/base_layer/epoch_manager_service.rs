@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use log::{debug, error, info, trace};
+use log::{error, info, trace};
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{DerivableFromPublicKey, NodeAddressable};
@@ -191,27 +191,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                     context,
                 );
             },
-            EpochManagerRequest::GetCommitteeForShardRange {
-                epoch,
-                shard_range,
-                reply,
-            } => handle(
-                reply,
-                self.inner.get_committee_for_shard_range(epoch, shard_range),
-                context,
-            ),
-            EpochManagerRequest::IsValidatorInCommitteeForCurrentEpoch {
-                substate: shard,
-                identity,
-                reply,
-            } => {
-                let epoch = self.inner.current_epoch();
-                handle(
-                    reply,
-                    self.inner.is_validator_in_committee(epoch, shard, &identity),
-                    context,
-                );
-            },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.subscribe()), context),
             EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply } => {
                 handle(reply, self.inner.get_validator_nodes_per_epoch(epoch), context)
@@ -219,7 +198,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::AddValidatorNodeRegistration {
                 block_height,
                 registration,
-                value,
+                value : _value,
                 reply,
             } => handle(
                 reply,

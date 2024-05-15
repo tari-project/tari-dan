@@ -356,15 +356,7 @@ impl EventManager {
             .epoch_manager
             .get_all_validator_nodes(epoch)
             .await
-            .map(|v| v.iter().map(|m| m.address.clone()).collect())?)
-        // let full_range = RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::max());
-        // let mut committee = self
-        //     .epoch_manager
-        //     .get_committee_within_shard_range(epoch, full_range)
-        //     .await?;
-        // committee.shuffle();
-
-        // Ok(committee)
+            .map(|v| v.iter().map(|m| m.address).collect())?)
     }
 
     async fn get_blocks_from_vn(

@@ -3,7 +3,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    ops::RangeInclusive,
 };
 
 use async_trait::async_trait;
@@ -11,7 +10,7 @@ use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::transactions::{tari_amount::MicroMinotari, transaction_components::ValidatorNodeRegistration};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeInfo, NetworkCommitteeInfo},
+    committee::{Committee, CommitteeInfo, },
     shard::Shard,
     Epoch,
     NodeAddressable,
@@ -214,24 +213,6 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
             .send(EpochManagerRequest::GetCommitteeForSubstate {
                 epoch,
                 substate_address,
-                reply: tx,
-            })
-            .await
-            .map_err(|_| EpochManagerError::SendError)?;
-
-        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
-    }
-
-    async fn get_committee_within_shard_range(
-        &self,
-        epoch: Epoch,
-        shard_range: RangeInclusive<SubstateAddress>,
-    ) -> Result<Committee<Self::Addr>, EpochManagerError> {
-        let (tx, rx) = oneshot::channel();
-        self.tx_request
-            .send(EpochManagerRequest::GetCommitteeForShardRange {
-                epoch,
-                shard_range,
                 reply: tx,
             })
             .await

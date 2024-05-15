@@ -3,7 +3,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    ops::RangeInclusive,
     sync::Arc,
 };
 
@@ -226,8 +225,8 @@ impl EpochManagerReader for TestEpochManager {
 
     async fn get_committee_info_by_validator_address(
         &self,
-        epoch: Epoch,
-        address: &Self::Addr,
+        _epoch: Epoch,
+        _address: &Self::Addr,
     ) -> Result<CommitteeInfo, EpochManagerError> {
         todo!()
     }
@@ -278,20 +277,6 @@ impl EpochManagerReader for TestEpochManager {
     //     Ok(committees)
     // }
 
-    async fn get_committee_within_shard_range(
-        &self,
-        _epoch: Epoch,
-        range: RangeInclusive<SubstateAddress>,
-    ) -> Result<Committee<Self::Addr>, EpochManagerError> {
-        let lock = self.state_lock().await;
-        Ok(Committee::new(
-            lock.validator_shards
-                .iter()
-                .filter(|(_, (_, s, _, _, _, _, _))| range.contains(s))
-                .map(|(a, (_, _, pk, _, _, _, _))| (a.clone(), pk.clone()))
-                .collect(),
-        ))
-    }
 
     async fn get_validator_node_by_public_key(
         &self,
@@ -328,6 +313,7 @@ pub struct TestEpochManagerState {
     pub current_block_info: (u64, FixedHash),
     pub last_block_of_current_epoch: FixedHash,
     pub is_epoch_active: bool,
+    #[allow(clippy::type_complexity)]
     pub validator_shards:
         HashMap<TestAddress, (Shard, SubstateAddress, PublicKey, Option<PublicKey>, u64, Epoch, Epoch)>,
     pub committees: HashMap<Shard, Committee<TestAddress>>,

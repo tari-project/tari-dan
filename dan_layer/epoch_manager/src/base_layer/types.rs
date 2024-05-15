@@ -3,7 +3,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    ops::RangeInclusive,
 };
 
 use tari_base_node_client::types::BaseLayerConsensusConstants;
@@ -87,11 +86,6 @@ pub enum EpochManagerRequest<TAddr> {
         substate_address: SubstateAddress,
         reply: Reply<Committee<TAddr>>,
     },
-    GetCommitteeForShardRange {
-        epoch: Epoch,
-        shard_range: RangeInclusive<SubstateAddress>,
-        reply: Reply<Committee<TAddr>>,
-    },
     GetCommitteeInfoByAddress {
         epoch: Epoch,
         address: TAddr,
@@ -100,11 +94,6 @@ pub enum EpochManagerRequest<TAddr> {
     GetValidatorNodesPerEpoch {
         epoch: Epoch,
         reply: Reply<Vec<ValidatorNode<TAddr>>>,
-    },
-    IsValidatorInCommitteeForCurrentEpoch {
-        substate: SubstateAddress,
-        identity: TAddr,
-        reply: Reply<bool>,
     },
     Subscribe {
         reply: Reply<broadcast::Receiver<EpochManagerEvent>>,

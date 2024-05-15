@@ -22,13 +22,12 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    ops::RangeInclusive,
 };
 
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeInfo, NetworkCommitteeInfo},
+    committee::{Committee, CommitteeInfo},
     shard::Shard,
     Epoch,
     NodeAddressable,
@@ -58,11 +57,7 @@ pub trait EpochManagerReader: Send + Sync {
         epoch: Epoch,
         substate_address: SubstateAddress,
     ) -> Result<Committee<Self::Addr>, EpochManagerError>;
-    async fn get_committee_within_shard_range(
-        &self,
-        epoch: Epoch,
-        range: RangeInclusive<SubstateAddress>,
-    ) -> Result<Committee<Self::Addr>, EpochManagerError>;
+
     async fn get_validator_node(
         &self,
         epoch: Epoch,

@@ -23,16 +23,14 @@
 use std::{
     cmp,
     collections::{HashMap, HashSet},
-    ops::RangeInclusive,
 };
 
-use indexmap::IndexMap;
 use log::*;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeInfo, CommitteeShardInfo, NetworkCommitteeInfo},
+    committee::{Committee, CommitteeInfo, NetworkCommitteeInfo},
     optional::Optional,
     shard::Shard,
     DerivableFromPublicKey,
@@ -449,7 +447,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         substate_address: SubstateAddress,
     ) -> Result<Vec<ValidatorNode<TAddr>>, EpochManagerError> {
         // retrieve the validator nodes for this epoch from database, sorted by shard_key
-        let mut vns = self.get_validator_nodes_per_epoch(epoch)?;
+        let vns = self.get_validator_nodes_per_epoch(epoch)?;
         if vns.is_empty() {
             return Err(EpochManagerError::NoCommitteeVns {
                 substate_address,
@@ -490,26 +488,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         ))
     }
 
-    pub fn is_validator_in_committee(
-        &self,
-        epoch: Epoch,
-        substate_address: SubstateAddress,
-        identity: &TAddr,
-    ) -> Result<bool, EpochManagerError> {
-        error!(target: LOG_TARGET, "is_validator_in_committee not implemented");
-        todo!()
-        // let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        // let mut tx = self.global_db.create_transaction()?;
-        // let mut vn_db = self.global_db.validator_nodes(&mut tx);
-        // let num_vns = vn_db.count(start_epoch, end_epoch, self.config.validator_node_sidechain_id.as_ref())?;
-        // let vn = vn_db.get_by_address(start_epoch, end_epoch, identity)?;
-        // let num_committees = calculate_num_committees(num_vns, self.config.committee_size);
-        // let shard = substate_address.to_committee_shard(num_committees);
-        // match vn.committee_shard {
-        //     Some(s) => Ok(s == shard),
-        //     None => Ok(false),
-        // }
-    }
 
     pub fn get_number_of_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError> {
         let num_vns = self.get_total_validator_count(epoch)?;
@@ -555,37 +533,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
 
         // None indicates that we are not registered, or a previous registration has expired
         Ok(expiry.checked_sub(num_blocks_since_last_reg))
-    }
-
-    pub fn get_committee_for_shard_range(
-        &self,
-        epoch: Epoch,
-        substate_address_range: RangeInclusive<SubstateAddress>,
-    ) -> Result<Committee<TAddr>, EpochManagerError> {
-        error!(target: LOG_TARGET, "get_committee_for_shard_range not implemented");
-        // let num_committees = self.get_number_of_committees(epoch)?;
-        //
-        // // Since we have fixed boundaries for committees, we want to include all validators within any range
-        // "touching" // the range we are searching for. For e.g. the committee for half a committee shard is
-        // the same committee as // for a whole committee shard.
-        // let rounded_substate_address_range = {
-        //     let start_range = substate_address_range.start().to_committee_range(num_committees);
-        //     let end_range = substate_address_range.end().to_committee_range(num_committees);
-        //     *start_range.start()..=*end_range.end()
-        // };
-        // let mut tx = self.global_db.create_transaction()?;
-        // let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
-        // let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        // let validators = validator_node_db.get_by_shard_range(
-        //     start_epoch,
-        //     end_epoch,
-        //     self.config.validator_node_sidechain_id.as_ref(),
-        //     rounded_substate_address_range,
-        // )?;
-        // Ok(Committee::new(
-        //     validators.into_iter().map(|v| (v.address, v.public_key)).collect(),
-        // ))
-        todo!()
     }
 
     pub fn get_our_validator_node(&self, epoch: Epoch) -> Result<ValidatorNode<TAddr>, EpochManagerError> {

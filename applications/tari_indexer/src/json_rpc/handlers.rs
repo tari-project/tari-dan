@@ -29,7 +29,7 @@ use axum_jrpc::{
     JsonRpcResponse,
 };
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
-use log::{error, warn};
+use log::{warn};
 use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_crypto::tari_utilities::hex::to_hex;
