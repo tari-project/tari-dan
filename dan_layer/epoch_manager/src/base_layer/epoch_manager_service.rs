@@ -103,14 +103,15 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
     #[allow(clippy::too_many_lines)]
     async fn handle_request(&mut self, req: EpochManagerRequest<TAddr>) {
         trace!(target: LOG_TARGET, "Received request: {:?}", req);
+        let context = &format!("{:?}", req);
         match req {
-            EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
-            EpochManagerRequest::CurrentBlockInfo { reply } => handle(reply, Ok(self.inner.current_block_info())),
+            EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch()), context),
+            EpochManagerRequest::CurrentBlockInfo { reply } => handle(reply, Ok(self.inner.current_block_info()), context),
             EpochManagerRequest::GetLastBlockOfTheEpoch { reply } => {
-                handle(reply, Ok(self.inner.last_block_of_current_epoch()))
+                handle(reply, Ok(self.inner.last_block_of_current_epoch()), context)
             },
             EpochManagerRequest::IsLastBlockOfTheEpoch { block_height, reply } => {
-                handle(reply, self.inner.is_last_block_of_epoch(block_height).await)
+                handle(reply, self.inner.is_last_block_of_epoch(block_height).await, context)
             },
             EpochManagerRequest::GetValidatorNode { epoch, addr, reply } => handle(
                 reply,
@@ -119,7 +120,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                         address: addr.to_string(),
                         epoch,
                     })
-                }),
+                }),context
             ),
             EpochManagerRequest::GetValidatorNodeByPublicKey {
                 epoch,
@@ -135,57 +136,59 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                             epoch,
                         })
                     }),
+                context
             ),
             EpochManagerRequest::GetManyValidatorNodes { query, reply } => {
-                handle(reply, self.inner.get_many_validator_nodes(query));
+                handle(reply, self.inner.get_many_validator_nodes(query), context);
+
             },
             EpochManagerRequest::AddBlockHash {
                 block_height,
                 block_hash,
                 reply,
             } => {
-                handle(reply, self.inner.add_base_layer_block_info(block_height, block_hash));
+                handle(reply, self.inner.add_base_layer_block_info(block_height, block_hash), context);
             },
             EpochManagerRequest::UpdateEpoch {
                 block_height,
                 block_hash,
                 reply,
             } => {
-                handle(reply, self.inner.update_epoch(block_height, block_hash).await);
+                handle(reply, self.inner.update_epoch(block_height, block_hash).await, context);
             },
-            EpochManagerRequest::LastRegistrationEpoch { reply } => handle(reply, self.inner.last_registration_epoch()),
+            EpochManagerRequest::LastRegistrationEpoch { reply } => handle(reply, self.inner.last_registration_epoch(), context),
 
             EpochManagerRequest::UpdateLastRegistrationEpoch { epoch, reply } => {
-                handle(reply, self.inner.update_last_registration_epoch(epoch));
+                handle(reply, self.inner.update_last_registration_epoch(epoch), context);
             },
-            EpochManagerRequest::IsEpochValid { epoch, reply } => handle(reply, Ok(self.inner.is_epoch_valid(epoch))),
+            EpochManagerRequest::IsEpochValid { epoch, reply } => handle(reply, Ok(self.inner.is_epoch_valid(epoch)), context),
             EpochManagerRequest::GetCommittees { epoch, reply } => {
-                handle(reply, self.inner.get_committees(epoch));
+                handle(reply, self.inner.get_committees(epoch), context);
             },
             EpochManagerRequest::GetCommitteeInfoByAddress {
                 epoch,
                 address,
                 reply,
-            } => handle(reply, self.inner.get_committee_info_by_validator_address(epoch, address)),
+            } => handle(reply, self.inner.get_committee_info_by_validator_address(epoch, address), context),
             EpochManagerRequest::GetCommitteeForSubstate {
                 epoch,
                 substate_address,
                 reply,
             } => {
-                handle(reply, self.inner.get_committee_for_substate(epoch, substate_address));
+                handle(reply, self.inner.get_committee_for_substate(epoch, substate_address), context);
             },
             EpochManagerRequest::GetCommitteeForShardRange {
                 epoch,
                 shard_range,
                 reply,
-            } => handle(reply, self.inner.get_committee_for_shard_range(epoch, shard_range)),
+            } => handle(reply, self.inner.get_committee_for_shard_range(epoch, shard_range), context),
             EpochManagerRequest::IsValidatorInCommitteeForCurrentEpoch { substate: shard, identity, reply } => {
                 let epoch = self.inner.current_epoch();
-                handle(reply, self.inner.is_validator_in_committee(epoch, shard, &identity));
+                handle(reply, self.inner.is_validator_in_committee(epoch, shard, &identity), context);
             },
-            EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.subscribe())),
+            EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.subscribe()), context),
             EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply } => {
-                handle(reply, self.inner.get_validator_nodes_per_epoch(epoch))
+                handle(reply, self.inner.get_validator_nodes_per_epoch(epoch), context)
             },
             EpochManagerRequest::AddValidatorNodeRegistration {
                 block_height,
@@ -197,19 +200,20 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
                 self.inner
                     .add_validator_node_registration(block_height, registration)
                     .await,
+                context
             ),
             // TODO: This should be rather be a state machine event
             EpochManagerRequest::NotifyScanningComplete { reply } => {
-                handle(reply, self.inner.on_scanning_complete().await)
+                handle(reply, self.inner.on_scanning_complete().await,context)
             },
             EpochManagerRequest::RemainingRegistrationEpochs { reply } => {
-                handle(reply, self.inner.remaining_registration_epochs().await)
+                handle(reply, self.inner.remaining_registration_epochs().await, context)
             },
             EpochManagerRequest::GetBaseLayerConsensusConstants { reply } => {
-                handle(reply, self.inner.get_base_layer_consensus_constants().await.cloned())
+                handle(reply, self.inner.get_base_layer_consensus_constants().await.cloned(), context)
             },
             EpochManagerRequest::GetOurValidatorNode { epoch, reply } => {
-                handle(reply, self.inner.get_our_validator_node(epoch))
+                handle(reply, self.inner.get_our_validator_node(epoch), context)
             },
             EpochManagerRequest::GetCommitteeInfo {
                 epoch,
@@ -218,33 +222,34 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             } => handle(
                 reply,
                 self.inner.get_committee_info_for_substate(epoch, substate_address),
+                context
             ),
             EpochManagerRequest::GetLocalCommitteeInfo { epoch, reply } => {
-                handle(reply, self.inner.get_local_committee_info(epoch))
+                handle(reply, self.inner.get_local_committee_info(epoch), context)
             },
             EpochManagerRequest::GetNumCommittees { epoch, reply } => {
-                handle(reply, self.inner.get_num_committees(epoch))
+                handle(reply, self.inner.get_num_committees(epoch), context)
             },
             EpochManagerRequest::GetCommitteesForShards { epoch, shards, reply } => {
-                handle(reply, self.inner.get_committees_for_shards(epoch, shards))
+                handle(reply, self.inner.get_committees_for_shards(epoch, shards), context)
             },
-            EpochManagerRequest::GetFeeClaimPublicKey { reply } => handle(reply, self.inner.get_fee_claim_public_key()),
+            EpochManagerRequest::GetFeeClaimPublicKey { reply } => handle(reply, self.inner.get_fee_claim_public_key(), context),
             EpochManagerRequest::SetFeeClaimPublicKey { public_key, reply } => {
-                handle(reply, self.inner.set_fee_claim_public_key(public_key))
+                handle(reply, self.inner.set_fee_claim_public_key(public_key), context)
             },
             EpochManagerRequest::GetBaseLayerBlockHeight { hash, reply } => {
-                handle(reply, self.inner.get_base_layer_block_height(hash).await)
+                handle(reply, self.inner.get_base_layer_block_height(hash).await, context)
             },
             EpochManagerRequest::GetNetworkCommittees { reply } => {
-                handle(reply, self.inner.get_network_committees().await)
+                handle(reply, self.inner.get_network_committees().await, context)
             },
         }
     }
 }
 
-fn handle<T>(reply: oneshot::Sender<Result<T, EpochManagerError>>, result: Result<T, EpochManagerError>) {
+fn handle<T>(reply: oneshot::Sender<Result<T, EpochManagerError>>, result: Result<T, EpochManagerError>, context: &str) {
     if let Err(ref e) = result {
-        error!(target: LOG_TARGET, "Request failed with error: {}", e);
+        error!(target: LOG_TARGET, "Request {} failed with error: {}", context, e);
     }
     if reply.send(result).is_err() {
         error!(target: LOG_TARGET, "Requester abandoned request");

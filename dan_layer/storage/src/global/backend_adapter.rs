@@ -96,7 +96,6 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
-        sidechain_id: Option<&PublicKey>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error>;
 
     fn get_validator_node_by_address(
@@ -119,7 +118,6 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         &self,
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
-        sidechain_id: Option<&PublicKey>,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<u64, Self::Error>;
     fn validator_nodes_count_for_bucket(

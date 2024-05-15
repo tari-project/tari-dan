@@ -485,7 +485,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
-        sidechain_id: Option<&PublicKey>,
     ) -> Result<u64, Self::Error> {
         let db_sidechain_id = sidechain_id.map(|id| id.as_bytes()).unwrap_or(&[0u8; 32]);
         let count = sql_query(
@@ -615,7 +614,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
-        sidechain_id: Option<&PublicKey>,
         shard_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error> {
         // TODO: is this method still needed? Most of this can be handled by the committees table
@@ -694,7 +692,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         &self,
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
-        sidechain_id: Option<&PublicKey>,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error> {
         use crate::global::schema::{validator_nodes};

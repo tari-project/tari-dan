@@ -3,7 +3,7 @@
 
 Feature: Epoch change
 
-  @serial
+  @serial @current
   Scenario: EpochEnd and EpochStart commands are used on epoch change
     Given fees are disabled
     # Initialize a base node, wallet, miner and VN

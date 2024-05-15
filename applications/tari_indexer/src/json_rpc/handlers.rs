@@ -780,12 +780,7 @@ impl JsonRpcHandlers {
     }
 
     fn internal_error<T: Display>(answer_id: i64, error: T) -> JsonRpcResponse {
-        let msg = if cfg!(debug_assertions) || option_env!("CI").is_some() {
-            error.to_string()
-        } else {
-            error!(target: LOG_TARGET, "Internal error: {}", error);
-            "Something went wrong".to_string()
-        };
+        let msg =    error.to_string();
         Self::error_response(answer_id, JsonRpcErrorReason::InternalError, msg)
     }
 }

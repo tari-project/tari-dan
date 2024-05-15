@@ -220,7 +220,7 @@ impl EpochManagerReader for TestEpochManager {
     async fn get_committees(&self, _epoch: Epoch) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
         todo!()
     }
-    async fn get_committee_info_for_validator_node(&self, epoch: Epoch, public_key: &Self::Addr) -> Result<CommitteeInfo, EpochManagerError> {
+    async fn get_committee_info_by_validator_address(&self, epoch: Epoch, address: &Self::Addr) -> Result<CommitteeInfo, EpochManagerError> {
         todo!()
     }
     async fn get_committees_by_shards(
