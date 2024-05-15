@@ -111,7 +111,7 @@ function Committee({
               <Typography variant="h6">Public Keys</Typography>
               {members.map((member) => (
                 <div className={`member ${member.address === peerId ? "me" : ""}`} key={member.address}>
-                  {member.address} (Registration Epoch: {member.epoch})
+                  {member.address}
                 </div>
               ))}
             </CodeBlock>
