@@ -111,7 +111,7 @@ impl Transaction {
     }
 
     pub fn involved_shards_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
-        self.all_input_addresses_iter()
+        self.versioned_input_addresses_iter()
     }
 
     pub fn inputs(&self) -> &IndexSet<SubstateRequirement> {
@@ -151,7 +151,7 @@ impl Transaction {
         self.all_inputs_substate_ids_iter().count()
     }
 
-    pub fn all_input_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+    pub fn versioned_input_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
         self.input_addresses_iter().chain(self.filled_input_addresses_iter())
     }
 
@@ -243,7 +243,7 @@ impl Transaction {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(
     feature = "ts",
     derive(ts_rs::TS),
@@ -274,6 +274,10 @@ impl SubstateRequirement {
         &self.substate_id
     }
 
+    pub fn into_substate_id(self) -> SubstateId {
+        self.substate_id
+    }
+
     pub fn version(&self) -> Option<u32> {
         self.version
     }
@@ -294,6 +298,13 @@ impl SubstateRequirement {
             substate_id: self.substate_id.clone(),
             version: v,
         })
+    }
+
+    pub fn or_zero_version(self) -> VersionedSubstateId {
+        VersionedSubstateId {
+            version: self.version.unwrap_or(0),
+            substate_id: self.substate_id,
+        }
     }
 }
 
@@ -343,6 +354,22 @@ impl From<VersionedSubstateId> for SubstateRequirement {
 impl<T: Into<SubstateId>> From<T> for SubstateRequirement {
     fn from(value: T) -> Self {
         Self::new(value.into(), None)
+    }
+}
+
+impl PartialEq for SubstateRequirement {
+    fn eq(&self, other: &Self) -> bool {
+        self.substate_id == other.substate_id
+    }
+}
+
+impl Eq for SubstateRequirement {}
+
+// Only consider the substate id in maps. This means that duplicates found if the substate id is the same regardless of
+// the version.
+impl std::hash::Hash for SubstateRequirement {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.substate_id.hash(state);
     }
 }
 

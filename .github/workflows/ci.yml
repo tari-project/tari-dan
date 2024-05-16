@@ -17,7 +17,7 @@ name: CI
 
 env:
   nightly_toolchain: nightly-2023-06-12
-  stable_toolchain: stable
+  stable_toolchain: 1.77
   CARGO_HTTP_MULTIPLEXING: false
   CARGO_TERM_COLOR: always
   TARI_TARGET_NETWORK: localnet
@@ -28,7 +28,7 @@ env:
 jobs:
   fmt:
     name: fmt
-    runs-on: [self-hosted, ubuntu-high-cpu]
+    runs-on: [ self-hosted, ubuntu-high-cpu ]
 
     steps:
       - name: checkout
@@ -52,7 +52,7 @@ jobs:
         run: cargo +${{ env.nightly_toolchain }} fmt --all -- --check
   prettier:
     name: prettier
-    runs-on: [self-hosted, ubuntu-high-cpu]
+    runs-on: [ self-hosted, ubuntu-high-cpu ]
 
     steps:
       - name: checkout
@@ -68,7 +68,7 @@ jobs:
 
   clippy:
     name: clippy
-    runs-on: [self-hosted, ubuntu-high-cpu]
+    runs-on: [ self-hosted, ubuntu-high-cpu ]
 
     steps:
       - name: checkout
@@ -123,7 +123,7 @@ jobs:
 
   build:
     name: check nightly
-    runs-on: [self-hosted, ubuntu-high-cpu]
+    runs-on: [ self-hosted, ubuntu-high-cpu ]
 
     steps:
       - name: checkout
@@ -149,7 +149,7 @@ jobs:
 
   build-stable:
     name: check stable
-    runs-on: [self-hosted, ubuntu-high-cpu]
+    runs-on: [ self-hosted, ubuntu-high-cpu ]
 
     steps:
       - name: checkout
@@ -198,7 +198,7 @@ jobs:
 
   test:
     name: test
-    runs-on: [self-hosted, ubuntu-high-cpu]
+    runs-on: [ self-hosted, ubuntu-high-cpu ]
 
     steps:
       - name: checkout

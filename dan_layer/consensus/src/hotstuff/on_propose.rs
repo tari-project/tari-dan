@@ -13,7 +13,7 @@ use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeShard},
+    committee::{Committee, CommitteeInfo},
     optional::Optional,
     Epoch,
     NodeHeight,
@@ -126,7 +126,7 @@ where TConsensusSpec: ConsensusSpec
         }
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_info(epoch).await?;
         let (current_base_layer_block_height, current_base_layer_block_hash) =
             self.epoch_manager.current_base_layer_block_info().await?;
         let (high_qc, qc_block, locked_block) = self.store.with_read_tx(|tx| {
@@ -240,7 +240,7 @@ where TConsensusSpec: ConsensusSpec
         parent_block: &LeafBlock,
         high_qc: QuorumCertificate,
         proposed_by: PublicKey,
-        local_committee_shard: &CommitteeShard,
+        local_committee_info: &CommitteeInfo,
         empty_block: bool,
         base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
@@ -283,7 +283,7 @@ where TConsensusSpec: ConsensusSpec
                 })
                 .chain(batch.into_iter().map(|t| {
                     let command =
-                        transaction_pool_record_to_command(tx, &t, local_committee_shard, &mut substate_changes)?;
+                        transaction_pool_record_to_command(tx, &t, local_committee_info, &mut substate_changes)?;
                     total_leader_fee += command
                         .committing()
                         .and_then(|tx| tx.leader_fee.as_ref())
@@ -312,8 +312,8 @@ where TConsensusSpec: ConsensusSpec
         let non_local_buckets = proposer::get_non_local_shards_from_commands(
             tx,
             &commands,
-            local_committee_shard.num_committees(),
-            local_committee_shard.shard(),
+            local_committee_info.num_committees(),
+            local_committee_info.shard(),
         )?;
 
         let foreign_counters = ForeignSendCounters::get_or_default(tx, parent_block.block_id())?;
@@ -331,7 +331,7 @@ where TConsensusSpec: ConsensusSpec
             high_qc,
             next_height,
             epoch,
-            local_committee_shard.shard(),
+            local_committee_info.shard(),
             proposed_by,
             commands,
             state_root,
@@ -353,10 +353,10 @@ where TConsensusSpec: ConsensusSpec
 fn transaction_pool_record_to_command<TTx: StateStoreReadTransaction>(
     tx: &mut TTx,
     t: &TransactionPoolRecord,
-    local_committee_shard: &CommitteeShard,
+    local_committee_info: &CommitteeInfo,
     substate_changes: &mut Vec<SubstateChange>,
 ) -> Result<Command, HotStuffError> {
-    let involved = local_committee_shard.count_distinct_shards(t.transaction().evidence.substate_addresses_iter());
+    let involved = local_committee_info.count_distinct_shards(t.transaction().evidence.substate_addresses_iter());
     if involved == 1 {
         info!(
             target: LOG_TARGET,

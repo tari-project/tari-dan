@@ -34,7 +34,13 @@ use integration_tests::{
     wallet_daemon_cli,
     TariWorld,
 };
-use libp2p::Multiaddr;
+use libp2p::{
+    futures::{
+        future::{select, Either},
+        pin_mut,
+    },
+    Multiaddr,
+};
 use tari_common::initialize_logging;
 use tari_dan_engine::abi::Type;
 use tari_dan_storage::consensus_models::QuorumDecision;
@@ -54,7 +60,7 @@ async fn main() {
     let mock_port = spawn_template_http_server(shutdown.to_signal()).await;
 
     let file = fs::File::create("cucumber-output-junit.xml").unwrap();
-    TariWorld::cucumber()
+    let cucumber_fut = TariWorld::cucumber()
         .max_concurrent_scenarios(1)
         .with_writer(writer::Tee::new(
             writer::JUnit::new(file, Verbosity::ShowWorldAndDocString).normalized(),
@@ -84,8 +90,15 @@ async fn main() {
             Box::pin(future::ready(()))
         })
         .fail_on_skipped()
-        .filter_run("tests/features/", |_, _, sc| !sc.tags.iter().any(|t| t == "ignore"))
-        .await;
+        .filter_run("tests/features/", |_, _, sc| !sc.tags.iter().any(|t| t == "ignore"));
+
+    let ctrl_c = tokio::signal::ctrl_c();
+    pin_mut!(ctrl_c);
+    pin_mut!(cucumber_fut);
+    match select(cucumber_fut, ctrl_c).await {
+        Either::Left(_) => {},
+        Either::Right((ctrl_c, _)) => ctrl_c.unwrap(),
+    }
 
     shutdown.trigger();
 }

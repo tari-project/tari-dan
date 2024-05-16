@@ -1,6 +1,6 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
-
+@claim_burn
 Feature: Claim Burn
 
   @serial @fixed

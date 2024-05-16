@@ -25,8 +25,8 @@ create table validator_nodes
     id         integer primary key autoincrement not null,
     public_key blob                              not null,
     shard_key  blob                              not null,
-    epoch      bigint                            not null
+    registered_at_base_height bigint not null,
+    start_epoch      bigint                            not null,
+    end_epoch      bigint                            not null
 );
 
-create index validator_nodes_epoch_index on validator_nodes (epoch);
-create unique index validator_nodes_public_key_uniq_idx on validator_nodes (public_key);

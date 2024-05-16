@@ -88,7 +88,7 @@ struct ScaffoldArgs {
     #[clap(long, short = 'c', alias = "config")]
     pub generator_config_file: Option<PathBuf>,
     #[clap(long, short = 'a')]
-    address: String,
+    template_address: String,
     #[clap(long, short = 'j')]
     dan_testing_jrpc_url: String,
 }
@@ -284,9 +284,12 @@ async fn scaffold(args: ScaffoldArgs) -> anyhow::Result<()> {
         output_path: "output/".into(),
         liquid: Some(generators::LiquidGeneratorOpts {
             skip_format: false,
-            variables: vec![("template_address".to_string(), Value::String(args.address.clone()))]
-                .into_iter()
-                .collect(),
+            variables: vec![(
+                "template_address".to_string(),
+                Value::String(args.template_address.clone()),
+            )]
+            .into_iter()
+            .collect(),
         }),
     };
 
@@ -307,7 +310,7 @@ async fn scaffold(args: ScaffoldArgs) -> anyhow::Result<()> {
     let request = json!({
         "jsonrpc" : "2.0",
         "method": "get_template",
-        "params": [hex::decode(args.address)?],
+        "params": [hex::decode(args.template_address)?],
         "id": 1
     });
     let response = reqwest::Client::new()

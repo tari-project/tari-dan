@@ -60,13 +60,7 @@ impl ExecutableManager {
                 exec.instance_type,
                 compile.working_dir().display()
             );
-            let mut child = cargo_build(
-                compile
-                    .working_dir()
-                    .canonicalize()
-                    .context("working_dir does not exist")?,
-                &compile.package_name,
-            )?;
+            let mut child = cargo_build(compile.working_dir(), &compile.package_name)?;
             tasks.push(async move {
                 let status = child.wait().await?;
                 Ok::<_, anyhow::Error>((status, exec))
@@ -93,9 +87,7 @@ impl ExecutableManager {
 
             self.prepared.push(Executable {
                 instance_type: exec.instance_type,
-                path: add_ext(&bin_path)
-                    .canonicalize()
-                    .with_context(|| anyhow!("The compiled binary at path '{}' does not exist.", bin_path.display()))?,
+                path: add_ext(&bin_path),
                 env: exec.env.clone(),
             })
         }
@@ -195,7 +187,7 @@ fn add_ext<P: AsRef<Path>>(path: P) -> PathBuf {
     let path = path.as_ref().to_path_buf();
 
     if cfg!(windows) {
-        path.with_extension(".exe")
+        path.with_extension("exe")
     } else {
         path
     }

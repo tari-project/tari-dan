@@ -1,9 +1,10 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
+@nft
 Feature: NFTs
 
-  @serial @current
+  @serial
   Scenario: Mint, mutate and burn non fungible tokens
     Given fees are disabled
     # Initialize a base node, wallet, miner and VN

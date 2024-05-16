@@ -182,7 +182,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
             .get_validator_node_by_public_key(qc.epoch(), signature.public_key())
             .await?;
         let actual_shard = epoch_manager
-            .get_committee_shard(qc.epoch(), vn.shard_key)
+            .get_committee_info_for_substate(qc.epoch(), vn.shard_key)
             .await?
             .shard();
         if actual_shard != qc.shard() {
@@ -202,7 +202,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         }
     }
     let committee_shard = epoch_manager
-        .get_committee_shard_by_validator_public_key(
+        .get_committee_info_by_validator_public_key(
             qc.epoch(),
             qc.signatures()
                 .first()

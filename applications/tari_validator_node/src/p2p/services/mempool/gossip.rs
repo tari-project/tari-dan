@@ -36,7 +36,7 @@ impl MempoolGossip<PeerAddress> {
     }
 
     pub async fn subscribe(&mut self, epoch: Epoch) -> Result<(), MempoolError> {
-        let committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
+        let committee_shard = self.epoch_manager.get_local_committee_info(epoch).await?;
         match self.is_subscribed {
             Some(b) if b == committee_shard.shard() => {
                 return Ok(());
@@ -63,7 +63,7 @@ impl MempoolGossip<PeerAddress> {
     }
 
     pub async fn forward_to_local_replicas(&mut self, epoch: Epoch, msg: DanMessage) -> Result<(), MempoolError> {
-        let committee = self.epoch_manager.get_local_committee_shard(epoch).await?;
+        let committee = self.epoch_manager.get_local_committee_info(epoch).await?;
 
         let topic = format!("transactions-{}", committee.shard());
         debug!(
@@ -85,7 +85,7 @@ impl MempoolGossip<PeerAddress> {
         exclude_shard: Option<Shard>,
     ) -> Result<(), MempoolError> {
         let n = self.epoch_manager.get_num_committees(epoch).await?;
-        let committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
+        let committee_shard = self.epoch_manager.get_local_committee_info(epoch).await?;
         let local_shard = committee_shard.shard();
         let shards = substate_addresses
             .into_iter()

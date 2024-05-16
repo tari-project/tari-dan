@@ -79,7 +79,7 @@ where TConsensusSpec: ConsensusSpec
                 self.process_local_proposal(current_height, msg).await?;
             },
             HotstuffMessage::ForeignProposal(ref proposal) => {
-                self.check_proposal_and_handle_missing_transactions(proposal.block.clone())
+                self.check_proposal_and_handle_missing_transactions(&proposal.block)
                     .await?;
                 self.report_message_ready(from, msg)?;
             },
@@ -105,10 +105,12 @@ where TConsensusSpec: ConsensusSpec
         self.message_buffer.clear_buffer();
     }
 
-    async fn check_proposal_and_handle_missing_transactions(
+    async fn check_proposal(
         &mut self,
         block: Block,
-    ) -> Result<Option<Block>, HotStuffError> {
+    ) -> Result<(), HotStuffError> {
+
+
         check_block::<TConsensusSpec>(
             &block,
             &self.epoch_manager,
@@ -118,7 +120,7 @@ where TConsensusSpec: ConsensusSpec
             &self.vote_signing_service,
         )
         .await?;
-        self.handle_missing_transactions(block).await
+        Ok(())
     }
 
     async fn process_local_proposal(
@@ -136,17 +138,18 @@ where TConsensusSpec: ConsensusSpec
             current_height,
         );
 
-        // if block.height() < current_height {
-        //     info!(
-        //         target: LOG_TARGET,
-        //         "🔥 Block {} is lower than current height {}. Ignoring.",
-        //         block,
-        //         current_height
-        //     );
-        //     return Ok(());
-        // }
+        if block.height() < current_height {
+            info!(
+                target: LOG_TARGET,
+                "🔥 Block {} is lower than current height {}. Ignoring.",
+                block,
+                current_height
+            );
+            return Ok(());
+        }
 
-        let Some(ready_block) = self.check_proposal_and_handle_missing_transactions(block).await? else {
+        self.check_proposal(&block).await?;
+        let Some(ready_block) = self.handle_missing_transactions(block).await? else {
             // Block not ready
             return Ok(());
         };

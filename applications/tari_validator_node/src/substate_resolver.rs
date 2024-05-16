@@ -17,11 +17,11 @@ use tari_engine_types::{
 };
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
 use tari_indexer_lib::{error::IndexerError, substate_cache::SubstateCache, substate_scanner::SubstateScanner};
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateRequirement, Transaction};
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory};
 
 use crate::{
-    p2p::services::mempool::SubstateResolver,
+    p2p::services::mempool::{ResolvedSubstates, SubstateResolver},
     virtual_substate::{VirtualSubstateError, VirtualSubstateManager},
 };
 
@@ -57,40 +57,107 @@ where
         }
     }
 
-    fn resolve_local_substates(
-        &self,
-        transaction: &Transaction,
-        out: &mut IndexMap<SubstateId, Substate>,
-    ) -> Result<HashSet<SubstateAddress>, SubstateResolverError> {
-        let inputs = transaction.all_input_addresses_iter();
-        let (local_substates, missing_shards) = self.store.with_read_tx(|tx| SubstateRecord::get_any(tx, inputs))?;
+    fn resolve_local_substates(&self, transaction: &Transaction) -> Result<ResolvedSubstates, SubstateResolverError> {
+        let mut substates = IndexMap::new();
+        let inputs = transaction.all_inputs_substate_ids_iter();
+        let (mut found_local_substates, missing_substate_ids) = self
+            .store
+            .with_read_tx(|tx| SubstateRecord::get_any_max_version(tx, inputs))?;
+
+        // Reconcile requested inputs with found local substates
+        let mut missing_substates = HashSet::with_capacity(missing_substate_ids.len());
+        for requested_input in transaction.all_inputs_iter() {
+            if missing_substate_ids.contains(requested_input.substate_id()) {
+                missing_substates.insert(requested_input);
+                // Not a local substate, so we will need to fetch it remotely
+                continue;
+            }
+
+            match requested_input.version() {
+                // Specific version requested
+                Some(requested_version) => {
+                    let maybe_match = found_local_substates
+                        .iter()
+                        .find(|s| s.version() == requested_version && s.substate_id() == requested_input.substate_id());
+
+                    match maybe_match {
+                        Some(substate) => {
+                            if substate.is_destroyed() {
+                                return Err(SubstateResolverError::InputSubstateDowned {
+                                    id: requested_input.into_substate_id(),
+                                    version: requested_version,
+                                });
+                            }
+                            // OK
+                        },
+                        // Requested substate or version not found. We know that the requested substate is not foreign
+                        // because we checked missing_substate_ids
+                        None => {
+                            return Err(SubstateResolverError::InputSubstateDoesNotExist {
+                                substate_requirement: requested_input,
+                            });
+                        },
+                    }
+                },
+                // No version specified, so we will use the latest version
+                None => {
+                    let (pos, substate) = found_local_substates
+                        .iter()
+                        .enumerate()
+                        .find(|(_, s)| s.substate_id() == requested_input.substate_id())
+                        // This is not possible
+                        .ok_or_else(|| {
+                            error!(
+                                target: LOG_TARGET,
+                                "🐞 BUG: Requested substate {} was not missing but was also not found",
+                                requested_input.substate_id()
+                            );
+                            SubstateResolverError::InputSubstateDoesNotExist { substate_requirement: requested_input.clone()}
+                        })?;
+
+                    if substate.is_destroyed() {
+                        // The requested substate is downed locally, it may be available in a foreign shard so we add it
+                        // to missing
+                        let _substate = found_local_substates.remove(pos);
+                        missing_substates.insert(requested_input);
+                        continue;
+                    }
+
+                    // User did not specify the version, so we will use the latest version
+                    // Ok
+                },
+            }
+        }
 
         info!(
             target: LOG_TARGET,
-            "Found {} local substates and {} missing shards",
-            local_substates.len(),
-            missing_shards.len());
+            "Found {} local substates and {} missing substates",
+            found_local_substates.len(),
+            missing_substate_ids.len(),
+        );
 
-        out.extend(
-            local_substates
+        substates.extend(
+            found_local_substates
                 .into_iter()
                 .map(|s| (s.substate_id.clone(), s.into_substate())),
         );
 
-        Ok(missing_shards)
+        Ok(ResolvedSubstates {
+            local: substates,
+            unresolved_foreign: missing_substates,
+        })
     }
 
     async fn resolve_remote_substates(
         &self,
-        substate_addresses: HashSet<SubstateAddress>,
-        out: &mut IndexMap<SubstateId, Substate>,
-    ) -> Result<(), SubstateResolverError> {
-        out.reserve(substate_addresses.len());
-        for substate_address in substate_addresses {
+        requested_substates: &HashSet<SubstateRequirement>,
+    ) -> Result<IndexMap<SubstateId, Substate>, SubstateResolverError> {
+        let mut substates = IndexMap::with_capacity(requested_substates.len());
+        for substate_req in requested_substates {
             let timer = Instant::now();
             let substate_result = self
                 .scanner
-                .get_specific_substate_from_committee_by_shard(substate_address)
+                .get_substate(substate_req.substate_id(), substate_req.version())
                 .await?;
 
             match substate_result {
@@ -101,20 +168,20 @@ where
                         id,
                         timer.elapsed().as_millis()
                     );
-                    out.insert(id, substate);
+                    substates.insert(id, substate);
                 },
                 SubstateResult::Down { id, version, .. } => {
                     return Err(SubstateResolverError::InputSubstateDowned { id, version });
                 },
                 SubstateResult::DoesNotExist => {
                     return Err(SubstateResolverError::InputSubstateDoesNotExist {
-                        address: substate_address,
+                        substate_requirement: substate_req.clone(),
                     });
                 },
             }
         }
 
-        Ok(())
+        Ok(substates)
     }
 
     async fn resolve_remote_virtual_substates(
@@ -158,17 +225,15 @@ where
 {
     type Error = SubstateResolverError;
 
-    async fn resolve(&self, transaction: &Transaction) -> Result<IndexMap<SubstateId, Substate>, Self::Error> {
-        let mut substates = IndexMap::new();
+    fn try_resolve_local(&self, transaction: &Transaction) -> Result<ResolvedSubstates, Self::Error> {
+        self.resolve_local_substates(transaction)
+    }
 
-        let missing_shards = self.resolve_local_substates(transaction, &mut substates)?;
-
-        // TODO: If any of the missing shards are local we should error early here rather than asking the local
-        //       committee
-
-        self.resolve_remote_substates(missing_shards, &mut substates).await?;
-
-        Ok(substates)
+    async fn try_resolve_foreign(
+        &self,
+        requested_substates: &HashSet<SubstateRequirement>,
+    ) -> Result<IndexMap<SubstateId, Substate>, Self::Error> {
+        self.resolve_remote_substates(requested_substates).await
     }
 
     async fn resolve_virtual_substates(
@@ -203,7 +268,7 @@ where
             return Ok(virtual_substates);
         }
 
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
         #[allow(clippy::mutable_key_type)]
         let validators = self
             .epoch_manager
@@ -247,8 +312,8 @@ pub enum SubstateResolverError {
     StorageError(#[from] StorageError),
     #[error("Indexer error: {0}")]
     IndexerError(#[from] IndexerError),
-    #[error("Input substate does not exist: {address}")]
-    InputSubstateDoesNotExist { address: SubstateAddress },
+    #[error("Input substate does not exist: {substate_requirement}")]
+    InputSubstateDoesNotExist { substate_requirement: SubstateRequirement },
     #[error("Input substate is downed: {id} (version: {version})")]
     InputSubstateDowned { id: SubstateId, version: u32 },
     #[error("Virtual substate error: {0}")]

@@ -110,22 +110,6 @@ function Info({
               <TableCell>Public key</TableCell>
               <DataTableCell>{identity.public_key}</DataTableCell>
             </TableRow>
-            <TableRow>
-              <TableCell>Committee info</TableCell>
-              <DataTableCell>
-                {epoch.committee_shard ? (
-                  <>
-                    Bucket: {epoch.committee_shard.shard}
-                    <br />
-                    Num committees: {epoch.committee_shard.num_committees}
-                    <br />
-                    Num members: {epoch.committee_shard.num_members}
-                  </>
-                ) : (
-                  "Validator not registered"
-                )}
-              </DataTableCell>
-            </TableRow>
             {renderShardKey()}
           </TableBody>
         </Table>

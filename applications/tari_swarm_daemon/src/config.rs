@@ -55,7 +55,7 @@ impl Config {
 
     fn overrides_from_cli(&mut self, cli: &Cli) {
         if let Some(ref base_dir) = cli.common.base_dir {
-            self.base_dir = base_dir.clone();
+            self.base_dir.clone_from(base_dir);
         }
         if let Some(network) = cli.common.network {
             self.network = network;

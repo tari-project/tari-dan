@@ -161,14 +161,14 @@ impl<TAddr: PartialEq> FromIterator<Committee<TAddr>> for Committee<TAddr> {
 /// Represents a "slice" of the 256-bit shard space
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
-pub struct CommitteeShard {
+pub struct CommitteeInfo {
     num_committees: u32,
     num_members: u32,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     shard: Shard,
 }
 
-impl CommitteeShard {
+impl CommitteeInfo {
     pub fn new(num_committees: u32, num_members: u32, shard: Shard) -> Self {
         Self {
             num_committees,

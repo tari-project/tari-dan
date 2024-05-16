@@ -3,5 +3,6 @@
 
 pub trait OrOptional<T> {
     type Error;
+    #[allow(dead_code)]
     fn or_optional(self) -> Result<Option<T>, Self::Error>;
 }

@@ -26,7 +26,7 @@ impl Validator<ExecutedTransaction> for HasInvolvedShards {
 
     async fn validate(&self, executed: &ExecutedTransaction) -> Result<(), Self::Error> {
         if executed.num_inputs_and_outputs() == 0 {
-            debug!(target: LOG_TARGET, "HasInvolvedShards - FAIL: No input or output shards");
+            warn!(target: LOG_TARGET, "HasInvolvedShards - FAIL: No input or output shards");
             return Err(MempoolError::NoInvolvedShards {
                 transaction_id: *executed.id(),
             });

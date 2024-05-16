@@ -31,11 +31,14 @@ use tari_base_node_client::{
 };
 use tari_common::configuration::Network;
 use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError, PublicKey};
-use tari_core::transactions::transaction_components::{
-    CodeTemplateRegistration,
-    SideChainFeature,
-    TransactionOutput,
-    ValidatorNodeRegistration,
+use tari_core::transactions::{
+    tari_amount::MicroMinotari,
+    transaction_components::{
+        CodeTemplateRegistration,
+        SideChainFeature,
+        TransactionOutput,
+        ValidatorNodeRegistration,
+    },
 };
 use tari_crypto::{
     ristretto::RistrettoPublicKey,
@@ -334,9 +337,20 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
                 };
                 match sidechain_feature {
                     SideChainFeature::ValidatorNodeRegistration(reg) => {
+                        info!(
+                            target: LOG_TARGET,
+                            "⛓️ Validator node registration UTXO for {} sidechain {} found at height {}",
+                            reg.public_key(),
+                            reg.sidechain_id().map(|v| v.to_hex()).unwrap_or("None".to_string()),
+                            current_height,
+                        );
                         if reg.sidechain_id() == self.validator_node_sidechain_id.as_ref() {
-                            self.register_validator_node_registration(current_height, reg.clone())
-                                .await?;
+                            self.register_validator_node_registration(
+                                current_height,
+                                reg.clone(),
+                                output.minimum_value_promise,
+                            )
+                            .await?;
                         } else {
                             warn!(
                                 target: LOG_TARGET,
@@ -465,6 +479,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         &mut self,
         height: u64,
         registration: ValidatorNodeRegistration,
+        minimum_value_promise: MicroMinotari,
     ) -> Result<(), BaseLayerScannerError> {
         info!(
             target: LOG_TARGET,
@@ -474,7 +489,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         );
 
         self.epoch_manager
-            .add_validator_node_registration(height, registration)
+            .add_validator_node_registration(height, registration, minimum_value_promise)
             .await?;
 
         Ok(())

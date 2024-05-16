@@ -85,14 +85,18 @@ where
         );
         let transaction_substate_address = SubstateAddress::for_transaction_receipt(tx_hash.into_array().into());
 
-        if transaction.involved_shards_iter().count() == 0 {
+        if transaction.all_inputs_iter().next().is_none() {
             self.try_with_committee(iter::once(transaction_substate_address), |mut client| {
                 let transaction = transaction.clone();
                 async move { client.submit_transaction(transaction).await }
             })
             .await
         } else {
-            self.try_with_committee(transaction.involved_shards_iter(), |mut client| {
+            let involved = transaction
+                .all_inputs_iter()
+                // If there is no version specified, submit to the validator node with version 0
+                .map(|i| i.or_zero_version().to_substate_address());
+            self.try_with_committee(involved, |mut client| {
                 let transaction = transaction.clone();
                 async move { client.submit_transaction(transaction).await }
             })
@@ -168,7 +172,10 @@ where
         // Get all unique members. The hashset already "shuffles" items owing to the random hash function.
         let mut all_members = HashSet::new();
         for substate_address in substate_addresses {
-            let committee = self.epoch_manager.get_committee(epoch, substate_address).await?;
+            let committee = self
+                .epoch_manager
+                .get_committee_for_substate(epoch, substate_address)
+                .await?;
             all_members.extend(committee.into_addresses());
         }
 

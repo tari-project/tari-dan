@@ -10,6 +10,7 @@ use std::{
 
 use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::{
+    dsl,
     query_builder::SqlQuery,
     sql_query,
     sql_types::{BigInt, Text},
@@ -60,8 +61,8 @@ use tari_dan_storage::{
     StateStoreReadTransaction,
     StorageError,
 };
-use tari_engine_types::lock::LockFlag;
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_engine_types::{lock::LockFlag, substate::SubstateId};
+use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 use tari_utilities::ByteArray;
 
 use crate::{
@@ -192,7 +193,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned> SqliteStateStore
         item_size: usize,
     ) -> String {
         let len = values.len();
-        let mut sql_frag = String::with_capacity(len * item_size + len * 3 + len - 1);
+        let mut sql_frag = String::with_capacity((len * item_size + len * 3 + len).saturating_sub(1));
         for (i, value) in values.enumerate() {
             sql_frag.push('"');
             sql_frag.push_str(value);
@@ -1473,18 +1474,91 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         substate.try_into()
     }
 
-    fn substates_get_any(&mut self, addresses: &HashSet<SubstateAddress>) -> Result<Vec<SubstateRecord>, StorageError> {
+    fn substates_get_any(
+        &mut self,
+        substate_ids: &HashSet<SubstateRequirement>,
+    ) -> Result<Vec<SubstateRecord>, StorageError> {
         use crate::schema::substates;
 
-        let substates = substates::table
-            .filter(substates::address.eq_any(addresses.iter().map(serialize_hex)))
+        let mut query = substates::table.into_boxed();
+
+        for id in substate_ids {
+            let id_str = id.substate_id.to_string();
+            match id.version() {
+                Some(v) => {
+                    query = query.or_filter(substates::substate_id.eq(id_str).and(substates::version.eq(v as i32)));
+                },
+                None => {
+                    // Select the max known version
+                    query = query.or_filter(substates::substate_id.eq(id_str.clone()).and(substates::version.eq(
+                        dsl::sql("SELECT MAX(version) FROM substates WHERE substate_id = ?").bind::<Text, _>(id_str),
+                    )));
+                },
+            }
+        }
+
+        let results = query
             .get_results::<sql_models::SubstateRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_get_any",
                 source: e,
             })?;
 
-        substates.into_iter().map(TryInto::try_into).collect()
+        results.into_iter().map(TryInto::try_into).collect()
+    }
+
+    fn substates_get_any_max_version<'a, I: IntoIterator<Item = &'a SubstateId>>(
+        &mut self,
+        substate_ids: I,
+    ) -> Result<Vec<SubstateRecord>, StorageError> {
+        use crate::schema::substates;
+        #[derive(Debug, QueryableByName)]
+        struct MaxVersionAndId {
+            #[allow(dead_code)]
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+            max_version: Option<i32>,
+            #[diesel(sql_type = diesel::sql_types::Integer)]
+            id: i32,
+        }
+
+        let substate_ids = substate_ids.into_iter().map(ToString::to_string).collect::<Vec<_>>();
+        if substate_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let frag = self.sql_frag_for_in_statement(substate_ids.iter().map(|s| s.as_str()), 32);
+        let max_versions_and_ids = sql_query(format!(
+            r#"
+                SELECT MAX(version) as max_version, id
+                FROM substates
+                WHERE substate_id in ({})
+                GROUP BY substate_id"#,
+            frag
+        ))
+        .get_results::<MaxVersionAndId>(self.connection())
+        .map_err(|e| SqliteStorageError::DieselError {
+            operation: "substates_get_any_max_version",
+            source: e,
+        })?;
+
+        let results = substates::table
+            .filter(substates::id.eq_any(max_versions_and_ids.iter().map(|m| m.id)))
+            .get_results::<sql_models::SubstateRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_any_max_version",
+                source: e,
+            })?;
+
+        // let results = substates::table
+        //     .group_by(substates::substate_id)
+        //     .select((substates::all_columns, dsl::max(substates::version))
+        //     .filter(substates::substate_id.eq_any(substate_ids.into_iter().map(ToString::to_string)))
+        //     .get_results::<(sql_models::SubstateRecord, Option<i32>)>(self.connection())
+        //     .map_err(|e| SqliteStorageError::DieselError {
+        //         operation: "substates_get_any_max_version",
+        //         source: e,
+        //     })?;
+
+        results.into_iter().map(TryInto::try_into).collect()
     }
 
     fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<VersionedSubstateId>>(

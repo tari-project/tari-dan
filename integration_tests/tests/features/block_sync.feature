@@ -1,6 +1,6 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
-
+@block_sync
 Feature: Block Sync
 
   @serial @fixed

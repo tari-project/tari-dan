@@ -186,9 +186,8 @@ impl SubstateManager {
     }
 
     pub async fn delete_substate_from_db(&self, substate_address: &SubstateId) -> Result<(), anyhow::Error> {
-        let mut tx = self.substate_store.create_write_tx()?;
-        tx.delete_substate(substate_address.to_address_string())?;
-        tx.commit()?;
+        self.substate_store
+            .with_write_tx(|tx| tx.delete_substate(substate_address.to_address_string()))?;
 
         Ok(())
     }

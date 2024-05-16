@@ -3,7 +3,7 @@
 use std::ops::DerefMut;
 
 use log::*;
-use tari_dan_common_types::{committee::CommitteeShard, optional::Optional, shard::Shard};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, shard::Shard};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -70,10 +70,10 @@ where TConsensusSpec: ConsensusSpec
         let vn = self.epoch_manager.get_validator_node(block.epoch(), &from).await?;
         let committee_shard = self
             .epoch_manager
-            .get_committee_shard(block.epoch(), vn.shard_key)
+            .get_committee_info_for_substate(block.epoch(), vn.shard_key)
             .await?;
 
-        let local_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
+        let local_shard = self.epoch_manager.get_local_committee_info(block.epoch()).await?;
         if let Err(err) = self.validate_proposed_block(&from, &block, local_shard.shard(), &foreign_receive_counter) {
             warn!(
                 target: LOG_TARGET,
@@ -139,7 +139,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
-        foreign_committee_shard: &CommitteeShard,
+        foreign_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
         let leaf = LeafBlock::get(tx.deref_mut())?;
         // We only want to save the QC once if applicable
@@ -178,7 +178,7 @@ where TConsensusSpec: ConsensusSpec
                 is_qc_saved = true;
             }
 
-            tx_rec.update_remote_data(tx, remote_decision, *block.justify().id(), foreign_committee_shard)?;
+            tx_rec.update_remote_data(tx, remote_decision, *block.justify().id(), foreign_committee_info)?;
 
             // If all shards are complete and we've already received our LocalPrepared, we can set out LocalPrepared
             // transaction as ready to propose ACCEPT. If we have not received the local LocalPrepared, the transition

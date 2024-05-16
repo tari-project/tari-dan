@@ -11,7 +11,7 @@ use std::{
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{
-    committee::CommitteeShard,
+    committee::CommitteeInfo,
     optional::{IsNotFoundError, Optional},
 };
 use tari_transaction::TransactionId;
@@ -388,10 +388,10 @@ impl TransactionPoolRecord {
         self
     }
 
-    pub fn add_evidence(&mut self, committee_shard: &CommitteeShard, qc_id: QcId) -> &mut Self {
+    pub fn add_evidence(&mut self, committee_info: &CommitteeInfo, qc_id: QcId) -> &mut Self {
         let evidence = &mut self.transaction.evidence;
         for (address, evidence_mut) in evidence.iter_mut() {
-            if committee_shard.includes_substate_address(address) {
+            if committee_info.includes_substate_address(address) {
                 evidence_mut.qc_ids.insert(qc_id);
             }
         }
@@ -448,9 +448,9 @@ impl TransactionPoolRecord {
         tx: &mut TTx,
         decision: Decision,
         foreign_qc_id: QcId,
-        foreign_committee_shard: &CommitteeShard,
+        foreign_committee_info: &CommitteeInfo,
     ) -> Result<(), TransactionPoolError> {
-        self.add_evidence(foreign_committee_shard, foreign_qc_id);
+        self.add_evidence(foreign_committee_info, foreign_qc_id);
         self.set_remote_decision(decision);
         tx.transaction_pool_update(
             &self.transaction.id,

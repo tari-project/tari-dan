@@ -179,7 +179,7 @@ where TSubstateCache: SubstateCache + 'static
         address: SubstateAddress,
         epoch: Epoch,
     ) -> Result<(SubstateId, Substate), DryRunTransactionProcessorError> {
-        let mut committee = self.epoch_manager.get_committee(epoch, address).await?;
+        let mut committee = self.epoch_manager.get_committee_for_substate(epoch, address).await?;
         committee.shuffle();
 
         let mut nexist_count = 0;

@@ -101,8 +101,10 @@ create table substates
     destroyed_at             timestamp NULL
 );
 
--- All shard ids are unique
-create unique index substates_uniq_shard_id on substates (address);
+-- All addresses are unique
+create unique index substates_uniq_address on substates (address);
+-- All substate_id, version pairs are unique. This is a common query
+create unique index substates_uniq_substate_id_and_version on substates (substate_id, version);
 -- querying for transaction ids that either Upd or Downd a substate
 create index substates_idx_created_by_transaction on substates (created_by_transaction);
 create index substates_idx_destroyed_by_transaction on substates (destroyed_by_transaction) where destroyed_by_transaction is not null;
