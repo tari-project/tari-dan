@@ -78,7 +78,7 @@ where TConsensusSpec: ConsensusSpec
     #[allow(clippy::too_many_lines)]
     pub async fn handle(&mut self, from: TConsensusSpec::Addr, message: NewViewMessage) -> Result<(), HotStuffError> {
         let local_committee = self.epoch_manager.get_local_committee(message.epoch).await?;
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(message.epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_info(message.epoch).await?;
         let locked = self.store.with_read_tx(|tx| LockedBlock::get(tx))?;
         match check_new_view_message::<TConsensusSpec>(
             &message,
