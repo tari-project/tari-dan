@@ -1,8 +1,12 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
+use indexmap::{IndexMap, IndexSet};
 use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
@@ -15,9 +19,10 @@ use tari_dan_engine::{
     template::LoadedTemplate,
     transaction::{TransactionError, TransactionProcessor},
 };
-use tari_dan_storage::consensus_models::ExecutedTransaction;
+use tari_dan_storage::consensus_models::{SubstateLockFlag, VersionedSubstateIdLockIntent};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
+    substate::Substate,
     virtual_substate::VirtualSubstates,
 };
 use tari_template_lib::{crypto::RistrettoPublicKeyBytes, prelude::NonFungibleAddress};
@@ -33,7 +38,40 @@ pub trait TransactionExecutor {
         transaction: Transaction,
         state_store: MemoryStateStore,
         virtual_substates: VirtualSubstates,
-    ) -> Result<ExecutedTransaction, Self::Error>;
+    ) -> Result<ExecutionOutput, Self::Error>;
+}
+
+#[derive(Debug, Clone)]
+pub struct ExecutionOutput {
+    pub transaction: Transaction,
+    pub result: ExecuteResult,
+    pub outputs: Vec<VersionedSubstateId>,
+    pub execution_time: Duration,
+}
+
+impl ExecutionOutput {
+    pub fn resolve_inputs(
+        &self,
+        inputs: IndexMap<VersionedSubstateId, Substate>,
+    ) -> IndexSet<VersionedSubstateIdLockIntent> {
+        let mut resolved_inputs = IndexSet::new();
+        if let Some(diff) = self.result.finalize.accept() {
+            resolved_inputs = inputs
+                .into_iter()
+                .map(|(versioned_id, _)| {
+                    let lock_flag = if diff.down_iter().any(|(id, _)| *id == versioned_id.substate_id) {
+                        // Update all inputs that were DOWNed to be write locked
+                        SubstateLockFlag::Write
+                    } else {
+                        // Any input not downed, gets a read lock
+                        SubstateLockFlag::Read
+                    };
+                    VersionedSubstateIdLockIntent::new(versioned_id, lock_flag)
+                })
+                .collect::<IndexSet<_>>();
+        }
+        resolved_inputs
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -63,7 +101,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         transaction: Transaction,
         state_store: MemoryStateStore,
         virtual_substates: VirtualSubstates,
-    ) -> Result<ExecutedTransaction, Self::Error> {
+    ) -> Result<ExecutionOutput, Self::Error> {
         let timer = Instant::now();
         // Include ownership token for the signers of this in the auth scope
         let owner_token = get_auth_token(transaction.signer_public_key());
@@ -100,7 +138,12 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        Ok(ExecutedTransaction::new(transaction, result, outputs, timer.elapsed()))
+        Ok(ExecutionOutput {
+            transaction,
+            result,
+            outputs,
+            execution_time: timer.elapsed(),
+        })
     }
 }
 

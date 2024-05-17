@@ -1,30 +1,15 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{HashMap, HashSet},
-    ops::DerefMut,
-    time::Duration,
-};
+use std::{collections::HashSet, ops::Deref, time::Duration};
 
 use indexmap::IndexSet;
 use serde::Deserialize;
-use tari_dan_common_types::SubstateAddress;
-use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
-    lock::LockFlag,
-};
+use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
 use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
 
 use crate::{
-    consensus_models::{
-        Decision,
-        Evidence,
-        ExecutedTransaction,
-        ShardEvidence,
-        TransactionAtom,
-        VersionedSubstateIdLockIntent,
-    },
+    consensus_models::{Decision, ExecutedTransaction, TransactionAtom, VersionedSubstateIdLockIntent},
     Ordering,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
@@ -127,6 +112,10 @@ impl TransactionRecord {
         self.final_decision.is_some()
     }
 
+    pub fn is_executed(&self) -> bool {
+        self.result.is_some()
+    }
+
     pub fn abort_details(&self) -> Option<&String> {
         self.abort_details.as_ref()
     }
@@ -167,10 +156,10 @@ impl TransactionRecord {
 
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
-        if !Self::exists(tx.deref_mut(), self.transaction.id())? {
+        if !Self::exists(&**tx, self.transaction.id())? {
             self.insert(tx)?;
         }
         Ok(())
@@ -178,7 +167,7 @@ impl TransactionRecord {
 
     pub fn save_all<'a, TTx, I>(tx: &mut TTx, transactions: I) -> Result<(), StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
         I: IntoIterator<Item = &'a TransactionRecord>,
     {
@@ -191,29 +180,29 @@ impl TransactionRecord {
 
     pub fn upsert<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
-        if TransactionRecord::exists(tx.deref_mut(), self.id())? {
+        if TransactionRecord::exists(&**tx, self.id())? {
             self.update(tx)
         } else {
             self.insert(tx)
         }
     }
 
-    pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx, tx_id: &TransactionId) -> Result<Self, StorageError> {
+    pub fn get<TTx: StateStoreReadTransaction>(tx: &TTx, tx_id: &TransactionId) -> Result<Self, StorageError> {
         tx.transactions_get(tx_id)
     }
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &mut TTx,
+        tx: &TTx,
         tx_id: &TransactionId,
     ) -> Result<bool, StorageError> {
         tx.transactions_exists(tx_id)
     }
 
     pub fn exists_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a TransactionId>>(
-        tx: &mut TTx,
+        tx: &TTx,
         tx_ids: I,
     ) -> Result<bool, StorageError> {
         for tx_id in tx_ids {
@@ -226,7 +215,7 @@ impl TransactionRecord {
     }
 
     pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
-        tx: &mut TTx,
+        tx: &TTx,
         tx_ids: I,
     ) -> Result<(Vec<Self>, HashSet<TransactionId>), StorageError> {
         let mut tx_ids = tx_ids.into_iter().copied().collect::<HashSet<_>>();
@@ -239,7 +228,7 @@ impl TransactionRecord {
     }
 
     pub fn get_paginated<TTx: StateStoreReadTransaction>(
-        tx: &mut TTx,
+        tx: &TTx,
         limit: u64,
         offset: u64,
         ordering: Option<Ordering>,
@@ -247,64 +236,13 @@ impl TransactionRecord {
         tx.transactions_get_paginated(limit, offset, ordering)
     }
 
-    pub fn to_atom(&self) -> TransactionAtom {
-        if let Some(result) = self.result() {
-            let decision = if result.finalize.result.is_accept() {
-                Decision::Commit
-            } else {
-                Decision::Abort
-            };
-
-            TransactionAtom {
-                id: *self.id(),
-                decision,
-                evidence: self.to_initial_evidence(),
-                transaction_fee: result
-                    .finalize
-                    .fee_receipt
-                    .total_fees_paid()
-                    .as_u64_checked()
-                    .unwrap_or(0),
-                // We calculate the leader fee later depending on the epoch of the block
-                leader_fee: None,
-            }
-        } else {
-            // Deferred
-            TransactionAtom {
-                id: *self.transaction.id(),
-                decision: Decision::Deferred,
-                evidence: Default::default(),
-                transaction_fee: 0,
-                leader_fee: None,
-            }
-        }
-    }
-
-    fn to_initial_evidence(&self) -> Evidence {
-        let mut deduped_evidence = HashMap::new();
-        deduped_evidence.extend(self.resolved_inputs.iter().flatten().map(|input| {
-            (input.to_substate_address(), ShardEvidence {
-                qc_ids: IndexSet::new(),
-                lock: input.lock_flag().as_lock_flag(),
-            })
-        }));
-
-        let tx_reciept_address = SubstateAddress::for_transaction_receipt(self.id().into_receipt_address());
-        deduped_evidence.extend(
-            self.resulting_outputs
-                    .iter()
-                    .map(|output| output.to_substate_address())
-                    // Exclude transaction receipt address from evidence since all involved shards will commit it
-                    .filter(|output| *output != tx_reciept_address)
-                    .map(|output| {
-                        (output, ShardEvidence {
-                            qc_ids: IndexSet::new(),
-                            lock: LockFlag::Write,
-                        })
-                    }),
-        );
-
-        deduped_evidence.into_iter().collect()
+    pub fn finalize_all<'a, TTx, I>(tx: &mut TTx, transactions: I) -> Result<(), StorageError>
+    where
+        TTx: StateStoreWriteTransaction + Deref,
+        TTx::Target: StateStoreReadTransaction,
+        I: IntoIterator<Item = &'a TransactionAtom>,
+    {
+        tx.transactions_finalize_all(transactions)
     }
 }
 
@@ -314,15 +252,13 @@ impl From<ExecutedTransaction> for TransactionRecord {
         let final_decision = tx.final_decision();
         let finalized_time = tx.finalized_time();
         let abort_details = tx.abort_details().cloned();
-        let resulting_outputs = tx.resulting_outputs().to_vec();
-        let resolved_inputs = tx.resolved_inputs().cloned();
-        let (transaction, result) = tx.dissolve();
+        let (transaction, result, resolved_inputs, resulting_outputs) = tx.dissolve();
 
         Self {
             transaction,
             result: Some(result),
             execution_time: Some(execution_time),
-            resolved_inputs,
+            resolved_inputs: Some(resolved_inputs),
             final_decision,
             finalized_time,
             resulting_outputs,

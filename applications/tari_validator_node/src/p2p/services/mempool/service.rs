@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut};
+use std::{collections::HashSet, fmt::Display, iter};
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::*;
@@ -662,7 +662,7 @@ where
                     e
                 );
                 self.state_store.with_write_tx(|tx| {
-                    TransactionRecord::get(tx.deref_mut(), &transaction_id)?
+                    TransactionRecord::get(&**tx, &transaction_id)?
                         .set_abort(format!("Mempool failed to execute: {}", e))
                         .update(tx)
                 })?;
@@ -687,7 +687,6 @@ where
             let input_shards = executed
                 .resolved_inputs()
                 .into_iter()
-                .flatten()
                 .map(|s| s.versioned_substate_id().to_committee_shard(num_committees))
                 .collect::<HashSet<_>>();
             let tx_substate_address = SubstateAddress::for_transaction_receipt(executed.id().into_receipt_address());
@@ -697,7 +696,7 @@ where
                 // All involved shards commit the transaction receipt, so we exclude the shard @ tx_substate_address from propagation and consensus.
                 .map(|s| s.to_substate_address())
                 .filter(|s| *s != tx_substate_address)
-                .filter(|s| !input_shards.contains(&s.to_committee_shard(num_committees)))
+                .filter(|s| !input_shards.contains(&s.to_shard(num_committees)))
                 .collect();
 
             if let Err(err) = self

@@ -3,4 +3,6 @@
 #[cfg(test)]
 mod consensus;
 #[cfg(test)]
+mod substate_store;
+#[cfg(test)]
 mod support;

@@ -27,6 +27,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{decode, decode_exact, encode, BorError};
+use tari_common_types::types::FixedHash;
 use tari_template_lib::{
     models::{
         ComponentAddress,
@@ -46,6 +47,7 @@ use crate::{
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
     fee_claim::{FeeClaim, FeeClaimAddress},
+    hashing::substate_value_hasher32,
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
     resource::Resource,
@@ -88,6 +90,19 @@ impl Substate {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, BorError> {
         decode(bytes)
     }
+
+    pub fn to_value_hash(&self) -> FixedHash {
+        hash_substate(self.substate_value(), self.version)
+    }
+}
+
+pub fn hash_substate(substate: &SubstateValue, version: u32) -> FixedHash {
+    substate_value_hasher32()
+        .chain(substate)
+        .chain(&version)
+        .result()
+        .into_array()
+        .into()
 }
 
 /// Base object address, version tuples
@@ -475,6 +490,13 @@ impl SubstateValue {
     pub fn into_transaction_receipt(self) -> Option<TransactionReceipt> {
         match self {
             SubstateValue::TransactionReceipt(tx_receipt) => Some(tx_receipt),
+            _ => None,
+        }
+    }
+
+    pub fn as_component(&self) -> Option<&ComponentHeader> {
+        match self {
+            SubstateValue::Component(component) => Some(component),
             _ => None,
         }
     }

@@ -4,7 +4,7 @@
 use diesel::{Queryable, QueryableByName};
 use tari_dan_storage::{
     consensus_models,
-    consensus_models::{Evidence, LeaderFee, TransactionAtom},
+    consensus_models::{Decision, Evidence, LeaderFee, TransactionAtom},
     StorageError,
 };
 use time::PrimitiveDateTime;
@@ -44,6 +44,7 @@ impl TransactionPoolRecord {
             evidence.merge(deserialize_json::<Evidence>(&update.evidence)?);
             self.is_ready = update.is_ready;
             pending_stage = Some(parse_from_string(&update.stage)?);
+            self.local_decision = update.local_decision;
         }
 
         if let Some(ref remote_evidence) = self.remote_evidence {
@@ -66,19 +67,31 @@ impl TransactionPoolRecord {
                 })
             })
             .transpose()?;
+        let original_decision = parse_from_string(&self.original_decision)?;
+        let local_decision = self.local_decision.as_deref().map(parse_from_string).transpose()?;
+        let remote_decision = self
+            .remote_decision
+            .as_deref()
+            .map(parse_from_string::<Decision>)
+            .transpose()?;
+        // TODO: sucks to reimplement this logic here
+        let aggregate_decision = remote_decision
+            .filter(|d| d.is_abort())
+            .or(local_decision)
+            .unwrap_or(original_decision);
 
         Ok(consensus_models::TransactionPoolRecord::load(
             TransactionAtom {
                 id: deserialize_hex_try_from(&self.transaction_id)?,
-                decision: parse_from_string(&self.original_decision)?,
+                decision: aggregate_decision,
                 evidence,
                 transaction_fee: self.transaction_fee as u64,
                 leader_fee,
             },
             parse_from_string(&self.stage)?,
             pending_stage,
-            self.local_decision.as_deref().map(parse_from_string).transpose()?,
-            self.remote_decision.as_deref().map(parse_from_string).transpose()?,
+            local_decision,
+            remote_decision,
             self.is_ready,
         ))
     }

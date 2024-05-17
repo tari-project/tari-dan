@@ -223,8 +223,8 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: GetStateRequest = value.parse_params()?;
 
-        let mut tx = self.state_store.create_read_tx().unwrap();
-        match SubstateRecord::get(&mut tx, &request.address).optional() {
+        let tx = self.state_store.create_read_tx().unwrap();
+        match SubstateRecord::get(&tx, &request.address).optional() {
             Ok(Some(state)) => Ok(JsonRpcResponse::success(answer_id, GetStateResponse {
                 data: state.into_substate().to_bytes(),
             })),
@@ -249,8 +249,8 @@ impl JsonRpcHandlers {
 
     pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let mut tx = self.state_store.create_read_tx().unwrap();
-        match TransactionRecord::get_paginated(&mut tx, 1000, 0, Some(Ordering::Descending)) {
+        let tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
+        match TransactionRecord::get_paginated(&tx, 1000, 0, Some(Ordering::Descending)) {
             Ok(recent_transactions) => {
                 let res = GetRecentTransactionsResponse {
                     transactions: recent_transactions.into_iter().map(|t| t.transaction).collect(),
@@ -271,21 +271,21 @@ impl JsonRpcHandlers {
     pub async fn list_blocks(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let req = value.parse_params::<ListBlocksRequest>()?;
-        let mut tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
+        let tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
         let start_block = match req.from_id {
-            Some(id) => Block::get(&mut tx, &id)
+            Some(id) => Block::get(&tx, &id)
                 .optional()
                 .map_err(internal_error(answer_id))?
                 .ok_or_else(|| not_found(answer_id, format!("Block {} not found", id)))?,
-            None => LeafBlock::get(&mut tx)
+            None => LeafBlock::get(&tx)
                 .optional()
                 .map_err(internal_error(answer_id))?
                 .ok_or_else(|| not_found(answer_id, "No leaf block"))?
-                .get_block(&mut tx)
+                .get_block(&tx)
                 .map_err(internal_error(answer_id))?,
         };
         let blocks = start_block
-            .get_parent_chain(&mut tx, req.limit)
+            .get_parent_chain(&tx, req.limit)
             .map_err(internal_error(answer_id))?;
 
         let res = ListBlocksResponse { blocks };
@@ -343,7 +343,7 @@ impl JsonRpcHandlers {
         let maybe_substate = self
             .state_store
             .with_read_tx(|tx| {
-                let address = SubstateAddress::from_address(&data.address, data.version);
+                let address = SubstateAddress::from_substate_id(&data.address, data.version);
                 SubstateRecord::get(tx, &address).optional()
             })
             .map_err(internal_error(answer_id))?;
@@ -396,8 +396,8 @@ impl JsonRpcHandlers {
     pub async fn get_block(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let data: GetBlockRequest = value.parse_params()?;
-        let mut tx = self.state_store.create_read_tx().unwrap();
-        match Block::get(&mut tx, &data.block_id) {
+        let tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
+        match Block::get(&tx, &data.block_id) {
             Ok(block) => {
                 let res = GetBlockResponse { block };
                 Ok(JsonRpcResponse::success(answer_id, res))
@@ -415,8 +415,8 @@ impl JsonRpcHandlers {
 
     pub async fn get_blocks_count(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let mut tx = self.state_store.create_read_tx().unwrap();
-        match Block::get_count(&mut tx) {
+        let tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
+        match Block::get_count(&tx) {
             Ok(count) => {
                 let res = GetBlocksCountResponse { count };
                 Ok(JsonRpcResponse::success(answer_id, res))

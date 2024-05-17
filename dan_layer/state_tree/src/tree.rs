@@ -54,7 +54,7 @@ impl<'a, S: TreeStoreReader<Version>, M: DbKeyMapper> StateTree<'a, S, M> {
 
 impl<'a, S: TreeStore<Version>, M: DbKeyMapper> StateTree<'a, S, M> {
     /// Stores the substate changes in the state tree and returns the new root hash.
-    pub fn put_substate_changes<I: IntoIterator<Item = SubstateChange>>(
+    pub fn put_substate_changes<I: IntoIterator<Item = SubstateTreeChange>>(
         &mut self,
         current_version: Version,
         next_version: Version,
@@ -87,7 +87,11 @@ impl<'a, S: TreeStore<Version>, M: DbKeyMapper> StateTree<'a, S, M> {
 }
 
 /// Calculates the new root hash and tree updates for the given substate changes.
-fn calculate_substate_changes<S: TreeStoreReader<Version>, M: DbKeyMapper, I: IntoIterator<Item = SubstateChange>>(
+fn calculate_substate_changes<
+    S: TreeStoreReader<Version>,
+    M: DbKeyMapper,
+    I: IntoIterator<Item = SubstateTreeChange>,
+>(
     store: &mut S,
     current_version: Option<Version>,
     next_version: Version,
@@ -98,11 +102,11 @@ fn calculate_substate_changes<S: TreeStoreReader<Version>, M: DbKeyMapper, I: In
     let changes = changes
         .into_iter()
         .map(|ch| match ch {
-            SubstateChange::Up { id, value_hash } => LeafChange {
+            SubstateTreeChange::Up { id, value_hash } => LeafChange {
                 key: M::map_to_leaf_key(&id),
                 new_payload: Some((value_hash, next_version)),
             },
-            SubstateChange::Down { id } => LeafChange {
+            SubstateTreeChange::Down { id } => LeafChange {
                 key: M::map_to_leaf_key(&id),
                 new_payload: None,
             },
@@ -122,12 +126,12 @@ fn calculate_substate_changes<S: TreeStoreReader<Version>, M: DbKeyMapper, I: In
     Ok((root_hash, update_result))
 }
 
-pub enum SubstateChange {
+pub enum SubstateTreeChange {
     Up { id: SubstateId, value_hash: Hash },
     Down { id: SubstateId },
 }
 
-impl SubstateChange {
+impl SubstateTreeChange {
     pub fn id(&self) -> &SubstateId {
         match self {
             Self::Up { id, .. } => id,

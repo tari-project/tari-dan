@@ -46,7 +46,7 @@ where TConsensusSpec: ConsensusSpec
         let num_committees = self.epoch_manager.get_num_committees(block.epoch()).await?;
 
         let validator = self.epoch_manager.get_our_validator_node(block.epoch()).await?;
-        let local_shard = validator.shard_key.to_committee_shard(num_committees);
+        let local_shard = validator.shard_key.to_shard(num_committees);
         let non_local_shards = self
             .store
             .with_read_tx(|tx| get_non_local_shards(tx, &block, num_committees, local_shard))?;
@@ -55,7 +55,7 @@ where TConsensusSpec: ConsensusSpec
         }
         info!(
             target: LOG_TARGET,
-            "🌿 PROPOSING foreignly new locked block {} to {} foreign shards. justify: {} ({}), parent: {}",
+            "🌿 PROPOSING new locked block {} to {} foreign shards. justify: {} ({}), parent: {}",
             block,
             non_local_shards.len(),
             block.justify().block_id(),
@@ -90,7 +90,7 @@ where TConsensusSpec: ConsensusSpec
 }
 
 pub fn get_non_local_shards<TTx: StateStoreReadTransaction>(
-    tx: &mut TTx,
+    tx: &TTx,
     block: &Block,
     num_committees: u32,
     local_shard: Shard,
@@ -98,8 +98,8 @@ pub fn get_non_local_shards<TTx: StateStoreReadTransaction>(
     get_non_local_shards_from_commands(tx, block.commands(), num_committees, local_shard)
 }
 
-pub fn get_non_local_shards_from_commands<TTx: StateStoreReadTransaction>(
-    tx: &mut TTx,
+fn get_non_local_shards_from_commands<TTx: StateStoreReadTransaction>(
+    tx: &TTx,
     commands: &BTreeSet<Command>,
     num_committees: u32,
     local_shard: Shard,
@@ -109,7 +109,7 @@ pub fn get_non_local_shards_from_commands<TTx: StateStoreReadTransaction>(
     let non_local_shards = prepared_txs
         .into_iter()
         .flat_map(|(_, addresses)| addresses)
-        .map(|address| address.to_committee_shard(num_committees))
+        .map(|address| address.to_shard(num_committees))
         .filter(|shard| *shard != local_shard)
         .collect();
     Ok(non_local_shards)

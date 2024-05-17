@@ -14,14 +14,13 @@ use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_rpc_state_sync::RpcStateSyncManager;
 use tari_state_store_sqlite::SqliteStateStore;
 
-use super::TariDanBlockTransactionExecutorBuilder;
 #[cfg(feature = "metrics")]
 use crate::consensus::metrics::PrometheusConsensusMetrics;
 use crate::{
     consensus::{
         leader_selection::RoundRobinLeaderStrategy,
         signature_service::TariSignatureService,
-        state_manager::TariStateManager,
+        TariDanBlockTransactionExecutor,
     },
     p2p::services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
 };
@@ -31,10 +30,6 @@ pub struct TariConsensusSpec;
 
 impl ConsensusSpec for TariConsensusSpec {
     type Addr = PeerAddress;
-    type BlockTransactionExecutorBuilder = TariDanBlockTransactionExecutorBuilder<
-        Self::EpochManager,
-        TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
-    >;
     type EpochManager = EpochManagerHandle<Self::Addr>;
     #[cfg(not(feature = "metrics"))]
     type Hooks = NoopHooks;
@@ -44,7 +39,8 @@ impl ConsensusSpec for TariConsensusSpec {
     type LeaderStrategy = RoundRobinLeaderStrategy;
     type OutboundMessaging = ConsensusOutboundMessaging<SqliteMessageLogger>;
     type SignatureService = TariSignatureService;
-    type StateManager = TariStateManager;
     type StateStore = SqliteStateStore<Self::Addr>;
     type SyncManager = RpcStateSyncManager<Self>;
+    type TransactionExecutor =
+        TariDanBlockTransactionExecutor<Self::EpochManager, TariDanTransactionProcessor<TemplateManager<PeerAddress>>>;
 }

@@ -1,52 +1,45 @@
 //    Copyright 2024 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use tari_consensus::traits::{
-    BlockTransactionExecutor,
-    BlockTransactionExecutorBuilder,
-    BlockTransactionExecutorError,
+use tari_consensus::{
+    hotstuff::substate_store::PendingSubstateStore,
+    traits::{BlockTransactionExecutor, BlockTransactionExecutorError},
 };
-use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
+use tari_dan_storage::{
+    consensus_models::{ExecutedTransaction, TransactionRecord},
+    StateStore,
+};
 use tari_transaction::Transaction;
 
-#[derive(Debug, Clone)]
-pub struct TestBlockTransactionExecutorBuilder {}
-
-impl TestBlockTransactionExecutorBuilder {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl<TStateStore> BlockTransactionExecutorBuilder<TStateStore> for TestBlockTransactionExecutorBuilder
-where TStateStore: StateStore
-{
-    type Executor = TestBlockTransactionProcessor;
-
-    fn build(&self) -> Self::Executor {
-        TestBlockTransactionProcessor::new()
-    }
-}
+use crate::support::executions_store::TestTransactionExecutionsStore;
 
 #[derive(Debug, Clone)]
-pub struct TestBlockTransactionProcessor {}
+pub struct TestBlockTransactionProcessor {
+    store: TestTransactionExecutionsStore,
+}
 
 impl TestBlockTransactionProcessor {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(store: TestTransactionExecutionsStore) -> Self {
+        Self { store }
     }
 }
 
-impl<TStateStore> BlockTransactionExecutor<TStateStore> for TestBlockTransactionProcessor
-where TStateStore: StateStore
-{
+impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBlockTransactionProcessor {
     fn execute(
-        &mut self,
+        &self,
         transaction: Transaction,
-        db_tx: &mut TStateStore::ReadTransaction<'_>,
+        store: &PendingSubstateStore<TStateStore>,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
-        // Tests generate executed transactions, so if execute is called we expect it to already be in the database.
-        let executed = ExecutedTransaction::get(db_tx, transaction.id())?;
+        if let Some(execution) = self.store.get(transaction.id()) {
+            let mut rec = TransactionRecord::new(transaction);
+            rec.resolved_inputs = Some(execution.resolved_inputs().clone());
+            rec.result = Some(execution.result().clone());
+            rec.resulting_outputs.clone_from(execution.resulting_outputs());
+            rec.execution_time = Some(execution.execution_time());
+
+            return Ok(rec.try_into().unwrap());
+        }
+        let executed = ExecutedTransaction::get(store.read_transaction(), transaction.id())?;
         Ok(executed)
     }
 }

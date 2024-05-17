@@ -5,6 +5,8 @@ use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore, Storag
 use tari_engine_types::substate::SubstateId;
 use tari_transaction::Transaction;
 
+use crate::hotstuff::substate_store::{PendingSubstateStore, SubstateStoreError};
+
 #[derive(thiserror::Error, Debug)]
 pub enum BlockTransactionExecutorError {
     #[error("Unable to resolve substate id: {substate_id}")]
@@ -18,17 +20,14 @@ pub enum BlockTransactionExecutorError {
     RemoteSubstatesNotAllowed,
     #[error("State store error: {0}")]
     StateStoreError(String),
+    #[error("Substate store error: {0}")]
+    SubstateStoreError(#[from] SubstateStoreError),
 }
 
 pub trait BlockTransactionExecutor<TStateStore: StateStore> {
     fn execute(
-        &mut self,
+        &self,
         transaction: Transaction,
-        db_tx: &mut TStateStore::ReadTransaction<'_>,
+        store: &PendingSubstateStore<TStateStore>,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError>;
-}
-
-pub trait BlockTransactionExecutorBuilder<TStateStore: StateStore> {
-    type Executor: BlockTransactionExecutor<TStateStore>;
-    fn build(&self) -> Self::Executor;
 }

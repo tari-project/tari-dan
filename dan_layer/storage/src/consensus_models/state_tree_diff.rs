@@ -4,7 +4,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::DerefMut;
+use std::ops::Deref;
 
 use tari_dan_common_types::NodeHeight;
 
@@ -29,14 +29,14 @@ impl PendingStateTreeDiff {
 
 impl PendingStateTreeDiff {
     /// Returns all pending state tree diffs from the last committed block (exclusive) to the given block (inclusive).
-    pub fn get_all_up_to_commit_block<TTx>(tx: &mut TTx, block_id: &BlockId) -> Result<Vec<Self>, StorageError>
+    pub fn get_all_up_to_commit_block<TTx>(tx: &TTx, block_id: &BlockId) -> Result<Vec<Self>, StorageError>
     where TTx: StateStoreReadTransaction {
         tx.pending_state_tree_diffs_get_all_up_to_commit_block(block_id)
     }
 
     pub fn remove_by_block<TTx>(tx: &mut TTx, block_id: &BlockId) -> Result<Self, StorageError>
     where
-        TTx: DerefMut + StateStoreWriteTransaction,
+        TTx: Deref + StateStoreWriteTransaction,
         TTx::Target: StateStoreReadTransaction,
     {
         tx.pending_state_tree_diffs_remove_by_block(block_id)
@@ -44,13 +44,10 @@ impl PendingStateTreeDiff {
 
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
-        TTx: DerefMut + StateStoreWriteTransaction,
+        TTx: Deref + StateStoreWriteTransaction,
         TTx::Target: StateStoreReadTransaction,
     {
-        if tx
-            .deref_mut()
-            .pending_state_tree_diffs_exists_for_block(&self.block_id)?
-        {
+        if tx.pending_state_tree_diffs_exists_for_block(&self.block_id)? {
             Ok(false)
         } else {
             tx.pending_state_tree_diffs_insert(self)?;

@@ -4,23 +4,22 @@
 use std::{
     borrow::Borrow,
     collections::HashSet,
+    fmt,
     hash::Hash,
     iter,
-    ops::{DerefMut, RangeInclusive},
+    ops::{Deref, RangeInclusive},
+    str::FromStr,
 };
 
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, SubstateAddress};
-use tari_engine_types::{
-    lock::LockFlag,
-    substate::{Substate, SubstateId, SubstateValue},
-};
+use tari_engine_types::substate::{hash_substate, Substate, SubstateId, SubstateValue};
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 
 use crate::{
-    consensus_models::{Block, BlockId, QcId, QuorumCertificate, VersionedSubstateIdLockIntent},
+    consensus_models::{Block, BlockId, LockedSubstate, QcId, QuorumCertificate},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -81,8 +80,8 @@ impl SubstateRecord {
         Self {
             substate_id,
             version,
+            state_hash: hash_substate(&substate_value, version),
             substate_value,
-            state_hash: Default::default(),
             created_height,
             created_justify,
             created_at_epoch,
@@ -93,7 +92,11 @@ impl SubstateRecord {
     }
 
     pub fn to_substate_address(&self) -> SubstateAddress {
-        SubstateAddress::from_address(&self.substate_id, self.version)
+        SubstateAddress::from_substate_id(&self.substate_id, self.version)
+    }
+
+    pub fn to_versioned_substate_id(&self) -> VersionedSubstateId {
+        VersionedSubstateId::new(self.substate_id.clone(), self.version)
     }
 
     pub fn to_substate_requirement(&self) -> SubstateRequirement {
@@ -154,62 +157,15 @@ impl SubstateRecord {
 }
 
 impl SubstateRecord {
-    pub fn try_lock_all<TTx: StateStoreWriteTransaction, B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
-        tx: &mut TTx,
-        locked_by_tx: &TransactionId,
-        inputs: I,
-        lock_flag: SubstateLockFlag,
-    ) -> Result<SubstateLockState, StorageError> {
-        tx.substates_try_lock_many(locked_by_tx, inputs, lock_flag)
-    }
-
-    pub fn try_lock_all2<
-        'a,
+    pub fn insert_all_locks<
         TTx: StateStoreWriteTransaction,
-        I: IntoIterator<Item = &'a VersionedSubstateIdLockIntent>,
+        I: IntoIterator<Item = (SubstateId, Vec<LockedSubstate>)>,
     >(
         tx: &mut TTx,
-        locked_by_tx: &TransactionId,
-        inputs: I,
-    ) -> Result<SubstateLockState, StorageError> {
-        // TODO
-        for input in inputs {
-            tx.substates_try_lock_many(
-                locked_by_tx,
-                iter::once(&input.to_substate_address()),
-                input.lock_flag(),
-            )?;
-        }
-
-        Ok(SubstateLockState::LockAcquired)
-    }
-
-    pub fn check_lock_all<TTx: StateStoreReadTransaction, B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
-        tx: &mut TTx,
-        inputs: I,
-        lock_flag: SubstateLockFlag,
-    ) -> Result<SubstateLockState, StorageError> {
-        tx.substates_check_lock_many(inputs, lock_flag)
-    }
-
-    pub fn try_unlock_many<TTx: StateStoreWriteTransaction, B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
-        tx: &mut TTx,
-        locked_by_tx: &TransactionId,
-        inputs: I,
-        lock_flag: SubstateLockFlag,
+        block_id: BlockId,
+        locks: I,
     ) -> Result<(), StorageError> {
-        tx.substates_try_unlock_many(locked_by_tx, inputs, lock_flag)?;
-        Ok(())
-    }
-
-    pub fn unlock_any<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a SubstateAddress>>(
-        tx: &mut TTx,
-        locked_by_tx: &TransactionId,
-        inputs: I,
-        lock_flag: SubstateLockFlag,
-    ) -> Result<(), StorageError> {
-        tx.substates_try_unlock_many(locked_by_tx, inputs, lock_flag)?;
-        Ok(())
+        tx.substate_locks_insert_all(block_id, locks)
     }
 
     pub fn create<TTx: StateStoreWriteTransaction>(self, tx: &mut TTx) -> Result<(), StorageError> {
@@ -218,7 +174,7 @@ impl SubstateRecord {
     }
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &mut TTx,
+        tx: &TTx,
         shard: &SubstateAddress,
     ) -> Result<bool, StorageError> {
         // TODO: optimise
@@ -230,28 +186,37 @@ impl SubstateRecord {
         I: IntoIterator<Item = S>,
         S: Borrow<VersionedSubstateId>,
     >(
-        tx: &mut TTx,
+        tx: &TTx,
         substates: I,
     ) -> Result<bool, StorageError> {
         tx.substates_any_exist(substates)
     }
 
     pub fn exists_for_transaction<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &mut TTx,
+        tx: &TTx,
         transaction_id: &TransactionId,
     ) -> Result<bool, StorageError> {
         tx.substates_exists_for_transaction(transaction_id)
     }
 
     pub fn get<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &mut TTx,
+        tx: &TTx,
         shard: &SubstateAddress,
     ) -> Result<SubstateRecord, StorageError> {
         tx.substates_get(shard)
     }
 
+    pub fn substate_is_up<TTx: StateStoreReadTransaction + ?Sized>(
+        tx: &TTx,
+        shard: &SubstateAddress,
+    ) -> Result<bool, StorageError> {
+        // TODO: consider optimising
+        let rec = tx.substates_get(shard)?;
+        Ok(rec.is_up())
+    }
+
     pub fn get_any<TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = SubstateRequirement>>(
-        tx: &mut TTx,
+        tx: &TTx,
         shards: I,
     ) -> Result<(Vec<SubstateRecord>, HashSet<SubstateRequirement>), StorageError> {
         let mut substate_ids = shards.into_iter().collect::<HashSet<_>>();
@@ -264,7 +229,7 @@ impl SubstateRecord {
     }
 
     pub fn get_any_max_version<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a SubstateId>>(
-        tx: &mut TTx,
+        tx: &TTx,
         substate_ids: I,
     ) -> Result<(Vec<SubstateRecord>, HashSet<&'a SubstateId>), StorageError> {
         let mut substate_ids = substate_ids.into_iter().collect::<HashSet<_>>();
@@ -276,8 +241,24 @@ impl SubstateRecord {
         Ok((found, substate_ids))
     }
 
+    pub fn get_latest<TTx: StateStoreReadTransaction + ?Sized>(
+        tx: &TTx,
+        substate_id: &SubstateId,
+    ) -> Result<SubstateRecord, StorageError> {
+        // TODO: consider optimising
+        let (mut found, _) = Self::get_any_max_version(tx, iter::once(substate_id))?;
+        let Some(found) = found.pop() else {
+            return Err(StorageError::NotFound {
+                item: "SubstateRecord::get_latest".to_string(),
+                key: substate_id.to_string(),
+            });
+        };
+
+        Ok(found)
+    }
+
     pub fn get_many_within_range<TTx: StateStoreReadTransaction, B: Borrow<RangeInclusive<SubstateAddress>>>(
-        tx: &mut TTx,
+        tx: &TTx,
         bounds: B,
         excluded_shards: &[SubstateAddress],
     ) -> Result<Vec<SubstateRecord>, StorageError> {
@@ -285,14 +266,14 @@ impl SubstateRecord {
     }
 
     pub fn get_many_by_created_transaction<TTx: StateStoreReadTransaction>(
-        tx: &mut TTx,
+        tx: &TTx,
         transaction_id: &TransactionId,
     ) -> Result<Vec<SubstateRecord>, StorageError> {
         tx.substates_get_many_by_created_transaction(transaction_id)
     }
 
     pub fn get_many_by_destroyed_transaction<TTx: StateStoreReadTransaction>(
-        tx: &mut TTx,
+        tx: &TTx,
         transaction_id: &TransactionId,
     ) -> Result<Vec<SubstateRecord>, StorageError> {
         tx.substates_get_many_by_destroyed_transaction(transaction_id)
@@ -300,14 +281,14 @@ impl SubstateRecord {
 
     pub fn get_created_quorum_certificate<TTx: StateStoreReadTransaction>(
         &self,
-        tx: &mut TTx,
+        tx: &TTx,
     ) -> Result<QuorumCertificate, StorageError> {
         tx.quorum_certificates_get(self.created_justify())
     }
 
     pub fn get_destroyed_quorum_certificate<TTx: StateStoreReadTransaction>(
         &self,
-        tx: &mut TTx,
+        tx: &TTx,
     ) -> Result<Option<QuorumCertificate>, StorageError> {
         self.destroyed()
             .map(|destroyed| tx.quorum_certificates_get(&destroyed.justify))
@@ -321,7 +302,6 @@ impl SubstateRecord {
         destroyed_by_block: &BlockId,
         destroyed_justify: &QcId,
         destroyed_by_transaction: &TransactionId,
-        require_locks: bool,
     ) -> Result<(), StorageError> {
         tx.substate_down_many(
             substate_addresses,
@@ -329,7 +309,6 @@ impl SubstateRecord {
             destroyed_by_block,
             destroyed_by_transaction,
             destroyed_justify,
-            require_locks,
         )
     }
 }
@@ -392,7 +371,7 @@ impl SubstateUpdate {
 impl SubstateUpdate {
     pub fn apply<TTx>(self, tx: &mut TTx, block: &Block) -> Result<(), StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
         match self {
@@ -406,8 +385,8 @@ impl SubstateUpdate {
                 SubstateRecord {
                     substate_id: proof.substate.substate_id,
                     version: proof.substate.version,
+                    state_hash: hash_substate(&proof.substate.substate_value, proof.substate.version),
                     substate_value: proof.substate.substate_value,
-                    state_hash: Default::default(),
                     created_by_transaction: proof.substate.created_by_transaction,
                     created_justify: *proof.created_qc.id(),
                     created_block: *block.id(),
@@ -433,12 +412,11 @@ impl SubstateUpdate {
                 proof.save(tx)?;
                 SubstateRecord::destroy_many(
                     tx,
-                    iter::once(SubstateAddress::from_address(&substate_id, version)),
+                    iter::once(SubstateAddress::from_substate_id(&substate_id, version)),
                     block.epoch(),
                     block.id(),
                     proof.id(),
                     &destroyed_by_transaction,
-                    false,
                 )?;
             },
         }
@@ -455,15 +433,15 @@ impl From<SubstateCreatedProof> for SubstateUpdate {
 
 /// Substate lock flags
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[repr(u8)]
 #[cfg_attr(
     feature = "ts",
     derive(ts_rs::TS),
     ts(export, export_to = "../../bindings/src/types/")
 )]
 pub enum SubstateLockFlag {
-    Read = 0x01,
-    Write = 0x02,
+    Read,
+    Write,
+    Output,
 }
 
 impl SubstateLockFlag {
@@ -475,13 +453,37 @@ impl SubstateLockFlag {
         matches!(self, Self::Read)
     }
 
-    pub fn as_lock_flag(&self) -> LockFlag {
+    pub fn is_output(&self) -> bool {
+        matches!(self, Self::Output)
+    }
+}
+
+impl fmt::Display for SubstateLockFlag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Read => LockFlag::Read,
-            Self::Write => LockFlag::Write,
+            Self::Read => write!(f, "Read"),
+            Self::Write => write!(f, "Write"),
+            Self::Output => write!(f, "Output"),
         }
     }
 }
+
+impl FromStr for SubstateLockFlag {
+    type Err = SubstateLockFlagParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Read" => Ok(Self::Read),
+            "Write" => Ok(Self::Write),
+            "Output" => Ok(Self::Output),
+            _ => Err(SubstateLockFlagParseError),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("Failed to parse SubstateLockFlag")]
+pub struct SubstateLockFlagParseError;
 
 #[derive(Debug, Clone, Copy)]
 pub enum SubstateLockState {
@@ -494,8 +496,6 @@ pub enum SubstateLockState {
     /// Some outputs substates exist. This indicates that that we attempted to lock an output but the output is already
     /// a substate (Up or DOWN)
     SomeOutputSubstatesExist,
-    /// Some inputs substates do not exist
-    InputsConfict,
 }
 
 impl SubstateLockState {

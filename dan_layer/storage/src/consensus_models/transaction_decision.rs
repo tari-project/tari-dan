@@ -8,6 +8,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use tari_engine_types::commit_result::TransactionResult;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -67,6 +68,16 @@ impl FromStr for Decision {
             "Abort" => Ok(Decision::Abort),
             "Deferred" => Ok(Decision::Deferred),
             _ => Err(()),
+        }
+    }
+}
+
+impl From<&TransactionResult> for Decision {
+    fn from(result: &TransactionResult) -> Self {
+        if result.is_accept() {
+            Decision::Commit
+        } else {
+            Decision::Abort
         }
     }
 }
