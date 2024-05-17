@@ -18,7 +18,7 @@ use tari_dan_storage::global::models::ValidatorNode;
 use tari_epoch_manager::{EpochManagerError, EpochManagerEvent, EpochManagerReader};
 use tokio::sync::{broadcast, Mutex, MutexGuard};
 
-use crate::support::{address::TestAddress, helpers::random_substate_in_bucket};
+use crate::support::{address::TestAddress, helpers::random_substate_in_shard};
 
 #[derive(Debug, Clone)]
 pub struct TestEpochManager {
@@ -87,7 +87,7 @@ impl TestEpochManager {
         let num_committees = committees.len() as u32;
         for (shard, committee) in committees {
             for (address, pk) in &committee.members {
-                let substate_address = random_substate_in_bucket(shard, num_committees);
+                let substate_address = random_substate_in_shard(shard, num_committees);
                 state.validator_shards.insert(
                     address.clone(),
                     (

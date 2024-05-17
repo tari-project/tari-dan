@@ -23,6 +23,7 @@
 use std::{
     cmp,
     collections::{HashMap, HashSet},
+    num::NonZeroU32,
 };
 
 use log::*;
@@ -629,8 +630,11 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     }
 }
 
-fn calculate_num_committees(num_vns: u64, committee_size: u32) -> u32 {
+fn calculate_num_committees(num_vns: u64, committee_size: NonZeroU32) -> u32 {
     // Number of committees is proportional to the number of validators available.
     // We cap the number of committees to u32::MAX (for a committee_size of 10 that's over 42 billion validators)
-    cmp::min(cmp::max(1, num_vns / u64::from(committee_size)), u64::from(u32::MAX)) as u32
+    cmp::min(
+        cmp::max(1, num_vns / u64::from(committee_size.get())),
+        u64::from(u32::MAX),
+    ) as u32
 }

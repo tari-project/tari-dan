@@ -22,7 +22,7 @@
 
 use std::{fs, io, ops::DerefMut, str::FromStr};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use futures::{future, FutureExt};
 use libp2p::identity;
 use log::info;
@@ -192,7 +192,10 @@ pub async fn spawn_services(
         // which depends on epoch_manager, so would be a circular dependency.
         EpochManagerConfig {
             base_layer_confirmations: consensus_constants.base_layer_confirmations,
-            committee_size: consensus_constants.committee_size,
+            committee_size: consensus_constants
+                .committee_size
+                .try_into()
+                .context("committee size must be non-zero")?,
             validator_node_sidechain_id: config.validator_node.validator_node_sidechain_id.clone(),
         },
         global_db.clone(),

@@ -22,6 +22,7 @@
 
 use std::{fs, io, str::FromStr};
 
+use anyhow::Context;
 use libp2p::identity;
 use minotari_app_utilities::identity_management;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
@@ -117,7 +118,10 @@ pub async fn spawn_services(
     let (epoch_manager, _) = tari_epoch_manager::base_layer::spawn_service(
         EpochManagerConfig {
             base_layer_confirmations: consensus_constants.base_layer_confirmations,
-            committee_size: consensus_constants.committee_size,
+            committee_size: consensus_constants
+                .committee_size
+                .try_into()
+                .context("committee_size must be non-zero")?,
             validator_node_sidechain_id: config.indexer.sidechain_id.clone(),
         },
         global_db.clone(),
