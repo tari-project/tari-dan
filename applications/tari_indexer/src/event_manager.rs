@@ -281,7 +281,6 @@ impl EventManager {
         };
         let start_block_id = start_block_id.unwrap_or(self.build_genesis_block_id());
 
-        dbg!(&committee);
         committee.members.shuffle(&mut OsRng);
         let mut last_block_id = start_block_id;
 
