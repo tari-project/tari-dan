@@ -22,7 +22,7 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tari_template_lib::Hash;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
@@ -100,6 +100,15 @@ impl ExecuteResult {
         let receipt = &self.finalize.fee_receipt;
         assert!(receipt.is_paid_in_full(), "Fees not paid in full");
         receipt
+    }
+
+    pub fn expect_return<T: DeserializeOwned>(&self, index: usize) -> T {
+        self.finalize
+            .execution_results
+            .get(index)
+            .expect("No return value at index")
+            .decode()
+            .expect("Failed to decode return value")
     }
 }
 

@@ -6,12 +6,16 @@ use std::fmt::{Display, Formatter};
 use tari_template_lib::{
     args::{ComponentAction, VaultAction},
     auth::ResourceAuthAction,
+    models::ComponentAddress,
 };
 
 #[derive(Debug, Clone)]
 pub enum ActionIdent {
     Native(NativeAction),
-    ComponentCallMethod { method: String },
+    ComponentCallMethod {
+        component_address: ComponentAddress,
+        method: String,
+    },
 }
 
 impl From<NativeAction> for ActionIdent {
@@ -42,8 +46,11 @@ impl Display for ActionIdent {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ActionIdent::Native(native_fn) => write!(f, "native.{}", native_fn),
-            ActionIdent::ComponentCallMethod { method } => {
-                write!(f, "call component method '{}'", method)
+            ActionIdent::ComponentCallMethod {
+                component_address,
+                method,
+            } => {
+                write!(f, "call component method '{method}' on {component_address}")
             },
         }
     }

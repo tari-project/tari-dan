@@ -122,7 +122,7 @@ fn it_rejects_unknown_substate_addresses() {
 fn it_rejects_references_to_buckets_that_arent_in_scope() {
     let mut test = TemplateTest::new(["tests/templates/shenanigans"]);
     let template_addr = test.get_template_address("Shenanigans");
-    let (account, owner_token, owner_key) = test.create_owned_account();
+    let (account, owner_token, owner_key) = test.create_funded_account();
 
     let result = test.execute_expect_success(
         Transaction::builder()
@@ -170,7 +170,7 @@ fn it_rejects_double_ownership_of_vault() {
 fn it_prevents_access_to_vault_id_in_component_context() {
     let mut test = TemplateTest::new(["tests/templates/shenanigans"]);
     let template_addr = test.get_template_address("Shenanigans");
-    let (account, _, _) = test.create_owned_account();
+    let (account, _, _) = test.create_funded_account();
 
     let vault_id = {
         let component = test.read_only_state_store().get_component(account).unwrap();
@@ -209,7 +209,7 @@ fn it_prevents_access_to_vault_id_in_component_context() {
 fn it_prevents_access_to_out_of_scope_component() {
     let mut test = TemplateTest::new(["tests/templates/shenanigans"]);
     let template_addr = test.get_template_address("Shenanigans");
-    let (account, _, _) = test.create_owned_account();
+    let (account, _, _) = test.create_funded_account();
 
     let result = test.execute_expect_success(
         Transaction::builder()
@@ -242,7 +242,7 @@ fn it_prevents_access_to_out_of_scope_component() {
 fn it_disallows_calls_on_vaults_that_are_not_owned_by_current_component() {
     let mut test = TemplateTest::new(["tests/templates/shenanigans"]);
     let template_addr = test.get_template_address("Shenanigans");
-    let (victim, _, _) = test.create_owned_account();
+    let (victim, _, _) = test.create_funded_account();
     let (attacker, _, _) = test.create_empty_account();
 
     let vault_id = {
@@ -274,7 +274,7 @@ fn it_disallows_calls_on_vaults_that_are_not_owned_by_current_component() {
 fn it_disallows_vault_access_if_vault_is_not_owned() {
     let mut test = TemplateTest::new(["tests/templates/shenanigans"]);
     let template_addr = test.get_template_address("Shenanigans");
-    let (victim, _, _) = test.create_owned_account();
+    let (victim, _, _) = test.create_funded_account();
 
     let vault_id = {
         let component = test.read_only_state_store().get_component(victim).unwrap();

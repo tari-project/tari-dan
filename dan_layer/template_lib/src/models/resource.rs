@@ -30,7 +30,7 @@ use tari_template_abi::rust::{
 use ts_rs::TS;
 
 use super::{BinaryTag, EntityId, KeyParseError, ObjectKey};
-use crate::newtype_struct_serde_impl;
+use crate::{newtype_struct_serde_impl, prelude::CONFIDENTIAL_TARI_RESOURCE_ADDRESS};
 
 const TAG: u64 = BinaryTag::ResourceAddress.as_u64();
 
@@ -55,6 +55,10 @@ impl ResourceAddress {
 
     pub fn as_entity_id(&self) -> EntityId {
         self.as_object_key().as_entity_id()
+    }
+
+    pub fn is_tari(&self) -> bool {
+        *self == CONFIDENTIAL_TARI_RESOURCE_ADDRESS
     }
 }
 

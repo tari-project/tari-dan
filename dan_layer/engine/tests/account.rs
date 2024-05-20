@@ -41,8 +41,8 @@ fn basic_faucet_transfer() {
         .unwrap();
 
     // Create sender and receiver accounts
-    let (sender_address, sender_proof, _) = template_test.create_owned_account();
-    let (receiver_address, _, _) = template_test.create_owned_account();
+    let (sender_address, sender_proof, _) = template_test.create_funded_account();
+    let (receiver_address, _, _) = template_test.create_funded_account();
 
     let _result = template_test
         .execute_and_commit(
@@ -128,7 +128,7 @@ fn withdraw_from_account_prevented() {
         .unwrap();
 
     // Create sender and receiver accounts
-    let (source_account, _, _) = template_test.create_owned_account();
+    let (source_account, _, _) = template_test.create_funded_account();
 
     let _result = template_test
         .execute_and_commit_manifest(
@@ -147,7 +147,7 @@ fn withdraw_from_account_prevented() {
         )
         .unwrap();
 
-    let (dest_address, non_owning_token, non_owning_key) = template_test.create_owned_account();
+    let (dest_address, non_owning_token, non_owning_key) = template_test.create_funded_account();
 
     let reason = template_test.execute_expect_failure(
         Transaction::builder()
@@ -161,6 +161,7 @@ fn withdraw_from_account_prevented() {
     );
 
     assert_access_denied_for_action(reason, ActionIdent::ComponentCallMethod {
+        component_address: source_account,
         method: "withdraw".to_string(),
     });
 
@@ -190,7 +191,7 @@ fn attempt_to_overwrite_account() {
     let mut template_test = TemplateTest::new::<_, &str>([]);
 
     // Create initial account with faucet funds
-    let (source_account, source_account_proof, source_account_sk) = template_test.create_owned_account();
+    let (source_account, source_account_proof, source_account_sk) = template_test.create_funded_account();
     let source_account_pk = RistrettoPublicKey::from_secret_key(&source_account_sk);
 
     let overwriting_tx = template_test.execute_expect_failure(

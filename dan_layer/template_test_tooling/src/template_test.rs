@@ -233,7 +233,7 @@ impl TemplateTest {
             .unwrap()
             .get_value(path)
             .unwrap()
-            .unwrap()
+            .unwrap_or_else(|| panic!("Expected component to have value at '{path}' but no value was found"))
     }
 
     pub fn default_signing_key(&self) -> &RistrettoSecretKey {
@@ -397,7 +397,15 @@ impl TemplateTest {
         (component, owner_proof, secret_key)
     }
 
+    #[deprecated(
+        since = "0.1.0",
+        note = "Please use create_funded_account instead. This method will be removed."
+    )]
     pub fn create_owned_account(&mut self) -> (ComponentAddress, NonFungibleAddress, RistrettoSecretKey) {
+        self.create_funded_account()
+    }
+
+    pub fn create_funded_account(&mut self) -> (ComponentAddress, NonFungibleAddress, RistrettoSecretKey) {
         let (owner_proof, public_key, secret_key) = self.create_owner_proof();
         let old_fail_fees = self.enable_fees;
         self.enable_fees = false;

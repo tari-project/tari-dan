@@ -17,7 +17,7 @@ pub struct ComponentBuilder<T> {
     address_allocation: Option<AddressAllocation<ComponentAddress>>,
 }
 
-impl<T: serde::Serialize> ComponentBuilder<T> {
+impl<T> ComponentBuilder<T> {
     /// Returns a new component builder for the specified data
     fn new(component: T) -> Self {
         Self {
@@ -46,7 +46,9 @@ impl<T: serde::Serialize> ComponentBuilder<T> {
         self.access_rules = access_rules;
         self
     }
+}
 
+impl<T: serde::Serialize> ComponentBuilder<T> {
     /// Creates the new component and returns it
     pub fn create(self) -> Component<T> {
         let address = engine().create_component(

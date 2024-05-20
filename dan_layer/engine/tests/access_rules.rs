@@ -92,6 +92,7 @@ mod component_access_rules {
         );
 
         assert_access_denied_for_action(reason, ActionIdent::ComponentCallMethod {
+            component_address,
             method: "set_value".to_string(),
         });
     }
@@ -137,6 +138,7 @@ mod component_access_rules {
         );
 
         assert_access_denied_for_action(reason, ActionIdent::ComponentCallMethod {
+            component_address,
             method: "set_value".to_string(),
         });
 
