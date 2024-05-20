@@ -531,7 +531,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             ))
             .filter(committees::epoch.eq(epoch.as_u64() as i64))
             .filter(validator_nodes::sidechain_id.eq(db_sidechain_id))
-            .limit(1)
             .load::<(i64, String, Vec<u8>)>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
