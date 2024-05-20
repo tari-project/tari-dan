@@ -149,7 +149,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         for vn in &vns {
             validator_nodes.set_committee_bucket(
                 vn.shard_key,
-                vn.shard_key.to_committee_shard(num_committees),
+                vn.shard_key.to_shard(num_committees),
                 self.config.validator_node_sidechain_id.as_ref(),
                 epoch,
             )?;
@@ -462,7 +462,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         }
 
         // A shard a equal slice of the shard space that a validator fits into
-        let shard = substate_address.to_committee_shard(num_committees);
+        let shard = substate_address.to_shard(num_committees);
 
         let mut shards = HashSet::new();
         shards.insert(shard);
@@ -569,7 +569,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         substate_address: SubstateAddress,
     ) -> Result<CommitteeInfo, EpochManagerError> {
         let num_committees = self.get_number_of_committees(epoch)?;
-        let shard = substate_address.to_committee_shard(num_committees);
+        let shard = substate_address.to_shard(num_committees);
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
         let num_validators =

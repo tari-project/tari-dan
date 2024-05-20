@@ -19,7 +19,6 @@ use crate::{
         leader_selection::RoundRobinLeaderStrategy,
         signature_service::TariSignatureService,
         spec::TariConsensusSpec,
-        state_manager::TariStateManager,
     },
     event_subscription::EventSubscription,
 };
@@ -31,9 +30,8 @@ mod leader_selection;
 pub mod metrics;
 mod signature_service;
 mod spec;
-mod state_manager;
 
-pub use block_transaction_executor::TariDanBlockTransactionExecutorBuilder;
+pub use block_transaction_executor::TariDanBlockTransactionExecutor;
 pub use handle::*;
 use sqlite_message_logger::SqliteMessageLogger;
 use tari_consensus::traits::ConsensusSpec;
@@ -59,7 +57,7 @@ pub async fn spawn(
     client_factory: TariValidatorNodeRpcClientFactory,
     hooks: <TariConsensusSpec as ConsensusSpec>::Hooks,
     shutdown_signal: ShutdownSignal,
-    transaction_executor_builder: TariDanBlockTransactionExecutorBuilder<
+    transaction_executor: TariDanBlockTransactionExecutor<
         EpochManagerHandle<PeerAddress>,
         TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
     >,
@@ -75,7 +73,6 @@ pub async fn spawn(
     let signing_service = TariSignatureService::new(keypair);
     let leader_strategy = RoundRobinLeaderStrategy::new();
     let transaction_pool = TransactionPool::new();
-    let state_manager = TariStateManager::new();
     let (tx_hotstuff_events, _) = broadcast::channel(100);
 
     let hotstuff_worker = HotstuffWorker::<TariConsensusSpec>::new(
@@ -88,9 +85,8 @@ pub async fn spawn(
         epoch_manager.clone(),
         leader_strategy,
         signing_service,
-        state_manager,
         transaction_pool,
-        transaction_executor_builder.clone(),
+        transaction_executor,
         tx_hotstuff_events.clone(),
         tx_mempool,
         hooks,

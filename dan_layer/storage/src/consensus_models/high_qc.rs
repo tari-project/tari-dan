@@ -61,18 +61,18 @@ impl HighQc {
 }
 
 impl HighQc {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx) -> Result<Self, StorageError> {
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx) -> Result<Self, StorageError> {
         tx.high_qc_get()
     }
 
     pub fn get_quorum_certificate<TTx: StateStoreReadTransaction + ?Sized>(
         &self,
-        tx: &mut TTx,
+        tx: &TTx,
     ) -> Result<QuorumCertificate, StorageError> {
         QuorumCertificate::get(tx, &self.qc_id)
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
         Block::get(tx, &self.block_id)
     }
 

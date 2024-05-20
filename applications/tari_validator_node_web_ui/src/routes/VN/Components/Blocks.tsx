@@ -136,7 +136,7 @@ function Blocks() {
               value: "height",
             },
             {
-              title: "Min # of Transactions",
+              title: "Min # of Commands",
               value: "transactions_cnt",
             },
             {
@@ -230,7 +230,7 @@ function Blocks() {
               </TableCell>
               <TableCell>
                 <HeadingMenu
-                  menuTitle="# of transactions"
+                  menuTitle="# of commands"
                   menuItems={[
                     {
                       title: "Sort Ascending",

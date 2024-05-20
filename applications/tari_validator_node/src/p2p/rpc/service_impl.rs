@@ -115,12 +115,12 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         let address = SubstateAddress::from_bytes(&req.address)
             .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate id: {}", e)))?;
 
-        let mut tx = self
+        let tx = self
             .shard_state_store
             .create_read_tx()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
-        let maybe_substate = SubstateRecord::get(&mut tx, &address)
+        let maybe_substate = SubstateRecord::get(&tx, &address)
             .optional()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
@@ -132,12 +132,12 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         };
 
         let created_qc = substate
-            .get_created_quorum_certificate(&mut tx)
+            .get_created_quorum_certificate(&tx)
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
         let resp = if substate.is_destroyed() {
             let destroyed_qc = substate
-                .get_destroyed_quorum_certificate(&mut tx)
+                .get_destroyed_quorum_certificate(&tx)
                 .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
             GetSubstateResponse {
                 status: SubstateStatus::Down as i32,
@@ -200,13 +200,13 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         req: Request<GetTransactionResultRequest>,
     ) -> Result<Response<GetTransactionResultResponse>, RpcStatus> {
         let req = req.into_message();
-        let mut tx = self
+        let tx = self
             .shard_state_store
             .create_read_tx()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
         let tx_id = TransactionId::try_from(req.transaction_id)
             .map_err(|_| RpcStatus::bad_request("Invalid transaction id"))?;
-        let transaction = TransactionRecord::get(&mut tx, &tx_id)
+        let transaction = TransactionRecord::get(&tx, &tx_id)
             .optional()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
             .ok_or_else(|| RpcStatus::not_found("Transaction not found"))?;

@@ -12,7 +12,10 @@ use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_state_tree::StateTreeError;
 use tari_transaction::{TransactionId, VersionedSubstateIdError};
 
-use crate::traits::{InboundMessagingError, OutboundMessagingError};
+use crate::{
+    hotstuff::substate_store::SubstateStoreError,
+    traits::{InboundMessagingError, OutboundMessagingError},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
@@ -90,6 +93,8 @@ pub enum HotStuffError {
     InvalidSyncRequest { details: String },
     #[error("Some input versions were not resolved at execution time: {0}")]
     VersionedSubstateIdError(#[from] VersionedSubstateIdError),
+    #[error("Substate store error: {0}")]
+    SubstateStoreError(#[from] SubstateStoreError),
 }
 
 impl From<EpochManagerError> for HotStuffError {

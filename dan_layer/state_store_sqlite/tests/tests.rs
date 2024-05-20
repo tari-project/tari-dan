@@ -78,7 +78,7 @@ mod confirm_all_transitions {
             .unwrap();
         let block_id = *block1.id();
 
-        tx.transaction_pool_add_pending_update(TransactionPoolStatusUpdate {
+        tx.transaction_pool_add_pending_update(&TransactionPoolStatusUpdate {
             block_id,
             block_height: NodeHeight(1),
             transaction_id: atom1.id,
@@ -88,7 +88,7 @@ mod confirm_all_transitions {
             local_decision: Decision::Commit,
         })
         .unwrap();
-        tx.transaction_pool_add_pending_update(TransactionPoolStatusUpdate {
+        tx.transaction_pool_add_pending_update(&TransactionPoolStatusUpdate {
             block_id,
             block_height: NodeHeight(1),
             transaction_id: atom2.id,
@@ -98,7 +98,7 @@ mod confirm_all_transitions {
             local_decision: Decision::Commit,
         })
         .unwrap();
-        tx.transaction_pool_add_pending_update(TransactionPoolStatusUpdate {
+        tx.transaction_pool_add_pending_update(&TransactionPoolStatusUpdate {
             block_id,
             block_height: NodeHeight(1),
             transaction_id: atom3.id,
@@ -109,11 +109,15 @@ mod confirm_all_transitions {
         })
         .unwrap();
 
-        let rec = tx.transaction_pool_get(zero_block.id(), &block_id, &atom1.id).unwrap();
+        let rec = tx
+            .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom1.id)
+            .unwrap();
         assert!(rec.stage().is_new());
         assert!(rec.pending_stage().unwrap().is_local_prepared());
 
-        let rec = tx.transaction_pool_get(zero_block.id(), &block_id, &atom2.id).unwrap();
+        let rec = tx
+            .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom2.id)
+            .unwrap();
         assert!(rec.stage().is_new());
         assert!(rec.pending_stage().unwrap().is_prepared());
 
@@ -122,15 +126,21 @@ mod confirm_all_transitions {
         ])
         .unwrap();
 
-        let rec = tx.transaction_pool_get(zero_block.id(), &block_id, &atom1.id).unwrap();
+        let rec = tx
+            .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom1.id)
+            .unwrap();
         assert!(rec.stage().is_local_prepared());
         assert!(rec.pending_stage().is_none());
 
-        let rec = tx.transaction_pool_get(zero_block.id(), &block_id, &atom2.id).unwrap();
+        let rec = tx
+            .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom2.id)
+            .unwrap();
         assert!(rec.stage().is_new());
         assert!(rec.pending_stage().unwrap().is_prepared());
 
-        let rec = tx.transaction_pool_get(zero_block.id(), &block_id, &atom3.id).unwrap();
+        let rec = tx
+            .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom3.id)
+            .unwrap();
         assert!(rec.stage().is_prepared());
         assert!(rec.pending_stage().is_none());
 

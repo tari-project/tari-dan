@@ -151,7 +151,7 @@ impl EpochManagerReader for TestEpochManager {
         substate_address: SubstateAddress,
     ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let state = self.state_lock().await;
-        let shard = substate_address.to_committee_shard(state.committees.len() as u32);
+        let shard = substate_address.to_shard(state.committees.len() as u32);
         Ok(state.committees[&shard].clone())
     }
 
@@ -190,7 +190,7 @@ impl EpochManagerReader for TestEpochManager {
         let our_vn = self.get_our_validator_node(epoch).await?;
         let num_committees = self.get_num_committees(epoch).await?;
         let committee = self.get_committee_for_substate(epoch, our_vn.shard_key).await?;
-        let our_shard = our_vn.shard_key.to_committee_shard(num_committees);
+        let our_shard = our_vn.shard_key.to_shard(num_committees);
 
         Ok(CommitteeInfo::new(num_committees, committee.len() as u32, our_shard))
     }
@@ -252,7 +252,7 @@ impl EpochManagerReader for TestEpochManager {
     ) -> Result<CommitteeInfo, EpochManagerError> {
         let num_committees = self.get_num_committees(epoch).await?;
         let committee = self.get_committee_for_substate(epoch, substate_address).await?;
-        let shard = substate_address.to_committee_shard(num_committees);
+        let shard = substate_address.to_shard(num_committees);
 
         Ok(CommitteeInfo::new(num_committees, committee.len() as u32, shard))
     }

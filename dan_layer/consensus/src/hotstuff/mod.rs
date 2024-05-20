@@ -20,10 +20,12 @@ mod on_receive_requested_transactions;
 mod on_receive_vote;
 mod on_sync_request;
 // mod on_sync_response;
+mod block_change_set;
 mod pacemaker;
 mod pacemaker_handle;
 mod proposer;
 mod state_machine;
+pub mod substate_store;
 mod vote_receiver;
 mod worker;
 

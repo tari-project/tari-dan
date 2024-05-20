@@ -31,7 +31,6 @@ pub struct Transaction {
     instructions: Vec<Instruction>,
     signature: TransactionSignature,
 
-    // TODO: Ideally we should ensure uniqueness and ordering invariants for each set.
     /// Input objects that may be downed (write) or referenced (read) by this transaction.
     inputs: IndexSet<SubstateRequirement>,
     /// Inputs filled by some authority. These are not part of the transaction hash nor the signature
@@ -283,14 +282,14 @@ impl SubstateRequirement {
     }
 
     pub fn to_substate_address(&self) -> Option<SubstateAddress> {
-        Some(SubstateAddress::from_address(self.substate_id(), self.version()?))
+        Some(SubstateAddress::from_substate_id(self.substate_id(), self.version()?))
     }
 
     /// Calculates and returns the shard number that this SubstateAddress belongs.
     /// A shard is a division of the 256-bit shard space.
     /// If the substate version is not known, None is returned.
     pub fn to_committee_shard(&self, num_committees: u32) -> Option<Shard> {
-        Some(self.to_substate_address()?.to_committee_shard(num_committees))
+        Some(self.to_substate_address()?.to_shard(num_committees))
     }
 
     pub fn to_versioned(&self) -> Option<VersionedSubstateId> {
@@ -377,7 +376,7 @@ impl std::hash::Hash for SubstateRequirement {
 #[error("Failed to parse substate requirement {0}")]
 pub struct SubstateRequirementParseError(String);
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(
     feature = "ts",
     derive(ts_rs::TS),
@@ -403,13 +402,23 @@ impl VersionedSubstateId {
     }
 
     pub fn to_substate_address(&self) -> SubstateAddress {
-        SubstateAddress::from_address(self.substate_id(), self.version())
+        SubstateAddress::from_substate_id(self.substate_id(), self.version())
     }
 
     /// Calculates and returns the shard number that this SubstateAddress belongs.
     /// A shard is an equal division of the 256-bit shard space.
     pub fn to_committee_shard(&self, num_committees: u32) -> Shard {
-        self.to_substate_address().to_committee_shard(num_committees)
+        self.to_substate_address().to_shard(num_committees)
+    }
+
+    pub fn to_previous_version(&self) -> Option<Self> {
+        self.version
+            .checked_sub(1)
+            .map(|v| Self::new(self.substate_id.clone(), v))
+    }
+
+    pub fn to_next_version(&self) -> Self {
+        Self::new(self.substate_id.clone(), self.version + 1)
     }
 }
 
@@ -456,22 +465,6 @@ impl TryFrom<SubstateRequirement> for VersionedSubstateId {
         }
     }
 }
-
-// Only consider the substate id in maps. This means that duplicates found if the substate id is the same regardless of
-// the version.
-impl std::hash::Hash for VersionedSubstateId {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.substate_id.hash(state);
-    }
-}
-
-impl PartialEq for VersionedSubstateId {
-    fn eq(&self, other: &Self) -> bool {
-        self.substate_id == other.substate_id
-    }
-}
-
-impl Eq for VersionedSubstateId {}
 
 impl Borrow<SubstateId> for VersionedSubstateId {
     fn borrow(&self) -> &SubstateId {

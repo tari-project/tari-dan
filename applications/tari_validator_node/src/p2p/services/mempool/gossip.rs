@@ -89,7 +89,7 @@ impl MempoolGossip<PeerAddress> {
         let local_shard = committee_shard.shard();
         let shards = substate_addresses
             .into_iter()
-            .map(|s| s.to_committee_shard(n))
+            .map(|s| s.to_shard(n))
             .filter(|b| exclude_shard.as_ref() != Some(b) && b != &local_shard)
             .collect::<HashSet<_>>();
 

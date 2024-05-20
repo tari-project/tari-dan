@@ -16,7 +16,7 @@ pub struct LastProposed {
 }
 
 impl LastProposed {
-    pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx) -> Result<Self, StorageError> {
+    pub fn get<TTx: StateStoreReadTransaction>(tx: &TTx) -> Result<Self, StorageError> {
         tx.last_proposed_get()
     }
 
@@ -28,7 +28,7 @@ impl LastProposed {
         tx.last_proposed_unset(self)
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
         Block::get(tx, &self.block_id)
     }
 }

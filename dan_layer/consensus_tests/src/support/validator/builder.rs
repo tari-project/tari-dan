@@ -1,9 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_consensus::{
-    hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffConfig, HotstuffWorker},
+    hotstuff::{ConsensusCurrentState, ConsensusWorker, ConsensusWorkerContext, HotstuffConfig, HotstuffWorker},
     traits::hooks::NoopHooks,
 };
 use tari_dan_common_types::{shard::Shard, SubstateAddress};
@@ -15,13 +16,13 @@ use tokio::sync::{broadcast, mpsc, watch};
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
+    executions_store::TestTransactionExecutionsStore,
     messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
     signing_service::TestVoteSignatureService,
     sync::AlwaysSyncedSyncManager,
     RoundRobinLeaderStrategy,
-    TestBlockTransactionExecutorBuilder,
+    TestBlockTransactionProcessor,
     TestConsensusSpec,
-    TestStateManager,
     Validator,
     ValidatorChannels,
 };
@@ -34,6 +35,7 @@ pub struct ValidatorBuilder {
     pub sql_url: String,
     pub leader_strategy: RoundRobinLeaderStrategy,
     pub epoch_manager: Option<TestEpochManager>,
+    pub transaction_executions: TestTransactionExecutionsStore,
 }
 
 impl ValidatorBuilder {
@@ -46,12 +48,18 @@ impl ValidatorBuilder {
             sql_url: ":memory".to_string(),
             leader_strategy: RoundRobinLeaderStrategy::new(),
             epoch_manager: None,
+            transaction_executions: TestTransactionExecutionsStore::new(),
         }
     }
 
     pub fn with_address_and_public_key(&mut self, address: TestAddress, public_key: PublicKey) -> &mut Self {
         self.address = address;
         self.public_key = public_key;
+        self
+    }
+
+    pub fn with_transaction_executions(&mut self, transaction_executions: TestTransactionExecutionsStore) -> &mut Self {
+        self.transaction_executions = transaction_executions;
         self
     }
 
@@ -81,6 +89,12 @@ impl ValidatorBuilder {
     }
 
     pub fn spawn(&self, shutdown_signal: ShutdownSignal) -> (ValidatorChannels, Validator) {
+        log::info!(
+            "Spawning validator with address {} and public key {}",
+            self.address,
+            self.public_key
+        );
+
         let (tx_broadcast, rx_broadcast) = mpsc::channel(100);
         let (tx_new_transactions, rx_new_transactions) = mpsc::channel(100);
         let (tx_hs_message, rx_hs_message) = mpsc::channel(100);
@@ -93,7 +107,6 @@ impl ValidatorBuilder {
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
         let signing_service = TestVoteSignatureService::new(self.public_key.clone(), self.address.clone());
         let transaction_pool = TransactionPool::new();
-        let noop_state_manager = TestStateManager::new();
         let (tx_events, _) = broadcast::channel(100);
 
         let epoch_manager =
@@ -102,11 +115,11 @@ impl ValidatorBuilder {
                 .unwrap()
                 .clone_for(self.address.clone(), self.public_key.clone(), self.shard);
 
-        let transaction_executor_builder = TestBlockTransactionExecutorBuilder::new();
+        let transaction_executor = TestBlockTransactionProcessor::new(self.transaction_executions.clone());
 
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             self.address.clone(),
-            Default::default(),
+            Network::LocalNet,
             inbound_messaging,
             outbound_messaging,
             rx_new_transactions,
@@ -114,9 +127,8 @@ impl ValidatorBuilder {
             epoch_manager.clone(),
             self.leader_strategy,
             signing_service,
-            noop_state_manager.clone(),
             transaction_pool,
-            transaction_executor_builder,
+            transaction_executor,
             tx_events.clone(),
             tx_mempool,
             NoopHooks,
@@ -127,12 +139,12 @@ impl ValidatorBuilder {
             },
         );
 
-        let (tx_current_state, _) = watch::channel(Default::default());
+        let (tx_current_state, rx_current_state) = watch::channel(ConsensusCurrentState::default());
         let context = ConsensusWorkerContext {
             epoch_manager: epoch_manager.clone(),
             hotstuff: worker,
             state_sync: AlwaysSyncedSyncManager,
-            tx_current_state,
+            tx_current_state: tx_current_state.clone(),
         };
 
         let mut worker = ConsensusWorker::new(shutdown_signal);
@@ -151,12 +163,12 @@ impl ValidatorBuilder {
 
         let validator = Validator {
             address: self.address.clone(),
-            shard: self.shard,
+            substate_address: self.shard,
             state_store: store,
             epoch_manager,
-            state_manager: noop_state_manager,
             leader_strategy: self.leader_strategy,
             events: tx_events.subscribe(),
+            current_state_machine_state: rx_current_state,
             handle,
         };
         (channels, validator)

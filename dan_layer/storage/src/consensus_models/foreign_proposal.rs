@@ -79,8 +79,8 @@ impl ForeignProposal {
         }
     }
 
-    pub fn set_proposed_height(&mut self, mined_at: NodeHeight) -> &mut Self {
-        self.proposed_height = Some(mined_at);
+    pub fn set_proposed_height(&mut self, height: NodeHeight) -> &mut Self {
+        self.proposed_height = Some(height);
         self.state = ForeignProposalState::Proposed;
         self
     }
@@ -98,18 +98,18 @@ impl ForeignProposal {
     }
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &mut TTx,
+        tx: &TTx,
         foreign_proposal: &Self,
     ) -> Result<bool, StorageError> {
         tx.foreign_proposal_exists(foreign_proposal)
     }
 
-    pub fn get_all_new<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx) -> Result<Vec<Self>, StorageError> {
+    pub fn get_all_new<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx) -> Result<Vec<Self>, StorageError> {
         tx.foreign_proposal_get_all_new()
     }
 
     pub fn get_all_pending<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &mut TTx,
+        tx: &TTx,
         from_block_id: &BlockId,
         to_block_id: &BlockId,
     ) -> Result<Vec<Self>, StorageError> {
@@ -117,7 +117,7 @@ impl ForeignProposal {
     }
 
     pub fn get_all_proposed<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &mut TTx,
+        tx: &TTx,
         to_height: NodeHeight,
     ) -> Result<Vec<Self>, StorageError> {
         tx.foreign_proposal_get_all_proposed(to_height)

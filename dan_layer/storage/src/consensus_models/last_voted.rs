@@ -21,7 +21,7 @@ impl LastVoted {
 }
 
 impl LastVoted {
-    pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx) -> Result<Self, StorageError> {
+    pub fn get<TTx: StateStoreReadTransaction>(tx: &TTx) -> Result<Self, StorageError> {
         tx.last_voted_get()
     }
 

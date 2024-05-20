@@ -5,14 +5,22 @@ use std::{iter, time::Duration};
 
 use rand::{distributions::Alphanumeric, rngs::OsRng, Rng};
 use tari_common_types::types::PrivateKey;
-use tari_dan_storage::consensus_models::{Decision, ExecutedTransaction, TransactionRecord};
+use tari_dan_storage::consensus_models::{
+    BlockId,
+    Decision,
+    ExecutedTransaction,
+    SubstateLockFlag,
+    TransactionExecution,
+    TransactionRecord,
+    VersionedSubstateIdLockIntent,
+};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     component::{ComponentBody, ComponentHeader},
     fees::FeeReceipt,
     substate::{Substate, SubstateDiff},
 };
-use tari_transaction::{SubstateRequirement, Transaction, VersionedSubstateId};
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId, VersionedSubstateId};
 
 use crate::support::helpers::random_substate_in_shard;
 
@@ -22,7 +30,39 @@ pub fn build_transaction_from(
     fee: u64,
     resulting_outputs: Vec<VersionedSubstateId>,
 ) -> TransactionRecord {
-    let tx_id = *tx.id();
+    let mut tx = TransactionRecord::new(tx);
+
+    // TODO: cleanup test api- this wont be expected
+    if !resulting_outputs.is_empty() {
+        let execution = create_execution_result_for_transaction(
+            // We're just building the execution here for DRY purposes, so genesis block id isn't used
+            BlockId::genesis(),
+            *tx.id(),
+            decision,
+            fee,
+            vec![],
+            resulting_outputs.clone(),
+        );
+
+        tx.result = Some(execution.result);
+        tx.resulting_outputs = execution.resulting_outputs;
+        tx.execution_time = Some(execution.execution_time);
+        // If the transaction does not require any inputs, we immediately resolve them to an empty set
+        if tx.transaction.all_inputs_iter().next().is_none() {
+            tx.resolved_inputs = Some(execution.resolved_inputs);
+        }
+    }
+    tx
+}
+
+pub fn create_execution_result_for_transaction(
+    block_id: BlockId,
+    tx_id: TransactionId,
+    decision: Decision,
+    fee: u64,
+    resolved_inputs: Vec<VersionedSubstateId>,
+    resulting_outputs: Vec<VersionedSubstateId>,
+) -> TransactionExecution {
     let result = if decision.is_commit() {
         let mut diff = SubstateDiff::new();
         for output in &resulting_outputs {
@@ -30,7 +70,7 @@ pub fn build_transaction_from(
             let random_state = tari_bor::to_value(&s).unwrap();
             diff.up(
                 output.substate_id.clone(),
-                Substate::new(0, ComponentHeader {
+                Substate::new(output.version, ComponentHeader {
                     template_address: Default::default(),
                     module_name: "Test".to_string(),
                     owner_key: Default::default(),
@@ -43,24 +83,26 @@ pub fn build_transaction_from(
         }
         TransactionResult::Accept(diff)
     } else {
-        TransactionResult::Reject(RejectReason::ExecutionFailure("Test failure".to_string()))
+        TransactionResult::Reject(RejectReason::ExecutionFailure("Expected failure".to_string()))
     };
 
-    let mut tx = TransactionRecord::new(tx);
-    tx.result = Some(ExecuteResult {
-        finalize: FinalizeResult::new(tx_id.into_array().into(), vec![], vec![], result, FeeReceipt {
-            total_fee_payment: fee.try_into().unwrap(),
-            total_fees_paid: fee.try_into().unwrap(),
-            cost_breakdown: vec![],
-        }),
-    });
-    tx.resulting_outputs = resulting_outputs;
-    tx.execution_time = Some(Duration::from_secs(0));
-    // If the transaction does not require any inputs, we immediately resolve them to an empty set
-    if tx.transaction.all_inputs_iter().next().is_none() {
-        tx.resolved_inputs = Some(Default::default());
-    }
-    tx
+    TransactionExecution::new(
+        block_id,
+        tx_id,
+        ExecuteResult {
+            finalize: FinalizeResult::new(tx_id.into_array().into(), vec![], vec![], result, FeeReceipt {
+                total_fee_payment: fee.try_into().unwrap(),
+                total_fees_paid: fee.try_into().unwrap(),
+                cost_breakdown: vec![],
+            }),
+        },
+        resolved_inputs
+            .into_iter()
+            .map(|v| VersionedSubstateIdLockIntent::new(v, SubstateLockFlag::Write))
+            .collect(),
+        resulting_outputs,
+        Duration::from_secs(0),
+    )
 }
 
 pub fn build_transaction(

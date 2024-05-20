@@ -119,9 +119,10 @@ where TSubstateCache: SubstateCache + 'static
         state_store.set_many(found_substates)?;
 
         // execute the payload in the WASM engine and return the result
-        let result = task::block_in_place(|| payload_processor.execute(transaction, state_store, virtual_substates))?;
+        let exec_output =
+            task::block_in_place(|| payload_processor.execute(transaction, state_store, virtual_substates))?;
 
-        Ok(result.into_result())
+        Ok(exec_output.result)
     }
 
     fn build_payload_processor(
