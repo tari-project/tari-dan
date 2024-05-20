@@ -83,7 +83,7 @@ where
 
     fn generate_validator_fee_claim_inner(
         &self,
-        tx: &mut <TStateStore as StateStore>::ReadTransaction<'_>,
+        tx: &<TStateStore as StateStore>::ReadTransaction<'_>,
         epoch: Epoch,
         public_key: &PublicKey,
     ) -> Result<FeeClaim, VirtualSubstateError> {

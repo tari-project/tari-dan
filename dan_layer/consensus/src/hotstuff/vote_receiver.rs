@@ -1,8 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::DerefMut;
-
 use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::FixedHash;
@@ -128,7 +126,7 @@ where TConsensusSpec: ConsensusSpec
             }
             .save(tx)?;
 
-            let count = Vote::count_for_block(tx.deref_mut(), &message.block_id)?;
+            let count = Vote::count_for_block(&**tx, &message.block_id)?;
             Ok::<_, HotStuffError>(count)
         })?;
 
@@ -150,8 +148,8 @@ where TConsensusSpec: ConsensusSpec
 
         let vote_data;
         {
-            let mut tx = self.store.create_read_tx()?;
-            let Some(block) = Block::get(&mut tx, &message.block_id).optional()? else {
+            let tx = self.store.create_read_tx()?;
+            let Some(block) = Block::get(&tx, &message.block_id).optional()? else {
                 warn!(
                     target: LOG_TARGET,
                     "❌ Received {} votes for unknown block {}", count, message.block_id
@@ -172,7 +170,7 @@ where TConsensusSpec: ConsensusSpec
                 });
             }
 
-            if let Some(existing_qc_for_block) = QuorumCertificate::get_by_block_id(&mut tx, block.id()).optional()? {
+            if let Some(existing_qc_for_block) = QuorumCertificate::get_by_block_id(&tx, block.id()).optional()? {
                 debug!(
                     target: LOG_TARGET,
                     "🔥 Received vote for block {} from {} ({} of {}), but we already have a QC for this block ({})",
@@ -185,7 +183,7 @@ where TConsensusSpec: ConsensusSpec
                 return Ok(true);
             }
 
-            let votes = block.get_votes(&mut tx)?;
+            let votes = block.get_votes(&tx)?;
             let Some(quorum_decision) = Self::calculate_threshold_decision(&votes, &local_committee_shard) else {
                 warn!(
                     target: LOG_TARGET,

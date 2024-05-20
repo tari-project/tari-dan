@@ -4,7 +4,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
-    ops::{Deref, DerefMut},
+    ops::Deref,
 };
 
 use async_trait::async_trait;
@@ -12,7 +12,7 @@ use futures::StreamExt;
 use log::*;
 use tari_common::configuration::Network;
 use tari_consensus::{
-    hotstuff::{calculate_state_merkle_diff, hash_substate, ProposalValidationError},
+    hotstuff::{calculate_state_merkle_diff, ProposalValidationError},
     traits::{ConsensusSpec, LeaderStrategy, SyncManager, SyncStatus},
 };
 use tari_dan_common_types::{committee::Committee, optional::Optional, shard::Shard, Epoch, NodeHeight, PeerAddress};
@@ -20,23 +20,25 @@ use tari_dan_p2p::proto::rpc::{GetHighQcRequest, SyncBlocksRequest};
 use tari_dan_storage::{
     consensus_models::{
         Block,
+        BlockDiff,
         BlockId,
         HighQc,
         LeafBlock,
         LockedBlock,
         PendingStateTreeDiff,
         QuorumCertificate,
+        SubstateChange,
         SubstateUpdate,
         TransactionPoolRecord,
         TransactionRecord,
     },
     StateStore,
-    StateStoreWriteTransaction,
 };
+use tari_engine_types::substate::hash_substate;
 use tari_epoch_manager::EpochManagerReader;
 use tari_rpc_framework::RpcError;
-use tari_state_tree::SubstateChange;
-use tari_transaction::Transaction;
+use tari_state_tree::SubstateTreeChange;
+use tari_transaction::{Transaction, VersionedSubstateId};
 use tari_validator_node_rpc::{
     client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory},
     rpc_service::ValidatorNodeRpcClient,
@@ -101,22 +103,21 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
     }
 
     fn create_zero_block_if_required(&self) -> Result<(), CommsRpcConsensusSyncError> {
-        let mut tx = self.state_store.create_write_tx()?;
-
-        let zero_block = Block::zero_block(self.network);
-        if !zero_block.exists(tx.deref_mut())? {
-            debug!(target: LOG_TARGET, "Creating zero block");
-            zero_block.justify().insert(&mut tx)?;
-            zero_block.insert(&mut tx)?;
-            zero_block.as_locked_block().set(&mut tx)?;
-            zero_block.as_leaf_block().set(&mut tx)?;
-            zero_block.as_last_executed().set(&mut tx)?;
-            zero_block.as_last_voted().set(&mut tx)?;
-            zero_block.justify().as_high_qc().set(&mut tx)?;
-            zero_block.commit(&mut tx)?;
-        }
-
-        tx.commit()?;
+        self.state_store.with_write_tx(|tx| {
+            let zero_block = Block::zero_block(self.network);
+            if !zero_block.exists(&**tx)? {
+                debug!(target: LOG_TARGET, "Creating zero block");
+                zero_block.justify().insert(tx)?;
+                zero_block.insert(tx)?;
+                zero_block.as_locked_block().set(tx)?;
+                zero_block.as_leaf_block().set(tx)?;
+                zero_block.as_last_executed().set(tx)?;
+                zero_block.as_last_voted().set(tx)?;
+                zero_block.justify().as_high_qc().set(tx)?;
+                zero_block.commit_diff(tx, BlockDiff::empty(*zero_block.id()))?;
+            }
+            Ok::<_, CommsRpcConsensusSyncError>(())
+        })?;
 
         Ok(())
     }
@@ -287,7 +288,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
             block.justify().save(tx)?;
 
-            let justify_block = block.justify().get_block(tx.deref_mut())?;
+            let justify_block = block.justify().get_block(&**tx)?;
 
             // Check if we need to calculate dummy blocks
             // TODO: Validate before doing this. e.g. block.height() is maliciously larger then block.justify().block_height()
@@ -327,7 +328,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 }
             }
 
-            if !block.is_safe(tx.deref_mut())? {
+            if !block.is_safe(&**tx)? {
                 return Err(CommsRpcConsensusSyncError::BlockNotSafe { block_id: *block.id() });
             }
 
@@ -372,16 +373,16 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         block: &Block,
         updates: &[SubstateUpdate],
     ) -> Result<(), CommsRpcConsensusSyncError> {
-        let pending_tree_updates = PendingStateTreeDiff::get_all_up_to_commit_block(tx.deref_mut(), block.id())?;
+        let pending_tree_updates = PendingStateTreeDiff::get_all_up_to_commit_block(&**tx, block.id())?;
         let current_version = block.justify().block_height().as_u64();
         let next_version = block.height().as_u64();
 
         let changes = updates.iter().map(|update| match update {
-            SubstateUpdate::Create(create) => SubstateChange::Up {
+            SubstateUpdate::Create(create) => SubstateTreeChange::Up {
                 id: create.substate.substate_id.clone(),
-                value_hash: hash_substate(&create.substate.clone().into_substate()),
+                value_hash: hash_substate(&create.substate.substate_value, create.substate.version),
             },
-            SubstateUpdate::Destroy(destroy) => SubstateChange::Down {
+            SubstateUpdate::Destroy(destroy) => SubstateTreeChange::Down {
                 id: destroy.substate_id.clone(),
             },
         });
@@ -410,7 +411,16 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         block: &Block,
         pending_state_updates: &mut HashMap<BlockId, Vec<SubstateUpdate>>,
     ) -> Result<(), CommsRpcConsensusSyncError> {
-        block.commit(tx)?;
+        let block_diff = BlockDiff::new(
+            *block.id(),
+            pending_state_updates
+                .drain()
+                .flat_map(|(_, v)| v)
+                .map(substate_update_to_change)
+                .collect(),
+        );
+
+        block.commit_diff(tx, block_diff)?;
 
         if block.is_dummy() {
             return Ok(());
@@ -418,12 +428,13 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
         // Finalize any ACCEPTED transactions
         for tx_atom in block.commands().iter().filter_map(|cmd| cmd.accept()) {
-            if let Some(mut transaction) = tx_atom.get_transaction(tx.deref_mut()).optional()? {
+            if let Some(mut transaction) = tx_atom.get_transaction(&**tx).optional()? {
                 transaction.final_decision = Some(tx_atom.decision);
                 if tx_atom.decision.is_abort() {
                     transaction.abort_details = Some("Abort decision via sync".to_string());
                 }
-                // TODO: execution result - we should execute or we should get the execution result via sync
+                // TODO: execution result - we should execute or we should get the execution result and verify state via
+                // sync
                 transaction.update(tx)?;
             }
         }
@@ -437,19 +448,6 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         let diff = PendingStateTreeDiff::remove_by_block(tx, block.id())?;
         let mut tree = tari_state_tree::SpreadPrefixStateTree::new(tx);
         tree.commit_diff(diff.diff)?;
-
-        // Commit the state if any
-        if let Some(updates) = pending_state_updates.remove(block.id()) {
-            debug!(target: LOG_TARGET, "Committed block {} has {} state update(s)", block, updates.len());
-            let (ups, downs) = updates.into_iter().partition::<Vec<_>, _>(|u| u.is_create());
-            // First do UPs then do DOWNs
-            for update in ups {
-                update.apply(tx, block)?;
-            }
-            for update in downs {
-                update.apply(tx, block)?;
-            }
-        }
 
         debug!(target: LOG_TARGET, "✅ COMMIT block {}", block);
         Ok(())
@@ -600,8 +598,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
             info!(target: LOG_TARGET,"Previous epoch is {}", prev_epoch);
             let prev_num_committee = self.epoch_manager.get_num_committees(prev_epoch).await?;
             info!(target: LOG_TARGET,"Previous num committee {}", prev_num_committee);
-            let start = range.start().to_committee_shard(prev_num_committee);
-            let end = range.end().to_committee_shard(prev_num_committee);
+            let start = range.start().to_shard(prev_num_committee);
+            let end = range.end().to_shard(prev_num_committee);
             info!(target: LOG_TARGET,"Start: {}, End: {}", start, end);
             let this_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
             let committees = self
@@ -652,8 +650,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
             info!(target: LOG_TARGET,"Previous epoch is {}", prev_epoch);
             let prev_num_committee = self.epoch_manager.get_num_committees(prev_epoch).await?;
             info!(target: LOG_TARGET,"Previous num committee {}", prev_num_committee);
-            let start = range.start().to_committee_shard(prev_num_committee);
-            let end = range.end().to_committee_shard(prev_num_committee);
+            let start = range.start().to_shard(prev_num_committee);
+            let end = range.end().to_shard(prev_num_committee);
             info!(target: LOG_TARGET,"Start: {}, End: {}", start, end);
             let committees = self
                 .epoch_manager
@@ -699,5 +697,20 @@ struct BlockIdAndHeight {
 impl Display for BlockIdAndHeight {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Block: {} (#{})", self.id, self.height)
+    }
+}
+
+// TODO: these are similar structures. Clean this up.
+fn substate_update_to_change(update: SubstateUpdate) -> SubstateChange {
+    match update {
+        SubstateUpdate::Create(create) => SubstateChange::Up {
+            id: VersionedSubstateId::new(create.substate.substate_id.clone(), create.substate.version),
+            transaction_id: create.substate.created_by_transaction,
+            substate: create.substate.into_substate(),
+        },
+        SubstateUpdate::Destroy(destroy) => SubstateChange::Down {
+            id: VersionedSubstateId::new(destroy.substate_id, destroy.version),
+            transaction_id: destroy.destroyed_by_transaction,
+        },
     }
 }

@@ -1,16 +1,20 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{BTreeMap, HashSet, VecDeque},
-    ops::DerefMut,
-};
+use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use log::*;
 use tari_common::configuration::Network;
-use tari_dan_common_types::{NodeAddressable, NodeHeight};
+use tari_dan_common_types::{optional::Optional, NodeAddressable, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, TransactionRecord},
+    consensus_models::{
+        Block,
+        ExecutedTransaction,
+        TransactionAtom,
+        TransactionPool,
+        TransactionPoolRecord,
+        TransactionRecord,
+    },
     StateStore,
     StateStoreWriteTransaction,
 };
@@ -47,6 +51,7 @@ pub struct OnInboundMessage<TConsensusSpec: ConsensusSpec> {
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_msg_ready: mpsc::UnboundedSender<(TConsensusSpec::Addr, HotstuffMessage)>,
     message_buffer: MessageBuffer<TConsensusSpec::Addr>,
+    transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
 }
 
 impl<TConsensusSpec> OnInboundMessage<TConsensusSpec>
@@ -60,6 +65,7 @@ where TConsensusSpec: ConsensusSpec
         leader_strategy: TConsensusSpec::LeaderStrategy,
         vote_signing_service: TConsensusSpec::SignatureService,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
+        transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     ) -> Self {
         let (tx_msg_ready, rx_msg_ready) = mpsc::unbounded_channel();
         Self {
@@ -72,6 +78,7 @@ where TConsensusSpec: ConsensusSpec
             outbound_messaging,
             tx_msg_ready,
             message_buffer: MessageBuffer::new(rx_msg_ready),
+            transaction_pool,
         }
     }
 
@@ -181,6 +188,36 @@ where TConsensusSpec: ConsensusSpec
         if let Some(unparked_block) = maybe_unparked_block {
             info!(target: LOG_TARGET, "♻️ all transactions for block {unparked_block} are ready for consensus");
 
+            // todo(hacky): ensure that all transactions are in the pool. Race condition: because we have not yet
+            // received it yet in the select! loop.
+            self.store.with_write_tx(|tx| {
+                for tx_id in unparked_block.all_transaction_ids() {
+                    if self.transaction_pool.exists(&**tx, tx_id)? {
+                        continue;
+                    }
+
+                    warn!(
+                        target: LOG_TARGET,
+                        "⚠️ Transaction {} is missing from the transaction pool. Attempting to recover.",
+                        tx_id
+                    );
+
+                    let transaction = TransactionRecord::get(&**tx, tx_id)?;
+                    // Did the mempool execute it?
+                    if transaction.is_executed() {
+                        // This should never fail
+                        let executed = ExecutedTransaction::try_from(transaction)?;
+                        self.transaction_pool.insert(tx, executed.to_atom())?;
+                    } else {
+                        // Deferred execution
+                        self.transaction_pool
+                            .insert(tx, TransactionAtom::deferred(*transaction.id()))?;
+                    }
+                }
+
+                Ok::<_, HotStuffError>(())
+            })?;
+
             let vn = self
                 .epoch_manager
                 .get_validator_node_by_public_key(unparked_block.epoch(), unparked_block.proposed_by())
@@ -249,12 +286,24 @@ where TConsensusSpec: ConsensusSpec
         if block.commands().is_empty() {
             return Ok((HashSet::new(), HashSet::new()));
         }
-        let (transactions, missing_tx_ids) = TransactionRecord::get_any(tx.deref_mut(), block.all_transaction_ids())?;
-        let awaiting_execution = transactions
+        let (transactions, missing_tx_ids) = TransactionRecord::get_any(&**tx, block.all_transaction_ids())?;
+        let awaiting_execution_or_deferred = transactions
             .into_iter()
+            .filter(|tx| tx.final_decision.is_some())
             .filter(|tx| tx.result.is_none())
             .map(|tx| *tx.transaction.id())
             .collect::<HashSet<_>>();
+
+        // TODO(hacky): improve this. We need to account for transactions that are deferred when determining which
+        // transactions are awaiting execution.
+        let mut awaiting_execution = HashSet::new();
+        for id in &awaiting_execution_or_deferred {
+            if let Some(t) = TransactionPoolRecord::get(&**tx, id).optional()? {
+                if !t.is_deferred() {
+                    awaiting_execution.insert(*id);
+                }
+            }
+        }
 
         if missing_tx_ids.is_empty() && awaiting_execution.is_empty() {
             debug!(

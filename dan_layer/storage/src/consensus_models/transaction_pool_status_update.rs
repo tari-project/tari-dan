@@ -4,7 +4,10 @@
 use tari_dan_common_types::NodeHeight;
 use tari_transaction::TransactionId;
 
-use crate::consensus_models::{BlockId, Decision, Evidence, TransactionPoolStage};
+use crate::{
+    consensus_models::{BlockId, Decision, Evidence, TransactionPoolStage},
+    StateStoreWriteTransaction,
+};
 
 #[derive(Debug, Clone)]
 pub struct TransactionPoolStatusUpdate {
@@ -44,5 +47,11 @@ impl TransactionPoolStatusUpdate {
 
     pub fn local_decision(&self) -> Decision {
         self.local_decision
+    }
+}
+
+impl TransactionPoolStatusUpdate {
+    pub fn insert<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), crate::StorageError> {
+        tx.transaction_pool_add_pending_update(self)
     }
 }

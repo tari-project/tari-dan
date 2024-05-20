@@ -19,8 +19,9 @@ tari_utilities = { workspace = true }
 
 anyhow = { workspace = true }
 bigdecimal = { workspace = true }
-diesel = { workspace = true, default-features = false, features = ["sqlite", "time", "numeric"] }
+diesel = { workspace = true, default-features = false, features = ["sqlite", "time", "numeric", "returning_clauses_for_sqlite_3_35"] }
 diesel_migrations = { workspace = true }
+indexmap = { workspace = true }
 log = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true, default-features = true }

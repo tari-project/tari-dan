@@ -5,13 +5,13 @@ pub mod hooks;
 mod leader_strategy;
 mod messaging;
 mod signing_service;
-mod state_manager;
+mod substate_store;
 mod sync;
 mod transaction_executor;
 
 pub use leader_strategy::*;
 pub use messaging::*;
-pub use state_manager::*;
+pub use substate_store::*;
 pub use sync::*;
 use tari_dan_common_types::DerivableFromPublicKey;
 use tari_dan_storage::StateStore;
@@ -28,13 +28,8 @@ pub trait ConsensusSpec: Send + Sync + Clone + 'static {
     type EpochManager: EpochManagerReader<Addr = Self::Addr> + Send + Sync + Clone + 'static;
     type LeaderStrategy: LeaderStrategy<Self::Addr> + Send + Sync + Clone + 'static;
     type SignatureService: VoteSignatureService + ValidatorSignatureService + Send + Sync + Clone + 'static;
-    type StateManager: StateManager<Self::StateStore> + Send + Sync + 'static;
     type SyncManager: SyncManager + Send + Sync + 'static;
-    type BlockTransactionExecutorBuilder: BlockTransactionExecutorBuilder<Self::StateStore>
-        + Send
-        + Sync
-        + Clone
-        + 'static;
+    type TransactionExecutor: BlockTransactionExecutor<Self::StateStore> + Send + Sync + Clone + 'static;
     type InboundMessaging: InboundMessaging<Addr = Self::Addr> + Send + Sync + 'static;
     type OutboundMessaging: OutboundMessaging<Addr = Self::Addr> + Clone + Send + Sync + 'static;
     type Hooks: ConsensusHooks + Clone + Send + Sync + 'static;

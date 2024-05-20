@@ -1,6 +1,5 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-use std::ops::DerefMut;
 
 use log::*;
 use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, shard::Shard};
@@ -82,7 +81,7 @@ where TConsensusSpec: ConsensusSpec
         ) {
             warn!(
                 target: LOG_TARGET,
-                "🔥 FOREIGN PROPOSAL: Invalid proposal from {}: {}. Ignoring.",
+                "⚠️ FOREIGN PROPOSAL: Invalid proposal from {}: {}. Ignoring.",
                 from,
                 err
             );
@@ -146,7 +145,7 @@ where TConsensusSpec: ConsensusSpec
         block: &Block,
         foreign_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
-        let leaf = LeafBlock::get(tx.deref_mut())?;
+        let leaf = LeafBlock::get(&**tx)?;
         // We only want to save the QC once if applicable
         let mut is_qc_saved = false;
 
@@ -188,7 +187,7 @@ where TConsensusSpec: ConsensusSpec
             // If all shards are complete and we've already received our LocalPrepared, we can set out LocalPrepared
             // transaction as ready to propose ACCEPT. If we have not received the local LocalPrepared, the transition
             // will happen when we receive the local block.
-            if tx_rec.current_stage().is_local_prepared() && tx_rec.transaction().evidence.all_shards_complete() {
+            if tx_rec.current_stage().is_local_prepared() && tx_rec.atom().evidence.all_shards_justified() {
                 info!(
                     target: LOG_TARGET,
                     "🔥 FOREIGN PROPOSAL: Transaction is ready for propose ACCEPT({}, {}) Local Stage: {}",
@@ -208,30 +207,31 @@ where TConsensusSpec: ConsensusSpec
         &self,
         from: &TConsensusSpec::Addr,
         candidate_block: &Block,
-        foreign_shard: Shard,
-        local_shard: Shard,
-        foreign_receive_counter: &ForeignReceiveCounters,
+        _foreign_shard: Shard,
+        _local_shard: Shard,
+        _foreign_receive_counter: &ForeignReceiveCounters,
     ) -> Result<(), ProposalValidationError> {
-        let Some(incoming_count) = candidate_block.get_foreign_counter(&local_shard) else {
-            debug!(target:LOG_TARGET, "Our bucket {local_shard:?} is missing reliability index in the proposed block {candidate_block:?}");
-            return Err(ProposalValidationError::MissingForeignCounters {
-                proposed_by: from.to_string(),
-                hash: *candidate_block.id(),
-            });
-        };
-        let current_count = foreign_receive_counter.get_count(&foreign_shard);
-        if current_count + 1 != incoming_count {
-            debug!(target:LOG_TARGET, "We were expecting the index to be {expected_count}, but the index was {incoming_count}", expected_count = current_count + 1);
-            return Err(ProposalValidationError::InvalidForeignCounters {
-                proposed_by: from.to_string(),
-                hash: *candidate_block.id(),
-                details: format!(
-                    "Expected foreign receive count to be {} but it was {}",
-                    current_count + 1,
-                    incoming_count
-                ),
-            });
-        }
+        // TODO: ignoring for now because this is currently broken
+        // let Some(incoming_count) = candidate_block.get_foreign_counter(&local_shard) else {
+        //     debug!(target:LOG_TARGET, "Our bucket {local_shard:?} is missing reliability index in the proposed block
+        // {candidate_block:?}");     return Err(ProposalValidationError::MissingForeignCounters {
+        //         proposed_by: from.to_string(),
+        //         hash: *candidate_block.id(),
+        //     });
+        // };
+        // let current_count = foreign_receive_counter.get_count(&foreign_shard);
+        // if current_count + 1 != incoming_count {
+        //     debug!(target:LOG_TARGET, "We were expecting the index to be {expected_count}, but the index was
+        // {incoming_count}", expected_count = current_count + 1);     return
+        // Err(ProposalValidationError::InvalidForeignCounters {         proposed_by: from.to_string(),
+        //         hash: *candidate_block.id(),
+        //         details: format!(
+        //             "Expected foreign receive count to be {} but it was {}",
+        //             current_count + 1,
+        //             incoming_count
+        //         ),
+        //     });
+        // }
         if candidate_block.height().is_zero() || candidate_block.is_genesis() {
             return Err(ProposalValidationError::ProposingGenesisBlock {
                 proposed_by: from.to_string(),

@@ -8,13 +8,13 @@ use tari_state_tree::{
     Hash,
     LeafKey,
     StateTree,
-    SubstateChange,
+    SubstateTreeChange,
     TreeStore,
     Version,
 };
 use tari_template_lib::models::{ComponentAddress, ObjectKey};
 
-pub fn change(substate_id_seed: u8, value_seed: Option<u8>) -> SubstateChange {
+pub fn change(substate_id_seed: u8, value_seed: Option<u8>) -> SubstateTreeChange {
     change_exact(
         SubstateId::Component(ComponentAddress::new(ObjectKey::from_array(
             [substate_id_seed; ObjectKey::LENGTH],
@@ -27,13 +27,13 @@ fn hash_value(value: &[u8]) -> Hash {
     substate_value_hasher32().chain(value).result().into_array().into()
 }
 
-pub fn change_exact(substate_id: SubstateId, value: Option<Vec<u8>>) -> SubstateChange {
+pub fn change_exact(substate_id: SubstateId, value: Option<Vec<u8>>) -> SubstateTreeChange {
     value
-        .map(|value| SubstateChange::Up {
+        .map(|value| SubstateTreeChange::Up {
             id: substate_id.clone(),
             value_hash: hash_value(&value),
         })
-        .unwrap_or_else(|| SubstateChange::Down { id: substate_id })
+        .unwrap_or_else(|| SubstateTreeChange::Down { id: substate_id })
 }
 
 fn from_seed(node_key_seed: u8) -> Vec<u8> {
@@ -53,11 +53,11 @@ impl<S: TreeStore<Version>> HashTreeTester<S> {
         }
     }
 
-    pub fn put_substate_changes(&mut self, changes: impl IntoIterator<Item = SubstateChange>) -> Hash {
+    pub fn put_substate_changes(&mut self, changes: impl IntoIterator<Item = SubstateTreeChange>) -> Hash {
         self.apply_database_updates(changes)
     }
 
-    fn apply_database_updates(&mut self, changes: impl IntoIterator<Item = SubstateChange>) -> Hash {
+    fn apply_database_updates(&mut self, changes: impl IntoIterator<Item = SubstateTreeChange>) -> Hash {
         let next_version = self.current_version.unwrap_or(0) + 1;
         let current_version = self.current_version.replace(next_version).unwrap_or(0);
         StateTree::<_, IdentityMapper>::new(&mut self.tree_store)

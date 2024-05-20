@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{fmt, fmt::Display, ops::DerefMut};
+use std::{fmt, fmt::Display, ops::Deref};
 
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, NodeHeight};
@@ -62,7 +62,7 @@ impl ValidBlock {
 impl ValidBlock {
     pub fn save_all_dummy_blocks<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
         for block in &self.dummy_blocks {

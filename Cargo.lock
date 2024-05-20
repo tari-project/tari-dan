@@ -1554,6 +1554,7 @@ dependencies = [
  "rand",
  "serde",
  "tari_bor",
+ "tari_common",
  "tari_common_types",
  "tari_consensus",
  "tari_crypto",
@@ -2321,9 +2322,9 @@ dependencies = [
 
 [[package]]
 name = "diesel"
-version = "2.1.5"
+version = "2.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03fc05c17098f21b89bc7d98fe1dd3cce2c11c2ad8e145f2a44fe08ed28eb559"
+checksum = "ff236accb9a5069572099f0b350a92e9560e8e63a9b8d546162f4a5e03026bb2"
 dependencies = [
  "bigdecimal",
  "chrono",
@@ -8900,6 +8901,7 @@ dependencies = [
  "config",
  "dashmap",
  "futures 0.3.30",
+ "indexmap 2.2.6",
  "json5",
  "libp2p-identity",
  "log",
@@ -9557,6 +9559,7 @@ dependencies = [
  "tari_dan_common_types",
  "tari_dan_p2p",
  "tari_dan_storage",
+ "tari_engine_types",
  "tari_epoch_manager",
  "tari_rpc_framework",
  "tari_state_tree",
@@ -9651,6 +9654,7 @@ dependencies = [
  "diesel",
  "diesel_migrations",
  "hex",
+ "indexmap 2.2.6",
  "log",
  "rand",
  "serde",

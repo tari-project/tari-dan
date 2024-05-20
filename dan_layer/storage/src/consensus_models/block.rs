@@ -5,7 +5,8 @@ use std::{
     collections::{BTreeSet, HashSet},
     fmt::{Debug, Display, Formatter},
     hash::Hash,
-    ops::{DerefMut, RangeInclusive},
+    iter,
+    ops::{Deref, RangeInclusive},
 };
 
 use indexmap::IndexMap;
@@ -31,10 +32,13 @@ use time::PrimitiveDateTime;
 use ts_rs::TS;
 
 use super::{
+    BlockDiff,
     ForeignProposal,
     ForeignSendCounters,
     QuorumCertificate,
+    SubstateChange,
     SubstateDestroyedProof,
+    SubstateRecord,
     ValidatorSchnorrSignature,
 };
 use crate::{
@@ -334,6 +338,13 @@ impl Block {
         self.commands.iter().filter_map(|d| d.transaction().map(|t| t.id()))
     }
 
+    pub fn all_accepted_transactions_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
+        self.commands
+            .iter()
+            .filter_map(|d| d.accept().or_else(|| d.local_only()))
+            .map(|t| t.id())
+    }
+
     pub fn all_foreign_proposals(&self) -> impl Iterator<Item = &ForeignProposal> + '_ {
         self.commands.iter().filter_map(|d| d.foreign_proposal())
     }
@@ -413,6 +424,14 @@ impl Block {
         self.total_leader_fee
     }
 
+    pub fn total_transaction_fee(&self) -> u64 {
+        self.commands
+            .iter()
+            .filter_map(|c| c.accept().or_else(|| c.local_only()))
+            .map(|atom| atom.transaction_fee)
+            .sum()
+    }
+
     pub fn proposed_by(&self) -> &PublicKey {
         &self.proposed_by
     }
@@ -479,17 +498,17 @@ impl Block {
 }
 
 impl Block {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, id: &BlockId) -> Result<Self, StorageError> {
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx, id: &BlockId) -> Result<Self, StorageError> {
         tx.blocks_get(id)
     }
 
-    pub fn get_tip<TTx: StateStoreReadTransaction>(tx: &mut TTx) -> Result<Self, StorageError> {
+    pub fn get_tip<TTx: StateStoreReadTransaction>(tx: &TTx) -> Result<Self, StorageError> {
         tx.blocks_get_tip()
     }
 
     /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
     pub fn get_all_blocks_between<TTx: StateStoreReadTransaction>(
-        tx: &mut TTx,
+        tx: &TTx,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
         include_dummy_blocks: bool,
@@ -497,16 +516,16 @@ impl Block {
         tx.blocks_get_all_between(start_block_id_exclusive, end_block_id_inclusive, include_dummy_blocks)
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
         Self::record_exists(tx, self.id())
     }
 
-    pub fn parent_exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
+    pub fn parent_exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
         Self::record_exists(tx, self.parent())
     }
 
     pub fn has_been_processed<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &mut TTx,
+        tx: &TTx,
         block_id: &BlockId,
     ) -> Result<bool, StorageError> {
         // TODO: consider optimising
@@ -518,7 +537,7 @@ impl Block {
     }
 
     pub fn record_exists<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &mut TTx,
+        tx: &TTx,
         block_id: &BlockId,
     ) -> Result<bool, StorageError> {
         tx.blocks_exists(block_id)
@@ -537,7 +556,7 @@ impl Block {
     //     tx.blocks_get_paginated(limit, offset, ordering)
     // }
 
-    pub fn get_count<TTx: StateStoreReadTransaction>(tx: &mut TTx) -> Result<i64, StorageError> {
+    pub fn get_count<TTx: StateStoreReadTransaction>(tx: &TTx) -> Result<i64, StorageError> {
         tx.blocks_get_count()
     }
 
@@ -545,10 +564,10 @@ impl Block {
     /// otherwise false.
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
-        let exists = self.exists(tx.deref_mut())?;
+        let exists = self.exists(&**tx)?;
         if exists {
             return Ok(false);
         }
@@ -556,8 +575,60 @@ impl Block {
         Ok(true)
     }
 
-    pub fn commit<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn commit_diff<TTx: StateStoreWriteTransaction>(
+        &self,
+        tx: &mut TTx,
+        block_diff: BlockDiff,
+    ) -> Result<(), StorageError> {
+        if block_diff.block_id() != self.id() {
+            return Err(StorageError::QueryError {
+                reason: format!(
+                    "[commit_diff] Block ID mismatch. Expected: {}, got: {}",
+                    self.id(),
+                    block_diff.block_id()
+                ),
+            });
+        }
+
+        // block_diff.remove(tx)?;
+
+        for change in block_diff.into_changes() {
+            match change {
+                SubstateChange::Up {
+                    id,
+                    transaction_id,
+                    substate,
+                } => {
+                    SubstateRecord::new(
+                        id.substate_id,
+                        id.version,
+                        substate.into_substate_value(),
+                        self.epoch(),
+                        self.height(),
+                        *self.id(),
+                        transaction_id,
+                        *self.justify().id(),
+                    )
+                    .create(tx)?;
+                },
+                SubstateChange::Down { id, transaction_id } => {
+                    SubstateRecord::destroy_many(
+                        tx,
+                        iter::once(id.to_substate_address()),
+                        self.epoch(),
+                        self.id(),
+                        self.justify().id(),
+                        &transaction_id,
+                    )?;
+                },
+            }
+        }
+
         tx.blocks_set_flags(self.id(), Some(true), None)
+    }
+
+    pub fn get_diff<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<BlockDiff, StorageError> {
+        tx.block_diffs_get(self.id())
     }
 
     pub fn set_as_processed<TTx: StateStoreWriteTransaction>(&mut self, tx: &mut TTx) -> Result<(), StorageError> {
@@ -567,20 +638,16 @@ impl Block {
 
     pub fn find_involved_shards<TTx: StateStoreReadTransaction>(
         &self,
-        tx: &mut TTx,
+        tx: &TTx,
     ) -> Result<HashSet<SubstateAddress>, StorageError> {
         tx.transactions_fetch_involved_shards(self.all_transaction_ids().copied().collect())
     }
 
-    pub fn max_height<TTx: StateStoreReadTransaction>(tx: &mut TTx) -> Result<NodeHeight, StorageError> {
+    pub fn max_height<TTx: StateStoreReadTransaction>(tx: &TTx) -> Result<NodeHeight, StorageError> {
         tx.blocks_max_height()
     }
 
-    pub fn extends<TTx: StateStoreReadTransaction>(
-        &self,
-        tx: &mut TTx,
-        ancestor: &BlockId,
-    ) -> Result<bool, StorageError> {
+    pub fn extends<TTx: StateStoreReadTransaction>(&self, tx: &TTx, ancestor: &BlockId) -> Result<bool, StorageError> {
         if self.id == *ancestor {
             return Ok(false);
         }
@@ -595,7 +662,7 @@ impl Block {
         tx.blocks_is_ancestor(self.parent(), ancestor)
     }
 
-    pub fn get_parent<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+    pub fn get_parent<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
         if self.id.is_genesis() {
             return Err(StorageError::NotFound {
                 item: "Block".to_string(),
@@ -607,22 +674,22 @@ impl Block {
 
     pub fn get_parent_chain<TTx: StateStoreReadTransaction>(
         &self,
-        tx: &mut TTx,
+        tx: &TTx,
         limit: usize,
     ) -> Result<Vec<Block>, StorageError> {
         tx.blocks_get_parent_chain(self.id(), limit)
     }
 
-    pub fn get_votes<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Vec<Vote>, StorageError> {
+    pub fn get_votes<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<Vec<Vote>, StorageError> {
         Vote::get_for_block(tx, &self.id)
     }
 
-    pub fn get_child_blocks<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Vec<Self>, StorageError> {
+    pub fn get_child_blocks<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<Vec<Self>, StorageError> {
         tx.blocks_get_all_by_parent(self.id())
     }
 
     pub fn get_total_due_for_epoch<TTx: StateStoreReadTransaction>(
-        tx: &mut TTx,
+        tx: &TTx,
         epoch: Epoch,
         validator_public_key: &PublicKey,
     ) -> Result<u64, StorageError> {
@@ -630,7 +697,7 @@ impl Block {
     }
 
     pub fn get_any_with_epoch_range_for_validator<TTx: StateStoreReadTransaction>(
-        tx: &mut TTx,
+        tx: &TTx,
         range: RangeInclusive<Epoch>,
         validator_public_key: Option<&PublicKey>,
     ) -> Result<Vec<Self>, StorageError> {
@@ -639,7 +706,7 @@ impl Block {
 
     pub fn get_transactions<TTx: StateStoreReadTransaction>(
         &self,
-        tx: &mut TTx,
+        tx: &TTx,
     ) -> Result<Vec<TransactionRecord>, StorageError> {
         let tx_ids = self.commands().iter().filter_map(|t| t.transaction().map(|t| t.id()));
         let (found, missing) = TransactionRecord::get_any(tx, tx_ids)?;
@@ -659,7 +726,7 @@ impl Block {
 
     pub fn get_substate_updates<TTx: StateStoreReadTransaction>(
         &self,
-        tx: &mut TTx,
+        tx: &TTx,
     ) -> Result<Vec<SubstateUpdate>, StorageError> {
         let committed = self
             .commands()
@@ -710,7 +777,7 @@ impl Block {
         mut on_commit: TFnOnCommit,
     ) -> Result<HighQc, E>
     where
-        TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+        TTx: StateStoreWriteTransaction + Deref + ?Sized,
         TTx::Target: StateStoreReadTransaction,
         TFnOnLock: FnMut(&mut TTx, &LockedBlock, &Block) -> Result<(), E>,
         TFnOnCommit: FnMut(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
@@ -719,17 +786,17 @@ impl Block {
         let high_qc = self.justify().update_high_qc(tx)?;
 
         // b'' <- b*.justify.node
-        let Some(commit_node) = self.justify().get_block(tx.deref_mut()).optional()? else {
+        let Some(commit_node) = self.justify().get_block(&**tx).optional()? else {
             return Ok(high_qc);
         };
 
         // b' <- b''.justify.node
-        let Some(precommit_node) = commit_node.justify().get_block(tx.deref_mut()).optional()? else {
+        let Some(precommit_node) = commit_node.justify().get_block(&**tx).optional()? else {
             return Ok(high_qc);
         };
 
         if !precommit_node.is_genesis() {
-            let locked = LockedBlock::get(tx.deref_mut())?;
+            let locked = LockedBlock::get(&**tx)?;
             if precommit_node.height() > locked.height {
                 on_locked_block_recurse(tx, &locked, &precommit_node, &mut on_lock_block)?;
                 precommit_node.as_locked_block().set(tx)?;
@@ -751,8 +818,8 @@ impl Block {
 
             // Commit prepare_node (b)
             if !prepare_node.is_genesis() {
-                let prepare_node = Block::get(tx.deref_mut(), prepare_node)?;
-                let last_executed = LastExecuted::get(tx.deref_mut())?;
+                let prepare_node = Block::get(&**tx, prepare_node)?;
+                let last_executed = LastExecuted::get(&**tx)?;
                 on_commit_block_recurse(tx, &last_executed, &prepare_node, &mut on_commit)?;
                 prepare_node.as_last_executed().set(tx)?;
             }
@@ -779,7 +846,7 @@ impl Block {
     /// accept a proposal is the branch of m.node extends from the currently locked node lockedQC.node. On the other
     /// hand, the liveness rule is the replica will accept m if m.justify has a higher view than the current
     /// lockedQC. The predicate is true as long as either one of two rules holds.
-    pub fn is_safe<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
+    pub fn is_safe<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<bool, StorageError> {
         let locked = LockedBlock::get(tx)?;
         let locked_block = locked.get_block(tx)?;
 
@@ -804,10 +871,10 @@ impl Block {
 
     pub fn save_foreign_send_counters<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+        TTx: StateStoreWriteTransaction + Deref + ?Sized,
         TTx::Target: StateStoreReadTransaction,
     {
-        let mut counters = ForeignSendCounters::get_or_default(tx.deref_mut(), self.justify().block_id())?;
+        let mut counters = ForeignSendCounters::get_or_default(&**tx, self.justify().block_id())?;
         // Add counters for this block and carry over the counters from the justify block, if any
         for shard in self.foreign_indexes.keys() {
             counters.increment_counter(*shard);
@@ -820,7 +887,7 @@ impl Block {
 
     pub fn get_all_substate_diffs<TTx: StateStoreReadTransaction + ?Sized>(
         &self,
-        tx: &mut TTx,
+        tx: &TTx,
     ) -> Result<Vec<SubstateDiff>, StorageError> {
         let transactions = self
             .commands()
@@ -922,13 +989,13 @@ fn on_locked_block_recurse<TTx, F, E>(
     callback: &mut F,
 ) -> Result<(), E>
 where
-    TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+    TTx: StateStoreWriteTransaction + Deref + ?Sized,
     TTx::Target: StateStoreReadTransaction,
     E: From<StorageError>,
     F: FnMut(&mut TTx, &LockedBlock, &Block) -> Result<(), E>,
 {
     if locked.height < block.height() {
-        let parent = block.get_parent(tx.deref_mut())?;
+        let parent = block.get_parent(&**tx)?;
         on_locked_block_recurse(tx, locked, &parent, callback)?;
         callback(tx, locked, block)?;
     }
@@ -942,13 +1009,13 @@ fn on_commit_block_recurse<TTx, F, E>(
     callback: &mut F,
 ) -> Result<(), E>
 where
-    TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+    TTx: StateStoreWriteTransaction + Deref + ?Sized,
     TTx::Target: StateStoreReadTransaction,
     E: From<StorageError>,
     F: FnMut(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
 {
     if last_executed.height < block.height() {
-        let parent = block.get_parent(tx.deref_mut())?;
+        let parent = block.get_parent(&**tx)?;
         // Recurse to "catch up" any parent parent blocks we may not have executed
         on_commit_block_recurse(tx, last_executed, &parent, callback)?;
         callback(tx, last_executed, block)?;

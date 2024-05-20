@@ -11,8 +11,8 @@ pub type LockId = u32;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum LockFlag {
-    Read,
-    Write,
+    Read = 0x01,
+    Write = 0x02,
 }
 
 impl LockFlag {

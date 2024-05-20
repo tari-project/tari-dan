@@ -6,16 +6,13 @@ use tari_common::configuration::Network;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::consensus_models::{Block, LeafBlock, PendingStateTreeDiff, QuorumCertificate};
-use tari_engine_types::{
-    hashing::substate_value_hasher32,
-    substate::{Substate, SubstateDiff},
-};
+use tari_engine_types::substate::SubstateDiff;
 use tari_state_tree::{
     Hash,
     StagedTreeStore,
     StateHashTreeDiff,
     StateTreeError,
-    SubstateChange,
+    SubstateTreeChange,
     TreeStoreReader,
     Version,
 };
@@ -92,22 +89,18 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
     Some(parent_block)
 }
 
-pub fn diff_to_substate_changes(diff: &SubstateDiff) -> impl Iterator<Item = SubstateChange> + '_ {
+pub fn diff_to_substate_changes(diff: &SubstateDiff) -> impl Iterator<Item = SubstateTreeChange> + '_ {
     diff.down_iter()
-        .map(|(substate_id, _version)| SubstateChange::Down {
+        .map(|(substate_id, _version)| SubstateTreeChange::Down {
             id: substate_id.clone(),
         })
-        .chain(diff.up_iter().map(move |(substate_id, value)| SubstateChange::Up {
+        .chain(diff.up_iter().map(move |(substate_id, value)| SubstateTreeChange::Up {
             id: substate_id.clone(),
-            value_hash: hash_substate(value),
+            value_hash: value.to_value_hash(),
         }))
 }
 
-pub fn hash_substate(substate: &Substate) -> FixedHash {
-    substate_value_hasher32().chain(substate).result().into_array().into()
-}
-
-pub fn calculate_state_merkle_diff<TTx: TreeStoreReader<Version>, I: IntoIterator<Item = SubstateChange>>(
+pub fn calculate_state_merkle_diff<TTx: TreeStoreReader<Version>, I: IntoIterator<Item = SubstateTreeChange>>(
     tx: &TTx,
     current_version: Version,
     next_version: Version,
