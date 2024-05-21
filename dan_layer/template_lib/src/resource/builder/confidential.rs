@@ -115,14 +115,14 @@ impl ConfidentialResourceBuilder {
     /// Specify a hook method that will be called to authorize actions on the resource.
     /// The signature of the method must be `fn(action: ResourceAuthAction, caller: CallerContext)`.
     /// The method should panic to deny the action.
-    /// The resource will fail to build if the component's template does not have a method with the specified signature.
+    /// The resource will fail to build if the component's template does not have a method with the correct signature.
     /// Hooks are only run when the resource is acted on by an external component.
     ///
     /// ## Examples
     ///
     /// Building a resource with a hook from within a component
     /// ```rust
-    /// use tari_template_lib::{caller_context::CallerContext, prelude::ResourceBuilder};
+    /// # use tari_template_lib::{caller_context::CallerContext, prelude::ResourceBuilder};
     /// ResourceBuilder::confidential()
     ///     .with_authorization_hook(CallerContext::current_component_address(), "my_hook")
     ///     .build();
@@ -131,7 +131,7 @@ impl ConfidentialResourceBuilder {
     /// Building a resource with a hook in a static template function. The address is allocated beforehand.
     ///
     /// ```rust
-    /// use tari_template_lib::{caller_context::CallerContext, prelude::ResourceBuilder};
+    /// # use tari_template_lib::{caller_context::CallerContext, prelude::ResourceBuilder};
     /// let alloc = CallerContext::allocate_component_address();
     /// ResourceBuilder::confidential()
     ///     .with_authorization_hook(*alloc.address(), "my_hook")

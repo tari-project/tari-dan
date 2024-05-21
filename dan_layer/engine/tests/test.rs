@@ -493,7 +493,7 @@ mod basic_nft {
     ) {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/basic_nft"]);
 
-        let (account_address, owner_token, _) = template_test.create_owned_account();
+        let (account_address, owner_token, _) = template_test.create_funded_account();
         let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![], vec![]);
 
         let nft_resx = template_test.get_previous_output_address(SubstateType::Resource);
@@ -947,7 +947,7 @@ mod emoji_id {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/emoji_id"]);
 
         // create an account
-        let (account_address, owner_proof, _) = template_test.create_owned_account();
+        let (account_address, owner_proof, _) = template_test.create_funded_account();
 
         // create a fungible token faucet, we are going to use those tokens as payments
         // TODO: use Thaums instead when they're implemented
@@ -1096,7 +1096,7 @@ mod tickets {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/tickets"]);
 
         // create an account
-        let (account_address, owner_proof, secret) = template_test.create_owned_account();
+        let (account_address, owner_proof, secret) = template_test.create_funded_account();
 
         // create a fungible token faucet, we are going to use those tokens as payments
         // TODO: use Thaums instead when they're implemented
@@ -1236,7 +1236,7 @@ mod nft_indexes {
     ) {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/nft_list"]);
 
-        let (account_address, owner_token, _) = template_test.create_owned_account();
+        let (account_address, owner_token, _) = template_test.create_funded_account();
         let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![], vec![]);
 
         let nft_resx = template_test.get_previous_output_address(SubstateType::Resource);

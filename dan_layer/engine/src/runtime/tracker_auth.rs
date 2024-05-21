@@ -37,11 +37,21 @@ impl<'a> Authorization<'a> {
             return Ok(());
         }
 
+        let component_address =
+            locked
+                .address()
+                .as_component_address()
+                .ok_or_else(|| RuntimeError::InvariantError {
+                    function: "check_component_access_rules",
+                    details: format!("Expected a component address, got {}", locked.address()),
+                })?;
+
         // Check access rules
         match component.access_rules().get_method_access_rule(method) {
             AccessRule::AllowAll => Ok(()),
             AccessRule::DenyAll => Err(RuntimeError::AccessDenied {
                 action_ident: ActionIdent::ComponentCallMethod {
+                    component_address,
                     method: method.to_string(),
                 },
             }),
@@ -49,6 +59,7 @@ impl<'a> Authorization<'a> {
                 if !check_restricted_access_rule(self.state, scope, rule)? {
                     return Err(RuntimeError::AccessDenied {
                         action_ident: ActionIdent::ComponentCallMethod {
+                            component_address,
                             method: method.to_string(),
                         },
                     });

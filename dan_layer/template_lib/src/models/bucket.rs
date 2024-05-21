@@ -213,4 +213,12 @@ impl Bucket {
         resp.decode()
             .expect("count_confidential_commitments returned invalid u32")
     }
+
+    pub fn assert_contains_no_confidential_funds(&self) {
+        let count = self.count_confidential_commitments();
+        assert_eq!(
+            count, 0,
+            "Expected bucket to have no confidential commitments, but found {count}",
+        );
+    }
 }

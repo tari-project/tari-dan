@@ -28,7 +28,7 @@ fn setup(fee: u16) -> TariSwapTest {
 
     let (tariswap, lp_resource) = create_tariswap_component(&mut template_test, a_resource, b_resource, fee);
 
-    let (account_address, account_proof, _) = template_test.create_owned_account();
+    let (account_address, account_proof, _) = template_test.create_funded_account();
     fund_account(&mut template_test, account_address, a_faucet);
     fund_account(&mut template_test, account_address, b_faucet);
 

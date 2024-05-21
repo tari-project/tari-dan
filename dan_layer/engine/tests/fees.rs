@@ -16,7 +16,7 @@ use tari_transaction::Transaction;
 fn deducts_fees_from_payments_and_refunds_the_rest() {
     let mut test = TemplateTest::new(["tests/templates/state"]);
 
-    let (account, owner_token, private_key) = test.create_owned_account();
+    let (account, owner_token, private_key) = test.create_funded_account();
     let orig_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
 
     test.enable_fees();
@@ -44,7 +44,7 @@ fn deducts_fees_from_payments_and_refunds_the_rest() {
 fn deducts_fees_when_transaction_fails() {
     let mut test = TemplateTest::new(["tests/templates/state"]);
 
-    let (account, owner_token, private_key) = test.create_owned_account();
+    let (account, owner_token, private_key) = test.create_funded_account();
     let orig_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
 
     test.enable_fees();
@@ -120,7 +120,7 @@ fn another_account_pays_partially_for_fees() {
     let mut test = TemplateTest::new(iter::empty::<&str>());
 
     let (account, owner_token, private_key) = test.create_empty_account();
-    let (account_fee, owner_token_fee, _) = test.create_owned_account();
+    let (account_fee, owner_token_fee, _) = test.create_funded_account();
     let orig_balance: Amount = test.call_method(
         account_fee,
         "balance",
@@ -167,7 +167,7 @@ fn another_account_pays_partially_for_fees() {
 fn failed_fee_transaction() {
     let mut test = TemplateTest::new(["tests/templates/state"]);
 
-    let (account, owner_token, private_key) = test.create_owned_account();
+    let (account, owner_token, private_key) = test.create_funded_account();
     let initial_balance: Amount =
         test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
 
@@ -201,8 +201,8 @@ fn failed_fee_transaction() {
 fn fail_partial_paid_fees() {
     let mut test = TemplateTest::new(["tests/templates/state"]);
 
-    let (account, owner_token, private_key) = test.create_owned_account();
-    let (account2, owner_token2, _) = test.create_owned_account();
+    let (account, owner_token, private_key) = test.create_funded_account();
+    let (account2, owner_token2, _) = test.create_funded_account();
     let orig_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
     println!("{:?}", orig_balance);
     test.enable_fees();
@@ -239,8 +239,8 @@ fn fail_partial_paid_fees() {
 fn fail_pay_less_fees_than_fee_transaction() {
     let mut test = TemplateTest::new(["tests/templates/state"]);
 
-    let (account, owner_token, private_key) = test.create_owned_account();
-    let (account2, owner_token2, _) = test.create_owned_account();
+    let (account, owner_token, private_key) = test.create_funded_account();
+    let (account2, owner_token2, _) = test.create_funded_account();
     let orig_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
     let state: ComponentAddress = test.call_function("State", "new", args![], vec![]);
 
@@ -302,8 +302,8 @@ fn fail_pay_less_fees_than_fee_transaction() {
 fn fail_pay_too_little_no_fee_instruction() {
     let mut test = TemplateTest::new(iter::empty::<&str>());
 
-    let (account, owner_token, private_key) = test.create_owned_account();
-    let (account2, owner_token2, _) = test.create_owned_account();
+    let (account, owner_token, private_key) = test.create_funded_account();
+    let (account2, owner_token2, _) = test.create_funded_account();
     let orig_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
 
     test.enable_fees();
@@ -336,8 +336,8 @@ fn fail_pay_too_little_no_fee_instruction() {
 fn success_pay_fee_in_main_instructions() {
     let mut test = TemplateTest::new(iter::empty::<&str>());
 
-    let (account, owner_token, private_key) = test.create_owned_account();
-    let (account2, owner_token2, _) = test.create_owned_account();
+    let (account, owner_token, private_key) = test.create_funded_account();
+    let (account2, owner_token2, _) = test.create_funded_account();
     let orig_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
 
     test.enable_fees();
