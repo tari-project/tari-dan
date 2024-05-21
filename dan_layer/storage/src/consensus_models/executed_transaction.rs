@@ -116,8 +116,9 @@ impl ExecutedTransaction {
         self.resolved_inputs.iter().map(|input| &input.versioned_substate_id)
     }
 
-    pub fn involved_shards_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
-        self.all_inputs_iter()
+    pub fn involved_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+        self.resolved_inputs
+            .iter()
             .map(|input| input.to_substate_address())
             .chain(self.resulting_outputs.iter().map(|output| output.to_substate_address()))
     }
@@ -182,6 +183,15 @@ impl ExecutedTransaction {
 
     pub fn to_initial_evidence(&self) -> Evidence {
         Evidence::from_inputs_and_outputs(*self.id(), &self.resolved_inputs, &self.resulting_outputs)
+    }
+
+    pub fn transaction_fee(&self) -> u64 {
+        self.result
+            .finalize
+            .fee_receipt
+            .total_fees_paid()
+            .as_u64_checked()
+            .unwrap_or(0)
     }
 
     pub fn is_finalized(&self) -> bool {
@@ -344,7 +354,7 @@ impl ExecutedTransaction {
         let transactions = Self::get_all(tx, transactions)?;
         Ok(transactions
             .into_iter()
-            .map(|t| (*t.transaction.id(), t.involved_shards_iter().collect()))
+            .map(|t| (*t.transaction.id(), t.involved_addresses_iter().collect()))
             .collect())
     }
 }

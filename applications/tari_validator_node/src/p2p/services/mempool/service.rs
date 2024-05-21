@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashSet, fmt::Display, iter};
+use std::{collections::HashSet, fmt, fmt::Display, iter};
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::*;
@@ -76,6 +76,21 @@ pub enum TransactionExecution {
     },
     /// Execution cannot occur in the mempool and is deferred to consensus
     Deferred { transaction: Transaction },
+}
+
+impl Display for TransactionExecution {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TransactionExecution::Executed { result } => match result {
+                Ok(executed) => write!(f, "Executed {}: {}", executed.id(), executed.result().finalize.result),
+                Err(e) => write!(f, "Execution failed: {}", e),
+            },
+            TransactionExecution::ExecutionFailure { error, .. } => {
+                write!(f, "Unexpected Execution failure: {}", error)
+            },
+            TransactionExecution::Deferred { transaction } => write!(f, "Deferred: {}", transaction.id()),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -501,6 +516,7 @@ where
             sender_shard,
         } = result;
 
+        info!(target: LOG_TARGET, "🎱 Transaction {transaction_id} execution: {execution}");
         match execution {
             TransactionExecution::Executed { result } => {
                 self.handle_execution_complete(transaction_id, result, should_propagate, sender_shard)

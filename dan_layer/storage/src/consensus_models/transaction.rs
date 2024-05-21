@@ -9,7 +9,7 @@ use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReas
 use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
 
 use crate::{
-    consensus_models::{Decision, ExecutedTransaction, TransactionAtom, VersionedSubstateIdLockIntent},
+    consensus_models::{BlockId, Decision, ExecutedTransaction, TransactionAtom, VersionedSubstateIdLockIntent},
     Ordering,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
@@ -236,13 +236,13 @@ impl TransactionRecord {
         tx.transactions_get_paginated(limit, offset, ordering)
     }
 
-    pub fn finalize_all<'a, TTx, I>(tx: &mut TTx, transactions: I) -> Result<(), StorageError>
+    pub fn finalize_all<'a, TTx, I>(tx: &mut TTx, block_id: BlockId, transactions: I) -> Result<(), StorageError>
     where
         TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
         I: IntoIterator<Item = &'a TransactionAtom>,
     {
-        tx.transactions_finalize_all(transactions)
+        tx.transactions_finalize_all(block_id, transactions)
     }
 }
 

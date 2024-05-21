@@ -403,6 +403,7 @@ where TConsensusSpec: ConsensusSpec
                         let executed = self.execute_transaction_if_required(&substate_store, &atom.id, block.id())?;
                         tx_rec.set_local_decision(executed.decision());
                         tx_rec.set_initial_evidence(executed.to_initial_evidence());
+                        tx_rec.set_transaction_fee(executed.transaction_fee());
                         proposed_block_change_set.add_transaction_execution(executed);
                     } else if tx_rec.current_decision().is_commit() &&
                         matches!(
@@ -417,6 +418,7 @@ where TConsensusSpec: ConsensusSpec
                         // Align the TransactionPoolRecord with the relevant execution
                         tx_rec.set_local_decision(execution.decision());
                         tx_rec.set_initial_evidence(execution.to_initial_evidence());
+                        tx_rec.set_transaction_fee(execution.transaction_fee());
                         proposed_block_change_set.add_transaction_execution(execution);
                     } else {
                         // continue
@@ -492,6 +494,8 @@ where TConsensusSpec: ConsensusSpec
                                     block,
                                     tx_rec.transaction_id(),
                                 );
+                                // TODO: Add a reason for the ABORT. Perhaps a reason enum
+                                //       Decision::Abort(AbortReason::LockConflict)
                                 tx_rec.set_local_decision(Decision::Abort);
                                 proposed_block_change_set.set_next_transaction_update(
                                     &tx_rec,
@@ -580,9 +584,14 @@ where TConsensusSpec: ConsensusSpec
 
                         let executed = self.execute_transaction_if_required(&substate_store, &atom.id, block.id())?;
                         tx_rec.set_local_decision(executed.decision());
+                        tx_rec.set_initial_evidence(executed.to_initial_evidence());
+                        tx_rec.set_transaction_fee(executed.transaction_fee());
                         proposed_block_change_set.add_transaction_execution(executed);
                     } else {
                         let executed = ExecutedTransaction::get_pending_execution_for_block(tx, block.id(), &t.id)?;
+                        tx_rec.set_local_decision(executed.decision());
+                        tx_rec.set_initial_evidence(executed.to_initial_evidence());
+                        tx_rec.set_transaction_fee(executed.transaction_fee());
                         proposed_block_change_set.add_transaction_execution(executed);
                     }
 
@@ -865,9 +874,22 @@ where TConsensusSpec: ConsensusSpec
             // return Ok(proposed_block_change_set.no_vote());
         }
 
-        let (diff, locks) = substate_store.into_diff_and_locks();
+        let (expected_merkle_root, tree_diff) = substate_store.calculate_jmt_diff_for_block(block)?;
+        if expected_merkle_root != *block.merkle_root() {
+            warn!(
+                target: LOG_TARGET,
+                "❌ Merkle root disagreement for block {}. Leader proposed {}, we calculated {}",
+                block,
+                block.merkle_root(),
+                expected_merkle_root
+            );
+            return Ok(proposed_block_change_set.no_vote());
+        }
+
+        let (diff, locks) = substate_store.into_parts();
         proposed_block_change_set
             .set_block_diff(diff)
+            .set_state_tree_diff(tree_diff)
             .set_substate_locks(locks)
             .set_quorum_decision(QuorumDecision::Accept);
 
@@ -1078,7 +1100,7 @@ where TConsensusSpec: ConsensusSpec
         let finalized_transactions = self
             .transaction_pool
             .remove_all(tx, block.all_accepted_transactions_ids())?;
-        TransactionRecord::finalize_all(tx, &finalized_transactions)?;
+        TransactionRecord::finalize_all(tx, *block.id(), &finalized_transactions)?;
 
         if !finalized_transactions.is_empty() {
             debug!(

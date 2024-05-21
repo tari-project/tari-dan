@@ -733,19 +733,30 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
 
     fn transactions_finalize_all<'a, I: IntoIterator<Item = &'a TransactionAtom>>(
         &mut self,
+        block_id: BlockId,
         transactions: I,
     ) -> Result<(), StorageError> {
         use crate::schema::transactions;
 
-        let changes = transactions.into_iter().map(|atom| {
-            (
-                transactions::transaction_id.eq(serialize_hex(atom.id)),
-                (
-                    transactions::final_decision.eq(atom.decision.to_string()),
-                    transactions::finalized_at.eq(now()),
-                ),
-            )
-        });
+        let changes = transactions
+            .into_iter()
+            .map(|atom| {
+                // TODO(perf): n calls, 2n queries, query is slow
+                let exec = self.transaction_executions_get_pending_for_block(&atom.id, &block_id)?;
+
+                Ok((
+                    transactions::transaction_id.eq(serialize_hex(atom.id())),
+                    (
+                        transactions::resolved_inputs.eq(serialize_json(&exec.resolved_inputs())?),
+                        transactions::resulting_outputs.eq(serialize_json(&exec.resulting_outputs())?),
+                        transactions::result.eq(serialize_json(&exec.result())?),
+                        transactions::execution_time_ms.eq(exec.execution_time().as_millis() as i64),
+                        transactions::final_decision.eq(atom.decision.to_string()),
+                        transactions::finalized_at.eq(now()),
+                    ),
+                ))
+            })
+            .collect::<Result<Vec<_>, StorageError>>()?;
 
         for (predicate, change) in changes {
             diesel::update(transactions::table)

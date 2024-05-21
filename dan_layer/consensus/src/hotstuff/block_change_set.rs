@@ -10,6 +10,7 @@ use tari_dan_storage::{
         BlockDiff,
         LeafBlock,
         LockedSubstate,
+        PendingStateTreeDiff,
         QuorumDecision,
         SubstateChange,
         SubstateRecord,
@@ -24,6 +25,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_engine_types::substate::SubstateId;
+use tari_state_tree::StateHashTreeDiff;
 use tari_transaction::TransactionId;
 
 #[derive(Debug, Clone)]
@@ -38,6 +40,7 @@ pub struct ProposedBlockChangeSet {
     block: LeafBlock,
     quorum_decision: Option<QuorumDecision>,
     block_diff: Vec<SubstateChange>,
+    state_tree_diff: StateHashTreeDiff,
     substate_locks: IndexMap<SubstateId, Vec<LockedSubstate>>,
     transaction_changes: IndexMap<TransactionId, TransactionChangeSet>,
 }
@@ -50,6 +53,7 @@ impl ProposedBlockChangeSet {
             block_diff: Vec::new(),
             substate_locks: IndexMap::new(),
             transaction_changes: IndexMap::new(),
+            state_tree_diff: StateHashTreeDiff::default(),
         }
     }
 
@@ -57,6 +61,11 @@ impl ProposedBlockChangeSet {
         self.quorum_decision = None;
         self.block_diff = Vec::new();
         self.transaction_changes.clear();
+        self
+    }
+
+    pub fn set_state_tree_diff(&mut self, diff: StateHashTreeDiff) -> &mut Self {
+        self.state_tree_diff = diff;
         self
     }
 
@@ -124,8 +133,12 @@ impl ProposedBlockChangeSet {
         TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
-        // Save the diff
-        BlockDiff::new(self.block.block_id, self.block_diff).insert(tx)?;
+        let block_diff = BlockDiff::new(self.block.block_id, self.block_diff);
+        // Store the block diff
+        block_diff.insert(tx)?;
+
+        // Store the tree diff
+        PendingStateTreeDiff::new(*self.block.block_id(), self.block.height(), self.state_tree_diff).save(tx)?;
 
         // Save locks
         SubstateRecord::insert_all_locks(tx, self.block.block_id, self.substate_locks)?;
