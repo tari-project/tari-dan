@@ -324,6 +324,7 @@ pub trait StateStoreWriteTransaction {
 
     fn transactions_finalize_all<'a, I: IntoIterator<Item = &'a TransactionAtom>>(
         &mut self,
+        block_id: BlockId,
         transaction: I,
     ) -> Result<(), StorageError>;
     // -------------------------------- Transaction Executions -------------------------------- //

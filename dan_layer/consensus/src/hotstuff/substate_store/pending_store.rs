@@ -5,10 +5,13 @@ use std::{borrow::Cow, collections::HashMap};
 
 use indexmap::IndexMap;
 use log::*;
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{optional::Optional, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{
+        Block,
         LockedSubstate,
+        PendingStateTreeDiff,
         SubstateChange,
         SubstateLockFlag,
         SubstateRecord,
@@ -17,11 +20,15 @@ use tari_dan_storage::{
     StateStore,
     StateStoreReadTransaction,
 };
-use tari_engine_types::substate::{Substate, SubstateId};
+use tari_engine_types::substate::{hash_substate, Substate, SubstateId};
+use tari_state_tree::{StateHashTreeDiff, SubstateTreeChange};
 use tari_transaction::{TransactionId, VersionedSubstateId};
 
 use super::error::SubstateStoreError;
-use crate::traits::{ReadableSubstateStore, WriteableSubstateStore};
+use crate::{
+    hotstuff::calculate_state_merkle_diff,
+    traits::{ReadableSubstateStore, WriteableSubstateStore},
+};
 
 const LOG_TARGET: &str = "tari::dan::hotstuff::substate_store::pending_store";
 
@@ -104,6 +111,31 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
 
         let substate = SubstateRecord::get_latest(self.store, id)?;
         Ok(substate.into_substate())
+    }
+
+    pub fn calculate_jmt_diff_for_block(
+        &mut self,
+        block: &Block,
+    ) -> Result<(FixedHash, StateHashTreeDiff), SubstateStoreError> {
+        let current_version = block.justify().block_height().as_u64();
+        let next_version = block.height().as_u64();
+
+        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(self.store, block.justify().block_id())?;
+
+        let changes = self.diff.iter().map(|ch| match ch {
+            SubstateChange::Up { id, substate, .. } => SubstateTreeChange::Up {
+                id: id.substate_id.clone(),
+                value_hash: hash_substate(substate.substate_value(), substate.version()),
+            },
+            SubstateChange::Down { id, .. } => SubstateTreeChange::Down {
+                id: id.substate_id.clone(),
+            },
+        });
+
+        let (state_root, state_tree_diff) =
+            calculate_state_merkle_diff(self.store, current_version, next_version, pending, changes)?;
+
+        Ok((state_root, state_tree_diff))
     }
 
     pub fn try_lock_all<I: IntoIterator<Item = VersionedSubstateIdLockIntent>>(
@@ -368,7 +400,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         &self.diff
     }
 
-    pub fn into_diff_and_locks(self) -> (Vec<SubstateChange>, IndexMap<SubstateId, Vec<LockedSubstate>>) {
+    pub fn into_parts(self) -> (Vec<SubstateChange>, IndexMap<SubstateId, Vec<LockedSubstate>>) {
         (self.diff, self.new_locks)
     }
 }

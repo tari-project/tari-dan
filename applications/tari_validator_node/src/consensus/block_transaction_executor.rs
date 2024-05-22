@@ -71,7 +71,7 @@ where
             exec_output.outputs,
             exec_output.execution_time,
         );
-        info!(target: LOG_TARGET, "Transaction {} executed. {:?}", id,executed);
+        info!(target: LOG_TARGET, "Transaction {} executed. {}", id,executed.result().finalize.result);
         Ok(executed)
     }
 }
@@ -96,17 +96,13 @@ impl<TEpochManager, TExecutor> TariDanBlockTransactionExecutor<TEpochManager, TE
                 Some(version) => {
                     let id = VersionedSubstateId::new(input.substate_id, version);
                     let substate = store.get(&id.to_substate_address())?;
+                    info!(target: LOG_TARGET, "Resolved substate: {id}");
                     resolved_substates.insert(id, substate);
                 },
                 None => {
                     let (id, substate) = self.resolve_local_substate::<TStateStore>(input.substate_id, store)?;
+                    info!(target: LOG_TARGET, "Resolved unversioned substate: {id}");
                     resolved_substates.insert(id, substate);
-                    // We try to fetch each input from the block "cache", and only hit the DB if the input has not been
-                    // used in the block before
-                    // match self.output_versions.get(input.substate_id()) {
-                    //     Some(version) => VersionedSubstateId::new(input.substate_id, *version),
-                    //     None =>
-                    // }
                 },
             }
         }
@@ -141,7 +137,7 @@ impl<TEpochManager, TExecutor> TariDanBlockTransactionExecutor<TEpochManager, TE
             .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
         for (id, substate) in inputs {
             access
-                .set_state(&id, substate)
+                .set_state(id.substate_id(), substate)
                 .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
         }
         access

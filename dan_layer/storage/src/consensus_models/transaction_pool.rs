@@ -248,6 +248,20 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
     ) -> Result<Vec<TransactionAtom>, TransactionPoolError> {
         TransactionPoolRecord::remove_all(tx, tx_ids)
     }
+
+    pub fn remove(
+        &self,
+        tx: &mut TStateStore::WriteTransaction<'_>,
+        id: TransactionId,
+    ) -> Result<TransactionAtom, TransactionPoolError> {
+        let atom = TransactionPoolRecord::remove_all(tx, &[id])?.pop().ok_or_else(|| {
+            TransactionPoolError::StorageError(StorageError::NotFound {
+                item: "TransactionPoolRecord".to_string(),
+                key: id.to_string(),
+            })
+        })?;
+        Ok(atom)
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -403,6 +417,11 @@ impl TransactionPoolRecord {
 
     pub fn set_initial_evidence(&mut self, evidence: Evidence) -> &mut Self {
         self.atom.evidence = evidence;
+        self
+    }
+
+    pub fn set_transaction_fee(&mut self, transaction_fee: u64) -> &mut Self {
+        self.atom.transaction_fee = transaction_fee;
         self
     }
 
