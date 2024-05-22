@@ -34,7 +34,7 @@ pub use crate::{
     caller_context::CallerContext,
     component::{Component, ComponentManager},
     consensus::Consensus,
-    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS, XTR2},
+    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS, XTR},
     crypto::{PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     debug,
     error,

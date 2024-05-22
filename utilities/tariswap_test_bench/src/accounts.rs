@@ -112,9 +112,9 @@ impl Runner {
                     revealed_amount: 1_000_000.into(),
                     output: None,
                 })
-                .put_last_instruction_output_on_workspace("xtr2")
+                .put_last_instruction_output_on_workspace("xtr")
                 .call_method(account.address.as_component_address().unwrap(), "deposit", args![
-                    Workspace("xtr2")
+                    Workspace("xtr")
                 ]);
         }
 

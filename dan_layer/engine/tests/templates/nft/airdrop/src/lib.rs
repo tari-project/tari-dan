@@ -37,8 +37,7 @@ mod airdrop_template {
         pub fn new() -> Component<Self> {
             let bucket = ResourceBuilder::non_fungible()
                 .with_token_symbol("AIR")
-                .mint_many_with(1..=100, |n| (NonFungibleId::from_u32(n), (&(), &())))
-                .build_bucket();
+                .initial_supply((1..=100).map(NonFungibleId::from_u32));
 
             Component::new(Self {
                 allow_list: HashSet::new(),

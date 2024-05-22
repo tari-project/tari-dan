@@ -6,7 +6,7 @@ use std::fmt::Display;
 use indexmap::IndexSet;
 use tari_engine_types::{indexed_value::IndexedWellKnownTypes, lock::LockId, substate::SubstateId, TemplateAddress};
 use tari_template_lib::{
-    constants::XTR2,
+    constants::XTR,
     models::{BucketId, EntityId, ProofId},
     prelude::PUBLIC_IDENTITY_RESOURCE_ADDRESS,
 };
@@ -80,8 +80,8 @@ impl CallScope {
 
     pub fn is_substate_in_scope(&self, address: &SubstateId) -> bool {
         // TODO: Hacky
-        // If the address is the XTR2 resource, it is always in scope
-        if *address == XTR2 {
+        // If the address is the XTR resource, it is always in scope
+        if *address == XTR {
             return true;
         }
 

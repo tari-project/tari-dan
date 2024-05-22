@@ -58,7 +58,7 @@ mod sparkle_nft_template {
                 // AllowAll makes testing easier
                 .mintable(AccessRule::AllowAll)
                 .burnable(AccessRule::AllowAll)
-                .build_bucket();
+                .initial_supply_with_data(Some((nft, (&(), &empty))));
 
             Component::new(Self {
                 resource_address: bucket.resource_address(),

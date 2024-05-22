@@ -485,7 +485,7 @@ where
     let substate_id = SubstateId::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let substate_address = SubstateAddress::from_substate_id(&substate_id, 0);
     let mut metadata = Metadata::new();
-    metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
+    metadata.insert(TOKEN_SYMBOL, "tXTR".to_string());
     if !SubstateRecord::exists(&**tx, &substate_address)? {
         SubstateRecord {
             substate_id,

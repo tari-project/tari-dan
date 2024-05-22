@@ -19,21 +19,19 @@ mod template {
             confidential_supply: ConfidentialOutputStatement,
         ) -> (Component<Self>, ResourceAddress, ResourceAddress, ResourceAddress) {
             let fungible = ResourceBuilder::fungible()
-                .initial_supply(Amount(1_000_000))
                 .recallable(AccessRule::AllowAll)
-                .build_bucket();
+                .initial_supply(Amount(1_000_000));
+
             let fungible_resource = fungible.resource_address();
 
             let non_fungible = ResourceBuilder::non_fungible()
-                .mint_many_with(1..=10, |n| (NonFungibleId::from_u32(n), (&(), &())))
                 .recallable(AccessRule::AllowAll)
-                .build_bucket();
+                .initial_supply((1..=10).map(NonFungibleId::from_u32));
             let non_fungible_resource = non_fungible.resource_address();
 
             let confidential = ResourceBuilder::confidential()
-                .initial_supply(confidential_supply)
                 .recallable(AccessRule::AllowAll)
-                .build_bucket();
+                .initial_supply(confidential_supply);
             let confidential_resource = confidential.resource_address();
 
             let component = Component::new(Self {

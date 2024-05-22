@@ -9,9 +9,12 @@ pub fn create_badge_resource(recall_rule: AccessRule) -> Bucket {
     let mut metadata = Metadata::new();
     metadata.insert("colour", "blue");
     ResourceBuilder::non_fungible()
-        .mint_many_with(BADGE_NAMES, |name| (NonFungibleId::from_string(name), (&metadata, &())))
         .recallable(recall_rule)
-        .build_bucket()
+        .initial_supply_with_data(
+            BADGE_NAMES
+                .into_iter()
+                .map(|name| (NonFungibleId::from_string(name), (&metadata, &()))),
+        )
 }
 
 #[template]
@@ -36,8 +39,7 @@ mod access_rules_template {
             let tokens = ResourceBuilder::fungible()
                 .with_owner_rule(owner_rule.clone())
                 .with_access_rules(resource_rules)
-                .initial_supply(1000)
-                .build_bucket();
+                .initial_supply(1000);
 
             let badges = create_badge_resource(recall_rule);
 
@@ -56,7 +58,7 @@ mod access_rules_template {
         pub fn default_rules() -> Component<AccessRulesTest> {
             let badges = create_badge_resource(AccessRule::DenyAll);
 
-            let tokens = ResourceBuilder::fungible().initial_supply(1000).build_bucket();
+            let tokens = ResourceBuilder::fungible().initial_supply(1000);
 
             Component::create(Self {
                 value: 0,
@@ -73,9 +75,8 @@ mod access_rules_template {
             let address_alloc = CallerContext::allocate_component_address();
 
             let tokens = ResourceBuilder::fungible()
-                .initial_supply(1000)
                 .with_authorization_hook(*address_alloc.address(), hook)
-                .build_bucket();
+                .initial_supply(1000);
 
             Component::new(Self {
                 value: 0,
@@ -95,12 +96,11 @@ mod access_rules_template {
             let address_alloc = CallerContext::allocate_component_address();
 
             let tokens = ResourceBuilder::fungible()
-                .initial_supply(1000)
                 .with_authorization_hook(
                     *address_alloc.address(),
                     "malicious_auth_hook_set_state_on_another_component",
                 )
-                .build_bucket();
+                .initial_supply(1000);
 
             Component::new(Self {
                 value: 0,
@@ -119,7 +119,6 @@ mod access_rules_template {
 
             let badge_resource = badges.resource_address();
             let tokens = ResourceBuilder::fungible()
-                .initial_supply(1000)
                 .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(
                     RequireRule::Require(
                         NonFungibleAddress::new(badge_resource, NonFungibleId::from_string("mint")).into(),
@@ -140,7 +139,7 @@ mod access_rules_template {
                         NonFungibleAddress::new(badge_resource, NonFungibleId::from_string("deposit")).into(),
                     ),
                 )))
-                .build_bucket();
+                .initial_supply(1000);
 
             Component::new(Self {
                 value: 0,
@@ -158,7 +157,6 @@ mod access_rules_template {
 
             let badge_resource = badges.resource_address();
             let tokens = ResourceBuilder::fungible()
-                .initial_supply(1000)
                 .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(
                     RequireRule::Require(badge_resource.into()),
                 )))
@@ -171,7 +169,7 @@ mod access_rules_template {
                 .depositable(AccessRule::Restricted(RestrictedAccessRule::Require(
                     RequireRule::Require(badge_resource.into()),
                 )))
-                .build_bucket();
+                .initial_supply(1000);
 
             Component::new(Self {
                 value: 0,
@@ -189,13 +187,12 @@ mod access_rules_template {
 
             let allocation = CallerContext::allocate_component_address();
             let tokens = ResourceBuilder::fungible()
-                .initial_supply(1000)
                 .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(
                     RequireRule::Require(allocation.address().clone().into()),
                 )))
                 // Only access rules apply, this just makes the test simpler because we do not need to change the transaction signer
                 .with_owner_rule(OwnerRule::None)
-                .build_bucket();
+                .initial_supply(1000);
 
             Component::new(Self {
                 value: 0,

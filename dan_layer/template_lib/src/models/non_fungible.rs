@@ -9,8 +9,6 @@ use tari_template_abi::{
     rust::{fmt, fmt::Display, str::FromStr, write},
     EngineOp,
 };
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
 use super::BinaryTag;
 use crate::{
@@ -27,7 +25,11 @@ const DELIM: char = ':';
 /// The unique identification of a non-fungible token inside it's parent resource
 #[serde_as]
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Serialize, Deserialize, Hash)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub enum NonFungibleId {
     U256(#[serde_as(as = "serde_with::Bytes")] [u8; 32]),
     String(String),
@@ -203,12 +205,20 @@ const TAG: u64 = BinaryTag::NonFungibleAddress.as_u64();
 
 /// The unique identifier of a non-fungible index in the Tari network
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct NonFungibleAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<NonFungibleAddressContents, TAG>);
 
 /// Data used to build a `NonFungibleAddress`
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct NonFungibleAddressContents {
     resource_address: ResourceAddress,
     id: NonFungibleId,
