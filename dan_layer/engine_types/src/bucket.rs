@@ -92,6 +92,10 @@ impl Bucket {
         self.resource_container.withdraw_confidential(proof, view_key)
     }
 
+    pub fn join(&mut self, other: Bucket) -> Result<(), ResourceError> {
+        self.resource_container.deposit(other.resource_container)
+    }
+
     pub fn reveal_confidential(
         &mut self,
         proof: ConfidentialWithdrawProof,

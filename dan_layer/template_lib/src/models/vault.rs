@@ -195,11 +195,11 @@ impl Vault {
     }
 
     /// Withdraw an `amount` of tokens from the vault into a new bucket.
-    pub fn withdraw(&self, amount: Amount) -> Bucket {
+    pub fn withdraw<T: Into<Amount>>(&self, amount: T) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::Withdraw,
-            args: invoke_args![VaultWithdrawArg::Fungible { amount }],
+            args: invoke_args![VaultWithdrawArg::Fungible { amount: amount.into() }],
         });
 
         resp.decode().expect("failed to decode Bucket")

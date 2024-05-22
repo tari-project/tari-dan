@@ -145,6 +145,18 @@ impl Bucket {
         (new_bucket, self)
     }
 
+    /// Joins the bucket with another of the same resource type, returning a new joined bucket with the value of both.
+    /// Will panic if the other bucket is not of the same resource type.
+    pub fn join(self, other: Bucket) -> Self {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::Join,
+            args: invoke_args![other.id],
+        });
+
+        resp.decode().expect("Bucket join returned invalid result")
+    }
+
     /// Returns how many tokens this bucket holds
     pub fn amount(&self) -> Amount {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {

@@ -1676,6 +1676,20 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     Ok(InvokeResult::encode(&bucket_id)?)
                 })
             },
+            BucketAction::Join => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "Join bucket action requires a bucket id".to_string(),
+                })?;
+                let other_bucket_id = args.assert_one_arg()?;
+
+                self.tracker.write_with(|state| {
+                    let other_bucket = state.take_bucket(other_bucket_id)?;
+                    let bucket = state.get_bucket_mut(bucket_id)?;
+                    bucket.join(other_bucket)?;
+                    Ok(InvokeResult::encode(&bucket_id)?)
+                })
+            },
             BucketAction::RevealConfidential => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "bucket_ref",

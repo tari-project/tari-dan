@@ -423,6 +423,7 @@ pub enum BucketAction {
     GetAmount,
     Take,
     TakeConfidential,
+    Join,
     RevealConfidential,
     Burn,
     CreateProof,

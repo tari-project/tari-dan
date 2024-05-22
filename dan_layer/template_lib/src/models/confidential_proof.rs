@@ -31,12 +31,12 @@ pub struct ConfidentialOutputStatement {
 
 impl ConfidentialOutputStatement {
     /// Creates an output proof for minting which only mints a revealed amount.
-    pub fn mint_revealed(amount: Amount) -> Self {
+    pub fn mint_revealed<T: Into<Amount>>(amount: T) -> Self {
         Self {
             output_statement: None,
             change_statement: None,
             range_proof: vec![],
-            output_revealed_amount: amount,
+            output_revealed_amount: amount.into(),
             change_revealed_amount: Amount::zero(),
         }
     }
@@ -145,11 +145,12 @@ pub struct ConfidentialWithdrawProof {
 
 impl ConfidentialWithdrawProof {
     /// Creates a withdrawal proof for revealed funds of a specific amount
-    pub fn revealed_withdraw(amount: Amount) -> Self {
+    pub fn revealed_withdraw<T: Into<Amount>>(amount: T) -> Self {
         // There are no confidential inputs or outputs (this amounts to the same thing as a Fungible resource transfer)
         // So signature s = 0 + e.x where x is a 0 excess, is valid.
         let balance_proof = BalanceProofSignature::try_from_parts(&[0u8; 32], &[0u8; 32]).unwrap();
 
+        let amount = amount.into();
         Self {
             inputs: vec![],
             input_revealed_amount: amount,
