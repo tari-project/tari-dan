@@ -139,7 +139,7 @@ where TConsensusSpec: ConsensusSpec
         }
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
-        let local_committee_shard = self.epoch_manager.get_local_committee_info(epoch).await?;
+        let local_committee_info = self.epoch_manager.get_local_committee_info(epoch).await?;
         let (current_base_layer_block_height, current_base_layer_block_hash) =
             self.epoch_manager.current_base_layer_block_info().await?;
         let (high_qc, qc_block, locked_block) = self.store.with_read_tx(|tx| {
@@ -191,7 +191,7 @@ where TConsensusSpec: ConsensusSpec
                 &leaf_block,
                 high_qc,
                 validator.public_key,
-                &local_committee_shard,
+                &local_committee_info,
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
                 //       is a good idea.
                 is_newview_propose,
@@ -208,10 +208,20 @@ where TConsensusSpec: ConsensusSpec
                 executed_transactions.len(),
                 next_block.id()
             );
-            for executed in executed_transactions.into_values() {
-                executed
-                    .into_execution_for_block(*next_block.id())
-                    .insert_if_required(tx)?;
+            for mut executed in executed_transactions.into_values() {
+                // TODO: This is a hacky workaround, if the executed transaction has no shards after execution, we
+                // remove it from the pool so that it does not get proposed again. Ideally we should be
+                // able to catch this in transaction validation.
+                if local_committee_info.count_distinct_shards(executed.involved_addresses_iter()) == 0 {
+                    self.transaction_pool.remove(tx, *executed.id())?;
+                    executed
+                        .set_abort("Transaction has no involved shards after execution")
+                        .update(tx)?;
+                } else {
+                    executed
+                        .into_execution_for_block(*next_block.id())
+                        .insert_if_required(tx)?;
+                }
             }
 
             next_block.as_last_proposed().set(tx)?;
@@ -286,7 +296,7 @@ where TConsensusSpec: ConsensusSpec
         executed_transactions: &mut HashMap<TransactionId, ExecutedTransaction>,
     ) -> Result<Option<Command>, HotStuffError> {
         // Execute deferred transaction
-        let num_involved_shards = if tx_rec.is_deferred() {
+        if tx_rec.is_deferred() {
             info!(
                 target: LOG_TARGET,
                 "👨‍🔧 PROPOSE: Executing deferred transaction {}",
@@ -297,19 +307,31 @@ where TConsensusSpec: ConsensusSpec
             // Update the decision so that we can propose it
             tx_rec.set_local_decision(executed.decision());
             tx_rec.set_initial_evidence(executed.to_initial_evidence());
+            tx_rec.set_transaction_fee(executed.transaction_fee());
             executed_transactions.insert(*executed.id(), executed);
-            // update involved shards since that may have changed after execution
-            local_committee_info.count_distinct_shards(tx_rec.atom().evidence.substate_addresses_iter())
         } else if tx_rec.current_decision().is_commit() && tx_rec.current_stage().is_new() {
-            // Executed in mempool add to this blocks executed transactions
+            // Executed in mempool. Add to this block's executed transactions
             let executed = ExecutedTransaction::get(tx, tx_rec.transaction_id())?;
             tx_rec.set_local_decision(executed.decision());
             tx_rec.set_initial_evidence(executed.to_initial_evidence());
+            tx_rec.set_transaction_fee(executed.transaction_fee());
             executed_transactions.insert(*executed.id(), executed);
-            local_committee_info.count_distinct_shards(tx_rec.atom().evidence.substate_addresses_iter())
         } else {
-            local_committee_info.count_distinct_shards(tx_rec.atom().evidence.substate_addresses_iter())
+            // Continue...
         };
+
+        let num_involved_shards =
+            local_committee_info.count_distinct_shards(tx_rec.atom().evidence.substate_addresses_iter());
+
+        if num_involved_shards == 0 {
+            warn!(
+                target: LOG_TARGET,
+                "Transaction {} has no involved shards, skipping...",
+                tx_rec.transaction_id(),
+            );
+
+            return Ok(None);
+        }
 
         // If the transaction is local only, propose LocalOnly. If the transaction is not new, it must have been
         // previously prepared in a multi-shard command (TBD if that a valid thing to do).

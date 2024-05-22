@@ -38,6 +38,8 @@ pub enum SubstateStoreError {
 
     #[error(transparent)]
     StoreError(#[from] StorageError),
+    #[error(transparent)]
+    StateTreeError(#[from] tari_state_tree::StateTreeError),
 }
 
 impl IsNotFoundError for SubstateStoreError {

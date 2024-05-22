@@ -54,9 +54,8 @@ impl ExecutionOutput {
         &self,
         inputs: IndexMap<VersionedSubstateId, Substate>,
     ) -> IndexSet<VersionedSubstateIdLockIntent> {
-        let mut resolved_inputs = IndexSet::new();
         if let Some(diff) = self.result.finalize.accept() {
-            resolved_inputs = inputs
+            inputs
                 .into_iter()
                 .map(|(versioned_id, _)| {
                     let lock_flag = if diff.down_iter().any(|(id, _)| *id == versioned_id.substate_id) {
@@ -68,9 +67,15 @@ impl ExecutionOutput {
                     };
                     VersionedSubstateIdLockIntent::new(versioned_id, lock_flag)
                 })
-                .collect::<IndexSet<_>>();
+                .collect()
+        } else {
+            // TODO: we might want to have a SubstateLockFlag::None for rejected transactions so that we still know the
+            // shards involved but do not lock them. We dont actually lock anything for rejected transactions anyway.
+            inputs
+                .into_iter()
+                .map(|(versioned_id, _)| VersionedSubstateIdLockIntent::new(versioned_id, SubstateLockFlag::Read))
+                .collect()
         }
-        resolved_inputs
     }
 }
 

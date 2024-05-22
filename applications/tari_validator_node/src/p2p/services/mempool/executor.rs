@@ -62,10 +62,10 @@ where
 
     if !foreign.is_empty() {
         info!(target: LOG_TARGET, "Unable to execute transaction {} in the mempool because it has foreign inputs: {:?}", transaction.id(), foreign);
-        return Ok(Err(MempoolError::MustDeferExecution {
+        return Err(MempoolError::MustDeferExecution {
             local_substates,
             foreign_substates: foreign,
-        }));
+        });
     }
 
     info!(target: LOG_TARGET, "🎱 Transaction {} resolved local inputs = [{}]", transaction.id(), local_substates.keys().map(|addr| addr.to_string()).collect::<Vec<_>>().join(", "));

@@ -74,6 +74,15 @@ impl TransactionExecution {
     pub fn to_initial_evidence(&self) -> Evidence {
         Evidence::from_inputs_and_outputs(self.transaction_id, &self.resolved_inputs, &self.resulting_outputs)
     }
+
+    pub fn transaction_fee(&self) -> u64 {
+        self.result
+            .finalize
+            .fee_receipt
+            .total_fees_paid()
+            .as_u64_checked()
+            .unwrap()
+    }
 }
 
 impl TransactionExecution {
