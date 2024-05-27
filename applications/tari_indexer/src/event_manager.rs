@@ -40,7 +40,7 @@ use tari_template_lib::{models::Metadata, Hash};
 use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory};
 
-use crate::substate_storage_sqlite::{
+use crate::{config::EventFilterConfig, substate_storage_sqlite::{
     models::events::{NewEvent, NewScannedBlockId},
     sqlite_substate_store_factory::{
         SqliteSubstateStore,
@@ -48,7 +48,7 @@ use crate::substate_storage_sqlite::{
         SubstateStoreReadTransaction,
         SubstateStoreWriteTransaction,
     },
-};
+}};
 
 const LOG_TARGET: &str = "tari::indexer::event_manager";
 
@@ -57,6 +57,7 @@ pub struct EventManager {
     epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
     client_factory: TariValidatorNodeRpcClientFactory,
     substate_store: SqliteSubstateStore,
+    event_filters: Vec<EventFilterConfig>,
 }
 
 impl EventManager {
@@ -65,12 +66,14 @@ impl EventManager {
         epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
         client_factory: TariValidatorNodeRpcClientFactory,
         substate_store: SqliteSubstateStore,
+        event_filters: Vec<EventFilterConfig>,
     ) -> Self {
         Self {
             network,
             epoch_manager,
             client_factory,
             substate_store,
+            event_filters,
         }
     }
 
@@ -112,7 +115,8 @@ impl EventManager {
             for transaction_id in transaction_ids {
                 let events = self.get_events_for_transaction(transaction_id).await?;
                 event_count += events.len();
-                self.store_events_in_db(&events).await?;
+                let filtered_events = events.into_iter().filter(|ev| self.should_persist_event(ev)).collect();
+                self.store_events_in_db(&filtered_events).await?;
             }
         }
 
@@ -123,6 +127,37 @@ impl EventManager {
         );
 
         Ok(event_count)
+    }
+
+    fn should_persist_event(&self, event: &Event) -> bool {
+        for filter in &self.event_filters {
+            if Self::event_matches_filter(filter, event) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    fn event_matches_filter(filter: &EventFilterConfig, event: &Event) -> bool {
+        let matches_topic = filter.topic.as_ref().map_or(true, |t| *t == event.topic());
+        let matches_template = filter.template_address.as_ref().map_or(true, |t| *t == event.template_address().to_string());
+
+        let matches_substate_id = match &filter.substate_id {
+            Some(substate_id) => event.substate_id().map(|s| s.to_string() == *substate_id).unwrap_or(false),
+            None => true,
+        };
+
+        let matches_entity_id = match &filter.entity_id {
+            Some(entity_id) => event.substate_id().map(|s| s.to_string().starts_with(entity_id)).unwrap_or(false),
+            None => true,
+        };
+
+        if matches_topic && matches_template && matches_substate_id && matches_entity_id {
+            return true;
+        }
+
+        return false;
     }
 
     pub async fn get_events_from_db(

@@ -168,6 +168,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         Box::new(services.epoch_manager.clone()),
         services.validator_node_client_factory.clone(),
         services.substate_store.clone(),
+        config.indexer.event_filters,
     ));
 
     // Run the GraphQL API

@@ -157,8 +157,8 @@ impl SubConfigPath for IndexerConfig {
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct EventFilterConfig {
-    topic: Option<String>,
-    entity_id: Option<String>,
-    substate_id: Option<String>,
-    template_address: Option<String>,
+    pub topic: Option<String>,
+    pub entity_id: Option<String>,
+    pub substate_id: Option<String>,
+    pub template_address: Option<String>,
 }
