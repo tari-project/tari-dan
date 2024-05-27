@@ -100,8 +100,10 @@ pub struct IndexerConfig {
     pub sidechain_id: Option<RistrettoPublicKey>,
     /// The templates sidechain id
     pub templates_sidechain_id: Option<RistrettoPublicKey>,
-    /// the burnt utxos sidechain id
+    /// The burnt utxos sidechain id
     pub burnt_utxo_sidechain_id: Option<RistrettoPublicKey>,
+    /// The event filtering configuration. If no filter is specified, the indexer stores ALL events in the network
+    pub event_filters: Vec<EventFilterConfig>,
 }
 
 impl IndexerConfig {
@@ -142,6 +144,7 @@ impl Default for IndexerConfig {
             sidechain_id: None,
             templates_sidechain_id: None,
             burnt_utxo_sidechain_id: None,
+            event_filters: vec![],
         }
     }
 }
@@ -150,4 +153,12 @@ impl SubConfigPath for IndexerConfig {
     fn main_key_prefix() -> &'static str {
         "indexer"
     }
+}
+
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
+pub struct EventFilterConfig {
+    topic: Option<String>,
+    entity_id: Option<String>,
+    substate_id: Option<String>,
+    template_address: Option<String>,
 }
