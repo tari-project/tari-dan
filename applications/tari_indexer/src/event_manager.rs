@@ -41,7 +41,7 @@ use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory};
 
 use crate::{config::EventFilterConfig, event_data::EventData, substate_storage_sqlite::{
-    models::events::{NewEvent, NewScannedBlockId},
+    models::{events::{NewEvent, NewScannedBlockId}, substate::NewSubstate},
     sqlite_substate_store_factory::{
         SqliteSubstateStore,
         SubstateStore,
@@ -191,7 +191,7 @@ impl EventManager {
         let mut tx = self.substate_store.create_write_tx()?;
 
         for data in events_data {
-            let row = NewEvent {
+            let event_row = NewEvent {
                 template_address: data.event.template_address().to_string(),
                 tx_hash: data.event.tx_hash().to_string(),
                 topic: data.event.topic(),
@@ -202,20 +202,38 @@ impl EventManager {
 
             // TODO: properly avoid or handle duplicated events
             //       For now we will just check if a similar event exists in the db
-            let event_already_exists = tx.event_exists(row.clone())?;
+            let event_already_exists = tx.event_exists(event_row.clone())?;
             if event_already_exists {
-                // the event is was already stored previously
+                // the event was already stored previously
+                warn!(
+                    target: LOG_TARGET,
+                    "Duplicated event {:}",
+                    data.event
+                );
                 continue;
             }
 
-            tx.save_event(row)?;
+            tx.save_event(event_row)?;
 
-            // TODO: store substate in db
+            // store/update the related substate if any
+            if let (Some(substate_id), Some(substate)) = (data.event.substate_id(), &data.substate) {
+                let substate_row = NewSubstate {
+                    address: substate_id.to_string(),
+                    version: i64::from(substate.version()),
+                    data: Self::encode_substate(&substate)?,
+                };
+                tx.set_substate(substate_row)?;
+            }
         }
 
         tx.commit()?;
 
         Ok(())
+    }
+
+    fn encode_substate(substate: &Substate) -> Result<String, anyhow::Error> {
+        let pretty_json = serde_json::to_string_pretty(&substate)?;
+        Ok(pretty_json)
     }
 
     async fn get_events_for_transaction(&self, transaction_id: TransactionId) -> Result<Vec<EventData>, anyhow::Error> {
@@ -230,7 +248,7 @@ impl EventManager {
                         let events = self.extract_events_from_transaction_result(execute_result);
                         return Ok(events);
                     } else {
-                        // The transaction is not successful, we don't return any events
+                        // The transaction is not successful, so we don't return any events
                         return Ok(vec![]);
                     }
                 },
