@@ -48,7 +48,9 @@
 # List of filters for events that we want to persist in the indexer database
 # If an event matches ANY of the filters, it will be persisted
 # We can have as many "[[indexer.event_filters]]" sections as we want, each one will be a filter
-# By default no filters are included, so the network does not persist any events
+
+# By default there is an empty filter that will match ALL events, making the indexer persist the entire network
+[[indexer.event_filters]]
 
 # Fields are "topic", "entity_id", "substate_id" and "template_address"
 #[[indexer.event_filters]]
@@ -63,5 +65,3 @@
 #topic = "another topic"
 #substate_id = "component_00000000000000000000000000000000000000000000000000000000"
 
-# An empty filter will match ALL events, making the indexer persist the entire network
-#[[indexer.event_filters]]

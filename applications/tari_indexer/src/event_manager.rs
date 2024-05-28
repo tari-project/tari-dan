@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     str::FromStr,
 };
 
@@ -34,7 +34,7 @@ use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, PeerAddress};
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
 use tari_dan_storage::consensus_models::{Block, BlockId, Command, Decision, TransactionRecord};
-use tari_engine_types::{commit_result::ExecuteResult, events::Event, substate::SubstateId};
+use tari_engine_types::{commit_result::{ExecuteResult, TransactionResult}, events::Event, substate::{Substate, SubstateId}};
 use tari_epoch_manager::EpochManagerReader;
 use tari_template_lib::{models::Metadata, Hash};
 use tari_transaction::{Transaction, TransactionId};
@@ -113,8 +113,11 @@ impl EventManager {
             );
 
             for transaction_id in transaction_ids {
+                // fetch all the events in the transaction
                 let events = self.get_events_for_transaction(transaction_id).await?;
                 event_count += events.len();
+
+                // only keep the events specified by the indexer filter
                 let filtered_events = events.into_iter().filter(|ev| self.should_persist_event(ev)).collect();
                 self.store_events_in_db(&filtered_events).await?;
             }
@@ -222,7 +225,8 @@ impl EventManager {
             match resp {
                 Ok(res) => {
                     if let Some(execute_result) = res {
-                        return Ok(execute_result.finalize.events);
+                        let events = self.extract_events_from_transaction_result(execute_result);
+                        return Ok(events);
                     } else {
                         // The transaction is not successful, we don't return any events
                         return Ok(vec![]);
@@ -275,6 +279,32 @@ impl EventManager {
                 }
             },
             _ => Ok(None),
+        }
+    }
+
+    fn extract_events_from_transaction_result(&self, result: ExecuteResult) -> Vec<Event> {
+        if let TransactionResult::Accept(substate_diff) = result.finalize.result {
+            let events = result.finalize.events;
+
+            let substates: HashMap<SubstateId, Substate> = substate_diff.into_up_iter().collect();
+
+            // TODO: add the substates to the events
+            for event in &events {
+                if let Some(substate_id) = event.substate_id() {
+                    let substate = substates.get(&substate_id).unwrap();
+                    info!(
+                        target: LOG_TARGET,
+                        "Substate {}({} bytes) for event {}",
+                        substate_id,
+                        substate.substate_value().to_bytes().len(),
+                        event.topic()
+                    );
+                }
+            }
+
+            return events;
+        } else {
+            return vec![]
         }
     }
 
