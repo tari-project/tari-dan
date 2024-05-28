@@ -47,13 +47,9 @@ use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_client::{
     types,
     types::{
-        AddAddressRequest,
         AddPeerRequest,
         AddPeerResponse,
-        ClearAddressesResponse,
         ConnectionDirection,
-        DeleteAddressRequest,
-        GetAddressesResponse,
         GetAllVnsRequest,
         GetAllVnsResponse,
         GetCommsStatsResponse,
@@ -392,71 +388,6 @@ impl JsonRpcHandlers {
             substate: resp.substate,
             created_by_transaction: resp.created_by_transaction,
         }))
-    }
-
-    pub async fn get_addresses(&self, value: JsonRpcExtractor) -> JrpcResult {
-        let answer_id = value.get_answer_id();
-
-        let res = self.substate_manager.get_all_addresses_from_db().await;
-
-        match res {
-            Ok(addresses) => Ok(JsonRpcResponse::success(answer_id, GetAddressesResponse { addresses })),
-            Err(e) => {
-                warn!(target: LOG_TARGET, "Error getting addresses: {}", e);
-                Err(Self::internal_error(
-                    answer_id,
-                    format!("Error getting addresses: {}", e),
-                ))
-            },
-        }
-    }
-
-    pub async fn add_address(&self, value: JsonRpcExtractor) -> JrpcResult {
-        let answer_id = value.get_answer_id();
-        let request: AddAddressRequest = value.parse_params()?;
-
-        match self
-            .substate_manager
-            .fetch_and_add_substate_to_db(&request.address)
-            .await
-        {
-            Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
-            Err(e) => {
-                warn!(target: LOG_TARGET, "Error adding address: {}", e);
-                Err(Self::internal_error(answer_id, format!("Error adding address: {}", e)))
-            },
-        }
-    }
-
-    pub async fn delete_address(&self, value: JsonRpcExtractor) -> JrpcResult {
-        let answer_id = value.get_answer_id();
-        let request: DeleteAddressRequest = value.parse_params()?;
-
-        match self.substate_manager.delete_substate_from_db(&request.address).await {
-            Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
-            Err(e) => {
-                warn!(target: LOG_TARGET, "Error deleting address: {}", e);
-                Err(Self::internal_error(
-                    answer_id,
-                    format!("Error deleting address: {}", e),
-                ))
-            },
-        }
-    }
-
-    pub async fn clear_addresses(&self, value: JsonRpcExtractor) -> JrpcResult {
-        let answer_id = value.get_answer_id();
-
-        match self.substate_manager.delete_all_substates_from_db().await {
-            Ok(_) => Ok(JsonRpcResponse::success(answer_id, ClearAddressesResponse {})),
-            Err(e) => {
-                warn!(target: LOG_TARGET, "Error clearing addresses: {}", e);
-                Err(Self::internal_error(
-                    answer_id,
-                    format!("Error clearing addresses: {}", e),
-                ))
-            },
-        }
     }
 
     pub async fn get_non_fungible_collections(&self, value: JsonRpcExtractor) -> JrpcResult {

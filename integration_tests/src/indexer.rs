@@ -65,13 +65,6 @@ pub struct IndexerProcess {
 }
 
 impl IndexerProcess {
-    pub async fn add_address(&self, world: &TariWorld, output_ref: String) {
-        let address = get_address_from_output(world, output_ref);
-
-        let mut jrpc_client = self.get_jrpc_indexer_client();
-        jrpc_client.add_address(address.clone()).await.unwrap();
-    }
-
     pub async fn get_substate(&self, world: &TariWorld, output_ref: String, version: u32) -> GetSubstateResponse {
         let address = get_address_from_output(world, output_ref);
 

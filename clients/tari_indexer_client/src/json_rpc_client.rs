@@ -24,15 +24,12 @@ use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
-use tari_engine_types::substate::SubstateId;
 
 use crate::{
     error::IndexerClientError,
     types::{
-        AddAddressRequest,
         AddPeerRequest,
         AddPeerResponse,
-        DeleteAddressRequest,
         GetEpochManagerStatsResponse,
         GetNonFungiblesRequest,
         GetNonFungiblesResponse,
@@ -80,10 +77,6 @@ impl IndexerJsonRpcClient {
         self.send_request("add_peer", request).await
     }
 
-    pub async fn add_address(&mut self, address: SubstateId) -> Result<(), IndexerClientError> {
-        self.send_request("add_address", AddAddressRequest { address }).await
-    }
-
     pub async fn get_substate(&mut self, req: GetSubstateRequest) -> Result<GetSubstateResponse, IndexerClientError> {
         self.send_request("get_substate", req).await
     }
@@ -107,10 +100,6 @@ impl IndexerJsonRpcClient {
         req: GetTemplateDefinitionRequest,
     ) -> Result<GetTemplateDefinitionResponse, IndexerClientError> {
         self.send_request("get_template_definition", req).await
-    }
-
-    pub async fn delete_address(&mut self, req: DeleteAddressRequest) -> Result<(), IndexerClientError> {
-        self.send_request("delete_address", req).await
     }
 
     pub async fn get_non_fungibles(
