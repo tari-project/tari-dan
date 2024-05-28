@@ -40,7 +40,7 @@ use tari_template_lib::{models::Metadata, Hash};
 use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory};
 
-use crate::{config::EventFilterConfig, substate_storage_sqlite::{
+use crate::{config::EventFilterConfig, event_data::EventData, substate_storage_sqlite::{
     models::events::{NewEvent, NewScannedBlockId},
     sqlite_substate_store_factory::{
         SqliteSubstateStore,
@@ -132,9 +132,9 @@ impl EventManager {
         Ok(event_count)
     }
 
-    fn should_persist_event(&self, event: &Event) -> bool {
+    fn should_persist_event(&self, event_data: &EventData) -> bool {
         for filter in &self.event_filters {
-            if Self::event_matches_filter(filter, event) {
+            if Self::event_matches_filter(filter, &event_data.event) {
                 return true;
             }
         }
@@ -187,16 +187,16 @@ impl EventManager {
         Ok(events)
     }
 
-    async fn store_events_in_db(&self, events: &Vec<Event>) -> Result<(), anyhow::Error> {
+    async fn store_events_in_db(&self, events_data: &Vec<EventData>) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
 
-        for event in events {
+        for data in events_data {
             let row = NewEvent {
-                template_address: event.template_address().to_string(),
-                tx_hash: event.tx_hash().to_string(),
-                topic: event.topic(),
-                payload: event.payload().to_json().expect("Failed to convert to JSON"),
-                substate_id: event.substate_id().map(|s| s.to_string()),
+                template_address: data.event.template_address().to_string(),
+                tx_hash: data.event.tx_hash().to_string(),
+                topic: data.event.topic(),
+                payload: data.event.payload().to_json().expect("Failed to convert to JSON"),
+                substate_id: data.event.substate_id().map(|s| s.to_string()),
                 version: 0_i32,
             };
 
@@ -209,6 +209,8 @@ impl EventManager {
             }
 
             tx.save_event(row)?;
+
+            // TODO: store substate in db
         }
 
         tx.commit()?;
@@ -216,7 +218,7 @@ impl EventManager {
         Ok(())
     }
 
-    async fn get_events_for_transaction(&self, transaction_id: TransactionId) -> Result<Vec<Event>, anyhow::Error> {
+    async fn get_events_for_transaction(&self, transaction_id: TransactionId) -> Result<Vec<EventData>, anyhow::Error> {
         let committee = self.get_all_vns().await?;
 
         for member in &committee {
@@ -282,25 +284,24 @@ impl EventManager {
         }
     }
 
-    fn extract_events_from_transaction_result(&self, result: ExecuteResult) -> Vec<Event> {
+    fn extract_events_from_transaction_result(&self, result: ExecuteResult) -> Vec<EventData> {
         if let TransactionResult::Accept(substate_diff) = result.finalize.result {
-            let events = result.finalize.events;
-
             let substates: HashMap<SubstateId, Substate> = substate_diff.into_up_iter().collect();
 
-            // TODO: add the substates to the events
-            for event in &events {
-                if let Some(substate_id) = event.substate_id() {
-                    let substate = substates.get(&substate_id).unwrap();
-                    info!(
-                        target: LOG_TARGET,
-                        "Substate {}({} bytes) for event {}",
-                        substate_id,
-                        substate.substate_value().to_bytes().len(),
-                        event.topic()
-                    );
-                }
-            }
+            let events = result.finalize.events
+                .into_iter()
+                .map(|event| {
+                    let substate = if let Some(substate_id) = event.substate_id() {
+                        substates.get(&substate_id).cloned()
+                    } else {
+                        None
+                    };
+
+                    EventData {
+                        event,
+                        substate,
+                    }
+                }).collect();
 
             return events;
         } else {

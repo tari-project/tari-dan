@@ -32,6 +32,7 @@ mod dry_run;
 pub mod graphql;
 mod http_ui;
 
+mod event_data;
 mod event_manager;
 mod json_rpc;
 mod substate_manager;
