@@ -310,9 +310,11 @@ async fn scaffold(args: ScaffoldArgs) -> anyhow::Result<()> {
     let request = json!({
         "jsonrpc" : "2.0",
         "method": "get_template",
-        "params": [hex::decode(args.template_address)?],
+        //"params": [hex::decode(args.template_address)?],
+        "params": [args.template_address],
         "id": 1
     });
+
     let response = reqwest::Client::new()
         .post(jrpc_url)
         .json(&request)
@@ -320,6 +322,7 @@ async fn scaffold(args: ScaffoldArgs) -> anyhow::Result<()> {
         .send()
         .await?;
     let response = response.json::<Value>().await?;
+    dbg!(&response);
     let name: &str = response["result"]["registration_metadata"]["name"]
         .as_str()
         .unwrap_or("unnamed.wasm");
