@@ -19,6 +19,7 @@ use tari_transaction::TransactionId;
 use crate::{
     consensus_models::{
         Decision,
+        Evidence,
         LeafBlock,
         LockedBlock,
         QcId,
@@ -131,7 +132,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
 
     pub fn get(
         &self,
-        tx: &mut TStateStore::ReadTransaction<'_>,
+        tx: &TStateStore::ReadTransaction<'_>,
         leaf: LeafBlock,
         id: &TransactionId,
     ) -> Result<TransactionPoolRecord, TransactionPoolError> {
@@ -145,13 +146,13 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
             leaf,
             locked,
         );
-        let rec = tx.transaction_pool_get(locked.block_id(), leaf.block_id(), id)?;
+        let rec = tx.transaction_pool_get_for_blocks(locked.block_id(), leaf.block_id(), id)?;
         Ok(rec)
     }
 
     pub fn exists(
         &self,
-        tx: &mut TStateStore::ReadTransaction<'_>,
+        tx: &TStateStore::ReadTransaction<'_>,
         id: &TransactionId,
     ) -> Result<bool, TransactionPoolError> {
         let exists = tx.transaction_pool_exists(id)?;
@@ -178,7 +179,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
 
     pub fn get_batch_for_next_block(
         &self,
-        tx: &mut TStateStore::ReadTransaction<'_>,
+        tx: &TStateStore::ReadTransaction<'_>,
         max: usize,
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
         let recs = tx.transaction_pool_get_many_ready(max)?;
@@ -187,7 +188,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
 
     pub fn has_uncommitted_transactions(
         &self,
-        tx: &mut TStateStore::ReadTransaction<'_>,
+        tx: &TStateStore::ReadTransaction<'_>,
     ) -> Result<bool, TransactionPoolError> {
         let count = tx.transaction_pool_count(None, Some(true), None)?;
         if count > 0 {
@@ -224,7 +225,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         Ok(count > 0)
     }
 
-    pub fn count(&self, tx: &mut TStateStore::ReadTransaction<'_>) -> Result<usize, TransactionPoolError> {
+    pub fn count(&self, tx: &TStateStore::ReadTransaction<'_>) -> Result<usize, TransactionPoolError> {
         let count = tx.transaction_pool_count(None, None, None)?;
         Ok(count)
     }
@@ -239,6 +240,28 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         tx.transaction_pool_set_all_transitions(locked_block, new_locked_block, tx_ids)?;
         Ok(())
     }
+
+    pub fn remove_all<'a, I: IntoIterator<Item = &'a TransactionId>>(
+        &self,
+        tx: &mut TStateStore::WriteTransaction<'_>,
+        tx_ids: I,
+    ) -> Result<Vec<TransactionAtom>, TransactionPoolError> {
+        TransactionPoolRecord::remove_all(tx, tx_ids)
+    }
+
+    pub fn remove(
+        &self,
+        tx: &mut TStateStore::WriteTransaction<'_>,
+        id: TransactionId,
+    ) -> Result<TransactionAtom, TransactionPoolError> {
+        let atom = TransactionPoolRecord::remove_all(tx, &[id])?.pop().ok_or_else(|| {
+            TransactionPoolError::StorageError(StorageError::NotFound {
+                item: "TransactionPoolRecord".to_string(),
+                key: id.to_string(),
+            })
+        })?;
+        Ok(atom)
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -248,7 +271,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
     ts(export, export_to = "../../bindings/src/types/")
 )]
 pub struct TransactionPoolRecord {
-    transaction: TransactionAtom,
+    atom: TransactionAtom,
     stage: TransactionPoolStage,
     pending_stage: Option<TransactionPoolStage>,
     local_decision: Option<Decision>,
@@ -266,7 +289,7 @@ impl TransactionPoolRecord {
         is_ready: bool,
     ) -> Self {
         Self {
-            transaction,
+            atom: transaction,
             stage,
             pending_stage,
             local_decision,
@@ -277,14 +300,14 @@ impl TransactionPoolRecord {
 
     pub fn current_decision(&self) -> Decision {
         self.remote_decision()
-            // Prioritize remote ABORT
+            // Prioritize remote ABORT i.e. if accept we look at our local decision
             .filter(|d| d.is_abort())
             .or_else(|| self.local_decision())
             .unwrap_or(self.original_decision())
     }
 
     pub fn is_deferred(&self) -> bool {
-        self.original_decision().is_deferred()
+        self.current_local_decision().is_deferred()
     }
 
     pub fn current_local_decision(&self) -> Decision {
@@ -292,7 +315,7 @@ impl TransactionPoolRecord {
     }
 
     pub fn original_decision(&self) -> Decision {
-        self.transaction.decision
+        self.atom.decision
     }
 
     pub fn local_decision(&self) -> Option<Decision> {
@@ -304,11 +327,15 @@ impl TransactionPoolRecord {
     }
 
     pub fn transaction_id(&self) -> &TransactionId {
-        &self.transaction.id
+        &self.atom.id
     }
 
-    pub fn transaction(&self) -> &TransactionAtom {
-        &self.transaction
+    pub fn atom(&self) -> &TransactionAtom {
+        &self.atom
+    }
+
+    pub fn into_atom(self) -> TransactionAtom {
+        self.atom
     }
 
     pub fn stage(&self) -> TransactionPoolStage {
@@ -331,19 +358,19 @@ impl TransactionPoolRecord {
         TransactionAtom {
             decision: self.current_decision(),
             leader_fee: Some(leader_fee),
-            ..self.transaction.clone()
+            ..self.atom.clone()
         }
     }
 
     pub fn get_local_transaction_atom(&self) -> TransactionAtom {
         TransactionAtom {
             decision: self.current_local_decision(),
-            ..self.transaction.clone()
+            ..self.atom.clone()
         }
     }
 
     pub fn calculate_leader_fee(&self, num_involved_shards: NonZeroU64, exhaust_divisor: u64) -> LeaderFee {
-        let transaction_fee = self.transaction.transaction_fee;
+        let transaction_fee = self.atom.transaction_fee;
         let target_burn = transaction_fee.checked_div(exhaust_divisor).unwrap_or(0);
         let block_fee_after_burn = transaction_fee - target_burn;
 
@@ -388,8 +415,18 @@ impl TransactionPoolRecord {
         self
     }
 
+    pub fn set_initial_evidence(&mut self, evidence: Evidence) -> &mut Self {
+        self.atom.evidence = evidence;
+        self
+    }
+
+    pub fn set_transaction_fee(&mut self, transaction_fee: u64) -> &mut Self {
+        self.atom.transaction_fee = transaction_fee;
+        self
+    }
+
     pub fn add_evidence(&mut self, committee_info: &CommitteeInfo, qc_id: QcId) -> &mut Self {
-        let evidence = &mut self.transaction.evidence;
+        let evidence = &mut self.atom.evidence;
         for (address, evidence_mut) in evidence.iter_mut() {
             if committee_info.includes_substate_address(address) {
                 evidence_mut.qc_ids.insert(qc_id);
@@ -430,14 +467,14 @@ impl TransactionPoolRecord {
         let update = TransactionPoolStatusUpdate {
             block_id: block.block_id,
             block_height: block.height,
-            transaction_id: self.transaction.id,
+            transaction_id: self.atom.id,
             stage: pending_stage,
-            evidence: self.transaction.evidence.clone(),
+            evidence: self.atom.evidence.clone(),
             is_ready,
             local_decision: self.current_local_decision(),
         };
 
-        tx.transaction_pool_add_pending_update(update)?;
+        tx.transaction_pool_add_pending_update(&update)?;
         self.pending_stage = Some(pending_stage);
 
         Ok(())
@@ -452,12 +489,7 @@ impl TransactionPoolRecord {
     ) -> Result<(), TransactionPoolError> {
         self.add_evidence(foreign_committee_info, foreign_qc_id);
         self.set_remote_decision(decision);
-        tx.transaction_pool_update(
-            &self.transaction.id,
-            None,
-            Some(decision),
-            Some(&self.transaction.evidence),
-        )?;
+        tx.transaction_pool_update(&self.atom.id, None, Some(decision), Some(&self.atom.evidence))?;
         Ok(())
     }
 
@@ -468,13 +500,13 @@ impl TransactionPoolRecord {
     ) -> Result<(), TransactionPoolError> {
         if self.local_decision.map(|d| d != decision).unwrap_or(true) {
             self.set_local_decision(decision);
-            tx.transaction_pool_update(&self.transaction.id, Some(decision), None, None)?;
+            tx.transaction_pool_update(&self.atom.id, Some(decision), None, None)?;
         }
         Ok(())
     }
 
     pub fn remove<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), TransactionPoolError> {
-        tx.transaction_pool_remove(&self.transaction.id)?;
+        tx.transaction_pool_remove(&self.atom.id)?;
         Ok(())
     }
 
@@ -490,12 +522,32 @@ impl TransactionPoolRecord {
         Ok(())
     }
 
+    pub fn remove_all<'a, TTx, I>(
+        tx: &mut TTx,
+        transaction_ids: I,
+    ) -> Result<Vec<TransactionAtom>, TransactionPoolError>
+    where
+        TTx: StateStoreWriteTransaction,
+        I: IntoIterator<Item = &'a TransactionId>,
+    {
+        let atoms = tx.transaction_pool_remove_all(transaction_ids)?;
+        Ok(atoms)
+    }
+
     pub fn get_transaction<TTx: StateStoreReadTransaction>(
         &self,
-        tx: &mut TTx,
+        tx: &TTx,
     ) -> Result<TransactionRecord, TransactionPoolError> {
         let transaction = TransactionRecord::get(tx, self.transaction_id())?;
         Ok(transaction)
+    }
+
+    pub fn get<TTx: StateStoreReadTransaction>(
+        tx: &TTx,
+        id: &TransactionId,
+    ) -> Result<TransactionPoolRecord, TransactionPoolError> {
+        let rec = tx.transaction_pool_get(id)?;
+        Ok(rec)
     }
 }
 
@@ -560,7 +612,7 @@ mod tests {
 
         fn create_record_with_fee(fee: u64) -> TransactionPoolRecord {
             TransactionPoolRecord {
-                transaction: TransactionAtom {
+                atom: TransactionAtom {
                     id: TransactionId::new([0; 32]),
                     decision: Decision::Commit,
                     evidence: Default::default(),

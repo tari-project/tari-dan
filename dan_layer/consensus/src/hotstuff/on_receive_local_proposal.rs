@@ -5,25 +5,21 @@
 // ----[foreign:LocalPrepared]--->(LocalPrepared, true) ----cmd:AllPrepare ---> (AllPrepared, true) ---cmd:Accept --->
 // Complete
 
-use std::ops::{Deref, DerefMut};
-
 use log::*;
 use tari_common::configuration::Network;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
     optional::Optional,
-    shard::Shard,
     NodeHeight,
 };
 use tari_dan_storage::{
     consensus_models::{
         Block,
-        BlockId,
         Decision,
+        ExecutedTransaction,
         ForeignProposal,
-        ForeignSendCounters,
         HighQc,
-        PendingStateTreeDiff,
+        TransactionAtom,
         TransactionPool,
         TransactionPoolStage,
         TransactionRecord,
@@ -32,14 +28,11 @@ use tari_dan_storage::{
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_state_tree::StateHashTreeDiff;
 use tokio::sync::broadcast;
 
-use super::proposer::{self, Proposer};
+use super::proposer::Proposer;
 use crate::{
     hotstuff::{
-        calculate_state_merkle_diff,
-        diff_to_substate_changes,
         error::HotStuffError,
         on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
         pacemaker_handle::PaceMakerHandle,
@@ -73,11 +66,10 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         pacemaker: PaceMakerHandle,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
         vote_signing_service: TConsensusSpec::SignatureService,
-        state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
-        transaction_executor_builder: TConsensusSpec::BlockTransactionExecutorBuilder,
+        transaction_executor: TConsensusSpec::TransactionExecutor,
         network: Network,
         hooks: TConsensusSpec::Hooks,
     ) -> Self {
@@ -95,12 +87,11 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 epoch_manager,
                 vote_signing_service,
                 leader_strategy,
-                state_manager,
                 transaction_pool,
                 outbound_messaging,
                 tx_events,
                 proposer,
-                transaction_executor_builder,
+                transaction_executor,
                 network,
                 hooks,
             ),
@@ -145,19 +136,38 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .await?;
 
         let maybe_high_qc_and_block = self.store.with_write_tx(|tx| {
-            if block.exists(tx.deref_mut())? {
+            if block.exists(&**tx)? {
                 info!(target: LOG_TARGET, "🧊 Block {} already exists", block);
                 return Ok(None);
             }
 
-            let Some((valid_block, tree_diff)) =
-                self.validate_block_header(tx, block, &local_committee, &local_committee_shard)?
+            let Some(valid_block) = self.validate_block_header(tx, block, &local_committee, &local_committee_shard)?
             else {
                 return Ok(None);
             };
 
+            // Ensure all transactions are inserted in the pool
+            // TODO(hacky): If the block has transactions (invariant: we have the transaction stored at this point) but
+            // it's not in the pool (race condition: transaction
+            for tx_id in valid_block.block().all_transaction_ids() {
+                if self.transaction_pool.exists(&**tx, tx_id)? {
+                    continue;
+                }
+                let transaction = TransactionRecord::get(&**tx, tx_id)?;
+                // Did the mempool execute it?
+                if transaction.is_executed() {
+                    // This should never fail
+                    let executed = ExecutedTransaction::try_from(transaction)?;
+                    self.transaction_pool.insert(tx, executed.to_atom())?;
+                } else {
+                    // Deferred execution
+                    self.transaction_pool
+                        .insert(tx, TransactionAtom::deferred(*transaction.id()))?;
+                }
+            }
+
             // Save the block as soon as it is valid to ensure we have a valid pacemaker height.
-            let high_qc = self.save_block(tx, &valid_block, tree_diff)?;
+            let high_qc = self.save_block(tx, &valid_block)?;
             info!(target: LOG_TARGET, "✅ Block {} is valid and persisted. HighQc({})", valid_block, high_qc);
             Ok::<_, HotStuffError>(Some((high_qc, valid_block)))
         })?;
@@ -177,15 +187,11 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         valid_block: &ValidBlock,
-        tree_diff: StateHashTreeDiff,
     ) -> Result<HighQc, HotStuffError> {
         valid_block.block().save_foreign_send_counters(tx)?;
         valid_block.block().justify().save(tx)?;
         valid_block.save_all_dummy_blocks(tx)?;
         valid_block.block().save(tx)?;
-
-        // Store the tree diff for the block
-        PendingStateTreeDiff::new(*valid_block.id(), valid_block.height(), tree_diff).save(tx)?;
 
         let high_qc = valid_block.block().justify().update_high_qc(tx)?;
         Ok(high_qc)
@@ -197,19 +203,17 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_info: &CommitteeInfo,
-    ) -> Result<Option<(ValidBlock, StateHashTreeDiff)>, HotStuffError> {
+    ) -> Result<Option<ValidBlock>, HotStuffError> {
         let result = self
-            .validate_local_proposed_block(tx.deref_mut(), block, local_committee, local_committee_info)
+            .validate_local_proposed_block(&**tx, block, local_committee, local_committee_info)
             .and_then(|valid_block| {
+                // TODO: This should be moved out of validate_block_header. Then tx can be a read transaction
                 self.update_foreign_proposal_transactions(tx, valid_block.block())?;
                 Ok(valid_block)
-            })
-            .and_then(|valid_block| {
-                let diff = self.check_state_merkle_root(tx, valid_block.block())?;
-                Ok((valid_block, diff))
             });
+
         match result {
-            Ok((validated, diff)) => Ok(Some((validated, diff))),
+            Ok(validated) => Ok(Some(validated)),
             // Propagate this error out as sync is needed in the case where we have a valid QC but do not know the
             // block
             Err(err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound { .. })) => {
@@ -233,17 +237,19 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         // TODO: Move this to consensus constants
         const FOREIGN_PROPOSAL_TIMEOUT: u64 = 1000;
         let all_proposed = ForeignProposal::get_all_proposed(
-            tx.deref_mut(),
+            &**tx,
             block.height().saturating_sub(NodeHeight(FOREIGN_PROPOSAL_TIMEOUT)),
         )?;
         for proposal in all_proposed {
             let mut has_unresolved_transactions = false;
 
-            let (transactions, _missing) = TransactionRecord::get_any(tx.deref_mut(), &proposal.transactions)?;
+            let (transactions, _missing) = TransactionRecord::get_any(&**tx, &proposal.transactions)?;
             for transaction in transactions {
                 if transaction.is_finalized() {
                     // We don't know the transaction at all, or we know it but it's not finalised.
-                    let mut tx_rec = self.transaction_pool.get(tx, block.as_leaf_block(), transaction.id())?;
+                    let mut tx_rec = self
+                        .transaction_pool
+                        .get(&**tx, block.as_leaf_block(), transaction.id())?;
                     // If the transaction is still in the pool we have to check if it was at least locally prepared,
                     // otherwise abort it.
                     if tx_rec.stage() == TransactionPoolStage::New || tx_rec.stage() == TransactionPoolStage::Prepared {
@@ -259,113 +265,83 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         Ok(())
     }
 
-    fn check_state_merkle_root(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
-        block: &Block,
-    ) -> Result<StateHashTreeDiff, HotStuffError> {
-        let current_version = block.justify().block_height().as_u64();
-        let next_version = block.height().as_u64();
-        let commit_substate_diffs = block.get_all_substate_diffs(tx)?;
-
-        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(tx, block.justify().block_id())?;
-
-        let (state_root, state_tree_diff) = calculate_state_merkle_diff(
-            tx.deref(),
-            current_version,
-            next_version,
-            pending,
-            commit_substate_diffs.iter().flat_map(diff_to_substate_changes),
-        )?;
-
-        if state_root != *block.merkle_root() {
-            return Err(ProposalValidationError::InvalidStateMerkleRoot {
-                block_id: *block.id(),
-                from_block: *block.merkle_root(),
-                calculated: state_root,
-            }
-            .into());
-        }
-
-        Ok(state_tree_diff)
-    }
-
-    fn check_foreign_indexes(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
-        num_committees: u32,
-        local_shard: Shard,
-        block: &Block,
-        justify_block: &BlockId,
-    ) -> Result<(), HotStuffError> {
-        let non_local_shards = proposer::get_non_local_shards(tx, block, num_committees, local_shard)?;
-        let block_foreign_indexes = block.foreign_indexes();
-        if block_foreign_indexes.len() != non_local_shards.len() {
-            return Err(ProposalValidationError::InvalidForeignCounters {
-                proposed_by: block.proposed_by().to_string(),
-                hash: *block.id(),
-                details: format!(
-                    "Foreign indexes length ({}) does not match non-local shards length ({})",
-                    block_foreign_indexes.len(),
-                    non_local_shards.len()
-                ),
-            }
-            .into());
-        }
-
-        let mut foreign_counters = ForeignSendCounters::get_or_default(tx, justify_block)?;
-        let mut current_shard = None;
-        for (shard, foreign_count) in block_foreign_indexes {
-            if let Some(current_shard) = current_shard {
-                // Check ordering
-                if current_shard > shard {
-                    return Err(ProposalValidationError::InvalidForeignCounters {
-                        proposed_by: block.proposed_by().to_string(),
-                        hash: *block.id(),
-                        details: format!(
-                            "Foreign indexes are not sorted by shard. Current shard: {}, shard: {}",
-                            current_shard, shard
-                        ),
-                    }
-                    .into());
-                }
-            }
-
-            current_shard = Some(shard);
-            // Check that each shard is correct
-            if !non_local_shards.contains(shard) {
-                return Err(ProposalValidationError::InvalidForeignCounters {
-                    proposed_by: block.proposed_by().to_string(),
-                    hash: *block.id(),
-                    details: format!("Shard {} is not a non-local shard", shard),
-                }
-                .into());
-            }
-
-            // Check that foreign counters are correct
-            let expected_count = foreign_counters.increment_counter(*shard);
-            if *foreign_count != expected_count {
-                return Err(ProposalValidationError::InvalidForeignCounters {
-                    proposed_by: block.proposed_by().to_string(),
-                    hash: *block.id(),
-                    details: format!(
-                        "Foreign counter for shard {} is incorrect. Expected {}, got {}",
-                        shard, expected_count, foreign_count
-                    ),
-                }
-                .into());
-            }
-        }
-
-        Ok(())
-    }
+    // TODO: fix
+    // fn check_foreign_indexes(
+    //     &self,
+    //     tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+    //     num_committees: u32,
+    //     local_shard: Shard,
+    //     block: &Block,
+    //     justify_block: &BlockId,
+    // ) -> Result<(), HotStuffError> {
+    //     let non_local_shards = proposer::get_non_local_shards(tx, block, num_committees, local_shard)?;
+    //     let block_foreign_indexes = block.foreign_indexes();
+    //     if block_foreign_indexes.len() != non_local_shards.len() {
+    //         return Err(ProposalValidationError::InvalidForeignCounters {
+    //             proposed_by: block.proposed_by().to_string(),
+    //             hash: *block.id(),
+    //             details: format!(
+    //                 "Foreign indexes length ({}) does not match non-local shards length ({})",
+    //                 block_foreign_indexes.len(),
+    //                 non_local_shards.len()
+    //             ),
+    //         }
+    //         .into());
+    //     }
+    //
+    //     let mut foreign_counters = ForeignSendCounters::get_or_default(tx, justify_block)?;
+    //     let mut current_shard = None;
+    //     for (shard, foreign_count) in block_foreign_indexes {
+    //         if let Some(current_shard) = current_shard {
+    //             // Check ordering
+    //             if current_shard > shard {
+    //                 return Err(ProposalValidationError::InvalidForeignCounters {
+    //                     proposed_by: block.proposed_by().to_string(),
+    //                     hash: *block.id(),
+    //                     details: format!(
+    //                         "Foreign indexes are not sorted by shard. Current shard: {}, shard: {}",
+    //                         current_shard, shard
+    //                     ),
+    //                 }
+    //                 .into());
+    //             }
+    //         }
+    //
+    //         current_shard = Some(shard);
+    //         // Check that each shard is correct
+    //         if !non_local_shards.contains(shard) {
+    //             return Err(ProposalValidationError::InvalidForeignCounters {
+    //                 proposed_by: block.proposed_by().to_string(),
+    //                 hash: *block.id(),
+    //                 details: format!("Shard {} is not a non-local shard", shard),
+    //             }
+    //             .into());
+    //         }
+    //
+    //         // Check that foreign counters are correct
+    //         let expected_count = foreign_counters.increment_counter(*shard);
+    //         if *foreign_count != expected_count {
+    //             return Err(ProposalValidationError::InvalidForeignCounters {
+    //                 proposed_by: block.proposed_by().to_string(),
+    //                 hash: *block.id(),
+    //                 details: format!(
+    //                     "Foreign counter for shard {} is incorrect. Expected {}, got {}",
+    //                     shard, expected_count, foreign_count
+    //                 ),
+    //             }
+    //             .into());
+    //         }
+    //     }
+    //
+    //     Ok(())
+    // }
 
     /// Perform final block validations (TODO: implement all validations)
     /// We assume at this point that initial stateless validations have been done (in inbound messages)
     #[allow(clippy::too_many_lines)]
     fn validate_local_proposed_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         candidate_block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_info: &CommitteeInfo,
@@ -415,13 +391,14 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .into());
         }
 
-        self.check_foreign_indexes(
-            tx,
-            local_committee_info.num_committees(),
-            local_committee_info.shard(),
-            &candidate_block,
-            justify_block.id(),
-        )?;
+        // TODO: this is broken
+        // self.check_foreign_indexes(
+        //     tx,
+        //     local_committee_info.num_committees(),
+        //     local_committee_info.shard(),
+        //     &candidate_block,
+        //     justify_block.id(),
+        // )?;
 
         let justify_block_height = justify_block.height();
         // if the block parent is not the justify parent, then we have experienced a leader failure

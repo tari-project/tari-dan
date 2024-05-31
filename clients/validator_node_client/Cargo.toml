@@ -17,7 +17,7 @@ tari_dan_storage = { workspace = true }
 
 reqwest = { workspace = true, features = ["json"] }
 multiaddr = { workspace = true }
-serde = { workspace = true, default-features = true }
+serde = { workspace = true, default-features = true, features = ["rc"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 ts-rs = { workspace = true, optional = true }

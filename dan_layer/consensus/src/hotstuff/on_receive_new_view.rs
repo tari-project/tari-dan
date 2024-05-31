@@ -1,10 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{HashMap, HashSet},
-    ops::DerefMut,
-};
+use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_common::configuration::Network;
@@ -142,7 +139,7 @@ where TConsensusSpec: ConsensusSpec
         let high_qc = self.store.with_write_tx(|tx| {
             high_qc.save(tx)?;
             let high_qc = high_qc.update_high_qc(tx)?;
-            high_qc.get_quorum_certificate(tx.deref_mut())
+            high_qc.get_quorum_certificate(&**tx)
         })?;
 
         // if checked_high_qc.block_height() > high_qc.block_height() {

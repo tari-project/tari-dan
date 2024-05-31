@@ -97,8 +97,8 @@ fn transfer_confidential_amounts_between_accounts() {
     let (mut template_test, faucet, faucet_resx) = setup(confidential_proof, None);
 
     // Create an account
-    let (account1, owner1, _k) = template_test.create_owned_account();
-    let (account2, _owner2, _k) = template_test.create_owned_account();
+    let (account1, owner1, _k) = template_test.create_funded_account();
+    let (account2, _owner2, _k) = template_test.create_funded_account();
 
     // Create proof for transfer
     let proof = generate_withdraw_proof(&faucet_mask, Amount(1000), Some(Amount(99_000)), Amount(0));
@@ -179,7 +179,7 @@ fn transfer_confidential_fails_with_invalid_balance() {
     let (mut template_test, faucet, _faucet_resx) = setup(confidential_proof, None);
 
     // Create an account
-    let (account1, _owner1, _k) = template_test.create_owned_account();
+    let (account1, _owner1, _k) = template_test.create_funded_account();
 
     // Create proof for transfer
     let proof = generate_withdraw_proof(&faucet_mask, Amount(1001), Some(Amount(99_000)), Amount(0));
@@ -211,8 +211,8 @@ fn reveal_confidential_and_transfer() {
     let (mut template_test, faucet, faucet_resx) = setup(confidential_proof, None);
 
     // Create an account
-    let (account1, owner1, _k) = template_test.create_owned_account();
-    let (account2, owner2, _k) = template_test.create_owned_account();
+    let (account1, owner1, _k) = template_test.create_funded_account();
+    let (account2, owner2, _k) = template_test.create_funded_account();
 
     // Create proof for transfer
 
@@ -284,8 +284,8 @@ fn attempt_to_reveal_with_unbalanced_proof() {
     let (mut template_test, faucet, faucet_resx) = setup(confidential_proof, None);
 
     // Create an account
-    let (account1, owner1, _k) = template_test.create_owned_account();
-    let (account2, _owner2, _k) = template_test.create_owned_account();
+    let (account1, owner1, _k) = template_test.create_funded_account();
+    let (account2, _owner2, _k) = template_test.create_funded_account();
 
     // Create proof for transfer
 
@@ -337,7 +337,7 @@ fn multi_commitment_join() {
     let (mut template_test, faucet, faucet_resx) = setup(confidential_proof, None);
 
     // Create an account
-    let (account1, owner1, _k) = template_test.create_owned_account();
+    let (account1, owner1, _k) = template_test.create_funded_account();
 
     // Create proof for transfer
 

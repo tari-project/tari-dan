@@ -23,13 +23,16 @@ libp2p-identity = { workspace = true, features = [
 ] }
 
 blake2 = { workspace = true }
+ethnum = { workspace = true }
 newtype-ops = { workspace = true }
 rand = { workspace = true }
 prost = { workspace = true }
 prost-types = { workspace = true }
 serde = { workspace = true, default-features = true }
-ruint = { workspace = true }
 ts-rs = { workspace = true, optional = true }
+
+[dev-dependencies]
+indexmap = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = ["prost", "prost-types"] # false positive, used in OUT_DIR structs

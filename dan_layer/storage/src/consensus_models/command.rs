@@ -3,18 +3,25 @@
 
 use std::{
     cmp::Ordering,
+    collections::HashMap,
     fmt::{Display, Formatter},
 };
 
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::SubstateAddress;
-use tari_engine_types::lock::LockFlag;
-use tari_transaction::TransactionId;
+use tari_transaction::{TransactionId, VersionedSubstateId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use super::{ExecutedTransaction, ForeignProposal, LeaderFee, TransactionRecord};
+use super::{
+    ExecutedTransaction,
+    ForeignProposal,
+    LeaderFee,
+    SubstateLockFlag,
+    TransactionRecord,
+    VersionedSubstateIdLockIntent,
+};
 use crate::{
     consensus_models::{Decision, QcId},
     StateStoreReadTransaction,
@@ -34,7 +41,38 @@ impl Evidence {
         }
     }
 
-    pub fn all_shards_complete(&self) -> bool {
+    pub fn from_inputs_and_outputs(
+        transaction_id: TransactionId,
+        resolved_inputs: &IndexSet<VersionedSubstateIdLockIntent>,
+        resulting_outputs: &[VersionedSubstateId],
+    ) -> Self {
+        let mut deduped_evidence = HashMap::new();
+        deduped_evidence.extend(resolved_inputs.iter().map(|input| {
+            (input.to_substate_address(), ShardEvidence {
+                qc_ids: IndexSet::new(),
+                lock: input.lock_flag(),
+            })
+        }));
+
+        let tx_reciept_address = SubstateAddress::for_transaction_receipt(transaction_id.into_receipt_address());
+        deduped_evidence.extend(
+            resulting_outputs
+                .iter()
+                .map(|output| output.to_substate_address())
+                // Exclude transaction receipt address from evidence since all involved shards will commit it
+                .filter(|output| *output != tx_reciept_address)
+                .map(|output| {
+                    (output, ShardEvidence {
+                        qc_ids: IndexSet::new(),
+                        lock: SubstateLockFlag::Write,
+                    })
+                }),
+        );
+
+        deduped_evidence.into_iter().collect()
+    }
+
+    pub fn all_shards_justified(&self) -> bool {
         // TODO: we should check that remote has one QC and local has three
         self.evidence.values().all(|qc_ids| !qc_ids.is_empty())
     }
@@ -51,7 +89,7 @@ impl Evidence {
         self.evidence.get(substate_address)
     }
 
-    pub fn num_complete_shards(&self) -> usize {
+    pub fn num_justified_shards(&self) -> usize {
         self.evidence
             .values()
             .filter(|evidence| !evidence.qc_ids.is_empty())
@@ -99,11 +137,11 @@ impl FromIterator<(SubstateAddress, ShardEvidence)> for Evidence {
 pub struct ShardEvidence {
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub qc_ids: IndexSet<QcId>,
-    pub lock: LockFlag,
+    pub lock: SubstateLockFlag,
 }
 
 impl ShardEvidence {
-    pub fn new(qc_ids: IndexSet<QcId>, lock: LockFlag) -> Self {
+    pub fn new(qc_ids: IndexSet<QcId>, lock: SubstateLockFlag) -> Self {
         Self { qc_ids, lock }
     }
 
@@ -133,22 +171,37 @@ pub struct TransactionAtom {
 }
 
 impl TransactionAtom {
+    pub fn deferred(transaction_id: TransactionId) -> Self {
+        Self {
+            id: transaction_id,
+            decision: Decision::Deferred,
+            evidence: Evidence::empty(),
+            transaction_fee: 0,
+            leader_fee: None,
+        }
+    }
+
     pub fn id(&self) -> &TransactionId {
         &self.id
     }
 
-    pub fn get_transaction<TTx: StateStoreReadTransaction>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<TransactionRecord, StorageError> {
+    pub fn get_transaction<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<TransactionRecord, StorageError> {
         TransactionRecord::get(tx, &self.id)
     }
 
     pub fn get_executed_transaction<TTx: StateStoreReadTransaction>(
         &self,
-        tx: &mut TTx,
+        tx: &TTx,
     ) -> Result<ExecutedTransaction, StorageError> {
         ExecutedTransaction::get(tx, &self.id)
+    }
+
+    pub fn abort(self) -> Self {
+        Self {
+            decision: Decision::Abort,
+            leader_fee: None,
+            ..self
+        }
     }
 }
 

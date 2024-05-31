@@ -18,7 +18,7 @@ use tari_dan_storage::global::models::ValidatorNode;
 use tari_epoch_manager::{EpochManagerError, EpochManagerEvent, EpochManagerReader};
 use tokio::sync::{broadcast, Mutex, MutexGuard};
 
-use crate::support::{address::TestAddress, helpers::random_substate_in_bucket};
+use crate::support::{address::TestAddress, helpers::random_substate_in_shard};
 
 #[derive(Debug, Clone)]
 pub struct TestEpochManager {
@@ -87,7 +87,7 @@ impl TestEpochManager {
         let num_committees = committees.len() as u32;
         for (shard, committee) in committees {
             for (address, pk) in &committee.members {
-                let substate_address = random_substate_in_bucket(shard, num_committees);
+                let substate_address = random_substate_in_shard(shard, num_committees);
                 state.validator_shards.insert(
                     address.clone(),
                     (
@@ -151,7 +151,7 @@ impl EpochManagerReader for TestEpochManager {
         substate_address: SubstateAddress,
     ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let state = self.state_lock().await;
-        let shard = substate_address.to_committee_shard(state.committees.len() as u32);
+        let shard = substate_address.to_shard(state.committees.len() as u32);
         Ok(state.committees[&shard].clone())
     }
 
@@ -190,7 +190,7 @@ impl EpochManagerReader for TestEpochManager {
         let our_vn = self.get_our_validator_node(epoch).await?;
         let num_committees = self.get_num_committees(epoch).await?;
         let committee = self.get_committee_for_substate(epoch, our_vn.shard_key).await?;
-        let our_shard = our_vn.shard_key.to_committee_shard(num_committees);
+        let our_shard = our_vn.shard_key.to_shard(num_committees);
 
         Ok(CommitteeInfo::new(num_committees, committee.len() as u32, our_shard))
     }
@@ -252,7 +252,7 @@ impl EpochManagerReader for TestEpochManager {
     ) -> Result<CommitteeInfo, EpochManagerError> {
         let num_committees = self.get_num_committees(epoch).await?;
         let committee = self.get_committee_for_substate(epoch, substate_address).await?;
-        let shard = substate_address.to_committee_shard(num_committees);
+        let shard = substate_address.to_shard(num_committees);
 
         Ok(CommitteeInfo::new(num_committees, committee.len() as u32, shard))
     }

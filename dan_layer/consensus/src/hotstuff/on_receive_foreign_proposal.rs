@@ -1,6 +1,5 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-use std::ops::DerefMut;
 
 use log::*;
 use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, shard::Shard};
@@ -77,7 +76,7 @@ where TConsensusSpec: ConsensusSpec
         if let Err(err) = self.validate_proposed_block(&from, &block, local_shard.shard(), &foreign_receive_counter) {
             warn!(
                 target: LOG_TARGET,
-                "🔥 FOREIGN PROPOSAL: Invalid proposal from {}: {}. Ignoring.",
+                "⚠️ FOREIGN PROPOSAL: Invalid proposal from {}: {}. Ignoring.",
                 from,
                 err
             );
@@ -141,7 +140,7 @@ where TConsensusSpec: ConsensusSpec
         block: &Block,
         foreign_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
-        let leaf = LeafBlock::get(tx.deref_mut())?;
+        let leaf = LeafBlock::get(&**tx)?;
         // We only want to save the QC once if applicable
         let mut is_qc_saved = false;
 
@@ -183,7 +182,7 @@ where TConsensusSpec: ConsensusSpec
             // If all shards are complete and we've already received our LocalPrepared, we can set out LocalPrepared
             // transaction as ready to propose ACCEPT. If we have not received the local LocalPrepared, the transition
             // will happen when we receive the local block.
-            if tx_rec.current_stage().is_local_prepared() && tx_rec.transaction().evidence.all_shards_complete() {
+            if tx_rec.current_stage().is_local_prepared() && tx_rec.atom().evidence.all_shards_justified() {
                 info!(
                     target: LOG_TARGET,
                     "🔥 FOREIGN PROPOSAL: Transaction is ready for propose ACCEPT({}, {}) Local Stage: {}",

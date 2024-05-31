@@ -293,6 +293,13 @@ impl EventManager {
         );
 
         for (member, _) in &committee.members {
+            debug!(
+                target: LOG_TARGET,
+                "Trying to get blocks from VN {} (epoch={}, shard={})",
+                member,
+                epoch,
+                shard
+            );
             let resp = self.get_blocks_from_vn(member, start_block_id).await;
 
             match resp {

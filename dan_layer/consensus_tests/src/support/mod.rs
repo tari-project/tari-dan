@@ -6,6 +6,7 @@
 
 mod address;
 mod epoch_manager;
+mod executions_store;
 mod harness;
 mod helpers;
 mod leader_strategy;
@@ -14,7 +15,6 @@ mod messaging_impls;
 mod network;
 mod signing_service;
 mod spec;
-mod state_manager;
 mod sync;
 mod transaction;
 mod transaction_executor;
@@ -25,7 +25,6 @@ pub use harness::*;
 pub use leader_strategy::*;
 pub use network::*;
 pub use spec::*;
-pub use state_manager::*;
 pub use transaction::*;
 pub use transaction_executor::*;
 pub use validator::*;

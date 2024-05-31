@@ -77,6 +77,23 @@ create table leaf_blocks
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 
+create table block_diffs
+(
+    id             integer   NOT NULL primary key AUTOINCREMENT,
+    block_id       text      NOT NULL,
+    transaction_id text      NOT NULL,
+    substate_id    text      NOT NULL,
+    version        int      NOT NULL,
+    -- Up or Down
+    change         text      NOT NULL,
+    -- NULL for Down
+    state          text      NULL,
+    created_at  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+);
+create index block_diffs_idx_block_id on block_diffs (block_id);
+
 create table substates
 (
     id                       integer   not NULL primary key AUTOINCREMENT,
@@ -94,9 +111,6 @@ create table substates
     destroyed_by_block       text      NULL,
     created_at_epoch         bigint    not NULL,
     destroyed_at_epoch       bigint    NULL,
-    read_locks               int       NOT NULL DEFAULT '0',
-    is_locked_w              boolean   NOT NULL DEFAULT '0',
-    locked_by                text      NULL,
     created_at               timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
     destroyed_at             timestamp NULL
 );
@@ -108,6 +122,21 @@ create unique index substates_uniq_substate_id_and_version on substates (substat
 -- querying for transaction ids that either Upd or Downd a substate
 create index substates_idx_created_by_transaction on substates (created_by_transaction);
 create index substates_idx_destroyed_by_transaction on substates (destroyed_by_transaction) where destroyed_by_transaction is not null;
+
+create table substate_locks
+(
+    id             integer   NOT NULL primary key AUTOINCREMENT,
+    block_id       text      NOT NULL,
+    transaction_id text      NOT NULL,
+    substate_id    text      NOT NULL,
+    version        int       NOT NULL,
+    -- Write, Read or Output
+    lock           text      NOT NULL DEFAULT '0',
+    is_local_only  boolean   NOT NULL DEFAULT '0',
+    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+);
 
 create table high_qcs
 (
@@ -191,6 +220,22 @@ create table transactions
 
 create unique index transactions_uniq_idx_id on transactions (transaction_id);
 
+create table transaction_executions
+(
+    id                integer   NOT NULL primary key AUTOINCREMENT,
+    -- Note: the block_id may not be in the database if the block is being proposed ∴ no foreign key
+    block_id          text      NOT NULL,
+    transaction_id    text      NOT NULL,
+    resolved_inputs   text      NOT NULL,
+    resulting_outputs text      NOT NULL,
+    result            text      NOT NULL,
+    execution_time_ms bigint    NOT NULL,
+    created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
+);
+
+create unique index transaction_executions_uniq_block_id_transaction_id on transaction_executions (block_id, transaction_id);
+
 create table transaction_pool
 (
     id                  integer   not null primary key AUTOINCREMENT,
@@ -228,18 +273,6 @@ create table transaction_pool_state_updates
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
 create unique index transaction_pool_uniq_block_id_transaction_id on transaction_pool_state_updates (block_id, transaction_id);
-
-create table locked_outputs
-(
-    id               integer   not null primary key AUTOINCREMENT,
-    block_id         text      not null,
-    transaction_id   text      not null,
-    substate_address text      not null,
-    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
-    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
-);
-create unique index locked_outputs_uniq_idx_substate_address on locked_outputs (substate_address);
 
 create table votes
 (

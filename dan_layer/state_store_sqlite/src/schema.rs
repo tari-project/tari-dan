@@ -1,6 +1,19 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    block_diffs (id) {
+        id -> Integer,
+        block_id -> Text,
+        transaction_id -> Text,
+        substate_id -> Text,
+        version -> Integer,
+        change -> Text,
+        state -> Nullable<Text>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     blocks (id) {
         id -> Integer,
         block_id -> Text,
@@ -126,16 +139,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    locked_outputs (id) {
-        id -> Integer,
-        block_id -> Text,
-        transaction_id -> Text,
-        substate_address -> Text,
-        created_at -> Timestamp,
-    }
-}
-
-diesel::table! {
     missing_transactions (id) {
         id -> Integer,
         block_id -> Text,
@@ -201,6 +204,19 @@ diesel::table! {
 }
 
 diesel::table! {
+    substate_locks (id) {
+        id -> Integer,
+        block_id -> Text,
+        transaction_id -> Text,
+        substate_id -> Text,
+        version -> Integer,
+        lock -> Text,
+        is_local_only -> Bool,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     substates (id) {
         id -> Integer,
         address -> Text,
@@ -217,11 +233,21 @@ diesel::table! {
         destroyed_by_block -> Nullable<Text>,
         created_at_epoch -> BigInt,
         destroyed_at_epoch -> Nullable<BigInt>,
-        read_locks -> Integer,
-        is_locked_w -> Bool,
-        locked_by -> Nullable<Text>,
         created_at -> Timestamp,
         destroyed_at -> Nullable<Timestamp>,
+    }
+}
+
+diesel::table! {
+    transaction_executions (id) {
+        id -> Integer,
+        block_id -> Text,
+        transaction_id -> Text,
+        resolved_inputs -> Text,
+        resulting_outputs -> Text,
+        result -> Text,
+        execution_time_ms -> BigInt,
+        created_at -> Timestamp,
     }
 }
 
@@ -317,6 +343,7 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
+    block_diffs,
     blocks,
     foreign_proposals,
     foreign_receive_counters,
@@ -328,13 +355,14 @@ diesel::allow_tables_to_appear_in_same_query!(
     last_voted,
     leaf_blocks,
     locked_block,
-    locked_outputs,
     missing_transactions,
     parked_blocks,
     pending_state_tree_diffs,
     quorum_certificates,
     state_tree,
+    substate_locks,
     substates,
+    transaction_executions,
     transaction_pool,
     transaction_pool_history,
     transaction_pool_state_updates,

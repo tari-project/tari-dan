@@ -1,59 +1,66 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, num::NonZeroU64, ops::DerefMut};
+#![allow(dead_code)]
+use std::num::NonZeroU64;
 
 use log::*;
 use tari_common::configuration::Network;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
     optional::Optional,
-    SubstateAddress,
 };
 use tari_dan_storage::{
     consensus_models::{
         Block,
+        BlockDiff,
         BlockId,
         Command,
         Decision,
         EpochEvent,
         ExecutedTransaction,
         ForeignProposal,
-        HighQc,
         LastExecuted,
         LastSentVote,
         LastVoted,
         LockedBlock,
-        LockedOutput,
         PendingStateTreeDiff,
         QuorumDecision,
         SubstateLockFlag,
-        SubstateRecord,
         TransactionAtom,
+        TransactionExecution,
         TransactionPool,
         TransactionPoolStage,
         TransactionRecord,
         ValidBlock,
+        VersionedSubstateIdLockIntent,
     },
     StateStore,
+    StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 use tokio::sync::broadcast;
 
 use super::proposer::Proposer;
 use crate::{
-    hotstuff::{error::HotStuffError, event::HotstuffEvent, ProposalValidationError, EXHAUST_DIVISOR},
+    hotstuff::{
+        block_change_set::{BlockDecision, ProposedBlockChangeSet},
+        error::HotStuffError,
+        event::HotstuffEvent,
+        substate_store::PendingSubstateStore,
+        ProposalValidationError,
+        EXHAUST_DIVISOR,
+    },
     messages::{HotstuffMessage, VoteMessage},
     traits::{
         hooks::ConsensusHooks,
         BlockTransactionExecutor,
-        BlockTransactionExecutorBuilder,
         ConsensusSpec,
         LeaderStrategy,
         OutboundMessaging,
-        StateManager,
         VoteSignatureService,
+        WriteableSubstateStore,
     },
 };
 
@@ -65,12 +72,11 @@ pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     epoch_manager: TConsensusSpec::EpochManager,
     vote_signing_service: TConsensusSpec::SignatureService,
     leader_strategy: TConsensusSpec::LeaderStrategy,
-    state_manager: TConsensusSpec::StateManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_events: broadcast::Sender<HotstuffEvent>,
     proposer: Proposer<TConsensusSpec>,
-    transaction_executor_builder: TConsensusSpec::BlockTransactionExecutorBuilder,
+    transaction_executor: TConsensusSpec::TransactionExecutor,
     network: Network,
     hooks: TConsensusSpec::Hooks,
 }
@@ -85,12 +91,11 @@ where TConsensusSpec: ConsensusSpec
         epoch_manager: TConsensusSpec::EpochManager,
         vote_signing_service: TConsensusSpec::SignatureService,
         leader_strategy: TConsensusSpec::LeaderStrategy,
-        state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
-        transaction_executor_builder: TConsensusSpec::BlockTransactionExecutorBuilder,
+        transaction_executor: TConsensusSpec::TransactionExecutor,
         network: Network,
         hooks: TConsensusSpec::Hooks,
     ) -> Self {
@@ -100,12 +105,11 @@ where TConsensusSpec: ConsensusSpec
             epoch_manager,
             vote_signing_service,
             leader_strategy,
-            state_manager,
             transaction_pool,
             outbound_messaging,
             tx_events,
             proposer,
-            transaction_executor_builder,
+            transaction_executor,
             network,
             hooks,
         }
@@ -122,37 +126,15 @@ where TConsensusSpec: ConsensusSpec
             .epoch_manager
             .get_committee_info_by_validator_public_key(valid_block.epoch(), valid_block.proposed_by())
             .await?;
-        let mut locked_blocks = Vec::new();
-        let mut finalized_transactions = Vec::new();
-        let maybe_decision = self.store.with_write_tx(|tx| {
-            let qc_block = valid_block.block().justify().get_block(tx.deref_mut())?;
-            let locked_block = LockedBlock::get(tx.deref_mut())?.get_block(tx.deref_mut())?;
+        let block_decision = self.store.with_write_tx(|tx| {
+            let change_set = self.decide_on_block(&**tx, &local_committee_shard, &valid_block)?;
 
-            // If the previous qc block was in different epoch, we have to have EpochEvent::Start
-            let epoch_should_start = qc_block.epoch() < valid_block.epoch();
+            let mut locked_blocks = Vec::new();
+            let mut finalized_transactions = Vec::new();
 
-            let epoch_should_end =
-                // If the epoch has not changed yet
-                qc_block.epoch() == valid_block.epoch() &&
-                // If the last justified block is an epoch end
-                qc_block.is_epoch_end() &&
-                // if the locked block is an epoch end, then we do not expect this block to be an epoch end
-                !locked_block.is_epoch_end() &&
-                // If the previous epoch is the genesis epoch, we don't need to end it (there was no committee at epoch 0)
-                !qc_block.is_genesis();
-
-            let mut maybe_decision = self.decide_on_block(
-                tx,
-                &local_committee_shard,
-                valid_block.block(),
-                epoch_should_start,
-                epoch_should_end,
-            )?;
-
-            let is_accept_decision = maybe_decision.map_or(false, |d| d.is_accept());
-            // Update nodes
-            if is_accept_decision {
-                let high_qc = valid_block.block().update_nodes(
+            if change_set.is_accept() {
+                // Update nodes
+                valid_block.block().update_nodes(
                     tx,
                     |tx, locked, block| {
                         locked_blocks.push(block.clone());
@@ -160,31 +142,36 @@ where TConsensusSpec: ConsensusSpec
                     },
                     |tx, last_exec, commit_block| {
                         let committed = self.on_commit(tx, last_exec, commit_block, &local_committee_shard)?;
-                        finalized_transactions.push(committed);
+                        if !committed.is_empty() {
+                            finalized_transactions.push(committed);
+                        }
                         Ok(())
                     },
                 )?;
-
-                // If we have a new high QC, we'll process the block it justifies
-                if !self.process_new_leaf(tx, high_qc, valid_block.block(), &local_committee_shard)? {
-                    maybe_decision = None;
-                }
             }
 
-            if maybe_decision.is_some() {
+            if change_set.is_accept() {
                 valid_block.block().as_last_voted().set(tx)?;
             }
 
-            Ok::<_, HotStuffError>(maybe_decision)
+            let quorum_decision = change_set.quorum_decision();
+            change_set.save(tx)?;
+
+            Ok::<_, HotStuffError>(BlockDecision {
+                quorum_decision,
+                locked_blocks,
+                finalized_transactions,
+            })
         })?;
 
-        self.hooks.on_local_block_decide(&valid_block, maybe_decision);
-        for t in finalized_transactions.into_iter().flatten() {
+        self.hooks
+            .on_local_block_decide(&valid_block, block_decision.quorum_decision);
+        for t in block_decision.finalized_transactions.into_iter().flatten() {
             self.hooks.on_transaction_finalized(&t);
         }
-        self.propose_newly_locked_blocks(locked_blocks).await?;
+        self.propose_newly_locked_blocks(block_decision.locked_blocks).await?;
 
-        if let Some(decision) = maybe_decision {
+        if let Some(decision) = block_decision.quorum_decision {
             let is_registered = self
                 .epoch_manager
                 .is_this_validator_registered_for_epoch(valid_block.epoch())
@@ -217,186 +204,37 @@ where TConsensusSpec: ConsensusSpec
 
     fn decide_on_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         local_committee_info: &CommitteeInfo,
-        block: &Block,
-        epoch_should_start: bool,
-        epoch_should_end: bool,
-    ) -> Result<Option<QuorumDecision>, HotStuffError> {
-        let mut maybe_decision = None;
-        if self.should_vote(tx.deref_mut(), block)? {
-            maybe_decision =
-                self.decide_what_to_vote(tx, block, local_committee_info, epoch_should_start, epoch_should_end)?;
+        valid_block: &ValidBlock,
+    ) -> Result<ProposedBlockChangeSet, HotStuffError> {
+        let qc_block = valid_block.block().justify().get_block(tx)?;
+        let locked_block = LockedBlock::get(tx)?.get_block(tx)?;
+
+        // If the previous qc block was in different epoch, we have to have EpochEvent::Start
+        let epoch_should_start = qc_block.epoch() < valid_block.epoch();
+
+        let epoch_should_end =
+            // If the epoch has not changed yet
+            qc_block.epoch() == valid_block.epoch() &&
+                // If the last justified block is an epoch end
+                qc_block.is_epoch_end() &&
+                // if the locked block is an epoch end, then we do not expect this block to be an epoch end
+                !locked_block.is_epoch_end() &&
+                // If the previous epoch is the genesis epoch, we don't need to end it (there was no committee at epoch 0)
+                !qc_block.is_genesis();
+
+        if !self.should_vote(tx, valid_block.block())? {
+            return Ok(ProposedBlockChangeSet::new(valid_block.block().as_leaf_block()).no_vote());
         }
 
-        Ok(maybe_decision)
-    }
-
-    #[allow(clippy::too_many_lines)]
-    fn process_new_leaf(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        high_qc: HighQc,
-        tip_block: &Block,
-        local_committee_info: &CommitteeInfo,
-    ) -> Result<bool, HotStuffError> {
-        let mut leaf = high_qc.get_block(tx.deref_mut())?;
-        if leaf.is_processed() {
-            debug!(
-                target: LOG_TARGET,
-                "🔥 Process NEW leaf block: Block {} already processed",
-                leaf,
-            );
-            return Ok(true);
-        }
-
-        debug!(
-            target: LOG_TARGET,
-            "🔥 Process NEW leaf block: Block {}",
-            leaf,
-        );
-
-        for cmd in leaf.commands() {
-            match cmd {
-                Command::LocalOnly(t) => {
-                    if t.decision.is_commit() {
-                        let transaction = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
-                        // Lock all inputs for the transaction as part of Prepare
-                        let is_inputs_locked = self.lock_inputs(tx, &transaction, local_committee_info)?;
-                        let is_outputs_locked = is_inputs_locked && self.lock_outputs(tx, leaf.id(), &transaction)?;
-
-                        // This should not be possible and may be due to a BUG. The failure to lock the leaf block
-                        // should have been detected in decide_on_block in the previous round.
-                        if !is_inputs_locked {
-                            // Unable to lock all inputs - do not vote on the child block
-                            warn!(
-                                target: LOG_TARGET,
-                                "❌ [NEVERHAPPEN] Unable to lock all inputs for transaction {} in block {}. Leader proposed {}, we decided {}",
-                                leaf.id(),
-                                transaction.id(),
-                                t.decision,
-                                Decision::Abort
-                            );
-                            // We change our decision to ABORT so that the next time we propose/receive a
-                            // proposal we will check for ABORT. It may
-                            // happen that the transaction causing the lock failure
-                            // is ABORTED too and the locks released allowing this transaction to succeed.
-                            // Currently, the client would have to resubmit the transaction to resolve this.
-                            let mut tx_rec = self.transaction_pool.get(tx, tip_block.as_leaf_block(), t.id())?;
-                            tx_rec.update_local_decision(tx, Decision::Abort)?;
-
-                            // The leader should not have proposed conflicting transactions
-                            return Ok(false);
-                        }
-
-                        if !is_outputs_locked {
-                            // Unable to lock all outputs - do not vote
-                            warn!(
-                                target: LOG_TARGET,
-                                "❌ [NEVERHAPPEN] Unable to lock all outputs for transaction {} in block {}. Leader proposed {}, we decided {}",
-                                leaf.id(),
-                                transaction.id(),
-                                t.decision,
-                                Decision::Abort
-                            );
-                            // Unlock any locked inputs because we are not voting
-                            self.unlock_inputs(tx, &transaction, local_committee_info)?;
-                            // We change our decision to ABORT so that the next time we propose/receive a
-                            // proposal we will check for ABORT
-                            let mut tx_rec = self.transaction_pool.get(tx, tip_block.as_leaf_block(), t.id())?;
-                            tx_rec.update_local_decision(tx, Decision::Abort)?;
-                            return Ok(false);
-                        }
-                    }
-                },
-                Command::Prepare(t) => {
-                    if t.decision.is_commit() {
-                        let transaction = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
-                        // Lock all inputs for the transaction as part of Prepare
-                        let is_inputs_locked = self.lock_inputs(tx, &transaction, local_committee_info)?;
-                        let is_outputs_locked = is_inputs_locked && self.lock_outputs(tx, leaf.id(), &transaction)?;
-
-                        if !is_inputs_locked {
-                            // Unable to lock all inputs - do not vote
-                            warn!(
-                                target: LOG_TARGET,
-                                "❌ Unable to lock all inputs for transaction {} in block {}. Leader proposed {}, we decided {}",
-                                leaf.id(),
-                                transaction.id(),
-                                t.decision,
-                                Decision::Abort
-                            );
-                            // We change our decision to ABORT so that the next time we propose/receive a
-                            // proposal we will check for ABORT. It may
-                            // happen that the transaction causing the lock failure
-                            // is ABORTED too and the locks released allowing this transaction to succeed.
-                            // Currently, the client would have to resubmit the transaction to resolve this.
-                            let mut tx_rec = self.transaction_pool.get(tx, tip_block.as_leaf_block(), t.id())?;
-                            tx_rec.update_local_decision(tx, Decision::Abort)?;
-
-                            // The leader should not have proposed conflicting transactions
-                            return Ok(false);
-                        } else if !is_outputs_locked {
-                            // Unable to lock all outputs - do not vote
-                            warn!(
-                                target: LOG_TARGET,
-                                "❌ Unable to lock all outputs for transaction {} in block {}. Leader proposed {}, we decided {}",
-                                leaf.id(),
-                                transaction.id(),
-                                t.decision,
-                                Decision::Abort
-                            );
-                            // Unlock any locked inputs because we are not voting
-                            self.unlock_inputs(tx, &transaction, local_committee_info)?;
-                            // We change our decision to ABORT so that the next time we propose/receive a
-                            // proposal we will check for ABORT
-                            let mut tx_rec = self.transaction_pool.get(tx, tip_block.as_leaf_block(), t.id())?;
-                            tx_rec.update_local_decision(tx, Decision::Abort)?;
-                            return Ok(false);
-                        } else {
-                            // We have locked all inputs and outputs
-                        }
-                    }
-                },
-                Command::LocalPrepared(t) => {
-                    let mut tx_rec = self.transaction_pool.get(tx, tip_block.as_leaf_block(), t.id())?;
-
-                    debug!(
-                        target: LOG_TARGET,
-                        "🔥 Process NEW leaf block: Update local proposal for transaction: {}. Local stage: {}, Leaf: {}",
-                        tx_rec.transaction_id(),
-                        tx_rec.current_stage(),
-                        leaf,
-                    );
-
-                    // If all shards are complete and we've already received our LocalPrepared, we can set the
-                    // LocalPrepared transaction as ready to propose ACCEPT.
-                    if tx_rec.current_stage().is_local_prepared() && tx_rec.transaction().evidence.all_shards_complete()
-                    {
-                        info!(
-                            target: LOG_TARGET,
-                            "🔥 Process NEW leaf block: Transaction is ready for propose ACCEPT({}, {}) Local Stage: {}",
-                            tx_rec.transaction_id(),
-                            tx_rec.current_decision(),
-                            tx_rec.current_stage()
-                        );
-                        tx_rec.add_pending_status_update(
-                            tx,
-                            leaf.as_leaf_block(),
-                            TransactionPoolStage::LocalPrepared,
-                            true,
-                        )?;
-                    }
-                },
-                Command::Accept(_) => {},
-                Command::ForeignProposal(_) => {},
-                Command::EpochEvent(_) => {},
-            }
-        }
-
-        leaf.set_as_processed(tx)?;
-
-        Ok(true)
+        self.decide_what_to_vote(
+            tx,
+            valid_block.block(),
+            local_committee_info,
+            epoch_should_start,
+            epoch_should_end,
+        )
     }
 
     /// if b_new .height > vheight && (b_new extends b_lock || b_new .justify.node.height > b_lock .height)
@@ -404,7 +242,7 @@ where TConsensusSpec: ConsensusSpec
     /// If we have not previously voted on this block and the node extends the current locked node, then we vote
     fn should_vote(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         block: &Block,
     ) -> Result<bool, ProposalValidationError> {
         let Some(last_voted) = LastVoted::get(tx).optional()? else {
@@ -462,19 +300,18 @@ where TConsensusSpec: ConsensusSpec
     #[allow(clippy::too_many_lines)]
     fn decide_what_to_vote(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         block: &Block,
         local_committee_info: &CommitteeInfo,
         epoch_should_start: bool,
         epoch_should_end: bool,
-    ) -> Result<Option<QuorumDecision>, HotStuffError> {
+    ) -> Result<ProposedBlockChangeSet, HotStuffError> {
         let mut total_leader_fee = 0;
-        let mut locked_inputs = HashSet::new();
-        let mut locked_outputs = HashSet::new();
 
-        // Executor used for transactions that have inputs without specific versions.
-        // It lives through the entire block so multiple transactions can be "chained" together in the same block
-        let mut executor = self.transaction_executor_builder.build();
+        // Store used for transactions that have inputs without specific versions.
+        // It lives through the entire block so multiple transactions can be sequenced together in the same block
+        let mut substate_store = PendingSubstateStore::new(tx);
+        let mut proposed_block_change_set = ProposedBlockChangeSet::new(block.as_leaf_block());
 
         if epoch_should_start && !block.is_epoch_start() {
             warn!(
@@ -482,7 +319,7 @@ where TConsensusSpec: ConsensusSpec
                 "❌ EpochEvent::Start command expected for block {} but not found",
                 block.id()
             );
-            return Ok(None);
+            return Ok(proposed_block_change_set.no_vote());
         }
 
         if epoch_should_end && !block.is_epoch_end() {
@@ -491,18 +328,18 @@ where TConsensusSpec: ConsensusSpec
                 "❌ EpochEvent::End command expected for block {} but not found",
                 block.id()
             );
-            return Ok(None);
+            return Ok(proposed_block_change_set.no_vote());
         }
 
         for cmd in block.commands() {
             if let Some(foreign_proposal) = cmd.foreign_proposal() {
-                if !ForeignProposal::exists(tx.deref_mut(), foreign_proposal)? {
+                if !ForeignProposal::exists(tx, foreign_proposal)? {
                     warn!(
                         target: LOG_TARGET,
                         "❌ Foreign proposal for block {block_id} from bucket {bucket} does not exist in the store",
                         block_id = foreign_proposal.block_id,bucket = foreign_proposal.bucket
                     );
-                    return Ok(None);
+                    return Ok(proposed_block_change_set.no_vote());
                 }
                 continue;
             }
@@ -515,7 +352,7 @@ where TConsensusSpec: ConsensusSpec
                                 "❌ EpochEvent::Start command received for block {} but it is not the start of the epoch",
                                 block.id()
                             );
-                            return Ok(None);
+                            return Ok(proposed_block_change_set.no_vote());
                         }
                     },
                     EpochEvent::End => {},
@@ -538,21 +375,8 @@ where TConsensusSpec: ConsensusSpec
                     block,
                     cmd.id(),
                 );
-                return Ok(None);
+                return Ok(proposed_block_change_set.no_vote());
             };
-
-            if tx_rec.is_deferred() {
-                info!(
-                    target: LOG_TARGET,
-                    "👨‍🔧 Executing deferred transaction {} in block {}",
-                    tx_rec.transaction_id(),
-                    block,
-                );
-
-                let executed = self.execute_transaction(tx, &atom.id, &mut executor)?;
-                self.transaction_pool.set_atom(tx, executed.to_atom())?;
-                tx_rec = self.transaction_pool.get(tx, block.as_leaf_block(), executed.id())?;
-            }
 
             // TODO: we probably need to provide the all/some of the QCs referenced in local transactions as
             //       part of the proposal DanMessage so that there is no race condition between receiving the
@@ -568,7 +392,39 @@ where TConsensusSpec: ConsensusSpec
             );
             match cmd {
                 Command::LocalOnly(t) => {
-                    if !tx_rec.current_stage().is_new() {
+                    if tx_rec.is_deferred() {
+                        info!(
+                            target: LOG_TARGET,
+                            "👨‍🔧 LOCAL-ONLY: Executing deferred transaction {} in block {}",
+                            tx_rec.transaction_id(),
+                            block,
+                        );
+
+                        let executed = self.execute_transaction_if_required(&substate_store, &atom.id, block.id())?;
+                        tx_rec.set_local_decision(executed.decision());
+                        tx_rec.set_initial_evidence(executed.to_initial_evidence());
+                        tx_rec.set_transaction_fee(executed.transaction_fee());
+                        proposed_block_change_set.add_transaction_execution(executed);
+                    } else if tx_rec.current_decision().is_commit() &&
+                        matches!(
+                            tx_rec.current_stage(),
+                            // TODO: Investigate race condition where transaction pool stage is already LocalOnly
+                            TransactionPoolStage::New | TransactionPoolStage::LocalOnly
+                        )
+                    {
+                        // We need to include the transaction execution context for this block if a transaction is yet
+                        // to be prepared.
+                        let execution = ExecutedTransaction::get_pending_execution_for_block(tx, block.id(), &t.id)?;
+                        // Align the TransactionPoolRecord with the relevant execution
+                        tx_rec.set_local_decision(execution.decision());
+                        tx_rec.set_initial_evidence(execution.to_initial_evidence());
+                        tx_rec.set_transaction_fee(execution.transaction_fee());
+                        proposed_block_change_set.add_transaction_execution(execution);
+                    } else {
+                        // continue
+                    }
+
+                    if !tx_rec.current_stage().is_new() && !tx_rec.current_stage().is_local_only() {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Stage disagreement for tx {} in block {}. Leader proposed LocalOnly, local stage is {}",
@@ -576,107 +432,24 @@ where TConsensusSpec: ConsensusSpec
                             block,
                             tx_rec.current_stage(),
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    if tx_rec.transaction().transaction_fee != t.transaction_fee {
+                    if tx_rec.atom().transaction_fee != t.transaction_fee {
                         warn!(
                             target: LOG_TARGET,
                             "❌ LocalOnly transaction fee disagreement for block {}. Leader proposed {}, we calculated {}",
                             block,
                             t.transaction_fee,
-                            tx_rec.transaction().transaction_fee
+                            tx_rec.atom().transaction_fee
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    if tx_rec.current_decision() == t.decision {
-                        if tx_rec.current_decision().is_commit() {
-                            if !local_committee_info.includes_all_substate_addresses(
-                                tx_rec.transaction().evidence.substate_addresses_iter(),
-                            ) {
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "❌ LocalOnly transaction {} in block {} has more than one involved shard",
-                                    t.id,
-                                    block,
-                                );
-                                return Ok(None);
-                            }
-
-                            let executed = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
-                            // Lock all inputs for the transaction as part of LocalOnly
-                            let is_inputs_locked =
-                                self.check_lock_inputs(tx, &executed, local_committee_info, &mut locked_inputs)?;
-                            let is_outputs_locked = is_inputs_locked &&
-                                self.check_lock_outputs(tx, &executed, &mut locked_outputs, &locked_inputs)?;
-
-                            if !is_inputs_locked {
-                                // Unable to lock all inputs - do not vote
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "❌ Unable to lock all inputs for transaction {} in block {}.",
-                                    block,
-                                    executed.id(),
-                                );
-                                // We change our decision to ABORT so that the next time we propose/receive a
-                                // proposal we will check for ABORT. It may
-                                // happen that the transaction causing the lock failure
-                                // is ABORTED too and the locks released allowing this transaction to succeed.
-                                // Currently, the client would have to resubmit the transaction to resolve this.
-                                tx_rec.update_local_decision(tx, Decision::Abort)?;
-
-                                // The leader should not have proposed conflicting transactions
-                                return Ok(None);
-                            } else if !is_outputs_locked {
-                                // Unable to lock all outputs - do not vote
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "❌ Unable to lock all outputs for transaction {} in block {}.",
-                                    block,
-                                    executed.id(),
-                                );
-                                // We change our decision to ABORT so that the next time we propose/receive a
-                                // proposal we will check for ABORT
-                                tx_rec.update_local_decision(tx, Decision::Abort)?;
-                                return Ok(None);
-                            } else {
-                                // We have locked all inputs and outputs
-                            }
-
-                            if t.leader_fee.is_none() {
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "❌ Leader fee for tx {} is None for LocalOnly command in block {}",
-                                    t.id,
-                                    block,
-                                );
-                                return Ok(None);
-                            }
-
-                            let calculated_leader_fee =
-                                tx_rec.calculate_leader_fee(NonZeroU64::new(1).unwrap(), EXHAUST_DIVISOR);
-                            if calculated_leader_fee != *t.leader_fee.as_ref().expect("None already checked") {
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "❌ LocalOnly leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
-                                    block,
-                                    t.leader_fee.as_ref().expect("None already checked"),
-                                    calculated_leader_fee
-                                );
-
-                                return Ok(None);
-                            }
-                            total_leader_fee += calculated_leader_fee.fee();
-                        }
-
-                        tx_rec.add_pending_status_update(
-                            tx,
-                            block.as_leaf_block(),
-                            TransactionPoolStage::LocalOnly,
-                            false,
-                        )?;
-                    } else {
+                    // If the leader proposed to commit a transaction that we want to abort, we abstain from voting
+                    // If the leader proposed to abort a transaction that we want to commit, perhaps the transaction has
+                    // a lock conflict, so we'll need to check this.
+                    if tx_rec.current_decision().is_abort() && t.decision.is_commit() {
                         // If we disagree with any local decision we abstain from voting
                         warn!(
                             target: LOG_TARGET,
@@ -686,10 +459,142 @@ where TConsensusSpec: ConsensusSpec
                             t.decision,
                             tx_rec.current_decision()
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
+
+                    if !local_committee_info
+                        .includes_all_substate_addresses(tx_rec.atom().evidence.substate_addresses_iter())
+                    {
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ LocalOnly transaction {} in block {} has more than one involved shard",
+                            t.id,
+                            block,
+                        );
+                        return Ok(proposed_block_change_set.no_vote());
+                    }
+
+                    if tx_rec.current_decision().is_commit() {
+                        let execution =
+                            proposed_block_change_set
+                                .get_transaction_execution(&t.id)
+                                .ok_or_else(|| {
+                                    HotStuffError::InvariantError(format!(
+                                        "Transaction execution not found for transaction {} in block {}",
+                                        t.id, block
+                                    ))
+                                })?;
+                        if !self.try_obtain_locks(execution, local_committee_info, &mut substate_store)? {
+                            // They want to ABORT a successfully executed transaction because of a lock conflict, which
+                            // we also have.
+                            if t.decision.is_abort() {
+                                warn!(
+                                    target: LOG_TARGET,
+                                    "🔥 Proposer chose to ABORT and we chose to ABORT due to lock conflict for transaction {} in block {}",
+                                    block,
+                                    tx_rec.transaction_id(),
+                                );
+                                // TODO: Add a reason for the ABORT. Perhaps a reason enum
+                                //       Decision::Abort(AbortReason::LockConflict)
+                                tx_rec.set_local_decision(Decision::Abort);
+                                proposed_block_change_set.set_next_transaction_update(
+                                    &tx_rec,
+                                    TransactionPoolStage::LocalOnly,
+                                    false,
+                                );
+                                continue;
+                            }
+
+                            warn!(
+                                target: LOG_TARGET,
+                                "❌ Failed to lock inputs/outputs for transaction {}. Not voting for block {}",
+                                block,
+                                tx_rec.transaction_id(),
+                            );
+                            return Ok(proposed_block_change_set.no_vote());
+                        }
+
+                        // If we've decided COMMIT and they decided ABORT, we need to abstain from voting
+                        if t.decision.is_abort() {
+                            warn!(
+                                target: LOG_TARGET,
+                                "❌ LocalOnly decision disagreement for transaction {} in block {}. Leader proposed {}, we decided {}",
+                                tx_rec.transaction_id(),
+                                block,
+                                t.decision,
+                                tx_rec.current_decision()
+                            );
+                            return Ok(proposed_block_change_set.no_vote());
+                        }
+
+                        if let Some(diff) = execution.result.finalize.accept() {
+                            if let Err(err) = substate_store.put_diff(t.id, diff) {
+                                warn!(
+                                    target: LOG_TARGET,
+                                    "❌ Failed to store diff for transaction {} in block {}. Error: {}",
+                                    block,
+                                    tx_rec.transaction_id(),
+                                    err
+                                );
+                                let _err = err.ok_or_storage_error()?;
+                                return Ok(proposed_block_change_set.no_vote());
+                            }
+                        }
+
+                        if t.leader_fee.is_none() {
+                            warn!(
+                                target: LOG_TARGET,
+                                "❌ Leader fee for tx {} is None for LocalOnly command in block {}",
+                                t.id,
+                                block,
+                            );
+                            return Ok(proposed_block_change_set.no_vote());
+                        }
+
+                        let calculated_leader_fee =
+                            tx_rec.calculate_leader_fee(NonZeroU64::new(1).expect("1 > 0"), EXHAUST_DIVISOR);
+                        if calculated_leader_fee != *t.leader_fee.as_ref().expect("None already checked") {
+                            warn!(
+                                target: LOG_TARGET,
+                                "❌ LocalOnly leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
+                                block,
+                                t.leader_fee.as_ref().expect("None already checked"),
+                                calculated_leader_fee
+                            );
+
+                            return Ok(proposed_block_change_set.no_vote());
+                        }
+                        total_leader_fee += calculated_leader_fee.fee();
+                    }
+
+                    proposed_block_change_set.set_next_transaction_update(
+                        &tx_rec,
+                        TransactionPoolStage::LocalOnly,
+                        false,
+                    );
                 },
                 Command::Prepare(t) => {
+                    if tx_rec.is_deferred() {
+                        info!(
+                            target: LOG_TARGET,
+                            "👨‍🔧 PREPARE: Executing deferred transaction {} in block {}",
+                            tx_rec.transaction_id(),
+                            block,
+                        );
+
+                        let executed = self.execute_transaction_if_required(&substate_store, &atom.id, block.id())?;
+                        tx_rec.set_local_decision(executed.decision());
+                        tx_rec.set_initial_evidence(executed.to_initial_evidence());
+                        tx_rec.set_transaction_fee(executed.transaction_fee());
+                        proposed_block_change_set.add_transaction_execution(executed);
+                    } else {
+                        let executed = ExecutedTransaction::get_pending_execution_for_block(tx, block.id(), &t.id)?;
+                        tx_rec.set_local_decision(executed.decision());
+                        tx_rec.set_initial_evidence(executed.to_initial_evidence());
+                        tx_rec.set_transaction_fee(executed.transaction_fee());
+                        proposed_block_change_set.add_transaction_execution(executed);
+                    }
+
                     if !tx_rec.current_stage().is_new() && !tx_rec.current_stage().is_prepared() {
                         warn!(
                             target: LOG_TARGET,
@@ -698,71 +603,21 @@ where TConsensusSpec: ConsensusSpec
                             block,
                             tx_rec.current_stage(),
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    if tx_rec.transaction().transaction_fee != t.transaction_fee {
+                    if tx_rec.atom().transaction_fee != t.transaction_fee {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Accept transaction fee disagreement for block {}. Leader proposed {}, we calculated {}",
                             block,
                             t.transaction_fee,
-                            tx_rec.transaction().transaction_fee
+                            tx_rec.atom().transaction_fee
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    if tx_rec.current_decision() == t.decision {
-                        if tx_rec.current_decision().is_commit() {
-                            let executed = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
-
-                            // Lock all inputs for the transaction as part of Prepare
-                            let is_inputs_locked =
-                                self.check_lock_inputs(tx, &executed, local_committee_info, &mut locked_inputs)?;
-                            let is_outputs_locked = is_inputs_locked &&
-                                self.check_lock_outputs(tx, &executed, &mut locked_outputs, &locked_inputs)?;
-
-                            if !is_inputs_locked {
-                                // Unable to lock all inputs - do not vote
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "❌ Unable to lock all inputs for transaction {} in block {}.",
-                                    block,
-                                    executed.id(),
-                                );
-                                // We change our decision to ABORT so that the next time we propose/receive a
-                                // proposal we will check for ABORT. It may
-                                // happen that the transaction causing the lock failure
-                                // is ABORTED too and the locks released allowing this transaction to succeed.
-                                // Currently, the client would have to resubmit the transaction to resolve this.
-                                tx_rec.update_local_decision(tx, Decision::Abort)?;
-
-                                // The leader should not have proposed conflicting transactions
-                                return Ok(None);
-                            } else if !is_outputs_locked {
-                                // Unable to lock all outputs - do not vote
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "❌ Unable to lock all outputs for transaction {} in block {}.",
-                                    block,
-                                    executed.id(),
-                                );
-                                // We change our decision to ABORT so that the next time we propose/receive a
-                                // proposal we will check for ABORT
-                                tx_rec.update_local_decision(tx, Decision::Abort)?;
-                                return Ok(None);
-                            } else {
-                                // We have locked all inputs and outputs
-                            }
-                        }
-
-                        tx_rec.add_pending_status_update(
-                            tx,
-                            block.as_leaf_block(),
-                            TransactionPoolStage::Prepared,
-                            true,
-                        )?;
-                    } else {
+                    if tx_rec.current_decision().is_abort() && t.decision.is_commit() {
                         // If we disagree with any local decision we abstain from voting
                         warn!(
                             target: LOG_TARGET,
@@ -772,8 +627,46 @@ where TConsensusSpec: ConsensusSpec
                             t.decision,
                             tx_rec.current_decision()
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
+
+                    if tx_rec.current_decision().is_commit() {
+                        let execution =
+                            proposed_block_change_set
+                                .get_transaction_execution(&t.id)
+                                .ok_or_else(|| {
+                                    HotStuffError::InvariantError(format!(
+                                        "Transaction execution not found for transaction {} in block {}",
+                                        t.id, block
+                                    ))
+                                })?;
+                        if !self.try_obtain_locks(execution, local_committee_info, &mut substate_store)? {
+                            // They want to ABORT a successfully executed transaction because of a lock conflict, which
+                            // we also have.
+                            if t.decision.is_abort() {
+                                tx_rec.set_local_decision(Decision::Abort);
+                                proposed_block_change_set.set_next_transaction_update(
+                                    &tx_rec,
+                                    TransactionPoolStage::Prepared,
+                                    true,
+                                );
+                                continue;
+                            }
+                            warn!(
+                                target: LOG_TARGET,
+                                "❌ Failed to lock inputs/outputs for transaction {}. Not voting for block {}",
+                                block,
+                                tx_rec.transaction_id(),
+                            );
+                            return Ok(proposed_block_change_set.no_vote());
+                        }
+                    }
+
+                    proposed_block_change_set.set_next_transaction_update(
+                        &tx_rec,
+                        TransactionPoolStage::Prepared,
+                        true,
+                    );
                 },
                 Command::LocalPrepared(t) => {
                     // Happy path: We've validated all the QCs and therefore are convinced that everyone also
@@ -789,7 +682,7 @@ where TConsensusSpec: ConsensusSpec
                             tx_rec.transaction_id(),
                             tx_rec.current_stage()
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
                     // We check that the leader decision is the same as our local decision.
                     // We disregard the remote decision because not all validators may have received the foreign
@@ -803,27 +696,26 @@ where TConsensusSpec: ConsensusSpec
                             t.decision,
                             tx_rec.current_local_decision()
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    if tx_rec.transaction().transaction_fee != t.transaction_fee {
+                    if tx_rec.atom().transaction_fee != t.transaction_fee {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Accept transaction fee disagreement tx {} in block {}. Leader proposed {}, we calculated {}",
                             tx_rec.transaction_id(),
                             block,
                             t.transaction_fee,
-                            tx_rec.transaction().transaction_fee
+                            tx_rec.atom().transaction_fee
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    tx_rec.add_pending_status_update(
-                        tx,
-                        block.as_leaf_block(),
+                    proposed_block_change_set.set_next_transaction_update(
+                        &tx_rec,
                         TransactionPoolStage::LocalPrepared,
-                        tx_rec.transaction().evidence.all_shards_complete(),
-                    )?;
+                        tx_rec.atom().evidence.all_shards_justified(),
+                    );
                 },
                 Command::Accept(t) => {
                     // Happy path: We've validated all the QCs and therefore are convinced that everyone also
@@ -837,7 +729,7 @@ where TConsensusSpec: ConsensusSpec
                             block,
                             tx_rec.current_stage(),
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
                     if tx_rec.current_decision() != t.decision {
                         warn!(
@@ -848,50 +740,50 @@ where TConsensusSpec: ConsensusSpec
                             t.decision,
                             tx_rec.current_decision()
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    if !tx_rec.transaction().evidence.all_shards_complete() {
+                    if !tx_rec.atom().evidence.all_shards_justified() {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Accept evidence disagreement tx {} in block {}. Evidence for {} out of {} shards",
                             tx_rec.transaction_id(),
                             block,
-                            tx_rec.transaction().evidence.num_complete_shards(),
-                            tx_rec.transaction().evidence.len(),
+                            tx_rec.atom().evidence.num_justified_shards(),
+                            tx_rec.atom().evidence.len(),
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    if tx_rec.transaction().transaction_fee != t.transaction_fee {
+                    if tx_rec.atom().transaction_fee != t.transaction_fee {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Accept transaction fee disagreement tx {} in block {}. Leader proposed {}, we calculated {}",
                             tx_rec.transaction_id(),
                             block,
                             t.transaction_fee,
-                            tx_rec.transaction().transaction_fee
+                            tx_rec.atom().transaction_fee
                         );
 
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
 
                     // Check if we have LocalPrepared ready i.e. LocalPrepared from all shards
                     // It is possible that the transaction was not marked as ready yet because of the order we
                     // received messages, but if we are in LocalPrepared and we have all the
                     // evidence, we would have proposed this too so we can continue.
-                    if !tx_rec.is_ready() && !tx_rec.transaction().evidence.all_shards_complete() {
+                    if !tx_rec.is_ready() && !tx_rec.atom().evidence.all_shards_justified() {
                         warn!(
                             target: LOG_TARGET,
                             "⚠️ Local proposal received ({}) for transaction {} which is not ready. Not voting.",
                             block,
-                            tx_rec.transaction()
+                            tx_rec.atom()
                         );
-                        return Ok(None);
+                        return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    let distinct_shards = local_committee_info
-                        .count_distinct_shards(tx_rec.transaction().evidence.substate_addresses_iter());
+                    let distinct_shards =
+                        local_committee_info.count_distinct_shards(tx_rec.atom().evidence.substate_addresses_iter());
                     let distinct_shards = NonZeroU64::new(distinct_shards as u64).ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
                             "Distinct shards is zero for transaction {} in block {}",
@@ -900,50 +792,65 @@ where TConsensusSpec: ConsensusSpec
                         ))
                     })?;
 
-                    if t.leader_fee.is_none() {
-                        warn!(
-                            target: LOG_TARGET,
-                            "❌ Leader fee for tx {} is None for Accept command in block {}",
-                            t.id,
-                            block,
-                        );
-                        return Ok(None);
-                    }
-
-                    let calculated_leader_fee = tx_rec.calculate_leader_fee(distinct_shards, EXHAUST_DIVISOR);
-                    if calculated_leader_fee != *t.leader_fee.as_ref().expect("None already checked") {
-                        warn!(
-                            target: LOG_TARGET,
-                            "❌ Accept leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
-                            block,
-                            t.leader_fee.as_ref().expect("None already checked"),
-                            calculated_leader_fee
-                        );
-
-                        return Ok(None);
-                    }
-                    total_leader_fee += calculated_leader_fee.fee();
                     // If the decision was changed to Abort, which can only happen when a foreign shard decides
                     // ABORT, and we decide COMMIT, we set SomePrepared, otherwise
                     // AllPrepared. There are no further stages after these, so these MUST
                     // never be ready to propose.
-                    if tx_rec.remote_decision().map(|d| d.is_abort()).unwrap_or(false) {
-                        tx_rec.add_pending_status_update(
-                            tx,
-                            block.as_leaf_block(),
+                    if tx_rec.current_decision().is_abort() {
+                        proposed_block_change_set.set_next_transaction_update(
+                            &tx_rec,
                             TransactionPoolStage::SomePrepared,
                             false,
-                        )?;
+                        );
                     } else {
-                        tx_rec.add_pending_status_update(
-                            tx,
-                            block.as_leaf_block(),
+                        proposed_block_change_set.set_next_transaction_update(
+                            &tx_rec,
                             TransactionPoolStage::AllPrepared,
                             false,
-                        )?;
+                        );
+
+                        if t.leader_fee.is_none() {
+                            warn!(
+                                target: LOG_TARGET,
+                                "❌ Leader fee for tx {} is None for Accept command in block {}",
+                                t.id,
+                                block,
+                            );
+                            return Ok(proposed_block_change_set.no_vote());
+                        }
+
+                        let calculated_leader_fee = tx_rec.calculate_leader_fee(distinct_shards, EXHAUST_DIVISOR);
+                        if calculated_leader_fee != *t.leader_fee.as_ref().expect("None already checked") {
+                            warn!(
+                                target: LOG_TARGET,
+                                "❌ Accept leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
+                                block,
+                                t.leader_fee.as_ref().expect("None already checked"),
+                                calculated_leader_fee
+                            );
+
+                            return Ok(proposed_block_change_set.no_vote());
+                        }
+                        total_leader_fee += calculated_leader_fee.fee();
+
+                        let execution = TransactionExecution::get_pending_for_block(tx, &t.id, block.parent())?;
+                        if let Some(diff) = execution.result().finalize.accept() {
+                            if let Err(err) = substate_store.put_diff(t.id, diff) {
+                                warn!(
+                                    target: LOG_TARGET,
+                                    "❌ Failed to store diff for transaction {} in block {}. Error: {}",
+                                    block,
+                                    tx_rec.transaction_id(),
+                                    err
+                                );
+                                let _err = err.ok_or_storage_error()?;
+                                return Ok(proposed_block_change_set.no_vote());
+                            }
+                        }
                     }
                 },
-                Command::ForeignProposal(_) => {
+                Command::ForeignProposal(_proposal) => {
+                    // TODO: this is not correct. we need to check the proposal and no-vote if invalid
                     warn!(
                         target: LOG_TARGET,
                         "❌ Foreign proposal command for block {}. Not voting.",
@@ -963,23 +870,48 @@ where TConsensusSpec: ConsensusSpec
                 block.total_leader_fee(),
                 total_leader_fee
             );
-            return Ok(None);
+            // TODO: investigate
+            // return Ok(proposed_block_change_set.no_vote());
         }
 
-        Ok(Some(QuorumDecision::Accept))
+        let (expected_merkle_root, tree_diff) = substate_store.calculate_jmt_diff_for_block(block)?;
+        if expected_merkle_root != *block.merkle_root() {
+            warn!(
+                target: LOG_TARGET,
+                "❌ Merkle root disagreement for block {}. Leader proposed {}, we calculated {}",
+                block,
+                block.merkle_root(),
+                expected_merkle_root
+            );
+            return Ok(proposed_block_change_set.no_vote());
+        }
+
+        let (diff, locks) = substate_store.into_parts();
+        proposed_block_change_set
+            .set_block_diff(diff)
+            .set_state_tree_diff(tree_diff)
+            .set_substate_locks(locks)
+            .set_quorum_decision(QuorumDecision::Accept);
+
+        Ok(proposed_block_change_set)
     }
 
-    // Executes the given transaction.
-    // If the transaction has already been executed it will be re-executed.
-    fn execute_transaction(
+    /// Executes the given transaction. If the transaction has already been executed for this block (on propose) then we
+    /// load without re-executing.
+    fn execute_transaction_if_required(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        store: &PendingSubstateStore<TConsensusSpec::StateStore>,
         transaction_id: &TransactionId,
-        executor: &mut <TConsensusSpec::BlockTransactionExecutorBuilder as BlockTransactionExecutorBuilder<
-            TConsensusSpec::StateStore,
-        >>::Executor,
-    ) -> Result<ExecutedTransaction, HotStuffError> {
-        let transaction = TransactionRecord::get(tx.deref_mut(), transaction_id)?;
+        block_id: &BlockId,
+    ) -> Result<TransactionExecution, HotStuffError> {
+        // If the transaction is already executed in the propose phase we simply load it for this block
+        if let Some(execution) =
+            TransactionExecution::get_by_block(store.read_transaction(), transaction_id, block_id).optional()?
+        {
+            return Ok(execution);
+        }
+
+        let transaction = TransactionRecord::get(store.read_transaction(), transaction_id)?;
 
         info!(
             target: LOG_TARGET,
@@ -987,281 +919,48 @@ where TConsensusSpec: ConsensusSpec
             transaction_id,
         );
 
-        let executed = executor
-            .execute(transaction.into_transaction(), tx)
+        let executed = self
+            .transaction_executor
+            .execute(transaction.into_transaction(), store)
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
-        executed.update(tx)?;
-        Ok(executed)
+        Ok(executed.into_execution_for_block(*block_id))
     }
 
-    fn lock_inputs(
+    fn try_obtain_locks(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        transaction: &ExecutedTransaction,
+        transaction_execution: &TransactionExecution,
         local_committee_info: &CommitteeInfo,
+        store: &mut PendingSubstateStore<'_, '_, TConsensusSpec::StateStore>,
     ) -> Result<bool, HotStuffError> {
-        let resolved_inputs = transaction.resolved_inputs().ok_or_else(|| {
-            HotStuffError::InvariantError(format!(
-                "Attempt to lock inputs on transaction {} but inputs are not resolved",
-                transaction.transaction().id()
-            ))
-        })?;
-
-        let state = SubstateRecord::try_lock_all(
-            tx,
-            transaction.id(),
-            local_committee_info.filter(
-                resolved_inputs
-                    .iter()
-                    .filter(|i| i.lock_flag().is_write())
-                    .map(|i| i.to_substate_address()),
-            ),
-            SubstateLockFlag::Write,
-        )?;
-        if !state.is_acquired() {
-            warn!(
-                target: LOG_TARGET,
-                "❌ Unable to write lock all inputs for transaction {}: {:?}",
-                transaction.id(),
-                state,
-            );
-            return Ok(false);
-        }
-
-        let state = SubstateRecord::try_lock_all(
-            tx,
-            transaction.id(),
-            local_committee_info.filter(
-                resolved_inputs
-                    .iter()
-                    .filter(|i| i.lock_flag().is_read())
-                    .map(|i| i.to_substate_address()),
-            ),
-            SubstateLockFlag::Read,
-        )?;
-
-        if !state.is_acquired() {
-            warn!(
-                target: LOG_TARGET,
-                "❌ Unable to read lock all input refs for transaction {}: {:?}",
-                transaction.id(),
-                state,
-            );
-            return Ok(false);
-        }
-
-        debug!(
-            target: LOG_TARGET,
-            "🔒️ Locked inputs for transaction {}",
-            transaction.id(),
+        let is_local_only = local_committee_info.includes_all_substate_addresses(
+            transaction_execution
+                .resolved_inputs()
+                .iter()
+                .map(|i| i.to_substate_address())
+                .chain(
+                    transaction_execution
+                        .resulting_outputs()
+                        .iter()
+                        .map(|id| id.to_substate_address()),
+                ),
         );
 
-        Ok(true)
-    }
-
-    fn check_lock_inputs(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
-        transaction: &ExecutedTransaction,
-        local_committee_info: &CommitteeInfo,
-        locked_inputs: &mut HashSet<SubstateAddress>,
-    ) -> Result<bool, HotStuffError> {
-        let resolved_inputs = transaction.resolved_inputs().ok_or_else(|| {
-            HotStuffError::InvariantError(format!(
-                "Attempt to lock inputs on transaction {} but inputs are not resolved",
-                transaction.transaction().id()
-            ))
-        })?;
-
-        // TODO: this doesnt check read/write semantics
-        if resolved_inputs
-            .iter()
-            .any(|addr| locked_inputs.contains(&addr.to_substate_address()))
-        {
-            warn!(
-                target: LOG_TARGET,
-                "❌ Locks for transaction {} conflict with other transactions in the block",
-                transaction.id(),
-            );
-            return Ok(false);
-        }
-
-        let state = SubstateRecord::check_lock_all(
-            tx,
-            local_committee_info.filter(
-                resolved_inputs
-                    .iter()
-                    .filter(|i| i.lock_flag().is_write())
-                    .map(|i| i.to_substate_address()),
-            ),
-            SubstateLockFlag::Write,
-        )?;
-        if !state.is_acquired() {
-            warn!(
-                target: LOG_TARGET,
-                "❌ Unable to write lock all inputs for transaction {}: {:?}",
-                transaction.id(),
-                state,
-            );
-            return Ok(false);
-        }
-
-        let state = SubstateRecord::check_lock_all(
-            tx,
-            local_committee_info.filter(
-                resolved_inputs
-                    .iter()
-                    .filter(|i| i.lock_flag().is_read())
-                    .map(|i| i.to_substate_address()),
-            ),
-            SubstateLockFlag::Read,
-        )?;
-        if !state.is_acquired() {
-            warn!(
-                target: LOG_TARGET,
-                "❌ Unable to read lock all inputs for transaction {}: {:?}",
-                transaction.id(),
-                state,
-            );
-            return Ok(false);
-        }
-
-        locked_inputs.extend(resolved_inputs.iter().map(|i| i.to_substate_address()));
-
-        debug!(
-            target: LOG_TARGET,
-            "🔒️ Input locks check OK for transaction {}",
-            transaction.id(),
+        let objects = transaction_execution.resolved_inputs().iter().cloned().chain(
+            transaction_execution
+                .resulting_outputs()
+                .iter()
+                .map(|id| VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockFlag::Output)),
         );
-
-        Ok(true)
-    }
-
-    fn unlock_inputs(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        transaction: &ExecutedTransaction,
-        local_committee_info: &CommitteeInfo,
-    ) -> Result<(), HotStuffError> {
-        let inputs = transaction.resolved_inputs().ok_or_else(|| {
-            HotStuffError::InvariantError(format!(
-                "Attempt to unlock inputs on transaction {} but inputs are not resolved",
-                transaction.transaction().id()
-            ))
-        })?;
-
-        SubstateRecord::try_unlock_many(
-            tx,
-            transaction.id(),
-            local_committee_info.filter(
-                inputs
-                    .iter()
-                    .filter(|i| i.lock_flag().is_write())
-                    .map(|i| i.to_substate_address()),
-            ),
-            SubstateLockFlag::Write,
-        )?;
-
-        SubstateRecord::try_unlock_many(
-            tx,
-            transaction.id(),
-            local_committee_info.filter(
-                inputs
-                    .iter()
-                    .filter(|i| i.lock_flag().is_read())
-                    .map(|i| i.to_substate_address()),
-            ),
-            SubstateLockFlag::Read,
-        )?;
-
-        Ok(())
-    }
-
-    fn lock_outputs(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block_id: &BlockId,
-        transaction: &ExecutedTransaction,
-    ) -> Result<bool, HotStuffError> {
-        debug!(
-            target: LOG_TARGET,
-            "Acquiring {} output locks for block `{}` and transaction `{}`",
-            transaction.resulting_outputs().len(),
-            block_id,
-            transaction.id(),
-        );
-
-        let state = LockedOutput::try_acquire_all(tx, block_id, transaction.id(), transaction.resulting_outputs())?;
-
-        if !state.is_acquired() {
+        if let Err(err) = store.try_lock_all(*transaction_execution.transaction_id(), objects, is_local_only) {
+            let err = err.ok_or_storage_error()?;
             warn!(
                 target: LOG_TARGET,
-                "❌ Unable to lock all outputs for transaction {}: {:?}",
-                transaction.id(),
-                state,
+                "❌ Failed to lock inputs/outputs for transaction {} because {err}", transaction_execution.transaction_id()
             );
             return Ok(false);
         }
-
         Ok(true)
-    }
-
-    fn check_lock_outputs(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
-        transaction: &ExecutedTransaction,
-        locked_outputs: &mut HashSet<VersionedSubstateId>,
-        locked_inputs: &HashSet<SubstateAddress>,
-    ) -> Result<bool, HotStuffError> {
-        let resulting_outputs = transaction.resulting_outputs();
-        if resulting_outputs.is_empty() {
-            return Ok(true);
-        }
-
-        if resulting_outputs
-            .iter()
-            .any(|i| locked_outputs.contains(i) || locked_inputs.contains(&i.to_substate_address()))
-        {
-            warn!(
-                target: LOG_TARGET,
-                "❌ Locks for transaction {} conflict with other transactions in the block",
-                transaction.id(),
-            );
-            return Ok(false);
-        }
-
-        let state = LockedOutput::check_locks(tx, resulting_outputs)?;
-        if !state.is_acquired() {
-            warn!(
-                target: LOG_TARGET,
-                "❌ Unable to lock all outputs for transaction {}: {:?}",
-                transaction.id(),
-                state,
-            );
-            return Ok(false);
-        }
-
-        locked_outputs.extend(resulting_outputs.iter().cloned());
-        debug!(
-            target: LOG_TARGET,
-            "🔒️ Output locks check OK for transaction {}",
-            transaction.id(),
-        );
-        Ok(true)
-    }
-
-    fn unlock_outputs(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        transaction: &ExecutedTransaction,
-        local_committee_info: &CommitteeInfo,
-    ) -> Result<(), HotStuffError> {
-        LockedOutput::try_release_all(
-            tx,
-            local_committee_info.filter(transaction.resulting_outputs().iter().map(|v| v.to_substate_address())),
-        )?;
-        Ok(())
     }
 
     async fn generate_vote_message(
@@ -1306,7 +1005,6 @@ where TConsensusSpec: ConsensusSpec
         Ok(committed_transactions)
     }
 
-    // Returns the number processed blocks
     fn on_lock_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
@@ -1323,8 +1021,7 @@ where TConsensusSpec: ConsensusSpec
             foreign_proposal.upsert(tx)?;
         }
 
-        // self.processed_locked_commands(tx, local_committee_shard, block)?;
-        // This moves the stage update from pending to current for all transactions on on the locked block
+        // This moves the stage update from pending to current for all transactions on the locked block
         self.transaction_pool.confirm_all_transitions(
             tx,
             locked,
@@ -1384,83 +1081,42 @@ where TConsensusSpec: ConsensusSpec
         block: &Block,
         local_committee_info: &CommitteeInfo,
     ) -> Result<Vec<TransactionAtom>, HotStuffError> {
-        let mut finalized_transactions = Vec::with_capacity(
-            block
-                .commands()
-                .iter()
-                .filter(|cmd| matches!(cmd, Command::Accept(_)))
-                .count(),
+        // Nothing to do here for empty dummy blocks
+        if block.is_dummy() {
+            block.commit_diff(tx, BlockDiff::empty(*block.id()))?;
+            return Ok(vec![]);
+        }
+
+        let diff = block.get_diff(&**tx)?;
+        info!(
+            target: LOG_TARGET,
+            "🌳 Committing block {} with {} substate change(s)", block, diff.len()
         );
-        let mut total_transaction_fee = 0;
-        for cmd in block.commands() {
-            match cmd {
-                Command::Prepare(_t) => {},
-                Command::LocalPrepared(_t) => {
-                    // TODO: Check if it's ok to unlock the inputs for ABORT at this point
-                },
-                Command::LocalOnly(t) | Command::Accept(t) => {
-                    let tx_rec = self.transaction_pool.get(tx, block.as_leaf_block(), &t.id)?;
-                    debug!(
-                        target: LOG_TARGET,
-                        "Transaction {} is finalized ({})", tx_rec.transaction_id(), t.decision
-                    );
 
-                    total_transaction_fee += tx_rec.transaction().transaction_fee;
+        let local_diff = diff.into_filtered(local_committee_info);
+        block.commit_diff(tx, local_diff)?;
 
-                    let mut executed = t.get_executed_transaction(tx.deref_mut())?;
-                    // Commit the transaction substate changes.
-                    if t.decision.is_commit() {
-                        if let Some(reject_reason) = executed.result().finalize.reject() {
-                            warn!(
-                                target: LOG_TARGET,
-                                "⚠️ We are unable to execute the block {} because transaction {} failed to execute but the committee decided to ACCEPT it.",
-                                block,
-                                tx_rec.transaction_id()
-                            );
-                            return Err(HotStuffError::RejectedTransactionCommitDecision {
-                                block_id: *block.id(),
-                                transaction_id: *tx_rec.transaction_id(),
-                                reject_reason: reject_reason.to_string(),
-                            });
-                        }
+        let finalized_transactions = self
+            .transaction_pool
+            .remove_all(tx, block.all_accepted_transactions_ids())?;
+        TransactionRecord::finalize_all(tx, *block.id(), &finalized_transactions)?;
 
-                        self.state_manager
-                            .commit_transaction(tx, block, &executed, local_committee_info)
-                            .map_err(|e| HotStuffError::StateManagerError(e.into()))?;
-                    }
-
-                    // Only unlock substates if we locked them in the first place
-                    if tx_rec.current_decision().is_commit() {
-                        // We unlock just so that inputs that were not mutated are unlocked, even though those
-                        // should be in input_refs
-                        self.unlock_inputs(tx, &executed, local_committee_info)?;
-                        // Unlock any outputs that were locked
-                        self.unlock_outputs(tx, &executed, local_committee_info)?;
-                    }
-
-                    // We are accepting the transaction so can remove the transaction from the pool
-                    debug!(
-                        target: LOG_TARGET,
-                        "🗑️ Removing transaction {} from pool", tx_rec.transaction_id()
-                    );
-                    tx_rec.remove(tx)?;
-                    executed.set_final_decision(t.decision).update(tx)?;
-                    finalized_transactions.push(t.clone());
-                },
-                Command::ForeignProposal(_) => {},
-                Command::EpochEvent(_) => {},
-            }
+        if !finalized_transactions.is_empty() {
+            debug!(
+                target: LOG_TARGET,
+                "✅ {} transactions finalized",
+                finalized_transactions.len(),
+            );
         }
 
-        block.commit(tx)?;
+        // Remove locks for finalized transactions
+        tx.substate_locks_remove_many_for_transactions(block.all_accepted_transactions_ids())?;
 
-        // We don't store (empty) pending state diffs for dummy blocks
-        if !block.is_dummy() {
-            let pending = PendingStateTreeDiff::remove_by_block(tx, block.id())?;
-            let mut state_tree = tari_state_tree::SpreadPrefixStateTree::new(tx);
-            state_tree.commit_diff(pending.diff)?;
-        }
+        let pending = PendingStateTreeDiff::remove_by_block(tx, block.id())?;
+        let mut state_tree = tari_state_tree::SpreadPrefixStateTree::new(tx);
+        state_tree.commit_diff(pending.diff)?;
 
+        let total_transaction_fee = block.total_transaction_fee();
         if total_transaction_fee > 0 {
             info!(
                 target: LOG_TARGET,

@@ -54,7 +54,7 @@ impl ForeignSendCounters {
     }
 
     pub fn get_or_default<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &mut TTx,
+        tx: &TTx,
         block_id: &BlockId,
     ) -> Result<Self, StorageError> {
         Ok(tx.foreign_send_counters_get(block_id).optional()?.unwrap_or_default())

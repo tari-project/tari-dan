@@ -62,10 +62,10 @@ where
 
     if !foreign.is_empty() {
         info!(target: LOG_TARGET, "Unable to execute transaction {} in the mempool because it has foreign inputs: {:?}", transaction.id(), foreign);
-        return Ok(Err(MempoolError::MustDeferExecution {
+        return Err(MempoolError::MustDeferExecution {
             local_substates,
             foreign_substates: foreign,
-        }));
+        });
     }
 
     info!(target: LOG_TARGET, "🎱 Transaction {} resolved local inputs = [{}]", transaction.id(), local_substates.keys().map(|addr| addr.to_string()).collect::<Vec<_>>().join(", "));
@@ -79,10 +79,10 @@ where
         state_db.set_many(local_substates).expect("memory db is infallible");
 
         match executor.execute(transaction, state_db, virtual_substates) {
-            Ok(mut executed) => {
+            Ok(exec_output) => {
                 // Update the resolved inputs to set the specific version, as we know it after execution
-                if let Some(diff) = executed.result().finalize.accept() {
-                    let resolved_inputs = versioned_inputs
+                let resolved_inputs = if let Some(diff) = exec_output.result.finalize.accept() {
+                    versioned_inputs
                         .into_iter()
                         .map(|versioned_id| {
                             let lock_flag = if diff.down_iter().any(|(id, _)| *id == versioned_id.substate_id) {
@@ -94,10 +94,9 @@ where
                             };
                             VersionedSubstateIdLockIntent::new(versioned_id, lock_flag)
                         })
-                        .collect::<IndexSet<_>>();
-                    executed.set_resolved_inputs(resolved_inputs);
+                        .collect::<IndexSet<_>>()
                 } else {
-                    let resolved_inputs = versioned_inputs
+                    versioned_inputs
                         .into_iter()
                         .map(|versioned_id| {
                             // We cannot tell which inputs are written, however since this transaction is a
@@ -106,11 +105,16 @@ where
                             // involved.
                             VersionedSubstateIdLockIntent::new(versioned_id, SubstateLockFlag::Write)
                         })
-                        .collect::<IndexSet<_>>();
-                    executed.set_resolved_inputs(resolved_inputs);
-                }
+                        .collect::<IndexSet<_>>()
+                };
 
-                Ok(executed)
+                Ok(ExecutedTransaction::new(
+                    exec_output.transaction,
+                    exec_output.result,
+                    resolved_inputs,
+                    exec_output.outputs,
+                    exec_output.execution_time,
+                ))
             },
             Err(err) => Err(err.into()),
         }

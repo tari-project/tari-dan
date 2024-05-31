@@ -4,14 +4,24 @@
 use std::{
     cmp,
     fmt::{Debug, Formatter},
-    ops::DerefMut,
 };
 
 use log::*;
 use tari_common::configuration::Network;
 use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
-    consensus_models::{Block, HighQc, LastVoted, LeafBlock, LockedBlock, TransactionPool, TransactionRecord},
+    consensus_models::{
+        Block,
+        BlockDiff,
+        ExecutedTransaction,
+        HighQc,
+        LastVoted,
+        LeafBlock,
+        LockedBlock,
+        TransactionAtom,
+        TransactionPool,
+        TransactionRecord,
+    },
     StateStore,
 };
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
@@ -89,9 +99,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         signing_service: TConsensusSpec::SignatureService,
-        state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        transaction_executor_builder: TConsensusSpec::BlockTransactionExecutorBuilder,
+        transaction_executor: TConsensusSpec::TransactionExecutor,
         tx_events: broadcast::Sender<HotstuffEvent>,
         tx_mempool: mpsc::UnboundedSender<Transaction>,
         hooks: TConsensusSpec::Hooks,
@@ -125,6 +134,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 leader_strategy.clone(),
                 signing_service.clone(),
                 outbound_messaging.clone(),
+                transaction_pool.clone(),
             ),
 
             on_next_sync_view: OnNextSyncViewHandler::new(
@@ -141,11 +151,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 pacemaker.clone_handle(),
                 outbound_messaging.clone(),
                 signing_service.clone(),
-                state_manager,
                 transaction_pool.clone(),
                 tx_events,
                 proposer.clone(),
-                transaction_executor_builder.clone(),
+                transaction_executor.clone(),
                 network,
                 hooks.clone(),
             ),
@@ -174,6 +183,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 state_store.clone(),
                 epoch_manager.clone(),
                 transaction_pool.clone(),
+                transaction_executor,
                 signing_service,
                 outbound_messaging.clone(),
             ),
@@ -193,7 +203,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     }
 
     pub async fn start(&mut self) -> Result<(), HotStuffError> {
-        self.create_genesis_block_if_required()?;
+        self.create_zero_block_if_required()?;
         let (current_height, high_qc) = self.state_store.with_read_tx(|tx| {
             let leaf = LeafBlock::get(tx)?;
             let last_voted = LastVoted::get(tx)?;
@@ -315,22 +325,35 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         current_height: NodeHeight,
     ) -> Result<(), HotStuffError> {
         let exists = self.state_store.with_write_tx(|tx| {
-            if self.transaction_pool.exists(tx.deref_mut(), &tx_id)? {
+            if self.transaction_pool.exists(&**tx, &tx_id)? {
                 return Ok(true);
             }
-            let transaction = TransactionRecord::get(tx.deref_mut(), &tx_id)?;
-            self.transaction_pool.insert(tx, transaction.to_atom())?;
+            let transaction = TransactionRecord::get(&**tx, &tx_id)?;
+            // Did the mempool execute it?
+            if transaction.is_executed() {
+                // This should never fail
+                let executed = ExecutedTransaction::try_from(transaction)?;
+                self.transaction_pool.insert(tx, executed.to_atom())?;
+            } else {
+                // Deferred execution
+                self.transaction_pool
+                    .insert(tx, TransactionAtom::deferred(*transaction.id()))?;
+            }
             Ok::<_, HotStuffError>(false)
         })?;
 
         debug!(
             target: LOG_TARGET,
-            "🔥 new transaction ready for consensus: {} ({} pending)",
+            "🔥 new transaction ready for consensus: {} ({} pending, exists = {})",
             tx_id,
-            num_pending_txs
+            num_pending_txs,
+            exists
         );
 
-        self.hooks.on_transaction_ready(&tx_id);
+        if !exists {
+            self.hooks.on_transaction_ready(&tx_id);
+        }
+
         if let Err(err) = self
             .on_inbound_message
             .update_parked_blocks(current_height, &tx_id)
@@ -601,11 +624,11 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         Ok(())
     }
 
-    fn create_genesis_block_if_required(&self) -> Result<(), HotStuffError> {
+    fn create_zero_block_if_required(&self) -> Result<(), HotStuffError> {
         self.state_store.with_write_tx(|tx| {
             // The parent for genesis blocks refer to this zero block
             let zero_block = Block::zero_block(self.network);
-            if !zero_block.exists(tx.deref_mut())? {
+            if !zero_block.exists(&**tx)? {
                 debug!(target: LOG_TARGET, "Creating zero block");
                 zero_block.justify().insert(tx)?;
                 zero_block.insert(tx)?;
@@ -614,22 +637,9 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 zero_block.as_last_executed().set(tx)?;
                 zero_block.as_last_voted().set(tx)?;
                 zero_block.justify().as_high_qc().set(tx)?;
-                zero_block.commit(tx)?;
+                zero_block.commit_diff(tx, BlockDiff::empty(*zero_block.id()))?;
             }
 
-            // let mut state_tree = SpreadPrefixStateTree::new(tx);
-            // state_tree.put_substate_changes_at_next_version(None, vec![])?;
-
-            // let genesis = Block::genesis();
-            // if !genesis.exists(tx.deref_mut())? {
-            //     debug!(target: LOG_TARGET, "Creating genesis block");
-            //     genesis.justify().save(&mut tx)?;
-            //     genesis.insert(&mut tx)?;
-            //     genesis.as_locked().set(&mut tx)?;
-            //     genesis.as_leaf_block().set(&mut tx)?;
-            //     genesis.as_last_executed().set(&mut tx)?;
-            //     genesis.justify().as_high_qc().set(&mut tx)?;
-            // }
             Ok(())
         })
     }

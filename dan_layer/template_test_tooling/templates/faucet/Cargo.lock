@@ -65,9 +65,8 @@ dependencies = [
 
 [[package]]
 name = "ciborium"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42e69ffd6f0917f5c029256a24d0161db17cea3997d185db0d35926308770f0e"
+version = "0.2.1"
+source = "git+https://github.com/enarx/ciborium.git?rev=114614d2a61102eb2321c68e53799d1e6f087aef#114614d2a61102eb2321c68e53799d1e6f087aef"
 dependencies = [
  "ciborium-io",
  "ciborium-ll",
@@ -76,15 +75,13 @@ dependencies = [
 
 [[package]]
 name = "ciborium-io"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05afea1e0a06c9be33d539b876f1ce3692f4afea2cb41f740e7743225ed1c757"
+version = "0.2.1"
+source = "git+https://github.com/enarx/ciborium.git?rev=114614d2a61102eb2321c68e53799d1e6f087aef#114614d2a61102eb2321c68e53799d1e6f087aef"
 
 [[package]]
 name = "ciborium-ll"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57663b653d948a338bfb3eeba9bb2fd5fcfaecb9e199e87e1eda4d9e8b240fd9"
+version = "0.2.1"
+source = "git+https://github.com/enarx/ciborium.git?rev=114614d2a61102eb2321c68e53799d1e6f087aef#114614d2a61102eb2321c68e53799d1e6f087aef"
 dependencies = [
  "ciborium-io",
  "half",
@@ -95,12 +92,6 @@ name = "core-foundation-sys"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06ea2b9bc92be3c2baa9334a323ebca2d6f074ff852cd1d7b11064035cd3868f"
-
-[[package]]
-name = "crunchy"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 
 [[package]]
 name = "darling"
@@ -162,13 +153,9 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "half"
-version = "2.4.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dd08c532ae367adf81c312a4580bc67f1d0fe8bc9c460520283f4c0ff277888"
-dependencies = [
- "cfg-if",
- "crunchy",
-]
+checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
 
 [[package]]
 name = "hashbrown"
@@ -389,7 +376,7 @@ dependencies = [
 
 [[package]]
 name = "tari_bor"
-version = "0.7.1"
+version = "0.6.0"
 dependencies = [
  "ciborium",
  "ciborium-io",
@@ -398,7 +385,7 @@ dependencies = [
 
 [[package]]
 name = "tari_template_abi"
-version = "0.7.1"
+version = "0.6.0"
 dependencies = [
  "serde",
  "tari_bor",
@@ -406,7 +393,7 @@ dependencies = [
 
 [[package]]
 name = "tari_template_lib"
-version = "0.7.1"
+version = "0.6.0"
 dependencies = [
  "newtype-ops",
  "serde",
@@ -418,7 +405,7 @@ dependencies = [
 
 [[package]]
 name = "tari_template_macros"
-version = "0.7.1"
+version = "0.6.0"
 dependencies = [
  "proc-macro2",
  "quote",

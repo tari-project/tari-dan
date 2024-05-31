@@ -16,7 +16,7 @@ fn basic_nft_mint() {
 
     let account_nft_template = account_nft_template_test.get_template_address("AccountNonFungible");
 
-    let (owner_component_address, owner_token, _) = account_nft_template_test.create_owned_account();
+    let (owner_component_address, owner_token, _) = account_nft_template_test.create_funded_account();
 
     let result = account_nft_template_test
         .execute_and_commit(

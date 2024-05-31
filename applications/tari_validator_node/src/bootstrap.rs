@@ -20,9 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, io, ops::DerefMut, str::FromStr};
+use std::{fs, io, ops::Deref, str::FromStr};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use futures::{future, FutureExt};
 use libp2p::identity;
 use log::info;
@@ -81,7 +81,7 @@ use tokio::{sync::mpsc, task::JoinHandle};
 #[cfg(feature = "metrics")]
 use crate::consensus::metrics::PrometheusConsensusMetrics;
 use crate::{
-    consensus::{self, ConsensusHandle, TariDanBlockTransactionExecutorBuilder},
+    consensus::{self, ConsensusHandle, TariDanBlockTransactionExecutor},
     dry_run_transaction_processor::DryRunTransactionProcessor,
     p2p::{
         create_tari_validator_node_rpc_service,
@@ -192,7 +192,10 @@ pub async fn spawn_services(
         // which depends on epoch_manager, so would be a circular dependency.
         EpochManagerConfig {
             base_layer_confirmations: consensus_constants.base_layer_confirmations,
-            committee_size: consensus_constants.committee_size,
+            committee_size: consensus_constants
+                .committee_size
+                .try_into()
+                .context("committee size must be non-zero")?,
             validator_node_sidechain_id: config.validator_node.validator_node_sidechain_id.clone(),
         },
         global_db.clone(),
@@ -242,8 +245,7 @@ pub async fn spawn_services(
     let outbound_messaging =
         ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
 
-    let transaction_executor_builder =
-        TariDanBlockTransactionExecutorBuilder::new(epoch_manager.clone(), payload_processor.clone());
+    let transaction_executor = TariDanBlockTransactionExecutor::new(epoch_manager.clone(), payload_processor.clone());
 
     #[cfg(feature = "metrics")]
     let metrics = PrometheusConsensusMetrics::new(state_store.clone(), metrics_registry);
@@ -261,7 +263,7 @@ pub async fn spawn_services(
         validator_node_client_factory.clone(),
         metrics,
         shutdown.clone(),
-        transaction_executor_builder,
+        transaction_executor,
         consensus_constants.clone(),
     )
     .await;
@@ -445,16 +447,16 @@ async fn spawn_p2p_rpc(
 // TODO: Figure out the best way to have the engine shard store mirror these bootstrapped states.
 fn bootstrap_state<TTx>(tx: &mut TTx, network: Network) -> Result<(), StorageError>
 where
-    TTx: StateStoreWriteTransaction + DerefMut,
+    TTx: StateStoreWriteTransaction + Deref,
     TTx::Target: StateStoreReadTransaction,
     TTx::Addr: NodeAddressable + Serialize,
 {
     let genesis_block = Block::genesis(network);
     let substate_id = SubstateId::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
-    let substate_address = SubstateAddress::from_address(&substate_id, 0);
+    let substate_address = SubstateAddress::from_substate_id(&substate_id, 0);
     let mut metadata: Metadata = Default::default();
     metadata.insert(TOKEN_SYMBOL, "ID".to_string());
-    if !SubstateRecord::exists(tx.deref_mut(), &substate_address)? {
+    if !SubstateRecord::exists(&**tx, &substate_address)? {
         // Create the resource for public identity
         SubstateRecord {
             substate_id,
@@ -481,10 +483,10 @@ where
     }
 
     let substate_id = SubstateId::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
-    let substate_address = SubstateAddress::from_address(&substate_id, 0);
+    let substate_address = SubstateAddress::from_substate_id(&substate_id, 0);
     let mut metadata = Metadata::new();
     metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
-    if !SubstateRecord::exists(tx.deref_mut(), &substate_address)? {
+    if !SubstateRecord::exists(&**tx, &substate_address)? {
         SubstateRecord {
             substate_id,
             version: 0,

@@ -1,11 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    borrow::Borrow,
-    collections::HashSet,
-    ops::{Deref, DerefMut},
-};
+use std::ops::Deref;
 
 use diesel::{
     sql_types::Text,
@@ -21,6 +17,7 @@ use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, NodeHeig
 use tari_dan_storage::{
     consensus_models::{
         Block,
+        BlockDiff,
         BlockId,
         Decision,
         Evidence,
@@ -34,14 +31,13 @@ use tari_dan_storage::{
         LastVoted,
         LeafBlock,
         LockedBlock,
-        LockedOutput,
+        LockedSubstate,
         PendingStateTreeDiff,
         QcId,
         QuorumCertificate,
-        SubstateLockFlag,
-        SubstateLockState,
         SubstateRecord,
         TransactionAtom,
+        TransactionExecution,
         TransactionPoolStage,
         TransactionPoolStatusUpdate,
         TransactionRecord,
@@ -51,7 +47,8 @@ use tari_dan_storage::{
     StateStoreWriteTransaction,
     StorageError,
 };
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_engine_types::substate::SubstateId;
+use tari_transaction::TransactionId;
 use tari_utilities::ByteArray;
 use time::{OffsetDateTime, PrimitiveDateTime};
 
@@ -227,8 +224,8 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
 
         diesel::sql_query(
             r#"
-            UPDATE blocks 
-            SET block_time = timestamp - 
+            UPDATE blocks
+            SET block_time = timestamp -
                              (SELECT timestamp
                               FROM blocks
                               WHERE block_id == ?)
@@ -270,6 +267,51 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "blocks_commit",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn block_diffs_insert(&mut self, block_diff: &BlockDiff) -> Result<(), StorageError> {
+        use crate::schema::block_diffs;
+
+        let block_id = serialize_hex(block_diff.block_id);
+        let values = block_diff
+            .changes
+            .iter()
+            .map(|ch| {
+                Ok((
+                    block_diffs::block_id.eq(&block_id),
+                    block_diffs::transaction_id.eq(serialize_hex(ch.transaction_id())),
+                    block_diffs::substate_id.eq(ch.versioned_substate_id().substate_id().to_string()),
+                    block_diffs::version.eq(ch.versioned_substate_id().version() as i32),
+                    block_diffs::change.eq(ch.as_change_string()),
+                    block_diffs::state.eq(ch.substate().map(serialize_json).transpose()?),
+                ))
+            })
+            .collect::<Result<Vec<_>, StorageError>>()?;
+
+        diesel::insert_into(block_diffs::table)
+            .values(values)
+            .execute(self.connection())
+            .map(|_| ())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "block_diffs_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn block_diffs_remove(&mut self, block_id: &BlockId) -> Result<(), StorageError> {
+        use crate::schema::block_diffs;
+
+        diesel::delete(block_diffs::table)
+            .filter(block_diffs::block_id.eq(serialize_hex(block_id)))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "block_diffs_remove",
                 source: e,
             })?;
 
@@ -689,6 +731,74 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
+    fn transactions_finalize_all<'a, I: IntoIterator<Item = &'a TransactionAtom>>(
+        &mut self,
+        block_id: BlockId,
+        transactions: I,
+    ) -> Result<(), StorageError> {
+        use crate::schema::transactions;
+
+        let changes = transactions
+            .into_iter()
+            .map(|atom| {
+                // TODO(perf): n calls, 2n queries, query is slow
+                let exec = self.transaction_executions_get_pending_for_block(&atom.id, &block_id)?;
+
+                Ok((
+                    transactions::transaction_id.eq(serialize_hex(atom.id())),
+                    (
+                        transactions::resolved_inputs.eq(serialize_json(&exec.resolved_inputs())?),
+                        transactions::resulting_outputs.eq(serialize_json(&exec.resulting_outputs())?),
+                        transactions::result.eq(serialize_json(&exec.result())?),
+                        transactions::execution_time_ms.eq(exec.execution_time().as_millis() as i64),
+                        transactions::final_decision.eq(atom.decision.to_string()),
+                        transactions::finalized_at.eq(now()),
+                    ),
+                ))
+            })
+            .collect::<Result<Vec<_>, StorageError>>()?;
+
+        for (predicate, change) in changes {
+            diesel::update(transactions::table)
+                .filter(predicate)
+                .set(change)
+                .execute(self.connection())
+                .map_err(|e| SqliteStorageError::DieselError {
+                    operation: "transactions_finalize_all",
+                    source: e,
+                })?;
+        }
+
+        Ok(())
+    }
+
+    fn transaction_executions_insert_or_ignore(
+        &mut self,
+        transaction_execution: &TransactionExecution,
+    ) -> Result<(), StorageError> {
+        use crate::schema::transaction_executions;
+
+        let insert = (
+            transaction_executions::block_id.eq(serialize_hex(transaction_execution.block_id())),
+            transaction_executions::transaction_id.eq(serialize_hex(transaction_execution.transaction_id())),
+            transaction_executions::result.eq(serialize_json(&transaction_execution.result())?),
+            transaction_executions::resolved_inputs.eq(serialize_json(&transaction_execution.resolved_inputs())?),
+            transaction_executions::resulting_outputs.eq(serialize_json(&transaction_execution.resulting_outputs())?),
+            transaction_executions::execution_time_ms
+                .eq(i64::try_from(transaction_execution.execution_time().as_millis()).unwrap_or(i64::MAX)),
+        );
+
+        diesel::insert_or_ignore_into(transaction_executions::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_executions_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
     fn transaction_pool_insert(
         &mut self,
         transaction: TransactionAtom,
@@ -754,7 +864,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn transaction_pool_add_pending_update(&mut self, update: TransactionPoolStatusUpdate) -> Result<(), StorageError> {
+    fn transaction_pool_add_pending_update(
+        &mut self,
+        update: &TransactionPoolStatusUpdate,
+    ) -> Result<(), StorageError> {
         use crate::schema::{transaction_pool, transaction_pool_state_updates};
 
         let transaction_id = serialize_hex(update.transaction_id());
@@ -891,6 +1004,48 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             })?;
 
         Ok(())
+    }
+
+    fn transaction_pool_remove_all<'a, I: IntoIterator<Item = &'a TransactionId>>(
+        &mut self,
+        transaction_ids: I,
+    ) -> Result<Vec<TransactionAtom>, StorageError> {
+        use crate::schema::{transaction_pool, transaction_pool_state_updates};
+
+        let transaction_ids = transaction_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
+
+        let txs = diesel::delete(transaction_pool::table)
+            .filter(transaction_pool::transaction_id.eq_any(&transaction_ids))
+            .returning(transaction_pool::all_columns)
+            .get_results::<sql_models::TransactionPoolRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_remove_all",
+                source: e,
+            })?;
+
+        if txs.len() != transaction_ids.len() {
+            return Err(SqliteStorageError::NotAllTransactionsFound {
+                operation: "transaction_pool_remove_all",
+                details: format!(
+                    "Found {} transactions, but {} were queried",
+                    txs.len(),
+                    transaction_ids.len()
+                ),
+            }
+            .into());
+        }
+
+        diesel::delete(transaction_pool_state_updates::table)
+            .filter(transaction_pool_state_updates::transaction_id.eq_any(&transaction_ids))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_remove_all",
+                source: e,
+            })?;
+
+        txs.into_iter()
+            .map(|tx| tx.try_convert(None).map(|t| t.into_atom()))
+            .collect()
     }
 
     fn transaction_pool_set_all_transitions<'a, I: IntoIterator<Item = &'a TransactionId>>(
@@ -1084,173 +1239,53 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn substates_try_lock_many<'a, B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
+    fn substate_locks_insert_all<I: IntoIterator<Item = (SubstateId, Vec<LockedSubstate>)>>(
         &mut self,
-        locked_by_tx: &TransactionId,
-        objects: I,
-        lock_flag: SubstateLockFlag,
-    ) -> Result<SubstateLockState, StorageError> {
-        use crate::schema::substates;
+        block_id: BlockId,
+        locks: I,
+    ) -> Result<(), StorageError> {
+        use crate::schema::substate_locks;
 
-        // Lock unique shards
-        let objects = objects
+        let locks = locks
             .into_iter()
-            .map(|v| serialize_hex(v.borrow()))
-            .collect::<HashSet<_>>();
+            .flat_map(|(id, locks)| {
+                locks.into_iter().map(move |lock| {
+                    (
+                        substate_locks::block_id.eq(serialize_hex(block_id)),
+                        substate_locks::substate_id.eq(id.to_string()),
+                        substate_locks::version.eq(lock.version() as i32),
+                        substate_locks::transaction_id.eq(serialize_hex(lock.transaction_id())),
+                        substate_locks::lock.eq(lock.substate_lock().to_string()),
+                        substate_locks::is_local_only.eq(lock.is_local_only()),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
 
-        let locked_details = substates::table
-            .select((substates::is_locked_w, substates::destroyed_by_transaction))
-            .filter(substates::address.eq_any(&objects))
-            .get_results::<(bool, Option<String>)>(self.connection())
+        diesel::insert_into(substate_locks::table)
+            .values(locks)
+            .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transactions_try_lock_many",
+                operation: "substate_locks_insert_all",
                 source: e,
             })?;
-        if locked_details.len() < objects.len() {
-            return Err(SqliteStorageError::NotAllSubstatesFound {
-                operation: "substates_try_lock_all",
-                details: format!(
-                    "{:?}: Found {} substates, but {} were requested",
-                    lock_flag,
-                    locked_details.len(),
-                    objects.len()
-                ),
-            }
-            .into());
-        }
 
-        if locked_details.iter().any(|(w, _)| *w) {
-            return Ok(SubstateLockState::SomeAlreadyWriteLocked);
-        }
-
-        if locked_details.iter().any(|(_, downed)| downed.is_some()) {
-            return Ok(SubstateLockState::SomeDestroyed);
-        }
-
-        match lock_flag {
-            SubstateLockFlag::Write => {
-                diesel::update(substates::table)
-                    .filter(substates::address.eq_any(objects))
-                    .set((
-                        substates::is_locked_w.eq(true),
-                        substates::locked_by.eq(serialize_hex(locked_by_tx)),
-                    ))
-                    .execute(self.connection())
-                    .map_err(|e| SqliteStorageError::DieselError {
-                        operation: "transactions_try_lock_many(Write)",
-                        source: e,
-                    })?;
-            },
-            SubstateLockFlag::Read => {
-                diesel::update(substates::table)
-                    .filter(substates::address.eq_any(objects))
-                    .set(substates::read_locks.eq(substates::read_locks + 1))
-                    .execute(self.connection())
-                    .map_err(|e| SqliteStorageError::DieselError {
-                        operation: "transactions_try_lock_many(Read)",
-                        source: e,
-                    })?;
-            },
-        }
-
-        Ok(SubstateLockState::LockAcquired)
+        Ok(())
     }
 
-    fn substates_try_unlock_many<B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
+    fn substate_locks_remove_many_for_transactions<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
-        locked_by_tx: &TransactionId,
-        objects: I,
-        lock_flag: SubstateLockFlag,
+        transaction_ids: I,
     ) -> Result<(), StorageError> {
-        use crate::schema::substates;
+        use crate::schema::substate_locks;
 
-        let objects = objects
-            .into_iter()
-            .map(|v| serialize_hex(v.borrow()))
-            .collect::<HashSet<_>>();
-
-        match lock_flag {
-            SubstateLockFlag::Write => {
-                // let locked_w = substates::table
-                //     .select(substates::is_locked_w)
-                //     // Only the locking transaction can unlock the substates for write
-                //     .filter(substates::locked_by.eq(serialize_hex(locked_by_tx)))
-                //     .filter(substates::shard_id.eq_any(&objects))
-                //     .get_results::<bool>(self.connection())
-                //     .map_err(|e| SqliteStorageError::DieselError {
-                //         operation: "substates_try_unlock_many",
-                //         source: e,
-                //     })?;
-                // if locked_w.len() < objects.len() {
-                //     return Err(SqliteStorageError::NotAllSubstatesFound {
-                //         operation: "substates_try_unlock_many",
-                //         details: format!(
-                //             "{:?}: Found {} substates, but {} were requested",
-                //             lock_flag,
-                //             locked_w.len(),
-                //             objects.len()
-                //         ),
-                //     }
-                //     .into());
-                // }
-                // if locked_w.iter().any(|w| !*w) {
-                //     return Err(SqliteStorageError::SubstatesUnlock {
-                //         operation: "substates_try_unlock_many",
-                //         details: "Not all substates are write locked".to_string(),
-                //     }
-                //     .into());
-                // }
-
-                diesel::update(substates::table)
-                    .filter(substates::address.eq_any(objects))
-                    .filter(substates::locked_by.eq(serialize_hex(locked_by_tx)))
-                    .set((
-                        substates::is_locked_w.eq(false),
-                        substates::locked_by.eq(None::<String>),
-                    ))
-                    .execute(self.connection())
-                    .map_err(|e| SqliteStorageError::DieselError {
-                        operation: "substates_try_unlock_many",
-                        source: e,
-                    })?;
-            },
-            SubstateLockFlag::Read => {
-                // let locked_r = substates::table
-                //     .select(substates::read_locks)
-                //     .filter(substates::shard_id.eq_any(&objects))
-                //     .get_results::<i32>(self.connection())
-                //     .map_err(|e| SqliteStorageError::DieselError {
-                //         operation: "substates_try_unlock_many",
-                //         source: e,
-                //     })?;
-                // if locked_r.len() < objects.len() {
-                //     return Err(SqliteStorageError::NotAllSubstatesFound {
-                //         operation: "substates_try_lock_all",
-                //         details: format!(
-                //             "Found {} substates, but {} were requested",
-                //             locked_r.len(),
-                //             objects.len()
-                //         ),
-                //     }
-                //     .into());
-                // }
-                // if locked_r.iter().any(|r| *r == 0) {
-                //     return Err(SqliteStorageError::SubstatesUnlock {
-                //         operation: "substates_try_unlock_many",
-                //         details: "Not all substates are read locked".to_string(),
-                //     }
-                //     .into());
-                // }
-                diesel::update(substates::table)
-                    .filter(substates::address.eq_any(objects))
-                    .set(substates::read_locks.eq(substates::read_locks - 1))
-                    .execute(self.connection())
-                    .map_err(|e| SqliteStorageError::DieselError {
-                        operation: "substates_try_unlock_many",
-                        source: e,
-                    })?;
-            },
-        }
+        diesel::delete(substate_locks::table)
+            .filter(substate_locks::transaction_id.eq_any(transaction_ids.into_iter().map(serialize_hex)))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substate_locks_release_all_by_substates",
+                source: e,
+            })?;
 
         Ok(())
     }
@@ -1262,40 +1297,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         destroyed_block_id: &BlockId,
         destroyed_transaction_id: &TransactionId,
         destroyed_qc_id: &QcId,
-        require_locks: bool,
     ) -> Result<(), StorageError> {
         use crate::schema::substates;
 
         let addresses = addresses.into_iter().map(serialize_hex).collect::<Vec<_>>();
-
-        let is_writable = substates::table
-            .select((substates::substate_id, substates::is_locked_w))
-            .filter(substates::address.eq_any(&addresses))
-            .get_results::<(String, bool)>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substate_down",
-                source: e,
-            })?;
-        if is_writable.len() != addresses.len() {
-            return Err(SqliteStorageError::NotAllSubstatesFound {
-                operation: "substate_down",
-                details: format!(
-                    "Found {} substates, but {} were requested",
-                    is_writable.len(),
-                    addresses.len()
-                ),
-            }
-            .into());
-        }
-        if require_locks {
-            if let Some((addr, _)) = is_writable.iter().find(|(_, w)| !*w) {
-                return Err(SqliteStorageError::SubstatesUnlock {
-                    operation: "substate_down",
-                    details: format!("Substate {} is not write locked", addr),
-                }
-                .into());
-            }
-        }
 
         let changes = (
             substates::destroyed_at.eq(diesel::dsl::now),
@@ -1346,93 +1351,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             })?;
 
         Ok(())
-    }
-
-    fn locked_outputs_acquire_all<I, B>(
-        &mut self,
-        block_id: &BlockId,
-        transaction_id: &TransactionId,
-        output_addresses: I,
-    ) -> Result<SubstateLockState, StorageError>
-    where
-        I: IntoIterator<Item = B>,
-        B: Borrow<VersionedSubstateId>,
-    {
-        use crate::schema::locked_outputs;
-        let block_id_hex = serialize_hex(block_id);
-        let transaction_id_hex = serialize_hex(transaction_id);
-
-        let insert = output_addresses
-            .into_iter()
-            .map(|address| {
-                (
-                    locked_outputs::block_id.eq(&block_id_hex),
-                    locked_outputs::transaction_id.eq(&transaction_id_hex),
-                    locked_outputs::substate_address.eq(serialize_hex(address.borrow().to_substate_address())),
-                )
-            })
-            .collect::<Vec<_>>();
-
-        let lock_state = diesel::insert_into(locked_outputs::table)
-            .values(insert)
-            .execute(self.connection())
-            .map(|_| SubstateLockState::LockAcquired)
-            .or_else(|e| {
-                if let diesel::result::Error::DatabaseError(diesel::result::DatabaseErrorKind::UniqueViolation, _) = e {
-                    Ok(SubstateLockState::SomeAlreadyWriteLocked)
-                } else {
-                    Err(SqliteStorageError::DieselError {
-                        operation: "locked_outputs_acquire_all",
-                        source: e,
-                    })
-                }
-            })?;
-
-        Ok(lock_state)
-    }
-
-    fn locked_outputs_release_all<I, B>(&mut self, output_addresses: I) -> Result<Vec<LockedOutput>, StorageError>
-    where
-        I: IntoIterator<Item = B>,
-        B: Borrow<SubstateAddress>,
-    {
-        use crate::schema::locked_outputs;
-
-        let output_addresses = output_addresses
-            .into_iter()
-            .map(|address| serialize_hex(address.borrow()))
-            .collect::<Vec<_>>();
-
-        // let locked = locked_outputs::table
-        //     .filter(locked_outputs::shard_id.eq_any(&output_shards))
-        //     .get_results::<sql_models::LockedOutput>(self.connection())
-        //     .map_err(|e| SqliteStorageError::DieselError {
-        //         operation: "locked_outputs_release",
-        //         source: e,
-        //     })?;
-        //
-        // if locked.len() != output_shards.len() {
-        //     return Err(SqliteStorageError::NotAllSubstatesFound {
-        //         operation: "locked_outputs_release",
-        //         details: format!(
-        //             "Found {} locked outputs, but {} were requested",
-        //             locked.len(),
-        //             output_shards.len()
-        //         ),
-        //     }
-        //     .into());
-        // }
-
-        diesel::delete(locked_outputs::table)
-            .filter(locked_outputs::substate_address.eq_any(&output_addresses))
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "locked_outputs_release",
-                source: e,
-            })?;
-
-        // locked.into_iter().map(TryInto::try_into).collect()
-        Ok(vec![])
     }
 
     fn pending_state_tree_diffs_remove_by_block(
@@ -1489,11 +1407,11 @@ impl<'a, TAddr> Deref for SqliteStateStoreWriteTransaction<'a, TAddr> {
     }
 }
 
-impl<'a, TAddr> DerefMut for SqliteStateStoreWriteTransaction<'a, TAddr> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.transaction.as_mut().unwrap()
-    }
-}
+// impl<'a, TAddr> DerefMut for SqliteStateStoreWriteTransaction<'a, TAddr> {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         self.transaction.as_mut().unwrap()
+//     }
+// }
 
 impl<TAddr> Drop for SqliteStateStoreWriteTransaction<'_, TAddr> {
     fn drop(&mut self) {

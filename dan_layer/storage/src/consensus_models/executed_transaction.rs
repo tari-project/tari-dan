@@ -3,21 +3,28 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    fmt,
     hash::Hash,
+    ops::Deref,
     time::Duration,
 };
 
 use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{optional::Optional, SubstateAddress};
-use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
-    lock::LockFlag,
-};
+use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
 use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
 
 use crate::{
-    consensus_models::{Decision, Evidence, ShardEvidence, SubstateLockFlag, TransactionAtom, TransactionRecord},
+    consensus_models::{
+        BlockId,
+        Decision,
+        Evidence,
+        SubstateLockFlag,
+        TransactionAtom,
+        TransactionExecution,
+        TransactionRecord,
+    },
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -33,7 +40,7 @@ pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
     resulting_outputs: Vec<VersionedSubstateId>,
-    resolved_inputs: Option<IndexSet<VersionedSubstateIdLockIntent>>,
+    resolved_inputs: IndexSet<VersionedSubstateIdLockIntent>,
     #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
     execution_time: Duration,
     final_decision: Option<Decision>,
@@ -46,12 +53,13 @@ impl ExecutedTransaction {
     pub fn new(
         transaction: Transaction,
         result: ExecuteResult,
+        resolved_inputs: IndexSet<VersionedSubstateIdLockIntent>,
         resulting_outputs: Vec<VersionedSubstateId>,
         execution_time: Duration,
     ) -> Self {
         Self {
             transaction,
-            resolved_inputs: None,
+            resolved_inputs,
             result,
             execution_time,
             resulting_outputs,
@@ -74,11 +82,7 @@ impl ExecutedTransaction {
     }
 
     pub fn original_decision(&self) -> Decision {
-        if self.result.finalize.is_accept() {
-            Decision::Commit
-        } else {
-            Decision::Abort
-        }
+        Decision::from(&self.result.finalize.result)
     }
 
     pub fn transaction(&self) -> &Transaction {
@@ -93,20 +97,28 @@ impl ExecutedTransaction {
         self.transaction
     }
 
+    pub fn into_execution_for_block(self, block_id: BlockId) -> TransactionExecution {
+        TransactionExecution::new(
+            block_id,
+            *self.transaction.id(),
+            self.result,
+            self.resolved_inputs,
+            self.resulting_outputs,
+            self.execution_time,
+        )
+    }
+
     pub fn result(&self) -> &ExecuteResult {
         &self.result
     }
 
     pub fn all_inputs_iter(&self) -> impl Iterator<Item = &VersionedSubstateId> + '_ {
-        self.resolved_inputs
-            .as_ref()
-            .into_iter()
-            .flatten()
-            .map(|input| &input.versioned_substate_id)
+        self.resolved_inputs.iter().map(|input| &input.versioned_substate_id)
     }
 
-    pub fn involved_shards_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
-        self.all_inputs_iter()
+    pub fn involved_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+        self.resolved_inputs
+            .iter()
             .map(|input| input.to_substate_address())
             .chain(self.resulting_outputs.iter().map(|output| output.to_substate_address()))
     }
@@ -149,44 +161,37 @@ impl ExecutedTransaction {
         &self.resulting_outputs
     }
 
-    pub fn resolved_inputs(&self) -> Option<&IndexSet<VersionedSubstateIdLockIntent>> {
-        self.resolved_inputs.as_ref()
+    pub fn resolved_inputs(&self) -> &IndexSet<VersionedSubstateIdLockIntent> {
+        &self.resolved_inputs
     }
 
-    pub fn set_resolved_inputs(&mut self, resolved_inputs: IndexSet<VersionedSubstateIdLockIntent>) -> &mut Self {
-        self.resolved_inputs = Some(resolved_inputs);
-        self
-    }
-
-    pub fn dissolve(self) -> (Transaction, ExecuteResult) {
-        (self.transaction, self.result)
+    pub fn dissolve(
+        self,
+    ) -> (
+        Transaction,
+        ExecuteResult,
+        IndexSet<VersionedSubstateIdLockIntent>,
+        Vec<VersionedSubstateId>,
+    ) {
+        (
+            self.transaction,
+            self.result,
+            self.resolved_inputs,
+            self.resulting_outputs,
+        )
     }
 
     pub fn to_initial_evidence(&self) -> Evidence {
-        let mut deduped_evidence = HashMap::new();
-        deduped_evidence.extend(self.resolved_inputs.iter().flatten().map(|input| {
-            (input.to_substate_address(), ShardEvidence {
-                qc_ids: IndexSet::new(),
-                lock: input.lock_flag().as_lock_flag(),
-            })
-        }));
+        Evidence::from_inputs_and_outputs(*self.id(), &self.resolved_inputs, &self.resulting_outputs)
+    }
 
-        let tx_reciept_address = SubstateAddress::for_transaction_receipt(self.id().into_receipt_address());
-        deduped_evidence.extend(
-            self.resulting_outputs
-                .iter()
-                .map(|output| output.to_substate_address())
-                // Exclude transaction receipt address from evidence since all involved shards will commit it
-                .filter(|output| *output != tx_reciept_address)
-                .map(|output| {
-                    (output, ShardEvidence {
-                        qc_ids: IndexSet::new(),
-                        lock: LockFlag::Write,
-                    })
-                }),
-        );
-
-        deduped_evidence.into_iter().collect()
+    pub fn transaction_fee(&self) -> u64 {
+        self.result
+            .finalize
+            .fee_receipt
+            .total_fees_paid()
+            .as_u64_checked()
+            .unwrap_or(0)
     }
 
     pub fn is_finalized(&self) -> bool {
@@ -205,21 +210,6 @@ impl ExecutedTransaction {
         self.abort_details.as_ref()
     }
 
-    pub fn set_final_decision(&mut self, decision: Decision) -> &mut Self {
-        self.final_decision = Some(decision);
-        if decision.is_abort() && self.abort_details.is_none() {
-            self.abort_details = Some(
-                self.result
-                    .finalize
-                    .result
-                    .reject()
-                    .map(|reason| reason.to_string())
-                    .unwrap_or_else(|| "Transaction execution succeeded but ABORT decision made".to_string()),
-            );
-        }
-        self
-    }
-
     pub fn set_abort<T: Into<String>>(&mut self, details: T) -> &mut Self {
         self.final_decision = Some(Decision::Abort);
         self.abort_details = Some(details.into());
@@ -229,7 +219,7 @@ impl ExecutedTransaction {
     pub fn to_atom(&self) -> TransactionAtom {
         TransactionAtom {
             id: *self.id(),
-            decision: self.decision(),
+            decision: self.original_decision(),
             evidence: self.to_initial_evidence(),
             transaction_fee: self
                 .result()
@@ -253,7 +243,19 @@ impl ExecutedTransaction {
         TransactionRecord::from(self.clone()).update(tx)
     }
 
-    pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx, tx_id: &TransactionId) -> Result<Self, StorageError> {
+    pub fn upsert<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
+    where
+        TTx: StateStoreWriteTransaction + Deref,
+        TTx::Target: StateStoreReadTransaction,
+    {
+        if Self::exists(&**tx, self.id())? {
+            self.update(tx)
+        } else {
+            self.insert(tx)
+        }
+    }
+
+    pub fn get<TTx: StateStoreReadTransaction>(tx: &TTx, tx_id: &TransactionId) -> Result<Self, StorageError> {
         let rec = tx.transactions_get(tx_id)?;
         if rec.result.is_none() {
             return Err(StorageError::NotFound {
@@ -266,8 +268,45 @@ impl ExecutedTransaction {
         rec.try_into()
     }
 
+    pub fn get_result<TTx: StateStoreReadTransaction>(
+        tx: &TTx,
+        tx_id: &TransactionId,
+    ) -> Result<ExecuteResult, StorageError> {
+        // TODO(perf): consider optimising
+        let rec = tx.transactions_get(tx_id)?;
+        let Some(result) = rec.result else {
+            return Err(StorageError::NotFound {
+                item: "ExecutedTransaction result".to_string(),
+                key: tx_id.to_string(),
+            });
+        };
+
+        Ok(result)
+    }
+
+    pub fn get_pending_execution_for_block<TTx: StateStoreReadTransaction>(
+        tx: &TTx,
+        block_id: &BlockId,
+        tx_id: &TransactionId,
+    ) -> Result<TransactionExecution, StorageError> {
+        if let Some(execution) = TransactionExecution::get_by_block(tx, tx_id, block_id).optional()? {
+            return Ok(execution);
+        }
+
+        // Since the mempool only executes versioned inputs it will update the local record with the final result.
+        // If there is no pending transaction result, we check if the final transaction execution has been set.
+        let exec = Self::get(tx, tx_id)?;
+        if exec.is_finalized() {
+            return Err(StorageError::QueryError {
+                reason: format!("Transaction {} has already been finalized", tx_id),
+            });
+        }
+
+        Ok(exec.into_execution_for_block(*block_id))
+    }
+
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &mut TTx,
+        tx: &TTx,
         tx_id: &TransactionId,
     ) -> Result<bool, StorageError> {
         match tx.transactions_get(tx_id).optional()? {
@@ -277,7 +316,7 @@ impl ExecutedTransaction {
     }
 
     pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
-        tx: &mut TTx,
+        tx: &TTx,
         tx_ids: I,
     ) -> Result<(Vec<Self>, HashSet<&'a TransactionId>), StorageError> {
         let mut tx_ids = tx_ids.into_iter().collect::<HashSet<_>>();
@@ -291,7 +330,7 @@ impl ExecutedTransaction {
     }
 
     pub fn get_all<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
-        tx: &mut TTx,
+        tx: &TTx,
         tx_ids: I,
     ) -> Result<Vec<Self>, StorageError> {
         let (recs, missing) = Self::get_any(tx, tx_ids)?;
@@ -309,13 +348,13 @@ impl ExecutedTransaction {
     }
 
     pub fn get_involved_shards<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
-        tx: &mut TTx,
+        tx: &TTx,
         transactions: I,
     ) -> Result<HashMap<TransactionId, HashSet<SubstateAddress>>, StorageError> {
         let transactions = Self::get_all(tx, transactions)?;
         Ok(transactions
             .into_iter()
-            .map(|t| (*t.transaction.id(), t.involved_shards_iter().collect()))
+            .map(|t| (*t.transaction.id(), t.involved_addresses_iter().collect()))
             .collect())
     }
 }
@@ -324,17 +363,24 @@ impl TryFrom<TransactionRecord> for ExecutedTransaction {
     type Error = StorageError;
 
     fn try_from(value: TransactionRecord) -> Result<Self, Self::Error> {
-        if value.result.is_none() {
+        if !value.is_executed() {
             return Err(StorageError::QueryError {
-                reason: format!("Transaction {} has not yet executed", value.transaction.id()),
+                reason: format!(
+                    "ExecutedTransaction::try_from: Transaction {} has not yet executed",
+                    value.transaction.id()
+                ),
             });
         }
+
+        let resolved_inputs = value.resolved_inputs.ok_or_else(|| StorageError::DataInconsistency {
+            details: format!("Executed transaction {} has no resolved inputs", value.transaction.id()),
+        })?;
 
         Ok(Self {
             transaction: value.transaction,
             result: value.result.unwrap(),
             execution_time: value.execution_time.unwrap_or_default(),
-            resolved_inputs: value.resolved_inputs,
+            resolved_inputs,
             final_decision: value.final_decision,
             finalized_time: value.finalized_time,
             resulting_outputs: value.resulting_outputs,
@@ -386,5 +432,11 @@ impl VersionedSubstateIdLockIntent {
 
     pub fn lock_flag(&self) -> SubstateLockFlag {
         self.lock_flag
+    }
+}
+
+impl fmt::Display for VersionedSubstateIdLockIntent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({})", self.versioned_substate_id, self.lock_flag)
     }
 }

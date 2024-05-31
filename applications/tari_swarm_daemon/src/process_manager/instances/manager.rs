@@ -211,13 +211,13 @@ impl InstanceManager {
             InstanceType::TariIndexer => {
                 self.indexers.insert(instance_id, IndexerProcess::new(instance));
             },
-            InstanceType::TariWalletDaemon => {
-                self.wallet_daemons
-                    .insert(instance_id, WalletDaemonProcess::new(instance));
-            },
             InstanceType::TariSignalingServer => {
                 self.signaling_servers
                     .insert(instance_id, SignalingServerProcess::new(instance));
+            },
+            InstanceType::TariWalletDaemon => {
+                self.wallet_daemons
+                    .insert(instance_id, WalletDaemonProcess::new(instance));
             },
         }
 
@@ -250,6 +250,10 @@ impl InstanceManager {
 
     pub fn indexers(&self) -> impl Iterator<Item = &IndexerProcess> + Sized {
         self.indexers.values()
+    }
+
+    pub fn signaling_servers(&self) -> impl Iterator<Item = &SignalingServerProcess> + Sized {
+        self.signaling_servers.values()
     }
 
     // pub fn wallet_daemons(&self) -> impl Iterator<Item = &WalletDaemonProcess> + Sized {
@@ -301,6 +305,7 @@ impl InstanceManager {
             .chain(self.minotari_miners.values_mut().map(|x| x.instance_mut()))
             .chain(self.validator_nodes.values_mut().map(|x| x.instance_mut()))
             .chain(self.indexers.values_mut().map(|x| x.instance_mut()))
+            .chain(self.signaling_servers.values_mut().map(|x| x.instance_mut()))
             .chain(self.wallet_daemons.values_mut().map(|x| x.instance_mut()))
     }
 
@@ -312,6 +317,7 @@ impl InstanceManager {
             .chain(self.minotari_miners.values().map(|x| x.instance()))
             .chain(self.validator_nodes.values().map(|x| x.instance()))
             .chain(self.indexers.values().map(|x| x.instance()))
+            .chain(self.signaling_servers.values().map(|x| x.instance()))
             .chain(self.wallet_daemons.values().map(|x| x.instance()))
     }
 

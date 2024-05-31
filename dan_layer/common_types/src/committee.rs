@@ -204,7 +204,7 @@ impl CommitteeInfo {
     }
 
     pub fn includes_substate_address(&self, substate_address: &SubstateAddress) -> bool {
-        let s = substate_address.to_committee_shard(self.num_committees);
+        let s = substate_address.to_shard(self.num_committees);
         self.shard == s
     }
 
@@ -237,10 +237,10 @@ impl CommitteeInfo {
     }
 
     /// Calculates the number of distinct shards for a given shard set
-    pub fn count_distinct_shards<'a, I: IntoIterator<Item = &'a SubstateAddress>>(&self, shards: I) -> usize {
+    pub fn count_distinct_shards<B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(&self, shards: I) -> usize {
         shards
             .into_iter()
-            .map(|shard| shard.to_committee_shard(self.num_committees))
+            .map(|shard| shard.borrow().to_shard(self.num_committees))
             .collect::<std::collections::HashSet<_>>()
             .len()
     }

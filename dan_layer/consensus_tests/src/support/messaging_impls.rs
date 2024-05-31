@@ -43,7 +43,7 @@ impl OutboundMessaging for TestOutboundMessaging {
             .send(message.into())
             .await
             .map_err(|_| OutboundMessagingError::FailedToEnqueueMessage {
-                reason: "channel closed".to_string(),
+                reason: "loopback channel closed".to_string(),
             })
     }
 
@@ -56,7 +56,7 @@ impl OutboundMessaging for TestOutboundMessaging {
             .send((to, message.into()))
             .await
             .map_err(|_| OutboundMessagingError::FailedToEnqueueMessage {
-                reason: "channel closed".to_string(),
+                reason: "leader channel closed".to_string(),
             })
     }
 
@@ -70,7 +70,7 @@ impl OutboundMessaging for TestOutboundMessaging {
             .send((committee.into_iter().cloned().collect(), message.into()))
             .await
             .map_err(|_| OutboundMessagingError::FailedToEnqueueMessage {
-                reason: "channel closed".to_string(),
+                reason: "broadcast channel closed".to_string(),
             })
     }
 }

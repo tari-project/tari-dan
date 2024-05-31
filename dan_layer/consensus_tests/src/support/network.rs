@@ -10,10 +10,7 @@ use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::shard::Shard;
-use tari_dan_storage::{
-    consensus_models::{TransactionPool, TransactionRecord},
-    StateStore,
-};
+use tari_dan_storage::{consensus_models::TransactionRecord, StateStore};
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
@@ -162,7 +159,8 @@ impl TestNetwork {
 pub enum TestNetworkDestination {
     All,
     Address(TestAddress),
-    Bucket(u32),
+    #[allow(dead_code)]
+    Shard(u32),
 }
 
 impl TestNetworkDestination {
@@ -170,12 +168,12 @@ impl TestNetworkDestination {
         match self {
             TestNetworkDestination::All => true,
             TestNetworkDestination::Address(a) => a == addr,
-            TestNetworkDestination::Bucket(b) => *b == bucket,
+            TestNetworkDestination::Shard(b) => *b == bucket,
         }
     }
 
     pub fn is_bucket(&self) -> bool {
-        matches!(self, TestNetworkDestination::Bucket(_))
+        matches!(self, TestNetworkDestination::Shard(_))
     }
 }
 
@@ -221,38 +219,6 @@ impl TestNetworkWorker {
         let tx_new_transactions = self.tx_new_transactions.clone();
         let transaction_store = self.transaction_store.clone();
 
-        // Handle transactions that come in from the test. This behaves like a mempool.
-        let mut mempool_task = tokio::spawn(async move {
-            while let Some((dest, tx_record)) = rx_new_transaction.recv().await {
-                transaction_store
-                    .write()
-                    .await
-                    .insert(*tx_record.transaction().id(), tx_record.clone());
-                for (addr, (bucket, tx_new_transaction_to_consensus, state_store)) in &tx_new_transactions {
-                    if dest.is_for(addr, *bucket) {
-                        state_store
-                            .with_write_tx(|tx| {
-                                tx_record.upsert(tx)?;
-                                // Inserting in the pool here allows us to wait for all transactions have made it to
-                                // consensus before starting consensus.
-                                let atom = tx_record.to_atom();
-                                let pool = TransactionPool::<SqliteStateStore<TestAddress>>::new();
-                                if !pool.exists(tx, &atom.id)? {
-                                    pool.insert(tx, atom)?;
-                                }
-                                Ok::<_, anyhow::Error>(())
-                            })
-                            .unwrap();
-                        log::info!("🐞 New transaction {}", tx_record.id());
-                        tx_new_transaction_to_consensus
-                            .send((*tx_record.id(), 0))
-                            .await
-                            .unwrap();
-                    }
-                }
-            }
-        });
-
         if self.network_status.borrow().is_paused() {
             loop {
                 self.network_status.changed().await.unwrap();
@@ -261,6 +227,37 @@ impl TestNetworkWorker {
                 }
             }
         }
+
+        log::info!("🚀 Network started");
+
+        // Handle transactions that come in from the test. This behaves like a mempool.
+        let mut mempool_task = tokio::spawn(async move {
+            while let Some((dest, tx_record)) = rx_new_transaction.recv().await {
+                let remaining = rx_new_transaction.len();
+                transaction_store
+                    .write()
+                    .await
+                    .insert(*tx_record.transaction().id(), tx_record.clone());
+
+                for (addr, (shard, tx_new_transaction_to_consensus, _)) in &tx_new_transactions {
+                    if dest.is_for(addr, *shard) {
+                        tx_new_transaction_to_consensus
+                            .send((*tx_record.id(), remaining))
+                            .await
+                            .unwrap();
+                        log::info!("🐞 New transaction {} for vn {}", tx_record.id(), addr);
+                    } else {
+                        log::warn!(
+                            "⚠️🐞 New transaction {} for vn {} was not sent to consensus (dest = {:?})",
+                            tx_record.id(),
+                            addr,
+                            dest
+                        );
+                    }
+                }
+            }
+            log::info!("🛑 Mempool task stopped");
+        });
 
         loop {
             let mut rx_broadcast = rx_broadcast
@@ -284,7 +281,7 @@ impl TestNetworkWorker {
                     break;
                 }
                 result = &mut mempool_task => {
-                    result.expect("Mempool task failed");
+                    result.expect("Test Mempool task failed");
                     break;
                 }
 
@@ -305,6 +302,8 @@ impl TestNetworkWorker {
                 Some((from, Some(msg))) = rx_mempool.next() => self.handle_mempool(from, msg).await,
             }
         }
+
+        log::info!("🛑 Network stopped");
     }
 
     pub async fn handle_broadcast(&mut self, from: TestAddress, to: Vec<TestAddress>, msg: HotstuffMessage) {

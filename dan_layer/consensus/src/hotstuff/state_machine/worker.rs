@@ -58,8 +58,11 @@ where
             ConsensusState::CheckSync(state) => self.result_or_shutdown(state.on_enter(context)).await,
             ConsensusState::Syncing(state) => self.result_or_shutdown(state.on_enter(context)).await,
             ConsensusState::Sleeping => {
-                time::sleep(Duration::from_secs(5)).await;
-                ConsensusStateEvent::Resume
+                self.result_or_shutdown(async {
+                    time::sleep(Duration::from_secs(5)).await;
+                    Ok(ConsensusStateEvent::Resume)
+                })
+                .await
             },
             ConsensusState::Running(state) => state
                 .on_enter(context)

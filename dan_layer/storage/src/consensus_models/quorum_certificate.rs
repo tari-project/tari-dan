@@ -1,7 +1,7 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{fmt::Display, ops::DerefMut};
+use std::{fmt::Display, ops::Deref};
 
 use log::*;
 use serde::{Deserialize, Serialize};
@@ -147,23 +147,23 @@ impl QuorumCertificate {
 }
 
 impl QuorumCertificate {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, qc_id: &QcId) -> Result<Self, StorageError> {
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx, qc_id: &QcId) -> Result<Self, StorageError> {
         tx.quorum_certificates_get(qc_id)
     }
 
     pub fn get_all<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a QcId>>(
-        tx: &mut TTx,
+        tx: &TTx,
         qc_ids: I,
     ) -> Result<Vec<Self>, StorageError> {
         tx.quorum_certificates_get_all(qc_ids)
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
         Block::get(tx, &self.block_id)
     }
 
     pub fn get_by_block_id<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &mut TTx,
+        tx: &TTx,
         block_id: &BlockId,
     ) -> Result<Self, StorageError> {
         tx.quorum_certificates_get_by_block_id(block_id)
@@ -173,16 +173,16 @@ impl QuorumCertificate {
         tx.quorum_certificates_insert(self)
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
         Ok(tx.quorum_certificates_get(&self.qc_id).optional()?.is_some())
     }
 
     pub fn update_high_qc<TTx>(&self, tx: &mut TTx) -> Result<HighQc, StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+        TTx: StateStoreWriteTransaction + Deref + ?Sized,
         TTx::Target: StateStoreReadTransaction,
     {
-        let mut high_qc = HighQc::get(tx.deref_mut())?;
+        let mut high_qc = HighQc::get(&**tx)?;
 
         if high_qc.block_height() < self.block_height() {
             debug!(
@@ -205,10 +205,10 @@ impl QuorumCertificate {
 
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+        TTx: StateStoreWriteTransaction + Deref + ?Sized,
         TTx::Target: StateStoreReadTransaction,
     {
-        if self.exists(tx.deref_mut())? {
+        if self.exists(&**tx)? {
             return Ok(true);
         }
         self.insert(tx)?;

@@ -29,7 +29,7 @@ impl ValidatorMetadata {
 pub fn vn_node_hash(network: Network, public_key: &PublicKey, substate_address: &SubstateAddress) -> FixedHash {
     TariBaseLayerHasher32::<TransactionHashDomain>::new_with_label(&format!("validator_nodes.n{}", network.as_byte()))
         .chain(public_key)
-        .chain(&substate_address.0)
+        .chain(substate_address.array())
         .finalize()
         .into()
 }

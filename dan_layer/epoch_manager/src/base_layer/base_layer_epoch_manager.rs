@@ -23,6 +23,7 @@
 use std::{
     cmp,
     collections::{HashMap, HashSet},
+    num::NonZeroU32,
 };
 
 use log::*;
@@ -148,7 +149,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         for vn in &vns {
             validator_nodes.set_committee_bucket(
                 vn.shard_key,
-                vn.shard_key.to_committee_shard(num_committees),
+                vn.shard_key.to_shard(num_committees),
                 self.config.validator_node_sidechain_id.as_ref(),
                 epoch,
             )?;
@@ -461,7 +462,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         }
 
         // A shard a equal slice of the shard space that a validator fits into
-        let shard = substate_address.to_committee_shard(num_committees);
+        let shard = substate_address.to_shard(num_committees);
 
         let mut shards = HashSet::new();
         shards.insert(shard);
@@ -568,7 +569,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         substate_address: SubstateAddress,
     ) -> Result<CommitteeInfo, EpochManagerError> {
         let num_committees = self.get_number_of_committees(epoch)?;
-        let shard = substate_address.to_committee_shard(num_committees);
+        let shard = substate_address.to_shard(num_committees);
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
         let num_validators =
@@ -629,8 +630,11 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     }
 }
 
-fn calculate_num_committees(num_vns: u64, committee_size: u32) -> u32 {
+fn calculate_num_committees(num_vns: u64, committee_size: NonZeroU32) -> u32 {
     // Number of committees is proportional to the number of validators available.
     // We cap the number of committees to u32::MAX (for a committee_size of 10 that's over 42 billion validators)
-    cmp::min(cmp::max(1, num_vns / u64::from(committee_size)), u64::from(u32::MAX)) as u32
+    cmp::min(
+        cmp::max(1, num_vns / u64::from(committee_size.get())),
+        u64::from(u32::MAX),
+    ) as u32
 }

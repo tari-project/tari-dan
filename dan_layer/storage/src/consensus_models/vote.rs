@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::DerefMut;
+use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
@@ -33,7 +33,7 @@ impl Vote {
 }
 
 impl Vote {
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
         Ok(tx
             .votes_get_by_block_and_sender(&self.block_id, &self.signature.public_key)
             .optional()?
@@ -42,10 +42,10 @@ impl Vote {
 
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
-        let exists = self.exists(tx.deref_mut())?;
+        let exists = self.exists(&**tx)?;
         if !exists {
             self.insert(tx)?;
         }
@@ -54,21 +54,21 @@ impl Vote {
 
     pub fn insert<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
         tx.votes_insert(self)
     }
 
     pub fn count_for_block<TTx: StateStoreReadTransaction>(
-        tx: &mut TTx,
+        tx: &TTx,
         block_id: &BlockId,
     ) -> Result<usize, StorageError> {
         tx.votes_count_for_block(block_id).map(|v| v as usize)
     }
 
     pub fn get_for_block<TTx: StateStoreReadTransaction>(
-        tx: &mut TTx,
+        tx: &TTx,
         block_id: &BlockId,
     ) -> Result<Vec<Self>, StorageError> {
         tx.votes_get_for_block(block_id)

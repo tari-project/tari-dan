@@ -41,7 +41,7 @@ impl ForeignReceiveCounters {
         Ok(())
     }
 
-    pub fn get_or_default<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx) -> Result<Self, StorageError> {
+    pub fn get_or_default<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx) -> Result<Self, StorageError> {
         Ok(tx.foreign_receive_counters_get().optional()?.unwrap_or_default())
     }
 }

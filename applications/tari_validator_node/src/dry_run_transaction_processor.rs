@@ -132,9 +132,9 @@ impl DryRunTransactionProcessor {
 
         // execute the payload in the WASM engine and return the result
         let processor = self.payload_processor.clone();
-        let executed =
+        let exec_output =
             task::spawn_blocking(move || processor.execute(transaction, temp_state_store, virtual_substates)).await??;
-        let result = executed.into_result();
+        let result = exec_output.result;
 
         let fees = &result.finalize.fee_receipt;
         info!(target: LOG_TARGET, "Transaction fees: {}", fees.total_fees_charged());

@@ -41,7 +41,7 @@ fn basic_emit_event() {
 fn cannot_use_standard_topic() {
     let mut template_test = TemplateTest::new(vec!["tests/templates/events"]);
     let event_emitter_template = template_test.get_template_address("EventEmitter");
-    let (_, _, private_key) = template_test.create_owned_account();
+    let (_, _, private_key) = template_test.create_funded_account();
     let invalid_topic = "std.mytopic";
     let reason = template_test.execute_expect_failure(
         Transaction::builder()
@@ -82,8 +82,8 @@ fn builtin_vault_events() {
         .unwrap();
 
     // Create sender and receiver accounts
-    let (sender_address, sender_proof, _) = template_test.create_owned_account();
-    let (receiver_address, _, _) = template_test.create_owned_account();
+    let (sender_address, sender_proof, _) = template_test.create_funded_account();
+    let (receiver_address, _, _) = template_test.create_funded_account();
     template_test
         .execute_and_commit(
             vec![
