@@ -548,7 +548,6 @@ impl From<&QuorumCertificate> for proto::consensus::QuorumCertificate {
             epoch: source.epoch().as_u64(),
             shard: source.shard().as_u32(),
             signatures: source.signatures().iter().map(Into::into).collect(),
-            leaf_hashes: source.leaf_hashes().iter().map(|h| h.to_vec()).collect(),
             decision: i32::from(source.decision().as_u8()),
         }
     }
@@ -565,11 +564,6 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
             Shard::from(value.shard),
             value
                 .signatures
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<_, _>>()?,
-            value
-                .leaf_hashes
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?,

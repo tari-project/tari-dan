@@ -1421,7 +1421,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         let vote = votes::table
             .filter(votes::block_id.eq(serialize_hex(block_id)))
-            .filter(votes::signer_public_key.eq(serialize_hex(signer_public_key)))
+            .filter(votes::signer_public_key.eq(serialize_hex(signer_public_key.as_bytes())))
             .first::<sql_models::Vote>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "votes_get",

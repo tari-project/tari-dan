@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::warn;
-use tari_dan_common_types::committee::{Committee, CommitteeShard};
+use tari_dan_common_types::committee::{Committee, CommitteeInfo, CommitteeShardInfo};
 use tari_dan_storage::consensus_models::LockedBlock;
 use tari_epoch_manager::EpochManagerReader;
 
@@ -17,7 +17,7 @@ pub async fn check_new_view_message<TConsensusSpec: ConsensusSpec>(
     locked: &LockedBlock,
     leader_strategy: &TConsensusSpec::LeaderStrategy,
     local_committee: &Committee<TConsensusSpec::Addr>,
-    local_committee_shard: &CommitteeShard,
+    local_committee_shard: &CommitteeInfo,
 ) -> Result<(), HotStuffError> {
     let epoch = message.epoch;
     if !epoch_manager

@@ -43,7 +43,6 @@ impl VoteSignatureService for TestVoteSignatureService {
     fn verify(
         &self,
         _signature: &ValidatorSignature,
-        _leaf_hash: &FixedHash,
         _block_id: &BlockId,
         _decision: &QuorumDecision,
     ) -> bool {

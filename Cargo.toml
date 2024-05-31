@@ -1,6 +1,6 @@
 # NOTE: When editing this version, also edit the versions in template_built_in/templates/account and account_nft
 [workspace.package]
-version = "0.6.0"
+version = "0.7.1"
 edition = "2021"
 authors = ["The Tari Development Community"]
 repository = "https://github.com/tari-project/tari-dan"
@@ -72,7 +72,7 @@ proto_builder = { path = "networking/proto_builder" }
 sqlite_message_logger = { path = "networking/sqlite_message_logger" }
 tari_base_node_client = { path = "clients/base_node_client" }
 # avoid including default features so each crate can choose which ones to import
-tari_bor = { version = "0.6", path = "dan_layer/tari_bor", default-features = false }
+tari_bor = { version = "0.7", path = "dan_layer/tari_bor", default-features = false }
 tari_rpc_state_sync = { path = "dan_layer/rpc_state_sync" }
 tari_consensus = { path = "dan_layer/consensus" }
 tari_dan_app_utilities = { path = "applications/tari_dan_app_utilities" }
@@ -96,10 +96,10 @@ tari_rpc_macros = { path = "networking/rpc_macros" }
 tari_state_store_sqlite = { path = "dan_layer/state_store_sqlite" }
 tari_state_tree = { path = "dan_layer/state_tree" }
 tari_swarm = { path = "networking/swarm" }
-tari_template_abi = { version = "0.6", path = "dan_layer/template_abi" }
+tari_template_abi = { version = "0.7", path = "dan_layer/template_abi" }
 tari_template_builtin = { path = "dan_layer/template_builtin" }
 tari_template_lib = { path = "dan_layer/template_lib" }
-tari_template_macros = { version = "0.6", path = "dan_layer/template_macros" }
+tari_template_macros = { version = "0.7", path = "dan_layer/template_macros" }
 tari_template_test_tooling = { path = "dan_layer/template_test_tooling" }
 tari_transaction = { path = "dan_layer/transaction" }
 tari_transaction_manifest = { path = "dan_layer/transaction_manifest" }
@@ -152,8 +152,9 @@ bytes = "1.5"
 cacache = "12.0.0"
 cargo_metadata = "0.15.3"
 cargo_toml = "0.11.5"
-ciborium = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a61102eb2321c68e53799d1e6f087aef", default-features = false }
-ciborium-io = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a61102eb2321c68e53799d1e6f087aef", default-features = false }
+#ciborium = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a61102eb2321c68e53799d1e6f087aef", default-features = false }
+ciborium = "0.2.2"
+ciborium-io = "0.2.2"
 clap = "3.2.25"
 chacha20poly1305 = "0.10.1"
 chrono = "0.4.24"
@@ -162,7 +163,7 @@ convert_case = "0.6.0"
 cucumber = "0.21.0"
 d3ne = { git = "https://github.com/stringhandler/d3ne-rs.git", tag = "v0.8.0-pre.3" }
 dashmap = "5.5.0"
-diesel = { version = "2", default-features = false }
+diesel = { version = "=2.1.6", default-features = false }
 diesel_migrations = "2"
 digest = "0.10"
 dirs = "4.0.0"

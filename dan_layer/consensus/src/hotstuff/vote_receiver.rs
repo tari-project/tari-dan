@@ -84,7 +84,7 @@ where TConsensusSpec: ConsensusSpec
         let committee = self.epoch_manager.get_local_committee(message.epoch).await?;
         let our_vn = self.epoch_manager.get_our_validator_node(message.epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_info(message.epoch).await?;
-        let from = message.signature.public_key.clone();
+        // let from = message.signature.public_key.clone();
         validations::vote_validations::check_vote_message::<TConsensusSpec>(
             &from,
             &message,

@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::committee::{Committee, CommitteeShard};
+use tari_dan_common_types::committee::{Committee, CommitteeInfo, CommitteeShardInfo};
 use tari_dan_storage::global::models::ValidatorNode;
 
 use crate::{
@@ -14,7 +14,7 @@ pub fn check_vote_message<TConsensusSpec: ConsensusSpec>(
     from: &TConsensusSpec::Addr,
     message: &VoteMessage,
     committee: &Committee<TConsensusSpec::Addr>,
-    local_committee_shard: &CommitteeShard,
+    local_committee_shard: &CommitteeInfo,
     our_vn: &ValidatorNode<TConsensusSpec::Addr>,
     vote_signature_service: &TConsensusSpec::SignatureService,
 ) -> Result<(), HotStuffError> {

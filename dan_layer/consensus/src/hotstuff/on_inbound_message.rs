@@ -79,7 +79,7 @@ where TConsensusSpec: ConsensusSpec
                 self.process_local_proposal(current_height, msg).await?;
             },
             HotstuffMessage::ForeignProposal(ref proposal) => {
-                self.check_proposal(proposal.block)
+                self.check_proposal(&proposal.block)
                     .await?;
                 self.report_message_ready(from, msg)?;
             },
