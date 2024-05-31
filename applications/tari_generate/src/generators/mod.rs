@@ -49,6 +49,7 @@ impl FromStr for GeneratorType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "rust" => Ok(GeneratorType::RustTemplateCli),
             "rust-template-cli" => Ok(GeneratorType::RustTemplateCli),
             _ => Err(anyhow::anyhow!("Invalid generator type")),
         }
