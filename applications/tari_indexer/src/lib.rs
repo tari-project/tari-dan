@@ -34,6 +34,7 @@ mod http_ui;
 
 mod event_data;
 mod event_manager;
+mod event_scanner;
 mod json_rpc;
 mod substate_manager;
 mod substate_storage_sqlite;
@@ -41,6 +42,7 @@ mod transaction_manager;
 
 use std::{fs, sync::Arc};
 
+use event_scanner::EventScanner;
 use http_ui::server::run_http_ui_server;
 use log::*;
 use substate_manager::SubstateManager;
@@ -127,7 +129,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     let dry_run_transaction_processor = DryRunTransactionProcessor::new(
         services.epoch_manager.clone(),
         services.validator_node_client_factory.clone(),
-        dan_layer_scanner,
+        dan_layer_scanner.clone(),
         services.template_manager.clone(),
         config.network,
     );
@@ -165,6 +167,12 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
 
     // Run the event manager
     let event_manager = Arc::new(EventManager::new(
+        services.substate_store.clone(),
+        dan_layer_scanner.clone(),
+    ));
+
+    // Run the event scanner
+    let event_scanner = Arc::new(EventScanner::new(
         config.network,
         Box::new(services.epoch_manager.clone()),
         services.validator_node_client_factory.clone(),
@@ -187,7 +195,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         tokio::select! {
             // keep scanning the dan layer for new events
             _ = time::sleep(config.indexer.dan_layer_scanning_internal) => {
-                match event_manager.scan_events().await {
+                match event_scanner.scan_events().await {
                     Ok(0) => {},
                     Ok(cnt) => info!(target: LOG_TARGET, "Scanned {} events(s) successfully", cnt),
                     Err(e) =>  error!(target: LOG_TARGET, "Event auto-scan failed: {}", e),

@@ -29,7 +29,7 @@ use tari_engine_types::substate::SubstateId;
 use tari_template_lib::Hash;
 use tari_transaction::TransactionId;
 
-use crate::{event_manager::EventManager, substate_manager::SubstateManager};
+use crate::event_manager::EventManager;
 
 const LOG_TARGET: &str = "tari::indexer::graphql::events";
 
@@ -67,9 +67,9 @@ impl EventQuery {
         tx_hash: String,
     ) -> Result<Vec<Event>, anyhow::Error> {
         info!(target: LOG_TARGET, "Querying events for transaction hash = {}", tx_hash);
-        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
+        let event_manager = ctx.data_unchecked::<Arc<EventManager>>();
         let tx_id = TransactionId::from_hex(&tx_hash)?;
-        let events = match substate_manager.scan_events_for_transaction(tx_id).await {
+        let events = match event_manager.scan_events_for_transaction(tx_id).await {
             Ok(events) => events,
             Err(e) => {
                 info!(
@@ -99,8 +99,8 @@ impl EventQuery {
             target: LOG_TARGET,
             "Querying events for substate_id = {}, starting from version = {}", substate_id, version
         );
-        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        let events = substate_manager
+        let event_manager = ctx.data_unchecked::<Arc<EventManager>>();
+        let events = event_manager
             .scan_events_for_substate_from_network(SubstateId::from_str(&substate_id)?, Some(version))
             .await?
             .iter()
@@ -122,8 +122,8 @@ impl EventQuery {
             target: LOG_TARGET,
             "Querying events. payload_key: {}, payload_value: {}, offset: {}, limit: {}, ", payload_key, payload_value, offset, limit,
         );
-        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        let events = substate_manager
+        let event_manager = ctx.data_unchecked::<Arc<EventManager>>();
+        let events = event_manager
             .scan_events_by_payload(payload_key, payload_value, offset, limit)
             .await?
             .iter()
@@ -177,8 +177,8 @@ impl EventQuery {
         let tx_hash = TransactionId::from_hex(&tx_hash)?;
 
         let payload = serde_json::from_str(&payload)?;
-        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        substate_manager.save_event_to_db(
+        let event_manager = ctx.data_unchecked::<Arc<EventManager>>();
+        event_manager.save_event_to_db(
             &substate_id,
             template_address,
             tx_hash,

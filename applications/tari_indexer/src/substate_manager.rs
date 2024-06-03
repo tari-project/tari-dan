@@ -20,41 +20,25 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryInto, str::FromStr, sync::Arc};
+use std::{convert::TryInto, sync::Arc};
 
-use anyhow::anyhow;
-use log::info;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_dan_app_utilities::substate_file_cache::SubstateFileCache;
 use tari_dan_common_types::PeerAddress;
-use tari_engine_types::{
-    events::Event,
-    substate::{Substate, SubstateId},
-};
+use tari_engine_types::substate::{Substate, SubstateId};
 use tari_epoch_manager::base_layer::EpochManagerHandle;
-use tari_indexer_lib::{
-    substate_decoder::find_related_substates,
-    substate_scanner::SubstateScanner,
-    NonFungibleSubstate,
-};
-use tari_template_lib::{models::TemplateAddress, prelude::Metadata};
+use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate}
+;
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, TariValidatorNodeRpcClientFactory};
-
-use crate::substate_storage_sqlite::{
-    models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
+use crate::substate_storage_sqlite::
     sqlite_substate_store_factory::{
         SqliteSubstateStore,
-        SqliteSubstateStoreWriteTransaction,
         SubstateStore,
         SubstateStoreReadTransaction,
-        SubstateStoreWriteTransaction,
-    },
-};
-
-const LOG_TARGET: &str = "tari::indexer::substate_manager";
+    }
+;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SubstateResponse {
@@ -69,6 +53,16 @@ pub struct NonFungibleResponse {
     pub index: u64,
     pub address: SubstateId,
     pub substate: Substate,
+}
+
+impl From<NonFungibleSubstate> for NonFungibleResponse {
+    fn from(nf: NonFungibleSubstate) -> Self {
+        Self {
+            index: nf.index,
+            address: nf.address,
+            substate: nf.substate,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -94,117 +88,6 @@ impl SubstateManager {
             substate_scanner: dan_layer_scanner,
             substate_store,
         }
-    }
-
-    pub async fn fetch_and_add_substate_to_db(&self, substate_address: &SubstateId) -> Result<(), anyhow::Error> {
-        // get the last version of the substate from the dan layer
-        let latest_stored_substate_version = {
-            let mut tx = self.substate_store.create_read_tx()?;
-            tx.get_latest_version_for_substate(substate_address)?
-                .map(|i| u32::try_from(i).expect("Failed to parse latest substate version"))
-        };
-
-        let substate = match self
-            .substate_scanner
-            .get_substate(substate_address, latest_stored_substate_version)
-            .await
-        {
-            Ok(SubstateResult::Up { substate, .. }) => substate,
-            Ok(_) => return Err(anyhow!("Substate not found in the network")),
-            Err(err) => return Err(anyhow!("Error scanning for substate: {}", err)),
-        };
-
-        // fetch all related substates
-        let related_addresses = find_related_substates(&substate)?;
-        let mut related_substates = HashMap::new();
-        for address in related_addresses {
-            if let SubstateResult::Up {
-                substate: related_substate,
-                ..
-            // TODO: substate fetching could be done in parallel (tokio)
-            } = self.substate_scanner.get_substate(&address, None).await?
-            {
-                related_substates.insert(address, related_substate);
-            }
-        }
-
-        // if it's a resource, we need also to retrieve all the individual nfts
-        let non_fungibles = if let SubstateId::Resource(addr) = substate_address {
-            // fetch the last index from database to avoid scaning always from the beginning
-            let latest_non_fungible_index = {
-                let mut tx = self.substate_store.create_read_tx()?;
-                tx.get_non_fungible_latest_index(addr.to_string())?
-                    .map(|i| i as u64)
-                    .unwrap_or_default()
-            };
-            self.substate_scanner
-                .get_non_fungibles(addr, latest_non_fungible_index, None)
-                .await?
-        } else {
-            vec![]
-        };
-
-        // store the substate in the database
-        let mut tx = self.substate_store.create_write_tx()?;
-        store_substate_in_db(&mut tx, substate_address, &substate)?;
-        info!(
-            target: LOG_TARGET,
-            "Added substate {} with version {} to the database",
-            substate_address.to_address_string(),
-            substate.version()
-        );
-
-        // store related substates in the database
-        for (address, substate) in related_substates {
-            store_substate_in_db(&mut tx, &address, &substate)?;
-            info!(
-                target: LOG_TARGET,
-                "Added related substate {} of {} to the database",
-                address.to_address_string(),
-                substate_address.to_address_string()
-            );
-        }
-
-        // store the associated non fungibles in the database
-        for nft in non_fungibles {
-            // store the substate of the nft in the databas
-            store_substate_in_db(&mut tx, &nft.address, &nft.substate)?;
-
-            // store the index of the nft
-            let nft_index_db_row = map_nft_index_to_db_row(substate_address, &nft)?;
-            tx.add_non_fungible_index(nft_index_db_row)?;
-            info!(
-                target: LOG_TARGET,
-                "Added non fungible {} at index {} to the database",
-                nft.address.to_address_string(),
-                nft.index,
-            );
-        }
-        tx.commit()?;
-
-        Ok(())
-    }
-
-    pub async fn delete_substate_from_db(&self, substate_address: &SubstateId) -> Result<(), anyhow::Error> {
-        self.substate_store
-            .with_write_tx(|tx| tx.delete_substate(substate_address.to_address_string()))?;
-
-        Ok(())
-    }
-
-    pub async fn delete_all_substates_from_db(&self) -> Result<(), anyhow::Error> {
-        let mut tx = self.substate_store.create_write_tx()?;
-        tx.clear_substates()?;
-        tx.commit()?;
-
-        Ok(())
-    }
-
-    pub async fn get_all_addresses_from_db(&self) -> Result<Vec<(String, i64)>, anyhow::Error> {
-        let mut tx = self.substate_store.create_read_tx()?;
-        let addresses = tx.get_all_addresses()?;
-
-        Ok(addresses)
     }
 
     pub async fn get_substate(
@@ -288,201 +171,17 @@ impl SubstateManager {
         start_index: u64,
         end_index: u64,
     ) -> Result<Vec<NonFungibleResponse>, anyhow::Error> {
-        let address_str = substate_address.to_address_string();
-        let mut tx = self.substate_store.create_read_tx()?;
-        let db_rows = tx.get_non_fungibles(address_str, start_index as i32, end_index as i32)?;
-
-        let mut nfts = Vec::with_capacity(db_rows.len());
-        for row in db_rows {
-            nfts.push(row.try_into()?);
-        }
-        Ok(nfts)
-    }
-
-    pub fn save_event_to_db(
-        &self,
-        substate_id: &SubstateId,
-        template_address: TemplateAddress,
-        tx_hash: TransactionId,
-        topic: String,
-        payload: &Metadata,
-        version: u64,
-    ) -> Result<(), anyhow::Error> {
-        let mut tx = self.substate_store.create_write_tx()?;
-        let new_event = NewEvent {
-            substate_id: Some(substate_id.to_string()),
-            template_address: template_address.to_string(),
-            tx_hash: tx_hash.to_string(),
-            topic,
-            payload: payload.to_json().expect("Failed to convert to JSON"),
-            version: version as i32,
-        };
-        tx.save_event(new_event)?;
-        tx.commit()?;
-        Ok(())
-    }
-
-    pub async fn scan_events_for_transaction(&self, tx_id: TransactionId) -> Result<Vec<Event>, anyhow::Error> {
-        let events = {
-            let mut tx = self.substate_store.create_read_tx()?;
-            tx.get_events_for_transaction(tx_id)?
+        let non_fungibles = if let SubstateId::Resource(addr) = substate_address {
+            self.substate_scanner
+                .get_non_fungibles(addr, start_index, Some(end_index))
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect()
+        } else {
+            vec![]
         };
 
-        let mut events = events
-            .iter()
-            .map(|e| Event::try_from(e.clone()))
-            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
-
-        // If we have no events locally, fetch from the network if possible.
-        if events.is_empty() {
-            let network_events = self.substate_scanner.get_events_for_transaction(tx_id).await?;
-            events.extend(network_events);
-        }
-
-        Ok(events)
+        Ok(non_fungibles)
     }
-
-    pub async fn scan_events_for_substate_from_network(
-        &self,
-        substate_id: SubstateId,
-        version: Option<u32>,
-    ) -> Result<Vec<Event>, anyhow::Error> {
-        let mut events = vec![];
-        let version = version.unwrap_or_default();
-
-        // check if database contains the events for this transaction, by querying
-        // what is the latest version for the given component_address
-        let stored_versions_in_db;
-        {
-            let mut tx = self.substate_store.create_read_tx()?;
-            stored_versions_in_db = tx.get_stored_versions_of_events(&substate_id, version)?;
-
-            let stored_events = match tx.get_all_events(&substate_id) {
-                Ok(events) => events,
-                Err(e) => {
-                    info!(
-                        target: LOG_TARGET,
-                        "Failed to get all events for substate_id = {}, version = {} with error = {}",
-                        substate_id,
-                        version,
-                        e
-                    );
-                    return Err(e.into());
-                },
-            };
-
-            let stored_events = stored_events
-                .iter()
-                .map(|e| e.clone().try_into())
-                .collect::<Result<Vec<_>, _>>()?;
-            events.extend(stored_events);
-        }
-
-        for v in 0..version {
-            if stored_versions_in_db.contains(&v) {
-                continue;
-            }
-            let network_version_events = self
-                .substate_scanner
-                .get_events_for_substate_and_version(&substate_id, v)
-                .await?;
-            events.extend(network_version_events);
-        }
-
-        let latest_version_in_db = stored_versions_in_db.into_iter().max().unwrap_or_default();
-        let version = version.max(latest_version_in_db);
-
-        // check if there are newest events for this component address in the network
-        let network_events = self
-            .substate_scanner
-            .get_events_for_substate(&substate_id, Some(version))
-            .await?;
-
-        // stores the newest network events to the db
-        // because the same substate_id with different version
-        // can be processed in the same transaction, we need to avoid
-        // duplicates
-        for (version, event) in network_events {
-            let template_address = event.template_address();
-            let tx_hash = TransactionId::new(event.tx_hash().into_array());
-            let topic = event.topic();
-            let payload = event.payload();
-            self.save_event_to_db(
-                &substate_id,
-                template_address,
-                tx_hash,
-                topic,
-                payload,
-                u64::from(version),
-            )?;
-            events.push(event);
-        }
-
-        Ok(events)
-    }
-
-    pub async fn scan_events_by_payload(
-        &self,
-        payload_key: String,
-        payload_value: String,
-        offset: u32,
-        limit: u32,
-    ) -> Result<Vec<Event>, anyhow::Error> {
-        let events = {
-            let mut tx = self.substate_store.create_read_tx()?;
-            tx.get_events_by_payload(payload_key, payload_value, offset, limit)?
-        };
-
-        let events = events
-            .iter()
-            .map(|e| Event::try_from(e.clone()))
-            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
-
-        Ok(events)
-    }
-
-    pub async fn scan_and_update_substates(&self) -> Result<usize, anyhow::Error> {
-        let addresses = self.get_all_addresses_from_db().await?;
-
-        let num_scanned = addresses.len();
-        for (address, _) in addresses {
-            let address = SubstateId::from_str(&address)?;
-            self.fetch_and_add_substate_to_db(&address).await?;
-        }
-
-        Ok(num_scanned)
-    }
-}
-
-fn store_substate_in_db(
-    tx: &mut SqliteSubstateStoreWriteTransaction,
-    address: &SubstateId,
-    substate: &Substate,
-) -> Result<(), anyhow::Error> {
-    let substate_row = NewSubstate {
-        address: address.to_address_string(),
-        version: i64::from(substate.version()),
-        data: encode_substate(substate)?,
-    };
-    tx.set_substate(substate_row)?;
-
-    Ok(())
-}
-
-fn map_nft_index_to_db_row(
-    resource_address: &SubstateId,
-    nft: &NonFungibleSubstate,
-) -> Result<NewNonFungibleIndex, anyhow::Error> {
-    Ok(NewNonFungibleIndex {
-        resource_address: resource_address.to_address_string(),
-        idx: nft.index as i32,
-        non_fungible_address: nft.address.to_address_string(),
-    })
-}
-
-fn encode_substate(substate: &Substate) -> Result<String, anyhow::Error> {
-    // let decoded_data = encode_substate_into_json(substate)?;
-    // let value = IndexedValue::from_raw(&tari_bor::encode(substate.substate_value())?)?;
-    let pretty_json = serde_json::to_string_pretty(&substate)?;
-    Ok(pretty_json)
 }
