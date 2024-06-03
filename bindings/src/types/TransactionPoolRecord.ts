@@ -4,7 +4,7 @@ import type { TransactionAtom } from "./TransactionAtom";
 import type { TransactionPoolStage } from "./TransactionPoolStage";
 
 export interface TransactionPoolRecord {
-  transaction: TransactionAtom;
+  atom: TransactionAtom;
   stage: TransactionPoolStage;
   pending_stage: TransactionPoolStage | null;
   local_decision: Decision | null;
