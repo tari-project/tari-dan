@@ -20,8 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::
-    collections::{HashMap, HashSet}
+use std::{
+    collections::{HashMap, HashSet}, str::FromStr}
 ;
 
 use futures::StreamExt;
@@ -35,6 +35,7 @@ use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus,
 use tari_dan_storage::consensus_models::{Block, BlockId, Command, Decision, TransactionRecord};
 use tari_engine_types::{commit_result::{ExecuteResult, TransactionResult}, events::Event, substate::{Substate, SubstateId}};
 use tari_epoch_manager::EpochManagerReader;
+use tari_template_lib::models::{EntityId, TemplateAddress};
 use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory};
 
@@ -50,12 +51,38 @@ use crate::{config::EventFilterConfig, event_data::EventData, substate_storage_s
 
 const LOG_TARGET: &str = "tari::indexer::event_scanner";
 
+
+#[derive(Default, Debug, Clone)]
+pub struct EventFilter {
+    pub topic: Option<String>,
+    pub entity_id: Option<EntityId>,
+    pub substate_id: Option<SubstateId>,
+    pub template_address: Option<TemplateAddress>,
+}
+
+impl TryFrom<EventFilterConfig> for EventFilter {
+    type Error = anyhow::Error;
+
+    fn try_from(cfg: EventFilterConfig) -> Result<Self, Self::Error> {
+        let entity_id = cfg.entity_id.map(|str| EntityId::from_hex(&str)).transpose()?;
+        let substate_id = cfg.substate_id.map(|str| SubstateId::from_str(&str)).transpose()?;
+        let template_address = cfg.template_address.map(|str| TemplateAddress::from_str(&str)).transpose()?;
+
+        Ok(Self {
+            topic: cfg.topic,
+            entity_id,
+            substate_id,
+            template_address
+        })
+    }   
+}
+
 pub struct EventScanner {
     network: Network,
     epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
     client_factory: TariValidatorNodeRpcClientFactory,
     substate_store: SqliteSubstateStore,
-    event_filters: Vec<EventFilterConfig>,
+    event_filters: Vec<EventFilter>,
 }
 
 impl EventScanner {
@@ -64,7 +91,7 @@ impl EventScanner {
         epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
         client_factory: TariValidatorNodeRpcClientFactory,
         substate_store: SqliteSubstateStore,
-        event_filters: Vec<EventFilterConfig>,
+        event_filters: Vec<EventFilter>,
     ) -> Self {
         Self {
             network,
@@ -145,17 +172,19 @@ impl EventScanner {
         return false;
     }
 
-    fn event_matches_filter(filter: &EventFilterConfig, event: &Event) -> bool {
+    fn event_matches_filter(filter: &EventFilter, event: &Event) -> bool {
         let matches_topic = filter.topic.as_ref().map_or(true, |t| *t == event.topic());
-        let matches_template = filter.template_address.as_ref().map_or(true, |t| *t == event.template_address().to_string());
+        let matches_template = filter.template_address.as_ref().map_or(true, |t| *t == event.template_address());
 
         let matches_substate_id = match &filter.substate_id {
-            Some(substate_id) => event.substate_id().map(|s| s.to_string() == *substate_id).unwrap_or(false),
+            Some(substate_id) => event.substate_id().map(|s| s == *substate_id).unwrap_or(false),
             None => true,
         };
 
         let matches_entity_id = match &filter.entity_id {
-            Some(entity_id) => event.substate_id().map(|s| s.to_string().starts_with(entity_id)).unwrap_or(false),
+            Some(entity_id) => event.substate_id()
+                .map(|s| Self::entity_id_matches(&s, entity_id))
+                .unwrap_or(false),
             None => true,
         };
 
@@ -165,6 +194,17 @@ impl EventScanner {
 
         return false;
     }
+
+    fn entity_id_matches(substate_id: &SubstateId, entity_id: &EntityId) -> bool {
+        match substate_id {
+            SubstateId::Component(c) => c.entity_id() == *entity_id,
+            SubstateId::Resource(r) => r.as_entity_id() == *entity_id,
+            SubstateId::Vault(v) => v.entity_id() == *entity_id,
+            // TODO: should all types of substate addresses expose the entity id?
+            _ => false,
+        }
+    }
+
     async fn store_events_in_db(&self, events_data: &Vec<EventData>) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
 

@@ -42,7 +42,7 @@ mod transaction_manager;
 
 use std::{fs, sync::Arc};
 
-use event_scanner::EventScanner;
+use event_scanner::{EventFilter, EventScanner};
 use http_ui::server::run_http_ui_server;
 use log::*;
 use substate_manager::SubstateManager;
@@ -172,12 +172,20 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     ));
 
     // Run the event scanner
+    let event_filters: Vec<EventFilter> = config.indexer.event_filters.
+        into_iter()
+        .map(TryInto::try_into)
+        .collect::<Result<_, _>>()
+        .map_err(|e| ExitError::new(
+            ExitCode::ConfigError,
+            format!("Invalid event filters: {}", e),
+        ))?;
     let event_scanner = Arc::new(EventScanner::new(
         config.network,
         Box::new(services.epoch_manager.clone()),
         services.validator_node_client_factory.clone(),
         services.substate_store.clone(),
-        config.indexer.event_filters,
+        event_filters,
     ));
 
     // Run the GraphQL API
