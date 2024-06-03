@@ -99,7 +99,7 @@ pub struct IndexerConfig {
     pub templates_sidechain_id: Option<RistrettoPublicKey>,
     /// The burnt utxos sidechain id
     pub burnt_utxo_sidechain_id: Option<RistrettoPublicKey>,
-    /// The event filtering configuration. If no filter is specified, the indexer stores ALL events in the network
+    /// The event filtering configuration
     pub event_filters: Vec<EventFilterConfig>,
 }
 
