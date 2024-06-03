@@ -21,8 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    collections::{HashMap, HashSet}, str::FromStr}
-;
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 
 use futures::StreamExt;
 use log::*;
@@ -33,24 +34,34 @@ use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, PeerAddress};
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
 use tari_dan_storage::consensus_models::{Block, BlockId, Command, Decision, TransactionRecord};
-use tari_engine_types::{commit_result::{ExecuteResult, TransactionResult}, events::Event, substate::{Substate, SubstateId}};
+use tari_engine_types::{
+    commit_result::{ExecuteResult, TransactionResult},
+    events::Event,
+    substate::{Substate, SubstateId},
+};
 use tari_epoch_manager::EpochManagerReader;
 use tari_template_lib::models::{EntityId, TemplateAddress};
 use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory};
 
-use crate::{config::EventFilterConfig, event_data::EventData, substate_storage_sqlite::{
-    models::{events::{NewEvent, NewScannedBlockId}, substate::NewSubstate},
-    sqlite_substate_store_factory::{
-        SqliteSubstateStore,
-        SubstateStore,
-        SubstateStoreReadTransaction,
-        SubstateStoreWriteTransaction,
+use crate::{
+    config::EventFilterConfig,
+    event_data::EventData,
+    substate_storage_sqlite::{
+        models::{
+            events::{NewEvent, NewScannedBlockId},
+            substate::NewSubstate,
+        },
+        sqlite_substate_store_factory::{
+            SqliteSubstateStore,
+            SubstateStore,
+            SubstateStoreReadTransaction,
+            SubstateStoreWriteTransaction,
+        },
     },
-}};
+};
 
 const LOG_TARGET: &str = "tari::indexer::event_scanner";
-
 
 #[derive(Default, Debug, Clone)]
 pub struct EventFilter {
@@ -66,15 +77,18 @@ impl TryFrom<EventFilterConfig> for EventFilter {
     fn try_from(cfg: EventFilterConfig) -> Result<Self, Self::Error> {
         let entity_id = cfg.entity_id.map(|str| EntityId::from_hex(&str)).transpose()?;
         let substate_id = cfg.substate_id.map(|str| SubstateId::from_str(&str)).transpose()?;
-        let template_address = cfg.template_address.map(|str| TemplateAddress::from_str(&str)).transpose()?;
+        let template_address = cfg
+            .template_address
+            .map(|str| TemplateAddress::from_str(&str))
+            .transpose()?;
 
         Ok(Self {
             topic: cfg.topic,
             entity_id,
             substate_id,
-            template_address
+            template_address,
         })
-    }   
+    }
 }
 
 pub struct EventScanner {
@@ -143,7 +157,8 @@ impl EventScanner {
                 event_count += events.len();
 
                 // only keep the events specified by the indexer filter
-                let filtered_events: Vec<EventData> = events.into_iter().filter(|ev| self.should_persist_event(ev)).collect();
+                let filtered_events: Vec<EventData> =
+                    events.into_iter().filter(|ev| self.should_persist_event(ev)).collect();
                 info!(
                     target: LOG_TARGET,
                     "Filtered events: {}",
@@ -168,13 +183,16 @@ impl EventScanner {
                 return true;
             }
         }
-        
+
         return false;
     }
 
     fn event_matches_filter(filter: &EventFilter, event: &Event) -> bool {
         let matches_topic = filter.topic.as_ref().map_or(true, |t| *t == event.topic());
-        let matches_template = filter.template_address.as_ref().map_or(true, |t| *t == event.template_address());
+        let matches_template = filter
+            .template_address
+            .as_ref()
+            .map_or(true, |t| *t == event.template_address());
 
         let matches_substate_id = match &filter.substate_id {
             Some(substate_id) => event.substate_id().map(|s| s == *substate_id).unwrap_or(false),
@@ -182,7 +200,8 @@ impl EventScanner {
         };
 
         let matches_entity_id = match &filter.entity_id {
-            Some(entity_id) => event.substate_id()
+            Some(entity_id) => event
+                .substate_id()
                 .map(|s| Self::entity_id_matches(&s, entity_id))
                 .unwrap_or(false),
             None => true,
@@ -334,7 +353,9 @@ impl EventScanner {
         if let TransactionResult::Accept(substate_diff) = result.finalize.result {
             let substates: HashMap<SubstateId, Substate> = substate_diff.into_up_iter().collect();
 
-            let events = result.finalize.events
+            let events = result
+                .finalize
+                .events
                 .into_iter()
                 .map(|event| {
                     let substate = if let Some(substate_id) = event.substate_id() {
@@ -343,15 +364,13 @@ impl EventScanner {
                         None
                     };
 
-                    EventData {
-                        event,
-                        substate,
-                    }
-                }).collect();
+                    EventData { event, substate }
+                })
+                .collect();
 
             return events;
         } else {
-            return vec![]
+            return vec![];
         }
     }
 

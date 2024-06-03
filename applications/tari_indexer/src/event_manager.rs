@@ -20,21 +20,21 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::BTreeMap,
-    str::FromStr, sync::Arc,
-};
+use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 
 use log::*;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_dan_app_utilities::substate_file_cache::SubstateFileCache;
 use tari_dan_common_types::PeerAddress;
 use tari_engine_types::{events::Event, substate::SubstateId};
+use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_indexer_lib::substate_scanner::SubstateScanner;
-use tari_template_lib::{models::{Metadata, TemplateAddress}, Hash};
+use tari_template_lib::{
+    models::{Metadata, TemplateAddress},
+    Hash,
+};
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
-use tari_epoch_manager::base_layer::EpochManagerHandle;
 
 use crate::substate_storage_sqlite::{
     models::events::NewEvent,
@@ -57,12 +57,13 @@ pub struct EventManager {
 impl EventManager {
     pub fn new(
         substate_store: SqliteSubstateStore,
-        substate_scanner:
-            Arc<SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, SubstateFileCache>>,
+        substate_scanner: Arc<
+            SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, SubstateFileCache>,
+        >,
     ) -> Self {
         Self {
             substate_store,
-            substate_scanner
+            substate_scanner,
         }
     }
 

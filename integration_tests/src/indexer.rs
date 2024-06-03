@@ -192,11 +192,14 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         config.indexer.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
         config.indexer.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
         config.indexer.graphql_address = Some(format!("127.0.0.1:{}", graphql_port).parse().unwrap());
-        
+
         // store all events in the database using an empty filter
-        config.indexer.event_filters = vec![
-            EventFilterConfig { topic: None, entity_id: None, substate_id: None, template_address: None }
-        ];
+        config.indexer.event_filters = vec![EventFilterConfig {
+            topic: None,
+            entity_id: None,
+            substate_id: None,
+            template_address: None,
+        }];
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);

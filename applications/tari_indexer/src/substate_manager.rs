@@ -28,17 +28,15 @@ use tari_dan_app_utilities::substate_file_cache::SubstateFileCache;
 use tari_dan_common_types::PeerAddress;
 use tari_engine_types::substate::{Substate, SubstateId};
 use tari_epoch_manager::base_layer::EpochManagerHandle;
-use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate}
-;
+use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, TariValidatorNodeRpcClientFactory};
-use crate::substate_storage_sqlite::
-    sqlite_substate_store_factory::{
-        SqliteSubstateStore,
-        SubstateStore,
-        SubstateStoreReadTransaction,
-    }
-;
+
+use crate::substate_storage_sqlite::sqlite_substate_store_factory::{
+    SqliteSubstateStore,
+    SubstateStore,
+    SubstateStoreReadTransaction,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SubstateResponse {

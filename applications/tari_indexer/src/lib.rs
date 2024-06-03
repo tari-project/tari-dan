@@ -172,14 +172,13 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     ));
 
     // Run the event scanner
-    let event_filters: Vec<EventFilter> = config.indexer.event_filters.
-        into_iter()
+    let event_filters: Vec<EventFilter> = config
+        .indexer
+        .event_filters
+        .into_iter()
         .map(TryInto::try_into)
         .collect::<Result<_, _>>()
-        .map_err(|e| ExitError::new(
-            ExitCode::ConfigError,
-            format!("Invalid event filters: {}", e),
-        ))?;
+        .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Invalid event filters: {}", e)))?;
     let event_scanner = Arc::new(EventScanner::new(
         config.network,
         Box::new(services.epoch_manager.clone()),
