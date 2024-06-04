@@ -184,7 +184,7 @@ impl EventScanner {
             }
         }
 
-        return false;
+        false
     }
 
     fn event_matches_filter(filter: &EventFilter, event: &Event) -> bool {
@@ -211,7 +211,7 @@ impl EventScanner {
             return true;
         }
 
-        return false;
+        false
     }
 
     fn entity_id_matches(substate_id: &SubstateId, entity_id: &EntityId) -> bool {
@@ -262,7 +262,7 @@ impl EventScanner {
                 let substate_row = NewSubstate {
                     address: substate_id.to_string(),
                     version: i64::from(substate.version()),
-                    data: Self::encode_substate(&substate)?,
+                    data: Self::encode_substate(substate)?,
                 };
                 info!(
                     target: LOG_TARGET,
@@ -368,9 +368,9 @@ impl EventScanner {
                 })
                 .collect();
 
-            return events;
+            events
         } else {
-            return vec![];
+            vec![]
         }
     }
 
