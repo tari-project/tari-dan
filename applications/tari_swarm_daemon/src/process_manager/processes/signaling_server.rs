@@ -12,12 +12,10 @@ impl SignalingServerProcess {
         Self { instance }
     }
 
-    #[allow(dead_code)]
     pub fn instance(&self) -> &Instance {
         &self.instance
     }
 
-    #[allow(dead_code)]
     pub fn instance_mut(&mut self) -> &mut Instance {
         &mut self.instance
     }

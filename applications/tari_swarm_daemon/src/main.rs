@@ -110,16 +110,6 @@ fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
             env: vec![],
         },
         ExecutableConfig {
-            instance_type: InstanceType::TariWalletDaemon,
-            execuable_path: Some("target/release/tari_wallet_daemon".into()),
-            compile: Some(CompileConfig {
-                working_dir: Some(".".into()),
-                package_name: "tari_dan_wallet_daemon".to_string(),
-                target_dir: None,
-            }),
-            env: vec![],
-        },
-        ExecutableConfig {
             instance_type: InstanceType::TariIndexer,
             execuable_path: Some("target/release/tari_indexer".into()),
             compile: Some(CompileConfig {
@@ -135,6 +125,16 @@ fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
             compile: Some(CompileConfig {
                 working_dir: Some(".".into()),
                 package_name: "tari_signaling_server".to_string(),
+                target_dir: None,
+            }),
+            env: vec![],
+        },
+        ExecutableConfig {
+            instance_type: InstanceType::TariWalletDaemon,
+            execuable_path: Some("target/release/tari_wallet_daemon".into()),
+            compile: Some(CompileConfig {
+                working_dir: Some(".".into()),
+                package_name: "tari_dan_wallet_daemon".to_string(),
                 target_dir: None,
             }),
             env: vec![],
@@ -156,8 +156,8 @@ fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
             .with_name("Validator node")
             .with_num_instances(1),
         InstanceConfig::new(InstanceType::TariIndexer).with_name("Indexer"),
-        InstanceConfig::new(InstanceType::TariWalletDaemon).with_name("Wallet Daemon"),
         InstanceConfig::new(InstanceType::TariSignalingServer).with_name("Signaling server"),
+        InstanceConfig::new(InstanceType::TariWalletDaemon).with_name("Wallet Daemon"),
     ];
 
     let base_dir = cli
