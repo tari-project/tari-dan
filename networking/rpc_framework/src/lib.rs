@@ -25,17 +25,12 @@
 //! Provides a request/response protocol that supports streaming.
 //! Available with the `rpc` crate feature.
 
-// TODO: fix all tests
 // #[cfg(test)]
 // mod test;
 
 /// Maximum frame size of each RPC message. This is enforced in tokio's length delimited codec.
 /// This can be thought of as the hard limit on message size.
 pub const RPC_MAX_FRAME_SIZE: usize = 3 * 1024 * 1024; // 3 MiB
-/// Maximum number of chunks into which a message can be broken up.
-const RPC_CHUNKING_MAX_CHUNKS: usize = 16; // 16 x 256 Kib = 4 MiB max combined message size
-const RPC_CHUNKING_THRESHOLD: usize = 256 * 1024;
-const RPC_CHUNKING_SIZE_LIMIT: usize = 384 * 1024;
 
 /// The maximum request payload size
 const fn max_request_size() -> usize {
@@ -44,7 +39,7 @@ const fn max_request_size() -> usize {
 
 /// The maximum size for a single RPC response message
 const fn max_response_size() -> usize {
-    RPC_CHUNKING_MAX_CHUNKS * RPC_CHUNKING_THRESHOLD
+    RPC_MAX_FRAME_SIZE
 }
 
 /// The maximum size for a single RPC response excluding overhead

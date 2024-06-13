@@ -23,6 +23,8 @@
 use std::{sync::Arc, time::Duration};
 
 use futures::StreamExt;
+use libp2p::{PeerId, StreamProtocol};
+use libp2p_substream::{ProtocolEvent, ProtocolNotification};
 use tari_shutdown::Shutdown;
 use tari_test_utils::unpack_enum;
 use tari_utilities::hex::Hex;
@@ -33,37 +35,22 @@ use tokio::{
 };
 
 use crate::{
+    error::HandshakeRejectReason,
     framing,
-    multiplexing::Yamux,
-    protocol::{
-        rpc,
-        rpc::{
-            context::RpcCommsBackend,
-            error::HandshakeRejectReason,
-            handshake::RpcHandshakeError,
-            test::{
-                greeting_service::{
-                    GreetingClient,
-                    GreetingRpc,
-                    GreetingServer,
-                    GreetingService,
-                    SayHelloRequest,
-                    SlowGreetingService,
-                    SlowStreamRequest,
-                },
-                mock::create_mocked_rpc_context,
-            },
-            RpcError,
-            RpcServer,
-            RpcServerBuilder,
-            RpcStatusCode,
-        },
-        ProtocolEvent,
-        ProtocolId,
-        ProtocolNotification,
+    handshake::RpcHandshakeError,
+    test::greeting_service::{
+        GreetingClient,
+        GreetingRpc,
+        GreetingServer,
+        GreetingService,
+        SayHelloRequest,
+        SlowGreetingService,
+        SlowStreamRequest,
     },
-    test_utils::{node_identity::build_node_identity, transport::build_multiplexed_connections},
-    NodeIdentity,
+    RpcError,
+    RpcServer,
+    RpcServerBuilder,
+    RpcStatusCode,
     Substream,
 };
 
@@ -71,22 +58,19 @@ pub(super) async fn setup_service_with_builder<T: GreetingRpc>(
     service_impl: T,
     builder: RpcServerBuilder,
 ) -> (
-    mpsc::Sender<ProtocolNotification<Substream>>,
+    mpsc::UnboundedSender<ProtocolNotification<Substream>>,
     task::JoinHandle<()>,
-    RpcCommsBackend,
     Shutdown,
 ) {
-    let (notif_tx, notif_rx) = mpsc::channel(10);
+    let (notif_tx, notif_rx) = mpsc::unbounded_channel();
     let shutdown = Shutdown::new();
-    let (context, _) = create_mocked_rpc_context();
     let server_hnd = task::spawn({
-        let context = context.clone();
         let shutdown_signal = shutdown.to_signal();
         async move {
             let fut = builder
                 .finish()
                 .add_service(GreetingServer::new(service_impl))
-                .serve(notif_rx, context);
+                .serve(notif_rx);
 
             tokio::select! {
                 biased;
@@ -96,16 +80,15 @@ pub(super) async fn setup_service_with_builder<T: GreetingRpc>(
         }
     });
 
-    (notif_tx, server_hnd, context, shutdown)
+    (notif_tx, server_hnd, shutdown)
 }
 
 pub(super) async fn setup_service<T: GreetingRpc>(
     service_impl: T,
     num_concurrent_sessions: usize,
 ) -> (
-    mpsc::Sender<ProtocolNotification<Substream>>,
+    mpsc::UnboundedSender<ProtocolNotification<Substream>>,
     task::JoinHandle<()>,
-    RpcCommsBackend,
     Shutdown,
 ) {
     let builder = RpcServer::builder()
@@ -121,14 +104,13 @@ pub(super) async fn setup<T: GreetingRpc>(
     let (notif_tx, server_hnd, context, shutdown) = setup_service(service_impl, num_concurrent_sessions).await;
     let (_, inbound, outbound) = build_multiplexed_connections().await;
     let substream = outbound.get_yamux_control().open_stream().await.unwrap();
+    let peer_id = PeerId::random();
 
-    let node_identity = build_node_identity(Default::default());
     // Notify that a peer wants to speak the greeting RPC protocol
-    context.peer_manager().add_peer(node_identity.to_peer()).await.unwrap();
     notif_tx
         .send(ProtocolNotification::new(
-            ProtocolId::from_static(b"/test/greeting/1.0"),
-            ProtocolEvent::NewInboundSubstream(node_identity.node_id().clone(), substream),
+            StreamProtocol::new(b"/test/greeting/1.0"),
+            ProtocolEvent::NewInboundSubstream { peer_id, substream },
         ))
         .await
         .unwrap();

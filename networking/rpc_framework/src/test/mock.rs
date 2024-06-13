@@ -172,12 +172,3 @@ impl From<RpcClient> for MockRpcClient {
         Self { inner }
     }
 }
-
-pub(crate) fn create_mocked_rpc_context() -> (RpcCommsBackend, ConnectivityManagerMockState) {
-    let (connectivity, mock) = create_connectivity_mock();
-    let mock_state = mock.get_shared_state();
-    mock.spawn();
-    let peer_manager = build_peer_manager();
-
-    (RpcCommsBackend::new(peer_manager, connectivity), mock_state)
-}
