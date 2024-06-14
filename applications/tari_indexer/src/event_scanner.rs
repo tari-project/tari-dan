@@ -27,13 +27,12 @@ use std::{
 
 use futures::StreamExt;
 use log::*;
-use rand::{prelude::SliceRandom, rngs::OsRng};
 use tari_bor::decode;
 use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, PeerAddress};
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
-use tari_dan_storage::consensus_models::{Block, BlockId, Command, Decision, TransactionRecord};
+use tari_dan_storage::consensus_models::{Block, BlockId, Decision, TransactionRecord};
 use tari_engine_types::{
     commit_result::{ExecuteResult, TransactionResult},
     events::Event,
@@ -128,7 +127,7 @@ impl EventScanner {
         // let network_committee_info = self.epoch_manager.get_network_committees().await?;
         // let epoch = network_committee_info.epoch;
         let current_committees = self.epoch_manager.get_committees(current_epoch).await?;
-        for (shard, committee) in current_committees {
+        for (shard, mut committee) in current_committees {
             info!(
                 target: LOG_TARGET,
                 "Scanning committee epoch={}, shard={}",
@@ -137,7 +136,7 @@ impl EventScanner {
             );
             // TODO: use the latest block id that we scanned for each committee
             let new_blocks = self
-                .get_new_blocks_from_committee(shard, &mut committee.clone(), current_epoch)
+                .get_new_blocks_from_committee(shard, &mut committee, current_epoch)
                 .await?;
             info!(
                 target: LOG_TARGET,
@@ -375,22 +374,11 @@ impl EventScanner {
     }
 
     fn extract_transaction_ids_from_blocks(&self, blocks: Vec<Block>) -> HashSet<TransactionId> {
-        let mut transaction_ids = HashSet::new();
-
-        for block in blocks {
-            for command in block.commands() {
-                match command {
-                    Command::Accept(t) | Command::LocalOnly(t) => {
-                        transaction_ids.insert(*t.id());
-                    },
-                    _ => {
-                        // we are only interested in events from confirmed transactions
-                    },
-                }
-            }
-        }
-
-        transaction_ids
+        blocks
+            .iter()
+            .flat_map(|b| b.all_accepted_transactions_ids())
+            .copied()
+            .collect()
     }
 
     fn build_genesis_block_id(&self) -> BlockId {
@@ -412,7 +400,7 @@ impl EventScanner {
         };
         let start_block_id = start_block_id.unwrap_or(self.build_genesis_block_id());
 
-        committee.members.shuffle(&mut OsRng);
+        committee.shuffle();
         let mut last_block_id = start_block_id;
 
         info!(
@@ -423,7 +411,7 @@ impl EventScanner {
             shard
         );
 
-        for (member, _) in &committee.members {
+        for member in committee.members() {
             debug!(
                 target: LOG_TARGET,
                 "Trying to get blocks from VN {} (epoch={}, shard={})",
