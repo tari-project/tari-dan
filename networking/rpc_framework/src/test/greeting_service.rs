@@ -31,6 +31,7 @@ use std::{
     time::Duration,
 };
 
+use async_trait::async_trait;
 use tari_utilities::hex::Hex;
 use tokio::{
     sync::{mpsc, RwLock},
@@ -38,15 +39,7 @@ use tokio::{
     time,
 };
 
-use crate::{
-    async_trait,
-    protocol::{
-        rpc::{NamedProtocolService, Request, Response, RpcError, RpcServerError, RpcStatus, Streaming},
-        ProtocolId,
-    },
-    utils,
-    Substream,
-};
+use crate::{Request, Response, RpcStatus, Streaming};
 
 #[async_trait]
 // #[tari_rpc(protocol_name = "/tari/greeting/1.0", server_struct = GreetingServer, client_struct = GreetingClient)]
@@ -126,7 +119,9 @@ impl GreetingRpc for GreetingService {
         let num = *request.message();
         let greetings = self.greetings[..cmp::min(num as usize, self.greetings.len())].to_vec();
         task::spawn(async move {
-            let _result = utils::mpsc::send_all(&tx, greetings.into_iter().map(Ok)).await;
+            for greeting in greetings {
+                tx.send(Ok(greeting)).await.unwrap();
+            }
         });
 
         Ok(Streaming::new(rx))

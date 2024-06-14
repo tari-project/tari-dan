@@ -9,6 +9,7 @@ use bytes::Bytes;
 use crate::{
     body::{Body, IntoBody},
     error::HandshakeRejectReason,
+    max_response_payload_size,
     proto,
     proto::rpc_session_reply::SessionResult,
     RpcError,
@@ -145,8 +146,6 @@ bitflags! {
         const FIN = 0x01;
         /// Typically sent with empty contents and used to confirm a substream is alive.
         const ACK = 0x02;
-        /// Another chunk to be received
-        const MORE = 0x04;
     }
 }
 impl RpcMessageFlags {
@@ -156,10 +155,6 @@ impl RpcMessageFlags {
 
     pub fn is_ack(self) -> bool {
         self.contains(Self::ACK)
-    }
-
-    pub fn is_more(self) -> bool {
-        self.contains(Self::MORE)
     }
 }
 
@@ -216,6 +211,20 @@ impl RpcResponse {
             status: self.status as u32,
             flags: self.flags.bits().into(),
             payload: self.payload.to_vec(),
+        }
+    }
+
+    pub fn exceeded_message_size(self) -> RpcResponse {
+        let msg = format!(
+            "The response size exceeded the maximum allowed payload size. Max = {} bytes, Got = {} bytes",
+            max_response_payload_size() as f32,
+            self.payload.len() as f32,
+        );
+        RpcResponse {
+            request_id: self.request_id,
+            status: RpcStatusCode::MalformedResponse,
+            flags: RpcMessageFlags::FIN,
+            payload: msg.into_bytes().into(),
         }
     }
 }
