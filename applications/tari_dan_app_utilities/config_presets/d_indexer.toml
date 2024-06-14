@@ -35,11 +35,30 @@
 # HTTP UI listener address (default = "127.0.0.1:15000")
 #http_ui_address = "127.0.0.1:15000"
 
-# Substate ids to keep watching
-#address_watchlist=[]
-
 # How often do we want to scan the dan layer for change. (default = 10)
 #dan_layer_scanning_internal=10
 
 [indexer.p2p]
 #transport = "tor"
+
+
+# List of filters for events that we want to persist in the indexer database
+# If an event matches ANY of the filters, it will be persisted
+# We can have as many "[[indexer.event_filters]]" sections as we want, each one will be a filter
+
+# By default there is an empty filter that will match ALL events, making the indexer persist the entire network
+[[indexer.event_filters]]
+
+# Fields are "topic", "entity_id", "substate_id" and "template_address"
+#[[indexer.event_filters]]
+#topic = "another topic"
+#entity_id = "0000000000000000000000000000000000000000"
+#substate_id = "component_00000000000000000000000000000000000000000000000000000000"
+#template_address = "0000000000000000000000000000000000000000000000000000000000000000"
+
+# Each individual filter is an "AND" condition, meaning all the specified fields in the filter must match
+# But we can specify only a subset of fields
+#[[indexer.event_filters]]
+#topic = "another topic"
+#substate_id = "component_00000000000000000000000000000000000000000000000000000000"
+

@@ -32,7 +32,9 @@ mod dry_run;
 pub mod graphql;
 mod http_ui;
 
+mod event_data;
 mod event_manager;
+mod event_scanner;
 mod json_rpc;
 mod substate_manager;
 mod substate_storage_sqlite;
@@ -40,6 +42,7 @@ mod transaction_manager;
 
 use std::{fs, sync::Arc};
 
+use event_scanner::{EventFilter, EventScanner};
 use http_ui::server::run_http_ui_server;
 use log::*;
 use substate_manager::SubstateManager;
@@ -126,7 +129,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     let dry_run_transaction_processor = DryRunTransactionProcessor::new(
         services.epoch_manager.clone(),
         services.validator_node_client_factory.clone(),
-        dan_layer_scanner,
+        dan_layer_scanner.clone(),
         services.template_manager.clone(),
         config.network,
     );
@@ -164,10 +167,24 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
 
     // Run the event manager
     let event_manager = Arc::new(EventManager::new(
+        services.substate_store.clone(),
+        dan_layer_scanner.clone(),
+    ));
+
+    // Run the event scanner
+    let event_filters: Vec<EventFilter> = config
+        .indexer
+        .event_filters
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<Result<_, _>>()
+        .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Invalid event filters: {}", e)))?;
+    let event_scanner = Arc::new(EventScanner::new(
         config.network,
         Box::new(services.epoch_manager.clone()),
         services.validator_node_client_factory.clone(),
         services.substate_store.clone(),
+        event_filters,
     ));
 
     // Run the GraphQL API
@@ -181,16 +198,11 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     fs::write(config.common.base_path.join("pid"), std::process::id().to_string())
         .map_err(|e| ExitError::new(ExitCode::IOError, e))?;
 
-    // keep scanning the dan layer for new versions of the stored substates
     loop {
         tokio::select! {
+            // keep scanning the dan layer for new events
             _ = time::sleep(config.indexer.dan_layer_scanning_internal) => {
-                match substate_manager.scan_and_update_substates().await {
-                    Ok(0) => {},
-                    Ok(cnt) => info!(target: LOG_TARGET, "Scanned {} substate(s) successfully", cnt),
-                    Err(e) =>  error!(target: LOG_TARGET, "Substate auto-scan failed: {}", e),
-                };
-                match event_manager.scan_events().await {
+                match event_scanner.scan_events().await {
                     Ok(0) => {},
                     Ok(cnt) => info!(target: LOG_TARGET, "Scanned {} events(s) successfully", cnt),
                     Err(e) =>  error!(target: LOG_TARGET, "Event auto-scan failed: {}", e),

@@ -29,8 +29,6 @@ import "./ValidatorNode.css";
 import { StyledPaper } from "../../Components/StyledComponents";
 import Grid from "@mui/material/Grid";
 import SecondaryHeading from "../../Components/SecondaryHeading";
-import MonitoredSubstates from "./Components/MonitoredSubstates";
-import MonitoredNftCollections from "./Components/MonitoredNftCollections";
 import type { GetIdentityResponse } from "@tariproject/typescript-bindings/tari-indexer-client";
 
 function ValidatorNode() {
@@ -62,22 +60,6 @@ function ValidatorNode() {
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Info identity={identity} />
-        </StyledPaper>
-      </Grid>
-      <Grid item sm={12} md={12} xs={12}>
-        <SecondaryHeading>Monitored Substates</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <MonitoredSubstates />
-        </StyledPaper>
-      </Grid>
-      <Grid item sm={12} md={12} xs={12}>
-        <SecondaryHeading>Monitored NFT collections</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <MonitoredNftCollections />
         </StyledPaper>
       </Grid>
       <Grid item sm={12} md={12} xs={12}>

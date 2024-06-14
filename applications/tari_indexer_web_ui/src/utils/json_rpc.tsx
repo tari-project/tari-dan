@@ -21,14 +21,8 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import type {
-  AddAddressRequest,
-  AddAddressResponse,
   AddPeerRequest,
   AddPeerResponse,
-  ClearAddressesResponse,
-  DeleteAddressRequest,
-  DeleteAddressResponse,
-  GetAddressesResponse,
   GetAllVnsResponse,
   GetCommsStatsResponse,
   GetConnectionsResponse,
@@ -90,11 +84,6 @@ export const getSubstate = (request: GetSubstateRequest): Promise<GetSubstateRes
   jsonRpc("get_substate", request);
 export const inspectSubstate = (request: InspectSubstateRequest): Promise<InspectSubstateResponse> =>
   jsonRpc("inspect_substate", request);
-export const getAddresses = (): Promise<GetAddressesResponse> => jsonRpc("get_addresses");
-export const addAddress = (request: AddAddressRequest): Promise<AddAddressResponse> => jsonRpc("add_address", request);
-export const deleteAddress = (request: DeleteAddressRequest): Promise<DeleteAddressResponse> =>
-  jsonRpc("delete_address", request);
-export const clearAddresses = (): Promise<ClearAddressesResponse> => jsonRpc("clear_addresses");
 export const getConnections = (): Promise<GetConnectionsResponse> => jsonRpc("get_connections");
 export const getNonFungibleCollections = (): Promise<GetNonFungibleCollectionsResponse> =>
   jsonRpc("get_non_fungible_collections");

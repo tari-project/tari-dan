@@ -86,17 +86,6 @@ pub struct InspectSubstateResponse {
     derive(TS),
     ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
 )]
-pub struct GetAddressesResponse {
-    #[cfg_attr(feature = "ts", ts(type = "Array<[string, number]>"))]
-    pub addresses: Vec<(String, i64)>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
-)]
 pub struct SubmitTransactionRequest {
     pub transaction: Transaction,
     #[serde(default)]
@@ -229,54 +218,6 @@ pub struct GetAllVnsRequest {
 pub struct GetAllVnsResponse {
     pub vns: Vec<BaseLayerValidatorNode>,
 }
-
-#[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
-)]
-pub struct AddAddressRequest {
-    #[serde_as(as = "DisplayFromStr")]
-    pub address: SubstateId,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
-)]
-pub struct AddAddressResponse {}
-
-#[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
-)]
-pub struct DeleteAddressRequest {
-    #[serde_as(as = "DisplayFromStr")]
-    pub address: SubstateId,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
-)]
-pub struct DeleteAddressResponse {}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
-)]
-pub struct ClearAddressesResponse {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(

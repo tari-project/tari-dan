@@ -222,13 +222,6 @@ async fn indexer_scans_network_events_for_resource(world: &mut TariWorld, indexe
     eprintln!("{:?}", events);
 }
 
-#[when(expr = "the indexer {word} tracks the address {word}")]
-async fn track_addresss_in_indexer(world: &mut TariWorld, indexer_name: String, output_ref: String) {
-    let indexer = world.indexers.get(&indexer_name).unwrap();
-    assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
-    indexer.add_address(world, output_ref).await;
-}
-
 #[then(expr = "the indexer {word} returns version {int} for substate {word}")]
 async fn assert_indexer_substate_version(
     world: &mut TariWorld,

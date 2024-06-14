@@ -31,7 +31,7 @@ use tari_crypto::tari_utilities::{hex::Hex, message_format::MessageFormat};
 use tari_dan_app_utilities::p2p_config::PeerSeedsConfig;
 use tari_engine_types::substate::SubstateId;
 use tari_indexer::{
-    config::{ApplicationConfig, IndexerConfig},
+    config::{ApplicationConfig, EventFilterConfig, IndexerConfig},
     run_indexer,
 };
 use tari_indexer_client::{
@@ -65,13 +65,6 @@ pub struct IndexerProcess {
 }
 
 impl IndexerProcess {
-    pub async fn add_address(&self, world: &TariWorld, output_ref: String) {
-        let address = get_address_from_output(world, output_ref);
-
-        let mut jrpc_client = self.get_jrpc_indexer_client();
-        jrpc_client.add_address(address.clone()).await.unwrap();
-    }
-
     pub async fn get_substate(&self, world: &TariWorld, output_ref: String, version: u32) -> GetSubstateResponse {
         let address = get_address_from_output(world, output_ref);
 
@@ -199,6 +192,14 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         config.indexer.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
         config.indexer.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
         config.indexer.graphql_address = Some(format!("127.0.0.1:{}", graphql_port).parse().unwrap());
+
+        // store all events in the database using an empty filter
+        config.indexer.event_filters = vec![EventFilterConfig {
+            topic: None,
+            entity_id: None,
+            substate_id: None,
+            template_address: None,
+        }];
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);

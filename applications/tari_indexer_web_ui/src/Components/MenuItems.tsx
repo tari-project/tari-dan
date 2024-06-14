@@ -59,18 +59,6 @@ const mainItems = [
     link: "/",
   },
   {
-    title: "Monitored substates",
-    icon: <IoExtensionPuzzleOutline style={iconStyle} />,
-    activeIcon: <IoExtensionPuzzle style={activeIconStyle} />,
-    link: "monitored_substates",
-  },
-  {
-    title: "Monitored NFT collections",
-    icon: <IoImageOutline style={iconStyle} />,
-    activeIcon: <IoImage style={activeIconStyle} />,
-    link: "nfts",
-  },
-  {
     title: "Recent Transactions",
     icon: <IoBarChartOutline style={iconStyle} />,
     activeIcon: <IoBarChart style={activeIconStyle} />,

@@ -39,7 +39,6 @@ use tari_dan_app_utilities::{
     p2p_config::{P2pConfig, PeerSeedsConfig},
     template_manager::implementation::TemplateConfig,
 };
-use tari_engine_types::substate::SubstateId;
 
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {
@@ -89,8 +88,6 @@ pub struct IndexerConfig {
     /// The jrpc address where the UI should connect (it can be the same as the json_rpc_address, but doesn't have to
     /// be), if this will be None, then the listen_addr will be used.
     pub ui_connect_address: Option<String>,
-    /// Substate ids to keep watching
-    pub address_watchlist: Vec<SubstateId>,
     /// How often do we want to scan the second layer for new versions
     #[serde(with = "serializers::seconds")]
     pub dan_layer_scanning_internal: Duration,
@@ -100,8 +97,10 @@ pub struct IndexerConfig {
     pub sidechain_id: Option<RistrettoPublicKey>,
     /// The templates sidechain id
     pub templates_sidechain_id: Option<RistrettoPublicKey>,
-    /// the burnt utxos sidechain id
+    /// The burnt utxos sidechain id
     pub burnt_utxo_sidechain_id: Option<RistrettoPublicKey>,
+    /// The event filtering configuration
+    pub event_filters: Vec<EventFilterConfig>,
 }
 
 impl IndexerConfig {
@@ -136,12 +135,12 @@ impl Default for IndexerConfig {
             graphql_address: Some("127.0.0.1:18301".parse().unwrap()),
             http_ui_address: Some("127.0.0.1:15000".parse().unwrap()),
             ui_connect_address: None,
-            address_watchlist: vec![],
             dan_layer_scanning_internal: Duration::from_secs(10),
             templates: TemplateConfig::default(),
             sidechain_id: None,
             templates_sidechain_id: None,
             burnt_utxo_sidechain_id: None,
+            event_filters: vec![],
         }
     }
 }
@@ -150,4 +149,12 @@ impl SubConfigPath for IndexerConfig {
     fn main_key_prefix() -> &'static str {
         "indexer"
     }
+}
+
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
+pub struct EventFilterConfig {
+    pub topic: Option<String>,
+    pub entity_id: Option<String>,
+    pub substate_id: Option<String>,
+    pub template_address: Option<String>,
 }

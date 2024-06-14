@@ -9,7 +9,7 @@ export interface ExecutedTransaction {
   transaction: Transaction;
   result: ExecuteResult;
   resulting_outputs: Array<VersionedSubstateId>;
-  resolved_inputs: Array<VersionedSubstateIdLockIntent> | null;
+  resolved_inputs: Array<VersionedSubstateIdLockIntent>;
   execution_time: { secs: number; nanos: number };
   final_decision: Decision | null;
   finalized_time: { secs: number; nanos: number } | null;

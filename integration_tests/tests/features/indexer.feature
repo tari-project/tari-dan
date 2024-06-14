@@ -74,16 +74,6 @@ Feature: Indexer node
     Given an indexer IDX connected to base node BASE
     Then indexer IDX has scanned to height 13
 
-    # Track a component
-    When the indexer IDX tracks the address ACC1/components/Account
-
-    # Track a vault
-    When the indexer IDX tracks the address TX2/vaults/0
-
-    # Track the NFT resource so the indexer tries to get all individual NFTs
-    When the indexer IDX tracks the address NFT/resources/0
-
-
     # Get substate of a component (the counter has been increased, so the version is 1)
     Then the indexer IDX returns version 1 for substate COUNTER_1/components/Counter
 
