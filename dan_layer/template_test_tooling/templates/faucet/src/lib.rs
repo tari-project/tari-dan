@@ -38,8 +38,7 @@ mod faucet_template {
         pub fn mint_with_symbol(initial_supply: Amount, symbol: String) -> Component<Self> {
             let coins = ResourceBuilder::fungible()
                 .with_token_symbol(symbol)
-                .initial_supply(initial_supply)
-                .build_bucket();
+                .initial_supply(initial_supply);
 
             Component::new(Self {
                 vault: Vault::from_bucket(coins),

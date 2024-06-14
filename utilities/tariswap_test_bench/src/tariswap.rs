@@ -6,7 +6,7 @@ use tari_dan_wallet_sdk::{apis::key_manager::TRANSACTION_BRANCH, models::Account
 use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress},
-    prelude::XTR2,
+    prelude::XTR,
 };
 use tari_transaction::{SubstateRequirement, Transaction};
 
@@ -30,7 +30,7 @@ impl Runner {
         );
         for _ in 0..num_tariswaps {
             builder = builder.call_function(self.tariswap_template.address, "new", args![
-                XTR2,
+                XTR,
                 faucet.resource_address,
                 Amount(1)
             ]);
@@ -67,11 +67,11 @@ impl Runner {
                 let transaction = Transaction::builder()
                     .with_inputs(vec![
                         SubstateRequirement::new(faucet.resource_address.into(), Some(0)),
-                        SubstateRequirement::new(XTR2.into(), Some(0)),
+                        SubstateRequirement::new(XTR.into(), Some(0)),
                     ])
                     .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), Amount(1000))
                     .call_method(account.address.as_component_address().unwrap(), "withdraw", args![
-                        XTR2, amount_a
+                        XTR, amount_a
                     ])
                     .put_last_instruction_output_on_workspace("a")
                     .call_method(account.address.as_component_address().unwrap(), "withdraw", args![
@@ -113,7 +113,7 @@ impl Runner {
         let key = self.sdk.key_manager_api().derive_key(TRANSACTION_BRANCH, 0)?;
 
         let mut tx_ids = vec![];
-        // Swap XTR2 for faucet
+        // Swap XTR for faucet
         // Batch these otherwise we can break consensus (proposed with locked object)
         for i in 0..5 {
             for (i, account) in accounts.iter().enumerate().skip(i * 200).take(200) {
@@ -122,15 +122,15 @@ impl Runner {
                     // Use resources as input refs to allow concurrent access.
                     .with_inputs(vec![
                         SubstateRequirement::new(faucet.resource_address.into(), Some(0)),
-                        SubstateRequirement::new(XTR2.into(), Some(0)),
+                        SubstateRequirement::new(XTR.into(), Some(0)),
                     ])
                     .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), Amount(1000))
-                    .call_method(tariswap.component_address, "get_pool_balance", args![ XTR2, ])
+                    .call_method(tariswap.component_address, "get_pool_balance", args![ XTR, ])
                     .call_method(tariswap.component_address, "get_pool_balance", args![ faucet.resource_address, ])
-                    .call_method(tariswap.component_address, "get_pool_ratio", args![XTR2, Amount(1000)])
+                    .call_method(tariswap.component_address, "get_pool_ratio", args![XTR, Amount(1000)])
                     .call_method(tariswap.component_address, "get_pool_ratio", args![faucet.resource_address, Amount(1000)])
                     .call_method(account.address.as_component_address().unwrap(), "withdraw", args![
-                    XTR2, amount_a_for_b
+                    XTR, amount_a_for_b
                 ])
                     .put_last_instruction_output_on_workspace("a")
                     .call_method(tariswap.component_address, "swap", args![
@@ -155,14 +155,14 @@ impl Runner {
                 let ratio_b = result.execution_results[3].decode::<Amount>()?;
                 let amount_swapped = amount_a_for_b.value() as f64 * (ratio_b.value() as f64 / 1000.0);
                 log::info!(
-                    "Swap {n} for {amount_a_for_b} XTR2 -> {amount_swapped} FAUCET @ {ratio_a}:{ratio_b} | pool \
-                     liquidity: {balance_a} XTR2 {balance_b} FAUCET",
+                    "Swap {n} for {amount_a_for_b} XTR -> {amount_swapped} FAUCET @ {ratio_a}:{ratio_b} | pool \
+                     liquidity: {balance_a} XTR {balance_b} FAUCET",
                     n = (i + 1) * (j + 1)
                 );
             }
         }
 
-        // Swap faucet for XTR2
+        // Swap faucet for XTR
         for i in 0..5 {
             for (i, account) in accounts.iter().enumerate().skip(i * 200).take(200) {
                 let tariswap = &tariswaps[i % tariswaps.len()];
@@ -170,12 +170,12 @@ impl Runner {
                     // Use resources as input refs to allow concurrent access.
                     .with_inputs(vec![
                         SubstateRequirement::new(faucet.resource_address.into(), Some(0)),
-                        SubstateRequirement::new(XTR2.into(), Some(0)),
+                        SubstateRequirement::new(XTR.into(), Some(0)),
                     ])
                     .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), Amount(1000))
-                    .call_method(tariswap.component_address, "get_pool_balance", args![XTR2])
+                    .call_method(tariswap.component_address, "get_pool_balance", args![XTR])
                     .call_method(tariswap.component_address, "get_pool_balance", args![faucet.resource_address])
-                    .call_method(tariswap.component_address, "get_pool_ratio", args![XTR2, Amount(1000)])
+                    .call_method(tariswap.component_address, "get_pool_ratio", args![XTR, Amount(1000)])
                     .call_method(tariswap.component_address, "get_pool_ratio", args![faucet.resource_address, Amount(1000)])
                     .call_method(account.address.as_component_address().unwrap(), "withdraw", args![
                         faucet.resource_address, amount_b_for_a
@@ -183,7 +183,7 @@ impl Runner {
                     .put_last_instruction_output_on_workspace("b")
                     .call_method(tariswap.component_address, "swap", args![
                         Workspace("b"),
-                        XTR2,
+                        XTR,
                     ])
                     .put_last_instruction_output_on_workspace("swapped")
                     .call_method(account.address.as_component_address().unwrap(), "deposit", args![
@@ -203,8 +203,8 @@ impl Runner {
                 let ratio_b = result.execution_results[3].decode::<Amount>()?;
                 let amount_swapped = amount_b_for_a.value() as f64 * (ratio_a.value() as f64 / 1000.0);
                 log::info!(
-                    "Swap {n} for {amount_b_for_a} FAUCET -> {amount_swapped} XTR2 @ {ratio_b}:{ratio_a} | pool \
-                     liquidity: {balance_a} XTR2 {balance_b} FAUCET",
+                    "Swap {n} for {amount_b_for_a} FAUCET -> {amount_swapped} XTR @ {ratio_b}:{ratio_a} | pool \
+                     liquidity: {balance_a} XTR {balance_b} FAUCET",
                     n = (i + 1) * (j + 1) * 2
                 );
             }

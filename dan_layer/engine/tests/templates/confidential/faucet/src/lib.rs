@@ -34,8 +34,7 @@ mod faucet_template {
         pub fn mint(confidential_proof: ConfidentialOutputStatement) -> Component<Self> {
             let coins = ResourceBuilder::confidential()
                 .mintable(AccessRule::AllowAll)
-                .initial_supply(confidential_proof)
-                .build_bucket();
+                .initial_supply(confidential_proof);
 
             Component::new(Self {
                 vault: Vault::from_bucket(coins),
@@ -50,9 +49,8 @@ mod faucet_template {
         ) -> Component<Self> {
             let coins = ResourceBuilder::confidential()
                 .mintable(AccessRule::AllowAll)
-                .initial_supply(confidential_proof)
                 .with_view_key(view_key)
-                .build_bucket();
+                .initial_supply(confidential_proof);
 
             Component::new(Self {
                 vault: Vault::from_bucket(coins),

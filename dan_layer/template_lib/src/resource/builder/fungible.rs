@@ -11,7 +11,6 @@ use crate::{
 
 /// Utility for building fungible resources inside templates
 pub struct FungibleResourceBuilder {
-    initial_supply: Amount,
     owner_rule: OwnerRule,
     access_rules: ResourceAccessRules,
     token_symbol: Option<String>,
@@ -23,7 +22,6 @@ impl FungibleResourceBuilder {
     /// Returns a new fungible resource builder
     pub(super) fn new() -> Self {
         Self {
-            initial_supply: Amount::zero(),
             owner_rule: OwnerRule::default(),
             access_rules: ResourceAccessRules::new(),
             token_symbol: None,
@@ -94,12 +92,6 @@ impl FungibleResourceBuilder {
         self
     }
 
-    /// Sets up how many tokens are going to be minted on resource creation
-    pub fn initial_supply<A: Into<Amount>>(mut self, initial_supply: A) -> Self {
-        self.initial_supply = initial_supply.into();
-        self
-    }
-
     /// Specify a hook method that will be called to authorize actions on the resource.
     /// The signature of the method must be `fn(action: ResourceAuthAction, caller: CallerContext)`.
     /// The method should panic to deny the action.
@@ -132,58 +124,33 @@ impl FungibleResourceBuilder {
 
     /// Build the resource, returning the address
     pub fn build(self) -> ResourceAddress {
-        // TODO: Improve API
-        assert!(
-            self.initial_supply.is_zero(),
-            "call build_bucket when initial supply set"
-        );
-        let (address, _) = Self::build_internal(
-            self.owner_rule,
-            self.access_rules,
-            self.metadata,
-            None,
-            self.token_symbol,
-            self.authorize_hook,
-        );
+        let (address, _) = self.build_internal(None);
         address
     }
 
-    /// Build the resource and return a bucket with the initial minted tokens (if specified previously)
-    pub fn build_bucket(self) -> Bucket {
+    /// Sets up how many tokens are going to be minted on resource creation
+    /// This builds the resource and returns a bucket containing the initial supply.
+    pub fn initial_supply<A: Into<Amount>>(self, initial_supply: A) -> Bucket {
         let mint_arg = MintArg::Fungible {
-            amount: self.initial_supply,
+            amount: initial_supply.into(),
         };
 
-        let (_, bucket) = Self::build_internal(
-            self.owner_rule,
-            self.access_rules,
-            self.metadata,
-            Some(mint_arg),
-            self.token_symbol,
-            self.authorize_hook,
-        );
-        bucket.expect("[build_bucket] Bucket not returned from system")
+        let (_, bucket) = self.build_internal(Some(mint_arg));
+        bucket.expect("[initial_supply] Bucket not returned from system")
     }
 
-    fn build_internal(
-        owner_rule: OwnerRule,
-        access_rules: ResourceAccessRules,
-        mut metadata: Metadata,
-        mint_arg: Option<MintArg>,
-        token_symbol: Option<String>,
-        authorize_hook: Option<AuthHook>,
-    ) -> (ResourceAddress, Option<Bucket>) {
-        if let Some(symbol) = token_symbol {
-            metadata.insert(TOKEN_SYMBOL, symbol);
+    fn build_internal(mut self, mint_arg: Option<MintArg>) -> (ResourceAddress, Option<Bucket>) {
+        if let Some(symbol) = self.token_symbol {
+            self.metadata.insert(TOKEN_SYMBOL, symbol);
         }
         ResourceManager::new().create(
             ResourceType::Fungible,
-            owner_rule,
-            access_rules,
-            metadata,
+            self.owner_rule,
+            self.access_rules,
+            self.metadata,
             mint_arg,
             None,
-            authorize_hook,
+            self.authorize_hook,
         )
     }
 }

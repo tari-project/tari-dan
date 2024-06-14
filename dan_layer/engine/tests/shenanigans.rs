@@ -6,7 +6,7 @@ use tari_engine_types::{indexed_value::IndexedWellKnownTypes, resource_container
 use tari_template_lib::{
     args,
     args::VaultAction,
-    constants::XTR2,
+    constants::XTR,
     models::{Amount, ComponentAddress, ResourceAddress},
     prelude::ResourceType,
 };
@@ -138,7 +138,7 @@ fn it_rejects_references_to_buckets_that_arent_in_scope() {
 
     let reason = test.execute_expect_failure(
         Transaction::builder()
-            .call_method(account, "withdraw", args![XTR2, Amount(1000)])
+            .call_method(account, "withdraw", args![XTR, Amount(1000)])
             .put_last_instruction_output_on_workspace("bucket")
             .call_method(shenanigans, "take_bucket_zero", args![])
             .sign(&owner_key)

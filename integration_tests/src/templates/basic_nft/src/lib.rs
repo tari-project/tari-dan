@@ -36,7 +36,8 @@ mod sparkle_nft_template {
 
     impl SparkleNft {
         pub fn new() -> Component<Self> {
-            let resource_address = ResourceBuilder::non_fungible().with_token_symbol("SPKL")
+            let resource_address = ResourceBuilder::non_fungible()
+                .with_token_symbol("SPKL")
                 // AllowAll makes testing easier
                 .mintable(AccessRule::AllowAll)
                 .burnable(AccessRule::AllowAll)
@@ -53,12 +54,12 @@ mod sparkle_nft_template {
 
         pub fn new_with_initial_nft(nft: NonFungibleId) -> Component<Self> {
             let empty = Metadata::new();
-            let bucket = ResourceBuilder::non_fungible().with_token_symbol("SPKL")
-                .with_non_fungibles(Some((nft, (&(), &empty))))
+            let bucket = ResourceBuilder::non_fungible()
+                .with_token_symbol("SPKL")
                 // AllowAll makes testing easier
                 .mintable(AccessRule::AllowAll)
                 .burnable(AccessRule::AllowAll)
-                .build_bucket();
+                .initial_supply_with_data(Some((nft, (&(), &empty))));
 
             Component::new(Self {
                 resource_address: bucket.resource_address(),
@@ -85,7 +86,7 @@ mod sparkle_nft_template {
             immutable_data.insert("name", name).insert("image_url", url);
 
             // Mint the NFT, this will fail if the token ID already exists
-            let mut res_manager = ResourceManager::get(self.resource_address);
+            let res_manager = ResourceManager::get(self.resource_address);
             res_manager.mint_non_fungible(id.clone(), &immutable_data, &Sparkle { brightness: 0 })
         }
 
@@ -108,7 +109,7 @@ mod sparkle_nft_template {
             nft.set_mutable_data(&data);
         }
 
-        pub fn burn(&mut self, mut bucket: Bucket) {
+        pub fn burn(&mut self, bucket: Bucket) {
             // this check is actually not needed, but with it we cover the "bucket.resource_type" method
             assert!(
                 bucket.resource_type() == ResourceType::NonFungible,

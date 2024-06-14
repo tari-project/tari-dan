@@ -18,4 +18,4 @@ pub const CONFIDENTIAL_TARI_RESOURCE_ADDRESS: ResourceAddress =
     ResourceAddress::new(ObjectKey::from_array([1u8; ObjectKey::LENGTH]));
 
 /// Shorthand version of the `CONFIDENTIAL_TARI_RESOURCE_ADDRESS` constant
-pub const XTR2: ResourceAddress = CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
+pub const XTR: ResourceAddress = CONFIDENTIAL_TARI_RESOURCE_ADDRESS;

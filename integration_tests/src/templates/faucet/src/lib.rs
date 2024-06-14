@@ -34,8 +34,7 @@ mod faucet_template {
         pub fn mint(initial_supply: Amount) -> Component<Self> {
             let coins = ResourceBuilder::fungible()
                 .with_token_symbol("FAUCET")
-                .initial_supply(initial_supply)
-                .build_bucket();
+                .initial_supply(initial_supply);
 
             Component::new(Self {
                 vault: Vault::from_bucket(coins),
@@ -52,6 +51,5 @@ mod faucet_template {
             debug!("Withdrawing {} coins from faucet", amount);
             self.vault.withdraw(amount)
         }
-
     }
 }

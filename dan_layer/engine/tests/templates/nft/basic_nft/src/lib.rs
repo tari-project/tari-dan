@@ -39,17 +39,16 @@ mod sparkle_nft_template {
         pub fn new() -> Component<Self> {
             // Create the non-fungible resource with 1 token (optional)
             let tokens = [
-                (NonFungibleId::from_u32(1), (&(), &())),
-                (NonFungibleId::from_u64(u64::MAX), (&(), &())),
-                (NonFungibleId::from_string("Sparkle1"), (&(), &())),
-                (NonFungibleId::from_u256([0u8; 32]), (&(), &())),
+                NonFungibleId::from_u32(1),
+                NonFungibleId::from_u64(u64::MAX),
+                NonFungibleId::from_string("Sparkle1"),
+                NonFungibleId::from_u256([0u8; 32]),
             ];
             let bucket = ResourceBuilder::non_fungible().with_token_symbol("SPKL")
-                .with_non_fungibles(tokens)
                 // Allow minting and burning for tests
                 .mintable(AccessRule::AllowAll)
                 .burnable(AccessRule::AllowAll)
-                .build_bucket();
+                .initial_supply(tokens);
 
             Component::new(Self {
                 address: bucket.resource_address(),

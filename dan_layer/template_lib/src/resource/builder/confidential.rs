@@ -13,7 +13,6 @@ use crate::{
 
 /// Utility for building confidential resources inside templates
 pub struct ConfidentialResourceBuilder {
-    initial_supply_proof: Option<ConfidentialOutputStatement>,
     metadata: Metadata,
     access_rules: ResourceAccessRules,
     view_key: Option<RistrettoPublicKeyBytes>,
@@ -26,7 +25,6 @@ impl ConfidentialResourceBuilder {
     /// Returns a new confidential resource builder
     pub(super) fn new() -> Self {
         Self {
-            initial_supply_proof: None,
             metadata: Metadata::new(),
             access_rules: ResourceAccessRules::new(),
             view_key: None,
@@ -106,12 +104,6 @@ impl ConfidentialResourceBuilder {
         self
     }
 
-    /// Sets up how many tokens are going to be minted on resource creation
-    pub fn initial_supply(mut self, initial_supply: ConfidentialOutputStatement) -> Self {
-        self.initial_supply_proof = Some(initial_supply);
-        self
-    }
-
     /// Specify a hook method that will be called to authorize actions on the resource.
     /// The signature of the method must be `fn(action: ResourceAuthAction, caller: CallerContext)`.
     /// The method should panic to deny the action.
@@ -144,64 +136,33 @@ impl ConfidentialResourceBuilder {
 
     /// Build the resource, returning the address
     pub fn build(self) -> ResourceAddress {
-        // TODO: Improve API
-        assert!(
-            self.initial_supply_proof.is_none(),
-            "call build_bucket when initial supply is set"
-        );
-        let (address, _) = Self::build_internal(
-            self.owner_rule,
-            self.access_rules,
-            self.metadata,
-            None,
-            self.view_key,
-            self.token_symbol,
-            self.authorize_hook,
-        );
+        let (address, _) = self.build_internal(None);
         address
     }
 
-    /// Build the resource and return a bucket with the initial minted tokens (if specified previously)
-    pub fn build_bucket(self) -> Bucket {
-        let resource = MintArg::Confidential {
-            proof: Box::new(
-                self.initial_supply_proof
-                    .expect("[build_bucket] initial supply not set"),
-            ),
+    /// Sets up how many tokens are going to be minted on resource creation
+    /// This builds the resource and returns a bucket containing the initial supply.
+    pub fn initial_supply(self, initial_supply_proof: ConfidentialOutputStatement) -> Bucket {
+        let mint_arg = MintArg::Confidential {
+            proof: Box::new(initial_supply_proof),
         };
 
-        let (_, bucket) = Self::build_internal(
-            self.owner_rule,
-            self.access_rules,
-            self.metadata,
-            Some(resource),
-            self.view_key,
-            self.token_symbol,
-            self.authorize_hook,
-        );
-        bucket.expect("[build_bucket] Bucket not returned from system")
+        let (_, bucket) = self.build_internal(Some(mint_arg));
+        bucket.expect("[initial_supply] Bucket not returned from system")
     }
 
-    fn build_internal(
-        owner_rule: OwnerRule,
-        access_rules: ResourceAccessRules,
-        mut metadata: Metadata,
-        resource: Option<MintArg>,
-        view_key: Option<RistrettoPublicKeyBytes>,
-        token_symbol: Option<String>,
-        authorize_hook: Option<AuthHook>,
-    ) -> (ResourceAddress, Option<Bucket>) {
-        if let Some(symbol) = token_symbol {
-            metadata.insert(TOKEN_SYMBOL, symbol);
+    fn build_internal(mut self, mint_arg: Option<MintArg>) -> (ResourceAddress, Option<Bucket>) {
+        if let Some(symbol) = self.token_symbol {
+            self.metadata.insert(TOKEN_SYMBOL, symbol);
         }
         ResourceManager::new().create(
             ResourceType::Confidential,
-            owner_rule,
-            access_rules,
-            metadata,
-            resource,
-            view_key,
-            authorize_hook,
+            self.owner_rule,
+            self.access_rules,
+            self.metadata,
+            mint_arg,
+            self.view_key,
+            self.authorize_hook,
         )
     }
 }

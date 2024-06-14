@@ -1,8 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::BTreeMap;
-
 use serde::Serialize;
 use tari_bor::to_value;
 
@@ -19,7 +17,6 @@ pub struct NonFungibleResourceBuilder {
     owner_rule: OwnerRule,
     metadata: Metadata,
     access_rules: ResourceAccessRules,
-    tokens_ids: BTreeMap<NonFungibleId, (tari_bor::Value, tari_bor::Value)>,
     token_symbol: Option<String>,
     authorize_hook: Option<AuthHook>,
 }
@@ -31,7 +28,6 @@ impl NonFungibleResourceBuilder {
             owner_rule: OwnerRule::default(),
             metadata: Metadata::new(),
             access_rules: ResourceAccessRules::new(),
-            tokens_ids: BTreeMap::new(),
             token_symbol: None,
             authorize_hook: None,
         }
@@ -105,49 +101,6 @@ impl NonFungibleResourceBuilder {
         self
     }
 
-    /// Sets up an initial non-fungible token to be minted on resource creation
-    pub fn with_non_fungible<T, U>(mut self, id: NonFungibleId, data: &T, mutable: &U) -> Self
-    where
-        T: Serialize,
-        U: Serialize,
-    {
-        self.tokens_ids
-            .insert(id, (to_value(data).unwrap(), to_value(mutable).unwrap()));
-        self
-    }
-
-    /// Sets up multiple initial non-fungible tokens to be minted on resource creation
-    pub fn with_non_fungibles<'a, I, T, U>(mut self, tokens: I) -> Self
-    where
-        I: IntoIterator<Item = (NonFungibleId, (&'a T, &'a U))>,
-        T: Serialize + ?Sized + 'a,
-        U: Serialize + ?Sized + 'a,
-    {
-        self.tokens_ids.extend(
-            tokens
-                .into_iter()
-                .map(|(id, (data, mutable))| (id, (to_value(data).unwrap(), to_value(mutable).unwrap()))),
-        );
-        self
-    }
-
-    /// Sets up multiple initial non-fungible tokens to be minted on resource creation by applying the provided function
-    /// N times
-    pub fn mint_many_with<'a, F, I, V, T, U>(mut self, iter: I, f: F) -> Self
-    where
-        F: FnMut(V) -> (NonFungibleId, (&'a T, &'a U)),
-        I: IntoIterator<Item = V>,
-        T: Serialize + ?Sized + 'a,
-        U: Serialize + ?Sized + 'a,
-    {
-        let values = iter
-            .into_iter()
-            .map(f)
-            .map(|(id, (data, mutable))| (id, (to_value(data).unwrap(), to_value(mutable).unwrap())));
-        self.tokens_ids.extend(values);
-        self
-    }
-
     /// Specify a hook method that will be called to authorize actions on the resource.
     /// The signature of the method must be `fn(action: ResourceAuthAction, caller: CallerContext)`.
     /// The method should panic to deny the action.
@@ -180,56 +133,60 @@ impl NonFungibleResourceBuilder {
 
     /// Build the resource, returning the address
     pub fn build(self) -> ResourceAddress {
-        // TODO: Improve API
-        assert!(self.tokens_ids.is_empty(), "call build_bucket with initial tokens set");
-        let (address, _) = Self::build_internal(
-            self.owner_rule,
-            self.access_rules,
-            self.metadata,
-            None,
-            self.token_symbol,
-            self.authorize_hook,
-        );
+        let (address, _) = self.build_internal(None);
         address
     }
 
-    /// Build the resource and return a bucket with the initial minted tokens (if specified previously)
-    pub fn build_bucket(self) -> Bucket {
-        let resource = MintArg::NonFungible {
-            tokens: self.tokens_ids,
+    pub fn initial_supply<I: IntoIterator<Item = NonFungibleId>>(self, initial_supply: I) -> Bucket {
+        let mint_arg = MintArg::NonFungible {
+            tokens: initial_supply
+                .into_iter()
+                .map(|id| (id, (tari_bor::Value::Null, tari_bor::Value::Null)))
+                .collect(),
         };
 
-        let (_, bucket) = Self::build_internal(
-            self.owner_rule,
-            self.access_rules,
-            self.metadata,
-            Some(resource),
-            self.token_symbol,
-            self.authorize_hook,
-        );
-        bucket.expect("[build_bucket] Bucket not returned from system")
+        let (_, bucket) = self.build_internal(Some(mint_arg));
+        bucket.expect("[initial_supply] Bucket not returned from engine")
     }
 
-    fn build_internal(
-        owner_rule: OwnerRule,
-        access_rules: ResourceAccessRules,
-        mut metadata: Metadata,
-        resource: Option<MintArg>,
-        token_symbol: Option<String>,
-        authorize_hook: Option<AuthHook>,
-    ) -> (ResourceAddress, Option<Bucket>) {
-        if let Some(symbol) = token_symbol {
-            metadata.insert(TOKEN_SYMBOL, symbol);
+    pub fn initial_supply_with_data<'a, I, T, U>(self, initial_supply: I) -> Bucket
+    where
+        I: IntoIterator<Item = (NonFungibleId, (&'a T, &'a U))>,
+        T: Serialize + ?Sized + 'a,
+        U: Serialize + ?Sized + 'a,
+    {
+        let mint_arg = MintArg::NonFungible {
+            tokens: initial_supply
+                .into_iter()
+                .map(|(id, (data, mutable))| {
+                    (
+                        id,
+                        (
+                            to_value(data).expect("failed to encode immutable NFT data"),
+                            to_value(mutable).expect("failed to encode mutable NFT data"),
+                        ),
+                    )
+                })
+                .collect(),
+        };
+
+        let (_, bucket) = self.build_internal(Some(mint_arg));
+        bucket.expect("[initial_supply] Bucket not returned from engine")
+    }
+
+    fn build_internal(mut self, mint_arg: Option<MintArg>) -> (ResourceAddress, Option<Bucket>) {
+        if let Some(symbol) = self.token_symbol {
+            self.metadata.insert(TOKEN_SYMBOL, symbol);
         }
 
         ResourceManager::new().create(
             ResourceType::NonFungible,
-            owner_rule,
-            access_rules,
-            metadata,
-            resource,
+            self.owner_rule,
+            self.access_rules,
+            self.metadata,
+            mint_arg,
             None,
-            authorize_hook,
+            self.authorize_hook,
         )
     }
 }

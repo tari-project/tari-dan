@@ -83,7 +83,7 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     auth::{AuthHook, AuthHookCaller, ComponentAccessRules, OwnerRule, ResourceAccessRules, ResourceAuthAction},
-    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, XTR2},
+    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, XTR},
     crypto::RistrettoPublicKeyBytes,
     models::{
         Amount,
@@ -1390,7 +1390,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.write_with(|state| {
                     let vault_lock = state.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
                     let resource_address = *state.get_vault(&vault_lock)?.resource_address();
-                    if resource_address != XTR2 {
+                    if resource_address != XTR {
                         return Err(RuntimeError::InvalidArgument {
                             argument: "vault_ref",
                             reason: format!(
@@ -1399,7 +1399,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                             ),
                         });
                     }
-                    let resource_lock = state.lock_substate(&SubstateId::Resource(XTR2), LockFlag::Read)?;
+                    let resource_lock = state.lock_substate(&SubstateId::Resource(XTR), LockFlag::Read)?;
                     let resource = state.get_resource(&resource_lock)?;
 
                     state.authorization().check_resource_access_rules(
@@ -1411,7 +1411,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
 
-                    let mut container = ResourceContainer::confidential(XTR2, None, Amount::zero());
+                    let mut container = ResourceContainer::confidential(XTR, None, Amount::zero());
                     if !arg.amount.is_zero() {
                         let withdrawn = vault_mut.withdraw(arg.amount)?;
                         container.deposit(withdrawn)?;
@@ -1673,6 +1673,20 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     let bucket_id = state.id_provider()?.new_bucket_id();
                     state.new_bucket(bucket_id, resource)?;
                     state.unlock_substate(resource_lock)?;
+                    Ok(InvokeResult::encode(&bucket_id)?)
+                })
+            },
+            BucketAction::Join => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "Join bucket action requires a bucket id".to_string(),
+                })?;
+                let other_bucket_id = args.assert_one_arg()?;
+
+                self.tracker.write_with(|state| {
+                    let other_bucket = state.take_bucket(other_bucket_id)?;
+                    let bucket = state.get_bucket_mut(bucket_id)?;
+                    bucket.join(other_bucket)?;
                     Ok(InvokeResult::encode(&bucket_id)?)
                 })
             },
