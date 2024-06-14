@@ -23,7 +23,7 @@ use tari_dan_wallet_sdk::{
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::{
-    component::new_account_address_from_parts,
+    component::new_component_address_from_public_key,
     confidential::ConfidentialClaim,
     instruction::Instruction,
     substate::{Substate, SubstateId},
@@ -834,7 +834,7 @@ fn get_or_create_account<T: WalletStore>(
                 .unwrap_or_else(|| sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH))?;
             let account_pk = PublicKey::from_secret_key(&account_secret_key.key);
 
-            let account_address = new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &account_pk);
+            let account_address = new_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, &account_pk);
 
             // We have no involved substate addresses, so we need to add an output
             (account_address.into(), account_secret_key, Some(name.to_string()))
@@ -882,7 +882,7 @@ pub async fn handle_transfer(
     let mut fee_instructions = vec![];
 
     let destination_account_address =
-        new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &req.destination_public_key);
+        new_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, &req.destination_public_key);
     let existing_account = sdk
         .substate_api()
         .scan_for_substate(&SubstateId::Component(destination_account_address), None)

@@ -67,6 +67,7 @@ mod account_template {
 
             Component::new(Self { vaults })
                 .with_access_rules(rules)
+                .with_public_key_address(public_key)
                 .with_owner_rule(OwnerRule::ByPublicKey(public_key))
                 .create()
         }

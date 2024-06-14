@@ -507,6 +507,7 @@ pub enum GenerateRandomAction {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CallerContextInvokeArg {
     pub action: CallerContextAction,
+    pub args: Vec<Vec<u8>>,
 }
 
 /// The possible actions that can be performed related to the caller context

@@ -88,6 +88,30 @@ fn test_state() {
 }
 
 #[test]
+fn state_create_multiple_in_one_call() {
+    let mut template_test = TemplateTest::new(["tests/templates/state"]);
+    let store = template_test.read_only_state_store();
+
+    // constructor
+    template_test.call_function::<()>("State", "create_multiple", args![10u32], vec![]);
+
+    let template_address = template_test.get_template_address("State");
+    let mut count = 0usize;
+    store
+        .with_substates(|s| {
+            if s.substate_value()
+                .component()
+                .filter(|a| a.template_address == template_address)
+                .is_some()
+            {
+                count += 1;
+            }
+        })
+        .unwrap();
+    assert_eq!(count, 10);
+}
+
+#[test]
 fn test_composed() {
     let mut template_test = TemplateTest::new(vec!["tests/templates/state", "tests/templates/hello_world"]);
 
@@ -107,7 +131,7 @@ fn test_composed() {
         .iter()
         .map(|f| f.name.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(functions, vec!["new", "restricted", "set", "get"]);
+    assert_eq!(functions, vec!["new", "create_multiple", "restricted", "set", "get"]);
 
     let component_state: ComponentAddress = template_test.call_function("State", "new", args![], vec![]);
     let component_hw: ComponentAddress = template_test.call_function("HelloWorld", "new", args!["أهلا"], vec![]);
@@ -125,8 +149,6 @@ fn test_composed() {
     assert_eq!(value, new_value);
 }
 
-// FIXME: this test breaks in CI but not in local
-#[ignore]
 #[test]
 fn test_buggy_template() {
     let err = compile_template("tests/templates/buggy", &["return_null_abi"])
@@ -1334,7 +1356,7 @@ mod nft_indexes {
 
 // TODO: these tests can be removed when create free test coins is removed
 mod free_test_coins {
-    use tari_engine_types::component::new_account_address_from_parts;
+    use tari_engine_types::component::new_component_address_from_public_key;
 
     use super::*;
     #[test]
@@ -1346,7 +1368,7 @@ mod free_test_coins {
 
         let owner_token = test.get_test_proof();
         let future_account_component =
-            new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, test.get_test_public_key());
+            new_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, test.get_test_public_key());
 
         test.execute_expect_success(
             Transaction::builder()

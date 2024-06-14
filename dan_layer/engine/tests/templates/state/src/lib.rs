@@ -37,6 +37,14 @@ mod state_template {
                 .create()
         }
 
+        pub fn create_multiple(n: u32) {
+            (0..n).for_each(|i| {
+                Component::new(Self { value: i })
+                    .with_access_rules(AccessRules::new().default(AccessRule::AllowAll))
+                    .create();
+            });
+        }
+
         pub fn restricted() -> Component<Self> {
             Component::new(Self { value: 0 })
                 .with_access_rules(

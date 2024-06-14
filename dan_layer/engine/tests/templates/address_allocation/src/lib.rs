@@ -11,7 +11,7 @@ mod template {
 
     impl AddressAllocationTest {
         pub fn create() -> (Component<Self>, ComponentAddress) {
-            let allocation = CallerContext::allocate_component_address();
+            let allocation = CallerContext::allocate_component_address(None);
             let address = allocation.address().clone();
             (
                 Component::new(Self {}).with_address_allocation(allocation).create(),
@@ -20,7 +20,7 @@ mod template {
         }
 
         pub fn drop_allocation() {
-            let _allocation = CallerContext::allocate_component_address();
+            let _allocation = CallerContext::allocate_component_address(None);
         }
     }
 }

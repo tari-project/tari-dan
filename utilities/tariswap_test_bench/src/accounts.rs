@@ -5,7 +5,7 @@ use std::ops::RangeInclusive;
 
 use tari_crypto::{keys::PublicKey as _, ristretto::RistrettoPublicKey};
 use tari_dan_wallet_sdk::{apis::key_manager::TRANSACTION_BRANCH, models::Account};
-use tari_engine_types::component::new_account_address_from_parts;
+use tari_engine_types::component::new_component_address_from_public_key;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{args, models::Amount};
 use tari_transaction::{Instruction, Transaction};
@@ -17,7 +17,7 @@ impl Runner {
         let key = self.sdk.key_manager_api().derive_key(TRANSACTION_BRANCH, 0)?;
         let owner_public_key = RistrettoPublicKey::from_secret_key(&key.key);
 
-        let account_address = new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &owner_public_key);
+        let account_address = new_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, &owner_public_key);
 
         let transaction = Transaction::builder()
             .with_fee_instructions_builder(|builder| {

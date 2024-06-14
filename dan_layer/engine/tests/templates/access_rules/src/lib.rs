@@ -72,7 +72,7 @@ mod access_rules_template {
         pub fn with_auth_hook(allowed: bool, hook: String) -> Component<AccessRulesTest> {
             let badges = create_badge_resource(AccessRule::DenyAll);
 
-            let address_alloc = CallerContext::allocate_component_address();
+            let address_alloc = CallerContext::allocate_component_address(None);
 
             let tokens = ResourceBuilder::fungible()
                 .with_authorization_hook(*address_alloc.address(), hook)
@@ -93,7 +93,7 @@ mod access_rules_template {
         pub fn with_auth_hook_attack_component(component_address: ComponentAddress) -> Component<AccessRulesTest> {
             let badges = create_badge_resource(AccessRule::DenyAll);
 
-            let address_alloc = CallerContext::allocate_component_address();
+            let address_alloc = CallerContext::allocate_component_address(None);
 
             let tokens = ResourceBuilder::fungible()
                 .with_authorization_hook(
@@ -185,7 +185,7 @@ mod access_rules_template {
         pub fn resource_actions_restricted_to_component() -> Component<AccessRulesTest> {
             let badges = create_badge_resource(AccessRule::AllowAll);
 
-            let allocation = CallerContext::allocate_component_address();
+            let allocation = CallerContext::allocate_component_address(None);
             let tokens = ResourceBuilder::fungible()
                 .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(
                     RequireRule::Require(allocation.address().clone().into()),

@@ -10,7 +10,7 @@ use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::keys::PublicKey as _;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_dan_wallet_crypto::{ConfidentialOutputMaskAndValue, ConfidentialProofStatement};
-use tari_engine_types::{component::new_account_address_from_parts, substate::SubstateId};
+use tari_engine_types::{component::new_component_address_from_public_key, substate::SubstateId};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
@@ -209,7 +209,7 @@ where
         &self,
         destination_pk: &PublicKey,
     ) -> Result<(VersionedSubstateId, bool), ConfidentialTransferApiError> {
-        let account_component = new_account_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, destination_pk);
+        let account_component = new_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, destination_pk);
         match self
             .substate_api
             .scan_for_substate(&account_component.into(), None)

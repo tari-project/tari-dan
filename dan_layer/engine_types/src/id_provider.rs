@@ -3,6 +3,7 @@
 
 use std::sync::{atomic, atomic::AtomicU32};
 
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_template_lib::{
     models::{
         BucketId,
@@ -15,11 +16,13 @@ use tari_template_lib::{
         TemplateAddress,
         VaultId,
     },
-    prelude::RistrettoPublicKeyBytes,
     Hash,
 };
 
-use crate::hashing::{hasher32, EngineHashDomainLabel};
+use crate::{
+    component::new_component_address_from_public_key,
+    hashing::{hasher32, EngineHashDomainLabel},
+};
 
 #[derive(Debug, Clone)]
 pub struct IdProvider<'a> {
@@ -53,25 +56,21 @@ impl<'a> IdProvider<'a> {
     pub fn new_component_address(
         &self,
         template_address: TemplateAddress,
-        owner_key_bytes: Option<RistrettoPublicKeyBytes>,
+        public_key_address: Option<RistrettoPublicKey>,
     ) -> Result<ComponentAddress, IdProviderError> {
-        // if the owner is a single key specified by the template logic, then it will be derived from the transaction
-        // hash
-        let component_id = match owner_key_bytes {
-            Some(key) => hasher32(EngineHashDomainLabel::ComponentAddress)
-                .chain(&template_address)
-                .chain(&key)
-                .result()
-                .into_array()
-                .into(),
-            None => hasher32(EngineHashDomainLabel::ComponentAddress)
-                .chain(&template_address)
-                .chain(&self.transaction_hash)
-                .chain(&self.next()?)
-                .result(),
-        };
-        let key = ObjectKey::new(self.entity_id, ComponentKey::new(component_id.trailing_bytes()));
-        Ok(ComponentAddress::new(key))
+        if let Some(key) = public_key_address {
+            // if a public key address is specified, then it will derive the address from the
+            // template hash and public key
+            return Ok(new_component_address_from_public_key(&template_address, &key));
+        }
+
+        let component_id = hasher32(EngineHashDomainLabel::ComponentAddress)
+            .chain(&self.transaction_hash)
+            .chain(&self.next()?)
+            .result();
+
+        let object_key = ObjectKey::new(self.entity_id, ComponentKey::new(component_id.trailing_bytes()));
+        Ok(ComponentAddress::new(object_key))
     }
 
     pub fn new_vault_id(&self) -> Result<VaultId, IdProviderError> {
