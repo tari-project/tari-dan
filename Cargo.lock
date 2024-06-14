@@ -9317,7 +9317,6 @@ dependencies = [
  "log4rs",
  "mime_guess",
  "minotari_app_utilities",
- "rand",
  "reqwest",
  "serde",
  "serde_json",
