@@ -90,6 +90,7 @@ impl<'a> IdProvider<'a> {
     pub fn new_uuid(&self) -> Result<[u8; 32], IdProviderError> {
         let n = self.object_ids.next_uuid_id();
         let id = hasher32(EngineHashDomainLabel::UuidOutput)
+            .chain(&self.transaction_hash)
             .chain(&self.entity_id)
             .chain(&n)
             .result();
