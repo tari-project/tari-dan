@@ -266,11 +266,13 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
                 let substate_id = SubstateId::from_str(&s.address)?;
                 let version = u32::try_from(s.version)?;
                 let template_address = s.template_address.map(|h| TemplateAddress::from_hex(&h)).transpose()?;
+                let timestamp = u64::try_from(s.timestamp)?;
                 Ok(ListSubstateItem {
                     substate_id,
                     module_name: s.module_name,
                     version,
                     template_address,
+                    timestamp,
                 })
             } )
             .collect::<Result<Vec<ListSubstateItem>, anyhow::Error>>()

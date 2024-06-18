@@ -92,6 +92,7 @@ pub struct ListSubstateItem {
     #[serde(default, with = "serde_tools::string::option")]
     #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     pub template_address: Option<TemplateAddress>,
+    pub timestamp: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
