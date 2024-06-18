@@ -225,7 +225,7 @@ pub trait SubstateStoreReadTransaction {
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
     fn list_substates(
         &mut self,
-        _by_type: Option<SubstateType>,
+        by_type: Option<SubstateType>,
         by_template_address: Option<TemplateAddress>,
         limit: Option<u64>,
         offset: Option<u64>) -> Result<Vec<ListSubstateItem>, StorageError>
@@ -237,7 +237,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         if let Some(template_address) = by_template_address {
             query = query.filter(substates::template_address.eq(template_address.to_string()));
         }
-         /*
+
         if let Some(substate_type) = by_type {
             let address_like = match substate_type {
                 SubstateType::NonFungible => format!("resource_% {}_%", substate_type.as_prefix_str()),
@@ -246,7 +246,6 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             query = query
                 .filter(substates::address.like(address_like));
         }
-        */
 
         if let Some(limit) = limit {
             query = query.limit(limit as i64);
