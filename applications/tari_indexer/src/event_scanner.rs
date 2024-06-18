@@ -262,6 +262,7 @@ impl EventScanner {
                     address: substate_id.to_string(),
                     version: i64::from(substate.version()),
                     data: Self::encode_substate(substate)?,
+                    tx_hash: data.event.tx_hash().to_string(),
                 };
                 info!(
                     target: LOG_TARGET,

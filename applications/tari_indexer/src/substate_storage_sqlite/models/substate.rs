@@ -36,23 +36,19 @@ pub struct Substate {
     pub address: String,
     pub version: i64,
     pub data: String,
-    pub transaction_hash: Option<Vec<u8>>,
+    pub tx_hash: String,
 }
 
 impl TryFrom<Substate> for SubstateResponse {
     type Error = anyhow::Error;
 
     fn try_from(row: SubstateRow) -> Result<Self, Self::Error> {
-        let tx_hash = if let Some(hash) = row.transaction_hash {
-            hash.try_into()?
-        } else {
-            TransactionId::default()
-        };
+        let created_by_transaction = TransactionId::from_hex(&row.tx_hash)?;
         Ok(SubstateResponse {
             address: row.address.parse()?,
             version: row.version.try_into()?,
             substate: serde_json::from_str(&row.data)?,
-            created_by_transaction: tx_hash,
+            created_by_transaction,
         })
     }
 }
@@ -63,4 +59,5 @@ pub struct NewSubstate {
     pub address: String,
     pub version: i64,
     pub data: String,
+    pub tx_hash: String,
 }

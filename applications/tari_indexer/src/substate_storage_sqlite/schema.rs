@@ -15,7 +15,7 @@ diesel::table! {
         address -> Text,
         version -> BigInt,
         data -> Text,
-        transaction_hash -> Nullable<Binary>,
+        tx_hash -> Text,
     }
 }
 
