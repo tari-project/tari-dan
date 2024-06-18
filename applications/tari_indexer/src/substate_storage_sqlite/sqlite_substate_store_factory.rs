@@ -268,7 +268,6 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
                 let version = u32::try_from(s.version)?;
                 Ok(ListSubstateItem {
                     substate_id,
-                    parent_id: None,
                     module_name: None,
                     version,
                     template_address: None,

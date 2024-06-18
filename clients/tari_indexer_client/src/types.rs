@@ -87,7 +87,6 @@ pub struct ListSubstatesResponse {
 )]
 pub struct ListSubstateItem {
     pub substate_id: SubstateId,
-    pub parent_id: Option<SubstateId>,
     pub module_name: Option<String>,
     pub version: u32,
     #[serde(default, with = "serde_tools::string::option")]
