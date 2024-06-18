@@ -20,10 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::HashMap,
-    str::FromStr,
-};
+use std::{collections::HashMap, str::FromStr};
 
 use futures::StreamExt;
 use log::*;
@@ -226,7 +223,11 @@ impl EventScanner {
         }
     }
 
-    async fn store_events_in_db(&self, events_data: &Vec<EventData>, transaction: TransactionMetadata) -> Result<(), anyhow::Error> {
+    async fn store_events_in_db(
+        &self,
+        events_data: &Vec<EventData>,
+        transaction: TransactionMetadata,
+    ) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
 
         for data in events_data {
@@ -400,10 +401,7 @@ impl EventScanner {
     fn extract_transactions_from_blocks(&self, blocks: Vec<Block>) -> Vec<TransactionMetadata> {
         blocks
             .iter()
-            .flat_map(|b|
-                b
-                .all_accepted_transactions_ids()
-                .map(|id| (id, b.timestamp())))
+            .flat_map(|b| b.all_accepted_transactions_ids().map(|id| (id, b.timestamp())))
             .map(|(transaction_id, timestamp)| TransactionMetadata {
                 transaction_id: *transaction_id,
                 timestamp,

@@ -17,12 +17,10 @@ use tari_engine_types::{
     substate::{Substate, SubstateId},
     TemplateAddress,
 };
-
 use tari_template_abi::TemplateDef;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
-
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[cfg_attr(

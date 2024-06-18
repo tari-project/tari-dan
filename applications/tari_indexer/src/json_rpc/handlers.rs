@@ -44,7 +44,42 @@ use tari_dan_engine::{template::TemplateModuleLoader, wasm::WasmModule};
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::consensus_models::Decision;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
-use tari_indexer_client::types::{self, AddPeerRequest, AddPeerResponse, ConnectionDirection, GetAllVnsRequest, GetAllVnsResponse, GetCommsStatsResponse, GetConnectionsResponse, GetEpochManagerStatsResponse, GetIdentityResponse, GetNonFungibleCollectionsResponse, GetNonFungibleCountRequest, GetNonFungibleCountResponse, GetNonFungiblesRequest, GetNonFungiblesResponse, GetRelatedTransactionsRequest, GetRelatedTransactionsResponse, GetSubstateRequest, GetSubstateResponse, GetTemplateDefinitionRequest, GetTemplateDefinitionResponse, GetTransactionResultRequest, GetTransactionResultResponse, IndexerTransactionFinalizedResult, InspectSubstateRequest, InspectSubstateResponse, ListSubstatesRequest, ListSubstatesResponse, ListTemplatesRequest, ListTemplatesResponse, NonFungibleSubstate, SubmitTransactionRequest, SubmitTransactionResponse, TemplateMetadata};
+use tari_indexer_client::types::{
+    self,
+    AddPeerRequest,
+    AddPeerResponse,
+    ConnectionDirection,
+    GetAllVnsRequest,
+    GetAllVnsResponse,
+    GetCommsStatsResponse,
+    GetConnectionsResponse,
+    GetEpochManagerStatsResponse,
+    GetIdentityResponse,
+    GetNonFungibleCollectionsResponse,
+    GetNonFungibleCountRequest,
+    GetNonFungibleCountResponse,
+    GetNonFungiblesRequest,
+    GetNonFungiblesResponse,
+    GetRelatedTransactionsRequest,
+    GetRelatedTransactionsResponse,
+    GetSubstateRequest,
+    GetSubstateResponse,
+    GetTemplateDefinitionRequest,
+    GetTemplateDefinitionResponse,
+    GetTransactionResultRequest,
+    GetTransactionResultResponse,
+    IndexerTransactionFinalizedResult,
+    InspectSubstateRequest,
+    InspectSubstateResponse,
+    ListSubstatesRequest,
+    ListSubstatesResponse,
+    ListTemplatesRequest,
+    ListTemplatesResponse,
+    NonFungibleSubstate,
+    SubmitTransactionRequest,
+    SubmitTransactionResponse,
+    TemplateMetadata,
+};
 use tari_networking::{is_supported_multiaddr, NetworkingHandle, NetworkingService};
 use tari_validator_node_rpc::client::{SubstateResult, TariValidatorNodeRpcClientFactory, TransactionResultStatus};
 
@@ -228,7 +263,12 @@ impl JsonRpcHandlers {
 
     pub async fn list_substates(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let ListSubstatesRequest { filter_by_template, filter_by_type, limit, offset} = value.parse_params()?;
+        let ListSubstatesRequest {
+            filter_by_template,
+            filter_by_type,
+            limit,
+            offset,
+        } = value.parse_params()?;
 
         let substates = self
             .substate_manager
@@ -239,9 +279,7 @@ impl JsonRpcHandlers {
                 Self::internal_error(answer_id, format!("Error getting substate: {}", e))
             })?;
 
-        Ok(JsonRpcResponse::success(answer_id, ListSubstatesResponse {
-            substates,
-        }))
+        Ok(JsonRpcResponse::success(answer_id, ListSubstatesResponse { substates }))
     }
 
     pub async fn get_substate(&self, value: JsonRpcExtractor) -> JrpcResult {

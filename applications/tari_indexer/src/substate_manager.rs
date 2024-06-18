@@ -96,7 +96,7 @@ impl SubstateManager {
         filter_by_template: Option<TemplateAddress>,
         limit: Option<u64>,
         offset: Option<u64>,
-    ) -> Result<Vec<ListSubstateItem>, anyhow::Error>  {
+    ) -> Result<Vec<ListSubstateItem>, anyhow::Error> {
         let mut tx = self.substate_store.create_read_tx()?;
         let substates = tx.list_substates(filter_by_type, filter_by_template, limit, offset)?;
         Ok(substates)

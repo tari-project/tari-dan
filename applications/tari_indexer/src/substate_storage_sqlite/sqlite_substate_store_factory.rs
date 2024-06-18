@@ -21,7 +21,12 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    collections::BTreeMap, fs::create_dir_all, ops::{Deref, DerefMut}, path::PathBuf, str::FromStr, sync::{Arc, Mutex}
+    collections::BTreeMap,
+    fs::create_dir_all,
+    ops::{Deref, DerefMut},
+    path::PathBuf,
+    str::FromStr,
+    sync::{Arc, Mutex},
 };
 
 use diesel::{
@@ -46,11 +51,10 @@ use super::models::{
     events::{EventData, NewEvent, NewScannedBlockId},
     non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex},
 };
-use crate::
-    substate_storage_sqlite::models::{
-        events::{Event, NewEventPayloadField, ScannedBlockId}, substate::{NewSubstate, Substate}
-    }
-;
+use crate::substate_storage_sqlite::models::{
+    events::{Event, NewEventPayloadField, ScannedBlockId},
+    substate::{NewSubstate, Substate},
+};
 
 const LOG_TARGET: &str = "tari::indexer::substate_storage_sqlite";
 
@@ -179,7 +183,8 @@ pub trait SubstateStoreReadTransaction {
         filter_by_type: Option<SubstateType>,
         filter_by_template: Option<TemplateAddress>,
         limit: Option<u64>,
-        offset: Option<u64>) -> Result<Vec<ListSubstateItem>, StorageError>;
+        offset: Option<u64>,
+    ) -> Result<Vec<ListSubstateItem>, StorageError>;
     fn get_substate(&mut self, address: &SubstateId) -> Result<Option<Substate>, StorageError>;
     fn get_latest_version_for_substate(&mut self, address: &SubstateId) -> Result<Option<i64>, StorageError>;
     fn get_all_addresses(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
@@ -228,12 +233,12 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         by_type: Option<SubstateType>,
         by_template_address: Option<TemplateAddress>,
         limit: Option<u64>,
-        offset: Option<u64>) -> Result<Vec<ListSubstateItem>, StorageError>
-    {
+        offset: Option<u64>,
+    ) -> Result<Vec<ListSubstateItem>, StorageError> {
         use crate::substate_storage_sqlite::schema::substates;
 
         let mut query = substates::table.into_boxed();
-       
+
         if let Some(template_address) = by_template_address {
             query = query.filter(substates::template_address.eq(template_address.to_string()));
         }
@@ -241,10 +246,9 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         if let Some(substate_type) = by_type {
             let address_like = match substate_type {
                 SubstateType::NonFungible => format!("resource_% {}_%", substate_type.as_prefix_str()),
-                _ => format!("{}_%", substate_type.as_prefix_str())
+                _ => format!("{}_%", substate_type.as_prefix_str()),
             };
-            query = query
-                .filter(substates::address.like(address_like));
+            query = query.filter(substates::address.like(address_like));
         }
 
         if let Some(limit) = limit {
@@ -274,12 +278,12 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
                     template_address,
                     timestamp,
                 })
-            } )
+            })
             .collect::<Result<Vec<ListSubstateItem>, anyhow::Error>>()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("list_substates: invalid substate items: {}", e),
             })?;
-        
+
         Ok(items)
     }
 
