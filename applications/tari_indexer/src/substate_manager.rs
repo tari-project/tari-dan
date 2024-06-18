@@ -107,7 +107,7 @@ impl SubstateManager {
         substate_address: &SubstateId,
         version: Option<u32>,
     ) -> Result<Option<SubstateResponse>, anyhow::Error> {
-        // we store the latest version of the substates in the watchlist,
+        // we store the latest version of the substates related to the events
         // so we will return the substate directly from database if it's there
         if let Some(substate) = self.get_substate_from_db(substate_address, version).await? {
             return Ok(Some(substate));
