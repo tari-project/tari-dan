@@ -36,7 +36,7 @@ use tari_dan_storage::consensus_models::{Block, BlockId, Decision, TransactionRe
 use tari_engine_types::{
     commit_result::{ExecuteResult, TransactionResult},
     events::Event,
-    substate::{Substate, SubstateId},
+    substate::{Substate, SubstateId, SubstateValue},
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_template_lib::models::{EntityId, TemplateAddress};
@@ -258,11 +258,15 @@ impl EventScanner {
 
             // store/update the related substate if any
             if let (Some(substate_id), Some(substate)) = (data.event.substate_id(), &data.substate) {
+                let template_address = Self::extract_template_address_from_substate(substate).map(|t| t.to_string());
+                let module_name = Self::extract_module_name_from_substate(substate);
                 let substate_row = NewSubstate {
                     address: substate_id.to_string(),
                     version: i64::from(substate.version()),
                     data: Self::encode_substate(substate)?,
                     tx_hash: data.event.tx_hash().to_string(),
+                    template_address,
+                    module_name,
                 };
                 info!(
                     target: LOG_TARGET,
@@ -276,6 +280,20 @@ impl EventScanner {
         tx.commit()?;
 
         Ok(())
+    }
+
+    fn extract_template_address_from_substate(substate: &Substate) -> Option<TemplateAddress> {
+        match substate.substate_value() {
+            SubstateValue::Component(c) => Some(c.template_address),
+            _ => None,
+        }
+    }
+
+    fn extract_module_name_from_substate(substate: &Substate) -> Option<String> {
+        match substate.substate_value() {
+            SubstateValue::Component(c) => Some(c.module_name.to_owned()),
+            _ => None,
+        }
     }
 
     fn encode_substate(substate: &Substate) -> Result<String, anyhow::Error> {

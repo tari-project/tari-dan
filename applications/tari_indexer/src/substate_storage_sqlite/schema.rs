@@ -16,6 +16,8 @@ diesel::table! {
         version -> BigInt,
         data -> Text,
         tx_hash -> Text,
+        template_address -> Nullable<Text>,
+        module_name -> Nullable<Text>,
     }
 }
 

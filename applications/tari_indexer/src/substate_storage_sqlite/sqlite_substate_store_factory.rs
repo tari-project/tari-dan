@@ -226,17 +226,18 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
     fn list_substates(
         &mut self,
         _by_type: Option<SubstateType>,
-        _by_template_address: Option<TemplateAddress>,
+        by_template_address: Option<TemplateAddress>,
         limit: Option<u64>,
         offset: Option<u64>) -> Result<Vec<ListSubstateItem>, StorageError>
     {
         use crate::substate_storage_sqlite::schema::substates;
 
         let mut query = substates::table.into_boxed();
-        /*
+       
         if let Some(template_address) = by_template_address {
             query = query.filter(substates::template_address.eq(template_address.to_string()));
         }
+         /*
         if let Some(substate_type) = by_type {
             let address_like = match substate_type {
                 SubstateType::NonFungible => format!("resource_% {}_%", substate_type.as_prefix_str()),
@@ -260,17 +261,17 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
                 reason: format!("list_substates: {}", e),
             })?;
 
-        // TODO: update database schema to store all needed substate info
         let items = substates
             .into_iter()
             .map(|s| {
                 let substate_id = SubstateId::from_str(&s.address)?;
                 let version = u32::try_from(s.version)?;
+                let template_address = s.template_address.map(|h| TemplateAddress::from_hex(&h)).transpose()?;
                 Ok(ListSubstateItem {
                     substate_id,
-                    module_name: None,
+                    module_name: s.module_name,
                     version,
-                    template_address: None,
+                    template_address,
                 })
             } )
             .collect::<Result<Vec<ListSubstateItem>, anyhow::Error>>()
