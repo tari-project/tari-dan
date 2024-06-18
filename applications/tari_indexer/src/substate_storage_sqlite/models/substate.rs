@@ -38,7 +38,8 @@ pub struct Substate {
     pub data: String,
     pub tx_hash: String,
     pub template_address: Option<String>,
-    pub module_name: Option<String>
+    pub module_name: Option<String>,
+    pub timestamp: i64
 }
 
 impl TryFrom<Substate> for SubstateResponse {
@@ -63,5 +64,6 @@ pub struct NewSubstate {
     pub data: String,
     pub tx_hash: String,
     pub template_address: Option<String>,
-    pub module_name: Option<String>
+    pub module_name: Option<String>,
+    pub timestamp: i64
 }

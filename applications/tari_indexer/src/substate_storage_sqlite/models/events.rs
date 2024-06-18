@@ -40,6 +40,7 @@ pub struct Event {
     pub payload: String,
     pub version: i32,
     pub substate_id: Option<String>,
+    pub timestamp: i64,
 }
 
 #[derive(Debug, Clone, Insertable, AsChangeset)]
@@ -52,6 +53,7 @@ pub struct NewEvent {
     pub payload: String,
     pub version: i32,
     pub substate_id: Option<String>,
+    pub timestamp: i64,
 }
 
 #[derive(Debug, Clone, Insertable, AsChangeset)]

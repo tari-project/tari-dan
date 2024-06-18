@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     str::FromStr,
 };
 
@@ -90,6 +90,12 @@ impl TryFrom<EventFilterConfig> for EventFilter {
     }
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+struct TransactionMetadata {
+    pub transaction_id: TransactionId,
+    pub timestamp: u64,
+}
+
 pub struct EventScanner {
     network: Network,
     epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
@@ -124,8 +130,6 @@ impl EventScanner {
         let mut event_count = 0;
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
-        // let network_committee_info = self.epoch_manager.get_network_committees().await?;
-        // let epoch = network_committee_info.epoch;
         let current_committees = self.epoch_manager.get_committees(current_epoch).await?;
         for (shard, mut committee) in current_committees {
             info!(
@@ -134,7 +138,6 @@ impl EventScanner {
                 current_epoch,
                 shard
             );
-            // TODO: use the latest block id that we scanned for each committee
             let new_blocks = self
                 .get_new_blocks_from_committee(shard, &mut committee, current_epoch)
                 .await?;
@@ -143,16 +146,16 @@ impl EventScanner {
                 "Scanned {} blocks",
                 new_blocks.len()
             );
-            let transaction_ids = self.extract_transaction_ids_from_blocks(new_blocks);
+            let transactions = self.extract_transactions_from_blocks(new_blocks);
             info!(
                 target: LOG_TARGET,
                 "Scanned {} transactions",
-                transaction_ids.len()
+                transactions.len()
             );
 
-            for transaction_id in transaction_ids {
+            for transaction in transactions {
                 // fetch all the events in the transaction
-                let events = self.get_events_for_transaction(transaction_id).await?;
+                let events = self.get_events_for_transaction(transaction.transaction_id).await?;
                 event_count += events.len();
 
                 // only keep the events specified by the indexer filter
@@ -163,7 +166,7 @@ impl EventScanner {
                     "Filtered events: {}",
                     filtered_events.len()
                 );
-                self.store_events_in_db(&filtered_events).await?;
+                self.store_events_in_db(&filtered_events, transaction).await?;
             }
         }
 
@@ -223,7 +226,7 @@ impl EventScanner {
         }
     }
 
-    async fn store_events_in_db(&self, events_data: &Vec<EventData>) -> Result<(), anyhow::Error> {
+    async fn store_events_in_db(&self, events_data: &Vec<EventData>, transaction: TransactionMetadata) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
 
         for data in events_data {
@@ -234,6 +237,7 @@ impl EventScanner {
                 payload: data.event.payload().to_json().expect("Failed to convert to JSON"),
                 substate_id: data.event.substate_id().map(|s| s.to_string()),
                 version: 0_i32,
+                timestamp: transaction.timestamp as i64,
             };
 
             // TODO: properly avoid or handle duplicated events
@@ -267,6 +271,7 @@ impl EventScanner {
                     tx_hash: data.event.tx_hash().to_string(),
                     template_address,
                     module_name,
+                    timestamp: transaction.timestamp as i64,
                 };
                 info!(
                     target: LOG_TARGET,
@@ -392,11 +397,17 @@ impl EventScanner {
         }
     }
 
-    fn extract_transaction_ids_from_blocks(&self, blocks: Vec<Block>) -> HashSet<TransactionId> {
+    fn extract_transactions_from_blocks(&self, blocks: Vec<Block>) -> Vec<TransactionMetadata> {
         blocks
             .iter()
-            .flat_map(|b| b.all_accepted_transactions_ids())
-            .copied()
+            .flat_map(|b|
+                b
+                .all_accepted_transactions_ids()
+                .map(|id| (id, b.timestamp())))
+            .map(|(transaction_id, timestamp)| TransactionMetadata {
+                transaction_id: *transaction_id,
+                timestamp,
+            })
             .collect()
     }
 

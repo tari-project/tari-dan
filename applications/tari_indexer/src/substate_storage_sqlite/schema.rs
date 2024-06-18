@@ -18,6 +18,7 @@ diesel::table! {
         tx_hash -> Text,
         template_address -> Nullable<Text>,
         module_name -> Nullable<Text>,
+        timestamp -> BigInt,
     }
 }
 
@@ -30,6 +31,7 @@ diesel::table! {
         payload -> Text,
         version -> Integer,
         substate_id -> Nullable<Text>,
+        timestamp -> BigInt,
     }
 }
 
