@@ -564,7 +564,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .filter(transactions::transaction_id.eq_any(tx_ids))
             .load::<sql_models::Transaction>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transactions_get_many",
+                operation: "transactions_get_any",
                 source: e,
             })?;
 

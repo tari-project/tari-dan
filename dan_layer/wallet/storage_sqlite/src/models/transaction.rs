@@ -9,8 +9,7 @@ use tari_dan_wallet_sdk::{
     models::{TransactionStatus, WalletTransaction},
     storage::WalletStorageError,
 };
-use tari_transaction::TransactionSignature;
-use tari_utilities::hex::Hex;
+use tari_transaction::UnsignedTransaction;
 
 use crate::{schema::transactions, serialization::deserialize_json};
 
@@ -20,8 +19,7 @@ pub struct Transaction {
     pub id: i32,
     pub hash: String,
     pub instructions: String,
-    pub signature: String,
-    pub sender_public_key: String,
+    pub signatures: String,
     pub fee_instructions: String,
     pub inputs: String,
     pub result: Option<String>,
@@ -41,26 +39,19 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn try_into_wallet_transaction(self) -> Result<WalletTransaction, WalletStorageError> {
-        let signature = deserialize_json(&self.signature)?;
-        let sender_public_key =
-            Hex::from_hex(&self.sender_public_key).map_err(|e| WalletStorageError::DecodingError {
-                operation: "transaction_get",
-                item: "sender_address",
-                details: e.to_string(),
-            })?;
-        let signature = TransactionSignature::new(sender_public_key, signature);
+        let signatures = deserialize_json(&self.signatures)?;
         let inputs = deserialize_json(&self.inputs)?;
 
         Ok(WalletTransaction {
             transaction: tari_transaction::Transaction::new(
-                deserialize_json(&self.fee_instructions)?,
-                deserialize_json(&self.instructions)?,
-                signature,
-                inputs,
-                // empty - We do not know filled inputs
-                Default::default(),
-                self.min_epoch.map(|epoch| Epoch(epoch as u64)),
-                self.max_epoch.map(|epoch| Epoch(epoch as u64)),
+                UnsignedTransaction {
+                    fee_instructions: deserialize_json(&self.fee_instructions)?,
+                    instructions: deserialize_json(&self.instructions)?,
+                    inputs,
+                    min_epoch: self.min_epoch.map(|epoch| Epoch(epoch as u64)),
+                    max_epoch: self.max_epoch.map(|epoch| Epoch(epoch as u64)),
+                },
+                signatures,
             ),
             status: TransactionStatus::from_str(&self.status).map_err(|e| WalletStorageError::DecodingError {
                 operation: "transaction_get",

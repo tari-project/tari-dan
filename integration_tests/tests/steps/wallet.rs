@@ -73,7 +73,7 @@ async fn when_i_burn_on_wallet(
 }
 
 #[when(expr = "wallet {word} has at least {int} {word}")]
-async fn check_balance(world: &mut TariWorld, wallet_name: String, balance: u64, units: String) {
+pub async fn check_balance(world: &mut TariWorld, wallet_name: String, balance: u64, units: String) {
     let wallet = world
         .wallets
         .get(&wallet_name)

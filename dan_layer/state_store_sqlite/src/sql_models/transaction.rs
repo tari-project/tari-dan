@@ -6,6 +6,7 @@ use std::{str::FromStr, time::Duration};
 use diesel::Queryable;
 use tari_dan_common_types::Epoch;
 use tari_dan_storage::{consensus_models, consensus_models::Decision, StorageError};
+use tari_transaction::UnsignedTransaction;
 use time::PrimitiveDateTime;
 
 use crate::serialization::deserialize_json;
@@ -16,7 +17,7 @@ pub struct Transaction {
     pub transaction_id: String,
     pub fee_instructions: String,
     pub instructions: String,
-    pub signature: String,
+    pub signatures: String,
     pub inputs: String,
     pub filled_inputs: String,
     pub resolved_inputs: Option<String>,
@@ -37,7 +38,7 @@ impl TryFrom<Transaction> for tari_transaction::Transaction {
     fn try_from(value: Transaction) -> Result<Self, Self::Error> {
         let fee_instructions = deserialize_json(&value.fee_instructions)?;
         let instructions = deserialize_json(&value.instructions)?;
-        let signature = deserialize_json(&value.signature)?;
+        let signatures = deserialize_json(&value.signatures)?;
 
         let inputs = deserialize_json(&value.inputs)?;
 
@@ -46,14 +47,16 @@ impl TryFrom<Transaction> for tari_transaction::Transaction {
         let max_epoch = value.max_epoch.map(|epoch| Epoch(epoch as u64));
 
         Ok(Self::new(
-            fee_instructions,
-            instructions,
-            signature,
-            inputs,
-            filled_inputs,
-            min_epoch,
-            max_epoch,
-        ))
+            UnsignedTransaction {
+                fee_instructions,
+                instructions,
+                inputs,
+                min_epoch,
+                max_epoch,
+            },
+            signatures,
+        )
+        .with_filled_inputs(filled_inputs))
     }
 }
 

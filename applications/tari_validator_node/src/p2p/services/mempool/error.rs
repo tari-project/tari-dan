@@ -73,6 +73,8 @@ pub enum MempoolError {
     NoInvolvedShards { transaction_id: TransactionId },
     #[error("Invalid transaction signature")]
     InvalidSignature,
+    #[error("Transaction {transaction_id} is not signed")]
+    TransactionNotSigned { transaction_id: TransactionId },
     #[error("Network error: {0}")]
     NetworkingError(#[from] NetworkingError),
 }

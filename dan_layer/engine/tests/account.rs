@@ -6,6 +6,7 @@ use tari_dan_engine::runtime::{ActionIdent, RuntimeError};
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
+    constants::XTR,
     models::{Amount, ComponentAddress, ResourceAddress},
 };
 use tari_template_test_tooling::{
@@ -223,4 +224,31 @@ fn attempt_to_overwrite_account() {
     // Double check that the source account was not overwritten due to the address collision, if it was, then we'd have
     // no vaults
     assert_eq!(balances.len(), 1);
+}
+
+#[test]
+fn gasless() {
+    let mut test = TemplateTest::new::<_, &str>([]);
+    test.enable_fees();
+
+    // Create initial account with faucet funds
+    let (fee_account, fee_account_proof, fee_account_sk) = test.create_funded_account();
+    let (user_account, user_account_proof, user_account_sk) = test.create_funded_account();
+    let (user2_account, _, _) = test.create_empty_account();
+
+    let result = test.execute_expect_success(
+        Transaction::builder()
+            .fee_transaction_pay_from_component(fee_account, Amount(1000))
+            .call_method(user_account, "withdraw", args![XTR, Amount(100)])
+            .put_last_instruction_output_on_workspace("b")
+            .call_method(user2_account, "deposit", args![Workspace("b")])
+            .call_method(user2_account, "get_balances", args![])
+            .build()
+            .sign(&fee_account_sk)
+            .sign(&user_account_sk),
+        vec![fee_account_proof, user_account_proof],
+    );
+
+    let balance = result.expect_return::<Vec<(ResourceAddress, Amount)>>(3);
+    assert_eq!(balance[0].1, 100);
 }

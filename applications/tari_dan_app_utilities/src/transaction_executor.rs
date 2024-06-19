@@ -108,10 +108,15 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         virtual_substates: VirtualSubstates,
     ) -> Result<ExecutionOutput, Self::Error> {
         let timer = Instant::now();
-        // Include ownership token for the signers of this in the auth scope
-        let owner_token = get_auth_token(transaction.signer_public_key());
+        // Include signature public key badges for all transaction signers in the initial auth scope
+        // NOTE: we assume all signatures have already been validated.
+        let initial_ownership_proofs = transaction
+            .signatures()
+            .iter()
+            .map(|sig| public_key_to_fungible_address(sig.public_key()))
+            .collect();
         let auth_params = AuthParams {
-            initial_ownership_proofs: vec![owner_token],
+            initial_ownership_proofs,
         };
 
         let initial_cost = 0;
@@ -152,10 +157,10 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
     }
 }
 
-fn get_auth_token(public_key: &PublicKey) -> NonFungibleAddress {
-    let public_key =
-        RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).expect("Expected public key to be 32 bytes");
-    NonFungibleAddress::from_public_key(public_key)
+fn public_key_to_fungible_address(public_key: &PublicKey) -> NonFungibleAddress {
+    RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes())
+        .expect("Expected public key to be 32 bytes")
+        .to_non_fungible_address()
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -1,22 +1,29 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{borrow::Borrow, collections::HashSet, fmt::Display, str::FromStr};
+use std::collections::HashSet;
 
 use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{shard::Shard, Epoch, SubstateAddress};
+use tari_crypto::ristretto::RistrettoSecretKey;
+use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_engine_types::{
     hashing::{hasher32, EngineHashDomainLabel},
     indexed_value::{IndexedValue, IndexedValueError},
     instruction::Instruction,
-    serde_with,
     substate::SubstateId,
 };
 use tari_template_lib::{models::ComponentAddress, Hash};
 
-use crate::{builder::TransactionBuilder, transaction_id::TransactionId, TransactionSignature};
+use crate::{
+    builder::TransactionBuilder,
+    transaction_id::TransactionId,
+    SubstateRequirement,
+    TransactionSignature,
+    UnsignedTransaction,
+    VersionedSubstateId,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
@@ -27,16 +34,11 @@ use crate::{builder::TransactionBuilder, transaction_id::TransactionId, Transact
 pub struct Transaction {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     id: TransactionId,
-    fee_instructions: Vec<Instruction>,
-    instructions: Vec<Instruction>,
-    signature: TransactionSignature,
-
-    /// Input objects that may be downed (write) or referenced (read) by this transaction.
-    inputs: IndexSet<SubstateRequirement>,
+    #[serde(flatten)]
+    transaction: UnsignedTransaction,
+    signatures: Vec<TransactionSignature>,
     /// Inputs filled by some authority. These are not part of the transaction hash nor the signature
     filled_inputs: IndexSet<VersionedSubstateId>,
-    min_epoch: Option<Epoch>,
-    max_epoch: Option<Epoch>,
 }
 
 impl Transaction {
@@ -44,37 +46,32 @@ impl Transaction {
         TransactionBuilder::new()
     }
 
-    pub fn new(
-        fee_instructions: Vec<Instruction>,
-        instructions: Vec<Instruction>,
-        signature: TransactionSignature,
-        inputs: IndexSet<SubstateRequirement>,
-        filled_inputs: IndexSet<VersionedSubstateId>,
-        min_epoch: Option<Epoch>,
-        max_epoch: Option<Epoch>,
-    ) -> Self {
+    pub fn new(unsigned_transaction: UnsignedTransaction, signatures: Vec<TransactionSignature>) -> Self {
         let mut tx = Self {
             id: TransactionId::default(),
-            fee_instructions,
-            instructions,
-            signature,
-            inputs,
-            filled_inputs,
-            min_epoch,
-            max_epoch,
+            transaction: unsigned_transaction,
+            filled_inputs: IndexSet::new(),
+            signatures,
         };
         tx.id = tx.calculate_hash();
         tx
     }
 
+    pub fn sign(mut self, secret: &RistrettoSecretKey) -> Self {
+        let sig = TransactionSignature::sign(secret, &self.transaction);
+        self.signatures.push(sig);
+        self.id = self.calculate_hash();
+        self
+    }
+
+    pub fn with_filled_inputs(self, filled_inputs: IndexSet<VersionedSubstateId>) -> Self {
+        Self { filled_inputs, ..self }
+    }
+
     fn calculate_hash(&self) -> TransactionId {
         hasher32(EngineHashDomainLabel::Transaction)
-            .chain(&self.signature)
-            .chain(&self.fee_instructions)
-            .chain(&self.instructions)
-            .chain(&self.inputs)
-            .chain(&self.min_epoch)
-            .chain(&self.max_epoch)
+            .chain(&self.signatures)
+            .chain(&self.transaction)
             .result()
             .into_array()
             .into()
@@ -89,24 +86,32 @@ impl Transaction {
         id == self.id
     }
 
+    pub fn unsigned_transaction(&self) -> &UnsignedTransaction {
+        &self.transaction
+    }
+
     pub fn hash(&self) -> Hash {
         self.id.into_array().into()
     }
 
     pub fn fee_instructions(&self) -> &[Instruction] {
-        &self.fee_instructions
+        &self.transaction.fee_instructions
     }
 
     pub fn instructions(&self) -> &[Instruction] {
-        &self.instructions
+        &self.transaction.instructions
     }
 
-    pub fn signature(&self) -> &TransactionSignature {
-        &self.signature
+    pub fn signatures(&self) -> &[TransactionSignature] {
+        &self.signatures
     }
 
-    pub fn signer_public_key(&self) -> &PublicKey {
-        self.signature.public_key()
+    pub fn verify_all_signatures(&self) -> bool {
+        if self.signatures.is_empty() {
+            return false;
+        }
+
+        self.signatures().iter().all(|sig| sig.verify(&self.transaction))
     }
 
     pub fn involved_shards_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
@@ -114,18 +119,19 @@ impl Transaction {
     }
 
     pub fn inputs(&self) -> &IndexSet<SubstateRequirement> {
-        &self.inputs
+        &self.transaction.inputs
     }
 
     fn input_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
-        self.inputs
+        self.transaction
+            .inputs
             .iter()
             .filter_map(|i: &SubstateRequirement| i.to_substate_address())
     }
 
     /// Returns (fee instructions, instructions)
     pub fn into_instructions(self) -> (Vec<Instruction>, Vec<Instruction>) {
-        (self.fee_instructions, self.instructions)
+        (self.transaction.fee_instructions, self.transaction.instructions)
     }
 
     pub fn all_inputs_iter(&self) -> impl Iterator<Item = SubstateRequirement> + '_ {
@@ -184,11 +190,11 @@ impl Transaction {
     }
 
     pub fn min_epoch(&self) -> Option<Epoch> {
-        self.min_epoch
+        self.transaction.min_epoch
     }
 
     pub fn max_epoch(&self) -> Option<Epoch> {
-        self.max_epoch
+        self.transaction.max_epoch
     }
 
     pub fn as_referenced_components(&self) -> impl Iterator<Item = &ComponentAddress> + '_ {
@@ -239,256 +245,5 @@ impl Transaction {
 
     pub fn has_inputs_without_version(&self) -> bool {
         self.inputs().iter().any(|i| i.version().is_none())
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(ts_rs::TS),
-    ts(export, export_to = "../../bindings/src/types/")
-)]
-pub struct SubstateRequirement {
-    #[serde(with = "serde_with::string")]
-    pub substate_id: SubstateId,
-    pub version: Option<u32>,
-}
-
-impl SubstateRequirement {
-    pub fn new(address: SubstateId, version: Option<u32>) -> Self {
-        Self {
-            substate_id: address,
-            version,
-        }
-    }
-
-    pub fn with_version(address: SubstateId, version: u32) -> Self {
-        Self {
-            substate_id: address,
-            version: Some(version),
-        }
-    }
-
-    pub fn substate_id(&self) -> &SubstateId {
-        &self.substate_id
-    }
-
-    pub fn into_substate_id(self) -> SubstateId {
-        self.substate_id
-    }
-
-    pub fn version(&self) -> Option<u32> {
-        self.version
-    }
-
-    pub fn to_substate_address(&self) -> Option<SubstateAddress> {
-        Some(SubstateAddress::from_substate_id(self.substate_id(), self.version()?))
-    }
-
-    /// Calculates and returns the shard number that this SubstateAddress belongs.
-    /// A shard is a division of the 256-bit shard space.
-    /// If the substate version is not known, None is returned.
-    pub fn to_committee_shard(&self, num_committees: u32) -> Option<Shard> {
-        Some(self.to_substate_address()?.to_shard(num_committees))
-    }
-
-    pub fn to_versioned(&self) -> Option<VersionedSubstateId> {
-        self.version.map(|v| VersionedSubstateId {
-            substate_id: self.substate_id.clone(),
-            version: v,
-        })
-    }
-
-    pub fn or_zero_version(self) -> VersionedSubstateId {
-        VersionedSubstateId {
-            version: self.version.unwrap_or(0),
-            substate_id: self.substate_id,
-        }
-    }
-}
-
-impl FromStr for SubstateRequirement {
-    type Err = SubstateRequirementParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = s.split(':');
-
-        // parse the substate id
-        let address = parts
-            .next()
-            .ok_or_else(|| SubstateRequirementParseError(s.to_string()))?;
-        let address = SubstateId::from_str(address).map_err(|_| SubstateRequirementParseError(s.to_string()))?;
-
-        // parse the version (optional)
-        let version = match parts.next() {
-            Some(v) => {
-                let parse_version = v.parse().map_err(|_| SubstateRequirementParseError(s.to_string()))?;
-                Some(parse_version)
-            },
-            None => None,
-        };
-
-        Ok(Self {
-            substate_id: address,
-            version,
-        })
-    }
-}
-
-impl Display for SubstateRequirement {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.version {
-            Some(v) => write!(f, "{}:{}", self.substate_id, v),
-            None => write!(f, "{}", self.substate_id),
-        }
-    }
-}
-
-impl From<VersionedSubstateId> for SubstateRequirement {
-    fn from(value: VersionedSubstateId) -> Self {
-        Self::with_version(value.substate_id, value.version)
-    }
-}
-
-impl<T: Into<SubstateId>> From<T> for SubstateRequirement {
-    fn from(value: T) -> Self {
-        Self::new(value.into(), None)
-    }
-}
-
-impl PartialEq for SubstateRequirement {
-    fn eq(&self, other: &Self) -> bool {
-        self.substate_id == other.substate_id
-    }
-}
-
-impl Eq for SubstateRequirement {}
-
-// Only consider the substate id in maps. This means that duplicates found if the substate id is the same regardless of
-// the version.
-impl std::hash::Hash for SubstateRequirement {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.substate_id.hash(state);
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("Failed to parse substate requirement {0}")]
-pub struct SubstateRequirementParseError(String);
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Deserialize, Serialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(ts_rs::TS),
-    ts(export, export_to = "../../bindings/src/types/")
-)]
-pub struct VersionedSubstateId {
-    #[serde(with = "serde_with::string")]
-    pub substate_id: SubstateId,
-    pub version: u32,
-}
-
-impl VersionedSubstateId {
-    pub fn new(substate_id: SubstateId, version: u32) -> Self {
-        Self { substate_id, version }
-    }
-
-    pub fn substate_id(&self) -> &SubstateId {
-        &self.substate_id
-    }
-
-    pub fn version(&self) -> u32 {
-        self.version
-    }
-
-    pub fn to_substate_address(&self) -> SubstateAddress {
-        SubstateAddress::from_substate_id(self.substate_id(), self.version())
-    }
-
-    /// Calculates and returns the shard number that this SubstateAddress belongs.
-    /// A shard is an equal division of the 256-bit shard space.
-    pub fn to_committee_shard(&self, num_committees: u32) -> Shard {
-        self.to_substate_address().to_shard(num_committees)
-    }
-
-    pub fn to_previous_version(&self) -> Option<Self> {
-        self.version
-            .checked_sub(1)
-            .map(|v| Self::new(self.substate_id.clone(), v))
-    }
-
-    pub fn to_next_version(&self) -> Self {
-        Self::new(self.substate_id.clone(), self.version + 1)
-    }
-}
-
-impl FromStr for VersionedSubstateId {
-    type Err = SubstateRequirementParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = s.split(':');
-
-        // parse the substate id
-        let address = parts
-            .next()
-            .ok_or_else(|| SubstateRequirementParseError(s.to_string()))?;
-        let address = SubstateId::from_str(address).map_err(|_| SubstateRequirementParseError(s.to_string()))?;
-
-        // parse the version
-        let version = parts
-            .next()
-            .ok_or_else(|| SubstateRequirementParseError(s.to_string()))
-            .and_then(|v| v.parse().map_err(|_| SubstateRequirementParseError(s.to_string())))?;
-
-        Ok(Self {
-            substate_id: address,
-            version,
-        })
-    }
-}
-
-impl Display for VersionedSubstateId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", self.substate_id, self.version)
-    }
-}
-
-impl TryFrom<SubstateRequirement> for VersionedSubstateId {
-    type Error = VersionedSubstateIdError;
-
-    fn try_from(value: SubstateRequirement) -> Result<Self, Self::Error> {
-        match value.version {
-            Some(v) => Ok(Self::new(value.substate_id, v)),
-            None => Err(VersionedSubstateIdError::SubstateRequirementNotVersioned(
-                value.substate_id,
-            )),
-        }
-    }
-}
-
-impl Borrow<SubstateId> for VersionedSubstateId {
-    fn borrow(&self) -> &SubstateId {
-        &self.substate_id
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum VersionedSubstateIdError {
-    #[error("Substate requirement {0} is not versioned")]
-    SubstateRequirementNotVersioned(SubstateId),
-}
-
-#[cfg(test)]
-mod tests {
-    use tari_template_lib::models::ObjectKey;
-
-    use super::*;
-
-    #[test]
-    fn it_hashes_identically_to_a_substate_id() {
-        let substate_id = SubstateId::Component(ComponentAddress::new(ObjectKey::default()));
-        let mut set = IndexSet::new();
-        set.extend([VersionedSubstateId::new(substate_id.clone(), 0)]);
-        assert!(set.contains(&substate_id));
     }
 }

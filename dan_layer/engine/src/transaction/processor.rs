@@ -118,10 +118,22 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
 
         let tracker = StateTracker::new(state_db, virtual_substates, initial_call_scope, transaction.hash());
 
+        // TODO: We'll have a "notarized" transaction that is signed by a single key. It signs a challenge incl. all the
+        // signatures of the transaction. We could define this signature as the "default" owner or we
+        // could remove the idea of a default owner (OwnedBySigner) entirely.
+        // For now the first signature in the list is used.
+        let transaction_signer_public_key = transaction
+            .signatures()
+            .first()
+            .map(|sig| sig.public_key().clone())
+            .ok_or_else(|| TransactionError::InvariantError {
+                details: "Transaction must have at least one signature".to_string(),
+            })?;
+
         let runtime_interface = RuntimeInterfaceImpl::initialize(
             tracker,
             template_provider.clone(),
-            transaction.signer_public_key().clone(),
+            transaction_signer_public_key,
             entity_id_provider,
             modules,
             MAX_CALL_DEPTH,

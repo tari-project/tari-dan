@@ -148,7 +148,7 @@ async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: Stri
 }
 
 #[when(expr = "validator node {word} sends a registration transaction to base wallet {word}")]
-async fn send_vn_registration_with_claim_wallet(world: &mut TariWorld, vn_name: String, base_wallet_name: String) {
+pub async fn send_vn_registration_with_claim_wallet(world: &mut TariWorld, vn_name: String, base_wallet_name: String) {
     let vn = world.get_validator_node(&vn_name);
 
     let mut base_layer_wallet = world.get_wallet(&base_wallet_name).create_client().await;
@@ -220,7 +220,7 @@ async fn assert_all_vns_are_registered(world: &mut TariWorld) {
 }
 
 #[then(expr = "the validator node {word} is listed as registered")]
-async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
+pub async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
     // create a base node client
     let vn = world.get_validator_node(&vn_name);
     let mut base_node_client: GrpcBaseNodeClient = get_base_node_client(vn.base_node_grpc_port);
