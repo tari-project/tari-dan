@@ -29,6 +29,7 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
+    component::new_component_address_from_public_key,
     entity_id_provider::EntityIdProvider,
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
     instruction::Instruction,
@@ -307,9 +308,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             }
         })?;
         let owner_pk = RistrettoPublicKeyBytes::from_bytes(owner_public_key.as_bytes()).unwrap();
-        let owner_token = NonFungibleAddress::from_public_key(owner_pk);
+        let account_address = new_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, owner_public_key);
 
-        let mut args = args![owner_token];
+        let mut args = args![NonFungibleAddress::from_public_key(owner_pk)];
         if let Some(workspace_bucket) = workspace_bucket {
             args.push(arg![Workspace(workspace_bucket)]);
         }
@@ -324,7 +325,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             template_address: ACCOUNT_TEMPLATE_ADDRESS,
             module_name: template.template_name().to_string(),
             arg_scope,
-            entity_id: owner_pk.as_hash().leading_bytes().into(),
+            entity_id: account_address.entity_id(),
         })?;
 
         let result = Self::invoke_template(template, template_provider, runtime.clone(), function_def, args)?;
