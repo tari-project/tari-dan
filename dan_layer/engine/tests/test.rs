@@ -157,7 +157,7 @@ fn test_buggy_template() {
         .unwrap_err();
     assert!(matches!(
         err,
-        TemplateLoaderError::WasmModuleError(WasmExecutionError::MemoryPointerOutOfRange { .. })
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::AbiDecodeError { .. })
     ));
 
     let err = compile_template("tests/templates/buggy", &["unexpected_export_function"])
