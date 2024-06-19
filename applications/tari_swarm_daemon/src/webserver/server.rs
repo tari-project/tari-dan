@@ -109,6 +109,7 @@ async fn json_rpc_handler(Extension(context): Extension<Arc<HandlerContext>>, va
         "add_validator_node" => call_handler(context, value, rpc::validator_nodes::create).await,
         "start" => call_handler(context, value, rpc::instances::start).await,
         "stop" => call_handler(context, value, rpc::instances::stop).await,
+        "list_instances" => call_handler(context, value, rpc::instances::list).await,
         _ => Ok(value.method_not_found(&value.method)),
     }
 }

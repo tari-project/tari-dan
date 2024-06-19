@@ -52,6 +52,10 @@ impl AllocatedPorts {
         self.ports[name]
     }
 
+    pub fn into_ports(self) -> HashMap<&'static str, u16> {
+        self.ports
+    }
+
     pub async fn next_port(&mut self, name: &'static str) -> u16 {
         loop {
             let port = self.current_port;
