@@ -25,6 +25,7 @@ use std::{
     fs::create_dir_all,
     ops::{Deref, DerefMut},
     path::PathBuf,
+    str::FromStr,
     sync::{Arc, Mutex},
 };
 
@@ -35,12 +36,14 @@ use diesel::{
     sql_types::{Integer, Nullable, Text},
     SqliteConnection,
 };
-use diesel_migrations::EmbeddedMigrations;
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use log::*;
 use tari_dan_common_types::{shard::Shard, Epoch};
 use tari_dan_storage::{consensus_models::BlockId, StorageError};
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
 use tari_engine_types::substate::SubstateId;
+use tari_indexer_client::types::{ListSubstateItem, SubstateType};
+use tari_template_lib::models::TemplateAddress;
 use tari_transaction::TransactionId;
 use thiserror::Error;
 
@@ -48,12 +51,9 @@ use super::models::{
     events::{EventData, NewEvent, NewScannedBlockId},
     non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex},
 };
-use crate::{
-    diesel_migrations::MigrationHarness,
-    substate_storage_sqlite::models::{
-        events::{Event, NewEventPayloadField, ScannedBlockId},
-        substate::{NewSubstate, Substate},
-    },
+use crate::substate_storage_sqlite::models::{
+    events::{Event, NewEventPayloadField, ScannedBlockId},
+    substate::{NewSubstate, Substate},
 };
 
 const LOG_TARGET: &str = "tari::indexer::substate_storage_sqlite";
@@ -178,6 +178,13 @@ impl<'a> SqliteSubstateStoreReadTransaction<'a> {
 }
 
 pub trait SubstateStoreReadTransaction {
+    fn list_substates(
+        &mut self,
+        filter_by_type: Option<SubstateType>,
+        filter_by_template: Option<TemplateAddress>,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> Result<Vec<ListSubstateItem>, StorageError>;
     fn get_substate(&mut self, address: &SubstateId) -> Result<Option<Substate>, StorageError>;
     fn get_latest_version_for_substate(&mut self, address: &SubstateId) -> Result<Option<i64>, StorageError>;
     fn get_all_addresses(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
@@ -221,6 +228,65 @@ pub trait SubstateStoreReadTransaction {
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
+    fn list_substates(
+        &mut self,
+        by_type: Option<SubstateType>,
+        by_template_address: Option<TemplateAddress>,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> Result<Vec<ListSubstateItem>, StorageError> {
+        use crate::substate_storage_sqlite::schema::substates;
+
+        let mut query = substates::table.into_boxed();
+
+        if let Some(template_address) = by_template_address {
+            query = query.filter(substates::template_address.eq(template_address.to_string()));
+        }
+
+        if let Some(substate_type) = by_type {
+            let address_like = match substate_type {
+                SubstateType::NonFungible => format!("resource_% {}_%", substate_type.as_prefix_str()),
+                _ => format!("{}_%", substate_type.as_prefix_str()),
+            };
+            query = query.filter(substates::address.like(address_like));
+        }
+
+        if let Some(limit) = limit {
+            query = query.limit(limit as i64);
+        }
+        if let Some(offset) = offset {
+            query = query.offset(offset as i64);
+        }
+
+        let substates: Vec<Substate> = query
+            .get_results(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("list_substates: {}", e),
+            })?;
+
+        let items = substates
+            .into_iter()
+            .map(|s| {
+                let substate_id = SubstateId::from_str(&s.address)?;
+                let version = u32::try_from(s.version)?;
+                let template_address = s.template_address.map(|h| TemplateAddress::from_hex(&h)).transpose()?;
+                let timestamp = u64::try_from(s.timestamp)?;
+                Ok(ListSubstateItem {
+                    substate_id,
+                    module_name: s.module_name,
+                    version,
+                    template_address,
+                    timestamp,
+                })
+            })
+            .collect::<Result<Vec<ListSubstateItem>, anyhow::Error>>()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("list_substates: invalid substate items: {}", e),
+            })?;
+
+        Ok(items)
+    }
+
     fn get_substate(&mut self, address: &SubstateId) -> Result<Option<Substate>, StorageError> {
         use crate::substate_storage_sqlite::schema::substates;
 

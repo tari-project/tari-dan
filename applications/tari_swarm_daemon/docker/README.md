@@ -8,8 +8,9 @@ cd sources
 git clone https://github.com/tari-project/tari.git
 git clone https://github.com/tari-project/tari-dan.git
 git clone https://github.com/tari-project/tari-connector.git
-cp -v applications/tari_swarm/docker/cross-compile-aarch64.sh .
-docker build -f applications/tari_swarm/docker/tari_swarm.Dockerfile \
+cp -v tari-dan/applications/tari_swarm_daemon/docker/cross-compile-aarch64.sh .
+cd ..
+docker build -f sources/tari-dan/applications/tari_swarm_daemon/docker/tari_swarm.Dockerfile \ 
   -t local/tari-swarm .
 ```
 

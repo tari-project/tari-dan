@@ -22,6 +22,77 @@ use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+)]
+pub enum SubstateType {
+    Component,
+    Resource,
+    Vault,
+    UnclaimedConfidentialOutput,
+    NonFungible,
+    TransactionReceipt,
+    FeeClaim,
+}
+
+impl SubstateType {
+    pub fn as_prefix_str(&self) -> &str {
+        match self {
+            SubstateType::Component => "component",
+            SubstateType::Resource => "resource",
+            SubstateType::Vault => "vault",
+            SubstateType::UnclaimedConfidentialOutput => "commitment",
+            SubstateType::NonFungible => "nft",
+            SubstateType::TransactionReceipt => "txreceipt",
+            SubstateType::FeeClaim => "feeclaim",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+)]
+pub struct ListSubstatesRequest {
+    #[serde(default, deserialize_with = "serde_tools::string::option::deserialize")]
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub filter_by_template: Option<TemplateAddress>,
+    pub filter_by_type: Option<SubstateType>,
+    pub limit: Option<u64>,
+    pub offset: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+)]
+pub struct ListSubstatesResponse {
+    pub substates: Vec<ListSubstateItem>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+)]
+pub struct ListSubstateItem {
+    pub substate_id: SubstateId,
+    pub module_name: Option<String>,
+    pub version: u32,
+    #[serde(default, with = "serde_tools::string::option")]
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub template_address: Option<TemplateAddress>,
+    pub timestamp: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "ts",

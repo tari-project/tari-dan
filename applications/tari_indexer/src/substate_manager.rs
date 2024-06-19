@@ -28,7 +28,9 @@ use tari_dan_app_utilities::substate_file_cache::SubstateFileCache;
 use tari_dan_common_types::PeerAddress;
 use tari_engine_types::substate::{Substate, SubstateId};
 use tari_epoch_manager::base_layer::EpochManagerHandle;
+use tari_indexer_client::types::{ListSubstateItem, SubstateType};
 use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
+use tari_template_lib::models::TemplateAddress;
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, TariValidatorNodeRpcClientFactory};
 
@@ -88,12 +90,24 @@ impl SubstateManager {
         }
     }
 
+    pub async fn list_substates(
+        &self,
+        filter_by_type: Option<SubstateType>,
+        filter_by_template: Option<TemplateAddress>,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> Result<Vec<ListSubstateItem>, anyhow::Error> {
+        let mut tx = self.substate_store.create_read_tx()?;
+        let substates = tx.list_substates(filter_by_type, filter_by_template, limit, offset)?;
+        Ok(substates)
+    }
+
     pub async fn get_substate(
         &self,
         substate_address: &SubstateId,
         version: Option<u32>,
     ) -> Result<Option<SubstateResponse>, anyhow::Error> {
-        // we store the latest version of the substates in the watchlist,
+        // we store the latest version of the substates related to the events
         // so we will return the substate directly from database if it's there
         if let Some(substate) = self.get_substate_from_db(substate_address, version).await? {
             return Ok(Some(substate));
