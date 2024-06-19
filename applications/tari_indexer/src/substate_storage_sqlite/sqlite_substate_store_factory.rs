@@ -177,6 +177,7 @@ impl<'a> SqliteSubstateStoreReadTransaction<'a> {
     }
 }
 
+// TODO: remove the allow dead_code attributes as these become used.
 pub trait SubstateStoreReadTransaction {
     fn list_substates(
         &mut self,
@@ -186,13 +187,17 @@ pub trait SubstateStoreReadTransaction {
         offset: Option<u64>,
     ) -> Result<Vec<ListSubstateItem>, StorageError>;
     fn get_substate(&mut self, address: &SubstateId) -> Result<Option<Substate>, StorageError>;
+    #[allow(dead_code)]
     fn get_latest_version_for_substate(&mut self, address: &SubstateId) -> Result<Option<i64>, StorageError>;
+    #[allow(dead_code)]
     fn get_all_addresses(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
     #[allow(dead_code)]
     fn get_all_substates(&mut self) -> Result<Vec<Substate>, StorageError>;
     fn get_non_fungible_collections(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
     fn get_non_fungible_count(&mut self, resource_address: String) -> Result<i64, StorageError>;
+    #[allow(dead_code)]
     fn get_non_fungible_latest_index(&mut self, resource_address: String) -> Result<Option<i32>, StorageError>;
+    #[allow(dead_code)]
     fn get_non_fungibles(
         &mut self,
         resource_address: String,
@@ -629,12 +634,16 @@ impl<'a> SqliteSubstateStoreWriteTransaction<'a> {
     }
 }
 
+// TODO: remove the allow dead_code attributes as these become used.
 pub trait SubstateStoreWriteTransaction {
     fn commit(self) -> Result<(), StorageError>;
     fn rollback(self) -> Result<(), StorageError>;
     fn set_substate(&mut self, new_substate: NewSubstate) -> Result<(), StorageError>;
+    #[allow(dead_code)]
     fn delete_substate(&mut self, address: String) -> Result<(), StorageError>;
+    #[allow(dead_code)]
     fn clear_substates(&mut self) -> Result<(), StorageError>;
+    #[allow(dead_code)]
     fn add_non_fungible_index(&mut self, new_nft_index: NewNonFungibleIndex) -> Result<(), StorageError>;
     fn save_event(&mut self, new_event: NewEvent) -> Result<(), StorageError>;
     fn save_scanned_block_id(&mut self, new_scanned_block_id: NewScannedBlockId) -> Result<(), StorageError>;
