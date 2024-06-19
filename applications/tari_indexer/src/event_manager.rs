@@ -75,6 +75,7 @@ impl EventManager {
         topic: String,
         payload: &Metadata,
         version: u64,
+        timestamp: u64,
     ) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
         let new_event = NewEvent {
@@ -84,6 +85,7 @@ impl EventManager {
             topic,
             payload: payload.to_json().expect("Failed to convert to JSON"),
             version: version as i32,
+            timestamp: timestamp as i64,
         };
         tx.save_event(new_event)?;
         tx.commit()?;
@@ -165,24 +167,10 @@ impl EventManager {
             .substate_scanner
             .get_events_for_substate(&substate_id, Some(version))
             .await?;
-
-        // stores the newest network events to the db
         // because the same substate_id with different version
         // can be processed in the same transaction, we need to avoid
         // duplicates
-        for (version, event) in network_events {
-            let template_address = event.template_address();
-            let tx_hash = TransactionId::new(event.tx_hash().into_array());
-            let topic = event.topic();
-            let payload = event.payload();
-            self.save_event_to_db(
-                &substate_id,
-                template_address,
-                tx_hash,
-                topic,
-                payload,
-                u64::from(version),
-            )?;
+        for (_, event) in network_events {
             events.push(event);
         }
 

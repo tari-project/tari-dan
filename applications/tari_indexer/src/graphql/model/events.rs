@@ -166,6 +166,7 @@ impl EventQuery {
         topic: String,
         payload: String,
         version: u64,
+        timestamp: u64,
     ) -> Result<Event, anyhow::Error> {
         info!(
             target: LOG_TARGET,
@@ -185,6 +186,7 @@ impl EventQuery {
             topic.clone(),
             &payload,
             version,
+            timestamp,
         )?;
 
         Ok(Event {

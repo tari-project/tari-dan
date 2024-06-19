@@ -20,7 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, path::PathBuf, time::Duration};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    time::{Duration, SystemTime},
+};
 
 use reqwest::Url;
 use tari_common::{
@@ -109,10 +113,14 @@ impl IndexerProcess {
         let payload = HashMap::<String, String>::from([("my".to_string(), "event".to_string())])
             .to_json()
             .unwrap();
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
         let query = format!(
             "{{ saveEvent(substateId: {:?}, templateAddress: {:?}, txHash: {:?}, topic: {:?}, payload: {:?}, version: \
-             {:?}) {{ substateId templateAddress txHash topic payload }} }}",
-            substate_id, template_address, tx_hash, topic, payload, version
+             {:?}, timestamp: {}) {{ substateId templateAddress txHash topic payload }} }}",
+            substate_id, template_address, tx_hash, topic, payload, version, timestamp
         );
         let res = graphql_client
             .send_request::<HashMap<String, tari_indexer::graphql::model::events::Event>>(&query, None, None)
