@@ -87,6 +87,8 @@ impl DanNode {
     }
 
     async fn handle_hotstuff_event(&self, event: HotstuffEvent) -> Result<(), anyhow::Error> {
+        info!(target: LOG_TARGET, "🔥 consensus event: {event}");
+
         let HotstuffEvent::BlockCommitted { block_id, .. } = event else {
             return Ok(());
         };

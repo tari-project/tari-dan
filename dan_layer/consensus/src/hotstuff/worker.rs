@@ -135,6 +135,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 signing_service.clone(),
                 outbound_messaging.clone(),
                 transaction_pool.clone(),
+                tx_events.clone(),
             ),
 
             on_next_sync_view: OnNextSyncViewHandler::new(
