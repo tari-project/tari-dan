@@ -29,14 +29,8 @@ impl ValidatorSignatureService for TariSignatureService {
 }
 
 impl VoteSignatureService for TariSignatureService {
-    fn verify(
-        &self,
-        signature: &ValidatorSignature,
-        leaf_hash: &FixedHash,
-        block_id: &BlockId,
-        decision: &QuorumDecision,
-    ) -> bool {
-        let challenge = self.create_challenge(leaf_hash, block_id, decision);
+    fn verify(&self, signature: &ValidatorSignature, block_id: &BlockId, decision: &QuorumDecision) -> bool {
+        let challenge = self.create_challenge(block_id, decision);
         signature.verify(challenge)
     }
 }

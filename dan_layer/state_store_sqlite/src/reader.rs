@@ -1529,13 +1529,13 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
     fn votes_get_by_block_and_sender(
         &self,
         block_id: &BlockId,
-        sender_leaf_hash: &FixedHash,
+        signer_public_key: &PublicKey,
     ) -> Result<Vote, StorageError> {
         use crate::schema::votes;
 
         let vote = votes::table
             .filter(votes::block_id.eq(serialize_hex(block_id)))
-            .filter(votes::sender_leaf_hash.eq(serialize_hex(sender_leaf_hash)))
+            .filter(votes::signer_public_key.eq(serialize_hex(signer_public_key.as_bytes())))
             .first::<sql_models::Vote>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "votes_get",

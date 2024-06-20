@@ -126,7 +126,6 @@ message QuorumCertificate {
   uint64 block_height = 2;
   uint64 epoch = 3;
   repeated tari.dan.common.SignatureAndPublicKey signatures = 4;
-  repeated bytes leaf_hashes = 6;
   QuorumDecision decision = 7;
   uint32 shard = 8;
 }

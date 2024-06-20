@@ -16,6 +16,7 @@ use super::vote_receiver::VoteReceiver;
 use crate::{
     hotstuff::{common::calculate_last_dummy_block, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::NewViewMessage,
+    validations::new_view_validations::check_new_view_message,
     traits::{ConsensusSpec, LeaderStrategy},
 };
 
@@ -73,6 +74,26 @@ where TConsensusSpec: ConsensusSpec
 
     #[allow(clippy::too_many_lines)]
     pub async fn handle(&mut self, from: TConsensusSpec::Addr, message: NewViewMessage) -> Result<(), HotStuffError> {
+        let local_committee = self.epoch_manager.get_local_committee(message.epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_info(message.epoch).await?;
+        let locked = self.store.with_read_tx(|tx| LockedBlock::get(tx))?;
+        match check_new_view_message::<TConsensusSpec>(
+            &message,
+            &self.epoch_manager,
+            &locked,
+            &self.leader_strategy,
+            &local_committee,
+            &local_committee_shard,
+        )
+        .await
+        {
+            Ok(()) => {},
+            Err(e) => {
+                warn!(target: LOG_TARGET, "❌ Ignoring NEW_VIEW message because it failed validation: {}",  e);
+                return Ok(());
+            },
+        }
+
         let NewViewMessage {
             high_qc,
             new_height,
@@ -87,29 +108,6 @@ where TConsensusSpec: ConsensusSpec
             from
         );
 
-        if !self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await? {
-            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for epoch {} because the epoch is invalid or we are not registered for that epoch", epoch);
-            return Ok(());
-        }
-
-        // TODO: This prevents syncing the blocks from previous epoch.
-        // if !self.epoch_manager.is_validator_in_local_committee(&from, epoch).await? {
-        //     return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
-        //         epoch,
-        //         sender: from.to_string(),
-        //         context: format!("Received NEWVIEW from {}", from),
-        //     });
-        // }
-
-        // We can never accept NEWVIEWS for heights that are lower than the locked block height
-        let locked = self.store.with_read_tx(|tx| LockedBlock::get(tx))?;
-        if new_height < locked.height() {
-            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for height less than the locked block, locked block: {} new height: {}", locked, new_height);
-            return Ok(());
-        }
-
-        self.validate_qc(&high_qc)?;
-
         // Sync if we do not have the block for this valid QC
         let exists = self
             .store
@@ -123,23 +121,7 @@ where TConsensusSpec: ConsensusSpec
             return Err(HotStuffError::FallenBehind {
                 local_height: leaf.height(),
                 qc_height: high_qc.block_height(),
-            });
-        }
-
-        let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
-        let local_committee_shard = self.epoch_manager.get_local_committee_info(epoch).await?;
-        let leader = self
-            .leader_strategy
-            .get_leader_for_next_block(&local_committee, new_height);
-        let our_node = self.epoch_manager.get_our_validator_node(epoch).await?;
-
-        if *leader != our_node.address {
-            warn!(target: LOG_TARGET, "❌ New View failed, leader is {} at height:{}", leader, new_height);
-            return Err(HotStuffError::NotTheLeader {
-                details: format!(
-                    "Received NEWVIEW height {} but this not is not the leader for that height",
-                    new_height
-                ),
+                detected_at: "NEWVIEW".to_string(),
             });
         }
 
@@ -149,15 +131,6 @@ where TConsensusSpec: ConsensusSpec
                 "🔥 Receive VOTE with NEWVIEW for node {} from {}", vote.block_id, from,
             );
             self.vote_receiver.handle(from.clone(), vote, false).await?;
-        }
-
-        // Are nodes requesting to create more than the minimum number of dummy blocks?
-        if high_qc.block_height().saturating_sub(new_height).as_u64() > local_committee.len() as u64 {
-            return Err(HotStuffError::BadNewViewMessage {
-                details: format!("Validator {from} requested an invalid number of dummy blocks"),
-                high_qc_height: high_qc.block_height(),
-                received_new_height: new_height,
-            });
         }
 
         // Take note of unique NEWVIEWs so that we can count them
@@ -176,7 +149,7 @@ where TConsensusSpec: ConsensusSpec
 
         let threshold = self.epoch_manager.get_local_threshold_for_epoch(epoch).await?;
 
-        info!(
+        debug!(
             target: LOG_TARGET,
             "🌟 Received NEWVIEW for height {} (QC: {}) has {} votes out of {}",
             new_height,
@@ -187,7 +160,7 @@ where TConsensusSpec: ConsensusSpec
         // Once we have received enough (quorum) NEWVIEWS, we can create the dummy block(s) and propose the next block.
         // Any subsequent NEWVIEWs for this height/view are ignored.
         if newview_count == threshold {
-            info!(target: LOG_TARGET, "🌟✅ NEWVIEW for block {} (high_qc: {}) has reached quorum ({}/{})", new_height, high_qc.as_high_qc(), newview_count, threshold);
+            debug!(target: LOG_TARGET, "🌟✅ NEWVIEW for block {} (high_qc: {}) has reached quorum ({}/{})", new_height, high_qc.as_high_qc(), newview_count, threshold);
 
             let high_qc_block = self.store.with_read_tx(|tx| high_qc.get_block(tx))?;
             // Determine how many missing blocks we must fill without actually creating them.
@@ -215,11 +188,6 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
-        Ok(())
-    }
-
-    fn validate_qc(&self, _qc: &QuorumCertificate) -> Result<(), HotStuffError> {
-        // TODO
         Ok(())
     }
 }

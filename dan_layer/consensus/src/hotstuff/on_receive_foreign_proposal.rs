@@ -21,6 +21,7 @@ use crate::{
     hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle, ProposalValidationError},
     messages::ProposalMessage,
     traits::ConsensusSpec,
+    validations,
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_foreign_proposal";
@@ -72,13 +73,7 @@ where TConsensusSpec: ConsensusSpec
             .await?;
 
         let local_shard = self.epoch_manager.get_local_committee_info(block.epoch()).await?;
-        if let Err(err) = self.validate_proposed_block(
-            &from,
-            &block,
-            committee_shard.shard(),
-            local_shard.shard(),
-            &foreign_receive_counter,
-        ) {
+        if let Err(err) = self.validate_proposed_block(&from, &block, local_shard.shard(), &foreign_receive_counter) {
             warn!(
                 target: LOG_TARGET,
                 "⚠️ FOREIGN PROPOSAL: Invalid proposal from {}: {}. Ignoring.",
@@ -207,50 +202,14 @@ where TConsensusSpec: ConsensusSpec
         &self,
         from: &TConsensusSpec::Addr,
         candidate_block: &Block,
-        _foreign_shard: Shard,
-        _local_shard: Shard,
-        _foreign_receive_counter: &ForeignReceiveCounters,
+        local_shard: Shard,
+        foreign_receive_counter: &ForeignReceiveCounters,
     ) -> Result<(), ProposalValidationError> {
-        // TODO: ignoring for now because this is currently broken
-        // let Some(incoming_count) = candidate_block.get_foreign_counter(&local_shard) else {
-        //     debug!(target:LOG_TARGET, "Our bucket {local_shard:?} is missing reliability index in the proposed block
-        // {candidate_block:?}");     return Err(ProposalValidationError::MissingForeignCounters {
-        //         proposed_by: from.to_string(),
-        //         hash: *candidate_block.id(),
-        //     });
-        // };
-        // let current_count = foreign_receive_counter.get_count(&foreign_shard);
-        // if current_count + 1 != incoming_count {
-        //     debug!(target:LOG_TARGET, "We were expecting the index to be {expected_count}, but the index was
-        // {incoming_count}", expected_count = current_count + 1);     return
-        // Err(ProposalValidationError::InvalidForeignCounters {         proposed_by: from.to_string(),
-        //         hash: *candidate_block.id(),
-        //         details: format!(
-        //             "Expected foreign receive count to be {} but it was {}",
-        //             current_count + 1,
-        //             incoming_count
-        //         ),
-        //     });
-        // }
-        if candidate_block.height().is_zero() || candidate_block.is_genesis() {
-            return Err(ProposalValidationError::ProposingGenesisBlock {
-                proposed_by: from.to_string(),
-                hash: *candidate_block.id(),
-            });
-        }
-
-        let calculated_hash = candidate_block.calculate_hash().into();
-        if calculated_hash != *candidate_block.id() {
-            return Err(ProposalValidationError::NodeHashMismatch {
-                proposed_by: from.to_string(),
-                hash: *candidate_block.id(),
-                calculated_hash,
-            });
-        }
-
-        // TODO: validate justify signatures
-        // self.validate_qc(candidate_block.justify(), committee)?;
-
-        Ok(())
+        validations::foreign_proposal_validations::check_foreign_proposal_message::<TConsensusSpec>(
+            from,
+            candidate_block,
+            local_shard,
+            foreign_receive_counter,
+        )
     }
 }

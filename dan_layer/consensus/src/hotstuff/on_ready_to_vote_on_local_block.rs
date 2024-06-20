@@ -972,9 +972,8 @@ where TConsensusSpec: ConsensusSpec
             .epoch_manager
             .get_validator_node(block.epoch(), &self.local_validator_addr)
             .await?;
-        let leaf_hash = vn.get_node_hash(self.network);
 
-        let signature = self.vote_signing_service.sign_vote(&leaf_hash, block.id(), &decision);
+        let signature = self.vote_signing_service.sign_vote(block.id(), &decision);
 
         Ok(VoteMessage {
             epoch: block.epoch(),

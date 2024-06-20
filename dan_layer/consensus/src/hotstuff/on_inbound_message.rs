@@ -24,14 +24,7 @@ use tokio::{sync::mpsc, time};
 
 use super::config::HotstuffConfig;
 use crate::{
-    block_validations::{
-        check_base_layer_block_hash,
-        check_hash_and_height,
-        check_network,
-        check_proposed_by_leader,
-        check_quorum_certificate,
-        check_signature,
-    },
+    validations::block_validations::check_block,
     hotstuff::error::HotStuffError,
     messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage},
     traits::{ConsensusSpec, OutboundMessaging},
@@ -93,7 +86,8 @@ where TConsensusSpec: ConsensusSpec
                 self.process_local_proposal(current_height, msg).await?;
             },
             HotstuffMessage::ForeignProposal(ref proposal) => {
-                self.check_proposal(&proposal.block).await?;
+                self.check_proposal(&proposal.block)
+                    .await?;
                 self.report_message_ready(from, msg)?;
             },
             msg => {
@@ -118,17 +112,21 @@ where TConsensusSpec: ConsensusSpec
         self.message_buffer.clear_buffer();
     }
 
-    async fn check_proposal(&self, block: &Block) -> Result<(), HotStuffError> {
-        check_base_layer_block_hash::<TConsensusSpec>(block, &self.epoch_manager, &self.config).await?;
-        check_network(block, self.network)?;
-        check_hash_and_height(block)?;
-        let committee_for_block = self
-            .epoch_manager
-            .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
-            .await?;
-        check_proposed_by_leader(&self.leader_strategy, &committee_for_block, block)?;
-        check_signature(block)?;
-        check_quorum_certificate::<TConsensusSpec>(block, &self.vote_signing_service, &self.epoch_manager).await?;
+    async fn check_proposal(
+        &mut self,
+        block: &Block,
+    ) -> Result<(), HotStuffError> {
+
+
+        check_block::<TConsensusSpec>(
+            block,
+            &self.epoch_manager,
+            &self.config,
+            self.network,
+            &self.leader_strategy,
+            &self.vote_signing_service,
+        )
+        .await?;
         Ok(())
     }
 

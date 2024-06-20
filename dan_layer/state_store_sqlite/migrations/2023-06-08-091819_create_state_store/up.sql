@@ -281,7 +281,7 @@ create table votes
     epoch            bigint    not null,
     block_id         text      not NULL,
     decision         integer   not null,
-    sender_leaf_hash text      not NULL,
+    signer_public_key       text      not null,
     signature        text      not NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
