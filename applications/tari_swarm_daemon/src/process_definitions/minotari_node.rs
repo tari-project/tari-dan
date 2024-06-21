@@ -1,6 +1,8 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use log::debug;
 use tokio::process::Command;
@@ -63,7 +65,7 @@ impl ProcessDefinition for MinotariNode {
         Ok(command)
     }
 
-    // fn get_relative_data_path(&self) -> Option<PathBuf> {
-    //     Some(Path::new("network/data"))
-    // }
+    fn get_relative_data_path(&self) -> Option<PathBuf> {
+        Some("data".into())
+    }
 }

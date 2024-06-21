@@ -1,6 +1,8 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::path::PathBuf;
+
 use anyhow::anyhow;
 use async_trait::async_trait;
 use log::debug;
@@ -62,5 +64,9 @@ impl ProcessDefinition for ValidatorNode {
             .arg("-pvalidator_node.base_layer_scanning_interval=1");
 
         Ok(command)
+    }
+
+    fn get_relative_data_path(&self) -> Option<PathBuf> {
+        Some("data".into())
     }
 }
