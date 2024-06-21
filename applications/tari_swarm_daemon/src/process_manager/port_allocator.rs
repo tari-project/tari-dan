@@ -52,7 +52,10 @@ impl AllocatedPorts {
         self.ports[name]
     }
 
-    pub async fn next_port(&mut self, name: &'static str) -> u16 {
+    pub async fn get_or_next_port(&mut self, name: &'static str) -> u16 {
+        if let Some(port) = self.ports.get(name) {
+            return *port;
+        }
         loop {
             let port = self.current_port;
             self.current_port += 1;

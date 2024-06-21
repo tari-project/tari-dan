@@ -70,7 +70,7 @@ impl<'a> ProcessContext<'a> {
     }
 
     pub async fn get_free_port(&mut self, name: &'static str) -> anyhow::Result<u16> {
-        Ok(self.port_allocator.next_port(name).await)
+        Ok(self.port_allocator.get_or_next_port(name).await)
     }
 
     pub fn local_ip(&self) -> &IpAddr {

@@ -274,7 +274,7 @@ impl EventScanner {
                     module_name,
                     timestamp: transaction.timestamp as i64,
                 };
-                info!(
+                debug!(
                     target: LOG_TARGET,
                     "Saving substate: {:?}",
                     substate_row

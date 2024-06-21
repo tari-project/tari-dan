@@ -27,6 +27,7 @@ use crate::{
         executables::{Executable, Executables},
         port_allocator::PortAllocator,
         processes::{MinoTariMinerProcess, MinoTariNodeProcess, MinoTariWalletProcess, ValidatorNodeProcess},
+        AllocatedPorts,
         IndexerProcess,
         Instance,
         SignalingServerProcess,
@@ -98,7 +99,7 @@ impl InstanceManager {
         extra_args: HashMap<String, String>,
     ) -> anyhow::Result<InstanceId> {
         let instance_id = self.next_instance_id();
-        self.fork(instance_id, executable, instance_type, instance_name, extra_args)
+        self.fork(instance_id, executable, instance_type, instance_name, extra_args, None)
             .await
     }
 
@@ -110,6 +111,7 @@ impl InstanceManager {
         instance_type: InstanceType,
         instance_name: String,
         extra_args: HashMap<String, String>,
+        ports: Option<AllocatedPorts>,
     ) -> anyhow::Result<InstanceId> {
         let local_ip = IpAddr::V4(Ipv4Addr::from([127, 0, 0, 1]));
         let definition = get_definition(instance_type);
@@ -121,7 +123,7 @@ impl InstanceManager {
             executable.path.display()
         );
 
-        let mut allocated_ports = self.port_allocator.create();
+        let mut allocated_ports = ports.unwrap_or_else(|| self.port_allocator.create());
 
         let base_path = self
             .base_path
@@ -279,9 +281,10 @@ impl InstanceManager {
         let instance_type = instance.instance_type();
         let instance_name = instance.name().to_string();
         let extra_args = instance.extra_args().clone();
+        let ports = instance.allocated_ports().clone();
 
         // This will just overwrite the previous instance
-        self.fork(id, executable, instance_type, instance_name, extra_args)
+        self.fork(id, executable, instance_type, instance_name, extra_args, Some(ports))
             .await?;
 
         Ok(())
