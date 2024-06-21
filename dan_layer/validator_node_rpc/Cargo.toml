@@ -23,6 +23,7 @@ async-trait = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true, default-features = true }
 thiserror = { workspace = true }
+tokio = { workspace = true, default-features = false, features = ["sync"] }
 
 [build-dependencies]
 proto_builder = { workspace = true }

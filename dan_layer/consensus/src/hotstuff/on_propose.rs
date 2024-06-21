@@ -113,7 +113,7 @@ where TConsensusSpec: ConsensusSpec
                     if let Some(next_block) = self.store.with_read_tx(|tx| last_proposed.get_block(tx)).optional()? {
                         info!(
                             target: LOG_TARGET,
-                            "🌿 RE-BROADCASTING locally block {}({}) to {} validators. {} command(s), justify: {} ({}), parent: {}",
+                            "🌿 RE-BROADCASTING local block {}({}) to {} validators. {} command(s), justify: {} ({}), parent: {}",
                             next_block.id(),
                             next_block.height(),
                             local_committee.len(),

@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{convert::TryInto, time::Duration};
+use std::{collections::HashMap, convert::TryInto, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -21,6 +21,7 @@ use tari_engine_types::{
 };
 use tari_networking::{MessageSpec, NetworkingHandle};
 use tari_transaction::{Transaction, TransactionId};
+use tokio::sync::RwLock;
 
 use crate::{rpc_service, ValidatorNodeRpcClientError};
 
@@ -78,24 +79,15 @@ pub enum SubstateResult {
 }
 
 pub struct TariValidatorNodeRpcClient<TMsg: MessageSpec> {
-    networking: NetworkingHandle<TMsg>,
     address: PeerAddress,
-    connection: Option<rpc_service::ValidatorNodeRpcClient>,
+    pool: RpcPool<TMsg>,
 }
 
 impl<TMsg: MessageSpec> TariValidatorNodeRpcClient<TMsg> {
     pub async fn client_connection(
         &mut self,
     ) -> Result<rpc_service::ValidatorNodeRpcClient, ValidatorNodeRpcClientError> {
-        if let Some(ref client) = self.connection {
-            if client.is_connected() {
-                return Ok(client.clone());
-            }
-        }
-
-        let client: rpc_service::ValidatorNodeRpcClient =
-            self.networking.connect_rpc(self.address.as_peer_id()).await?;
-        self.connection = Some(client.clone());
+        let client = self.pool.get_or_connect(&self.address).await?;
         Ok(client)
     }
 }
@@ -251,12 +243,14 @@ impl<TMsg: MessageSpec> ValidatorNodeRpcClient for TariValidatorNodeRpcClient<TM
 
 #[derive(Clone, Debug)]
 pub struct TariValidatorNodeRpcClientFactory {
-    networking: NetworkingHandle<TariMessagingSpec>,
+    pool: RpcPool<TariMessagingSpec>,
 }
 
 impl TariValidatorNodeRpcClientFactory {
     pub fn new(networking: NetworkingHandle<TariMessagingSpec>) -> Self {
-        Self { networking }
+        Self {
+            pool: RpcPool::new(networking),
+        }
     }
 }
 
@@ -266,9 +260,42 @@ impl ValidatorNodeClientFactory for TariValidatorNodeRpcClientFactory {
 
     fn create_client(&self, address: &Self::Addr) -> Self::Client {
         TariValidatorNodeRpcClient {
-            networking: self.networking.clone(),
             address: *address,
-            connection: None,
+            pool: self.pool.clone(),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RpcPool<TMsg: MessageSpec> {
+    sessions: Arc<RwLock<HashMap<PeerAddress, rpc_service::ValidatorNodeRpcClient>>>,
+    networking: NetworkingHandle<TMsg>,
+}
+
+impl<TMsg: MessageSpec> RpcPool<TMsg> {
+    pub fn new(networking: NetworkingHandle<TMsg>) -> Self {
+        Self {
+            sessions: Default::default(),
+            networking,
+        }
+    }
+
+    async fn get_or_connect(
+        &mut self,
+        addr: &PeerAddress,
+    ) -> Result<rpc_service::ValidatorNodeRpcClient, ValidatorNodeRpcClientError> {
+        let mut sessions = self.sessions.write().await;
+        if let Some(client) = sessions.get(addr) {
+            if client.is_connected() {
+                return Ok(client.clone());
+            } else {
+                sessions.remove(addr);
+            }
+        }
+
+        let client: rpc_service::ValidatorNodeRpcClient = self.networking.connect_rpc(addr.as_peer_id()).await?;
+        sessions.insert(*addr, client.clone());
+
+        Ok(client)
     }
 }
