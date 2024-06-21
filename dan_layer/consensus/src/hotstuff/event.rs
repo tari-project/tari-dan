@@ -2,14 +2,22 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use tari_dan_common_types::NodeHeight;
-use tari_dan_storage::consensus_models::BlockId;
+use tari_dan_storage::consensus_models::{BlockId, LeafBlock};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum HotstuffEvent {
-    /// A block has been committed
+    #[error("Block {block_id} has been committed at height {height}")]
     BlockCommitted { block_id: BlockId, height: NodeHeight },
-    /// A critical failure occurred in consensus
+    #[error("Consensus failure: {message}")]
     Failure { message: String },
-    /// A leader has timed out
+    #[error("Leader timeout: new height {new_height}")]
     LeaderTimeout { new_height: NodeHeight },
+    #[error("Block {block} has been parked ({num_missing_txs} missing, {num_awaiting_txs} awaiting execution)")]
+    ProposedBlockParked {
+        block: LeafBlock,
+        num_missing_txs: usize,
+        num_awaiting_txs: usize,
+    },
+    #[error("Parked block {block} is ready")]
+    ParkedBlockReady { block: LeafBlock },
 }
