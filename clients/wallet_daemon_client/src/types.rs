@@ -29,10 +29,10 @@ use std::{collections::HashMap, time::Duration};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, SubstateAddress};
+use tari_dan_common_types::{substate_type::SubstateType, Epoch, SubstateAddress};
 use tari_dan_wallet_sdk::{
     apis::{confidential_transfer::ConfidentialTransferInputSelection, jwt::Claims, key_manager},
-    models::{Account, ConfidentialProofId, NonFungibleToken, SubstateType, TransactionStatus},
+    models::{Account, ConfidentialProofId, NonFungibleToken, TransactionStatus},
 };
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult},
@@ -1095,6 +1095,8 @@ pub struct SubstatesListRequest {
     #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     pub filter_by_template: Option<TemplateAddress>,
     pub filter_by_type: Option<SubstateType>,
+    pub limit: Option<u64>,
+    pub offset: Option<u64>
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
