@@ -28,7 +28,21 @@ use serde_json::json;
 use crate::{
     error::IndexerClientError,
     types::{
-        AddPeerRequest, AddPeerResponse, GetEpochManagerStatsResponse, GetNonFungiblesRequest, GetNonFungiblesResponse, GetSubstateRequest, GetSubstateResponse, GetTemplateDefinitionRequest, GetTemplateDefinitionResponse, GetTransactionResultRequest, GetTransactionResultResponse, ListSubstatesRequest, ListSubstatesResponse, SubmitTransactionRequest, SubmitTransactionResponse
+        AddPeerRequest,
+        AddPeerResponse,
+        GetEpochManagerStatsResponse,
+        GetNonFungiblesRequest,
+        GetNonFungiblesResponse,
+        GetSubstateRequest,
+        GetSubstateResponse,
+        GetTemplateDefinitionRequest,
+        GetTemplateDefinitionResponse,
+        GetTransactionResultRequest,
+        GetTransactionResultResponse,
+        ListSubstatesRequest,
+        ListSubstatesResponse,
+        SubmitTransactionRequest,
+        SubmitTransactionResponse,
     },
 };
 
@@ -69,7 +83,10 @@ impl IndexerJsonRpcClient {
         self.send_request("get_substate", req).await
     }
 
-    pub async fn list_substates(&mut self, req: ListSubstatesRequest) -> Result<ListSubstatesResponse, IndexerClientError> {
+    pub async fn list_substates(
+        &mut self,
+        req: ListSubstatesRequest,
+    ) -> Result<ListSubstatesResponse, IndexerClientError> {
         self.send_request("list_substates", req).await
     }
 

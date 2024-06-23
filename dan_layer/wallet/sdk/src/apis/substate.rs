@@ -4,7 +4,10 @@
 use std::collections::HashMap;
 
 use log::*;
-use tari_dan_common_types::{optional::{IsNotFoundError, Optional}, substate_type::SubstateType};
+use tari_dan_common_types::{
+    optional::{IsNotFoundError, Optional},
+    substate_type::SubstateType,
+};
 use tari_engine_types::{
     indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     substate::{SubstateId, SubstateValue},

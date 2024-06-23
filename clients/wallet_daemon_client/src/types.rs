@@ -1096,7 +1096,7 @@ pub struct SubstatesListRequest {
     pub filter_by_template: Option<TemplateAddress>,
     pub filter_by_type: Option<SubstateType>,
     pub limit: Option<u64>,
-    pub offset: Option<u64>
+    pub offset: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

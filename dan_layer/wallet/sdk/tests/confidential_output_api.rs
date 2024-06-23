@@ -269,4 +269,14 @@ impl WalletNetworkInterface for PanicIndexer {
     async fn fetch_template_definition(&self, _template_address: TemplateAddress) -> Result<TemplateDef, Self::Error> {
         panic!("PanicIndexer called")
     }
+
+    async fn list_substates(
+        &self,
+        _filter_by_template: Option<TemplateAddress>,
+        _filter_by_type: Option<tari_dan_common_types::substate_type::SubstateType>,
+        _limit: Option<u64>,
+        _offset: Option<u64>,
+    ) -> Result<tari_dan_wallet_sdk::network::SubstateListResult, Self::Error> {
+        panic!("PanicIndexer called")
+    }
 }

@@ -32,7 +32,7 @@ pub trait WalletNetworkInterface {
         filter_by_template: Option<TemplateAddress>,
         filter_by_type: Option<SubstateType>,
         limit: Option<u64>,
-        offset: Option<u64>
+        offset: Option<u64>,
     ) -> Result<SubstateListResult, Self::Error>;
 
     async fn submit_transaction(

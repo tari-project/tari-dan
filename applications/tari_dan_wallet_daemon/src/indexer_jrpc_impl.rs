@@ -7,14 +7,24 @@ use axum::async_trait;
 use reqwest::{IntoUrl, Url};
 use tari_dan_common_types::{optional::IsNotFoundError, substate_type::SubstateType};
 use tari_dan_wallet_sdk::network::{
-    SubstateListItem, SubstateListResult, SubstateQueryResult, TransactionFinalizedResult, TransactionQueryResult, WalletNetworkInterface
+    SubstateListItem,
+    SubstateListResult,
+    SubstateQueryResult,
+    TransactionFinalizedResult,
+    TransactionQueryResult,
+    WalletNetworkInterface,
 };
 use tari_engine_types::substate::SubstateId;
 use tari_indexer_client::{
     error::IndexerClientError,
     json_rpc_client::IndexerJsonRpcClient,
     types::{
-        GetSubstateRequest, GetTransactionResultRequest, IndexerTransactionFinalizedResult, ListSubstateItem, ListSubstatesRequest, SubmitTransactionRequest
+        GetSubstateRequest,
+        GetTransactionResultRequest,
+        IndexerTransactionFinalizedResult,
+        ListSubstateItem,
+        ListSubstatesRequest,
+        SubmitTransactionRequest,
     },
 };
 use tari_template_lib::models::TemplateAddress;
@@ -83,7 +93,7 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
         filter_by_template: Option<TemplateAddress>,
         filter_by_type: Option<SubstateType>,
         limit: Option<u64>,
-        offset: Option<u64>
+        offset: Option<u64>,
     ) -> Result<SubstateListResult, Self::Error> {
         let mut client = self.get_client()?;
         let result = client
@@ -94,10 +104,17 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
                 offset,
             })
             .await?;
-        let substates = result.substates
+        let substates = result
+            .substates
             .into_iter()
             .map(|s| {
-                let ListSubstateItem {substate_id, module_name, version, template_address, timestamp } = s;
+                let ListSubstateItem {
+                    substate_id,
+                    module_name,
+                    version,
+                    template_address,
+                    timestamp,
+                } = s;
                 SubstateListItem {
                     substate_id,
                     module_name,
