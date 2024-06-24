@@ -36,11 +36,7 @@ export default function Permissions(props: {
   optionalPermissions: TariPermission[];
   setOptionalPermissions: any;
 }) {
-  const {
-    requiredPermissions,
-    optionalPermissions,
-    setOptionalPermissions,
-  } = props;
+  const { requiredPermissions, optionalPermissions, setOptionalPermissions } = props;
   const [permissions, setPermissions] = useState(
     optionalPermissions.map((permission, index) => {
       return { id: index, name: permission.toString(), checked: true };
@@ -71,7 +67,7 @@ export default function Permissions(props: {
       <FormControl component="fieldset" variant="standard" style={{ width: "100%" }}>
         <Divider />
         <FormGroup>
-          {requiredPermissions.map((permission, i) =>
+          {requiredPermissions.map((permission, i) => (
             <React.Fragment key={i}>
               <FormControlLabel
                 control={<Switch checked={true} disabled={true} />}
@@ -81,11 +77,11 @@ export default function Permissions(props: {
                 className="permissions-switch"
               />
               <Divider />
-            </React.Fragment>,
-          )}
+            </React.Fragment>
+          ))}
         </FormGroup>
         <FormGroup>
-          {permissions.map(({ checked, name, id }, i) =>
+          {permissions.map(({ checked, name, id }, i) => (
             <React.Fragment key={i}>
               <FormControlLabel
                 control={<Switch checked={checked} onChange={() => handleChange(id)} name={name} value={name} />}
@@ -95,8 +91,8 @@ export default function Permissions(props: {
                 className="permissions-switch"
               />
               <Divider />
-            </React.Fragment>,
-          )}
+            </React.Fragment>
+          ))}
         </FormGroup>
         <FormHelperText style={{ marginBottom: "20px", marginTop: "20px" }}>
           You may be sharing sensitive information with this site. Approve or deny access above.

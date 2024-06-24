@@ -60,15 +60,8 @@ interface BalanceRowProps {
 }
 
 function BalanceRow(props: BalanceRowProps) {
-  const {
-    token_symbol,
-    resource_address,
-    resource_type,
-    balance,
-    confidential_balance,
-    vault_address,
-    onSendClicked,
-  } = props;
+  const { token_symbol, resource_address, resource_type, balance, confidential_balance, vault_address, onSendClicked } =
+    props;
   const { showBalance } = useAccountStore();
   return (
     <TableRow key={token_symbol || resource_address}>
@@ -79,11 +72,7 @@ function BalanceRow(props: BalanceRowProps) {
       <DataTableCell>{resource_type}</DataTableCell>
       <DataTableCell>{showBalance ? balance : "*************"}</DataTableCell>
       <DataTableCell>
-        <ConfidentialBalance
-          show={showBalance}
-          resourceType={resource_type}
-          balance={confidential_balance}
-        />
+        <ConfidentialBalance show={showBalance} resourceType={resource_type} balance={confidential_balance} />
       </DataTableCell>
       <DataTableCell>
         <Button variant="outlined" onClick={() => onSendClicked?.(resource_address, resource_type)}>
@@ -94,7 +83,7 @@ function BalanceRow(props: BalanceRowProps) {
   );
 }
 
-function ConfidentialBalance(props: { show: boolean, balance: number, resourceType: string }) {
+function ConfidentialBalance(props: { show: boolean; balance: number; resourceType: string }) {
   switch (props.resourceType) {
     case "Confidential":
       return <>{props.show ? props.balance : "**************"}</>;
@@ -125,15 +114,15 @@ function TabPanel(props: TabPanelProps) {
 
 function tabProps(index: number) {
   return {
-    id: `asset-tab-${index}`,
+    "id": `asset-tab-${index}`,
     "aria-controls": `asset-tabpanel-${index}`,
   };
 }
 
 function Assets({ accountName }: { accountName: string }) {
   const [resourceToSend, setResourceToSend] = useState<{
-    address: ResourceAddress,
-    resource_type: ResourceType
+    address: ResourceAddress;
+    resource_type: ResourceType;
   } | null>(null);
   const [value, setValue] = useState(0);
 

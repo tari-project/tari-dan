@@ -29,7 +29,7 @@ import MuiAccordionDetails from "@mui/material/AccordionDetails";
 export const Accordion = styled((props: AccordionProps) => (
   <MuiAccordion disableGutters elevation={0} square {...props} />
 ))(({ theme }) => ({
-  border: `2px solid ${theme.palette.background.paper}`,
+  "border": `2px solid ${theme.palette.background.paper}`,
   "&:not(:last-child)": {
     borderBottom: 0,
   },
@@ -41,8 +41,8 @@ export const Accordion = styled((props: AccordionProps) => (
 export const AccordionSummary = styled((props: AccordionSummaryProps) => (
   <MuiAccordionSummary expandIcon={<KeyboardArrowRightRoundedIcon />} {...props} />
 ))(({ theme }) => ({
-  backgroundColor: theme.palette.divider,
-  flexDirection: "row-reverse",
+  "backgroundColor": theme.palette.divider,
+  "flexDirection": "row-reverse",
   "& .MuiAccordionSummary-expandIconWrapper.Mui-expanded": {
     transform: "rotate(90deg)",
   },

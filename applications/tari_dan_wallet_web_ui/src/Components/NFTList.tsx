@@ -64,7 +64,6 @@ function displayNftId(nftId: NonFungibleId) {
     return `String:${nftId.String}`;
   }
 
-
   return JSON.stringify(nftId);
 }
 
@@ -76,12 +75,7 @@ export interface NftListProps {
 }
 
 export default function NFTList(props: NftListProps) {
-  const {
-    nftsListIsError,
-    nftsListIsFetching,
-    nftsListError,
-    nftsListData,
-  } = props;
+  const { nftsListIsError, nftsListIsFetching, nftsListError, nftsListData } = props;
   if (nftsListIsError || nftsListIsFetching) {
     <FetchStatusCheck
       isError={nftsListIsError}

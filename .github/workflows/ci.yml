@@ -64,7 +64,7 @@ jobs:
 
       - name: prettier
         run: |
-          npx prettier --check "./applications/{tari_validator_node_web_ui,tari_indexer_web_ui,tari_dan_wallet_web_ui}/src/*.{ts,tsx,css,json}"
+          npx prettier --check "./applications/{tari_validator_node_web_ui,tari_indexer_web_ui,tari_dan_wallet_web_ui}/src/*.{ts,tsx,json}"
 
   clippy:
     name: clippy

@@ -28,8 +28,8 @@ import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 
 export const AccordionIconButton = styled(IconButton)(({ theme }) => ({
-  backgroundColor: theme.palette.divider,
-  color: theme.palette.primary.main,
+  "backgroundColor": theme.palette.divider,
+  "color": theme.palette.primary.main,
   "&:hover": {
     backgroundColor: theme.palette.primary.main,
     color: "#fff",
