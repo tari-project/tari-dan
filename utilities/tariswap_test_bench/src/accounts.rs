@@ -49,11 +49,12 @@ impl Runner {
         account_key_indexes: RangeInclusive<u64>,
     ) -> anyhow::Result<Vec<Account>> {
         let key = self.sdk.key_manager_api().derive_key(TRANSACTION_BRANCH, 0)?;
-        let num_accounts = *account_key_indexes.end() as usize - *account_key_indexes.start() as usize + 1;
+        let key_index_start = *account_key_indexes.start();
+        let num_accounts = *account_key_indexes.end() as usize - key_index_start as usize + 1;
         let owners = account_key_indexes
             .map(|idx| {
                 let key = self.sdk.key_manager_api().derive_key(TRANSACTION_BRANCH, idx)?;
-                Ok(RistrettoPublicKey::from_secret_key(&key.key))
+                Ok(key)
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 
@@ -61,8 +62,8 @@ impl Runner {
             pay_fee_account.address.as_component_address().unwrap(),
             Amount(1000 * owners.len() as i64),
         );
-        for owner in owners {
-            builder = builder.create_account(owner);
+        for owner in &owners {
+            builder = builder.create_account(RistrettoPublicKey::from_secret_key(&owner.key));
         }
         let transaction = builder.sign(&key.key).build();
 
@@ -70,19 +71,23 @@ impl Runner {
         let diff = finalize.result.accept().unwrap();
         let mut accounts = Vec::with_capacity(num_accounts);
 
-        for (i, account) in diff
-            .up_iter()
-            .map(|(addr, _)| addr)
-            .filter(|addr| addr.is_component())
-            .enumerate()
-        {
-            if *account == pay_fee_account.address {
-                continue;
-            }
-            // TODO: Key index doesnt match
+        for owner in owners {
+            let account = diff
+                .up_iter()
+                .map(|(addr, _)| addr)
+                .filter(|addr| addr.is_component())
+                .filter(|addr| **addr != pay_fee_account.address)
+                .find(|addr| {
+                    new_account_address_from_parts(
+                        &ACCOUNT_TEMPLATE_ADDRESS,
+                        &RistrettoPublicKey::from_secret_key(&owner.key),
+                    ) == **addr
+                })
+                .expect("New account not found in diff");
+
             self.sdk
                 .accounts_api()
-                .add_account(None, account, i as u64 + 1, false)?;
+                .add_account(None, account, owner.key_index, false)?;
             let account = self.sdk.accounts_api().get_account_by_address(account)?;
             accounts.push(account);
         }

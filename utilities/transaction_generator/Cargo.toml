@@ -21,7 +21,9 @@ bytes = { workspace = true }
 clap = { version = "4.3.21", features = ["derive"] }
 rayon = { workspace = true }
 rand = { workspace = true }
+indexmap = { workspace = true }
 once_cell = { workspace = true, features = ["critical-section"] }
+serde = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = [
