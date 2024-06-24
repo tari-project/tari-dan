@@ -20,7 +20,10 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::TransactionId;
-use tokio::{sync::mpsc, time};
+use tokio::{
+    sync::{broadcast, mpsc},
+    time,
+};
 
 use super::config::HotstuffConfig;
 use crate::{
@@ -32,7 +35,7 @@ use crate::{
         check_quorum_certificate,
         check_signature,
     },
-    hotstuff::error::HotStuffError,
+    hotstuff::{error::HotStuffError, HotstuffEvent},
     messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage},
     traits::{ConsensusSpec, OutboundMessaging},
 };
@@ -52,6 +55,7 @@ pub struct OnInboundMessage<TConsensusSpec: ConsensusSpec> {
     tx_msg_ready: mpsc::UnboundedSender<(TConsensusSpec::Addr, HotstuffMessage)>,
     message_buffer: MessageBuffer<TConsensusSpec::Addr>,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
+    tx_events: broadcast::Sender<HotstuffEvent>,
 }
 
 impl<TConsensusSpec> OnInboundMessage<TConsensusSpec>
@@ -66,6 +70,7 @@ where TConsensusSpec: ConsensusSpec
         vote_signing_service: TConsensusSpec::SignatureService,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
+        tx_events: broadcast::Sender<HotstuffEvent>,
     ) -> Self {
         let (tx_msg_ready, rx_msg_ready) = mpsc::unbounded_channel();
         Self {
@@ -79,6 +84,7 @@ where TConsensusSpec: ConsensusSpec
             tx_msg_ready,
             message_buffer: MessageBuffer::new(rx_msg_ready),
             transaction_pool,
+            tx_events,
         }
     }
 
@@ -223,6 +229,10 @@ where TConsensusSpec: ConsensusSpec
                 .get_validator_node_by_public_key(unparked_block.epoch(), unparked_block.proposed_by())
                 .await?;
 
+            let _ignore = self.tx_events.send(HotstuffEvent::ParkedBlockReady {
+                block: unparked_block.as_leaf_block(),
+            });
+
             self.report_message_ready(
                 vn.address,
                 HotstuffMessage::Proposal(ProposalMessage { block: unparked_block }),
@@ -249,6 +259,12 @@ where TConsensusSpec: ConsensusSpec
                 target: LOG_TARGET,
                 "🔥 Block {} has {} missing transactions and {} awaiting execution", block, missing_tx_ids.len(), awaiting_execution.len(),
             );
+
+            let _ignore = self.tx_events.send(HotstuffEvent::ProposedBlockParked {
+                block: block.as_leaf_block(),
+                num_missing_txs: missing_tx_ids.len(),
+                num_awaiting_txs: awaiting_execution.len(),
+            });
 
             if !missing_tx_ids.is_empty() {
                 let block_id = *block.id();

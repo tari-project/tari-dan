@@ -162,8 +162,8 @@ impl Test {
             match event {
                 HotstuffEvent::BlockCommitted { block_id, height } => return (address, block_id, height),
                 HotstuffEvent::Failure { message } => panic!("[{}] Consensus failure: {}", address, message),
-                HotstuffEvent::LeaderTimeout { new_height } => {
-                    log::info!("[{address}] Leader timeout. New height {new_height}");
+                other => {
+                    log::info!("[{}] Ignoring event: {:?}", address, other);
                     continue;
                 },
             }

@@ -77,18 +77,18 @@ impl EventManager {
         version: u64,
         timestamp: u64,
     ) -> Result<(), anyhow::Error> {
-        let mut tx = self.substate_store.create_write_tx()?;
-        let new_event = NewEvent {
-            substate_id: Some(substate_id.to_string()),
-            template_address: template_address.to_string(),
-            tx_hash: tx_hash.to_string(),
-            topic,
-            payload: payload.to_json().expect("Failed to convert to JSON"),
-            version: version as i32,
-            timestamp: timestamp as i64,
-        };
-        tx.save_event(new_event)?;
-        tx.commit()?;
+        self.substate_store.with_write_tx(|tx| {
+            let new_event = NewEvent {
+                substate_id: Some(substate_id.to_string()),
+                template_address: template_address.to_string(),
+                tx_hash: tx_hash.to_string(),
+                topic,
+                payload: payload.to_json().expect("Failed to convert to JSON"),
+                version: version as i32,
+                timestamp: timestamp as i64,
+            };
+            tx.save_event(new_event)
+        })?;
         Ok(())
     }
 
