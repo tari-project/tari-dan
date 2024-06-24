@@ -351,7 +351,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             block.update_nodes(
                 tx,
                 |_, _, _| Ok(()),
-                |tx, _last_executed, block| {
+                |tx, _last_executed,_, block| {
                     debug!(target: LOG_TARGET, "Sync is committing block {}", block);
                     Self::commit_block(tx,  block, pending_state_updates)?;
                     block.as_last_executed().set(tx)?;

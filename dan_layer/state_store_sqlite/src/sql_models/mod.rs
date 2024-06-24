@@ -4,6 +4,7 @@
 mod block;
 mod block_diff;
 mod bookkeeping;
+mod epoch_checkpoint;
 mod leaf_block;
 mod pending_state_tree_diff;
 mod quorum_certificate;
@@ -17,6 +18,7 @@ mod vote;
 pub use block::*;
 pub use block_diff::*;
 pub use bookkeeping::*;
+pub use epoch_checkpoint::*;
 pub use leaf_block::*;
 pub use pending_state_tree_diff::*;
 pub use quorum_certificate::*;

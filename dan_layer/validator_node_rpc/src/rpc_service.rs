@@ -42,4 +42,16 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
         &self,
         request: Request<proto::GetHighQcRequest>,
     ) -> Result<Response<proto::GetHighQcResponse>, RpcStatus>;
+
+    #[rpc(method = 7)]
+    async fn get_checkpoint(
+        &self,
+        request: Request<proto::GetCheckpointRequest>,
+    ) -> Result<Response<proto::GetCheckpointResponse>, RpcStatus>;
+
+    #[rpc(method = 8)]
+    async fn sync_state(
+        &self,
+        request: Request<proto::SyncStateRequest>,
+    ) -> Result<Streaming<proto::SyncStateResponse>, RpcStatus>;
 }

@@ -36,6 +36,7 @@ use tari_dan_storage::{
         BlockDiff,
         BlockId,
         Command,
+        EpochCheckpoint,
         ForeignProposal,
         ForeignProposalState,
         ForeignReceiveCounters,
@@ -1924,6 +1925,21 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             })?;
 
         diffs.into_iter().map(TryInto::try_into).collect()
+    }
+
+    fn epoch_checkpoints_get_by_epoch(&self, epoch: Epoch) -> Result<EpochCheckpoint, StorageError> {
+        use crate::schema::epoch_checkpoints;
+
+        let checkpoint = epoch_checkpoints::table
+            .filter(epoch_checkpoints::epoch.eq(epoch.as_u64() as i64))
+            .order_by(epoch_checkpoints::id.desc())
+            .first::<sql_models::EpochCheckpoint>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "epoch_checkpoints_get_by_epoch",
+                source: e,
+            })?;
+
+        checkpoint.try_into()
     }
 }
 

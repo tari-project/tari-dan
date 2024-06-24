@@ -161,15 +161,6 @@ message GetVirtualSubstateResponse {
   repeated tari.dan.consensus.QuorumCertificate quorum_certificates = 2;
 }
 
-message SyncStateRequest {
-  bytes start_block_id = 1;
-  uint64 end_epoch = 2;
-}
-
-message SyncStateResponse {
-  SubstateUpdate update = 1;
-}
-
 message SubstateCreatedProof {
   SubstateData substate = 1;
   tari.dan.consensus.QuorumCertificate created_justify = 2;
@@ -224,4 +215,27 @@ message GetHighQcRequest {}
 
 message GetHighQcResponse {
   tari.dan.consensus.QuorumCertificate high_qc = 1;
+}
+
+message GetCheckpointRequest {
+  uint64 epoch = 1;
+}
+
+message GetCheckpointResponse {
+  EpochCheckpoint checkpoint = 1;
+}
+
+message EpochCheckpoint {
+  uint64 shard = 1;
+  tari.dan.consensus.Block block = 2;
+  repeated QuorumCertificates qcs = 3;
+  bytes state_root = 4;
+}
+
+message SyncStateRequest {
+  uint64 end_epoch = 1;
+}
+
+message SyncStateResponse {
+  SubstateUpdate update = 1;
 }

@@ -28,6 +28,8 @@ use tari_dan_common_types::{optional::Optional, PeerAddress, SubstateAddress};
 use tari_dan_p2p::{
     proto,
     proto::rpc::{
+        GetCheckpointRequest,
+        GetCheckpointResponse,
         GetHighQcRequest,
         GetHighQcResponse,
         GetSubstateRequest,
@@ -38,12 +40,11 @@ use tari_dan_p2p::{
         SubstateStatus,
         SyncBlocksRequest,
         SyncBlocksResponse,
+        SyncStateRequest,
+        SyncStateResponse,
     },
 };
-use tari_dan_storage::{
-    consensus_models::{Block, BlockId, HighQc, LockedBlock, QuorumCertificate, SubstateRecord, TransactionRecord},
-    StateStore,
-};
+use tari_dan_storage::{consensus_models::{Block, BlockId, HighQc, LockedBlock, QuorumCertificate, SubstateRecord, TransactionRecord}, StateStore, StorageError};
 use tari_engine_types::virtual_substate::VirtualSubstateId;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_rpc_framework::{Request, Response, RpcStatus, Streaming};
@@ -51,6 +52,7 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::rpc_service::ValidatorNodeRpcService;
 use tokio::{sync::mpsc, task};
+use tari_dan_storage::consensus_models::EpochCheckpoint;
 
 use crate::{
     p2p::{rpc::sync_task::BlockSyncTask, services::mempool::MempoolHandle},
@@ -301,5 +303,31 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         Ok(Response::new(GetHighQcResponse {
             high_qc: Some((&high_qc).into()),
         }))
+    }
+
+    async fn get_checkpoint(
+        &self,
+        request: Request<GetCheckpointRequest>,
+    ) -> Result<Response<GetCheckpointResponse>, RpcStatus> {
+        let (checkpoint, block,qcs) = self.shard_state_store.with_read_tx(|tx| {
+            let checkpoint = EpochCheckpoint::get_for_epoch(tx, request.epoch.into())?;
+            let block = checkpoint.get_block(tx)?;
+            let qcs = checkpoint.get_qcs(tx)?;
+            Ok::<_, StorageError>((checkpoint, block, qcs))
+        })?;
+
+
+        Ok(Response::new(GetCheckpointResponse {
+            checkpoint: Some(proto::rpc::EpochCheckpoint {
+                shard: checkpoint.shard().as_u32(),
+                block: Some(block.into()),
+                qcs: qcs.into_iter().map(|qc| qc.into()).collect(),
+                state_root: checkpoint.state_root().as_slice().to_vec(),
+            })
+        })
+    }
+
+    async fn sync_state(&self, _request: Request<SyncStateRequest>) -> Result<Streaming<SyncStateResponse>, RpcStatus> {
+        todo!()
     }
 }

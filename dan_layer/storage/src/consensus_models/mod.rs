@@ -4,6 +4,7 @@
 mod block;
 mod block_diff;
 mod command;
+mod epoch_checkpoint;
 mod executed_transaction;
 mod foreign_proposal;
 mod foreign_receive_counters;
@@ -33,6 +34,7 @@ mod vote_signature;
 pub use block::*;
 pub use block_diff::*;
 pub use command::*;
+pub use epoch_checkpoint::*;
 pub use executed_transaction::*;
 pub use foreign_proposal::*;
 pub use foreign_receive_counters::*;

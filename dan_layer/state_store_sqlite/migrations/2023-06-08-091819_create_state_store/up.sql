@@ -351,6 +351,19 @@ CREATE TABLE pending_state_tree_diffs
 
 CREATE UNIQUE INDEX pending_state_tree_diffs_uniq_idx_block_id on pending_state_tree_diffs (block_id);
 
+-- Epoch checkpoint
+-- End-of-epoch checkpoint data
+create table epoch_checkpoints
+(
+    id         integer   not null primary key AUTOINCREMENT,
+    epoch      bigint    not null,
+    shard      int       not null,
+    block_id   text      not null,
+    state_hash text      not null,
+    qcs        text      not null,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+);
 
 -- Debug Triggers
 CREATE TABLE transaction_pool_history

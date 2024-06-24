@@ -17,6 +17,7 @@ use tari_dan_storage::{
         BlockId,
         Command,
         Decision,
+        EpochCheckpoint,
         EpochEvent,
         ExecutedTransaction,
         ForeignProposal,
@@ -25,6 +26,7 @@ use tari_dan_storage::{
         LastVoted,
         LockedBlock,
         PendingStateTreeDiff,
+        QuorumCertificate,
         QuorumDecision,
         SubstateLockFlag,
         TransactionAtom,
@@ -140,8 +142,9 @@ where TConsensusSpec: ConsensusSpec
                         locked_blocks.push(block.clone());
                         self.on_lock_block(tx, locked, block)
                     },
-                    |tx, last_exec, commit_block| {
-                        let committed = self.on_commit(tx, last_exec, commit_block, &local_committee_shard)?;
+                    |tx, last_exec, three_chain, commit_block| {
+                        let committed =
+                            self.on_commit(tx, last_exec, commit_block, three_chain, &local_committee_shard)?;
                         if !committed.is_empty() {
                             finalized_transactions.push(committed);
                         }
@@ -990,9 +993,10 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         last_executed: &LastExecuted,
         block: &Block,
+        three_chain: &[BlockId; 3],
         local_committee_info: &CommitteeInfo,
     ) -> Result<Vec<TransactionAtom>, HotStuffError> {
-        let committed_transactions = self.execute(tx, block, local_committee_info)?;
+        let committed_transactions = self.execute(tx, block, three_chain, local_committee_info)?;
         debug!(
             target: LOG_TARGET,
             "✅ COMMIT block {}, last executed height = {}",
@@ -1080,12 +1084,32 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
+        three_chain: &[BlockId; 3],
         local_committee_info: &CommitteeInfo,
     ) -> Result<Vec<TransactionAtom>, HotStuffError> {
         // Nothing to do here for empty dummy blocks
         if block.is_dummy() {
             block.commit_diff(tx, BlockDiff::empty(*block.id()))?;
             return Ok(vec![]);
+        }
+
+        if block.is_epoch_end() {
+            // Add checkpoint for this chain
+            // Get the QC that justifies the commit block (this block)
+            debug_assert_eq!(*block.id(), three_chain[0], "Block and chain[0] should be the same");
+            let qc1 = QuorumCertificate::get_by_block_id(&**tx, &three_chain[0])?;
+            // The rest of the 3-chain. The block that justifies the block that justified the commit block and so on
+            let qc2 = QuorumCertificate::get_by_block_id(&**tx, &three_chain[1])?;
+            let qc3 = QuorumCertificate::get_by_block_id(&**tx, &three_chain[2])?;
+
+            EpochCheckpoint::new(
+                *block.id(),
+                block.epoch(),
+                local_committee_info.shard(),
+                *block.merkle_root(),
+                [*qc1.id(), *qc2.id(), *qc3.id()],
+            )
+            .insert(tx)?;
         }
 
         let diff = block.get_diff(&**tx)?;

@@ -780,7 +780,7 @@ impl Block {
         TTx: StateStoreWriteTransaction + Deref + ?Sized,
         TTx::Target: StateStoreReadTransaction,
         TFnOnLock: FnMut(&mut TTx, &LockedBlock, &Block) -> Result<(), E>,
-        TFnOnCommit: FnMut(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
+        TFnOnCommit: FnMut(&mut TTx, &LastExecuted, &[BlockId; 3], &Block) -> Result<(), E>,
         E: From<StorageError>,
     {
         let high_qc = self.justify().update_high_qc(tx)?;
@@ -818,9 +818,10 @@ impl Block {
 
             // Commit prepare_node (b)
             if !prepare_node.is_genesis() {
+                let three_chain = [*prepare_node, precommit_node.id, commit_node.id];
                 let prepare_node = Block::get(&**tx, prepare_node)?;
                 let last_executed = LastExecuted::get(&**tx)?;
-                on_commit_block_recurse(tx, &last_executed, &prepare_node, &mut on_commit)?;
+                on_commit_block_recurse(tx, &last_executed, &prepare_node, &three_chain, &mut on_commit)?;
                 prepare_node.as_last_executed().set(tx)?;
             }
         } else {
@@ -1006,19 +1007,20 @@ fn on_commit_block_recurse<TTx, F, E>(
     tx: &mut TTx,
     last_executed: &LastExecuted,
     block: &Block,
+    three_chain: &[BlockId; 3],
     callback: &mut F,
 ) -> Result<(), E>
 where
     TTx: StateStoreWriteTransaction + Deref + ?Sized,
     TTx::Target: StateStoreReadTransaction,
     E: From<StorageError>,
-    F: FnMut(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
+    F: FnMut(&mut TTx, &LastExecuted, &[BlockId; 3], &Block) -> Result<(), E>,
 {
     if last_executed.height < block.height() {
         let parent = block.get_parent(&**tx)?;
         // Recurse to "catch up" any parent parent blocks we may not have executed
-        on_commit_block_recurse(tx, last_executed, &parent, callback)?;
-        callback(tx, last_executed, block)?;
+        on_commit_block_recurse(tx, last_executed, &parent, three_chain, callback)?;
+        callback(tx, last_executed, three_chain, block)?;
     }
     Ok(())
 }

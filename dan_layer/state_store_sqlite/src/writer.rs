@@ -20,6 +20,7 @@ use tari_dan_storage::{
         BlockDiff,
         BlockId,
         Decision,
+        EpochCheckpoint,
         Evidence,
         ExecutedTransaction,
         ForeignProposal,
@@ -1413,6 +1414,28 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
 
         Ok(())
     }
+
+    fn epoch_checkpoint_insert(&mut self, epoch_checkpoint: &EpochCheckpoint) -> Result<(), StorageError> {
+        use crate::schema::epoch_checkpoints;
+
+        let insert = (
+            epoch_checkpoints::block_id.eq(serialize_hex(epoch_checkpoint.block_id())),
+            epoch_checkpoints::state_hash.eq(serialize_hex(epoch_checkpoint.state_root())),
+            epoch_checkpoints::qcs.eq(serialize_json(epoch_checkpoint.qcs())?),
+            epoch_checkpoints::shard.eq(epoch_checkpoint.shard().as_u32() as i32),
+            epoch_checkpoints::epoch.eq(epoch_checkpoint.epoch().as_u64() as i64),
+        );
+
+        diesel::insert_into(epoch_checkpoints::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "epoch_checkpoint_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
 }
 
 impl<'a, TAddr> Deref for SqliteStateStoreWriteTransaction<'a, TAddr> {
@@ -1422,12 +1445,6 @@ impl<'a, TAddr> Deref for SqliteStateStoreWriteTransaction<'a, TAddr> {
         self.transaction.as_ref().unwrap()
     }
 }
-
-// impl<'a, TAddr> DerefMut for SqliteStateStoreWriteTransaction<'a, TAddr> {
-//     fn deref_mut(&mut self) -> &mut Self::Target {
-//         self.transaction.as_mut().unwrap()
-//     }
-// }
 
 impl<TAddr> Drop for SqliteStateStoreWriteTransaction<'_, TAddr> {
     fn drop(&mut self) {

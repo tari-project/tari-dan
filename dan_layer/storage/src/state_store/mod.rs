@@ -23,6 +23,7 @@ use crate::{
         BlockDiff,
         BlockId,
         Decision,
+        EpochCheckpoint,
         Evidence,
         ForeignProposal,
         ForeignReceiveCounters,
@@ -268,6 +269,7 @@ pub trait StateStoreReadTransaction: Sized {
         &self,
         block_id: &BlockId,
     ) -> Result<Vec<PendingStateTreeDiff>, StorageError>;
+    fn epoch_checkpoints_get_by_epoch(&self, epoch: Epoch) -> Result<EpochCheckpoint, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -413,6 +415,9 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         block_id: &BlockId,
     ) -> Result<PendingStateTreeDiff, StorageError>;
+
+    //---------------------------------- EpochCheckpoint --------------------------------------------//
+    fn epoch_checkpoint_insert(&mut self, epoch_checkpoint: &EpochCheckpoint) -> Result<(), StorageError>;
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
