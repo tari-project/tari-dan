@@ -38,11 +38,11 @@ use diesel::{
 };
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use log::*;
-use tari_dan_common_types::{shard::Shard, Epoch};
+use tari_dan_common_types::{shard::Shard, substate_type::SubstateType, Epoch};
 use tari_dan_storage::{consensus_models::BlockId, StorageError};
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
 use tari_engine_types::substate::SubstateId;
-use tari_indexer_client::types::{ListSubstateItem, SubstateType};
+use tari_indexer_client::types::ListSubstateItem;
 use tari_template_lib::models::TemplateAddress;
 use tari_transaction::TransactionId;
 use thiserror::Error;

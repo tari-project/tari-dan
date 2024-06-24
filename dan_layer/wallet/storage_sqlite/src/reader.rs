@@ -18,6 +18,7 @@ use diesel::{
 use log::error;
 use serde::de::DeserializeOwned;
 use tari_common_types::types::Commitment;
+use tari_dan_common_types::substate_type::SubstateType;
 use tari_dan_wallet_sdk::{
     models::{
         Account,
@@ -27,7 +28,6 @@ use tari_dan_wallet_sdk::{
         NonFungibleToken,
         OutputStatus,
         SubstateModel,
-        SubstateType,
         TransactionStatus,
         VaultModel,
         WalletTransaction,

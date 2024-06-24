@@ -9,7 +9,7 @@ use serde_json::Value as JsonValue;
 use serde_with::{serde_as, DisplayFromStr};
 use tari_base_node_client::types::BaseLayerValidatorNode;
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{substate_type::SubstateType, Epoch};
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
@@ -21,36 +21,6 @@ use tari_template_abi::TemplateDef;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(ts_rs::TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
-)]
-pub enum SubstateType {
-    Component,
-    Resource,
-    Vault,
-    UnclaimedConfidentialOutput,
-    NonFungible,
-    TransactionReceipt,
-    FeeClaim,
-}
-
-impl SubstateType {
-    pub fn as_prefix_str(&self) -> &str {
-        match self {
-            SubstateType::Component => "component",
-            SubstateType::Resource => "resource",
-            SubstateType::Vault => "vault",
-            SubstateType::UnclaimedConfidentialOutput => "commitment",
-            SubstateType::NonFungible => "nft",
-            SubstateType::TransactionReceipt => "txreceipt",
-            SubstateType::FeeClaim => "feeclaim",
-        }
-    }
-}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(

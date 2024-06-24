@@ -5,8 +5,10 @@ use std::sync::{Arc, Mutex};
 
 use axum::async_trait;
 use reqwest::{IntoUrl, Url};
-use tari_dan_common_types::optional::IsNotFoundError;
+use tari_dan_common_types::{optional::IsNotFoundError, substate_type::SubstateType};
 use tari_dan_wallet_sdk::network::{
+    SubstateListItem,
+    SubstateListResult,
     SubstateQueryResult,
     TransactionFinalizedResult,
     TransactionQueryResult,
@@ -20,6 +22,8 @@ use tari_indexer_client::{
         GetSubstateRequest,
         GetTransactionResultRequest,
         IndexerTransactionFinalizedResult,
+        ListSubstateItem,
+        ListSubstatesRequest,
         SubmitTransactionRequest,
     },
 };
@@ -82,6 +86,45 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
             substate: result.substate,
             created_by_transaction: result.created_by_transaction,
         })
+    }
+
+    async fn list_substates(
+        &self,
+        filter_by_template: Option<TemplateAddress>,
+        filter_by_type: Option<SubstateType>,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> Result<SubstateListResult, Self::Error> {
+        let mut client = self.get_client()?;
+        let result = client
+            .list_substates(ListSubstatesRequest {
+                filter_by_template,
+                filter_by_type,
+                limit,
+                offset,
+            })
+            .await?;
+        let substates = result
+            .substates
+            .into_iter()
+            .map(|s| {
+                let ListSubstateItem {
+                    substate_id,
+                    module_name,
+                    version,
+                    template_address,
+                    timestamp,
+                } = s;
+                SubstateListItem {
+                    substate_id,
+                    module_name,
+                    version,
+                    template_address,
+                    timestamp,
+                }
+            })
+            .collect();
+        Ok(SubstateListResult { substates })
     }
 
     async fn submit_transaction(

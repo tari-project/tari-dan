@@ -27,6 +27,8 @@ pub mod services;
 mod substate_address;
 pub use substate_address::SubstateAddress;
 
+pub mod substate_type;
+
 mod peer_address;
 pub use peer_address::*;
 pub mod uint;
