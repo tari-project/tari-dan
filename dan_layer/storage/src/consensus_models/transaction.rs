@@ -133,16 +133,19 @@ impl TransactionRecord {
             if d.is_commit() {
                 self.result
             } else {
+                let finalize_result = self.result.map(|r| r.finalize);
                 Some(ExecuteResult {
-                    finalize: FinalizeResult::new_rejected(
-                        self.transaction.id().into_array().into(),
-                        RejectReason::ShardRejected(format!(
-                            "Validators decided to abort: {}",
-                            self.abort_details
-                                .as_deref()
-                                .unwrap_or("<invalid state, no abort details>")
-                        )),
-                    ),
+                    finalize: finalize_result.unwrap_or_else(|| {
+                        FinalizeResult::new_rejected(
+                            self.transaction.id().into_array().into(),
+                            RejectReason::ShardRejected(format!(
+                                "Validators decided to abort: {}",
+                                self.abort_details
+                                    .as_deref()
+                                    .unwrap_or("<invalid state, no abort details>")
+                            )),
+                        )
+                    }),
                 })
             }
         })
