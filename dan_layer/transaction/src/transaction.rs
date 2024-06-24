@@ -134,6 +134,16 @@ impl Transaction {
         (self.transaction.fee_instructions, self.transaction.instructions)
     }
 
+    pub fn into_parts(
+        self,
+    ) -> (
+        UnsignedTransaction,
+        Vec<TransactionSignature>,
+        IndexSet<VersionedSubstateId>,
+    ) {
+        (self.transaction, self.signatures, self.filled_inputs)
+    }
+
     pub fn all_inputs_iter(&self) -> impl Iterator<Item = SubstateRequirement> + '_ {
         self.inputs()
             .iter()

@@ -336,6 +336,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 let executed = ExecutedTransaction::try_from(transaction)?;
                 self.transaction_pool.insert(tx, executed.to_atom())?;
             } else {
+                debug!(
+                    target: LOG_TARGET,
+                    "🔥 New transaction {tx_id} is deferred (not executed yet)",
+                );
                 // Deferred execution
                 self.transaction_pool
                     .insert(tx, TransactionAtom::deferred(*transaction.id()))?;
@@ -345,7 +349,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
         debug!(
             target: LOG_TARGET,
-            "🔥 new transaction ready for consensus: {} ({} pending, exists = {})",
+            "🔥 new transaction ready for consensus: {} ({} pending, already exists = {})",
             tx_id,
             num_pending_txs,
             exists

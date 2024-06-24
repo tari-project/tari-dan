@@ -536,7 +536,7 @@ where TConsensusSpec: ConsensusSpec
                                     tx_rec.transaction_id(),
                                     err
                                 );
-                                let _err = err.ok_or_storage_error()?;
+                                let _err = err.ok_or_fatal_error()?;
                                 return Ok(proposed_block_change_set.no_vote());
                             }
                         }
@@ -843,7 +843,7 @@ where TConsensusSpec: ConsensusSpec
                                     tx_rec.transaction_id(),
                                     err
                                 );
-                                let _err = err.ok_or_storage_error()?;
+                                let _err = err.ok_or_fatal_error()?;
                                 return Ok(proposed_block_change_set.no_vote());
                             }
                         }
@@ -953,7 +953,7 @@ where TConsensusSpec: ConsensusSpec
                 .map(|id| VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockFlag::Output)),
         );
         if let Err(err) = store.try_lock_all(*transaction_execution.transaction_id(), objects, is_local_only) {
-            let err = err.ok_or_storage_error()?;
+            let err = err.ok_or_fatal_error()?;
             warn!(
                 target: LOG_TARGET,
                 "❌ Failed to lock inputs/outputs for transaction {} because {err}", transaction_execution.transaction_id()
