@@ -172,27 +172,23 @@ function ExtraInfoVN({name, url, setRow, addTxToPool, autoRefresh, state, horizo
         return (<>
                 <hr/>
                 <h3>Pool transaction</h3>
-                <div style={{
-                    display: "grid",
-                    gridAutoFlow: horizontal ? "column" : "row",
-                    gridTemplateRows: horizontal ? "auto auto auto auto auto" : "auto",
-                    gridTemplateColumns: horizontal ? "auto" : "auto auto auto auto auto",
-                }}>
-                    <b>Tx Id</b>
-                    <b>Ready</b>
-                    <b>Local_Decision</b>
-                    <b>Remote_Decision</b>
-                    <b>Stage</b>
-                    {pool.map((tx) => (
-                        <>
-                            <div
-                                onClick={() => copyToClipboard(tx.transaction.id)}>{copied && "Copied" || shorten(tx.transaction.id)}</div>
-                            <div>{tx.is_ready && "Yes" || "No"}</div>
-                            <div>{tx.local_decision || "_"}</div>
-                            <div>{tx.remote_decision || "_"}</div>
-                            <div>{tx.stage}</div>
-                        </>))}
-                </div>
+                <table style={{
+                    width: "100%"}}>
+                <tr>
+                    <td>Tx Id</td>
+                    <td>Ready</td>
+                    <td>Decision</td>
+                    <td>Stage</td>
+                    </tr>
+                    {pool.map(({atom}, i) => (
+                        <tr key={i}>
+                            <td
+                                onClick={() => copyToClipboard(atom.id)}>{copied && "Copied" || shorten(atom.id)}</td>
+                            <td>{atom.is_ready && "Yes" || "No"}</td>
+                            <td>{atom.decision || "_"}</td>
+                            <td>{atom.stage}</td>
+                        </tr>))}
+                </table>
             </>
         );
     };
@@ -302,7 +298,7 @@ function ShowInfo(params: any) {
     };
 
     const handleDeleteData = () => {
-        console.log("Sorry not implemented");
+        jsonRpc("delete_data", {name}).then(onReload);
     };
 
 

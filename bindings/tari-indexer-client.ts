@@ -21,7 +21,6 @@ export * from "./src/types/tari-indexer-client/GetNonFungibleCountRequest";
 export * from "./src/types/tari-indexer-client/GetTransactionResultRequest";
 export * from "./src/types/tari-indexer-client/GetRelatedTransactionsResponse";
 export * from "./src/types/tari-indexer-client/GetNonFungiblesResponse";
-export * from "./src/types/tari-indexer-client/SubstateType";
 export * from "./src/types/tari-indexer-client/GetRelatedTransactionsRequest";
 export * from "./src/types/tari-indexer-client/GetEpochManagerStatsResponse";
 export * from "./src/types/tari-indexer-client/AddPeerRequest";

@@ -10,6 +10,7 @@ use std::{
 };
 
 use anyhow::anyhow;
+use log::info;
 use tari_common::configuration::Network;
 use tokio::{
     fs,
@@ -297,6 +298,26 @@ impl InstanceManager {
             .ok_or_else(|| anyhow!("Instance not found"))?;
 
         instance.terminate().await?;
+        Ok(())
+    }
+
+    pub async fn delete_instance_data(&mut self, id: InstanceId) -> anyhow::Result<()> {
+        let instance = self
+            .instances_mut()
+            .find(|i| i.id() == id)
+            .ok_or_else(|| anyhow!("Instance not found"))?;
+
+        let definition = get_definition(instance.instance_type());
+
+        if let Some(data_path) = definition.get_relative_data_path() {
+            let path = instance.base_path().join(data_path);
+            info!(
+                "Deleting data directory for instance {}: {}",
+                instance.name(),
+                path.display()
+            );
+            fs::remove_dir_all(path).await?;
+        }
         Ok(())
     }
 

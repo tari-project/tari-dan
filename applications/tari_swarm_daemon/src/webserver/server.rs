@@ -110,6 +110,7 @@ async fn json_rpc_handler(Extension(context): Extension<Arc<HandlerContext>>, va
         "start" => call_handler(context, value, rpc::instances::start).await,
         "stop" => call_handler(context, value, rpc::instances::stop).await,
         "list_instances" => call_handler(context, value, rpc::instances::list).await,
+        "delete_data" => call_handler(context, value, rpc::instances::delete_data).await,
         _ => Ok(value.method_not_found(&value.method)),
     }
 }

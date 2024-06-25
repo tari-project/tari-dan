@@ -4,7 +4,10 @@
 use std::collections::HashMap;
 
 use log::*;
-use tari_dan_common_types::optional::{IsNotFoundError, Optional};
+use tari_dan_common_types::{
+    optional::{IsNotFoundError, Optional},
+    substate_type::SubstateType,
+};
 use tari_engine_types::{
     indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     substate::{SubstateId, SubstateValue},
@@ -14,7 +17,7 @@ use tari_engine_types::{
 use tari_transaction::TransactionId;
 
 use crate::{
-    models::{SubstateModel, SubstateType, VersionedSubstateId},
+    models::{SubstateModel, VersionedSubstateId},
     network::WalletNetworkInterface,
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };

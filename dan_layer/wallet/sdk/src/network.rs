@@ -6,6 +6,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tari_dan_common_types::substate_type::SubstateType;
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
@@ -25,6 +26,14 @@ pub trait WalletNetworkInterface {
         version: Option<u32>,
         local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error>;
+
+    async fn list_substates(
+        &self,
+        filter_by_template: Option<TemplateAddress>,
+        filter_by_type: Option<SubstateType>,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> Result<SubstateListResult, Self::Error>;
 
     async fn submit_transaction(
         &self,
@@ -52,6 +61,20 @@ pub struct SubstateQueryResult {
     pub version: u32,
     pub substate: Substate,
     pub created_by_transaction: TransactionId,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SubstateListResult {
+    pub substates: Vec<SubstateListItem>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SubstateListItem {
+    pub substate_id: SubstateId,
+    pub module_name: Option<String>,
+    pub version: u32,
+    pub template_address: Option<TemplateAddress>,
+    pub timestamp: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

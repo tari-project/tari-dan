@@ -104,3 +104,35 @@ pub async fn list(context: &HandlerContext, req: ListInstancesRequest) -> Result
         instances: instances.into_iter().map(Into::into).collect(),
     })
 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DeleteInstanceDataRequest {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DeleteInstanceDataResponse {
+    pub success: bool,
+}
+
+pub async fn delete_data(
+    context: &HandlerContext,
+    req: DeleteInstanceDataRequest,
+) -> Result<DeleteInstanceDataResponse, anyhow::Error> {
+    let instance = context
+        .process_manager()
+        .get_instance_by_name(req.name)
+        .await?
+        .ok_or_else(|| {
+            JsonRpcError::new(
+                JsonRpcErrorReason::ApplicationError(404),
+                "Instance not found".to_string(),
+                serde_json::Value::Null,
+            )
+        })?;
+
+    context.process_manager().stop_instance(instance.id).await?;
+    context.process_manager().delete_instance_data(instance.id).await?;
+
+    Ok(DeleteInstanceDataResponse { success: true })
+}

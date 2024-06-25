@@ -47,19 +47,22 @@ pub async fn handle_list(
     let sdk = context.wallet_sdk().clone();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::SubstatesRead])?;
 
-    // TODO: pagination
-    let substates =
-        sdk.substate_api()
-            .list_substates(req.filter_by_type, req.filter_by_template.as_ref(), None, None)?;
+    let result = sdk
+        .get_network_interface()
+        .list_substates(req.filter_by_template, req.filter_by_type, req.limit, req.offset)
+        .await?;
 
-    let substates = substates
+    let substates = result
+        .substates
         .into_iter()
-        .map(|substate| WalletSubstateRecord {
-            substate_id: substate.address.substate_id,
-            parent_id: substate.parent_address,
-            version: substate.address.version,
-            template_address: substate.template_address,
-            module_name: substate.module_name,
+        // TODO: should also add the "timestamp" and "type" fields from the indexer list items?
+        .map(|s| WalletSubstateRecord {
+            substate_id: s.substate_id,
+            // TODO: should we remove the "parent_id" field from the wallet API? is it really needed somewhere?
+            parent_id: None,
+            version: s.version,
+            template_address: s.template_address,
+            module_name: s.module_name,
         })
         .collect();
 

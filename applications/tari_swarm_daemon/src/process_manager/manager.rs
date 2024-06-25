@@ -150,6 +150,12 @@ impl ProcessManager {
                     log::warn!("Request cancelled before response could be sent")
                 }
             },
+            DeleteInstanceData { instance_id, reply } => {
+                let result = self.instance_manager.delete_instance_data(instance_id).await;
+                if reply.send(result).is_err() {
+                    log::warn!("Request cancelled before response could be sent")
+                }
+            },
             MineBlocks { blocks, reply } => {
                 let result = self.mine(blocks).await;
                 if reply.send(result).is_err() {
