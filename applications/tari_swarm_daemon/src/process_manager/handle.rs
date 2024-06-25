@@ -33,6 +33,10 @@ pub enum ProcessManagerRequest {
         instance_id: InstanceId,
         reply: Reply<()>,
     },
+    DeleteInstanceData {
+        instance_id: InstanceId,
+        reply: Reply<()>,
+    },
     MineBlocks {
         blocks: u64,
         reply: Reply<()>,
@@ -192,6 +196,18 @@ impl ProcessManagerHandle {
         let (tx_reply, rx_reply) = oneshot::channel();
         self.tx_request
             .send(ProcessManagerRequest::StopInstance {
+                instance_id,
+                reply: tx_reply,
+            })
+            .await?;
+
+        rx_reply.await?
+    }
+
+    pub async fn delete_instance_data(&self, instance_id: InstanceId) -> anyhow::Result<()> {
+        let (tx_reply, rx_reply) = oneshot::channel();
+        self.tx_request
+            .send(ProcessManagerRequest::DeleteInstanceData {
                 instance_id,
                 reply: tx_reply,
             })
