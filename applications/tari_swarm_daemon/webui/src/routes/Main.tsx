@@ -172,12 +172,13 @@ function ExtraInfoVN({name, url, setRow, addTxToPool, autoRefresh, state, horizo
         return (<>
                 <hr/>
                 <h3>Pool transaction</h3>
-                <table style={{width: "100%"}}>
-                    <tr>
-                        <td>Tx Id</td>
-                        <td>Ready</td>
-                        <td>Decision</td>
-                        <td>Stage</td>
+                <table style={{
+                    width: "100%"}}>
+                <tr>
+                    <td>Tx Id</td>
+                    <td>Ready</td>
+                    <td>Decision</td>
+                    <td>Stage</td>
                     </tr>
                     {pool.map(({atom}, i) => (
                         <tr key={i}>

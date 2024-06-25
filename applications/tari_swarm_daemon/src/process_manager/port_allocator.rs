@@ -52,6 +52,10 @@ impl AllocatedPorts {
         self.ports[name]
     }
 
+    pub fn into_ports(self) -> HashMap<&'static str, u16> {
+        self.ports
+    }
+
     pub async fn get_or_next_port(&mut self, name: &'static str) -> u16 {
         if let Some(port) = self.ports.get(name) {
             return *port;
