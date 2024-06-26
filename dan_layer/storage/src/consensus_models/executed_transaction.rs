@@ -12,7 +12,7 @@ use std::{
 use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{optional::Optional, SubstateAddress};
-use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
+use tari_engine_types::commit_result::ExecuteResult;
 use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
 
 use crate::{
@@ -128,24 +128,7 @@ impl ExecutedTransaction {
     }
 
     pub fn into_final_result(self) -> Option<ExecuteResult> {
-        self.final_decision().map(|d| {
-            if d.is_commit() {
-                self.result
-            } else {
-                // TODO: We preserve the original result mainly for debugging purposes, but this is a little hacky
-                ExecuteResult {
-                    finalize: FinalizeResult::new_rejected(
-                        self.result.finalize.transaction_hash,
-                        RejectReason::ShardRejected(format!(
-                            "Validators decided to abort: {}",
-                            self.abort_details
-                                .as_deref()
-                                .unwrap_or("<invalid state, no abort details>")
-                        )),
-                    ),
-                }
-            }
-        })
+        TransactionRecord::from(self).into_final_result()
     }
 
     pub fn into_result(self) -> ExecuteResult {

@@ -131,9 +131,14 @@ impl TransactionRecord {
         //       result. These results are independent of each other.
         self.final_decision().and_then(|d| {
             if d.is_commit() {
+                // Is is expected that the result is ACCEPT.
+                // TODO: Handle (elsewhere) the edge-case where our execution failed but the committee decided to COMMIT
+                // (fetch the state transitions from a peer)
                 self.result
             } else {
-                let finalize_result = self.result.map(|r| r.finalize);
+                // Only use rejected results for the transaction. If execution ACCEPTed but the final decision is ABORT,
+                // then use abort_details (which should have been set in this case).
+                let finalize_result = self.result.map(|r| r.finalize).filter(|f| !f.result.is_accept());
                 Some(ExecuteResult {
                     finalize: finalize_result.unwrap_or_else(|| {
                         FinalizeResult::new_rejected(
