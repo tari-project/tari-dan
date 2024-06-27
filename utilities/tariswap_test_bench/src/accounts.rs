@@ -78,7 +78,7 @@ impl Runner {
                 .filter(|addr| addr.is_component())
                 .filter(|addr| **addr != pay_fee_account.address)
                 .find(|addr| {
-                    new_account_address_from_parts(
+                    new_component_address_from_public_key(
                         &ACCOUNT_TEMPLATE_ADDRESS,
                         &RistrettoPublicKey::from_secret_key(&owner.key),
                     ) == **addr
