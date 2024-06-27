@@ -12,7 +12,7 @@ async fn create_miner(world: &mut TariWorld, miner_name: String, bn_name: String
 }
 
 #[when(expr = "miner {word} mines {int} new blocks")]
-async fn miner_mines_new_blocks(world: &mut TariWorld, miner_name: String, num_blocks: u64) {
+pub async fn miner_mines_new_blocks(world: &mut TariWorld, miner_name: String, num_blocks: u64) {
     let bn = world
         .base_nodes
         .values()

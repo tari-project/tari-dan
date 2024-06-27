@@ -17,7 +17,14 @@ impl Validator<Transaction> for TransactionSignatureValidator {
     type Error = MempoolError;
 
     async fn validate(&self, transaction: &Transaction) -> Result<(), MempoolError> {
-        if !transaction.signature().verify(&transaction.into()) {
+        if transaction.signatures().is_empty() {
+            warn!(target: LOG_TARGET, "TransactionSignatureValidator - FAIL: No signatures");
+            return Err(MempoolError::TransactionNotSigned {
+                transaction_id: *transaction.id(),
+            });
+        }
+
+        if !transaction.verify_all_signatures() {
             warn!(target: LOG_TARGET, "TransactionSignatureValidator - FAIL: Invalid signature");
             return Err(MempoolError::InvalidSignature);
         }

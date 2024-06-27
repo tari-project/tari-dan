@@ -92,8 +92,8 @@ impl TryFrom<proto::common::SignatureAndPublicKey> for TransactionSignature {
     }
 }
 
-impl From<TransactionSignature> for proto::common::SignatureAndPublicKey {
-    fn from(value: TransactionSignature) -> Self {
+impl From<&TransactionSignature> for proto::common::SignatureAndPublicKey {
+    fn from(value: &TransactionSignature) -> Self {
         Self {
             public_nonce: value.signature().get_public_nonce().to_vec(),
             signature: value.signature().get_signature().to_vec(),

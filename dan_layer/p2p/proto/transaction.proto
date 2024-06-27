@@ -18,14 +18,18 @@ message CommitmentSignature {
   bytes signature_v = 3;
 }
 
-message Transaction {
+message UnsignedTransaction {
   repeated Instruction fee_instructions = 1;
   repeated Instruction instructions = 2;
-  tari.dan.common.SignatureAndPublicKey signature = 3;
-  repeated SubstateRequirement inputs = 4;
-  repeated VersionedSubstateId filled_inputs = 5;
-  tari.dan.common.Epoch min_epoch = 6;
-  tari.dan.common.Epoch max_epoch = 7;
+  repeated SubstateRequirement inputs = 3;
+  tari.dan.common.Epoch min_epoch = 4;
+  tari.dan.common.Epoch max_epoch = 5;
+}
+
+message Transaction {
+  UnsignedTransaction transaction = 1;
+  repeated tari.dan.common.SignatureAndPublicKey signatures = 2;
+  repeated VersionedSubstateId filled_inputs = 3;
 }
 
 message Instruction {

@@ -44,7 +44,7 @@ use tari_template_lib::{
         ViewableBalanceProof,
     },
 };
-use tari_transaction::{SubstateRequirement, Transaction, VersionedSubstateId};
+use tari_transaction::{SubstateRequirement, Transaction, UnsignedTransaction, VersionedSubstateId};
 
 use crate::{
     proto::{
@@ -89,6 +89,49 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
     type Error = anyhow::Error;
 
     fn try_from(request: proto::transaction::Transaction) -> Result<Self, Self::Error> {
+        let signatures = request
+            .signatures
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
+        let filled_inputs = request
+            .filled_inputs
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
+        let transaction = Transaction::new(
+            request
+                .transaction
+                .map(TryInto::try_into)
+                .transpose()?
+                .ok_or_else(|| anyhow!("Unsigned transaction not provided"))?,
+            signatures,
+        )
+        .with_filled_inputs(filled_inputs);
+
+        Ok(transaction)
+    }
+}
+
+impl From<&Transaction> for proto::transaction::Transaction {
+    fn from(transaction: &Transaction) -> Self {
+        let signatures = transaction.signatures().iter().map(Into::into).collect();
+        let filled_inputs = transaction.filled_inputs().iter().map(Into::into).collect();
+
+        proto::transaction::Transaction {
+            transaction: Some(transaction.unsigned_transaction().into()),
+            signatures,
+            filled_inputs,
+        }
+    }
+}
+
+//---------------------------------- UnsignedTransaction --------------------------------------------//
+
+impl TryFrom<proto::transaction::UnsignedTransaction> for UnsignedTransaction {
+    type Error = anyhow::Error;
+
+    fn try_from(request: proto::transaction::UnsignedTransaction) -> Result<Self, Self::Error> {
         let instructions = request
             .instructions
             .into_iter()
@@ -99,62 +142,45 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
-        let signature = request
-            .signature
-            .ok_or_else(|| anyhow!("invalid signature"))?
-            .try_into()?;
         let inputs = request
             .inputs
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
-        let filled_inputs = request
-            .filled_inputs
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, _>>()?;
         let min_epoch = request.min_epoch.map(|epoch| Epoch(epoch.epoch));
         let max_epoch = request.max_epoch.map(|epoch| Epoch(epoch.epoch));
-        let transaction = Transaction::new(
+        Ok(Self {
             fee_instructions,
             instructions,
-            signature,
             inputs,
-            filled_inputs,
             min_epoch,
             max_epoch,
-        );
-
-        Ok(transaction)
+        })
     }
 }
 
-impl From<&Transaction> for proto::transaction::Transaction {
-    fn from(transaction: &Transaction) -> Self {
-        let signature = transaction.signature().clone().into();
+impl From<&UnsignedTransaction> for proto::transaction::UnsignedTransaction {
+    fn from(transaction: &UnsignedTransaction) -> Self {
         let inputs = transaction.inputs().iter().map(Into::into).collect();
-        let filled_inputs = transaction.filled_inputs().iter().map(Into::into).collect();
-        let fee_instructions = transaction.fee_instructions().to_vec();
-        let instructions = transaction.instructions().to_vec();
         let min_epoch = transaction
             .min_epoch()
             .map(|epoch| proto::common::Epoch { epoch: epoch.0 });
         let max_epoch = transaction
             .max_epoch()
             .map(|epoch| proto::common::Epoch { epoch: epoch.0 });
-        let fee_instructions = fee_instructions.into_iter().map(Into::into).collect();
-        let instructions = instructions.into_iter().map(Into::into).collect();
-        proto::transaction::Transaction {
+        let fee_instructions = transaction.fee_instructions().iter().cloned().map(Into::into).collect();
+        let instructions = transaction.instructions().iter().cloned().map(Into::into).collect();
+
+        proto::transaction::UnsignedTransaction {
             fee_instructions,
             instructions,
-            signature: Some(signature),
             inputs,
-            filled_inputs,
             min_epoch,
             max_epoch,
         }
     }
 }
+
 // -------------------------------- Instruction -------------------------------- //
 
 impl TryFrom<proto::transaction::Instruction> for Instruction {

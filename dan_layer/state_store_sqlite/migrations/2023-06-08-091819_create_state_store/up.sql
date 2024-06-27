@@ -203,7 +203,7 @@ create table transactions
     transaction_id    text      not null,
     fee_instructions  text      not NULL,
     instructions      text      not NULL,
-    signature         text      not NULL,
+    signatures        text      not NULL,
     inputs            text      not NULL,
     filled_inputs     text      not NULL,
     resolved_inputs   text      NULL,

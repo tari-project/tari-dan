@@ -17,7 +17,7 @@ use tari_engine_types::{
 };
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
 use tari_indexer_lib::{error::IndexerError, substate_cache::SubstateCache, substate_scanner::SubstateScanner};
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory};
 
 use crate::{
@@ -241,7 +241,7 @@ where
         transaction: &Transaction,
         current_epoch: Epoch,
     ) -> Result<VirtualSubstates, Self::Error> {
-        let claim_instructions = transaction
+        let claim_epoch_and_public_key = transaction
             .instructions()
             .iter()
             .chain(transaction.fee_instructions())
@@ -264,7 +264,7 @@ where
             VirtualSubstate::CurrentEpoch(current_epoch.as_u64()),
         );
 
-        if claim_instructions.is_empty() {
+        if claim_epoch_and_public_key.is_empty() {
             return Ok(virtual_substates);
         }
 
@@ -272,21 +272,25 @@ where
         #[allow(clippy::mutable_key_type)]
         let validators = self
             .epoch_manager
-            .get_many_validator_nodes(claim_instructions.clone())
+            .get_many_validator_nodes(claim_epoch_and_public_key.clone())
             .await?;
 
-        let signer = transaction.signer_public_key();
-        if let Some(vn) = validators.values().find(|vn| vn.fee_claim_public_key != *signer) {
+        if let Some(vn) = validators.values().find(|vn| {
+            transaction
+                .signatures()
+                .iter()
+                .all(|sig| vn.fee_claim_public_key != *sig.public_key())
+        }) {
             return Err(SubstateResolverError::UnauthorizedFeeClaim {
                 validator_address: vn.address.to_string(),
-                signer: signer.to_string(),
+                transaction_id: *transaction.id(),
             });
         }
 
         // Partition the claim instructions into local and remote claims
         let mut local_claim_vns = Vec::new();
         let mut remote_claim_vns = Vec::new();
-        claim_instructions.into_iter().for_each(|(epoch, public_key)| {
+        claim_epoch_and_public_key.into_iter().for_each(|(epoch, public_key)| {
             let vn = validators.get(&(epoch, public_key.clone())).unwrap();
             if local_committee_shard.includes_substate_address(&vn.shard_key) {
                 local_claim_vns.push((epoch, public_key))
@@ -320,8 +324,11 @@ pub enum SubstateResolverError {
     VirtualSubstateError(#[from] VirtualSubstateError),
     #[error("Epoch manager error: {0}")]
     EpochManagerError(#[from] EpochManagerError),
-    #[error("Unauthorized fee claim: validator node {validator_address} (transaction signed by: {signer})")]
-    UnauthorizedFeeClaim { validator_address: String, signer: String },
+    #[error("Unauthorized fee claim: validator node {validator_address} (transaction: {transaction_id})")]
+    UnauthorizedFeeClaim {
+        validator_address: String,
+        transaction_id: TransactionId,
+    },
     #[error("State store error: {0}")]
     StateStorageError(#[from] StateStoreError),
 }

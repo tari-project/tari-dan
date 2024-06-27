@@ -84,6 +84,17 @@ async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: Str
     spawn_indexer(world, indexer_name, bn_name).await;
 }
 
+#[given(expr = "an indexer {word} connected to a base node")]
+async fn start_indexer_connected_to_a_base_node(world: &mut TariWorld, indexer_name: String) {
+    let bn_name = world
+        .base_nodes
+        .keys()
+        .next()
+        .cloned()
+        .expect("no base nodes have been started");
+    spawn_indexer(world, indexer_name, bn_name).await;
+}
+
 #[given(expr = "{word} indexer GraphQL request works")]
 async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
     let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();

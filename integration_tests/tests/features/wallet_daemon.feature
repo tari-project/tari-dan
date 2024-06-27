@@ -133,30 +133,16 @@ Feature: Wallet Daemon
   @serial
   Scenario: Create and mint account NFT
     Given fees are disabled
-        # Initialize a base node, wallet, miner and VN
-    Given a base node BASE
-    Given a wallet WALLET connected to base node BASE
-    Given a miner MINER connected to base node BASE and wallet WALLET
+    # Initialize a base node, wallet, miner and VN
+    Given a network with registered validator VAL_1 and wallet daemon WALLET_D
 
-        # Initialize a VN
-    Given a validator node VAL_1 connected to base node BASE and wallet daemon WALLET_D
+    # Initialize an indexer
+    Given an indexer IDX connected to base node NETWORK_BASE
 
-        # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 6 new blocks
-    When wallet WALLET has at least 20000000 uT
-
-        # VN registration
-    When validator node VAL_1 sends a registration transaction to base wallet WALLET
-    When miner MINER mines 16 new blocks
-    Then the validator node VAL_1 is listed as registered
-
-        # Initialize an indexer
-    Given an indexer IDX connected to base node BASE
-
-        # Initialize the wallet daemon
+    # Initialize the wallet daemon
     Given a wallet daemon WALLET_D connected to indexer IDX
 
-        # Create two accounts to test sending the tokens
+    # Create two accounts to test sending the tokens
     When I create an account ACC via the wallet daemon WALLET_D with 10000 free coins
 
         # Mint a new account NFT

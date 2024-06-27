@@ -313,7 +313,7 @@ diesel::table! {
         transaction_id -> Text,
         fee_instructions -> Text,
         instructions -> Text,
-        signature -> Text,
+        signatures -> Text,
         inputs -> Text,
         filled_inputs -> Text,
         resolved_inputs -> Nullable<Text>,
