@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use tari_bor::decode_exact;
 use tari_dan_engine::state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError};
 use tari_engine_types::{
     component::ComponentHeader,
@@ -39,9 +40,23 @@ impl ReadOnlyStateStore {
         Ok(IndexedValue::from_value(component.into_state()).unwrap())
     }
 
+    pub fn count(&self) -> Result<usize, StateStoreError> {
+        let tx = self.store.read_access()?;
+        let count = tx.iter_raw().count();
+        Ok(count)
+    }
+
     pub fn get_substate(&self, address: &SubstateId) -> Result<Substate, StateStoreError> {
         let tx = self.store.read_access()?;
         let substate = tx.get_state::<_, Substate>(address)?;
         Ok(substate)
+    }
+
+    pub fn with_substates<F>(&self, mut f: F) -> Result<(), StateStoreError>
+    where F: FnMut(Substate) {
+        let tx = self.store.read_access()?;
+        tx.iter_raw()
+            .for_each(|(_, substate)| f(decode_exact(substate).unwrap()));
+        Ok(())
     }
 }

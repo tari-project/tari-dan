@@ -150,7 +150,9 @@ impl WasmProcess {
                 env.state().interface().consensus_invoke(arg.action)
             }),
             EngineOp::CallerContextInvoke => Self::handle(env, arg, |env, arg: CallerContextInvokeArg| {
-                env.state().interface().caller_context_invoke(arg.action)
+                env.state()
+                    .interface()
+                    .caller_context_invoke(arg.action, arg.args.into())
             }),
             EngineOp::GenerateRandomInvoke => Self::handle(env, arg, |env, arg: GenerateRandomInvokeArg| {
                 env.state().interface().generate_random_invoke(arg.action)

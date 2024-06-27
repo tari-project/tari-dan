@@ -471,11 +471,16 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         self.tracker.lock_substate(&SubstateId::Component(*address), lock_flag)
     }
 
-    fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError> {
+    fn caller_context_invoke(
+        &self,
+        action: CallerContextAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError> {
         self.invoke_modules_on_runtime_call("caller_context_invoke")?;
 
         match action {
             CallerContextAction::GetCallerPublicKey => {
+                args.assert_no_args("CallerContextAction::GetCallerPublicKey")?;
                 let sender_public_key =
                     RistrettoPublicKeyBytes::from_bytes(self.transaction_signer_public_key.as_bytes()).expect(
                         "RistrettoPublicKeyBytes::from_bytes should be infallible when called with RistrettoPublicKey \
@@ -485,6 +490,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 Ok(InvokeResult::encode(&sender_public_key)?)
             },
             CallerContextAction::GetComponentAddress => self.tracker.read_with(|state| {
+                args.assert_no_args("CallerContextAction::GetComponentAddress")?;
                 let call_frame = state.current_call_scope()?;
                 let maybe_address = call_frame
                     .get_current_component_lock()
@@ -492,8 +498,22 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 Ok(InvokeResult::encode(&maybe_address)?)
             }),
             CallerContextAction::AllocateNewComponentAddress => self.tracker.write_with(|state| {
+                let public_key_address: Option<RistrettoPublicKeyBytes> = args.assert_one_arg()?;
+                let public_key_address = public_key_address
+                    .map(|pk| {
+                        RistrettoPublicKey::from_canonical_bytes(pk.as_bytes()).map_err(|_| {
+                            RuntimeError::InvalidArgument {
+                                argument: "public_key_address",
+                                reason: "Invalid RistrettoPublicKeyBytes".to_string(),
+                            }
+                        })
+                    })
+                    .transpose()?;
+
                 let (template, _) = state.current_template()?;
-                let address = state.id_provider()?.new_component_address(*template, None)?;
+                let address = state
+                    .id_provider()?
+                    .new_component_address(*template, public_key_address)?;
                 let allocation = state.new_address_allocation(address)?;
                 Ok(InvokeResult::encode(&allocation)?)
             }),
@@ -525,13 +545,18 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
         match action {
             ComponentAction::Create => {
-                let arg: CreateComponentArg = args.assert_one_arg()?;
+                let CreateComponentArg {
+                    encoded_state,
+                    owner_rule,
+                    access_rules,
+                    address_allocation,
+                } = args.assert_one_arg()?;
 
                 let template_addr = self.tracker.get_template_address()?;
                 let template_def = self.get_template_def(&template_addr)?;
-                validate_component_access_rule_methods(&arg.access_rules, &template_def)?;
+                validate_component_access_rule_methods(&access_rules, &template_def)?;
 
-                let owner_key = match arg.owner_rule {
+                let owner_key = match owner_rule {
                     OwnerRule::OwnedBySigner => {
                         Some(to_ristretto_public_key_bytes(&self.transaction_signer_public_key))
                     },
@@ -541,11 +566,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 };
 
                 let component_address = self.tracker.new_component(
-                    arg.encoded_state,
+                    encoded_state,
                     owner_key,
-                    arg.owner_rule,
-                    arg.access_rules,
-                    arg.address_allocation,
+                    owner_rule,
+                    access_rules,
+                    address_allocation,
                 )?;
                 Ok(InvokeResult::encode(&component_address)?)
             },

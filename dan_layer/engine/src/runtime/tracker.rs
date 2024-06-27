@@ -166,9 +166,7 @@ impl StateTracker {
                     addr.try_into()
                         .map_err(|address| RuntimeError::AddressAllocationTypeMismatch { address })?
                 },
-                None => state
-                    .id_provider()?
-                    .new_component_address(template_address, owner_key)?,
+                None => state.id_provider()?.new_component_address(template_address, None)?,
             };
 
             let component = ComponentBody { state: component_state };

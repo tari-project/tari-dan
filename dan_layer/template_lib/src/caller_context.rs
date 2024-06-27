@@ -19,6 +19,7 @@ impl CallerContext {
     pub fn transaction_signer_public_key() -> RistrettoPublicKeyBytes {
         let resp: InvokeResult = call_engine(EngineOp::CallerContextInvoke, &CallerContextInvokeArg {
             action: CallerContextAction::GetCallerPublicKey,
+            args: invoke_args![],
         });
 
         resp.decode().expect("Failed to decode PublicKey")
@@ -29,6 +30,7 @@ impl CallerContext {
     pub fn current_component_address() -> ComponentAddress {
         let resp: InvokeResult = call_engine(EngineOp::CallerContextInvoke, &CallerContextInvokeArg {
             action: CallerContextAction::GetComponentAddress,
+            args: invoke_args![],
         });
 
         resp.decode::<Option<ComponentAddress>>()
@@ -36,9 +38,12 @@ impl CallerContext {
             .expect("Not in a component instance context")
     }
 
-    pub fn allocate_component_address() -> AddressAllocation<ComponentAddress> {
+    pub fn allocate_component_address(
+        public_key_address: Option<RistrettoPublicKeyBytes>,
+    ) -> AddressAllocation<ComponentAddress> {
         let resp: InvokeResult = call_engine(EngineOp::CallerContextInvoke, &CallerContextInvokeArg {
             action: CallerContextAction::AllocateNewComponentAddress,
+            args: invoke_args![public_key_address],
         });
 
         resp.decode()
