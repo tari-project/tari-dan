@@ -21,6 +21,7 @@ use tari_dan_storage::{
         BlockId,
         Decision,
         Evidence,
+        ExecutedTransaction,
         ForeignProposal,
         ForeignReceiveCounters,
         ForeignSendCounters,
@@ -741,8 +742,22 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let changes = transactions
             .into_iter()
             .map(|atom| {
-                // TODO(perf): n calls, 2n queries, query is slow
-                let exec = self.transaction_executions_get_pending_for_block(&atom.id, &block_id)?;
+                // TODO(perf): 2n queries, query is slow
+                let exec = self
+                    .transaction_executions_get_pending_for_block(&atom.id, &block_id)
+                    .optional()?;
+
+                let exec = match exec {
+                    Some(exec) => exec,
+                    None => {
+                        // Executed in the mempool.
+                        // TODO: this is kinda hacky. Either the mempool should add a block_id=null execution or we
+                        // should remove mempool execution
+                        let transaction = self.transactions_get(&atom.id)?;
+                        let executed = ExecutedTransaction::try_from(transaction)?;
+                        executed.into_execution_for_block(block_id)
+                    },
+                };
 
                 Ok((
                     transactions::transaction_id.eq(serialize_hex(atom.id())),

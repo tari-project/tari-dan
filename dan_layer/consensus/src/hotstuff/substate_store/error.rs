@@ -5,6 +5,8 @@ use tari_dan_common_types::{optional::IsNotFoundError, SubstateAddress};
 use tari_dan_storage::{consensus_models::SubstateLockFlag, StorageError};
 use tari_transaction::VersionedSubstateId;
 
+use crate::hotstuff::HotStuffError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum SubstateStoreError {
     #[error("Substate {address} not found")]
@@ -53,17 +55,11 @@ impl IsNotFoundError for SubstateStoreError {
 }
 
 impl SubstateStoreError {
-    pub fn ok_or_storage_error(self) -> Result<Self, StorageError> {
+    pub fn ok_or_fatal_error(self) -> Result<Self, HotStuffError> {
         match self {
-            SubstateStoreError::StoreError(err) => Err(err),
+            SubstateStoreError::StoreError(err) => Err(err.into()),
+            SubstateStoreError::StateTreeError(err) => Err(err.into()),
             other => Ok(other),
-        }
-    }
-
-    pub fn into_storage_error(self) -> Option<StorageError> {
-        match self {
-            SubstateStoreError::StoreError(err) => Some(err),
-            _ => None,
         }
     }
 }

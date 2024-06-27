@@ -68,7 +68,7 @@ export default function SendMoney() {
 export interface SendMoneyDialogProps {
   open: boolean;
   resource_address?: ResourceAddress;
-  resource_type?: ResourceType,
+  resource_type?: ResourceType;
   onSendComplete?: () => void;
   handleClose: () => void;
 }
@@ -181,7 +181,10 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
                 title: "Fee estimate failed",
                 error: true,
                 // TODO: fix this
-                message: JSON.stringify(unionGet(result.result.result, "Reject" as keyof TransactionResult) || unionGet(result.result.result, "AcceptFeeRejectRest" as keyof TransactionResult)?.[1]),
+                message: JSON.stringify(
+                  unionGet(result.result.result, "Reject" as keyof TransactionResult) ||
+                    unionGet(result.result.result, "AcceptFeeRejectRest" as keyof TransactionResult)?.[1],
+                ),
               });
               return;
             }
@@ -274,18 +277,10 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
                 value={transferFormState.inputSelection}
                 onChange={setSelectFormValue}
               >
-                <MenuItem value="PreferRevealed">
-                  Spend revealed funds first, then confidential
-                </MenuItem>
-                <MenuItem value="PreferConfidential">
-                  Spend confidential funds first, then revealed
-                </MenuItem>
-                <MenuItem value="ConfidentialOnly">
-                  Only spend confidential funds
-                </MenuItem>
-                <MenuItem value="RevealedOnly">
-                  Only spend revealed funds
-                </MenuItem>
+                <MenuItem value="PreferRevealed">Spend revealed funds first, then confidential</MenuItem>
+                <MenuItem value="PreferConfidential">Spend confidential funds first, then revealed</MenuItem>
+                <MenuItem value="ConfidentialOnly">Only spend confidential funds</MenuItem>
+                <MenuItem value="RevealedOnly">Only spend revealed funds</MenuItem>
               </Select>
             </>
           )}
@@ -325,7 +320,6 @@ export function SendMoneyDialog(props: SendMoneyDialogProps) {
     </Dialog>
   );
 }
-
 
 function unionGet<T extends object>(object: T, key: keyof T): T[keyof T] | null {
   return key in object ? object[key] : null;

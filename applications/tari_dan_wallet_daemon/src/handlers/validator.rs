@@ -108,18 +108,17 @@ pub async fn handle_claim_validator_fees(
 
     let finalized = wait_for_result(&mut events, tx_id).await?;
 
-    if let Some(reject) = finalized.finalize.result.reject() {
+    if let Some(reject) = finalized.finalize.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
-    if let Some(reason) = finalized.finalize.reject() {
+    if let Some(reason) = finalized.finalize.full_reject() {
         return Err(anyhow::anyhow!(
-            "Fee transaction succeeded (fees charged) however the transaction failed: {}",
-            reason
+            "Fee transaction succeeded (fees charged) however the transaction failed: {reason}",
         ));
     }
     info!(
         target: LOG_TARGET,
-        "✅ Transfer transaction {} finalized. Fee: {}",
+        "✅ Claim fee transaction {} finalized. Fee: {}",
         finalized.transaction_id,
         finalized.final_fee
     );

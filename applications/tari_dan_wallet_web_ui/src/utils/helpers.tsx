@@ -121,7 +121,11 @@ export function emptyRows(
   return page > 0 ? Math.max(0, (1 + page) * rowsPerPage - array.length) : 0;
 }
 
-export function handleChangePage(event: unknown, newPage: number, setPage: React.Dispatch<React.SetStateAction<number>>) {
+export function handleChangePage(
+  event: unknown,
+  newPage: number,
+  setPage: React.Dispatch<React.SetStateAction<number>>,
+) {
   setPage(newPage);
 }
 
@@ -133,4 +137,3 @@ export function handleChangeRowsPerPage(
   setRowsPerPage(parseInt(event.target.value, 10));
   setPage(0);
 }
-

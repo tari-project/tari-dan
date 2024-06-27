@@ -62,7 +62,7 @@ use crate::{
     },
 };
 
-const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_locally";
+const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_local_propose";
 
 pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     network: Network,
@@ -367,7 +367,7 @@ where TConsensusSpec: ConsensusSpec
                         .iter()
                         .map(|id| VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockFlag::Output)),
                 );
-                if let Err(err) = substate_store.try_lock_all(*transaction.id(), objects, false) {
+                if let Err(err) = substate_store.try_lock_all(*transaction.id(), objects, true) {
                     warn!(
                         target: LOG_TARGET,
                         "🔒 Transaction {} cannot be locked for LocalOnly: {}. Proposing to ABORT...",
@@ -375,7 +375,7 @@ where TConsensusSpec: ConsensusSpec
                         err,
                     );
                     // Only error if it is not related to lock errors
-                    let _err = err.ok_or_storage_error()?;
+                    let _err = err.ok_or_fatal_error()?;
                     // If the transaction does not lock, we propose to abort it
                     return Ok(Some(Command::LocalOnly(tx_atom.abort())));
                 }
@@ -416,7 +416,7 @@ where TConsensusSpec: ConsensusSpec
                             err,
                         );
                         // Only error if it is not related to lock errors
-                        let _err = err.ok_or_storage_error()?;
+                        let _err = err.ok_or_fatal_error()?;
                         // If the transaction does not lock, we should propose to abort it
                         return Ok(Some(Command::Prepare(tx_rec.get_local_transaction_atom().abort())));
                     }

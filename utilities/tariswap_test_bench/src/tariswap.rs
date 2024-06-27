@@ -52,18 +52,25 @@ impl Runner {
     pub async fn add_liquidity(
         &mut self,
         tariswaps: &[TariSwap],
+        primary_account: &Account,
         accounts: &[Account],
         amount_a: Amount,
         amount_b: Amount,
         faucet: &Faucet,
     ) -> anyhow::Result<()> {
-        let key = self.sdk.key_manager_api().derive_key(TRANSACTION_BRANCH, 0)?;
-
+        let primary_account_key = self
+            .sdk
+            .key_manager_api()
+            .derive_key(TRANSACTION_BRANCH, primary_account.key_index)?;
         let mut tx_ids = vec![];
         // Batch these otherwise we can break consensus (proposed with locked object)
         for i in 0..5 {
             for (i, tariswap) in tariswaps.iter().enumerate().skip(i * 200).take(200) {
                 let account = &accounts[i % accounts.len()];
+                let key = self
+                    .sdk
+                    .key_manager_api()
+                    .derive_key(TRANSACTION_BRANCH, account.key_index)?;
                 let transaction = Transaction::builder()
                     .with_inputs(vec![
                         SubstateRequirement::new(faucet.resource_address.into(), Some(0)),
@@ -87,6 +94,7 @@ impl Runner {
                     .call_method(account.address.as_component_address().unwrap(), "deposit", args![
                         Workspace("lp")
                     ])
+                    .sign(&primary_account_key.key)
                     .sign(&key.key)
                     .build();
 
@@ -102,21 +110,30 @@ impl Runner {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     pub async fn do_tariswap_swaps(
         &mut self,
         tariswaps: &[TariSwap],
+        primary_account: &Account,
         accounts: &[Account],
         amount_a_for_b: Amount,
         amount_b_for_a: Amount,
         faucet: &Faucet,
     ) -> anyhow::Result<()> {
-        let key = self.sdk.key_manager_api().derive_key(TRANSACTION_BRANCH, 0)?;
+        let primary_account_key = self
+            .sdk
+            .key_manager_api()
+            .derive_key(TRANSACTION_BRANCH, primary_account.key_index)?;
 
         let mut tx_ids = vec![];
         // Swap XTR for faucet
         // Batch these otherwise we can break consensus (proposed with locked object)
         for i in 0..5 {
             for (i, account) in accounts.iter().enumerate().skip(i * 200).take(200) {
+                let key = self
+                    .sdk
+                    .key_manager_api()
+                    .derive_key(TRANSACTION_BRANCH, account.key_index)?;
                 let tariswap = &tariswaps[i % tariswaps.len()];
                 let transaction = Transaction::builder()
                     // Use resources as input refs to allow concurrent access.
@@ -141,6 +158,7 @@ impl Runner {
                     .call_method(account.address.as_component_address().unwrap(), "deposit", args![
                     Workspace("swapped")
                 ])
+                    .sign(&primary_account_key.key)
                     .sign(&key.key)
                     .build();
 
@@ -154,7 +172,7 @@ impl Runner {
                 let ratio_a = result.execution_results[2].decode::<Amount>()?;
                 let ratio_b = result.execution_results[3].decode::<Amount>()?;
                 let amount_swapped = amount_a_for_b.value() as f64 * (ratio_b.value() as f64 / 1000.0);
-                log::info!(
+                info!(
                     "Swap {n} for {amount_a_for_b} XTR -> {amount_swapped} FAUCET @ {ratio_a}:{ratio_b} | pool \
                      liquidity: {balance_a} XTR {balance_b} FAUCET",
                     n = (i + 1) * (j + 1)
@@ -165,6 +183,10 @@ impl Runner {
         // Swap faucet for XTR
         for i in 0..5 {
             for (i, account) in accounts.iter().enumerate().skip(i * 200).take(200) {
+                let key = self
+                    .sdk
+                    .key_manager_api()
+                    .derive_key(TRANSACTION_BRANCH, account.key_index)?;
                 let tariswap = &tariswaps[i % tariswaps.len()];
                 let transaction = Transaction::builder()
                     // Use resources as input refs to allow concurrent access.

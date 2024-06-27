@@ -46,7 +46,7 @@ where TSpec: ConsensusSpec
                 Ok(ConsensusStateEvent::NeedSync)
             },
             Err(err) => {
-                error!(target: LOG_TARGET, "HotStuff failed to start: {}", err);
+                error!(target: LOG_TARGET, "HotStuff crashed: {}", err);
                 Err(err)
             },
         }

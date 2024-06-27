@@ -72,14 +72,28 @@ async fn run(cli: cli::CommonArgs, _args: cli::RunArgs) -> anyhow::Result<()> {
 
     info!("⏳️ Adding liquidity to tariswap pools...");
     runner
-        .add_liquidity(&tariswaps, &accounts, Amount(1000), Amount(100), &faucet)
+        .add_liquidity(
+            &tariswaps,
+            &primary_account,
+            &accounts,
+            Amount(1000),
+            Amount(100),
+            &faucet,
+        )
         .await?;
     info!("✅ Done adding liquidity to tariswaps");
 
     info!("⏳️ Submitting swaps...");
     for _ in 0..10 {
         runner
-            .do_tariswap_swaps(&tariswaps, &accounts, Amount(1000), Amount(100), &faucet)
+            .do_tariswap_swaps(
+                &tariswaps,
+                &primary_account,
+                &accounts,
+                Amount(1000),
+                Amount(100),
+                &faucet,
+            )
             .await?;
         runner.log_stats();
     }

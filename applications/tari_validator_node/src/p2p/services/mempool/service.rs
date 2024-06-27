@@ -600,6 +600,11 @@ where
 
                 match self.after_execute_validator.validate(&executed).await {
                     Ok(_) => {
+                        info!(
+                            target: LOG_TARGET,
+                            "✅ Transaction {} passed validation",
+                            executed.id(),
+                        );
                         // Add the transaction result and push it into the pool for consensus. This is done in a single
                         // transaction so that if we receive a proposal for this transaction, we
                         // either are awaiting execution OR execution is complete and it's in the pool.
@@ -693,7 +698,7 @@ where
 
         let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
         let all_inputs_iter = executed.all_inputs_iter().map(|i| i.to_substate_address());
-        let is_input_shard = local_committee_shard.includes_any_shard(all_inputs_iter) |
+        let is_input_shard = local_committee_shard.includes_any_shard(all_inputs_iter) ||
             (executed.transaction().inputs().is_empty() && executed.transaction().filled_inputs().is_empty());
 
         if should_propagate && is_input_shard {

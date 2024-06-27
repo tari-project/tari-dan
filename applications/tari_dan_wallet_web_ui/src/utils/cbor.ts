@@ -1,7 +1,6 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-
 export function getValueByPath(cborRepr: object, path: string): any {
   let value = cborRepr;
   for (const part of path.split(".")) {
@@ -64,10 +63,9 @@ export function convertCborValue(value: any): any {
   return value;
 }
 
-
 function bytesToAddressString(type: String, tag: ArrayLike<number>): string {
-  const hex = Array.from(tag, function(byte) {
-    return ("0" + (byte & 0xFF).toString(16)).slice(-2);
+  const hex = Array.from(tag, function (byte) {
+    return ("0" + (byte & 0xff).toString(16)).slice(-2);
   }).join("");
 
   return `${type}_${hex}`;
@@ -85,7 +83,6 @@ export function convertTaggedValueToString(tag: number, value: any): string | an
       return value;
   }
 }
-
 
 enum BinaryTag {
   ComponentAddress = 128,

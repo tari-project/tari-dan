@@ -743,15 +743,6 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
 
     fn save_event(&mut self, new_event: NewEvent) -> Result<(), StorageError> {
         use crate::substate_storage_sqlite::schema::{event_payloads, events};
-        warn!(
-            target: LOG_TARGET,
-            "Added new event to the database with substate_id = {:?}, template_address = {} and for transaction \
-             hash = {}, version = {}",
-            new_event.substate_id,
-            new_event.template_address,
-            new_event.tx_hash,
-            new_event.version,
-        );
 
         // Save the event into the database
         let event_row: Event = diesel::insert_into(events::table)
@@ -785,14 +776,14 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
                     reason: format!("save_event: {}", e),
                 })?;
         }
-
-        info!(
+        debug!(
             target: LOG_TARGET,
             "Added new event to the database with substate_id = {:?}, template_address = {} and for transaction \
-             hash = {}",
+             hash = {}, version = {}",
             new_event.substate_id,
             new_event.template_address,
-            new_event.tx_hash
+            new_event.tx_hash,
+            new_event.version,
         );
 
         Ok(())

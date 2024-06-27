@@ -39,6 +39,9 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn stress_test(args: StressTestArgs) -> anyhow::Result<Option<StressTestResultSummary>> {
+    if args.jrpc_address.is_empty() {
+        bail!("No validator nodes specified");
+    }
     let mut clients = Vec::with_capacity(args.jrpc_address.len());
     for address in args.jrpc_address {
         let mut client = ValidatorNodeClient::connect(format!("http://{}/json_rpc", address))?;

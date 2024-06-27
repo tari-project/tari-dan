@@ -175,10 +175,10 @@ impl SubstateRecord {
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &TTx,
-        shard: &SubstateAddress,
+        address: &SubstateAddress,
     ) -> Result<bool, StorageError> {
         // TODO: optimise
-        Ok(Self::get(tx, shard).optional()?.is_some())
+        Ok(Self::get(tx, address).optional()?.is_some())
     }
 
     pub fn any_exist<

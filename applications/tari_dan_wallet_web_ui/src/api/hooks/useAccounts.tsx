@@ -128,16 +128,15 @@ export const useAccountsTransfer = (
 };
 
 export const useAccountsCreateFreeTestCoins = () => {
-  const createFreeTestCoins = async (
-    {
-      accountName,
-      amount,
-      fee,
-    }: {
-      accountName: string | null;
-      amount: number;
-      fee: number | null;
-    }) => {
+  const createFreeTestCoins = async ({
+    accountName,
+    amount,
+    fee,
+  }: {
+    accountName: string | null;
+    amount: number;
+    fee: number | null;
+  }) => {
     const result = await accountsCreateFreeTestCoins({
       account: (accountName && { Name: accountName }) || null,
       amount,
@@ -167,7 +166,6 @@ export const useAccountsList = (offset: number, limit: number) => {
     },
   });
 };
-
 
 export const useAccountsGetBalances = (accountName: string, refresh: boolean = false) => {
   return useQuery({

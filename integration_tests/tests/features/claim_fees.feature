@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 @claim_fees
 Feature: Claim Fees
+
   @serial @fixed
   Scenario: Claim validator fees
     # Initialize a base node, wallet, miner and VN

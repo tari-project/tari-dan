@@ -84,7 +84,8 @@ impl Runner {
 
             if !finalize.is_full_accept() {
                 return Err(anyhow::anyhow!(
-                    "Transaction failed: {:?}",
+                    "Transaction {} failed: {:?}",
+                    tx_id,
                     finalize.result.full_reject().unwrap()
                 ));
             }
