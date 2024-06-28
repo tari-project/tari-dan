@@ -83,13 +83,13 @@ create table block_diffs
     block_id       text      NOT NULL,
     transaction_id text      NOT NULL,
     substate_id    text      NOT NULL,
-    version        int      NOT NULL,
+    version        int       NOT NULL,
     -- Up or Down
     change         text      NOT NULL,
     -- NULL for Down
     state          text      NULL,
-    created_at  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
+    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 create index block_diffs_idx_block_id on block_diffs (block_id);
@@ -106,11 +106,15 @@ create table substates
     created_justify          text      not NULL,
     created_block            text      not NULL,
     created_height           bigint    not NULL,
+    -- <epoch, shard> uniquely identifies the chain
+    created_at_epoch         bigint    not NULL,
+    created_by_shard         int       not NULL,
     destroyed_by_transaction text      NULL,
     destroyed_justify        text      NULL,
     destroyed_by_block       text      NULL,
-    created_at_epoch         bigint    not NULL,
+    -- <epoch, shard> uniquely identifies the chain
     destroyed_at_epoch       bigint    NULL,
+    destroyed_by_shard       int       NULL,
     created_at               timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
     destroyed_at             timestamp NULL
 );
@@ -351,18 +355,21 @@ CREATE TABLE pending_state_tree_diffs
 
 CREATE UNIQUE INDEX pending_state_tree_diffs_uniq_idx_block_id on pending_state_tree_diffs (block_id);
 
--- Epoch checkpoint
--- End-of-epoch checkpoint data
-create table epoch_checkpoints
+-- An append-only store of state transitions
+CREATE TABLE state_transitions
 (
-    id         integer   not null primary key AUTOINCREMENT,
-    epoch      bigint    not null,
-    shard      int       not null,
-    block_id   text      not null,
-    state_hash text      not null,
-    qcs        text      not null,
-    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+    id               integer                                   not NULL primary key AUTOINCREMENT,
+    -- <epoch, shard> tuple uniquely identifies the "chain" that created the state transition
+    epoch            bigint                                    not NULL,
+    shard            int                                       not NULL,
+    substate_address text                                      not NULL,
+    -- substate_id and version not required, just to make DB inspection easier
+    substate_id      text                                      NULL,
+    version          int                                       NULL,
+    transition       text check (transition IN ('UP', 'DOWN')) not NULL,
+    state_hash       text                                      NULL,
+    created_at       timestamp                                 not NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (substate_address) REFERENCES substates (address)
 );
 
 -- Debug Triggers

@@ -53,6 +53,8 @@ pub enum HotStuffError {
     StateManagerError(anyhow::Error),
     #[error("Invalid vote signature from {signer_public_key} (unauthenticated)")]
     InvalidVoteSignature { signer_public_key: String },
+    #[error("Invalid vote {signer_public_key} (unauthenticated): {details}")]
+    InvalidVote { signer_public_key: String, details: String },
     #[error("Vote sent from peer {address} did not match the expected signer public key {signer_public_key}")]
     RejectingVoteNotSentBySigner { address: String, signer_public_key: String },
     #[error("Transaction pool error: {0}")]

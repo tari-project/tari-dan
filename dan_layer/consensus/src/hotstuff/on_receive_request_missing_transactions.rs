@@ -32,10 +32,17 @@ where TConsensusSpec: ConsensusSpec
         from: TConsensusSpec::Addr,
         msg: RequestMissingTransactionsMessage,
     ) -> Result<(), HotStuffError> {
-        debug!(target: LOG_TARGET, "{} is requesting {} missing transactions from block {}", from, msg.transactions.len(), msg.block_id);
-        let (txs, _) = self
+        debug!(target: LOG_TARGET, "{} is requesting {} missing transaction(s) from block {}", from, msg.transactions.len(), msg.block_id);
+        let (txs, missing) = self
             .store
             .with_read_tx(|tx| TransactionRecord::get_any(tx, &msg.transactions))?;
+        if !missing.is_empty() {
+            warn!(
+                target: LOG_TARGET,
+                "Some requested transaction(s) not found: {}", missing.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", ")
+            )
+        }
+
         self.outbound_messaging
             .send(
                 from,

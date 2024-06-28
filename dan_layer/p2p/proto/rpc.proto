@@ -217,25 +217,32 @@ message GetHighQcResponse {
   tari.dan.consensus.QuorumCertificate high_qc = 1;
 }
 
-message GetCheckpointRequest {
-  uint64 epoch = 1;
-}
+message GetCheckpointRequest {}
 
 message GetCheckpointResponse {
   EpochCheckpoint checkpoint = 1;
 }
 
 message EpochCheckpoint {
-  uint64 shard = 1;
-  tari.dan.consensus.Block block = 2;
-  repeated QuorumCertificates qcs = 3;
-  bytes state_root = 4;
+  tari.dan.consensus.Block block = 1;
+  repeated tari.dan.consensus.QuorumCertificate qcs = 2;
 }
 
 message SyncStateRequest {
-  uint64 end_epoch = 1;
+  uint64 start_epoch = 1;
+  uint32 start_shard = 2;
+  uint64 start_seq = 3;
+  // The shard in the current shard-epoch that is requested.
+  // This will limit the state transitions returned to those that fall within this shard-epoch.
+  uint64 current_epoch = 4;
+  uint32 current_shard = 5;
 }
 
 message SyncStateResponse {
-  SubstateUpdate update = 1;
+  SubstateUpdateBatch update_batch = 1;
+}
+
+message SubstateUpdateBatch {
+  repeated SubstateUpdate updates = 1;
+  bytes state_hash = 2;
 }

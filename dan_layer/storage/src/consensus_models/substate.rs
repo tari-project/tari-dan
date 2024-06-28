@@ -14,7 +14,7 @@ use std::{
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, SubstateAddress};
+use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeHeight, SubstateAddress};
 use tari_engine_types::substate::{hash_substate, Substate, SubstateId, SubstateValue};
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 
@@ -46,6 +46,7 @@ pub struct SubstateRecord {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_block: BlockId,
     pub created_height: NodeHeight,
+    pub created_by_shard: Shard,
     pub created_at_epoch: Epoch,
     pub destroyed: Option<SubstateDestroyed>,
 }
@@ -64,6 +65,7 @@ pub struct SubstateDestroyed {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub by_block: BlockId,
     pub at_epoch: Epoch,
+    pub by_shard: Shard,
 }
 
 impl SubstateRecord {
@@ -71,6 +73,7 @@ impl SubstateRecord {
         substate_id: SubstateId,
         version: u32,
         substate_value: SubstateValue,
+        created_by_shard: Shard,
         created_at_epoch: Epoch,
         created_height: NodeHeight,
         created_block: BlockId,
@@ -84,6 +87,7 @@ impl SubstateRecord {
             substate_value,
             created_height,
             created_justify,
+            created_by_shard,
             created_at_epoch,
             created_by_transaction,
             created_block,
@@ -257,6 +261,14 @@ impl SubstateRecord {
         Ok(found)
     }
 
+    pub fn get_n_after<TTx: StateStoreReadTransaction>(
+        tx: &TTx,
+        n: usize,
+        after: &SubstateAddress,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.substates_get_n_after(n, after)
+    }
+
     pub fn get_many_within_range<TTx: StateStoreReadTransaction, B: Borrow<RangeInclusive<SubstateAddress>>>(
         tx: &TTx,
         bounds: B,
@@ -295,16 +307,18 @@ impl SubstateRecord {
             .transpose()
     }
 
-    pub fn destroy_many<TTx: StateStoreWriteTransaction, I: IntoIterator<Item = SubstateAddress>>(
+    pub fn destroy<TTx: StateStoreWriteTransaction>(
         tx: &mut TTx,
-        substate_addresses: I,
+        substate_address: SubstateAddress,
+        shard: Shard,
         epoch: Epoch,
         destroyed_by_block: &BlockId,
         destroyed_justify: &QcId,
         destroyed_by_transaction: &TransactionId,
     ) -> Result<(), StorageError> {
-        tx.substate_down_many(
-            substate_addresses,
+        tx.substates_down(
+            substate_address,
+            shard,
             epoch,
             destroyed_by_block,
             destroyed_by_transaction,
@@ -391,6 +405,7 @@ impl SubstateUpdate {
                     created_justify: *proof.created_qc.id(),
                     created_block: *block.id(),
                     created_height: block.height(),
+                    created_by_shard: block.shard(),
                     created_at_epoch: block.epoch(),
                     destroyed: None,
                 }
@@ -410,9 +425,10 @@ impl SubstateUpdate {
                     destroyed_by_transaction
                 );
                 proof.save(tx)?;
-                SubstateRecord::destroy_many(
+                SubstateRecord::destroy(
                     tx,
-                    iter::once(SubstateAddress::from_substate_id(&substate_id, version)),
+                    SubstateAddress::from_substate_id(&substate_id, version),
+                    block.shard(),
                     block.epoch(),
                     block.id(),
                     proof.id(),

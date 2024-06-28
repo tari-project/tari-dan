@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use log::*;
 use tari_common::configuration::Network;
-use tari_dan_common_types::{optional::Optional, NodeAddressable, NodeHeight};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -20,10 +20,7 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::TransactionId;
-use tokio::{
-    sync::{broadcast, mpsc},
-    time,
-};
+use tokio::sync::{broadcast, mpsc};
 
 use super::config::HotstuffConfig;
 use crate::{
@@ -111,8 +108,12 @@ where TConsensusSpec: ConsensusSpec
 
     /// Returns the next message that is ready for consensus. The future returned from this function is cancel safe, and
     /// can be used with tokio::select! macro.
-    pub async fn next_message(&mut self, current_height: NodeHeight) -> IncomingMessageResult<TConsensusSpec::Addr> {
-        self.message_buffer.next(current_height).await
+    pub async fn next_message(
+        &mut self,
+        current_epoch: Epoch,
+        current_height: NodeHeight,
+    ) -> IncomingMessageResult<TConsensusSpec::Addr> {
+        self.message_buffer.next(current_epoch, current_height).await
     }
 
     /// Discards all buffered messages including ones queued up for processing and returns when complete.
@@ -341,7 +342,7 @@ where TConsensusSpec: ConsensusSpec
 }
 
 pub struct MessageBuffer<TAddr> {
-    buffer: BTreeMap<NodeHeight, VecDeque<(TAddr, HotstuffMessage)>>,
+    buffer: BTreeMap<(Epoch, NodeHeight), VecDeque<(TAddr, HotstuffMessage)>>,
     rx_msg_ready: mpsc::UnboundedReceiver<(TAddr, HotstuffMessage)>,
 }
 
@@ -353,32 +354,32 @@ impl<TAddr: NodeAddressable> MessageBuffer<TAddr> {
         }
     }
 
-    pub async fn next(&mut self, current_height: NodeHeight) -> IncomingMessageResult<TAddr> {
-        // Clear buffer with lower heights
-        self.buffer = self.buffer.split_off(&current_height);
+    pub async fn next(&mut self, current_epoch: Epoch, current_height: NodeHeight) -> IncomingMessageResult<TAddr> {
+        // Clear buffer with lower (epoch, heights)
+        self.buffer = self.buffer.split_off(&(current_epoch, current_height));
 
         // Check if message is in the buffer
-        if let Some(buffer) = self.buffer.get_mut(&current_height) {
+        if let Some(buffer) = self.buffer.get_mut(&(current_epoch, current_height)) {
             if let Some(msg_tuple) = buffer.pop_front() {
                 return Ok(Some(msg_tuple));
             }
         }
 
-        while let Some((from, msg)) = self.next_message_or_sync(current_height).await? {
-            match msg_height(&msg) {
+        while let Some((from, msg)) = self.next_message_or_sync(current_epoch, current_height).await? {
+            match msg_epoch_and_height(&msg) {
                 // Discard old message
-                Some(h) if h < current_height => {
-                    debug!(target: LOG_TARGET, "Discard message {} is for previous height {}. Current height {}", msg, h, current_height);
+                Some((e, h)) if e < current_epoch || h < current_height => {
+                    debug!(target: LOG_TARGET, "Discard message {} is for previous epoch {}/height {}. Current epoch {}/height {}", msg, e, h, current_epoch,current_height);
                     continue;
                 },
-                // Buffer message for future height
-                Some(h) if h > current_height => {
+                // Buffer message for future epoch/height
+                Some((epoch, height)) if epoch > current_epoch || height > current_height => {
                     if msg.proposal().is_some() {
-                        info!(target: LOG_TARGET, "Proposal {} is for future block {}. Current height {}", msg, h, current_height);
+                        info!(target: LOG_TARGET, "🦴Proposal {msg} is for future view (Current Epoch: {current_epoch}, height {current_height})");
                     } else {
-                        debug!(target: LOG_TARGET, "Message {} is for future height {}. Current height {}", msg, h, current_height);
+                        debug!(target: LOG_TARGET, "🦴Message {msg} is for future view (Current Epoch: {current_epoch}, height: {current_height})");
                     }
-                    self.push_to_buffer(h, from, msg);
+                    self.push_to_buffer(epoch, height, from, msg);
                     continue;
                 },
                 // Height is irrelevant or current, return message
@@ -400,37 +401,69 @@ impl<TAddr: NodeAddressable> MessageBuffer<TAddr> {
 
     async fn next_message_or_sync(
         &mut self,
+        current_epoch: Epoch,
         current_height: NodeHeight,
     ) -> Result<Option<(TAddr, HotstuffMessage)>, NeedsSync<TAddr>> {
-        loop {
-            // Don't really like this but because we can receive proposals out of order, we need to wait a bit to see
-            // if we get a proposal at our height without switching to sync.
-            let timeout = time::sleep(time::Duration::from_secs(2));
-            tokio::pin!(timeout);
-            tokio::select! {
-                msg = self.rx_msg_ready.recv() => return Ok(msg),
-                _ = timeout.as_mut() => {
-                    // Check if we have any proposals
-                    for queue in self.buffer.values() {
-                        for (from, msg) in queue {
-                           if let Some(proposal) = msg.proposal() {
-                                if proposal.block.justify().block_height() > current_height {
-                                     return Err(NeedsSync {
-                                        from: from.clone(),
-                                        local_height: current_height,
-                                        qc_height: proposal.block.justify().block_height(),
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        if let Some(addr_and_msg) = self.rx_msg_ready.recv().await {
+            return Ok(Some(addr_and_msg));
         }
+
+        Ok(None)
+
+        // loop {
+        //     if let Some(addr_and_msg) = self.rx_msg_ready.recv().await {
+        //         return Ok(Some(addr_and_msg));
+        //     }
+        //
+        //     // Check if we have any proposals that exceed the current view
+        //     for queue in self.buffer.values() {
+        //         for (from, msg) in queue {
+        //             if let Some(proposal) = msg.proposal() {
+        //                 if proposal.block.justify().epoch() > current_epoch ||
+        //                     proposal.block.justify().block_height() > current_height
+        //                 {
+        //                     return Err(NeedsSync {
+        //                         from: from.clone(),
+        //                         local_height: current_height,
+        //                         qc_height: proposal.block.justify().block_height(),
+        //                         remote_epoch: proposal.block.justify().epoch(),
+        //                         local_epoch: current_epoch,
+        //                     });
+        //                 }
+        //             }
+        //         }
+        //     }
+        //
+        //     // Don't really like this but because we can receive proposals out of order, we need to wait a bit to see
+        //     // if we get a proposal at our height without switching to sync.
+        //     //     let timeout = time::sleep(time::Duration::from_secs(2));
+        //     //     tokio::pin!(timeout);
+        //     //     tokio::select! {
+        //     //         msg = self.rx_msg_ready.recv() => return Ok(msg),
+        //     //         _ = timeout.as_mut() => {
+        //     //             // Check if we have any proposals
+        //     //             for queue in self.buffer.values() {
+        //     //                 for (from, msg) in queue {
+        //     //                    if let Some(proposal) = msg.proposal() {
+        //     //                         if proposal.block.justify().epoch() > current_epoch ||
+        //     // proposal.block.justify().block_height() > current_height {
+        //     // return Err(NeedsSync {                                 from: from.clone(),
+        //     //                                 local_height: current_height,
+        //     //                                 qc_height: proposal.block.justify().block_height(),
+        //     //                                 remote_epoch: proposal.block.justify().epoch(),
+        //     //                                 local_epoch: current_epoch
+        //     //                             });
+        //     //                         }
+        //     //                     }
+        //     //                 }
+        //     //             }
+        //     //         }
+        //     //     }
+        // }
     }
 
-    fn push_to_buffer(&mut self, height: NodeHeight, from: TAddr, msg: HotstuffMessage) {
-        self.buffer.entry(height).or_default().push_back((from, msg));
+    fn push_to_buffer(&mut self, epoch: Epoch, height: NodeHeight, from: TAddr, msg: HotstuffMessage) {
+        self.buffer.entry((epoch, height)).or_default().push_back((from, msg));
     }
 }
 
@@ -440,13 +473,15 @@ pub struct NeedsSync<TAddr: NodeAddressable> {
     pub from: TAddr,
     pub local_height: NodeHeight,
     pub qc_height: NodeHeight,
+    pub remote_epoch: Epoch,
+    pub local_epoch: Epoch,
 }
 
-fn msg_height(msg: &HotstuffMessage) -> Option<NodeHeight> {
+fn msg_epoch_and_height(msg: &HotstuffMessage) -> Option<(Epoch, NodeHeight)> {
     match msg {
-        HotstuffMessage::Proposal(msg) => Some(msg.block.height()),
+        HotstuffMessage::Proposal(msg) => Some((msg.block.epoch(), msg.block.height())),
         // Votes for block 2, occur at current height 3
-        HotstuffMessage::Vote(msg) => Some(msg.block_height.saturating_add(NodeHeight(1))),
+        HotstuffMessage::Vote(msg) => Some((msg.epoch, msg.block_height.saturating_add(NodeHeight(1)))),
         _ => None,
     }
 }

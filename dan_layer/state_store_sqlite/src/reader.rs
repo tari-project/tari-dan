@@ -36,7 +36,6 @@ use tari_dan_storage::{
         BlockDiff,
         BlockId,
         Command,
-        EpochCheckpoint,
         ForeignProposal,
         ForeignProposalState,
         ForeignReceiveCounters,
@@ -52,6 +51,8 @@ use tari_dan_storage::{
         PendingStateTreeDiff,
         QcId,
         QuorumCertificate,
+        StateTransition,
+        StateTransitionId,
         SubstateRecord,
         TransactionExecution,
         TransactionPoolRecord,
@@ -695,6 +696,38 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         })?;
 
         block.try_convert(qc)
+    }
+
+    fn blocks_get_last_n_in_epoch(&self, n: usize, epoch: Epoch) -> Result<Vec<Block>, StorageError> {
+        use crate::schema::{blocks, quorum_certificates};
+
+        let blocks = blocks::table
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .filter(blocks::epoch.eq(epoch.as_u64() as i64))
+            .filter(blocks::is_committed.eq(true))
+            .order_by(blocks::height.desc())
+            .limit(n as i64)
+            .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_get_last_n_in_epoch",
+                source: e,
+            })?;
+
+        blocks
+            .into_iter()
+            // Order from lowest to highest height
+            .rev()
+            .map(|(b, qc)| {
+                qc.ok_or_else(|| StorageError::DataInconsistency {
+                    details: format!(
+                        "blocks_get_last_n_in_epoch: block {} references non-existent quorum certificate {}",
+                        b.block_id, b.qc_id
+                    ),
+                })
+                .and_then(|qc| b.try_convert(qc))
+            })
+            .collect()
     }
 
     fn blocks_get_all_between(
@@ -1721,6 +1754,31 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         Ok(count > 0)
     }
 
+    fn substates_get_n_after(&self, n: usize, after: &SubstateAddress) -> Result<Vec<SubstateRecord>, StorageError> {
+        use crate::schema::substates;
+
+        let start_id = substates::table
+            .select(substates::id)
+            .filter(substates::address.eq(after.to_string()))
+            .get_result::<i32>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_n_after",
+                source: e,
+            })?;
+
+        let substates = substates::table
+            .filter(substates::id.gt(start_id))
+            .limit(n as i64)
+            .order_by(substates::id.asc())
+            .get_results::<sql_models::SubstateRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_n_after",
+                source: e,
+            })?;
+
+        substates.into_iter().map(TryInto::try_into).collect()
+    }
+
     fn substates_get_many_within_range(
         &self,
         start: &SubstateAddress,
@@ -1927,19 +1985,47 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         diffs.into_iter().map(TryInto::try_into).collect()
     }
 
-    fn epoch_checkpoints_get_by_epoch(&self, epoch: Epoch) -> Result<EpochCheckpoint, StorageError> {
-        use crate::schema::epoch_checkpoints;
+    fn state_transitions_get_n_after(
+        &self,
+        n: usize,
+        id: StateTransitionId,
+    ) -> Result<Vec<StateTransition>, StorageError> {
+        use crate::schema::{state_transitions, substates};
 
-        let checkpoint = epoch_checkpoints::table
-            .filter(epoch_checkpoints::epoch.eq(epoch.as_u64() as i64))
-            .order_by(epoch_checkpoints::id.desc())
-            .first::<sql_models::EpochCheckpoint>(self.connection())
+        let start_id = state_transitions::table
+            .select(state_transitions::id)
+            .filter(state_transitions::epoch.eq(id.to_epoch().as_u64() as i64))
+            .filter(state_transitions::shard.eq(id.to_shard().as_u32() as i32))
+            .order_by(state_transitions::id.asc())
+            .first::<i32>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "epoch_checkpoints_get_by_epoch",
+                operation: "state_transitions_get_n_after",
                 source: e,
             })?;
 
-        checkpoint.try_into()
+        let start_id = start_id + (id.to_seq() as i32);
+
+        let transitions = state_transitions::table
+            .left_join(substates::table.on(state_transitions::substate_address.eq(substates::address)))
+            .select((state_transitions::all_columns, substates::all_columns.nullable()))
+            .filter(state_transitions::id.gt(start_id))
+            .limit(n as i64)
+            .get_results::<(sql_models::StateTransition, Option<sql_models::SubstateRecord>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "state_transitions_get_n_after",
+                source: e,
+            })?;
+
+        transitions
+            .into_iter()
+            .map(|(t, s)| {
+                let s = s.ok_or_else(|| StorageError::DataInconsistency {
+                    details: format!("substate entry does not exist for transition {}", t.id),
+                })?;
+
+                t.try_convert(s, start_id)
+            })
+            .collect()
     }
 }
 

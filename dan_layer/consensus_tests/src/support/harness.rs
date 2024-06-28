@@ -105,6 +105,7 @@ impl Test {
                     id,
                     0,
                     value,
+                    Shard::zero(),
                     Epoch(0),
                     NodeHeight(0),
                     BlockId::genesis(),
@@ -150,7 +151,7 @@ impl Test {
             .unwrap()
     }
 
-    pub async fn on_block_committed(&mut self) -> (TestAddress, BlockId, NodeHeight) {
+    pub async fn on_block_committed(&mut self) -> (TestAddress, BlockId, Epoch, NodeHeight) {
         loop {
             let (address, event) = if let Some(timeout) = self.timeout {
                 tokio::time::timeout(timeout, self.on_hotstuff_event())
@@ -160,7 +161,11 @@ impl Test {
                 self.on_hotstuff_event().await
             };
             match event {
-                HotstuffEvent::BlockCommitted { block_id, height } => return (address, block_id, height),
+                HotstuffEvent::BlockCommitted {
+                    block_id,
+                    epoch,
+                    height,
+                } => return (address, block_id, epoch, height),
                 HotstuffEvent::Failure { message } => panic!("[{}] Consensus failure: {}", address, message),
                 other => {
                     log::info!("[{}] Ignoring event: {:?}", address, other);

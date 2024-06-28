@@ -1,70 +1,50 @@
 //    Copyright 2024 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{shard::Shard, Epoch, PeerAddress};
+use tari_dan_common_types::Epoch;
 
 use crate::{
-    consensus_models::{Block, BlockId, QcId, QuorumCertificate},
+    consensus_models::{Block, QuorumCertificate},
     StateStoreReadTransaction,
-    StateStoreWriteTransaction,
     StorageError,
 };
 
+#[derive(Debug, Clone)]
 pub struct EpochCheckpoint {
-    epoch: Epoch,
-    shard: Shard,
-    block_id: BlockId,
-    state_root: FixedHash,
-    qcs: [QcId; 3],
+    block: Block,
+    qcs: Vec<QuorumCertificate>,
 }
 
 impl EpochCheckpoint {
-    pub fn new(block_id: BlockId, epoch: Epoch, shard: Shard, state_root: FixedHash, qcs: [QcId; 3]) -> Self {
-        Self {
-            block_id,
-            epoch,
-            shard,
-            state_root,
-            qcs,
-        }
+    pub fn new(block: Block, qcs: Vec<QuorumCertificate>) -> Self {
+        Self { block, qcs }
     }
 
-    pub fn epoch(&self) -> Epoch {
-        self.epoch
-    }
-
-    pub fn shard(&self) -> Shard {
-        self.shard
-    }
-
-    pub fn state_root(&self) -> &FixedHash {
-        &self.state_root
-    }
-
-    pub fn qcs(&self) -> &[QcId; 3] {
+    pub fn qcs(&self) -> &[QuorumCertificate] {
         &self.qcs
     }
 
-    pub fn block_id(&self) -> BlockId {
-        self.block_id
+    pub fn block(&self) -> &Block {
+        &self.block
     }
 }
 
 impl EpochCheckpoint {
-    pub fn insert<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        tx.epoch_checkpoint_insert(self)
-    }
+    pub fn generate<TTx: StateStoreReadTransaction>(tx: &TTx, epoch: Epoch) -> Result<Self, StorageError> {
+        let mut blocks = tx.blocks_get_last_n_in_epoch(3, epoch)?;
+        if blocks.is_empty() {
+            return Err(StorageError::NotFound {
+                item: format!("EpochCheckpoint: No blocks found for epoch {}", epoch),
+                key: epoch.to_string(),
+            });
+        }
 
-    pub fn get_for_epoch<TTx: StateStoreReadTransaction>(tx: &TTx, epoch: Epoch) -> Result<Self, StorageError> {
-        tx.epoch_checkpoints_get_by_epoch(epoch)
-    }
+        let commit_block = blocks.pop().unwrap();
+        let qcs = blocks.into_iter().map(|b| b.into_justify()).collect();
 
-    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<Block, StorageError> {
-        tx.block_get(self.block_id)
-    }
-
-    pub fn get_qcs<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<Vec<QuorumCertificate>, StorageError> {
-        tx.quorum_certificates_get_all(self.qcs)
+        Ok(Self {
+            block: commit_block,
+            qcs,
+        })
     }
 }

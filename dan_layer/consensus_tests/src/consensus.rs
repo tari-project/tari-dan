@@ -150,7 +150,7 @@ async fn node_requests_missing_transaction_from_local_leader() {
     }
     test.start_epoch(Epoch(0)).await;
     loop {
-        let (_, _, committed_height) = test.on_block_committed().await;
+        let (_, _, _, committed_height) = test.on_block_committed().await;
 
         if test.is_transaction_pool_empty() {
             break;
@@ -386,7 +386,7 @@ async fn leader_failure_node_goes_down() {
     test.start_epoch(Epoch(0)).await;
 
     loop {
-        let (_, _, committed_height) = test.on_block_committed().await;
+        let (_, _, _, committed_height) = test.on_block_committed().await;
 
         if committed_height == NodeHeight(1) {
             log::info!("😴 Node 2 goes offline");

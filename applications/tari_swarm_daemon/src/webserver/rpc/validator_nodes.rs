@@ -75,6 +75,7 @@ pub async fn create(
 
     if req.register {
         context.process_manager().register_validator_node(instance_id).await?;
+        context.process_manager().mine_blocks(10).await?;
     }
 
     Ok(ValidatorNodeCreateResponse { instance_id })

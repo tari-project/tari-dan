@@ -228,7 +228,9 @@ where TConsensusSpec: ConsensusSpec
         info!(target: LOG_TARGET, "🔥 New QC {}", qc);
         let high_qc = self.store.with_write_tx(|tx| qc.update_high_qc(tx))?;
 
-        self.pacemaker.update_view(block_height, high_qc.block_height).await?;
+        self.pacemaker
+            .update_view(message.epoch, block_height, high_qc.block_height)
+            .await?;
 
         Ok(true)
     }
@@ -255,6 +257,17 @@ where TConsensusSpec: ConsensusSpec
     }
 
     fn validate_vote_message(&self, message: &VoteMessage, sender_leaf_hash: &FixedHash) -> Result<(), HotStuffError> {
+        let current_epoch = self.pacemaker.current_view().get_epoch();
+        if current_epoch != message.epoch {
+            return Err(HotStuffError::InvalidVote {
+                signer_public_key: message.signature.public_key.to_string(),
+                details: format!(
+                    "Our current view is at epoch {} but the vote was for epoch {}",
+                    current_epoch, message.epoch
+                ),
+            });
+        }
+
         if !self.vote_signature_service.verify(
             &message.signature,
             sender_leaf_hash,

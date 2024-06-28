@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 mod common;
 mod config;
-mod current_height;
+mod current_view;
 mod error;
 mod event;
 mod on_beat;

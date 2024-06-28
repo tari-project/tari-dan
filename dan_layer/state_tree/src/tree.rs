@@ -97,7 +97,7 @@ fn calculate_substate_changes<
     next_version: Version,
     changes: I,
 ) -> Result<(Hash, TreeUpdateBatch<Version>), StateTreeError> {
-    let smt = JellyfishMerkleTree::new(store);
+    let jmt = JellyfishMerkleTree::new(store);
 
     let changes = changes
         .into_iter()
@@ -113,7 +113,7 @@ fn calculate_substate_changes<
         })
         .collect::<Vec<_>>();
 
-    let (root_hash, update_result) = smt.batch_put_value_set(
+    let (root_hash, update_result) = jmt.batch_put_value_set(
         changes
             .iter()
             .map(|change| (&change.key, change.new_payload.as_ref()))

@@ -42,18 +42,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    epoch_checkpoints (id) {
-        id -> Integer,
-        epoch -> BigInt,
-        shard -> Integer,
-        block_id -> Text,
-        state_hash -> Text,
-        qcs -> Text,
-        created_at -> Timestamp,
-    }
-}
-
-diesel::table! {
     foreign_proposals (id) {
         id -> Integer,
         bucket -> Integer,
@@ -207,6 +195,20 @@ diesel::table! {
 }
 
 diesel::table! {
+    state_transitions (id) {
+        id -> Integer,
+        epoch -> BigInt,
+        shard -> Integer,
+        substate_address -> Text,
+        substate_id -> Nullable<Text>,
+        version -> Nullable<Integer>,
+        transition -> Text,
+        state_hash -> Nullable<Text>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     state_tree (id) {
         id -> Integer,
         key -> Text,
@@ -240,11 +242,13 @@ diesel::table! {
         created_justify -> Text,
         created_block -> Text,
         created_height -> BigInt,
+        created_at_epoch -> BigInt,
+        created_by_shard -> Integer,
         destroyed_by_transaction -> Nullable<Text>,
         destroyed_justify -> Nullable<Text>,
         destroyed_by_block -> Nullable<Text>,
-        created_at_epoch -> BigInt,
         destroyed_at_epoch -> Nullable<BigInt>,
+        destroyed_by_shard -> Nullable<Integer>,
         created_at -> Timestamp,
         destroyed_at -> Nullable<Timestamp>,
     }
@@ -357,7 +361,6 @@ diesel::table! {
 diesel::allow_tables_to_appear_in_same_query!(
     block_diffs,
     blocks,
-    epoch_checkpoints,
     foreign_proposals,
     foreign_receive_counters,
     foreign_send_counters,
@@ -372,6 +375,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     parked_blocks,
     pending_state_tree_diffs,
     quorum_certificates,
+    state_transitions,
     state_tree,
     substate_locks,
     substates,

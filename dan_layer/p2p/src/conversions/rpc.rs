@@ -4,7 +4,13 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
-use tari_dan_storage::consensus_models::{SubstateCreatedProof, SubstateData, SubstateDestroyedProof, SubstateUpdate};
+use tari_dan_storage::consensus_models::{
+    EpochCheckpoint,
+    SubstateCreatedProof,
+    SubstateData,
+    SubstateDestroyedProof,
+    SubstateUpdate,
+};
 use tari_engine_types::substate::{SubstateId, SubstateValue};
 
 use crate::proto;
@@ -108,6 +114,28 @@ impl From<SubstateData> for proto::rpc::SubstateData {
             version: value.version,
             substate_value: value.substate_value.to_bytes(),
             created_transaction: value.created_by_transaction.as_bytes().to_vec(),
+        }
+    }
+}
+
+//---------------------------------- EpochCheckpoint --------------------------------------------//
+
+impl TryFrom<proto::rpc::EpochCheckpoint> for EpochCheckpoint {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::rpc::EpochCheckpoint) -> Result<Self, Self::Error> {
+        Ok(Self::new(
+            value.block.ok_or_else(|| anyhow!("block not provided"))?.try_into()?,
+            value.qcs.into_iter().map(TryInto::try_into).collect::<Result<_, _>>()?,
+        ))
+    }
+}
+
+impl From<EpochCheckpoint> for proto::rpc::EpochCheckpoint {
+    fn from(value: EpochCheckpoint) -> Self {
+        Self {
+            block: Some(value.block().into()),
+            qcs: value.qcs().into_iter().map(Into::into).collect(),
         }
     }
 }

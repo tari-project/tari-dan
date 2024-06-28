@@ -13,14 +13,13 @@ use diesel::{
     SqliteConnection,
 };
 use log::*;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, NodeHeight, SubstateAddress};
+use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockDiff,
         BlockId,
         Decision,
-        EpochCheckpoint,
         Evidence,
         ExecutedTransaction,
         ForeignProposal,
@@ -1307,40 +1306,17 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn substate_down_many<I: IntoIterator<Item = SubstateAddress>>(
-        &mut self,
-        addresses: I,
-        epoch: Epoch,
-        destroyed_block_id: &BlockId,
-        destroyed_transaction_id: &TransactionId,
-        destroyed_qc_id: &QcId,
-    ) -> Result<(), StorageError> {
-        use crate::schema::substates;
-
-        let addresses = addresses.into_iter().map(serialize_hex).collect::<Vec<_>>();
-
-        let changes = (
-            substates::destroyed_at.eq(diesel::dsl::now),
-            substates::destroyed_by_transaction.eq(Some(serialize_hex(destroyed_transaction_id))),
-            substates::destroyed_by_block.eq(Some(serialize_hex(destroyed_block_id))),
-            substates::destroyed_at_epoch.eq(Some(epoch.as_u64() as i64)),
-            substates::destroyed_justify.eq(Some(serialize_hex(destroyed_qc_id))),
-        );
-
-        diesel::update(substates::table)
-            .filter(substates::address.eq_any(addresses))
-            .set(changes)
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substate_down",
-                source: e,
-            })?;
-
-        Ok(())
-    }
-
     fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError> {
-        use crate::schema::substates;
+        use crate::schema::{state_transitions, substates};
+
+        if substate.is_destroyed() {
+            return Err(StorageError::QueryError {
+                reason: format!(
+                    "calling substates_create with a destroyed SubstateRecord is not valid. substate_id = {}",
+                    substate.substate_id
+                ),
+            });
+        }
 
         let values = (
             substates::address.eq(serialize_hex(substate.to_substate_address())),
@@ -1353,17 +1329,79 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             substates::created_block.eq(serialize_hex(substate.created_block)),
             substates::created_height.eq(substate.created_height.as_u64() as i64),
             substates::created_at_epoch.eq(substate.created_at_epoch.as_u64() as i64),
-            substates::destroyed_by_transaction.eq(substate.destroyed().map(|d| serialize_hex(d.by_transaction))),
-            substates::destroyed_justify.eq(substate.destroyed().map(|d| serialize_hex(d.justify))),
-            substates::destroyed_by_block.eq(substate.destroyed().map(|d| serialize_hex(d.by_block))),
-            substates::destroyed_at_epoch.eq(substate.destroyed().map(|d| d.at_epoch.as_u64() as i64)),
+            substates::created_by_shard.eq(substate.created_by_shard.as_u32() as i32),
         );
 
         diesel::insert_into(substates::table)
             .values(values)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substate_create",
+                operation: "substates_create",
+                source: e,
+            })?;
+
+        let values = (
+            state_transitions::epoch.eq(substate.created_at_epoch.as_u64() as i64),
+            state_transitions::shard.eq(substate.created_by_shard.as_u32() as i32),
+            state_transitions::substate_address.eq(serialize_hex(&substate.to_substate_address())),
+            state_transitions::substate_id.eq(substate.substate_id.to_string()),
+            state_transitions::version.eq(substate.version as i32),
+            state_transitions::transition.eq("UP"),
+            state_transitions::state_hash.eq(serialize_hex(&substate.state_hash)),
+        );
+
+        diesel::insert_into(state_transitions::table)
+            .values(values)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_create",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn substates_down(
+        &mut self,
+        address: SubstateAddress,
+        shard: Shard,
+        epoch: Epoch,
+        destroyed_block_id: &BlockId,
+        destroyed_transaction_id: &TransactionId,
+        destroyed_qc_id: &QcId,
+    ) -> Result<(), StorageError> {
+        use crate::schema::{state_transitions, substates};
+
+        let changes = (
+            substates::destroyed_at.eq(diesel::dsl::now),
+            substates::destroyed_by_transaction.eq(Some(serialize_hex(destroyed_transaction_id))),
+            substates::destroyed_by_block.eq(Some(serialize_hex(destroyed_block_id))),
+            substates::destroyed_at_epoch.eq(Some(epoch.as_u64() as i64)),
+            substates::destroyed_by_shard.eq(Some(shard.as_u32() as i32)),
+            substates::destroyed_justify.eq(Some(serialize_hex(destroyed_qc_id))),
+        );
+
+        diesel::update(substates::table)
+            .filter(substates::address.eq(serialize_hex(address)))
+            .set(changes)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_down",
+                source: e,
+            })?;
+
+        let values = (
+            state_transitions::epoch.eq(epoch.as_u64() as i64),
+            state_transitions::shard.eq(shard.as_u32() as i32),
+            state_transitions::substate_address.eq(serialize_hex(&address)),
+            state_transitions::transition.eq("DOWN"),
+        );
+
+        diesel::insert_into(state_transitions::table)
+            .values(values)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_down",
                 source: e,
             })?;
 
@@ -1409,28 +1447,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "pending_state_tree_diffs_insert",
-                source: e,
-            })?;
-
-        Ok(())
-    }
-
-    fn epoch_checkpoint_insert(&mut self, epoch_checkpoint: &EpochCheckpoint) -> Result<(), StorageError> {
-        use crate::schema::epoch_checkpoints;
-
-        let insert = (
-            epoch_checkpoints::block_id.eq(serialize_hex(epoch_checkpoint.block_id())),
-            epoch_checkpoints::state_hash.eq(serialize_hex(epoch_checkpoint.state_root())),
-            epoch_checkpoints::qcs.eq(serialize_json(epoch_checkpoint.qcs())?),
-            epoch_checkpoints::shard.eq(epoch_checkpoint.shard().as_u32() as i32),
-            epoch_checkpoints::epoch.eq(epoch_checkpoint.epoch().as_u64() as i64),
-        );
-
-        diesel::insert_into(epoch_checkpoints::table)
-            .values(insert)
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "epoch_checkpoint_insert",
                 source: e,
             })?;
 

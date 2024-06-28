@@ -5,7 +5,7 @@ use tari_consensus::{
     hotstuff::substate_store::{PendingSubstateStore, SubstateStoreError},
     traits::{ReadableSubstateStore, WriteableSubstateStore},
 };
-use tari_dan_common_types::PeerAddress;
+use tari_dan_common_types::{shard::Shard, PeerAddress};
 use tari_dan_storage::{
     consensus_models::{
         BlockId,
@@ -205,6 +205,7 @@ fn add_substate(store: &TestStore, seed: u8, version: u32) -> VersionedSubstateI
                 created_justify: QcId::genesis(),
                 created_block: BlockId::genesis(),
                 created_height: 0.into(),
+                created_by_shard: Shard::zero(),
                 created_at_epoch: 0.into(),
                 destroyed: None,
             }

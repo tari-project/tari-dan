@@ -76,7 +76,9 @@ impl From<&HotstuffMessage> for proto::consensus::HotStuffMessage {
             HotstuffMessage::RequestedTransaction(msg) => {
                 proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg.into())
             },
-            HotstuffMessage::SyncRequest(msg) => proto::consensus::hot_stuff_message::Message::SyncRequest(msg.into()),
+            HotstuffMessage::CatchUpSyncRequest(msg) => {
+                proto::consensus::hot_stuff_message::Message::SyncRequest(msg.into())
+            },
             HotstuffMessage::SyncResponse(msg) => {
                 proto::consensus::hot_stuff_message::Message::SyncResponse(msg.into())
             },
@@ -104,7 +106,7 @@ impl TryFrom<proto::consensus::HotStuffMessage> for HotstuffMessage {
                 HotstuffMessage::RequestedTransaction(msg.try_into()?)
             },
             proto::consensus::hot_stuff_message::Message::SyncRequest(msg) => {
-                HotstuffMessage::SyncRequest(msg.try_into()?)
+                HotstuffMessage::CatchUpSyncRequest(msg.try_into()?)
             },
             proto::consensus::hot_stuff_message::Message::SyncResponse(msg) => {
                 HotstuffMessage::SyncResponse(msg.try_into()?)
@@ -626,6 +628,7 @@ impl TryFrom<proto::consensus::Substate> for SubstateRecord {
             created_height: NodeHeight(value.created_height),
 
             destroyed: value.destroyed.map(TryInto::try_into).transpose()?,
+            created_by_shard: Shard::from(value.created_by_shard),
         })
     }
 }
@@ -642,6 +645,7 @@ impl From<SubstateRecord> for proto::consensus::Substate {
             created_block: value.created_block.as_bytes().to_vec(),
             created_height: value.created_height.as_u64(),
             created_epoch: value.created_at_epoch.as_u64(),
+            created_by_shard: value.created_by_shard.as_u32(),
 
             destroyed: value.destroyed.map(Into::into),
         }
@@ -661,6 +665,7 @@ impl TryFrom<proto::consensus::SubstateDestroyed> for SubstateDestroyed {
                 .epoch
                 .map(Into::into)
                 .ok_or_else(|| anyhow!("Epoch not provided"))?,
+            by_shard: Shard::from(value.shard),
         })
     }
 }
@@ -672,6 +677,7 @@ impl From<SubstateDestroyed> for proto::consensus::SubstateDestroyed {
             justify: value.justify.as_bytes().to_vec(),
             block: value.by_block.as_bytes().to_vec(),
             epoch: Some(value.at_epoch.into()),
+            shard: value.by_shard.as_u32(),
         }
     }
 }

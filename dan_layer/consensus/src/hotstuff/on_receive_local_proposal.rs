@@ -10,6 +10,7 @@ use tari_common::configuration::Network;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
     optional::Optional,
+    Epoch,
     NodeHeight,
 };
 use tari_dan_storage::{
@@ -19,6 +20,8 @@ use tari_dan_storage::{
         ExecutedTransaction,
         ForeignProposal,
         HighQc,
+        LastSentVote,
+        QuorumDecision,
         TransactionAtom,
         TransactionPool,
         TransactionPoolStage,
@@ -39,13 +42,14 @@ use crate::{
         HotstuffEvent,
         ProposalValidationError,
     },
-    messages::ProposalMessage,
-    traits::{hooks::ConsensusHooks, ConsensusSpec, LeaderStrategy},
+    messages::{HotstuffMessage, ProposalMessage, VoteMessage},
+    traits::{hooks::ConsensusHooks, ConsensusSpec, LeaderStrategy, OutboundMessaging, VoteSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_local_proposal";
 
 pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
+    local_validator_addr: TConsensusSpec::Addr,
     network: Network,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
@@ -53,13 +57,16 @@ pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     pacemaker: PaceMakerHandle,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock<TConsensusSpec>,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
+    vote_signing_service: TConsensusSpec::SignatureService,
+    proposer: Proposer<TConsensusSpec>,
     hooks: TConsensusSpec::Hooks,
 }
 
 impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        validator_addr: TConsensusSpec::Addr,
+        local_validator_addr: TConsensusSpec::Addr,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -74,26 +81,23 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         hooks: TConsensusSpec::Hooks,
     ) -> Self {
         Self {
+            local_validator_addr: local_validator_addr.clone(),
             network,
             store: store.clone(),
-            epoch_manager: epoch_manager.clone(),
-            leader_strategy: leader_strategy.clone(),
+            epoch_manager,
+            leader_strategy,
             pacemaker,
             transaction_pool: transaction_pool.clone(),
-            hooks: hooks.clone(),
+            vote_signing_service,
+            outbound_messaging,
+            proposer,
+            hooks,
             on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock::new(
-                validator_addr,
+                local_validator_addr,
                 store,
-                epoch_manager,
-                vote_signing_service,
-                leader_strategy,
                 transaction_pool,
-                outbound_messaging,
                 tx_events,
-                proposer,
                 transaction_executor,
-                network,
-                hooks,
             ),
         }
     }
@@ -130,7 +134,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .epoch_manager
             .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
-        let local_committee_shard = self
+        let local_committee_info = self
             .epoch_manager
             .get_committee_info_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
@@ -141,7 +145,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 return Ok(None);
             }
 
-            let Some(valid_block) = self.validate_block_header(tx, block, &local_committee, &local_committee_shard)?
+            let Some(valid_block) = self.validate_block_header(tx, block, &local_committee, &local_committee_info)?
             else {
                 return Ok(None);
             };
@@ -174,13 +178,148 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         if let Some((high_qc, valid_block)) = maybe_high_qc_and_block {
             self.pacemaker
-                .update_view(valid_block.height(), high_qc.block_height())
+                .update_view(valid_block.epoch(), valid_block.height(), high_qc.block_height())
                 .await?;
 
-            self.on_ready_to_vote_on_local_block.handle(valid_block).await?;
+            let block_decision = self
+                .on_ready_to_vote_on_local_block
+                .handle(&valid_block, local_committee_info)?;
+
+            self.hooks
+                .on_local_block_decide(&valid_block, block_decision.quorum_decision);
+            for t in block_decision.finalized_transactions.into_iter().flatten() {
+                self.hooks.on_transaction_finalized(&t);
+            }
+            self.propose_newly_locked_blocks(block_decision.locked_blocks).await?;
+
+            if let Some(decision) = block_decision.quorum_decision {
+                let is_registered = self
+                    .epoch_manager
+                    .is_this_validator_registered_for_epoch(valid_block.epoch())
+                    .await?;
+
+                if is_registered {
+                    debug!(
+                        target: LOG_TARGET,
+                        "🔥 LOCAL PROPOSAL {} DECIDED {:?}",
+                        valid_block,
+                        decision,
+                    );
+                    let local_committee = self.epoch_manager.get_local_committee(valid_block.epoch()).await?;
+
+                    let vote = self.generate_vote_message(valid_block.block(), decision).await?;
+                    self.send_vote_to_leader(&local_committee, vote, valid_block.block())
+                        .await?;
+                } else {
+                    info!(
+                        target: LOG_TARGET,
+                        "❓️ Local validator not registered for epoch {}. Not voting on block {}",
+                        valid_block.epoch(),
+                        valid_block,
+                    );
+                }
+            }
+
+            if let Some(end_epoch) = block_decision.end_of_epoch {
+                self.pacemaker.update_epoch(end_epoch + Epoch(1)).await?;
+            }
         }
 
         Ok(())
+    }
+
+    async fn send_vote_to_leader(
+        &mut self,
+        local_committee: &Committee<TConsensusSpec::Addr>,
+        vote: VoteMessage,
+        block: &Block,
+    ) -> Result<(), HotStuffError> {
+        let leader = self
+            .leader_strategy
+            .get_leader_for_next_block(local_committee, block.height());
+        info!(
+            target: LOG_TARGET,
+            "🔥 VOTE {:?} for block {} proposed by {} to next leader {:.4}",
+            vote.decision,
+            block,
+            block.proposed_by(),
+            leader,
+        );
+        self.outbound_messaging
+            .send(leader.clone(), HotstuffMessage::Vote(vote.clone()))
+            .await?;
+        self.store.with_write_tx(|tx| {
+            let last_sent_vote = LastSentVote {
+                epoch: vote.epoch,
+                block_id: vote.block_id,
+                block_height: vote.block_height,
+                decision: vote.decision,
+                signature: vote.signature,
+            };
+            last_sent_vote.set(tx)
+        })?;
+        Ok(())
+    }
+
+    async fn propose_newly_locked_blocks(&mut self, blocks: Vec<Block>) -> Result<(), HotStuffError> {
+        for block in blocks {
+            debug!(target:LOG_TARGET,"Broadcast new locked block: {block}");
+            let local_committee = self
+                .epoch_manager
+                .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
+                .await?;
+            let Some(our_addr) = self
+                .epoch_manager
+                .get_our_validator_node(block.epoch())
+                .await
+                .optional()?
+            else {
+                info!(
+                    target: LOG_TARGET,
+                    "❌ Our validator node is not registered for epoch {}. Not proposing {block} to foreign committee",
+                    block.epoch(),
+                );
+                continue;
+            };
+            let leader_index = self.leader_strategy.calculate_leader(&local_committee, block.height());
+            let my_index = local_committee
+                .addresses()
+                .position(|addr| *addr == our_addr.address)
+                .ok_or_else(|| HotStuffError::InvariantError("Our address not found in local committee".to_string()))?;
+            // There are other ways to approach this. But for simplicty is better just to make sure at least one honest
+            // node will send it to the whole foreign committee. So we select the leader and f other nodes. It has to be
+            // deterministic so we select by index (leader, leader+1, ..., leader+f). FYI: The messages between
+            // committees and within committees are not different in terms of size, speed, etc.
+            let diff_from_leader = (my_index + local_committee.len() - leader_index as usize) % local_committee.len();
+            // f+1 nodes (always including the leader) send the proposal to the foreign committee
+            // if diff_from_leader <= (local_committee.len() - 1) / 3 + 1 {
+            if diff_from_leader <= local_committee.len() / 3 {
+                self.proposer.broadcast_foreign_proposal_if_required(block).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn generate_vote_message(
+        &self,
+        block: &Block,
+        decision: QuorumDecision,
+    ) -> Result<VoteMessage, HotStuffError> {
+        let vn = self
+            .epoch_manager
+            .get_validator_node(block.epoch(), &self.local_validator_addr)
+            .await?;
+        let leaf_hash = vn.get_node_hash(self.network);
+
+        let signature = self.vote_signing_service.sign_vote(&leaf_hash, block.id(), &decision);
+
+        Ok(VoteMessage {
+            epoch: block.epoch(),
+            block_id: *block.id(),
+            block_height: block.height(),
+            decision,
+            signature,
+        })
     }
 
     fn save_block(

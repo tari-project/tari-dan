@@ -15,6 +15,10 @@ use crate::{uint::U256, SubstateAddress};
 pub struct Shard(#[cfg_attr(feature = "ts", ts(type = "number"))] u32);
 
 impl Shard {
+    pub const fn zero() -> Shard {
+        Shard(0)
+    }
+
     pub fn as_u32(self) -> u32 {
         self.0
     }

@@ -180,6 +180,7 @@ impl ProcessManager {
     }
 
     async fn register_all_validator_nodes(&mut self) -> anyhow::Result<()> {
+        let mut skip = vec![];
         for vn in self.instance_manager.validator_nodes_mut() {
             if !vn.instance_mut().check_running() {
                 log::error!(
@@ -187,7 +188,7 @@ impl ProcessManager {
                     vn.instance().id(),
                     vn.instance().name()
                 );
-                continue;
+                skip.push(vn.instance().id());
             }
         }
 
@@ -203,6 +204,9 @@ impl ProcessManager {
             })?;
 
         for vn in self.instance_manager.validator_nodes() {
+            if skip.contains(&vn.instance().id()) {
+                continue;
+            }
             info!("🟡 Registering validator node {}", vn.instance().name());
             if let Err(err) = vn.wait_for_startup(Duration::from_secs(10)).await {
                 log::error!(
@@ -257,7 +261,6 @@ impl ProcessManager {
 
         let reg_info = vn.get_registration_info().await?;
         wallet.register_validator_node(reg_info).await?;
-        self.mine(20).await?;
         Ok(())
     }
 

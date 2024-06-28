@@ -4,6 +4,7 @@
 use std::ops::Deref;
 
 use indexmap::IndexMap;
+use tari_dan_common_types::Epoch;
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -33,6 +34,7 @@ pub struct BlockDecision {
     pub quorum_decision: Option<QuorumDecision>,
     pub locked_blocks: Vec<Block>,
     pub finalized_transactions: Vec<Vec<TransactionAtom>>,
+    pub end_of_epoch: Option<Epoch>,
 }
 
 #[derive(Debug, Clone)]

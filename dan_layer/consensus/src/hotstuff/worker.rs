@@ -33,6 +33,7 @@ use super::{
     config::HotstuffConfig,
     on_receive_requested_transactions::OnReceiveRequestedTransactions,
     proposer::Proposer,
+    ProposalValidationError,
 };
 use crate::{
     hotstuff::{
@@ -46,7 +47,7 @@ use crate::{
         on_receive_new_view::OnReceiveNewViewHandler,
         on_receive_request_missing_transactions::OnReceiveRequestMissingTransactions,
         on_receive_vote::OnReceiveVoteHandler,
-        on_sync_request::{OnSyncRequest, MAX_BLOCKS_PER_SYNC},
+        on_sync_request::OnSyncRequest,
         pacemaker::PaceMaker,
         pacemaker_handle::PaceMakerHandle,
         vote_receiver::VoteReceiver,
@@ -210,14 +211,19 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             let last_voted = LastVoted::get(tx)?;
             Ok::<_, HotStuffError>((cmp::max(leaf.height(), last_voted.height()), HighQc::get(tx)?))
         })?;
+
+        let current_epoch = self.epoch_manager.current_epoch().await?;
         info!(
             target: LOG_TARGET,
-            "🚀 Pacemaker starting leaf_block: {}, high_qc: {}",
+            "🚀 Pacemaker starting for epoch {}, height: {}, high_qc: {}",
+            current_epoch,
             current_height,
             high_qc
         );
 
-        self.pacemaker.start(current_height, high_qc.block_height()).await?;
+        self.pacemaker
+            .start(current_epoch, current_height, high_qc.block_height())
+            .await?;
 
         self.run().await?;
         Ok(())
@@ -237,9 +243,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
         self.request_initial_catch_up_sync().await?;
 
-        let mut prev_height = self.pacemaker.current_height();
+        let mut prev_height = self.pacemaker.current_view().get_height();
         loop {
-            let current_height = self.pacemaker.current_height() + NodeHeight(1);
+            let current_height = self.pacemaker.current_view().get_height() + NodeHeight(1);
+            let current_epoch = self.pacemaker.current_view().get_epoch();
 
             if current_height != prev_height {
                 self.hooks.on_pacemaker_height_changed(current_height);
@@ -262,7 +269,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     }
                 },
 
-                msg_or_sync = self.on_inbound_message.next_message(current_height) => {
+                msg_or_sync = self.on_inbound_message.next_message(current_epoch, current_height) => {
                     if let Err(e) = self.dispatch_hotstuff_message(msg_or_sync).await {
                         self.on_failure("on_new_hs_message", &e).await;
                         return Err(e);
@@ -277,7 +284,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 },
 
                 Ok(event) = epoch_manager_events.recv() => {
-                    self.handle_epoch_manager_event(event).await?;
+                    self.on_epoch_manager_event(event).await?;
                 },
 
                 _ = on_beat.wait() => {
@@ -376,7 +383,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         Ok(())
     }
 
-    async fn handle_epoch_manager_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
+    async fn on_epoch_manager_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
         match event {
             EpochManagerEvent::EpochChanged(epoch) => {
                 if !self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await? {
@@ -385,6 +392,14 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                         "💤 This validator is not registered for epoch {}. Going to sleep.", epoch
                     );
                     return Err(HotStuffError::NotRegisteredForCurrentEpoch { epoch });
+                }
+
+                // Edge case: we have started a VN and have progressed a few epochs quickly and have no blocks in
+                // previous epochs to update the current view. This only really applies when mining is
+                // instant (localnet)
+                let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?;
+                if leaf_block.is_genesis() {
+                    self.pacemaker.update_epoch(epoch).await?;
                 }
 
                 // TODO: This is breaking my testing right now (division by zero, from time to time)
@@ -507,11 +522,12 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             self.on_propose
                 .handle(current_epoch, &local_committee, leaf_block, is_newview_propose)
                 .await?;
-        } else if is_newview_propose {
-            // We can make this a warm/error in future, but for now I want to be sure this never happens
-            panic!("propose_if_leader called with is_newview_propose=true but we're not the leader");
         } else {
-            // Nothing to do
+            // We can make this a warm/error in future, but for now I want to be sure this never happens
+            debug_assert!(
+                !is_newview_propose,
+                "propose_if_leader called with is_newview_propose=true but we're not the leader"
+            );
         }
         Ok(())
     }
@@ -527,13 +543,16 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 from,
                 local_height,
                 qc_height,
+                remote_epoch,
+                local_epoch,
             }) => {
                 self.hooks.on_needs_sync(local_height, qc_height);
-                if qc_height.as_u64() - local_height.as_u64() > MAX_BLOCKS_PER_SYNC as u64 {
+                if remote_epoch > local_epoch {
                     warn!(
                         target: LOG_TARGET,
-                        "⚠️ Node is too far behind to catch up from {} (local height: {}, qc height: {})",
+                        "⚠️ Node is behind by more than an epoch from peer {} (local epoch: {}, height: {}, qc height: {})",
                         from,
+                        local_epoch,
                         local_height,
                         qc_height
                     );
@@ -566,10 +585,27 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 "on_receive_new_view",
                 self.on_receive_new_view.handle(from, message).await,
             ),
-            HotstuffMessage::Proposal(msg) => log_err(
-                "on_receive_local_proposal",
-                self.on_receive_local_proposal.handle(msg).await,
-            ),
+            HotstuffMessage::Proposal(msg) => {
+                match log_err(
+                    "on_receive_local_proposal",
+                    self.on_receive_local_proposal.handle(msg).await,
+                ) {
+                    Ok(_) => Ok(()),
+                    Err(
+                        err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound {
+                            ..
+                        }),
+                    ) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️This node has fallen behind due to a missing justified block: {err}"
+                        );
+                        self.on_catch_up_sync(&from).await?;
+                        Ok(())
+                    },
+                    Err(err) => return Err(err),
+                }
+            },
             HotstuffMessage::ForeignProposal(msg) => log_err(
                 "on_receive_foreign_proposal",
                 self.on_receive_foreign_proposal.handle(from, msg).await,
@@ -583,7 +619,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 "on_receive_requested_txs",
                 self.on_receive_requested_txs.handle(from, msg).await,
             ),
-            HotstuffMessage::SyncRequest(msg) => {
+            HotstuffMessage::CatchUpSyncRequest(msg) => {
                 self.on_sync_request.handle(from, msg);
                 Ok(())
             },
@@ -601,19 +637,19 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         let high_qc = self.state_store.with_read_tx(|tx| HighQc::get(tx))?;
         info!(
             target: LOG_TARGET,
-            "⏰ Catch up required from block {} from {} (current height: {})",
+            "⏰ Catch up required from block {} from {} (current view: {})",
             high_qc,
             from,
-            self.pacemaker.current_height()
+            self.pacemaker.current_view()
         );
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
-        // Send the request message
+        // Request a catch-up
         if self
             .outbound_messaging
             .send(
                 from.clone(),
-                HotstuffMessage::SyncRequest(SyncRequestMessage {
+                HotstuffMessage::CatchUpSyncRequest(SyncRequestMessage {
                     epoch: current_epoch,
                     high_qc,
                 }),

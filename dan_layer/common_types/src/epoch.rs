@@ -44,8 +44,8 @@ impl Epoch {
         self.0.to_le_bytes()
     }
 
-    pub fn saturating_sub(&self, other: Epoch) -> Epoch {
-        Epoch(self.0.saturating_sub(other.0))
+    pub fn saturating_sub<T: Into<Epoch>>(&self, other: T) -> Epoch {
+        Epoch(self.0.saturating_sub(other.into().0))
     }
 
     pub fn checked_sub(&self, other: Self) -> Option<Epoch> {
@@ -61,7 +61,7 @@ impl From<u64> for Epoch {
 
 impl Display for Epoch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "Epoch({})", self.0)
     }
 }
 

@@ -583,7 +583,7 @@ where TSvc: Service<Request<Bytes>, Response = Response<Body>, Error = RpcStatus
                 "({}) Client has an invalid deadline. {}", self.logging_context_string, decoded_msg
             );
             // Let the client know that they have disobeyed the spec
-            let status = RpcStatus::bad_request(&format!(
+            let status = RpcStatus::bad_request(format!(
                 "Invalid deadline ({:.0?}). The deadline MUST be greater than {:.0?}.",
                 self.peer_id, deadline,
             ));

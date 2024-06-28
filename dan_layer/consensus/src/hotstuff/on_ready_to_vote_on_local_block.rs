@@ -5,11 +5,7 @@
 use std::num::NonZeroU64;
 
 use log::*;
-use tari_common::configuration::Network;
-use tari_dan_common_types::{
-    committee::{Committee, CommitteeInfo},
-    optional::Optional,
-};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -17,16 +13,13 @@ use tari_dan_storage::{
         BlockId,
         Command,
         Decision,
-        EpochCheckpoint,
         EpochEvent,
         ExecutedTransaction,
         ForeignProposal,
         LastExecuted,
-        LastSentVote,
         LastVoted,
         LockedBlock,
         PendingStateTreeDiff,
-        QuorumCertificate,
         QuorumDecision,
         SubstateLockFlag,
         TransactionAtom,
@@ -40,11 +33,9 @@ use tari_dan_storage::{
     StateStore,
     StateStoreWriteTransaction,
 };
-use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::TransactionId;
 use tokio::sync::broadcast;
 
-use super::proposer::Proposer;
 use crate::{
     hotstuff::{
         block_change_set::{BlockDecision, ProposedBlockChangeSet},
@@ -54,16 +45,7 @@ use crate::{
         ProposalValidationError,
         EXHAUST_DIVISOR,
     },
-    messages::{HotstuffMessage, VoteMessage},
-    traits::{
-        hooks::ConsensusHooks,
-        BlockTransactionExecutor,
-        ConsensusSpec,
-        LeaderStrategy,
-        OutboundMessaging,
-        VoteSignatureService,
-        WriteableSubstateStore,
-    },
+    traits::{BlockTransactionExecutor, ConsensusSpec, WriteableSubstateStore},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_lock_block_ready";
@@ -71,68 +53,47 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_lock_block_ready";
 pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     local_validator_addr: TConsensusSpec::Addr,
     store: TConsensusSpec::StateStore,
-    epoch_manager: TConsensusSpec::EpochManager,
-    vote_signing_service: TConsensusSpec::SignatureService,
-    leader_strategy: TConsensusSpec::LeaderStrategy,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-    outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_events: broadcast::Sender<HotstuffEvent>,
-    proposer: Proposer<TConsensusSpec>,
     transaction_executor: TConsensusSpec::TransactionExecutor,
-    network: Network,
-    hooks: TConsensusSpec::Hooks,
 }
 
 impl<TConsensusSpec> OnReadyToVoteOnLocalBlock<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
         store: TConsensusSpec::StateStore,
-        epoch_manager: TConsensusSpec::EpochManager,
-        vote_signing_service: TConsensusSpec::SignatureService,
-        leader_strategy: TConsensusSpec::LeaderStrategy,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        outbound_messaging: TConsensusSpec::OutboundMessaging,
         tx_events: broadcast::Sender<HotstuffEvent>,
-        proposer: Proposer<TConsensusSpec>,
         transaction_executor: TConsensusSpec::TransactionExecutor,
-        network: Network,
-        hooks: TConsensusSpec::Hooks,
     ) -> Self {
         Self {
             local_validator_addr: validator_addr,
             store,
-            epoch_manager,
-            vote_signing_service,
-            leader_strategy,
             transaction_pool,
-            outbound_messaging,
             tx_events,
-            proposer,
             transaction_executor,
-            network,
-            hooks,
         }
     }
 
-    pub async fn handle(&mut self, valid_block: ValidBlock) -> Result<(), HotStuffError> {
+    pub fn handle(
+        &mut self,
+        valid_block: &ValidBlock,
+        local_committee_info: CommitteeInfo,
+    ) -> Result<BlockDecision, HotStuffError> {
         debug!(
             target: LOG_TARGET,
             "🔥 LOCAL PROPOSAL READY: {}",
             valid_block,
         );
 
-        let local_committee_shard = self
-            .epoch_manager
-            .get_committee_info_by_validator_public_key(valid_block.epoch(), valid_block.proposed_by())
-            .await?;
-        let block_decision = self.store.with_write_tx(|tx| {
-            let change_set = self.decide_on_block(&**tx, &local_committee_shard, &valid_block)?;
+        self.store.with_write_tx(|tx| {
+            let change_set = self.decide_on_block(&**tx, &local_committee_info, valid_block)?;
 
             let mut locked_blocks = Vec::new();
             let mut finalized_transactions = Vec::new();
+            let mut end_of_epoch = None;
 
             if change_set.is_accept() {
                 // Update nodes
@@ -142,9 +103,11 @@ where TConsensusSpec: ConsensusSpec
                         locked_blocks.push(block.clone());
                         self.on_lock_block(tx, locked, block)
                     },
-                    |tx, last_exec, three_chain, commit_block| {
-                        let committed =
-                            self.on_commit(tx, last_exec, commit_block, three_chain, &local_committee_shard)?;
+                    |tx, last_exec, commit_block| {
+                        if commit_block.is_epoch_end() {
+                            end_of_epoch = Some(commit_block.epoch());
+                        }
+                        let committed = self.on_commit(tx, last_exec, commit_block, &local_committee_info)?;
                         if !committed.is_empty() {
                             finalized_transactions.push(committed);
                         }
@@ -164,45 +127,9 @@ where TConsensusSpec: ConsensusSpec
                 quorum_decision,
                 locked_blocks,
                 finalized_transactions,
+                end_of_epoch,
             })
-        })?;
-
-        self.hooks
-            .on_local_block_decide(&valid_block, block_decision.quorum_decision);
-        for t in block_decision.finalized_transactions.into_iter().flatten() {
-            self.hooks.on_transaction_finalized(&t);
-        }
-        self.propose_newly_locked_blocks(block_decision.locked_blocks).await?;
-
-        if let Some(decision) = block_decision.quorum_decision {
-            let is_registered = self
-                .epoch_manager
-                .is_this_validator_registered_for_epoch(valid_block.epoch())
-                .await?;
-
-            if is_registered {
-                debug!(
-                    target: LOG_TARGET,
-                    "🔥 LOCAL PROPOSAL {} DECIDED {:?}",
-                    valid_block,
-                    decision,
-                );
-                let local_committee = self.epoch_manager.get_local_committee(valid_block.epoch()).await?;
-
-                let vote = self.generate_vote_message(valid_block.block(), decision).await?;
-                self.send_vote_to_leader(&local_committee, vote, valid_block.block())
-                    .await?;
-            } else {
-                info!(
-                    target: LOG_TARGET,
-                    "❓️ Local validator not registered for epoch {}. Not voting on block {}",
-                    valid_block.epoch(),
-                    valid_block,
-                );
-            }
-        }
-
-        Ok(())
+        })
     }
 
     fn decide_on_block(
@@ -265,39 +192,6 @@ where TConsensusSpec: ConsensusSpec
         }
 
         Ok(true)
-    }
-
-    async fn send_vote_to_leader(
-        &mut self,
-        local_committee: &Committee<TConsensusSpec::Addr>,
-        vote: VoteMessage,
-        block: &Block,
-    ) -> Result<(), HotStuffError> {
-        let leader = self
-            .leader_strategy
-            .get_leader_for_next_block(local_committee, block.height());
-        info!(
-            target: LOG_TARGET,
-            "🔥 VOTE {:?} for block {} proposed by {} to next leader {:.4}",
-            vote.decision,
-            block,
-            block.proposed_by(),
-            leader,
-        );
-        self.outbound_messaging
-            .send(leader.clone(), HotstuffMessage::Vote(vote.clone()))
-            .await?;
-        self.store.with_write_tx(|tx| {
-            let last_sent_vote = LastSentVote {
-                epoch: vote.epoch,
-                block_id: vote.block_id,
-                block_height: vote.block_height,
-                decision: vote.decision,
-                signature: vote.signature,
-            };
-            last_sent_vote.set(tx)
-        })?;
-        Ok(())
     }
 
     #[allow(clippy::too_many_lines)]
@@ -966,37 +860,14 @@ where TConsensusSpec: ConsensusSpec
         Ok(true)
     }
 
-    async fn generate_vote_message(
-        &self,
-        block: &Block,
-        decision: QuorumDecision,
-    ) -> Result<VoteMessage, HotStuffError> {
-        let vn = self
-            .epoch_manager
-            .get_validator_node(block.epoch(), &self.local_validator_addr)
-            .await?;
-        let leaf_hash = vn.get_node_hash(self.network);
-
-        let signature = self.vote_signing_service.sign_vote(&leaf_hash, block.id(), &decision);
-
-        Ok(VoteMessage {
-            epoch: block.epoch(),
-            block_id: *block.id(),
-            block_height: block.height(),
-            decision,
-            signature,
-        })
-    }
-
     fn on_commit(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         last_executed: &LastExecuted,
         block: &Block,
-        three_chain: &[BlockId; 3],
         local_committee_info: &CommitteeInfo,
     ) -> Result<Vec<TransactionAtom>, HotStuffError> {
-        let committed_transactions = self.execute(tx, block, three_chain, local_committee_info)?;
+        let committed_transactions = self.execute(tx, block, local_committee_info)?;
         debug!(
             target: LOG_TARGET,
             "✅ COMMIT block {}, last executed height = {}",
@@ -1004,6 +875,7 @@ where TConsensusSpec: ConsensusSpec
             last_executed.height
         );
         self.publish_event(HotstuffEvent::BlockCommitted {
+            epoch: block.epoch(),
             block_id: *block.id(),
             height: block.height(),
         });
@@ -1037,45 +909,6 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn propose_newly_locked_blocks(&mut self, blocks: Vec<Block>) -> Result<(), HotStuffError> {
-        for block in blocks {
-            debug!(target:LOG_TARGET,"Broadcast new locked block: {block}");
-            let local_committee = self
-                .epoch_manager
-                .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
-                .await?;
-            let Some(our_addr) = self
-                .epoch_manager
-                .get_our_validator_node(block.epoch())
-                .await
-                .optional()?
-            else {
-                info!(
-                    target: LOG_TARGET,
-                    "❌ Our validator node is not registered for epoch {}. Not proposing {block} to foreign committee",
-                    block.epoch(),
-                );
-                continue;
-            };
-            let leader_index = self.leader_strategy.calculate_leader(&local_committee, block.height());
-            let my_index = local_committee
-                .addresses()
-                .position(|addr| *addr == our_addr.address)
-                .ok_or_else(|| HotStuffError::InvariantError("Our address not found in local committee".to_string()))?;
-            // There are other ways to approach this. But for simplicty is better just to make sure at least one honest
-            // node will send it to the whole foreign committee. So we select the leader and f other nodes. It has to be
-            // deterministic so we select by index (leader, leader+1, ..., leader+f). FYI: The messages between
-            // committees and within committees are not different in terms of size, speed, etc.
-            let diff_from_leader = (my_index + local_committee.len() - leader_index as usize) % local_committee.len();
-            // f+1 nodes (always including the leader) send the proposal to the foreign committee
-            // if diff_from_leader <= (local_committee.len() - 1) / 3 + 1 {
-            if diff_from_leader <= local_committee.len() / 3 {
-                self.proposer.broadcast_foreign_proposal_if_required(block).await?;
-            }
-        }
-        Ok(())
-    }
-
     fn publish_event(&self, event: HotstuffEvent) {
         let _ignore = self.tx_events.send(event);
     }
@@ -1084,32 +917,12 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
-        three_chain: &[BlockId; 3],
         local_committee_info: &CommitteeInfo,
     ) -> Result<Vec<TransactionAtom>, HotStuffError> {
-        // Nothing to do here for empty dummy blocks
         if block.is_dummy() {
+            // Nothing to do here for empty dummy blocks. Just mark the block as committed.
             block.commit_diff(tx, BlockDiff::empty(*block.id()))?;
             return Ok(vec![]);
-        }
-
-        if block.is_epoch_end() {
-            // Add checkpoint for this chain
-            // Get the QC that justifies the commit block (this block)
-            debug_assert_eq!(*block.id(), three_chain[0], "Block and chain[0] should be the same");
-            let qc1 = QuorumCertificate::get_by_block_id(&**tx, &three_chain[0])?;
-            // The rest of the 3-chain. The block that justifies the block that justified the commit block and so on
-            let qc2 = QuorumCertificate::get_by_block_id(&**tx, &three_chain[1])?;
-            let qc3 = QuorumCertificate::get_by_block_id(&**tx, &three_chain[2])?;
-
-            EpochCheckpoint::new(
-                *block.id(),
-                block.epoch(),
-                local_committee_info.shard(),
-                *block.merkle_root(),
-                [*qc1.id(), *qc2.id(), *qc3.id()],
-            )
-            .insert(tx)?;
         }
 
         let diff = block.get_diff(&**tx)?;

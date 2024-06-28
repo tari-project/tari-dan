@@ -16,16 +16,12 @@ use tari_consensus::{
     traits::{ConsensusSpec, LeaderStrategy, SyncManager, SyncStatus},
 };
 use tari_dan_common_types::{committee::Committee, optional::Optional, shard::Shard, Epoch, NodeHeight, PeerAddress};
-use tari_dan_p2p::{
-    proto::rpc::{GetCheckpointRequest, GetCheckpointResponse, GetHighQcRequest, SyncBlocksRequest, SyncStateRequest},
-    TariMessagingSpec,
-};
+use tari_dan_p2p::proto::rpc::{GetHighQcRequest, SyncBlocksRequest};
 use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockDiff,
         BlockId,
-        EpochCheckpoint,
         HighQc,
         LeafBlock,
         LockedBlock,
@@ -44,7 +40,7 @@ use tari_rpc_framework::RpcError;
 use tari_state_tree::SubstateTreeChange;
 use tari_transaction::{Transaction, VersionedSubstateId};
 use tari_validator_node_rpc::{
-    client::{TariValidatorNodeRpcClient, TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory},
+    client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory},
     rpc_service::ValidatorNodeRpcClient,
 };
 
@@ -79,6 +75,15 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             leader_strategy,
             client_factory,
         }
+    }
+
+    async fn get_sync_peers(&self) -> Result<Committee<TConsensusSpec::Addr>, CommsRpcConsensusSyncError> {
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        let this_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
+        let mut committee = self.epoch_manager.get_local_committee(current_epoch).await?;
+        committee.members.retain(|(addr, _)| *addr != this_vn.address);
+        committee.shuffle();
+        Ok(committee)
     }
 
     async fn sync_with_peer(
@@ -561,107 +566,6 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         }
         Ok(sync_error)
     }
-
-    async fn establish_rpc_session(&self, addr: &PeerAddress) -> Option<ValidatorNodeRpcClient> {
-        let mut rpc_client = self.client_factory.create_client(addr);
-        match rpc_client.client_connection().await {
-            Ok(c) => Some(c),
-            Err(err) => {
-                warn!(
-                    target: LOG_TARGET,
-                    "Failed to establish RPC session with vn {addr}: {err}. Attempting another VN if available"
-                );
-                return None;
-            },
-        }
-    }
-
-    async fn fetch_epoch_checkpoint(&self, client: &mut ValidatorNodeRpcClient) -> Option<EpochCheckpoint> {
-        match client.get_checkpoint(GetCheckpointRequest {}).await {
-            Ok(GetCheckpointResponse {
-                checkpoint: Some(checkpoint),
-            }) => match EpochCheckpoint::try_from(checkpoint) {
-                Ok(cp) => Some(cp),
-                Err(err) => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Invalid message received from peer: {err}",
-                    );
-                    None
-                },
-            },
-            Ok(GetCheckpointResponse { checkpoint: None }) => {
-                warn!(
-                    target: LOG_TARGET,
-                    "Invalid response: no checkpoint provided. Attempting to fetch from another validator node",
-                );
-                None
-            },
-            Err(err) => {
-                warn!(
-                    target: LOG_TARGET,
-                    "Failed to fetch checkpoint from peer: {err}",
-                );
-                None
-            },
-        }
-    }
-
-    async fn start_state_sync(&self, client: &mut ValidatorNodeRpcClient) -> Result<(), CommsRpcConsensusSyncError> {
-        let current_epoch = self.epoch_manager.current_epoch().await?;
-        let committee_info = self.epoch_manager.get_local_committee_info(current_epoch).await?;
-
-        let mut state_stream = client
-            .sync_state(SyncStateRequest {
-                start_epoch: 0,
-                start_shard: 0,
-                start_seq: 0,
-                current_epoch: current_epoch.as_u64(),
-                current_shard: committee_info.shard().as_u32(),
-            })
-            .await?;
-
-        while let Some(result) = state_stream.next().await {
-            let msg = result?;
-
-            let updates = msg.update_batch.ok_or_else(|| {
-                CommsRpcConsensusSyncError::InvalidResponse(
-                    anyhow::anyhow!("Expected peer to return substate updates",),
-                )
-            })?;
-
-            for update in updates.updates.into_iter().map(SubstateUpdate::try_from) {
-                let update = update.map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
-                log::error!(target: LOG_TARGET, "-> {:?}", update);
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn get_sync_committees(&self) -> Result<HashMap<Shard, Committee<PeerAddress>>, CommsRpcConsensusSyncError> {
-        let current_epoch = self.epoch_manager.current_epoch().await?;
-        // We are behind at least one epoch.
-        // We get the current substate range, and we asks committees from previous epoch in this range to give us
-        // data.
-        let local_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
-        let range = local_shard.to_substate_address_range();
-        let prev_epoch = current_epoch.saturating_sub(Epoch(1));
-        info!(target: LOG_TARGET,"Previous epoch is {}", prev_epoch);
-        let prev_num_committee = self.epoch_manager.get_num_committees(prev_epoch).await?;
-        info!(target: LOG_TARGET,"Previous num committee {}", prev_num_committee);
-        let start = range.start().to_shard(prev_num_committee);
-        let end = range.end().to_shard(prev_num_committee);
-        info!(target: LOG_TARGET,"Start: {}, End: {}", start, end);
-        let committees = self
-            .epoch_manager
-            .get_committees_by_shards(
-                prev_epoch,
-                (start.as_u32()..=end.as_u32()).map(Shard::from).collect::<HashSet<_>>(),
-            )
-            .await?;
-        Ok(committees)
-    }
 }
 
 #[async_trait]
@@ -671,56 +575,114 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
     type Error = CommsRpcConsensusSyncError;
 
     async fn check_sync(&self) -> Result<SyncStatus, Self::Error> {
-        // TODO: if we're here we might always need to sync
-        Ok(SyncStatus::Behind)
+        let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx).optional())?;
+        let leaf_epoch = match leaf_block {
+            Some(leaf_block) => {
+                let block = self
+                    .state_store
+                    .with_read_tx(|tx| Block::get(tx, leaf_block.block_id()))?;
+                block.epoch()
+            },
+            None => Epoch(0),
+        };
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        if current_epoch > leaf_epoch {
+            info!(target: LOG_TARGET, "We are behind at least one epoch");
+            // We are behind at least one epoch.
+            // We get the current substate range, and we asks committees from previous epoch in this range to give us
+            // data.
+            let local_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
+            let current_num_committee = self.epoch_manager.get_num_committees(current_epoch).await?;
+            let range = local_shard.shard().to_substate_address_range(current_num_committee);
+            let prev_epoch = current_epoch.saturating_sub(Epoch(1));
+            info!(target: LOG_TARGET,"Previous epoch is {}", prev_epoch);
+            let prev_num_committee = self.epoch_manager.get_num_committees(prev_epoch).await?;
+            info!(target: LOG_TARGET,"Previous num committee {}", prev_num_committee);
+            let start = range.start().to_shard(prev_num_committee);
+            let end = range.end().to_shard(prev_num_committee);
+            info!(target: LOG_TARGET,"Start: {}, End: {}", start, end);
+            let this_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
+            let committees = self
+                .epoch_manager
+                .get_committees_by_shards(
+                    prev_epoch,
+                    (start.as_u32()..=end.as_u32()).map(Shard::from).collect::<HashSet<_>>(),
+                )
+                .await?;
+            for (shard, mut committee) in committees {
+                info!(target: LOG_TARGET, "Syncing shard {} from previous epoch. Committee : {:?}", shard, committee);
+                committee.members.retain(|(addr, _)| *addr != this_vn.address);
+                committee.shuffle();
+                if self.check_sync_from_committee(committee).await? == SyncStatus::Behind {
+                    return Ok(SyncStatus::Behind);
+                }
+            }
+        }
 
-        // let current_epoch = self.epoch_manager.current_epoch().await?;
-        //
-        // let leaf_epoch = self.state_store.with_read_tx(|tx| {
-        //     let epoch = LeafBlock::get(tx)
-        //         .optional()?
-        //         .map(|leaf| Block::get(tx, leaf.block_id()))
-        //         .transpose()?
-        //         .map(|b| b.epoch())
-        //         .unwrap_or(Epoch(0));
-        //     Ok::<_, Self::Error>(epoch)
-        // })?;
-        //
-        // // We only sync if we're behind by an epoch. The current epoch is replayed in consensus.
-        // if current_epoch > leaf_epoch {
-        //     info!(target: LOG_TARGET, "??Our current leaf block is behind the current epoch. Syncing...");
-        //     return Ok(SyncStatus::Behind);
-        // }
-        //
-        // Ok(SyncStatus::UpToDate)
+        let committee: Committee<PeerAddress> = self.get_sync_peers().await?;
+        self.check_sync_from_committee(committee).await
     }
 
     async fn sync(&mut self) -> Result<(), Self::Error> {
-        let prev_epoch_committees = self.get_sync_committees().await?;
-
-        // Sync data from each committee in range of the committee we're joining.
-        // NOTE: we don't have to worry about substates in address range because shard boundaries are fixed.
-        for (shard, mut committee) in prev_epoch_committees {
-            committee.shuffle();
-            for addr in committee.members() {
-                let Some(mut client) = self.establish_rpc_session(addr).await else {
-                    continue;
-                };
-
-                let Some(checkpoint) = self.fetch_epoch_checkpoint(&mut client).await else {
-                    continue;
-                };
-                error!(target: LOG_TARGET, "Checkpoint: {:?}", checkpoint);
-                // TODO: do something with the checkpoint
-
-                if let Err(err) = self.start_state_sync(&mut client).await {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Failed to sync state from {addr}: {err}. Attempting another peer if available"
-                    );
-                    continue;
+        info!(target: LOG_TARGET, "Syncing");
+        let mut sync_error = None;
+        let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx).optional())?;
+        let leaf_epoch = match leaf_block {
+            Some(leaf_block) => {
+                let block = self
+                    .state_store
+                    .with_read_tx(|tx| Block::get(tx, leaf_block.block_id()))?;
+                block.epoch()
+            },
+            None => Epoch(0),
+        };
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        let this_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
+        if current_epoch > leaf_epoch {
+            info!(target: LOG_TARGET, "We are behind at least one epoch..sync");
+            // We are behind at least one epoch.
+            // We get the current substate range, and we asks committees from previous epoch in this range to give us
+            // data.
+            let local_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
+            let current_num_committee = self.epoch_manager.get_num_committees(current_epoch).await?;
+            let range = local_shard.shard().to_substate_address_range(current_num_committee);
+            let prev_epoch = current_epoch.saturating_sub(Epoch(1));
+            info!(target: LOG_TARGET,"Previous epoch is {}", prev_epoch);
+            let prev_num_committee = self.epoch_manager.get_num_committees(prev_epoch).await?;
+            info!(target: LOG_TARGET,"Previous num committee {}", prev_num_committee);
+            let start = range.start().to_shard(prev_num_committee);
+            let end = range.end().to_shard(prev_num_committee);
+            info!(target: LOG_TARGET,"Start: {}, End: {}", start, end);
+            let committees = self
+                .epoch_manager
+                .get_committees_by_shards(
+                    prev_epoch,
+                    (start.as_u32()..=end.as_u32()).map(Shard::from).collect::<HashSet<_>>(),
+                )
+                .await?;
+            for (_shard, committee) in committees {
+                info!(target:LOG_TARGET,"Syncing from committee {:?}",committee);
+                if let Some(error) = self
+                    .sync_from_committee(committee, Some(current_epoch), this_vn.address)
+                    .await?
+                {
+                    sync_error = Some(error);
                 }
             }
+        }
+
+        let committee = self.get_sync_peers().await?;
+        if committee.is_empty() {
+            warn!(target: LOG_TARGET, "No peers available for sync");
+            return Ok(());
+        }
+
+        if let Some(error) = self.sync_from_committee(committee, None, this_vn.address).await? {
+            sync_error = Some(error);
+        }
+
+        if let Some(err) = sync_error {
+            return Err(err);
         }
 
         Ok(())
