@@ -269,6 +269,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             timestamp: value.timestamp(),
             base_layer_block_height: value.base_layer_block_height(),
             base_layer_block_hash: value.base_layer_block_hash().as_bytes().to_vec(),
+            is_dummy: value.is_dummy(),
         }
     }
 }
@@ -281,31 +282,51 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
             .map_err(|_| anyhow!("Block conversion: Invalid network byte {}", value.network))?
             .try_into()?;
 
-        Ok(Self::new(
-            network,
-            value.parent_id.try_into()?,
-            value
-                .justify
-                .ok_or_else(|| anyhow!("Block conversion: QC not provided"))?
-                .try_into()?,
-            NodeHeight(value.height),
-            Epoch(value.epoch),
-            Shard::from(value.shard),
-            PublicKey::from_canonical_bytes(&value.proposed_by)
-                .map_err(|_| anyhow!("Block conversion: Invalid proposed_by"))?,
-            value
-                .commands
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<_, _>>()?,
-            value.merkle_root.try_into()?,
-            value.total_leader_fee,
-            decode_exact(&value.foreign_indexes)?,
-            value.signature.map(TryInto::try_into).transpose()?,
-            value.timestamp,
-            value.base_layer_block_height,
-            value.base_layer_block_hash.try_into()?,
-        ))
+        if value.is_dummy {
+            Ok(Self::dummy_block(
+                network,
+                value.parent_id.try_into()?,
+                PublicKey::from_canonical_bytes(&value.proposed_by)
+                    .map_err(|_| anyhow!("Block conversion: Invalid proposed_by"))?,
+                NodeHeight(value.height),
+                value
+                    .justify
+                    .ok_or_else(|| anyhow!("Block conversion: QC not provided"))?
+                    .try_into()?,
+                Epoch(value.epoch),
+                Shard::from(value.shard),
+                value.merkle_root.try_into()?,
+                value.timestamp,
+                value.base_layer_block_height,
+                value.base_layer_block_hash.try_into()?,
+            ))
+        } else {
+            Ok(Self::new(
+                network,
+                value.parent_id.try_into()?,
+                value
+                    .justify
+                    .ok_or_else(|| anyhow!("Block conversion: QC not provided"))?
+                    .try_into()?,
+                NodeHeight(value.height),
+                Epoch(value.epoch),
+                Shard::from(value.shard),
+                PublicKey::from_canonical_bytes(&value.proposed_by)
+                    .map_err(|_| anyhow!("Block conversion: Invalid proposed_by"))?,
+                value
+                    .commands
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<Result<_, _>>()?,
+                value.merkle_root.try_into()?,
+                value.total_leader_fee,
+                decode_exact(&value.foreign_indexes)?,
+                value.signature.map(TryInto::try_into).transpose()?,
+                value.timestamp,
+                value.base_layer_block_height,
+                value.base_layer_block_hash.try_into()?,
+            ))
+        }
     }
 }
 

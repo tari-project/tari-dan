@@ -56,7 +56,7 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     msg.high_qc,
                     leaf_block
                 );
-                let blocks = Block::get_all_blocks_between(tx, msg.high_qc.block_id(), leaf_block.block_id(), false)?;
+                let blocks = Block::get_all_blocks_between(tx, msg.high_qc.block_id(), leaf_block.block_id(), true)?;
 
                 info!(
                     target: LOG_TARGET,

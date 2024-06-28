@@ -39,7 +39,7 @@ use crate::{
     hotstuff::{
         error::HotStuffError,
         event::HotstuffEvent,
-        on_inbound_message::{IncomingMessageResult, NeedsSync, OnInboundMessage},
+        on_inbound_message::{IncomingMessageResult, OnInboundMessage},
         on_next_sync_view::OnNextSyncViewHandler,
         on_propose::OnPropose,
         on_receive_foreign_proposal::OnReceiveForeignProposalHandler,
@@ -53,7 +53,7 @@ use crate::{
         vote_receiver::VoteReceiver,
     },
     messages::{HotstuffMessage, SyncRequestMessage},
-    traits::{hooks::ConsensusHooks, ConsensusSpec, InboundMessaging, LeaderStrategy, OutboundMessaging},
+    traits::{hooks::ConsensusHooks, ConsensusSpec, LeaderStrategy, OutboundMessaging},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
@@ -65,7 +65,6 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
 
     tx_events: broadcast::Sender<HotstuffEvent>,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
-    inbound_messaging: TConsensusSpec::InboundMessaging,
     rx_new_transactions: mpsc::Receiver<(TransactionId, usize)>,
 
     on_inbound_message: OnInboundMessage<TConsensusSpec>,
@@ -124,19 +123,21 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             network,
             tx_events: tx_events.clone(),
             outbound_messaging: outbound_messaging.clone(),
-            inbound_messaging,
             rx_new_transactions,
 
             on_inbound_message: OnInboundMessage::new(
+                validator_addr.clone(),
                 network,
                 config,
                 state_store.clone(),
                 epoch_manager.clone(),
                 leader_strategy.clone(),
                 signing_service.clone(),
+                inbound_messaging,
                 outbound_messaging.clone(),
                 transaction_pool.clone(),
                 tx_events.clone(),
+                hooks.clone(),
             ),
 
             on_next_sync_view: OnNextSyncViewHandler::new(
@@ -260,15 +261,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             );
 
             tokio::select! {
-                Some(result) = self.inbound_messaging.next_message() => {
-                    let (from, msg) = result?;
-                    self.hooks.on_message_received(&msg);
-                    if let Err(err) = self.on_inbound_message.handle(current_height, from, msg).await {
-                        self.hooks.on_error(&err);
-                        error!(target: LOG_TARGET, "Error handling message: {}", err);
-                    }
-                },
-
                 msg_or_sync = self.on_inbound_message.next_message(current_epoch, current_height) => {
                     if let Err(e) = self.dispatch_hotstuff_message(msg_or_sync).await {
                         self.on_failure("on_new_hs_message", &e).await;
@@ -460,7 +452,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     break;
                 },
                 _ = self.on_inbound_message.discard() => {},
-                _ = self.inbound_messaging.next_message() => {},
                 _ = self.rx_new_transactions.recv() => {}
             }
         }
@@ -538,33 +529,43 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     ) -> Result<(), HotStuffError> {
         let (from, msg) = match result {
             Ok(Some(msg)) => msg,
-            Ok(None) => return Ok(()),
-            Err(NeedsSync {
-                from,
-                local_height,
-                qc_height,
-                remote_epoch,
-                local_epoch,
-            }) => {
-                self.hooks.on_needs_sync(local_height, qc_height);
-                if remote_epoch > local_epoch {
-                    warn!(
-                        target: LOG_TARGET,
-                        "⚠️ Node is behind by more than an epoch from peer {} (local epoch: {}, height: {}, qc height: {})",
-                        from,
-                        local_epoch,
-                        local_height,
-                        qc_height
-                    );
-                    return Err(HotStuffError::FallenBehind {
-                        local_height,
-                        qc_height,
-                    });
-                }
-                self.on_catch_up_sync(&from).await?;
+            Ok(None) => {
+                warn!(target: LOG_TARGET, "🚨Incoming message stream has closed");
                 return Ok(());
             },
+            Err(err) => {
+                return Err(err);
+            },
         };
+        // let (from, msg) = match result {
+        //     Ok(Some(msg)) => msg,
+        //     Ok(None) => return Ok(()),
+        //     Err(NeedsSync {
+        //         from,
+        //         local_height,
+        //         qc_height,
+        //         remote_epoch,
+        //         local_epoch,
+        //     }) => {
+        //         self.hooks.on_needs_sync(local_height, qc_height);
+        //         if remote_epoch > local_epoch {
+        //             warn!(
+        //                 target: LOG_TARGET,
+        //                 "⚠️ Node is behind by more than an epoch from peer {} (local epoch: {}, height: {}, qc height:
+        // {})",                 from,
+        //                 local_epoch,
+        //                 local_height,
+        //                 qc_height
+        //             );
+        //             return Err(HotStuffError::FallenBehind {
+        //                 local_height,
+        //                 qc_height,
+        //             });
+        //         }
+        //         self.on_catch_up_sync(&from).await?;
+        //         return Ok(());
+        //     },
+        // };
 
         // if !self
         //     .epoch_manager

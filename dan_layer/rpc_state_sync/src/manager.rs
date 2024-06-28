@@ -672,7 +672,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
 
     async fn check_sync(&self) -> Result<SyncStatus, Self::Error> {
         // TODO: if we're here we might always need to sync
-        Ok(SyncStatus::Behind)
+        Ok(SyncStatus::UpToDate)
 
         // let current_epoch = self.epoch_manager.current_epoch().await?;
         //

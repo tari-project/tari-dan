@@ -12,7 +12,7 @@ use std::{
 
 use libp2p::{
     core::UpgradeInfo,
-    futures::{channel::mpsc, FutureExt, SinkExt, StreamExt},
+    futures::{channel::mpsc, FutureExt, StreamExt},
     swarm::{
         handler::{
             ConnectionEvent,
@@ -49,15 +49,18 @@ pub struct Handler<TCodec: Codec> {
     requested_stream: Option<MessageStream<TCodec::Message>>,
     pending_stream: Option<MessageStream<TCodec::Message>>,
     pending_events: VecDeque<Event<TCodec::Message>>,
-    pending_events_sender: mpsc::Sender<Event<TCodec::Message>>,
-    pending_events_receiver: mpsc::Receiver<Event<TCodec::Message>>,
+    pending_events_sender: mpsc::UnboundedSender<Event<TCodec::Message>>,
+    pending_events_receiver: mpsc::UnboundedReceiver<Event<TCodec::Message>>,
     codec: TCodec,
     tasks: futures_bounded::FuturesSet<Event<TCodec::Message>>,
 }
 
 impl<TCodec: Codec> Handler<TCodec> {
     pub fn new(peer_id: PeerId, protocol: StreamProtocol, config: &Config) -> Self {
-        let (pending_events_sender, pending_events_receiver) = mpsc::channel(10);
+        // We're using this unbounded channel to send events from the handler tasks to the main poll method.
+        // Therefore, we cannot ever wait to send on this channel or we'll deadlock, therefore we use an unbounded
+        // channel.
+        let (pending_events_sender, pending_events_receiver) = mpsc::unbounded();
         Self {
             peer_id,
             protocol,
@@ -128,7 +131,7 @@ where TCodec: Codec + Send + Clone + 'static
             .take()
             .expect("negotiated outbound stream without a requested stream");
 
-        let mut events = self.pending_events_sender.clone();
+        let events = self.pending_events_sender.clone();
 
         self.pending_events.push_back(Event::OutboundStreamOpened {
             peer_id: self.peer_id,
@@ -147,8 +150,7 @@ where TCodec: Codec + Send + Clone + 'static
                 match codec.encode_to(&mut peer_stream, msg).await {
                     Ok(()) => {
                         events
-                            .send(Event::MessageSent { message_id, stream_id })
-                            .await
+                            .unbounded_send(Event::MessageSent { message_id, stream_id })
                             .expect("Can never be closed because receiver is held in this instance");
                     },
                     Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
@@ -170,7 +172,7 @@ where TCodec: Codec + Send + Clone + 'static
         let mut codec = self.codec.clone();
         let peer_id = self.peer_id;
         let (mut stream, _protocol) = inbound.protocol;
-        let mut events = self.pending_events_sender.clone();
+        let events = self.pending_events_sender.clone();
 
         self.pending_events.push_back(Event::InboundStreamOpened { peer_id });
 
@@ -179,8 +181,7 @@ where TCodec: Codec + Send + Clone + 'static
                 match codec.decode_from(&mut stream).await {
                     Ok(msg) => {
                         events
-                            .send(Event::ReceivedMessage { peer_id, message: msg })
-                            .await
+                            .unbounded_send(Event::ReceivedMessage { peer_id, message: msg })
                             .expect("Can never be closed because receiver is held in this instance");
                         // TODO
                         // Event::ReceivedMessage { peer_id, message }

@@ -197,7 +197,8 @@ async fn multi_validator_propose_blocks_with_new_transactions_until_all_committe
     let mut test = Test::builder()
         // TODO: this timeout is just masking an issue. A node sometimes falls behind and then has to catch up, so we need more time for that. 
         //       However, nodes should never fall behind in this test scenario.
-        .with_test_timeout(Duration::from_secs(60))
+        // .with_test_timeout(Duration::from_secs(60))
+        .debug_sql("/tmp/test{}.db")
         .add_committee(0, vec!["1", "2", "3", "4", "5"])
         .start()
         .await;

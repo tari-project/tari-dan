@@ -34,14 +34,15 @@ use crate::{
     },
     hotstuff::{error::HotStuffError, HotstuffEvent},
     messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage},
-    traits::{ConsensusSpec, OutboundMessaging},
+    traits::{hooks::ConsensusHooks, ConsensusSpec, InboundMessaging, OutboundMessaging},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::inbound_messages";
 
-pub type IncomingMessageResult<TAddr> = Result<Option<(TAddr, HotstuffMessage)>, NeedsSync<TAddr>>;
+pub type IncomingMessageResult<TAddr> = Result<Option<(TAddr, HotstuffMessage)>, HotStuffError>;
 
 pub struct OnInboundMessage<TConsensusSpec: ConsensusSpec> {
+    local_validator_addr: TConsensusSpec::Addr,
     network: Network,
     config: HotstuffConfig,
     store: TConsensusSpec::StateStore,
@@ -50,27 +51,31 @@ pub struct OnInboundMessage<TConsensusSpec: ConsensusSpec> {
     vote_signing_service: TConsensusSpec::SignatureService,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_msg_ready: mpsc::UnboundedSender<(TConsensusSpec::Addr, HotstuffMessage)>,
-    message_buffer: MessageBuffer<TConsensusSpec::Addr>,
+    rx_msg_ready: mpsc::UnboundedReceiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+    message_buffer: MessageBuffer<TConsensusSpec>,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     tx_events: broadcast::Sender<HotstuffEvent>,
+    hooks: TConsensusSpec::Hooks,
 }
 
-impl<TConsensusSpec> OnInboundMessage<TConsensusSpec>
-where TConsensusSpec: ConsensusSpec
-{
+impl<TConsensusSpec: ConsensusSpec> OnInboundMessage<TConsensusSpec> {
     pub fn new(
+        local_validator_addr: TConsensusSpec::Addr,
         network: Network,
         config: HotstuffConfig,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         vote_signing_service: TConsensusSpec::SignatureService,
+        inbound_messaging: TConsensusSpec::InboundMessaging,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
+        hooks: TConsensusSpec::Hooks,
     ) -> Self {
         let (tx_msg_ready, rx_msg_ready) = mpsc::unbounded_channel();
         Self {
+            local_validator_addr,
             network,
             config,
             store,
@@ -79,31 +84,12 @@ where TConsensusSpec: ConsensusSpec
             vote_signing_service,
             outbound_messaging,
             tx_msg_ready,
-            message_buffer: MessageBuffer::new(rx_msg_ready),
+            rx_msg_ready,
+            message_buffer: MessageBuffer::new(inbound_messaging),
             transaction_pool,
             tx_events,
+            hooks,
         }
-    }
-
-    pub async fn handle(
-        &mut self,
-        current_height: NodeHeight,
-        from: TConsensusSpec::Addr,
-        msg: HotstuffMessage,
-    ) -> Result<(), HotStuffError> {
-        match msg {
-            HotstuffMessage::Proposal(msg) => {
-                self.process_local_proposal(current_height, msg).await?;
-            },
-            HotstuffMessage::ForeignProposal(ref proposal) => {
-                self.check_proposal(&proposal.block).await?;
-                self.report_message_ready(from, msg)?;
-            },
-            msg => {
-                self.report_message_ready(from, msg)?;
-            },
-        }
-        Ok(())
     }
 
     /// Returns the next message that is ready for consensus. The future returned from this function is cancel safe, and
@@ -113,7 +99,57 @@ where TConsensusSpec: ConsensusSpec
         current_epoch: Epoch,
         current_height: NodeHeight,
     ) -> IncomingMessageResult<TConsensusSpec::Addr> {
-        self.message_buffer.next(current_epoch, current_height).await
+        loop {
+            tokio::select! {
+                biased;
+                // Return all the unparked messages first
+                Some(addr_and_msg) = self.rx_msg_ready.recv() => {
+                    return Ok(Some(addr_and_msg));
+                },
+
+                // Then incoming messages for the current epoch/height
+                result = self.message_buffer.next(current_epoch, current_height) => {
+                    match result {
+                        Ok(Some((from, msg))) => {
+                            self.hooks.on_message_received(&msg);
+                            match self.on_message(current_height, from, msg).await {
+                                Ok(Some(addr_and_msg)) => return Ok(Some(addr_and_msg)),
+                                Ok(None) => {
+                                    // Message parked, keep polling
+                                },
+                                Err(err) => {
+                                    self.hooks.on_error(&err);
+                                    error!(target: LOG_TARGET, "Error handling message: {}", err);
+                                }
+                            }
+                        },
+                        Ok(None) => {
+                            // Inbound messages terminated
+                            return Ok(None)
+                        },
+                        Err(err) => {
+                            return Err(err);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    async fn on_message(
+        &mut self,
+        current_height: NodeHeight,
+        from: TConsensusSpec::Addr,
+        msg: HotstuffMessage,
+    ) -> Result<Option<(TConsensusSpec::Addr, HotstuffMessage)>, HotStuffError> {
+        match msg {
+            HotstuffMessage::Proposal(msg) => self.process_local_proposal(current_height, msg).await,
+            HotstuffMessage::ForeignProposal(ref proposal) => {
+                self.check_proposal(&proposal.block).await?;
+                Ok(Some((from, msg)))
+            },
+            msg => Ok(Some((from, msg))),
+        }
     }
 
     /// Discards all buffered messages including ones queued up for processing and returns when complete.
@@ -143,7 +179,7 @@ where TConsensusSpec: ConsensusSpec
         &mut self,
         current_height: NodeHeight,
         proposal: ProposalMessage,
-    ) -> Result<(), HotStuffError> {
+    ) -> Result<Option<(TConsensusSpec::Addr, HotstuffMessage)>, HotStuffError> {
         let ProposalMessage { block } = proposal;
 
         info!(
@@ -161,13 +197,13 @@ where TConsensusSpec: ConsensusSpec
                 block,
                 current_height
             );
-            return Ok(());
+            return Ok(None);
         }
 
         self.check_proposal(&block).await?;
         let Some(ready_block) = self.handle_missing_transactions(block).await? else {
-            // Block not ready
-            return Ok(());
+            // Block not ready -park it
+            return Ok(None);
         };
 
         let vn = self
@@ -175,16 +211,14 @@ where TConsensusSpec: ConsensusSpec
             .get_validator_node_by_public_key(ready_block.epoch(), ready_block.proposed_by())
             .await?;
 
-        self.report_message_ready(
+        Ok(Some((
             vn.address,
             HotstuffMessage::Proposal(ProposalMessage { block: ready_block }),
-        )?;
-
-        Ok(())
+        )))
     }
 
     pub async fn update_parked_blocks(
-        &self,
+        &mut self,
         current_height: NodeHeight,
         transaction_id: &TransactionId,
     ) -> Result<(), HotStuffError> {
@@ -234,7 +268,7 @@ where TConsensusSpec: ConsensusSpec
                 block: unparked_block.as_leaf_block(),
             });
 
-            self.report_message_ready(
+            self.notify_message_ready(
                 vn.address,
                 HotstuffMessage::Proposal(ProposalMessage { block: unparked_block }),
             )?;
@@ -242,7 +276,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    fn report_message_ready(&self, from: TConsensusSpec::Addr, msg: HotstuffMessage) -> Result<(), HotStuffError> {
+    fn notify_message_ready(&self, from: TConsensusSpec::Addr, msg: HotstuffMessage) -> Result<(), HotStuffError> {
         self.tx_msg_ready
             .send((from, msg))
             .map_err(|_| HotStuffError::InternalChannelClosed {
@@ -255,44 +289,67 @@ where TConsensusSpec: ConsensusSpec
             .store
             .with_write_tx(|tx| self.check_for_missing_transactions(tx, &block))?;
 
-        if !missing_tx_ids.is_empty() || !awaiting_execution.is_empty() {
-            info!(
-                target: LOG_TARGET,
-                "🔥 Block {} has {} missing transactions and {} awaiting execution", block, missing_tx_ids.len(), awaiting_execution.len(),
-            );
-
-            let _ignore = self.tx_events.send(HotstuffEvent::ProposedBlockParked {
-                block: block.as_leaf_block(),
-                num_missing_txs: missing_tx_ids.len(),
-                num_awaiting_txs: awaiting_execution.len(),
-            });
-
-            if !missing_tx_ids.is_empty() {
-                let block_id = *block.id();
-                let epoch = block.epoch();
-                let block_proposed_by = block.proposed_by().clone();
-
-                let vn = self
-                    .epoch_manager
-                    .get_validator_node_by_public_key(epoch, &block_proposed_by)
-                    .await?;
-
-                self.outbound_messaging
-                    .send(
-                        vn.address,
-                        HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
-                            block_id,
-                            epoch,
-                            transactions: missing_tx_ids,
-                        }),
-                    )
-                    .await?;
-            }
-
-            return Ok(None);
+        if missing_tx_ids.is_empty() && awaiting_execution.is_empty() {
+            return Ok(Some(block));
         }
 
-        Ok(Some(block))
+        let _ignore = self.tx_events.send(HotstuffEvent::ProposedBlockParked {
+            block: block.as_leaf_block(),
+            num_missing_txs: missing_tx_ids.len(),
+            num_awaiting_txs: awaiting_execution.len(),
+        });
+
+        if !missing_tx_ids.is_empty() {
+            let block_id = *block.id();
+            let epoch = block.epoch();
+            let block_proposed_by = block.proposed_by().clone();
+
+            let vn = self
+                .epoch_manager
+                .get_validator_node_by_public_key(epoch, &block_proposed_by)
+                .await?;
+
+            let mut request_from_address = vn.address;
+
+            // (Yet another) Edge case: If we're catching up, we could be the proposer but we no longer have the
+            // transaction (we deleted our database) In this case, request from another random VN
+            // (TODO: not 100% reliable)
+            if request_from_address == self.local_validator_addr {
+                let mut local_committee = self.epoch_manager.get_local_committee(epoch).await?;
+
+                local_committee.shuffle();
+                match local_committee
+                    .into_iter()
+                    .filter(|(addr, _)| *addr != self.local_validator_addr)
+                    .next()
+                {
+                    Some((addr, _)) => {
+                        warn!(target: LOG_TARGET, "⚠️Requesting missing transactions from another validator {addr} because we are (presumably) catching up (local_peer_id = {})", self.local_validator_addr);
+                        request_from_address = addr;
+                    },
+                    None => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌NEVERHAPPEN: We're the only validator in the committee but we need to request missing transactions."
+                        );
+                        return Ok(None);
+                    },
+                }
+            }
+
+            self.outbound_messaging
+                .send(
+                    request_from_address,
+                    HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
+                        block_id,
+                        epoch,
+                        transactions: missing_tx_ids,
+                    }),
+                )
+                .await?;
+        }
+
+        Ok(None)
     }
 
     fn check_for_missing_transactions(
@@ -332,7 +389,7 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "🔥 Block {} has {} missing transactions and {} awaiting execution", block, missing_tx_ids.len(), awaiting_execution.len(),
+            "⏳ Block {} has {} missing transactions and {} awaiting execution", block, missing_tx_ids.len(), awaiting_execution.len(),
         );
 
         tx.missing_transactions_insert(block, &missing_tx_ids, &awaiting_execution)?;
@@ -341,128 +398,131 @@ where TConsensusSpec: ConsensusSpec
     }
 }
 
-pub struct MessageBuffer<TAddr> {
-    buffer: BTreeMap<(Epoch, NodeHeight), VecDeque<(TAddr, HotstuffMessage)>>,
-    rx_msg_ready: mpsc::UnboundedReceiver<(TAddr, HotstuffMessage)>,
+pub struct MessageBuffer<TConsensusSpec: ConsensusSpec> {
+    buffer: BTreeMap<(Epoch, NodeHeight), VecDeque<(TConsensusSpec::Addr, HotstuffMessage)>>,
+    inbound_messaging: TConsensusSpec::InboundMessaging,
 }
 
-impl<TAddr: NodeAddressable> MessageBuffer<TAddr> {
-    pub fn new(rx_msg_ready: mpsc::UnboundedReceiver<(TAddr, HotstuffMessage)>) -> Self {
+impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
+    pub fn new(inbound_messaging: TConsensusSpec::InboundMessaging) -> Self {
         Self {
             buffer: BTreeMap::new(),
-            rx_msg_ready,
+            inbound_messaging,
         }
     }
 
-    pub async fn next(&mut self, current_epoch: Epoch, current_height: NodeHeight) -> IncomingMessageResult<TAddr> {
-        // Clear buffer with lower (epoch, heights)
-        self.buffer = self.buffer.split_off(&(current_epoch, current_height));
+    pub async fn next(
+        &mut self,
+        current_epoch: Epoch,
+        current_height: NodeHeight,
+    ) -> IncomingMessageResult<TConsensusSpec::Addr> {
+        loop {
+            // Clear buffer with lower (epoch, heights)
+            self.buffer = self.buffer.split_off(&(current_epoch, current_height));
 
-        // Check if message is in the buffer
-        if let Some(buffer) = self.buffer.get_mut(&(current_epoch, current_height)) {
-            if let Some(msg_tuple) = buffer.pop_front() {
-                return Ok(Some(msg_tuple));
+            // Check if message is in the buffer
+            if let Some(buffer) = self.buffer.get_mut(&(current_epoch, current_height)) {
+                if let Some(msg_tuple) = buffer.pop_front() {
+                    return Ok(Some(msg_tuple));
+                }
             }
-        }
 
-        while let Some((from, msg)) = self.next_message_or_sync(current_epoch, current_height).await? {
-            match msg_epoch_and_height(&msg) {
-                // Discard old message
-                Some((e, h)) if e < current_epoch || h < current_height => {
-                    debug!(target: LOG_TARGET, "Discard message {} is for previous epoch {}/height {}. Current epoch {}/height {}", msg, e, h, current_epoch,current_height);
-                    continue;
-                },
-                // Buffer message for future epoch/height
-                Some((epoch, height)) if epoch > current_epoch || height > current_height => {
-                    if msg.proposal().is_some() {
-                        info!(target: LOG_TARGET, "🦴Proposal {msg} is for future view (Current Epoch: {current_epoch}, height {current_height})");
-                    } else {
-                        debug!(target: LOG_TARGET, "🦴Message {msg} is for future view (Current Epoch: {current_epoch}, height: {current_height})");
-                    }
-                    self.push_to_buffer(epoch, height, from, msg);
-                    continue;
-                },
-                // Height is irrelevant or current, return message
-                _ => return Ok(Some((from, msg))),
+            // while let Some((from, msg)) = self.next_message_or_sync(current_epoch, current_height).await? {
+            while let Some(result) = self.inbound_messaging.next_message().await {
+                let (from, msg) = result?;
+                match msg_epoch_and_height(&msg) {
+                    // Discard old message
+                    Some((e, h)) if e < current_epoch || h < current_height => {
+                        info!(target: LOG_TARGET, "Discard message {} is for previous view {}/{}. Current view {}/{}", msg, e, h, current_epoch,current_height);
+                        continue;
+                    },
+                    // Buffer message for future epoch/height
+                    Some((epoch, height)) if epoch > current_epoch || height > current_height => {
+                        if msg.proposal().is_some() {
+                            info!(target: LOG_TARGET, "🦴Proposal {msg} is for future view (Current view: {current_epoch}, {current_height})");
+                        } else {
+                            debug!(target: LOG_TARGET, "🦴Message {msg} is for future view (Current view: {current_epoch}, {current_height})");
+                        }
+                        self.push_to_buffer(epoch, height, from, msg);
+                        continue;
+                    },
+                    // Height is irrelevant or current, return message
+                    _ => return Ok(Some((from, msg))),
+                }
             }
-        }
 
-        Ok(None)
+            // Inbound messaging has terminated
+            return Ok(None);
+        }
     }
 
     pub async fn discard(&mut self) {
         self.clear_buffer();
-        while self.rx_msg_ready.recv().await.is_some() {}
+        while self.inbound_messaging.next_message().await.is_some() {}
     }
 
     pub fn clear_buffer(&mut self) {
         self.buffer.clear();
     }
 
-    async fn next_message_or_sync(
-        &mut self,
-        current_epoch: Epoch,
-        current_height: NodeHeight,
-    ) -> Result<Option<(TAddr, HotstuffMessage)>, NeedsSync<TAddr>> {
-        if let Some(addr_and_msg) = self.rx_msg_ready.recv().await {
-            return Ok(Some(addr_and_msg));
-        }
+    // async fn next_message_or_sync(
+    //     &mut self,
+    //     current_epoch: Epoch,
+    //     current_height: NodeHeight,
+    // ) -> Result<Option<(TConsensusSpec::Addr, HotstuffMessage)>, NeedsSync<TConsensusSpec::Addr>> {
+    //     // loop {
+    //     //     if let Some(addr_and_msg) = self.rx_msg_ready.recv().await {
+    //     //         return Ok(Some(addr_and_msg));
+    //     //     }
+    //     //
+    //     //     // Check if we have any proposals that exceed the current view
+    //     //     for queue in self.buffer.values() {
+    //     //         for (from, msg) in queue {
+    //     //             if let Some(proposal) = msg.proposal() {
+    //     //                 if proposal.block.justify().epoch() > current_epoch ||
+    //     //                     proposal.block.justify().block_height() > current_height
+    //     //                 {
+    //     //                     return Err(NeedsSync {
+    //     //                         from: from.clone(),
+    //     //                         local_height: current_height,
+    //     //                         qc_height: proposal.block.justify().block_height(),
+    //     //                         remote_epoch: proposal.block.justify().epoch(),
+    //     //                         local_epoch: current_epoch,
+    //     //                     });
+    //     //                 }
+    //     //             }
+    //     //         }
+    //     //     }
+    //     //
+    //     //     // Don't really like this but because we can receive proposals out of order, we need to wait a bit to
+    // see     //     // if we get a proposal at our height without switching to sync.
+    //     //     //     let timeout = time::sleep(time::Duration::from_secs(2));
+    //     //     //     tokio::pin!(timeout);
+    //     //     //     tokio::select! {
+    //     //     //         msg = self.rx_msg_ready.recv() => return Ok(msg),
+    //     //     //         _ = timeout.as_mut() => {
+    //     //     //             // Check if we have any proposals
+    //     //     //             for queue in self.buffer.values() {
+    //     //     //                 for (from, msg) in queue {
+    //     //     //                    if let Some(proposal) = msg.proposal() {
+    //     //     //                         if proposal.block.justify().epoch() > current_epoch ||
+    //     //     // proposal.block.justify().block_height() > current_height {
+    //     //     // return Err(NeedsSync {                                 from: from.clone(),
+    //     //     //                                 local_height: current_height,
+    //     //     //                                 qc_height: proposal.block.justify().block_height(),
+    //     //     //                                 remote_epoch: proposal.block.justify().epoch(),
+    //     //     //                                 local_epoch: current_epoch
+    //     //     //                             });
+    //     //     //                         }
+    //     //     //                     }
+    //     //     //                 }
+    //     //     //             }
+    //     //     //         }
+    //     //     //     }
+    //     // }
+    // }
 
-        Ok(None)
-
-        // loop {
-        //     if let Some(addr_and_msg) = self.rx_msg_ready.recv().await {
-        //         return Ok(Some(addr_and_msg));
-        //     }
-        //
-        //     // Check if we have any proposals that exceed the current view
-        //     for queue in self.buffer.values() {
-        //         for (from, msg) in queue {
-        //             if let Some(proposal) = msg.proposal() {
-        //                 if proposal.block.justify().epoch() > current_epoch ||
-        //                     proposal.block.justify().block_height() > current_height
-        //                 {
-        //                     return Err(NeedsSync {
-        //                         from: from.clone(),
-        //                         local_height: current_height,
-        //                         qc_height: proposal.block.justify().block_height(),
-        //                         remote_epoch: proposal.block.justify().epoch(),
-        //                         local_epoch: current_epoch,
-        //                     });
-        //                 }
-        //             }
-        //         }
-        //     }
-        //
-        //     // Don't really like this but because we can receive proposals out of order, we need to wait a bit to see
-        //     // if we get a proposal at our height without switching to sync.
-        //     //     let timeout = time::sleep(time::Duration::from_secs(2));
-        //     //     tokio::pin!(timeout);
-        //     //     tokio::select! {
-        //     //         msg = self.rx_msg_ready.recv() => return Ok(msg),
-        //     //         _ = timeout.as_mut() => {
-        //     //             // Check if we have any proposals
-        //     //             for queue in self.buffer.values() {
-        //     //                 for (from, msg) in queue {
-        //     //                    if let Some(proposal) = msg.proposal() {
-        //     //                         if proposal.block.justify().epoch() > current_epoch ||
-        //     // proposal.block.justify().block_height() > current_height {
-        //     // return Err(NeedsSync {                                 from: from.clone(),
-        //     //                                 local_height: current_height,
-        //     //                                 qc_height: proposal.block.justify().block_height(),
-        //     //                                 remote_epoch: proposal.block.justify().epoch(),
-        //     //                                 local_epoch: current_epoch
-        //     //                             });
-        //     //                         }
-        //     //                     }
-        //     //                 }
-        //     //             }
-        //     //         }
-        //     //     }
-        // }
-    }
-
-    fn push_to_buffer(&mut self, epoch: Epoch, height: NodeHeight, from: TAddr, msg: HotstuffMessage) {
+    fn push_to_buffer(&mut self, epoch: Epoch, height: NodeHeight, from: TConsensusSpec::Addr, msg: HotstuffMessage) {
         self.buffer.entry((epoch, height)).or_default().push_back((from, msg));
     }
 }
