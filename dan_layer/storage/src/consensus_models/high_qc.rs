@@ -23,7 +23,7 @@
 use std::fmt::Display;
 
 use serde::Serialize;
-use tari_dan_common_types::NodeHeight;
+use tari_dan_common_types::{Epoch, NodeHeight};
 
 use crate::{
     consensus_models::{Block, BlockId, LeafBlock, QcId, QuorumCertificate},
@@ -36,6 +36,7 @@ use crate::{
 pub struct HighQc {
     pub block_id: BlockId,
     pub block_height: NodeHeight,
+    pub epoch: Epoch,
     pub qc_id: QcId,
 }
 
@@ -52,10 +53,15 @@ impl HighQc {
         &self.qc_id
     }
 
+    pub fn epoch(&self) -> Epoch {
+        self.epoch
+    }
+
     pub fn as_leaf_block(&self) -> LeafBlock {
         LeafBlock {
             block_id: self.block_id,
             height: self.block_height,
+            epoch: self.epoch,
         }
     }
 }

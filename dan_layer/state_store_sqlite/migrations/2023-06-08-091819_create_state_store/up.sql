@@ -73,6 +73,7 @@ create table leaf_blocks
     id           integer   not null primary key AUTOINCREMENT,
     block_id     text      not NULL,
     block_height bigint    not NULL,
+    epoch        bigint    not NULL,
     created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
@@ -147,6 +148,7 @@ create table high_qcs
     id           integer   not null primary key autoincrement,
     block_id     text      not null,
     block_height bigint    not null,
+    epoch        bigint    not null,
     qc_id        text      not null,
     created_at   timestamp NOT NULL default current_timestamp,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id),
@@ -160,6 +162,7 @@ create table last_voted
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
+    epoch      bigint    not null,
     created_at timestamp NOT NULL default current_timestamp
 );
 
@@ -180,6 +183,7 @@ create table last_executed
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
+    epoch      bigint    not null,
     created_at timestamp NOT NULL default current_timestamp,
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
@@ -189,6 +193,7 @@ create table last_proposed
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
+    epoch      bigint    not null,
     created_at timestamp NOT NULL default current_timestamp
 );
 
@@ -197,6 +202,7 @@ create table locked_block
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
+    epoch      bigint    not null,
     created_at timestamp NOT NULL default current_timestamp,
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );

@@ -56,14 +56,9 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     msg.high_qc,
                     leaf_block
                 );
+                // NOTE: We have to send dummy blocks, because the messaging will ignore gaps in the block height when
+                // syncing until eventually the syncing node's pacemaker leader-fails a few times.
                 let blocks = Block::get_all_blocks_between(tx, msg.high_qc.block_id(), leaf_block.block_id(), true)?;
-
-                info!(
-                    target: LOG_TARGET,
-                    "🌐 Sending {} blocks to {}",
-                    blocks.len(),
-                    from
-                );
 
                 Ok::<_, HotStuffError>(blocks)
             });
@@ -75,6 +70,15 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     return;
                 },
             };
+
+            info!(
+                target: LOG_TARGET,
+                "🌐 Sending {} blocks ({} to {}) to {}",
+                blocks.len(),
+                blocks.first().map(|b| b.height()).unwrap_or_default(),
+                blocks.last().map(|b| b.height()).unwrap_or_default(),
+                from
+            );
 
             for block in blocks {
                 debug!(

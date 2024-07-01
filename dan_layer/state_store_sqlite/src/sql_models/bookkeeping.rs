@@ -19,6 +19,7 @@ pub struct HighQc {
     pub id: i32,
     pub block_id: String,
     pub block_height: i64,
+    pub epoch: i64,
     pub qc_id: String,
     pub created_at: PrimitiveDateTime,
 }
@@ -30,6 +31,7 @@ impl TryFrom<HighQc> for consensus_models::HighQc {
         Ok(Self {
             block_id: deserialize_hex_try_from(&value.block_id)?,
             block_height: NodeHeight(value.block_height as u64),
+            epoch: Epoch(value.epoch as u64),
             qc_id: deserialize_hex_try_from(&value.qc_id)?,
         })
     }
@@ -102,6 +104,7 @@ pub struct LockedBlock {
     pub id: i32,
     pub block_id: String,
     pub height: i64,
+    pub epoch: i64,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -112,6 +115,7 @@ impl TryFrom<LockedBlock> for consensus_models::LockedBlock {
         Ok(Self {
             block_id: deserialize_hex_try_from(&value.block_id)?,
             height: NodeHeight(value.height as u64),
+            epoch: Epoch(value.epoch as u64),
         })
     }
 }
@@ -121,6 +125,7 @@ pub struct LastExecuted {
     pub id: i32,
     pub block_id: String,
     pub height: i64,
+    pub epoch: i64,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -131,6 +136,7 @@ impl TryFrom<LastExecuted> for consensus_models::LastExecuted {
         Ok(Self {
             block_id: deserialize_hex_try_from(&value.block_id)?,
             height: NodeHeight(value.height as u64),
+            epoch: Epoch(value.epoch as u64),
         })
     }
 }
@@ -140,6 +146,7 @@ pub struct LastVoted {
     pub id: i32,
     pub block_id: String,
     pub height: i64,
+    pub epoch: i64,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -150,6 +157,7 @@ impl TryFrom<LastVoted> for consensus_models::LastVoted {
         Ok(Self {
             block_id: deserialize_hex_try_from(&value.block_id)?,
             height: NodeHeight(value.height as u64),
+            epoch: Epoch(value.epoch as u64),
         })
     }
 }
@@ -193,6 +201,7 @@ pub struct LastProposed {
     pub id: i32,
     pub block_id: String,
     pub height: i64,
+    pub epoch: i64,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -203,6 +212,7 @@ impl TryFrom<LastProposed> for consensus_models::LastProposed {
         Ok(Self {
             block_id: deserialize_hex_try_from(&value.block_id)?,
             height: NodeHeight(value.height as u64),
+            epoch: Epoch(value.epoch as u64),
         })
     }
 }

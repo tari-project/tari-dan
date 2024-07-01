@@ -20,11 +20,6 @@ where TConsensusSpec: ConsensusSpec
     }
 
     pub async fn handle(&self, from: TConsensusSpec::Addr, message: VoteMessage) -> Result<(), HotStuffError> {
-        debug!(
-            target: LOG_TARGET,
-            "🔥 Receive VOTE for node {} from {}", message.block_id, message.signature.public_key,
-        );
-
         self.vote_receiver.handle(from, message, true).await
     }
 }

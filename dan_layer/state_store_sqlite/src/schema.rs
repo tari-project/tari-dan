@@ -76,6 +76,7 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         block_height -> BigInt,
+        epoch -> BigInt,
         qc_id -> Text,
         created_at -> Timestamp,
     }
@@ -86,6 +87,7 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         height -> BigInt,
+        epoch -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -95,6 +97,7 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         height -> BigInt,
+        epoch -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -116,6 +119,7 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         height -> BigInt,
+        epoch -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -125,6 +129,7 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         block_height -> BigInt,
+        epoch -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -134,6 +139,7 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         height -> BigInt,
+        epoch -> BigInt,
         created_at -> Timestamp,
     }
 }

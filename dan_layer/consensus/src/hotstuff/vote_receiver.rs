@@ -105,7 +105,7 @@ where TConsensusSpec: ConsensusSpec
         if !local_committee_shard.includes_substate_address(&sender_vn.shard_key) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch: message.epoch,
-                sender: message.signature.public_key.to_string(),
+                sender: from.to_string(),
                 context: "OnReceiveVote".to_string(),
             });
         }
@@ -113,8 +113,6 @@ where TConsensusSpec: ConsensusSpec
         let sender_leaf_hash = sender_vn.get_node_hash(self.network);
 
         self.validate_vote_message(&message, &sender_leaf_hash)?;
-
-        let from = message.signature.public_key.clone();
 
         let count = self.store.with_write_tx(|tx| {
             Vote {

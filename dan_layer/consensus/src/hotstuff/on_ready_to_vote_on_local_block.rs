@@ -13,7 +13,6 @@ use tari_dan_storage::{
         BlockId,
         Command,
         Decision,
-        EpochEvent,
         ExecutedTransaction,
         ForeignProposal,
         LastExecuted,
@@ -48,7 +47,7 @@ use crate::{
     traits::{BlockTransactionExecutor, ConsensusSpec, WriteableSubstateStore},
 };
 
-const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_lock_block_ready";
+const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_ready_to_vote_on_local_block";
 
 pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     local_validator_addr: TConsensusSpec::Addr,
@@ -81,6 +80,7 @@ where TConsensusSpec: ConsensusSpec
         &mut self,
         valid_block: &ValidBlock,
         local_committee_info: CommitteeInfo,
+        can_propose_epoch_end: bool,
     ) -> Result<BlockDecision, HotStuffError> {
         debug!(
             target: LOG_TARGET,
@@ -89,7 +89,7 @@ where TConsensusSpec: ConsensusSpec
         );
 
         self.store.with_write_tx(|tx| {
-            let change_set = self.decide_on_block(&**tx, &local_committee_info, valid_block)?;
+            let change_set = self.decide_on_block(&**tx, &local_committee_info, valid_block, can_propose_epoch_end)?;
 
             let mut locked_blocks = Vec::new();
             let mut finalized_transactions = Vec::new();
@@ -101,13 +101,14 @@ where TConsensusSpec: ConsensusSpec
                     tx,
                     |tx, locked, block| {
                         locked_blocks.push(block.clone());
+
                         self.on_lock_block(tx, locked, block)
                     },
                     |tx, last_exec, commit_block| {
+                        let committed = self.on_commit(tx, last_exec, commit_block, &local_committee_info)?;
                         if commit_block.is_epoch_end() {
                             end_of_epoch = Some(commit_block.epoch());
                         }
-                        let committed = self.on_commit(tx, last_exec, commit_block, &local_committee_info)?;
                         if !committed.is_empty() {
                             finalized_transactions.push(committed);
                         }
@@ -137,34 +138,19 @@ where TConsensusSpec: ConsensusSpec
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         local_committee_info: &CommitteeInfo,
         valid_block: &ValidBlock,
+        can_propose_epoch_end: bool,
     ) -> Result<ProposedBlockChangeSet, HotStuffError> {
-        let qc_block = valid_block.block().justify().get_block(tx)?;
-        let locked_block = LockedBlock::get(tx)?.get_block(tx)?;
+        // let qc_block = valid_block.block().justify().get_block(tx)?;
+        // let locked_block = LockedBlock::get(tx)?.get_block(tx)?;
 
         // If the previous qc block was in different epoch, we have to have EpochEvent::Start
-        let epoch_should_start = qc_block.epoch() < valid_block.epoch();
-
-        let epoch_should_end =
-            // If the epoch has not changed yet
-            qc_block.epoch() == valid_block.epoch() &&
-                // If the last justified block is an epoch end
-                qc_block.is_epoch_end() &&
-                // if the locked block is an epoch end, then we do not expect this block to be an epoch end
-                !locked_block.is_epoch_end() &&
-                // If the previous epoch is the genesis epoch, we don't need to end it (there was no committee at epoch 0)
-                !qc_block.is_genesis();
+        // let epoch_should_start = qc_block.epoch() < valid_block.epoch();
 
         if !self.should_vote(tx, valid_block.block())? {
             return Ok(ProposedBlockChangeSet::new(valid_block.block().as_leaf_block()).no_vote());
         }
 
-        self.decide_what_to_vote(
-            tx,
-            valid_block.block(),
-            local_committee_info,
-            epoch_should_start,
-            epoch_should_end,
-        )
+        self.decide_what_to_vote(tx, valid_block.block(), local_committee_info, can_propose_epoch_end)
     }
 
     /// if b_new .height > vheight && (b_new extends b_lock || b_new .justify.node.height > b_lock .height)
@@ -200,8 +186,7 @@ where TConsensusSpec: ConsensusSpec
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         block: &Block,
         local_committee_info: &CommitteeInfo,
-        epoch_should_start: bool,
-        epoch_should_end: bool,
+        can_propose_epoch_end: bool,
     ) -> Result<ProposedBlockChangeSet, HotStuffError> {
         let mut total_leader_fee = 0;
 
@@ -210,19 +195,28 @@ where TConsensusSpec: ConsensusSpec
         let mut substate_store = PendingSubstateStore::new(tx);
         let mut proposed_block_change_set = ProposedBlockChangeSet::new(block.as_leaf_block());
 
-        if epoch_should_start && !block.is_epoch_start() {
-            warn!(
-                target: LOG_TARGET,
-                "❌ EpochEvent::Start command expected for block {} but not found",
-                block.id()
-            );
-            return Ok(proposed_block_change_set.no_vote());
-        }
+        // if epoch_should_start && !block.is_epoch_start() {
+        //     warn!(
+        //         target: LOG_TARGET,
+        //         "❌ EpochEvent::Start command expected for block {} but not found",
+        //         block.id()
+        //     );
+        //     return Ok(proposed_block_change_set.no_vote());
+        // }
+        //
+        // if epoch_should_end && !block.is_epoch_end() {
+        //     warn!(
+        //         target: LOG_TARGET,
+        //         "❌ EpochEvent::End command expected for block {} but not found",
+        //         block.id()
+        //     );
+        //     return Ok(proposed_block_change_set.no_vote());
+        // }
 
-        if epoch_should_end && !block.is_epoch_end() {
+        if block.is_epoch_end() && block.commands().len() > 1 {
             warn!(
                 target: LOG_TARGET,
-                "❌ EpochEvent::End command expected for block {} but not found",
+                "❌ EpochEvent::End command in block {} but block contains other commands",
                 block.id()
             );
             return Ok(proposed_block_change_set.no_vote());
@@ -240,19 +234,14 @@ where TConsensusSpec: ConsensusSpec
                 }
                 continue;
             }
-            if let Command::EpochEvent(event) = cmd {
-                match event {
-                    EpochEvent::Start => {
-                        if !epoch_should_start {
-                            warn!(
-                                target: LOG_TARGET,
-                                "❌ EpochEvent::Start command received for block {} but it is not the start of the epoch",
-                                block.id()
-                            );
-                            return Ok(proposed_block_change_set.no_vote());
-                        }
-                    },
-                    EpochEvent::End => {},
+            if cmd.is_epoch_end() {
+                if !can_propose_epoch_end {
+                    warn!(
+                        target: LOG_TARGET,
+                        "❌ EpochEvent::End command received for block {} but it is not the next epoch",
+                        block.id(),
+                    );
+                    return Ok(proposed_block_change_set.no_vote());
                 }
                 continue;
             }
@@ -755,7 +744,7 @@ where TConsensusSpec: ConsensusSpec
                     );
                 },
                 // This was already handled above
-                Command::EpochEvent(_) => {},
+                Command::EndEpoch => {},
             }
         }
 
@@ -867,7 +856,7 @@ where TConsensusSpec: ConsensusSpec
         block: &Block,
         local_committee_info: &CommitteeInfo,
     ) -> Result<Vec<TransactionAtom>, HotStuffError> {
-        let committed_transactions = self.execute(tx, block, local_committee_info)?;
+        let committed_transactions = self.finalize_block(tx, block, local_committee_info)?;
         debug!(
             target: LOG_TARGET,
             "✅ COMMIT block {}, last executed height = {}",
@@ -913,7 +902,7 @@ where TConsensusSpec: ConsensusSpec
         let _ignore = self.tx_events.send(event);
     }
 
-    fn execute(
+    fn finalize_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,

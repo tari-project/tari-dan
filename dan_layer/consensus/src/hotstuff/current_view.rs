@@ -42,15 +42,23 @@ impl CurrentView {
         self.update_epoch(epoch);
         let current_height = self.get_height();
         if height > current_height {
-            info!(target: LOG_TARGET, "🧿 View updated to height {height}");
+            info!(target: LOG_TARGET, "🧿 PACEMAKER: View updated to height {height}");
             self.height.store(height.as_u64(), atomic::Ordering::SeqCst);
         }
+    }
+
+    /// Resets the height and epoch. Prefer update.
+    pub fn reset(&self, epoch: Epoch, height: NodeHeight) {
+        info!(target: LOG_TARGET, "🧿 PACEMAKER RESET: View updated to epoch {epoch}");
+        self.epoch.store(epoch.as_u64(), atomic::Ordering::SeqCst);
+        info!(target: LOG_TARGET, "🧿 PACEMAKER RESET: View updated to height {height}");
+        self.height.store(height.as_u64(), atomic::Ordering::SeqCst);
     }
 
     pub fn update_epoch(&self, epoch: Epoch) {
         let current_epoch = self.get_epoch();
         if epoch > current_epoch {
-            info!(target: LOG_TARGET, "🧿 View updated to epoch {epoch}");
+            info!(target: LOG_TARGET, "🧿 PACEMAKER: View updated to epoch {epoch}");
             self.epoch.store(epoch.as_u64(), atomic::Ordering::SeqCst);
         }
     }

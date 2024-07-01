@@ -142,6 +142,7 @@ impl<TConsensusSpec: ConsensusSpec> OnInboundMessage<TConsensusSpec> {
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage,
     ) -> Result<Option<(TConsensusSpec::Addr, HotstuffMessage)>, HotStuffError> {
+        log::error!("HERE1");
         match msg {
             HotstuffMessage::Proposal(msg) => self.process_local_proposal(current_height, msg).await,
             HotstuffMessage::ForeignProposal(ref proposal) => {
@@ -162,16 +163,22 @@ impl<TConsensusSpec: ConsensusSpec> OnInboundMessage<TConsensusSpec> {
     }
 
     async fn check_proposal(&self, block: &Block) -> Result<(), HotStuffError> {
+        log::error!("🐞{} HERE 2.0", self.local_validator_addr);
         check_base_layer_block_hash::<TConsensusSpec>(block, &self.epoch_manager, &self.config).await?;
+        log::error!("🐞{} HERE 2.1", self.local_validator_addr);
         check_network(block, self.network)?;
         check_hash_and_height(block)?;
+        log::error!("🐞{} HERE 2.4", self.local_validator_addr);
         let committee_for_block = self
             .epoch_manager
             .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
+        log::error!("🐞{} HERE 2.3", self.local_validator_addr);
         check_proposed_by_leader(&self.leader_strategy, &committee_for_block, block)?;
         check_signature(block)?;
+        log::error!("🐞{} HERE 2.5", self.local_validator_addr);
         check_quorum_certificate::<TConsensusSpec>(block, &self.vote_signing_service, &self.epoch_manager).await?;
+        log::error!("🐞{} HERE 2.6", self.local_validator_addr);
         Ok(())
     }
 
@@ -184,7 +191,8 @@ impl<TConsensusSpec: ConsensusSpec> OnInboundMessage<TConsensusSpec> {
 
         info!(
             target: LOG_TARGET,
-            "📜 new unvalidated PROPOSAL message {} from {} (current height = {})",
+            "📜 [{}] new unvalidated PROPOSAL message {} from {} (current height = {})",
+        self.local_validator_addr,
             block,
             block.proposed_by(),
             current_height,
@@ -200,17 +208,22 @@ impl<TConsensusSpec: ConsensusSpec> OnInboundMessage<TConsensusSpec> {
             return Ok(None);
         }
 
+        log::error!("🐞{} HERE 2", self.local_validator_addr);
         self.check_proposal(&block).await?;
+        log::error!("🐞{} HERE 3", self.local_validator_addr);
         let Some(ready_block) = self.handle_missing_transactions(block).await? else {
             // Block not ready -park it
+            log::error!("🐞{} HERE4", self.local_validator_addr);
             return Ok(None);
         };
+        log::error!("🐞{} HERE5", self.local_validator_addr);
 
         let vn = self
             .epoch_manager
             .get_validator_node_by_public_key(ready_block.epoch(), ready_block.proposed_by())
             .await?;
 
+        log::error!("🐞{} HERE6", self.local_validator_addr);
         Ok(Some((
             vn.address,
             HotstuffMessage::Proposal(ProposalMessage { block: ready_block }),
@@ -358,6 +371,10 @@ impl<TConsensusSpec: ConsensusSpec> OnInboundMessage<TConsensusSpec> {
         block: &Block,
     ) -> Result<(HashSet<TransactionId>, HashSet<TransactionId>), HotStuffError> {
         if block.commands().is_empty() {
+            debug!(
+                target: LOG_TARGET,
+                "✅ Block {} is empty (no missing transactions)", block
+            );
             return Ok((HashSet::new(), HashSet::new()));
         }
         let (transactions, missing_tx_ids) = TransactionRecord::get_any(&**tx, block.all_transaction_ids())?;

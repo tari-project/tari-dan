@@ -1,13 +1,14 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::NodeHeight;
+use tari_dan_common_types::{Epoch, NodeHeight};
 
 use crate::{consensus_models::BlockId, StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
 pub struct LastVoted {
     pub block_id: BlockId,
     pub height: NodeHeight,
+    pub epoch: Epoch,
 }
 
 impl LastVoted {
@@ -17,6 +18,10 @@ impl LastVoted {
 
     pub fn height(&self) -> NodeHeight {
         self.height
+    }
+
+    pub fn epoch(&self) -> Epoch {
+        self.epoch
     }
 }
 
@@ -36,6 +41,10 @@ impl LastVoted {
 
 impl std::fmt::Display for LastVoted {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(block_id: {}, height: {})", self.block_id, self.height)
+        write!(
+            f,
+            "LastVoted(BlockId({}), {}, {})",
+            self.block_id, self.height, self.epoch
+        )
     }
 }

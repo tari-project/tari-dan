@@ -42,7 +42,6 @@ use tari_dan_storage::consensus_models::{
     BlockId,
     Command,
     Decision,
-    EpochEvent,
     Evidence,
     ForeignProposal,
     ForeignProposalState,
@@ -342,9 +341,7 @@ impl From<&Command> for proto::consensus::Command {
             Command::ForeignProposal(foreign_proposal) => {
                 proto::consensus::command::Command::ForeignProposal(foreign_proposal.into())
             },
-            Command::EpochEvent(event) => {
-                proto::consensus::command::Command::EpochEvent(proto::consensus::EpochEvent::from(event).into())
-            },
+            Command::EndEpoch => proto::consensus::command::Command::EndEpoch(true),
         };
 
         Self { command: Some(command) }
@@ -364,11 +361,7 @@ impl TryFrom<proto::consensus::Command> for Command {
             proto::consensus::command::Command::ForeignProposal(foreign_proposal) => {
                 Command::ForeignProposal(foreign_proposal.try_into()?)
             },
-            proto::consensus::command::Command::EpochEvent(event) => Command::EpochEvent(
-                proto::consensus::EpochEvent::try_from(event)
-                    .map_err(|_| anyhow!("Invalid epoch event value {}", event))?
-                    .try_into()?,
-            ),
+            proto::consensus::command::Command::EndEpoch(_) => Command::EndEpoch,
         })
     }
 }
@@ -490,29 +483,6 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
                 .collect::<Result<_, _>>()?,
             base_layer_block_height: value.base_layer_block_height,
         })
-    }
-}
-
-// ------------------------------- EpochEvent ------------------------------- //
-
-impl From<&EpochEvent> for proto::consensus::EpochEvent {
-    fn from(value: &EpochEvent) -> Self {
-        match value {
-            EpochEvent::Start => proto::consensus::EpochEvent::Start,
-            EpochEvent::End => proto::consensus::EpochEvent::End,
-        }
-    }
-}
-
-impl TryFrom<proto::consensus::EpochEvent> for EpochEvent {
-    type Error = anyhow::Error;
-
-    fn try_from(value: proto::consensus::EpochEvent) -> Result<Self, Self::Error> {
-        match value {
-            proto::consensus::EpochEvent::Start => Ok(EpochEvent::Start),
-            proto::consensus::EpochEvent::End => Ok(EpochEvent::End),
-            proto::consensus::EpochEvent::UnknownEvent => Err(anyhow!("Epoch event not provided")),
-        }
     }
 }
 
@@ -712,6 +682,7 @@ impl From<&SyncRequestMessage> for proto::consensus::SyncRequest {
             high_qc: Some(proto::consensus::HighQc {
                 block_id: value.high_qc.block_id.as_bytes().to_vec(),
                 block_height: value.high_qc.block_height.as_u64(),
+                epoch: value.epoch.as_u64(),
                 qc_id: value.high_qc.qc_id.as_bytes().to_vec(),
             }),
         }
@@ -730,6 +701,7 @@ impl TryFrom<proto::consensus::SyncRequest> for SyncRequestMessage {
                     Ok::<_, anyhow::Error>(HighQc {
                         block_id: BlockId::try_from(value.block_id)?,
                         block_height: NodeHeight(value.block_height),
+                        epoch: Epoch(value.epoch),
                         qc_id: QcId::try_from(value.qc_id)?,
                     })
                 })

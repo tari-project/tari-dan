@@ -59,12 +59,12 @@ pub async fn check_base_layer_block_hash<TConsensusSpec: ConsensusSpec>(
             current: current_height,
         })?;
     }
-    if block.is_epoch_end() && !epoch_manager.is_last_block_of_epoch(base_layer_block_height).await? {
-        Err(ProposalValidationError::NotLastBlockOfEpoch {
-            block_id: *block.id(),
-            base_layer_block_height,
-        })?;
-    }
+    // if block.is_epoch_end() && !epoch_manager.is_last_block_of_epoch(base_layer_block_height).await? {
+    //     Err(ProposalValidationError::NotLastBlockOfEpoch {
+    //         block_id: *block.id(),
+    //         base_layer_block_height,
+    //     })?;
+    // }
     Ok(())
 }
 

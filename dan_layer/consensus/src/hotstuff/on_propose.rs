@@ -22,7 +22,6 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         Command,
-        EpochEvent,
         ExecutedTransaction,
         ForeignProposal,
         ForeignSendCounters,
@@ -104,6 +103,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee: &Committee<TConsensusSpec::Addr>,
         leaf_block: LeafBlock,
         is_newview_propose: bool,
+        propose_epoch_end: bool,
     ) -> Result<(), HotStuffError> {
         if let Some(last_proposed) = self.store.with_read_tx(|tx| LastProposed::get(tx)).optional()? {
             if last_proposed.height > leaf_block.height {
@@ -129,7 +129,7 @@ where TConsensusSpec: ConsensusSpec
 
                 info!(
                     target: LOG_TARGET,
-                    "⤵️ SKIPPING propose for leaf {} because we already proposed block {}",
+                    "⤵️ SKIPPING propose for {} because we already proposed block {}",
                     leaf_block,
                     last_proposed,
                 );
@@ -142,46 +142,10 @@ where TConsensusSpec: ConsensusSpec
         let local_committee_info = self.epoch_manager.get_local_committee_info(epoch).await?;
         let (current_base_layer_block_height, current_base_layer_block_hash) =
             self.epoch_manager.current_base_layer_block_info().await?;
-        let (high_qc, qc_block, locked_block) = self.store.with_read_tx(|tx| {
-            let high_qc = HighQc::get(tx)?;
-            let qc_block = high_qc.get_block(tx)?;
-            let locked_block = LockedBlock::get(tx)?.get_block(tx)?;
-            Ok::<_, HotStuffError>((high_qc, qc_block, locked_block))
-        })?;
+        let high_qc = self.store.with_read_tx(|tx| HighQc::get(tx))?;
 
-        let parent_base_layer_block_hash = qc_block.base_layer_block_hash();
-
-        let base_layer_block_hash = if qc_block.base_layer_block_height() >= current_base_layer_block_height {
-            *parent_base_layer_block_hash
-        } else {
-            // We select our current base layer block hash as the base layer block hash for the next block if
-            // and only if we know that the parent block was smaller.
-            current_base_layer_block_hash
-        };
-
-        // If epoch has changed, we should first end the epoch with an EpochEvent::End
-        let propose_epoch_end =
-            // If we didn't locked block with an EpochEvent::End
-            !locked_block.is_epoch_end() &&
-            // The last block is from previous epoch or it is an EpochEnd block
-            (qc_block.epoch() < epoch || qc_block.is_epoch_end()) &&
-            // If the previous epoch is the genesis epoch, we don't need to end it (there was no committee at epoch 0)
-            !qc_block.is_genesis();
-
-        // If the epoch is changed, we use the current epoch
-        let epoch = if propose_epoch_end { qc_block.epoch() } else { epoch };
-        let base_layer_block_hash = if propose_epoch_end {
-            self.epoch_manager.get_last_block_of_current_epoch().await?
-        } else {
-            base_layer_block_hash
-        };
-        let base_layer_block_height = self
-            .epoch_manager
-            .get_base_layer_block_height(base_layer_block_hash)
-            .await?
-            .unwrap();
-        // The epoch is greater only when the EpochEnd event is locked.
-        let propose_epoch_start = qc_block.epoch() < epoch;
+        let base_layer_block_hash = current_base_layer_block_hash;
+        let base_layer_block_height = current_base_layer_block_height;
 
         let next_block = self.store.with_write_tx(|tx| {
             let high_qc = high_qc.get_quorum_certificate(&**tx)?;
@@ -197,7 +161,6 @@ where TConsensusSpec: ConsensusSpec
                 is_newview_propose,
                 base_layer_block_height,
                 base_layer_block_hash,
-                propose_epoch_start,
                 propose_epoch_end,
             )?;
 
@@ -230,7 +193,8 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "🌿 PROPOSING new local block {} to {} validators. justify: {} ({}), parent: {}",
+            "🌿 [{}] PROPOSING new local block {} to {} validators. justify: {} ({}), parent: {}",
+            validator.address,
             next_block,
             local_committee.len(),
             next_block.justify().block_id(),
@@ -483,12 +447,11 @@ where TConsensusSpec: ConsensusSpec
         empty_block: bool,
         base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
-        propose_epoch_start: bool,
         propose_epoch_end: bool,
     ) -> Result<(Block, HashMap<TransactionId, ExecutedTransaction>), HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
-        let batch = if empty_block || propose_epoch_end || propose_epoch_start {
+        let batch = if empty_block || propose_epoch_end {
             vec![]
         } else {
             self.transaction_pool.get_batch_for_next_block(tx, TARGET_BLOCK_SIZE)?
@@ -499,10 +462,8 @@ where TConsensusSpec: ConsensusSpec
         let mut total_leader_fee = 0;
         let locked_block = LockedBlock::get(tx)?;
         let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
-        let mut commands = if propose_epoch_start {
-            BTreeSet::from_iter([Command::EpochEvent(EpochEvent::Start)])
-        } else if propose_epoch_end {
-            BTreeSet::from_iter([Command::EpochEvent(EpochEvent::End)])
+        let mut commands = if propose_epoch_end {
+            BTreeSet::from_iter([Command::EndEpoch])
         } else {
             ForeignProposal::get_all_new(tx)?
                 .into_iter()

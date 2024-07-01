@@ -36,6 +36,7 @@ use tokio::sync::broadcast;
 use super::proposer::Proposer;
 use crate::{
     hotstuff::{
+        current_view::CurrentView,
         error::HotStuffError,
         on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
         pacemaker_handle::PaceMakerHandle,
@@ -102,7 +103,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         }
     }
 
-    pub async fn handle(&mut self, message: ProposalMessage) -> Result<(), HotStuffError> {
+    pub async fn handle(&mut self, current_view: CurrentView, message: ProposalMessage) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = message;
 
         debug!(
@@ -112,7 +113,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             block.proposed_by()
         );
 
-        match self.process_block(block).await {
+        match self.process_block(current_view, block).await {
             Ok(()) => Ok(()),
             Err(err @ HotStuffError::ProposalValidationError(_)) => {
                 self.hooks.on_block_validation_failed(&err);
@@ -122,7 +123,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         }
     }
 
-    async fn process_block(&mut self, block: Block) -> Result<(), HotStuffError> {
+    async fn process_block(&mut self, current_view: CurrentView, block: Block) -> Result<(), HotStuffError> {
         if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
             return Err(HotStuffError::EpochNotActive {
                 epoch: block.epoch(),
@@ -177,13 +178,14 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         })?;
 
         if let Some((high_qc, valid_block)) = maybe_high_qc_and_block {
-            self.pacemaker
-                .update_view(valid_block.epoch(), valid_block.height(), high_qc.block_height())
-                .await?;
+            let current_epoch = self.epoch_manager.current_epoch().await?;
+            let can_propose_epoch_end = current_epoch > current_view.get_epoch();
 
-            let block_decision = self
-                .on_ready_to_vote_on_local_block
-                .handle(&valid_block, local_committee_info)?;
+            let block_decision = self.on_ready_to_vote_on_local_block.handle(
+                &valid_block,
+                local_committee_info,
+                can_propose_epoch_end,
+            )?;
 
             self.hooks
                 .on_local_block_decide(&valid_block, block_decision.quorum_decision);
@@ -220,9 +222,13 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 }
             }
 
-            if let Some(end_epoch) = block_decision.end_of_epoch {
-                self.pacemaker.update_epoch(end_epoch + Epoch(1)).await?;
-            }
+            let epoch = block_decision
+                .end_of_epoch
+                .map(|e| e + Epoch(1))
+                .unwrap_or_else(|| valid_block.epoch());
+            self.pacemaker
+                .update_view(epoch, valid_block.height(), high_qc.block_height())
+                .await?;
         }
 
         Ok(())
@@ -499,7 +505,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             return Err(ProposalValidationError::JustifyBlockNotFound {
                 proposed_by: candidate_block.proposed_by().to_string(),
                 block_description: candidate_block.to_string(),
-                justify_block: *candidate_block.justify().block_id(),
+                justify_block: candidate_block.justify().as_leaf_block(),
             }
             .into());
         };
@@ -553,7 +559,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
             while last_dummy_block.id() != candidate_block.parent() {
                 if last_dummy_block.height() > candidate_block.height() {
-                    warn!(target: LOG_TARGET, "🔥 Bad proposal, dummy block height {} is greater than new height {}", last_dummy_block, candidate_block);
+                    warn!(target: LOG_TARGET, "❌ Bad proposal, unable to find dummy blocks (last dummy: {}) for candidate block {}", last_dummy_block, candidate_block);
                     return Err(ProposalValidationError::CandidateBlockDoesNotExtendJustify {
                         justify_block_height,
                         candidate_block_height: candidate_block.height(),

@@ -71,14 +71,8 @@ message Command {
     TransactionAtom accept = 3;
     TransactionAtom local_only = 4;
     ForeignProposal foreign_proposal = 5;
-    EpochEvent epoch_event = 6;
+    bool end_epoch = 6;
   }
-}
-
-enum EpochEvent {
-  UNKNOWN_EVENT = 0;
-  START = 1;
-  END = 2;
 }
 
 enum ForeignProposalState {
@@ -231,7 +225,8 @@ message SyncRequest {
 message HighQc {
   bytes block_id = 1;
   uint64 block_height = 2;
-  bytes qc_id = 3;
+  uint64 epoch = 3;
+  bytes qc_id = 4;
 }
 
 message SyncResponse {

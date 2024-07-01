@@ -139,6 +139,7 @@ impl QuorumCertificate {
         HighQc {
             block_id: self.block_id,
             block_height: self.block_height,
+            epoch: self.epoch,
             qc_id: self.qc_id,
         }
     }
@@ -147,6 +148,7 @@ impl QuorumCertificate {
         LeafBlock {
             block_id: self.block_id,
             height: self.block_height,
+            epoch: self.epoch,
         }
     }
 
@@ -154,6 +156,7 @@ impl QuorumCertificate {
         LastVoted {
             block_id: self.block_id,
             height: self.block_height,
+            epoch: self.epoch,
         }
     }
 }

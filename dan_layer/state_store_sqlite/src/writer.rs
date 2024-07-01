@@ -367,6 +367,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let insert = (
             last_voted::block_id.eq(serialize_hex(last_voted.block_id)),
             last_voted::height.eq(last_voted.height.as_u64() as i64),
+            last_voted::epoch.eq(last_voted.epoch.as_u64() as i64),
         );
 
         diesel::insert_into(last_voted::table)
@@ -401,6 +402,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let insert = (
             last_executed::block_id.eq(serialize_hex(last_exec.block_id)),
             last_executed::height.eq(last_exec.height.as_u64() as i64),
+            last_executed::epoch.eq(last_exec.epoch.as_u64() as i64),
         );
 
         diesel::insert_into(last_executed::table)
@@ -420,6 +422,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let insert = (
             last_proposed::block_id.eq(serialize_hex(last_proposed.block_id)),
             last_proposed::height.eq(last_proposed.height.as_u64() as i64),
+            last_proposed::epoch.eq(last_proposed.epoch.as_u64() as i64),
         );
 
         diesel::insert_into(last_proposed::table)
@@ -454,6 +457,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let insert = (
             leaf_blocks::block_id.eq(serialize_hex(leaf_node.block_id)),
             leaf_blocks::block_height.eq(leaf_node.height.as_u64() as i64),
+            leaf_blocks::epoch.eq(leaf_node.epoch.as_u64() as i64),
         );
 
         diesel::insert_into(leaf_blocks::table)
@@ -484,6 +488,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let insert = (
             locked_block::block_id.eq(serialize_hex(locked_block.block_id)),
             locked_block::height.eq(locked_block.height.as_u64() as i64),
+            locked_block::epoch.eq(locked_block.epoch.as_u64() as i64),
         );
 
         diesel::insert_into(locked_block::table)
@@ -503,6 +508,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let insert = (
             high_qcs::block_id.eq(serialize_hex(high_qc.block_id)),
             high_qcs::block_height.eq(high_qc.block_height().as_u64() as i64),
+            high_qcs::epoch.eq(high_qc.epoch().as_u64() as i64),
             high_qcs::qc_id.eq(serialize_hex(high_qc.qc_id)),
         );
 

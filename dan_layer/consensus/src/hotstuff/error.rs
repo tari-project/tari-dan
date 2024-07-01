@@ -127,11 +127,11 @@ pub enum ProposalValidationError {
     },
     #[error("Node proposed by {proposed_by} with hash {hash} is the genesis block")]
     ProposingGenesisBlock { proposed_by: String, hash: BlockId },
-    #[error("Justification block {justify_block} for proposed block {block_description} by {proposed_by} not found")]
+    #[error("Justified block {justify_block} for proposed block {block_description} by {proposed_by} not found")]
     JustifyBlockNotFound {
         proposed_by: String,
         block_description: String,
-        justify_block: BlockId,
+        justify_block: LeafBlock,
     },
     #[error("QC in block {block_id} that was proposed by {proposed_by} is invalid: {details}")]
     JustifyBlockInvalid {

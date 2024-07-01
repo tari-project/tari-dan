@@ -21,6 +21,7 @@ mod on_receive_vote;
 mod on_sync_request;
 // mod on_sync_response;
 mod block_change_set;
+mod on_catch_up_sync;
 mod pacemaker;
 mod pacemaker_handle;
 mod proposer;

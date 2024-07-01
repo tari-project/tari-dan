@@ -255,7 +255,7 @@ impl Block {
         network: Network,
         parent: BlockId,
         proposed_by: PublicKey,
-        node_height: NodeHeight,
+        height: NodeHeight,
         high_qc: QuorumCertificate,
         epoch: Epoch,
         shard: Shard,
@@ -264,24 +264,30 @@ impl Block {
         parent_base_layer_block_height: u64,
         parent_base_layer_block_hash: FixedHash,
     ) -> Self {
-        let mut block = Self::new(
+        let mut block = Self {
+            id: BlockId::genesis(),
             network,
             parent,
-            high_qc,
-            node_height,
+            justify: high_qc,
+            height,
             epoch,
             shard,
             proposed_by,
-            Default::default(),
-            parent_merkle_root,
-            0,
-            IndexMap::new(),
-            None,
-            parent_timestamp,
-            parent_base_layer_block_height,
-            parent_base_layer_block_hash,
-        );
-        block.is_dummy = true;
+            merkle_root: parent_merkle_root,
+            commands: BTreeSet::new(),
+            total_leader_fee: 0,
+            is_dummy: true,
+            is_processed: false,
+            is_committed: false,
+            foreign_indexes: IndexMap::new(),
+            stored_at: None,
+            signature: None,
+            block_time: None,
+            timestamp: parent_timestamp,
+            base_layer_block_height: parent_base_layer_block_height,
+            base_layer_block_hash: parent_base_layer_block_hash,
+        };
+        block.id = block.calculate_hash().into();
         block.is_processed = false;
         block
     }
@@ -326,10 +332,6 @@ impl Block {
         self.id.is_genesis()
     }
 
-    pub fn is_epoch_start(&self) -> bool {
-        self.commands.iter().any(|c| c.is_epoch_start())
-    }
-
     pub fn is_epoch_end(&self) -> bool {
         self.commands.iter().any(|c| c.is_epoch_end())
     }
@@ -357,6 +359,7 @@ impl Block {
         LockedBlock {
             height: self.height,
             block_id: self.id,
+            epoch: self.epoch,
         }
     }
 
@@ -364,6 +367,7 @@ impl Block {
         LastExecuted {
             height: self.height,
             block_id: self.id,
+            epoch: self.epoch,
         }
     }
 
@@ -371,6 +375,7 @@ impl Block {
         LastVoted {
             height: self.height,
             block_id: self.id,
+            epoch: self.epoch,
         }
     }
 
@@ -378,6 +383,7 @@ impl Block {
         LeafBlock {
             height: self.height,
             block_id: self.id,
+            epoch: self.epoch,
         }
     }
 
@@ -385,6 +391,7 @@ impl Block {
         LastProposed {
             height: self.height,
             block_id: self.id,
+            epoch: self.epoch,
         }
     }
 
