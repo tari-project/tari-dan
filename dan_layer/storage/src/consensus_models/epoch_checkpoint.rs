@@ -1,6 +1,8 @@
 //    Copyright 2024 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
+use std::fmt::Display;
+
 use tari_dan_common_types::Epoch;
 
 use crate::{
@@ -46,5 +48,15 @@ impl EpochCheckpoint {
             block: commit_block,
             qcs,
         })
+    }
+}
+
+impl Display for EpochCheckpoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EpochCheckpoint: block={}, qcs=", self.block)?;
+        for qc in self.qcs() {
+            write!(f, "{}, ", qc.id())?;
+        }
+        Ok(())
     }
 }

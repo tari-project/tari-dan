@@ -33,8 +33,8 @@ pub enum HotStuffError {
     EpochNotActive { epoch: Epoch, details: String },
     #[error("Not registered for current epoch {epoch}")]
     NotRegisteredForCurrentEpoch { epoch: Epoch },
-    #[error("Received message from non-committee member. Epoch: {epoch}, Sender: {sender}, {context}")]
-    ReceivedMessageFromNonCommitteeMember {
+    #[error("Received vote from non-committee member. Epoch: {epoch}, Sender: {sender}, {context}")]
+    ReceivedVoteFromNonCommitteeMember {
         epoch: Epoch,
         sender: String,
         context: String,
@@ -55,8 +55,6 @@ pub enum HotStuffError {
     InvalidVoteSignature { signer_public_key: String },
     #[error("Invalid vote {signer_public_key} (unauthenticated): {details}")]
     InvalidVote { signer_public_key: String, details: String },
-    #[error("Vote sent from peer {address} did not match the expected signer public key {signer_public_key}")]
-    RejectingVoteNotSentBySigner { address: String, signer_public_key: String },
     #[error("Transaction pool error: {0}")]
     TransactionPoolError(#[from] TransactionPoolError),
     #[error("Transaction {transaction_id} does not exist")]

@@ -29,7 +29,7 @@ use indexmap::IndexMap;
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -1996,6 +1996,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .select(state_transitions::id)
             .filter(state_transitions::epoch.eq(id.to_epoch().as_u64() as i64))
             .filter(state_transitions::shard.eq(id.to_shard().as_u32() as i32))
+            .filter(state_transitions::seq.eq(0i64))
             .order_by(state_transitions::id.asc())
             .first::<i32>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -2023,9 +2024,33 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                     details: format!("substate entry does not exist for transition {}", t.id),
                 })?;
 
-                t.try_convert(s, start_id)
+                t.try_convert(s)
             })
             .collect()
+    }
+
+    fn state_transitions_get_last_id(&self) -> Result<StateTransitionId, StorageError> {
+        use crate::schema::state_transitions;
+
+        let (seq, epoch, shard) = state_transitions::table
+            .select((
+                state_transitions::seq,
+                state_transitions::epoch,
+                state_transitions::shard,
+            ))
+            .order_by(state_transitions::epoch.desc())
+            .then_order_by(state_transitions::seq.desc())
+            .first::<(i64, i64, i32)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "state_transitions_get_last_id",
+                source: e,
+            })?;
+
+        let epoch = Epoch(epoch as u64);
+        let shard = Shard::from(shard as u32);
+        let seq = seq as u64;
+
+        Ok(StateTransitionId::from_parts(epoch, shard, seq))
     }
 }
 

@@ -4,6 +4,7 @@
 use std::ops::Deref;
 
 use diesel::{
+    dsl,
     sql_types::Text,
     AsChangeset,
     ExpressionMethods,
@@ -13,7 +14,7 @@ use diesel::{
     SqliteConnection,
 };
 use log::*;
-use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeAddressable, NodeHeight, SubstateAddress};
+use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -49,7 +50,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_engine_types::substate::SubstateId;
-use tari_transaction::TransactionId;
+use tari_transaction::{TransactionId, VersionedSubstateId};
 use tari_utilities::ByteArray;
 use time::{OffsetDateTime, PrimitiveDateTime};
 
@@ -1346,7 +1347,18 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 source: e,
             })?;
 
+        let seq = state_transitions::table
+            .select(dsl::max(state_transitions::seq))
+            .filter(state_transitions::epoch.eq(substate.created_at_epoch.as_u64() as i64))
+            .first::<Option<i64>>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_create",
+                source: e,
+            })?;
+        let next_seq = seq.map(|s| s + 1).unwrap_or(0);
+
         let values = (
+            state_transitions::seq.eq(next_seq),
             state_transitions::epoch.eq(substate.created_at_epoch.as_u64() as i64),
             state_transitions::shard.eq(substate.created_by_shard.as_u32() as i32),
             state_transitions::substate_address.eq(serialize_hex(&substate.to_substate_address())),
@@ -1369,7 +1381,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
 
     fn substates_down(
         &mut self,
-        address: SubstateAddress,
+        versioned_substate_id: VersionedSubstateId,
         shard: Shard,
         epoch: Epoch,
         destroyed_block_id: &BlockId,
@@ -1387,8 +1399,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             substates::destroyed_justify.eq(Some(serialize_hex(destroyed_qc_id))),
         );
 
+        let address = versioned_substate_id.to_substate_address();
+
         diesel::update(substates::table)
-            .filter(substates::address.eq(serialize_hex(address)))
+            .filter(substates::address.eq(serialize_hex(&address)))
             .set(changes)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -1396,10 +1410,23 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 source: e,
             })?;
 
+        let seq = state_transitions::table
+            .select(dsl::max(state_transitions::seq))
+            .filter(state_transitions::epoch.eq(epoch.as_u64() as i64))
+            .first::<Option<i64>>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_create",
+                source: e,
+            })?;
+        let next_seq = seq.map(|s| s + 1).unwrap_or(0);
+
         let values = (
+            state_transitions::seq.eq(next_seq),
             state_transitions::epoch.eq(epoch.as_u64() as i64),
             state_transitions::shard.eq(shard.as_u32() as i32),
             state_transitions::substate_address.eq(serialize_hex(&address)),
+            state_transitions::substate_id.eq(versioned_substate_id.substate_id.to_string()),
+            state_transitions::version.eq(versioned_substate_id.version as i32),
             state_transitions::transition.eq("DOWN"),
         );
 

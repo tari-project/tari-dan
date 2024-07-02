@@ -279,6 +279,8 @@ pub trait StateStoreReadTransaction: Sized {
         n: usize,
         id: StateTransitionId,
     ) -> Result<Vec<StateTransition>, StorageError>;
+
+    fn state_transitions_get_last_id(&self) -> Result<StateTransitionId, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -411,7 +413,7 @@ pub trait StateStoreWriteTransaction {
     fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
     fn substates_down(
         &mut self,
-        substate_address: SubstateAddress,
+        versioned_substate_id: VersionedSubstateId,
         shard: Shard,
         epoch: Epoch,
         destroyed_block_id: &BlockId,

@@ -5,6 +5,7 @@ use std::{
     borrow::Borrow,
     collections::HashSet,
     fmt,
+    fmt::Display,
     hash::Hash,
     iter,
     ops::{Deref, RangeInclusive},
@@ -309,7 +310,7 @@ impl SubstateRecord {
 
     pub fn destroy<TTx: StateStoreWriteTransaction>(
         tx: &mut TTx,
-        substate_address: SubstateAddress,
+        versioned_substate_id: VersionedSubstateId,
         shard: Shard,
         epoch: Epoch,
         destroyed_by_block: &BlockId,
@@ -317,7 +318,7 @@ impl SubstateRecord {
         destroyed_by_transaction: &TransactionId,
     ) -> Result<(), StorageError> {
         tx.substates_down(
-            substate_address,
+            versioned_substate_id,
             shard,
             epoch,
             destroyed_by_block,
@@ -427,7 +428,7 @@ impl SubstateUpdate {
                 proof.save(tx)?;
                 SubstateRecord::destroy(
                     tx,
-                    SubstateAddress::from_substate_id(&substate_id, version),
+                    VersionedSubstateId::new(substate_id, version),
                     block.shard(),
                     block.epoch(),
                     block.id(),
@@ -444,6 +445,15 @@ impl SubstateUpdate {
 impl From<SubstateCreatedProof> for SubstateUpdate {
     fn from(value: SubstateCreatedProof) -> Self {
         Self::Create(value)
+    }
+}
+
+impl Display for SubstateUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Create(proof) => write!(f, "Create: {}v{}", proof.substate.substate_id, proof.substate.version),
+            Self::Destroy(proof) => write!(f, "Destroy: {}v{}", proof.substate_id, proof.version),
+        }
     }
 }
 

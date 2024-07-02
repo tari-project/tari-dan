@@ -52,7 +52,7 @@ where TConsensusSpec: ConsensusSpec
     pub async fn handle(&mut self, from: TConsensusSpec::Addr, message: ProposalMessage) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = message;
 
-        debug!(
+        info!(
             target: LOG_TARGET,
             "🔥 Receive FOREIGN PROPOSAL for block {}, parent {}, height {} from {}",
             block.id(),

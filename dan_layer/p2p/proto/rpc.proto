@@ -239,10 +239,11 @@ message SyncStateRequest {
 }
 
 message SyncStateResponse {
-  SubstateUpdateBatch update_batch = 1;
+  repeated StateTransition transitions = 1;
+  bytes state_hash = 2;
 }
 
-message SubstateUpdateBatch {
-  repeated SubstateUpdate updates = 1;
-  bytes state_hash = 2;
+message StateTransition {
+    bytes id = 1;
+    SubstateUpdate update = 2;
 }

@@ -78,40 +78,35 @@ where TConsensusSpec: ConsensusSpec
         message: VoteMessage,
         check_leadership: bool,
     ) -> Result<bool, HotStuffError> {
-        // Is a committee member sending us this vote?
-        let committee = self.epoch_manager.get_local_committee(message.epoch).await?;
-        if !committee.contains(&from) {
-            return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
+        // Is a local committee member that signed this vote?
+        let sender_vn = self
+            .epoch_manager
+            .get_validator_node_by_public_key(message.epoch, &message.signature.public_key)
+            .await
+            .optional()?;
+        let Some(sender_vn) = sender_vn else {
+            return Err(HotStuffError::ReceivedVoteFromNonCommitteeMember {
                 epoch: message.epoch,
                 sender: from.to_string(),
-                context: "OnReceiveVote".to_string(),
+                context: "VoteReceiver::handle_vote (sender pk not from registered VN)".to_string(),
             });
-        }
-
-        // Are we the leader for the block being voted for?
-        let our_vn = self.epoch_manager.get_our_validator_node(message.epoch).await?;
-
-        let local_committee_shard = self.epoch_manager.get_local_committee_info(message.epoch).await?;
+        };
 
         // Get the sender shard, and check that they are in the local committee
-        let sender_vn = self.epoch_manager.get_validator_node(message.epoch, &from).await?;
-        if message.signature.public_key != sender_vn.public_key {
-            return Err(HotStuffError::RejectingVoteNotSentBySigner {
-                address: from.to_string(),
-                signer_public_key: message.signature.public_key.to_string(),
-            });
-        }
-
-        if !local_committee_shard.includes_substate_address(&sender_vn.shard_key) {
-            return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
+        let our_vn = self.epoch_manager.get_our_validator_node(message.epoch).await?;
+        let committee = self
+            .epoch_manager
+            .get_committee_for_substate(message.epoch, our_vn.shard_key)
+            .await?;
+        if !committee.contains(&sender_vn.address) {
+            return Err(HotStuffError::ReceivedVoteFromNonCommitteeMember {
                 epoch: message.epoch,
-                sender: from.to_string(),
-                context: "OnReceiveVote".to_string(),
+                sender: sender_vn.address.to_string(),
+                context: "VoteReceiver::handle_vote (VN not in local committee)".to_string(),
             });
         }
 
         let sender_leaf_hash = sender_vn.get_node_hash(self.network);
-
         self.validate_vote_message(&message, &sender_leaf_hash)?;
 
         let count = self.store.with_write_tx(|tx| {
@@ -127,6 +122,8 @@ where TConsensusSpec: ConsensusSpec
             let count = Vote::count_for_block(&**tx, &message.block_id)?;
             Ok::<_, HotStuffError>(count)
         })?;
+
+        let local_committee_shard = self.epoch_manager.get_local_committee_info(message.epoch).await?;
 
         // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
         // in the QC.
@@ -155,6 +152,7 @@ where TConsensusSpec: ConsensusSpec
                 return Ok(false);
             };
 
+            // Are we the leader for the block being voted for?
             if check_leadership &&
                 !self
                     .leader_strategy

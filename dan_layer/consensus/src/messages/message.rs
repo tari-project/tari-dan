@@ -65,7 +65,7 @@ impl Display for HotstuffMessage {
             HotstuffMessage::Proposal(msg) => {
                 write!(f, "Proposal(Epoch={},Height={})", msg.block.epoch(), msg.block.height(),)
             },
-            HotstuffMessage::ForeignProposal(msg) => write!(f, "ForeignProposal({})", msg.block.height()),
+            HotstuffMessage::ForeignProposal(msg) => write!(f, "ForeignProposal({})", msg),
             HotstuffMessage::Vote(msg) => write!(f, "Vote({}, {}, {})", msg.block_height, msg.block_id, msg.decision),
             HotstuffMessage::RequestMissingTransactions(msg) => {
                 write!(

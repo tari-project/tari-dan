@@ -14,6 +14,10 @@ impl TestAddress {
     pub fn new<T: Into<String>>(s: T) -> Self {
         TestAddress(s.into())
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
 }
 
 impl NodeAddressable for TestAddress {

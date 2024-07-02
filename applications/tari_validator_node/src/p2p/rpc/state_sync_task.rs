@@ -8,7 +8,6 @@ use tari_dan_common_types::{shard::Shard, Epoch, SubstateAddress};
 use tari_dan_p2p::proto::rpc::{
     sync_blocks_response::SyncData,
     QuorumCertificates,
-    SubstateUpdateBatch,
     SyncBlocksResponse,
     SyncStateResponse,
     Transactions,
@@ -75,11 +74,14 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
                     current_state_transition_id = last_state_transition_id;
                 },
                 Ok(None) => {
-                    self.send(Err(RpcStatus::not_found(format!(
-                        "State transition not found with id={current_state_transition_id}"
-                    ))))
-                    .await?;
-                    return Err(());
+                    // TODO: differentiate between not found and end of stream
+                    // self.send(Err(RpcStatus::not_found(format!(
+                    //     "State transition not found with id={current_state_transition_id}"
+                    // ))))
+                    // .await?;
+
+                    // Finished
+                    return Ok(());
                 },
                 Err(err) => {
                     self.send(Err(RpcStatus::log_internal_error(LOG_TARGET)(err))).await?;
@@ -112,15 +114,13 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
         current_state_transition_id: StateTransitionId,
     ) -> Result<Option<StateTransitionId>, StorageError> {
         self.store.with_read_tx(|tx| {
-            let mut last_state_transition_id = current_state_transition_id;
             let state_transitions = StateTransition::get_n_after(tx, BATCH_SIZE, current_state_transition_id)?;
 
             let Some(last) = state_transitions.last() else {
                 return Ok(None);
             };
 
-            last_state_transition_id = last.id;
-
+            let last_state_transition_id = last.id;
             buffer.extend(state_transitions);
             Ok::<_, StorageError>(Some(last_state_transition_id))
         })
@@ -137,12 +137,13 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
         Ok(())
     }
 
-    async fn send_state_transitions<I: IntoIterator<Item = StateTransition>>(&mut self, updates: I) -> Result<(), ()> {
+    async fn send_state_transitions<I: IntoIterator<Item = StateTransition>>(
+        &mut self,
+        state_transitions: I,
+    ) -> Result<(), ()> {
         self.send(Ok(SyncStateResponse {
-            update_batch: Some(SubstateUpdateBatch {
-                updates: updates.into_iter().map(|s| s.update).map(Into::into).collect(),
-                state_hash: vec![],
-            }),
+            transitions: state_transitions.into_iter().map(Into::into).collect(),
+            state_hash: vec![],
         }))
         .await?;
 

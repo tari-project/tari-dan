@@ -24,6 +24,16 @@ impl StateTransition {
     ) -> Result<Vec<Self>, StorageError> {
         tx.state_transitions_get_n_after(n, after_id)
     }
+
+    pub fn get_last_id<TTx: StateStoreReadTransaction>(tx: &TTx) -> Result<StateTransitionId, StorageError> {
+        tx.state_transitions_get_last_id()
+    }
+}
+
+impl Display for StateTransition {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.id, self.update)
+    }
 }
 
 /// 20 byte ID
@@ -43,6 +53,15 @@ impl StateTransitionId {
         buf[U64_SZ..U64_SZ + U32_SZ].copy_from_slice(&shard.as_u32().to_le_bytes());
         buf[U64_SZ + U32_SZ..].copy_from_slice(&seq.to_le_bytes());
         Self(buf)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != 20 {
+            return None;
+        }
+        let mut buf = [0u8; 20];
+        buf.copy_from_slice(bytes);
+        Some(Self(buf))
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -70,12 +89,15 @@ impl StateTransitionId {
 
 impl Display for StateTransitionId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for b in self.0 {
-            write!(f, "{:02x?}", b)?;
+        if f.alternate() {
+            for b in self.0 {
+                write!(f, "{:02x?}", b)?;
+            }
+            write!(f, " ")?;
         }
         write!(
             f,
-            " (epoch = {}, shard = {}, seq = {})",
+            "(epoch = {}, shard = {}, seq = {})",
             self.to_epoch(),
             self.to_shard(),
             self.to_seq()

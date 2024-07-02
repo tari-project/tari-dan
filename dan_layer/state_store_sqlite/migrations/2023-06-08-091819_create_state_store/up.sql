@@ -368,10 +368,12 @@ CREATE TABLE state_transitions
     -- <epoch, shard> tuple uniquely identifies the "chain" that created the state transition
     epoch            bigint                                    not NULL,
     shard            int                                       not NULL,
+    -- in conjunction with the <epoch, shard>, this uniquely identifies and orders the state transition
+    seq              bigint                                    not NULL,
     substate_address text                                      not NULL,
     -- substate_id and version not required, just to make DB inspection easier
-    substate_id      text                                      NULL,
-    version          int                                       NULL,
+    substate_id      text                                      not NULL,
+    version          int                                       not NULL,
     transition       text check (transition IN ('UP', 'DOWN')) not NULL,
     state_hash       text                                      NULL,
     created_at       timestamp                                 not NULL DEFAULT CURRENT_TIMESTAMP,

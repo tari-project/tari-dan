@@ -6,6 +6,8 @@ use std::convert::{TryFrom, TryInto};
 use anyhow::anyhow;
 use tari_dan_storage::consensus_models::{
     EpochCheckpoint,
+    StateTransition,
+    StateTransitionId,
     SubstateCreatedProof,
     SubstateData,
     SubstateDestroyedProof,
@@ -114,6 +116,31 @@ impl From<SubstateData> for proto::rpc::SubstateData {
             version: value.version,
             substate_value: value.substate_value.to_bytes(),
             created_transaction: value.created_by_transaction.as_bytes().to_vec(),
+        }
+    }
+}
+
+//---------------------------------- StateTransition --------------------------------------------//
+
+impl TryFrom<proto::rpc::StateTransition> for StateTransition {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::rpc::StateTransition) -> Result<Self, Self::Error> {
+        let id = StateTransitionId::from_bytes(&value.id)
+            .ok_or_else(|| anyhow::anyhow!("Invalid state transition id bytes"))?;
+        let update = value
+            .update
+            .ok_or_else(|| anyhow::anyhow!("Missing state transition update"))?;
+        let update = SubstateUpdate::try_from(update)?;
+        Ok(Self { id, update })
+    }
+}
+
+impl From<StateTransition> for proto::rpc::StateTransition {
+    fn from(value: StateTransition) -> Self {
+        Self {
+            id: value.id.as_bytes().to_vec(),
+            update: Some(value.update.into()),
         }
     }
 }

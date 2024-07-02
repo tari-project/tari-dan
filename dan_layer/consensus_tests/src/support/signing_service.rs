@@ -7,7 +7,7 @@ use tari_consensus::traits::{ValidatorSignatureService, VoteSignatureService};
 use tari_crypto::keys::SecretKey;
 use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSchnorrSignature, ValidatorSignature};
 
-use super::TestAddress;
+use super::{helpers, TestAddress};
 
 #[derive(Debug, Clone)]
 pub struct TestVoteSignatureService {
@@ -17,10 +17,8 @@ pub struct TestVoteSignatureService {
 }
 
 impl TestVoteSignatureService {
-    pub fn new(public_key: PublicKey, addr: TestAddress) -> Self {
-        let mut bytes = [0u8; 64];
-        bytes[0..addr.0.as_bytes().len()].copy_from_slice(addr.0.as_bytes());
-        let secret_key = PrivateKey::from_uniform_bytes(&bytes).unwrap();
+    pub fn new(addr: TestAddress) -> Self {
+        let (secret_key, public_key) = helpers::derive_keypair_from_address(&addr);
         Self {
             public_key,
             secret_key,

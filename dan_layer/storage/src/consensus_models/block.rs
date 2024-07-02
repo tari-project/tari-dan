@@ -626,7 +626,7 @@ impl Block {
                 SubstateChange::Down { id, transaction_id } => {
                     SubstateRecord::destroy(
                         tx,
-                        id.to_substate_address(),
+                        id,
                         self.shard(),
                         self.epoch(),
                         self.id(),

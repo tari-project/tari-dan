@@ -11,6 +11,26 @@ use crate::{
     traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
 };
 
+pub async fn check_proposal<TConsensusSpec: ConsensusSpec>(
+    block: &Block,
+    network: Network,
+    epoch_manager: &TConsensusSpec::EpochManager,
+    vote_signing_service: &TConsensusSpec::SignatureService,
+    leader_strategy: &TConsensusSpec::LeaderStrategy,
+    config: &HotstuffConfig,
+) -> Result<(), HotStuffError> {
+    check_base_layer_block_hash::<TConsensusSpec>(block, epoch_manager, config).await?;
+    check_network(block, network)?;
+    check_hash_and_height(block)?;
+    let committee_for_block = epoch_manager
+        .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
+        .await?;
+    check_proposed_by_leader(leader_strategy, &committee_for_block, block)?;
+    check_signature(block)?;
+    check_quorum_certificate::<TConsensusSpec>(block, vote_signing_service, epoch_manager).await?;
+    Ok(())
+}
+
 pub fn check_network(candidate_block: &Block, network: Network) -> Result<(), ProposalValidationError> {
     if candidate_block.network() != network {
         return Err(ProposalValidationError::InvalidNetwork {

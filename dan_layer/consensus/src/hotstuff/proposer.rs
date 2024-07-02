@@ -73,7 +73,7 @@ where TConsensusSpec: ConsensusSpec
             .await?;
         info!(
             target: LOG_TARGET,
-            "🌿 Broadcasting new locked block {} to {} foreign committees.",
+            "🌿 FOREIGN PROPOSE: Broadcasting locked block {} to {} foreign committees.",
             block,
             non_local_committees.len(),
         );

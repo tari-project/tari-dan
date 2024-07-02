@@ -26,7 +26,7 @@ use tari_template_lib::models::ComponentAddress;
 use tari_transaction::{TransactionId, VersionedSubstateId};
 use tokio::{sync::broadcast, task, time::sleep};
 
-use super::MessageFilter;
+use super::{helpers, MessageFilter};
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
@@ -404,19 +404,16 @@ impl TestBuilder {
         self
     }
 
-    pub fn add_committee<T: Into<Shard>>(mut self, bucket: T, addresses: Vec<&'static str>) -> Self {
+    pub fn add_committee<T: Into<Shard>>(mut self, shard: T, addresses: Vec<&'static str>) -> Self {
         let entry = self
             .committees
-            .entry(bucket.into())
+            .entry(shard.into())
             .or_insert_with(|| Committee::new(vec![]));
 
         for addr in addresses {
-            let mut bytes = [0u8; 64];
-            bytes[0..addr.as_bytes().len()].copy_from_slice(addr.as_bytes());
-            let secret_key = PrivateKey::from_uniform_bytes(&bytes).unwrap();
-            entry
-                .members
-                .push((TestAddress::new(addr), PublicKey::from_secret_key(&secret_key)));
+            let addr = TestAddress::new(addr);
+            let (_, pk) = helpers::derive_keypair_from_address(&addr);
+            entry.members.push((addr, pk));
         }
         self
     }
@@ -437,12 +434,14 @@ impl TestBuilder {
             .all_validators()
             .await
             .into_iter()
-            .map(|(address, bucket, shard, pk, _, _, _)| {
+            .map(|(address, bucket, shard, _, _, _, _)| {
                 let sql_address = self.sql_address.replace("{}", &address.0);
+                let (sk, pk) = helpers::derive_keypair_from_address(&address);
+
                 let (channels, validator) = Validator::builder()
                     .with_sql_url(sql_address)
                     .with_transaction_executions(transaction_executions.clone())
-                    .with_address_and_public_key(address.clone(), pk.clone())
+                    .with_address_and_secret_key(address.clone(), sk)
                     .with_shard(shard)
                     .with_bucket(bucket)
                     .with_epoch_manager(epoch_manager.clone_for(address.clone(), pk, shard))

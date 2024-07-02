@@ -24,22 +24,19 @@ pub struct StateTransition {
     pub id: i32,
     pub epoch: i64,
     pub shard: i32,
+    pub seq: i64,
     pub substate_address: String,
-    pub substate_id: Option<String>,
-    pub version: Option<i32>,
+    pub substate_id: String,
+    pub version: i32,
     pub transition: String,
     pub state_hash: Option<String>,
     pub created_at: PrimitiveDateTime,
 }
 
 impl StateTransition {
-    pub fn try_convert(
-        self,
-        substate: SubstateRecord,
-        start_id: i32,
-    ) -> Result<consensus_models::StateTransition, StorageError> {
+    pub fn try_convert(self, substate: SubstateRecord) -> Result<consensus_models::StateTransition, StorageError> {
         let substate = consensus_models::SubstateRecord::try_from(substate)?;
-        let seq = (self.id - start_id) as u64;
+        let seq = self.seq as u64;
         let epoch = Epoch(self.epoch as u64);
         let shard = Shard::from(self.shard as u32);
 

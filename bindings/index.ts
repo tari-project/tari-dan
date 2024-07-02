@@ -29,7 +29,6 @@ export * from "./src/types/Decision";
 export * from "./src/types/ElgamalVerifiableBalance";
 export * from "./src/types/EntityId";
 export * from "./src/types/Epoch";
-export * from "./src/types/EpochEvent";
 export * from "./src/types/Event";
 export * from "./src/types/Evidence";
 export * from "./src/types/ExecuteResult";

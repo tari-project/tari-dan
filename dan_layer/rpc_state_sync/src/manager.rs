@@ -16,9 +16,12 @@ use tari_consensus::{
     traits::{ConsensusSpec, LeaderStrategy, SyncManager, SyncStatus},
 };
 use tari_dan_common_types::{committee::Committee, optional::Optional, shard::Shard, Epoch, NodeHeight, PeerAddress};
-use tari_dan_p2p::{
-    proto::rpc::{GetCheckpointRequest, GetCheckpointResponse, GetHighQcRequest, SyncBlocksRequest, SyncStateRequest},
-    TariMessagingSpec,
+use tari_dan_p2p::proto::rpc::{
+    GetCheckpointRequest,
+    GetCheckpointResponse,
+    GetHighQcRequest,
+    SyncBlocksRequest,
+    SyncStateRequest,
 };
 use tari_dan_storage::{
     consensus_models::{
@@ -31,12 +34,18 @@ use tari_dan_storage::{
         LockedBlock,
         PendingStateTreeDiff,
         QuorumCertificate,
+        StateTransition,
         SubstateChange,
+        SubstateCreatedProof,
+        SubstateDestroyedProof,
+        SubstateRecord,
         SubstateUpdate,
         TransactionPoolRecord,
         TransactionRecord,
     },
     StateStore,
+    StateStoreWriteTransaction,
+    StorageError,
 };
 use tari_engine_types::substate::hash_substate;
 use tari_epoch_manager::EpochManagerReader;
@@ -562,18 +571,13 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         Ok(sync_error)
     }
 
-    async fn establish_rpc_session(&self, addr: &PeerAddress) -> Option<ValidatorNodeRpcClient> {
+    async fn establish_rpc_session(
+        &self,
+        addr: &PeerAddress,
+    ) -> Result<ValidatorNodeRpcClient, CommsRpcConsensusSyncError> {
         let mut rpc_client = self.client_factory.create_client(addr);
-        match rpc_client.client_connection().await {
-            Ok(c) => Some(c),
-            Err(err) => {
-                warn!(
-                    target: LOG_TARGET,
-                    "Failed to establish RPC session with vn {addr}: {err}. Attempting another VN if available"
-                );
-                return None;
-            },
-        }
+        let client = rpc_client.client_connection().await?;
+        Ok(client)
     }
 
     async fn fetch_epoch_checkpoint(&self, client: &mut ValidatorNodeRpcClient) -> Option<EpochCheckpoint> {
@@ -607,35 +611,99 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         }
     }
 
-    async fn start_state_sync(&self, client: &mut ValidatorNodeRpcClient) -> Result<(), CommsRpcConsensusSyncError> {
+    async fn start_state_sync(
+        &self,
+        client: &mut ValidatorNodeRpcClient,
+        checkpoint: EpochCheckpoint,
+    ) -> Result<(), CommsRpcConsensusSyncError> {
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let committee_info = self.epoch_manager.get_local_committee_info(current_epoch).await?;
 
+        let last_state_transition_id = self.state_store.with_read_tx(|tx| StateTransition::get_last_id(tx))?;
+        if current_epoch == last_state_transition_id.to_epoch() {
+            info!(target: LOG_TARGET, "🛜Already up to date. No need to sync.");
+            return Ok(());
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "🛜Syncing from state transition {last_state_transition_id}"
+        );
+
         let mut state_stream = client
             .sync_state(SyncStateRequest {
-                start_epoch: 0,
-                start_shard: 0,
-                start_seq: 0,
+                start_epoch: last_state_transition_id.to_epoch().as_u64(),
+                start_shard: last_state_transition_id.to_shard().as_u32(),
+                start_seq: last_state_transition_id.to_seq(),
                 current_epoch: current_epoch.as_u64(),
                 current_shard: committee_info.shard().as_u32(),
             })
             .await?;
 
         while let Some(result) = state_stream.next().await {
-            let msg = result?;
+            let msg = match result {
+                Ok(msg) => msg,
+                Err(err) if err.is_not_found() => {
+                    return Ok(());
+                },
+                Err(err) => {
+                    return Err(err.into());
+                },
+            };
 
-            let updates = msg.update_batch.ok_or_else(|| {
-                CommsRpcConsensusSyncError::InvalidResponse(
-                    anyhow::anyhow!("Expected peer to return substate updates",),
-                )
+            self.state_store.with_write_tx(|tx| {
+                for transition in msg.transitions {
+                    let transition =
+                        StateTransition::try_from(transition).map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
+                    info!(target: LOG_TARGET, "🛜 Applied state update {transition}");
+                    self.commit_update(tx, &checkpoint, transition)?;
+                }
+
+                Ok::<_, CommsRpcConsensusSyncError>(())
             })?;
-
-            for update in updates.updates.into_iter().map(SubstateUpdate::try_from) {
-                let update = update.map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
-                log::error!(target: LOG_TARGET, "-> {:?}", update);
-            }
         }
 
+        Ok(())
+    }
+
+    pub fn commit_update<TTx: StateStoreWriteTransaction>(
+        &self,
+        tx: &mut TTx,
+        checkpoint: &EpochCheckpoint,
+        transition: StateTransition,
+    ) -> Result<(), StorageError> {
+        match transition.update {
+            SubstateUpdate::Create(SubstateCreatedProof { substate, created_qc }) => {
+                SubstateRecord::new(
+                    substate.substate_id,
+                    substate.version,
+                    substate.substate_value,
+                    transition.id.to_shard(),
+                    transition.id.to_epoch(),
+                    NodeHeight(0),
+                    *checkpoint.block().id(),
+                    substate.created_by_transaction,
+                    *created_qc.id(),
+                )
+                .create(tx)?;
+            },
+            SubstateUpdate::Destroy(SubstateDestroyedProof {
+                substate_id,
+                version,
+                justify,
+                destroyed_by_transaction,
+            }) => {
+                SubstateRecord::destroy(
+                    tx,
+                    VersionedSubstateId::new(substate_id, version),
+                    transition.id.to_shard(),
+                    transition.id.to_epoch(),
+                    checkpoint.block().id(),
+                    justify.id(),
+                    &destroyed_by_transaction,
+                )?;
+            },
+        }
         Ok(())
     }
 
@@ -671,59 +739,70 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
     type Error = CommsRpcConsensusSyncError;
 
     async fn check_sync(&self) -> Result<SyncStatus, Self::Error> {
-        // TODO: if we're here we might always need to sync
-        Ok(SyncStatus::UpToDate)
+        let current_epoch = self.epoch_manager.current_epoch().await?;
 
-        // let current_epoch = self.epoch_manager.current_epoch().await?;
-        //
-        // let leaf_epoch = self.state_store.with_read_tx(|tx| {
-        //     let epoch = LeafBlock::get(tx)
-        //         .optional()?
-        //         .map(|leaf| Block::get(tx, leaf.block_id()))
-        //         .transpose()?
-        //         .map(|b| b.epoch())
-        //         .unwrap_or(Epoch(0));
-        //     Ok::<_, Self::Error>(epoch)
-        // })?;
-        //
-        // // We only sync if we're behind by an epoch. The current epoch is replayed in consensus.
-        // if current_epoch > leaf_epoch {
-        //     info!(target: LOG_TARGET, "??Our current leaf block is behind the current epoch. Syncing...");
-        //     return Ok(SyncStatus::Behind);
-        // }
-        //
-        // Ok(SyncStatus::UpToDate)
+        let leaf_epoch = self.state_store.with_read_tx(|tx| {
+            let epoch = LeafBlock::get(tx)
+                .optional()?
+                .map(|leaf| Block::get(tx, leaf.block_id()))
+                .transpose()?
+                .map(|b| b.epoch())
+                .unwrap_or(Epoch(0));
+            Ok::<_, Self::Error>(epoch)
+        })?;
+
+        // We only sync if we're behind by an epoch. The current epoch is replayed in consensus.
+        if current_epoch > leaf_epoch {
+            info!(target: LOG_TARGET, "🛜Our current leaf block is behind the current epoch. Syncing...");
+            return Ok(SyncStatus::Behind);
+        }
+
+        Ok(SyncStatus::UpToDate)
     }
 
     async fn sync(&mut self) -> Result<(), Self::Error> {
         let prev_epoch_committees = self.get_sync_committees().await?;
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        let our_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
 
+        let mut last_error = None;
         // Sync data from each committee in range of the committee we're joining.
         // NOTE: we don't have to worry about substates in address range because shard boundaries are fixed.
         for (shard, mut committee) in prev_epoch_committees {
             committee.shuffle();
             for addr in committee.members() {
-                let Some(mut client) = self.establish_rpc_session(addr).await else {
+                if our_vn.address == *addr {
                     continue;
+                }
+                let mut client = match self.establish_rpc_session(addr).await {
+                    Ok(c) => c,
+                    Err(err) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Failed to establish RPC session with vn {addr}: {err}. Attempting another VN if available"
+                        );
+                        last_error = Some(err);
+                        continue;
+                    },
                 };
 
                 let Some(checkpoint) = self.fetch_epoch_checkpoint(&mut client).await else {
                     continue;
                 };
-                error!(target: LOG_TARGET, "Checkpoint: {:?}", checkpoint);
-                // TODO: do something with the checkpoint
+                info!(target: LOG_TARGET, "🛜 Checkpoint: {checkpoint}");
 
-                if let Err(err) = self.start_state_sync(&mut client).await {
+                if let Err(err) = self.start_state_sync(&mut client, checkpoint).await {
                     warn!(
                         target: LOG_TARGET,
-                        "Failed to sync state from {addr}: {err}. Attempting another peer if available"
+                        "⚠️Failed to sync state from {addr}: {err}. Attempting another peer if available"
                     );
+                    last_error = Some(err);
                     continue;
                 }
             }
         }
 
-        Ok(())
+        last_error.map(Err).unwrap_or(Ok(()))
     }
 }
 
