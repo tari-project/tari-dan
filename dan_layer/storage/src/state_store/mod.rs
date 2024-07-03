@@ -136,11 +136,13 @@ pub trait StateStoreReadTransaction: Sized {
         from_block_id: &BlockId,
     ) -> Result<TransactionExecution, StorageError>;
     fn blocks_get(&self, block_id: &BlockId) -> Result<Block, StorageError>;
-    fn blocks_get_tip(&self) -> Result<Block, StorageError>;
-    fn blocks_get_last_n_in_epoch(&self, n: usize, epoch: Epoch) -> Result<Vec<Block>, StorageError>;
+    fn blocks_get_tip(&self, epoch: Epoch, shard: Shard) -> Result<Block, StorageError>;
+    fn blocks_get_last_n_in_epoch(&self, n: usize, epoch: Epoch, shard: Shard) -> Result<Vec<Block>, StorageError>;
     /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
     fn blocks_get_all_between(
         &self,
+        epoch: Epoch,
+        shard: Shard,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
         include_dummy_blocks: bool,
@@ -271,6 +273,8 @@ pub trait StateStoreReadTransaction: Sized {
     fn pending_state_tree_diffs_exists_for_block(&self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn pending_state_tree_diffs_get_all_up_to_commit_block(
         &self,
+        epoch: Epoch,
+        shard: Shard,
         block_id: &BlockId,
     ) -> Result<Vec<PendingStateTreeDiff>, StorageError>;
 

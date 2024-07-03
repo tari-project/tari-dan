@@ -121,10 +121,9 @@ impl PaceMakerHandle {
     }
 
     /// Reset the leader timeout. This should be called when an end of epoch proposal has been committed.
-    pub async fn update_epoch(&self, epoch: Epoch) -> Result<(), HotStuffError> {
-        // Update current height here to prevent possibility of race conditions
-        self.current_view.update_epoch(epoch);
-        self.reset_leader_timeout(None).await
+    pub async fn set_epoch(&self, epoch: Epoch) -> Result<(), HotStuffError> {
+        self.current_view.reset(epoch, NodeHeight::zero());
+        self.reset_leader_timeout(Some(NodeHeight::zero())).await
     }
 
     pub fn current_view(&self) -> &CurrentView {

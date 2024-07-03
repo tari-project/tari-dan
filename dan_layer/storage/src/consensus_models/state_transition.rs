@@ -1,9 +1,10 @@
-//   Copyright 2023 The Tari Project
+//   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
     fmt::{Display, Formatter},
-    mem::size_of,
+    io::{Read, Write},
+    mem,
 };
 
 use tari_dan_common_types::{shard::Shard, Epoch};
@@ -36,71 +37,95 @@ impl Display for StateTransition {
     }
 }
 
-/// 20 byte ID
-/// epoch: Epoch,
-/// shard: Shard,
-/// seq_no: u64,
-#[derive(Debug, Clone, Copy)]
-pub struct StateTransitionId([u8; 20]);
-
-const U64_SZ: usize = size_of::<u64>();
-const U32_SZ: usize = size_of::<u32>();
-
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StateTransitionId {
+    epoch: Epoch,
+    shard: Shard,
+    seq: u64,
+}
 impl StateTransitionId {
-    pub fn from_parts(epoch: Epoch, shard: Shard, seq: u64) -> Self {
-        let mut buf = [0u8; 20];
-        buf[..U64_SZ].copy_from_slice(&epoch.as_u64().to_le_bytes());
-        buf[U64_SZ..U64_SZ + U32_SZ].copy_from_slice(&shard.as_u32().to_le_bytes());
-        buf[U64_SZ + U32_SZ..].copy_from_slice(&seq.to_le_bytes());
-        Self(buf)
+    const BYTE_SIZE: usize = mem::size_of::<Self>();
+
+    pub fn new(epoch: Epoch, shard: Shard, seq: u64) -> Self {
+        Self { epoch, shard, seq }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() != 20 {
+    pub fn from_bytes(mut bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < Self::BYTE_SIZE {
             return None;
         }
-        let mut buf = [0u8; 20];
-        buf.copy_from_slice(bytes);
-        Some(Self(buf))
+        let bytes_mut = &mut bytes;
+        let epoch = Epoch(u64::from_le_bytes(copy_fixed(bytes_mut)));
+        let shard = Shard::from(u32::from_le_bytes(copy_fixed(bytes_mut)));
+        let seq = u64::from_le_bytes(copy_fixed(bytes_mut));
+        Some(Self::new(epoch, shard, seq))
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
+    pub fn as_bytes(&self) -> [u8; Self::BYTE_SIZE] {
+        let mut buf = [0u8; Self::BYTE_SIZE];
+        let buf_mut = &mut buf.as_mut_slice();
+        write_fixed(self.epoch.to_le_bytes(), buf_mut);
+        write_fixed(self.shard.as_u32().to_le_bytes(), buf_mut);
+        write_fixed(self.seq.to_le_bytes(), buf_mut);
+        buf
     }
 
-    pub fn to_epoch(&self) -> Epoch {
-        let mut buf = [0u8; size_of::<u64>()];
-        buf.copy_from_slice(&self.0[..U64_SZ]);
-        Epoch(u64::from_le_bytes(buf))
+    pub fn epoch(&self) -> Epoch {
+        self.epoch
     }
 
-    pub fn to_shard(&self) -> Shard {
-        let mut buf = [0u8; U32_SZ];
-        buf.copy_from_slice(&self.0[U64_SZ..U64_SZ + U32_SZ]);
-        Shard::from(u32::from_le_bytes(buf))
+    pub fn shard(&self) -> Shard {
+        self.shard
     }
 
-    pub fn to_seq(self) -> u64 {
-        let mut buf = [0u8; U64_SZ];
-        buf.copy_from_slice(&self.0[U64_SZ + U32_SZ..]);
-        u64::from_le_bytes(buf)
+    pub fn seq(self) -> u64 {
+        self.seq
     }
 }
 
 impl Display for StateTransitionId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if f.alternate() {
-            for b in self.0 {
-                write!(f, "{:02x?}", b)?;
-            }
-            write!(f, " ")?;
-        }
         write!(
             f,
-            "(epoch = {}, shard = {}, seq = {})",
-            self.to_epoch(),
-            self.to_shard(),
-            self.to_seq()
+            "StateTransition(epoch = {}, shard = {}, seq = {})",
+            self.epoch(),
+            self.shard(),
+            self.seq()
         )
+    }
+}
+
+/// Copies bytes into a fixed byte array.
+///
+/// ## Panics
+/// Caller must ensure that sufficient bytes remain on the mut ref to the input slice.
+fn copy_fixed<const SZ: usize>(bytes: &mut &[u8]) -> [u8; SZ] {
+    let mut buf = [0u8; SZ];
+    bytes
+        .read_exact(&mut buf)
+        .expect("copy_fixed: Expected enough bytes to read");
+    buf
+}
+
+/// Writes fixed bytes into a buffer.
+/// ## Panics
+/// Caller must ensure that the buffer has sufficient space for the fixed bytes.
+fn write_fixed<const SZ: usize>(buf: [u8; SZ], out: &mut &mut [u8]) {
+    out.write_all(&buf)
+        .expect("write_fixed: Expected buffer to have sufficient space for fixed bytes");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_and_from_bytes() {
+        let id = StateTransitionId::new(Epoch(1), Shard::from(2), 3);
+        let bytes = id.as_bytes();
+        let id2 = StateTransitionId::from_bytes(&bytes).unwrap();
+        assert_eq!(id, id2);
+
+        assert_eq!(StateTransitionId::from_bytes(&[1, 2, 3]), None);
     }
 }

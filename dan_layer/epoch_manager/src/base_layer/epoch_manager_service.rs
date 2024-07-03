@@ -211,6 +211,9 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::NotifyScanningComplete { reply } => {
                 handle(reply, self.inner.on_scanning_complete().await, context)
             },
+            EpochManagerRequest::WaitForInitialScanningToComplete { reply } => {
+                self.inner.add_notify_on_scanning_complete(reply);
+            },
             EpochManagerRequest::RemainingRegistrationEpochs { reply } => {
                 handle(reply, self.inner.remaining_registration_epochs().await, context)
             },

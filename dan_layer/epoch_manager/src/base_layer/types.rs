@@ -99,6 +99,9 @@ pub enum EpochManagerRequest<TAddr> {
     NotifyScanningComplete {
         reply: Reply<()>,
     },
+    WaitForInitialScanningToComplete {
+        reply: Reply<()>,
+    },
     RemainingRegistrationEpochs {
         reply: Reply<Option<Epoch>>,
     },

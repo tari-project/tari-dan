@@ -37,7 +37,7 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
 
         task::spawn(async move {
             let result = store.with_read_tx(|tx| {
-                let leaf_block = LeafBlock::get(tx)?;
+                let leaf_block = LeafBlock::get(tx)?.get_block(tx)?;
 
                 if leaf_block.height() < msg.high_qc.block_height() {
                     return Err(HotStuffError::InvalidSyncRequest {
@@ -58,7 +58,14 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                 );
                 // NOTE: We have to send dummy blocks, because the messaging will ignore gaps in the block height when
                 // syncing until eventually the syncing node's pacemaker leader-fails a few times.
-                let blocks = Block::get_all_blocks_between(tx, msg.high_qc.block_id(), leaf_block.block_id(), true)?;
+                let blocks = Block::get_all_blocks_between(
+                    tx,
+                    leaf_block.epoch(),
+                    leaf_block.shard(),
+                    msg.high_qc.block_id(),
+                    leaf_block.id(),
+                    true,
+                )?;
 
                 Ok::<_, HotStuffError>(blocks)
             });

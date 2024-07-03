@@ -39,18 +39,6 @@ pub struct LeafBlock {
 }
 
 impl LeafBlock {
-    pub fn is_genesis(&self) -> bool {
-        self.block_id.is_genesis()
-    }
-
-    pub fn genesis() -> Self {
-        Self {
-            block_id: BlockId::genesis(),
-            height: NodeHeight(0),
-            epoch: Epoch(0),
-        }
-    }
-
     pub fn height(&self) -> NodeHeight {
         self.height
     }

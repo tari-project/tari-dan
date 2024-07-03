@@ -82,7 +82,7 @@ impl StateTransition {
         };
 
         Ok(consensus_models::StateTransition {
-            id: StateTransitionId::from_parts(epoch, shard, seq),
+            id: StateTransitionId::new(epoch, shard, seq),
             update,
         })
     }

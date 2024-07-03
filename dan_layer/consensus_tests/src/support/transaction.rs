@@ -36,7 +36,7 @@ pub fn build_transaction_from(
     if !resulting_outputs.is_empty() {
         let execution = create_execution_result_for_transaction(
             // We're just building the execution here for DRY purposes, so genesis block id isn't used
-            BlockId::genesis(),
+            BlockId::zero(),
             *tx.id(),
             decision,
             fee,

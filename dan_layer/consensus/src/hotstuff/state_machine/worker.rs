@@ -113,7 +113,9 @@ where
     }
 
     pub async fn run(&mut self, mut context: ConsensusWorkerContext<TSpec>) {
-        let mut state = ConsensusState::Idle(Idle::new());
+        // When starting up we will wait a bit.
+        // Context: in swarm, we start on epoch 2, then quickly go to epoch 3.
+        let mut state = ConsensusState::Idle(Idle::with_initial_delay());
         loop {
             let next_event = self.next_event(&mut context, &state).await;
             state = self.transition(state, next_event);

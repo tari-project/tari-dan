@@ -475,17 +475,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     fn locked_block_set(&mut self, locked_block: &LockedBlock) -> Result<(), StorageError> {
         use crate::schema::locked_block;
 
-        if let Some(existing) = self.locked_block_get().optional()? {
-            if locked_block.height <= existing.height {
-                return Err(StorageError::QueryError {
-                    reason: format!(
-                        "Locked block height {} is not greater than existing height {}",
-                        locked_block.height, existing.height
-                    ),
-                });
-            }
-        }
-
         let insert = (
             locked_block::block_id.eq(serialize_hex(locked_block.block_id)),
             locked_block::height.eq(locked_block.height.as_u64() as i64),
@@ -812,6 +801,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
 
         diesel::insert_or_ignore_into(transaction_executions::table)
             .values(insert)
+            .on_conflict_do_nothing()
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transaction_executions_insert",

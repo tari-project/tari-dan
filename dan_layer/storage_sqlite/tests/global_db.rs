@@ -72,7 +72,7 @@ fn update_committee_bucket(
     epoch: Epoch,
 ) {
     validator_nodes
-        .set_committee_bucket(derived_substate_address(public_key), committee_bucket, None, epoch)
+        .set_committee_shard(derived_substate_address(public_key), committee_bucket, None, epoch)
         .unwrap();
 }
 

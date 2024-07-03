@@ -130,7 +130,8 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "🔥 Received vote for block #{} {} from {} ({} of {})",
+            "🔥 Received vote for block {} {} {} from {} ({} of {})",
+            message.epoch,
             message.block_height,
             message.block_id,
             from,

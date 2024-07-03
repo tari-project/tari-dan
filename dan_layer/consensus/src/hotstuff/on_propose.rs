@@ -106,7 +106,7 @@ where TConsensusSpec: ConsensusSpec
         propose_epoch_end: bool,
     ) -> Result<(), HotStuffError> {
         if let Some(last_proposed) = self.store.with_read_tx(|tx| LastProposed::get(tx)).optional()? {
-            if last_proposed.height > leaf_block.height {
+            if last_proposed.epoch == leaf_block.epoch && last_proposed.height > leaf_block.height {
                 // is_newview_propose means that a NEWVIEW has reached quorum and nodes are expecting us to propose.
                 // Re-broadcast the previous proposal
                 if is_newview_propose {
@@ -509,7 +509,8 @@ where TConsensusSpec: ConsensusSpec
             commands.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
         );
 
-        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(tx, high_qc.block_id())?;
+        let pending =
+            PendingStateTreeDiff::get_all_up_to_commit_block(tx, high_qc.epoch(), high_qc.shard(), high_qc.block_id())?;
 
         let (state_root, _) = calculate_state_merkle_diff(
             tx,

@@ -304,6 +304,11 @@ impl EpochManagerReader for TestEpochManager {
     async fn get_base_layer_block_height(&self, _hash: FixedHash) -> Result<Option<u64>, EpochManagerError> {
         Ok(Some(self.inner.lock().await.current_block_info.0))
     }
+
+    async fn wait_for_initial_scanning_to_complete(&self) -> Result<(), EpochManagerError> {
+        // Scanning is not relevant to tests
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]

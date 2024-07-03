@@ -89,7 +89,7 @@ pub async fn check_base_layer_block_hash<TConsensusSpec: ConsensusSpec>(
 }
 
 pub fn check_hash_and_height(candidate_block: &Block) -> Result<(), ProposalValidationError> {
-    if candidate_block.height().is_zero() || candidate_block.is_genesis() {
+    if candidate_block.is_genesis() {
         return Err(ProposalValidationError::ProposingGenesisBlock {
             proposed_by: candidate_block.proposed_by().to_string(),
             hash: *candidate_block.id(),
@@ -154,8 +154,8 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     epoch_manager: &TConsensusSpec::EpochManager,
 ) -> Result<(), HotStuffError> {
     let qc = candidate_block.justify();
-    if qc.is_genesis() {
-        // This is potentially dangerous. There should be a check
+    if qc.is_zero() {
+        // TODO: This is potentially dangerous. There should be a check
         // to make sure this is the start of the chain.
 
         return Ok(());
@@ -166,6 +166,10 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
             candidate_block_height: candidate_block.height(),
         }
         .into());
+    }
+
+    if qc.signatures().is_empty() {
+        return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
     }
 
     let mut vns = vec![];

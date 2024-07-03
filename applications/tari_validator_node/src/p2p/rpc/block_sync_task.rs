@@ -84,13 +84,13 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
             }
         }
 
-        match self.fetch_last_blocks(&mut buffer, &current_block_id).await {
-            Ok(_) => (),
-            Err(err) => {
-                self.send(Err(RpcStatus::log_internal_error(LOG_TARGET)(err))).await?;
-                return Err(());
-            },
-        }
+        // match self.fetch_last_blocks(&mut buffer, &current_block_id).await {
+        //     Ok(_) => (),
+        //     Err(err) => {
+        //         self.send(Err(RpcStatus::log_internal_error(LOG_TARGET)(err))).await?;
+        //         return Err(());
+        //     },
+        // }
 
         debug!(
             target: LOG_TARGET,
@@ -140,58 +140,58 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         })
     }
 
-    async fn fetch_last_blocks(
-        &self,
-        buffer: &mut BlockBuffer,
-        current_block_id: &BlockId,
-    ) -> Result<(), StorageError> {
-        // if let Some(up_to_epoch) = self.up_to_epoch {
-        //     // Wait for the end of epoch block if the requested epoch has not yet completed
-        //     // TODO: We should consider streaming blocks as they come in from consensus
-        //     loop {
-        //         let block = self.store.with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
-        //         if block.is_epoch_end() && block.epoch() + Epoch(1) >= up_to_epoch {
-        //             // If found the epoch end block, break.
-        //             break;
-        //         }
-        //         tokio::time::sleep(Duration::from_secs(10)).await;
-        //     }
-        // }
-        self.store.with_read_tx(|tx| {
-            // TODO: if there are any transactions in the block the syncing node will reject the block
-
-            // If syncing to epoch, sync to the leaf block
-            let up_to_block = if self.up_to_epoch.is_none() {
-                let locked_block = LockedBlock::get(tx)?;
-                *locked_block.block_id()
-            } else {
-                let leaf_block = LeafBlock::get(tx)?;
-                *leaf_block.block_id()
-            };
-
-            let blocks = Block::get_all_blocks_between(tx, current_block_id, &up_to_block, false)?;
-            for block in blocks {
-                debug!(
-                    target: LOG_TARGET,
-                    "Fetching last blocks. Current block: {} to target {}",
-                    block,
-                    current_block_id
-                );
-                let all_qcs = block
-                    .commands()
-                    .iter()
-                    .filter(|cmd| cmd.transaction().is_some())
-                    .flat_map(|cmd| cmd.evidence().qc_ids_iter())
-                    .collect::<HashSet<_>>();
-                let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
-
-                // No substate updates can occur for blocks after the last commit
-                buffer.push((block, certificates, vec![], vec![]));
-            }
-
-            Ok::<_, StorageError>(())
-        })
-    }
+    // async fn fetch_last_blocks(
+    //     &self,
+    //     buffer: &mut BlockBuffer,
+    //     current_block_id: &BlockId,
+    // ) -> Result<(), StorageError> {
+    //     // if let Some(up_to_epoch) = self.up_to_epoch {
+    //     //     // Wait for the end of epoch block if the requested epoch has not yet completed
+    //     //     // TODO: We should consider streaming blocks as they come in from consensus
+    //     //     loop {
+    //     //         let block = self.store.with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
+    //     //         if block.is_epoch_end() && block.epoch() + Epoch(1) >= up_to_epoch {
+    //     //             // If found the epoch end block, break.
+    //     //             break;
+    //     //         }
+    //     //         tokio::time::sleep(Duration::from_secs(10)).await;
+    //     //     }
+    //     // }
+    //     self.store.with_read_tx(|tx| {
+    //         // TODO: if there are any transactions in the block the syncing node will reject the block
+    //
+    //         // If syncing to epoch, sync to the leaf block
+    //         let up_to_block = if self.up_to_epoch.is_none() {
+    //             let locked_block = LockedBlock::get(tx)?;
+    //             *locked_block.block_id()
+    //         } else {
+    //             let leaf_block = LeafBlock::get(tx)?;
+    //             *leaf_block.block_id()
+    //         };
+    //
+    //         let blocks = Block::get_all_blocks_between(tx, current_block_id, &up_to_block, false)?;
+    //         for block in blocks {
+    //             debug!(
+    //                 target: LOG_TARGET,
+    //                 "Fetching last blocks. Current block: {} to target {}",
+    //                 block,
+    //                 current_block_id
+    //             );
+    //             let all_qcs = block
+    //                 .commands()
+    //                 .iter()
+    //                 .filter(|cmd| cmd.transaction().is_some())
+    //                 .flat_map(|cmd| cmd.evidence().qc_ids_iter())
+    //                 .collect::<HashSet<_>>();
+    //             let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
+    //
+    //             // No substate updates can occur for blocks after the last commit
+    //             buffer.push((block, certificates, vec![], vec![]));
+    //         }
+    //
+    //         Ok::<_, StorageError>(())
+    //     })
+    // }
 
     async fn send(&mut self, result: Result<SyncBlocksResponse, RpcStatus>) -> Result<(), ()> {
         if self.sender.send(result).await.is_err() {

@@ -232,7 +232,7 @@ where TConsensusSpec: ConsensusSpec
         //         ),
         //     });
         // }
-        if candidate_block.height().is_zero() || candidate_block.is_genesis() {
+        if candidate_block.is_genesis() {
             return Err(ProposalValidationError::ProposingGenesisBlock {
                 proposed_by: from.to_string(),
                 hash: *candidate_block.id(),

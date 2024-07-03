@@ -1,10 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-// (New, true) ----(cmd:Prepare) ---> (Prepared, true) -----cmd:LocalPrepared ---> (LocalPrepared, false)
-// ----[foreign:LocalPrepared]--->(LocalPrepared, true) ----cmd:AllPrepare ---> (AllPrepared, true) ---cmd:Accept --->
-// Complete
-
 use log::*;
 use tari_common::configuration::Network;
 use tari_dan_common_types::{
@@ -222,13 +218,42 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 }
             }
 
-            let epoch = block_decision
-                .end_of_epoch
-                .map(|e| e + Epoch(1))
-                .unwrap_or_else(|| valid_block.epoch());
-            self.pacemaker
-                .update_view(epoch, valid_block.height(), high_qc.block_height())
-                .await?;
+            match block_decision.end_of_epoch {
+                Some(epoch) => {
+                    let next_epoch = epoch + Epoch(1);
+
+                    // If we're registered for the next epoch. Create a new genesis block.
+                    if let Some(vn) = self.epoch_manager.get_our_validator_node(next_epoch).await.optional()? {
+                        // TODO: Change VN db to include the shard in the ValidatorNode struct.
+                        let num_committees = self.epoch_manager.get_num_committees(next_epoch).await?;
+                        let next_shard = vn.shard_key.to_shard(num_committees);
+                        self.store.with_write_tx(|tx| {
+                            let genesis = Block::genesis(self.network, next_epoch, next_shard);
+                            info!(target: LOG_TARGET, "⭐️ Creating new genesis block {genesis}");
+                            genesis.insert(tx)?;
+                            // We'll propose using the new genesis as parent
+                            genesis.as_locked_block().set(tx)?;
+                            genesis.as_leaf_block().set(tx)?;
+                            genesis.as_last_executed().set(tx)?;
+                            genesis.as_last_voted().set(tx)?;
+                            genesis.justify().as_high_qc().set(tx)
+                        })?;
+
+                        // Set the pacemaker to next epoch
+                        self.pacemaker.set_epoch(next_epoch).await?;
+                    } else {
+                        info!(
+                            target: LOG_TARGET,
+                            "💤 Our validator node is not registered for epoch {next_epoch}.",
+                        )
+                    }
+                },
+                None => {
+                    self.pacemaker
+                        .update_view(valid_block.epoch(), valid_block.height(), high_qc.block_height())
+                        .await?;
+                },
+            }
         }
 
         Ok(())
@@ -523,17 +548,18 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .into());
         }
 
-        // Special case for genesis block
-        if candidate_block.parent().is_genesis() && candidate_block.justify().is_genesis() {
-            return Ok(ValidBlock::new(candidate_block));
-        }
-
         if candidate_block.height() < justify_block.height() {
             return Err(ProposalValidationError::CandidateBlockNotHigherThanJustify {
                 justify_block_height: justify_block.height(),
                 candidate_block_height: candidate_block.height(),
             }
             .into());
+        }
+
+        // Special case for genesis block. A genesis block contains a genesis QC that does not justify anything, this is
+        // the HIGH QC for the first block.
+        if candidate_block.height() == NodeHeight(1) && candidate_block.justify().is_zero() {
+            return Ok(ValidBlock::new(candidate_block));
         }
 
         // TODO: this is broken

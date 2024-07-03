@@ -95,7 +95,7 @@ impl PaceMaker {
                                 }
 
                                 if let Some(height) = high_qc_height {
-                                self.current_high_qc_height =  height;
+                                    self.current_high_qc_height =  height;
                                 }
                                 let delta = self.delta_time();
                                 info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_view, delta);

@@ -143,15 +143,15 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
-    pub fn set_committee_bucket(
+    pub fn set_committee_shard(
         &mut self,
         substate_address: SubstateAddress,
-        committee_bucket: Shard,
+        shard: Shard,
         sidechain_id: Option<&PublicKey>,
         epoch: Epoch,
     ) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend
-            .validator_nodes_set_committee_bucket(self.tx, substate_address, committee_bucket, sidechain_id, epoch)
+            .validator_nodes_set_committee_shard(self.tx, substate_address, shard, sidechain_id, epoch)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 }

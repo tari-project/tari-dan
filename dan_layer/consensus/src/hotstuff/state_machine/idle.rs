@@ -1,12 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, time::Duration};
 
 use log::*;
 use tari_dan_common_types::Epoch;
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
-use tokio::sync::broadcast;
+use tokio::{sync::broadcast, time};
 
 use crate::{
     hotstuff::{
@@ -19,21 +19,38 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::consensus::sm::idle";
 
 #[derive(Debug, Clone)]
-pub struct Idle<TSpec>(PhantomData<TSpec>);
+pub struct Idle<TSpec> {
+    _spec: PhantomData<TSpec>,
+    with_delay: bool,
+}
 
 impl<TSpec> Idle<TSpec>
 where TSpec: ConsensusSpec
 {
     pub fn new() -> Self {
-        Self(PhantomData)
+        Self {
+            _spec: PhantomData,
+            with_delay: false,
+        }
+    }
+
+    pub fn with_initial_delay() -> Self {
+        Self {
+            _spec: PhantomData,
+            with_delay: true,
+        }
     }
 
     pub(super) async fn on_enter(
         &self,
         context: &mut ConsensusWorkerContext<TSpec>,
     ) -> Result<ConsensusStateEvent, HotStuffError> {
+        if self.with_delay {
+            time::sleep(Duration::from_secs(10)).await;
+        }
         // Subscribe before checking if we're registered to eliminate the chance that we miss the epoch event
         let mut epoch_events = context.epoch_manager.subscribe().await?;
+        context.epoch_manager.wait_for_initial_scanning_to_complete().await?;
         let current_epoch = context.epoch_manager.current_epoch().await?;
         if self.is_registered_for_epoch(context, current_epoch).await? {
             return Ok(ConsensusStateEvent::RegisteredForEpoch { epoch: current_epoch });
@@ -48,8 +65,8 @@ where TSpec: ConsensusSpec
                                 return Ok(event);
                             }
                         },
-                        Err(broadcast::error::RecvError::Lagged(_)) => {
-                            debug!(target: LOG_TARGET, "Idle state lagged behind epoch manager event stream");
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            debug!(target: LOG_TARGET, "Idle state lagged behind by {n} epoch manager events");
                         },
                         Err(broadcast::error::RecvError::Closed) => {
                             break;

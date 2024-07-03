@@ -8,7 +8,7 @@ use std::{
 
 use log::*;
 use tari_common::configuration::Network;
-use tari_dan_common_types::{Epoch, NodeHeight};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -212,14 +212,21 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     }
 
     pub async fn start(&mut self) -> Result<(), HotStuffError> {
-        self.create_zero_block_if_required()?;
-        let (current_height, high_qc) = self.state_store.with_read_tx(|tx| {
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        let committee_info = self.epoch_manager.get_local_committee_info(current_epoch).await?;
+
+        self.create_genesis_block_if_required(current_epoch, committee_info.shard())?;
+
+        let (current_epoch, current_height, high_qc) = self.state_store.with_read_tx(|tx| {
             let leaf = LeafBlock::get(tx)?;
             let last_voted = LastVoted::get(tx)?;
-            Ok::<_, HotStuffError>((cmp::max(leaf.height(), last_voted.height()), HighQc::get(tx)?))
+            Ok::<_, HotStuffError>((
+                leaf.epoch(),
+                cmp::max(leaf.height(), last_voted.height()),
+                HighQc::get(tx)?,
+            ))
         })?;
 
-        let current_epoch = self.epoch_manager.current_epoch().await?;
         info!(
             target: LOG_TARGET,
             "🚀 Pacemaker starting for epoch {}, height: {}, high_qc: {}",
@@ -270,14 +277,14 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 Some(result) = self.on_inbound_message.next_message(current_epoch, current_height) => {
                     if let Err(err) = self.on_unvalidated_message(current_height, result).await {
                         self.hooks.on_error(&err);
-                        error!(target: LOG_TARGET, "Error handling new message: {}", err);
+                        error!(target: LOG_TARGET, "🚨Error handling new message: {}", err);
                     }
                 },
 
                 Some((tx_id, pending)) = self.rx_new_transactions.recv() => {
                     if let Err(err) = self.on_new_transaction(tx_id, pending, current_height).await {
                         self.hooks.on_error(&err);
-                        error!(target: LOG_TARGET, "Error handling new transaction: {}", err);
+                        error!(target: LOG_TARGET, "🚨Error handling new transaction: {}", err);
                     }
                 },
 
@@ -418,28 +425,13 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 // Edge case: we have started a VN and have progressed a few epochs quickly and have no blocks in
                 // previous epochs to update the current view. This only really applies when mining is
                 // instant (localnet)
-                let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?;
-                if leaf_block.is_genesis() {
-                    self.pacemaker.update_epoch(epoch).await?;
-                }
-
-                // TODO: This is breaking my testing right now (division by zero, from time to time)
-                // Send the last vote to the leader at the next epoch so that they can justify the current tip.
-                // if let Some(last_voted) = self.state_store.with_read_tx(|tx| LastSentVote::get(tx)).optional()? {
-                //     info!(
-                //         target: LOG_TARGET,
-                //         "💌 Sending last vote to the leader at epoch {}: {}",
-                //         epoch,
-                //         last_voted
-                //     );
-                //     let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
-                //     let leader = self
-                //         .leader_strategy
-                //         .get_leader_for_next_block(&local_committee, last_voted.block_height);
-                //     self.outbound_messaging
-                //         .send(leader.clone(), HotstuffMessage::Vote(last_voted.into()))
-                //         .await?;
+                // let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?;
+                // if leaf_block.block_id.is_zero() {
+                //     self.pacemaker.set_epoch(epoch).await?;
                 // }
+
+                // If we can propose a block end, let's not wait for the block time to do it
+                self.pacemaker.beat();
             },
             EpochManagerEvent::ThisValidatorIsRegistered { .. } => {},
         }
@@ -518,15 +510,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             Some(leaf_block) => leaf_block,
             None => self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?,
         };
-        // let locked_block = self
-        //     .state_store
-        //     .with_read_tx(|tx| LockedBlock::get(tx)?.get_block(tx))?;
-        // let current_epoch = self.epoch_manager.current_epoch().await?;
-        // let epoch = if locked_block.is_epoch_end() || locked_block.is_genesis() {
-        //     current_epoch
-        // } else {
-        //     locked_block.epoch()
-        // };
+
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
 
         let is_leader =
@@ -669,7 +653,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         }
     }
 
-    fn create_zero_block_if_required(&self) -> Result<(), HotStuffError> {
+    fn create_genesis_block_if_required(&self, epoch: Epoch, shard: Shard) -> Result<(), HotStuffError> {
         self.state_store.with_write_tx(|tx| {
             // The parent for genesis blocks refer to this zero block
             let zero_block = Block::zero_block(self.network);
@@ -677,12 +661,25 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 debug!(target: LOG_TARGET, "Creating zero block");
                 zero_block.justify().insert(tx)?;
                 zero_block.insert(tx)?;
-                zero_block.as_locked_block().set(tx)?;
-                zero_block.as_leaf_block().set(tx)?;
-                zero_block.as_last_executed().set(tx)?;
-                zero_block.as_last_voted().set(tx)?;
-                zero_block.justify().as_high_qc().set(tx)?;
+                // zero_block.as_locked_block().set(tx)?;
+                // zero_block.as_leaf_block().set(tx)?;
+                // zero_block.as_last_executed().set(tx)?;
+                // zero_block.as_last_voted().set(tx)?;
+                // zero_block.justify().as_high_qc().set(tx)?;
                 zero_block.commit_diff(tx, BlockDiff::empty(*zero_block.id()))?;
+            }
+
+            let genesis = Block::genesis(self.network, epoch, shard);
+            if !genesis.exists(&**tx)? {
+                info!(target: LOG_TARGET, "✨Creating genesis block {genesis}");
+                // genesis.justify().insert(tx)?;
+                genesis.insert(tx)?;
+                genesis.as_locked_block().set(tx)?;
+                genesis.as_leaf_block().set(tx)?;
+                genesis.as_last_executed().set(tx)?;
+                genesis.as_last_voted().set(tx)?;
+                genesis.justify().as_high_qc().set(tx)?;
+                genesis.commit_diff(tx, BlockDiff::empty(*genesis.id()))?;
             }
 
             Ok(())

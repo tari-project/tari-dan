@@ -337,20 +337,21 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             return Err(RpcStatus::not_found("Cannot generate checkpoint for genesis epoch"));
         }
 
-        if !self
+        let Some(local_committee_info) = self
             .epoch_manager
-            .is_this_validator_registered_for_epoch(prev_epoch)
+            .get_local_committee_info(prev_epoch)
             .await
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+            .optional()
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))? else
         {
             return Err(RpcStatus::bad_request(format!(
                 "This validator node is not registered for the previous epoch {prev_epoch}"
             )));
-        }
+        };
 
         let checkpoint = self
             .shard_state_store
-            .with_read_tx(|tx| EpochCheckpoint::generate(tx, prev_epoch))
+            .with_read_tx(|tx| EpochCheckpoint::generate(tx, prev_epoch, local_committee_info.shard()))
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
         Ok(Response::new(GetCheckpointResponse {
@@ -364,7 +365,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         let (sender, receiver) = mpsc::channel(10);
 
         let last_state_transition_for_chain =
-            StateTransitionId::from_parts(Epoch(req.start_epoch), Shard::from(req.start_shard), req.start_seq);
+            StateTransitionId::new(Epoch(req.start_epoch), Shard::from(req.start_shard), req.start_seq);
 
         // TODO: validate that we can provide the required sync data
         let current_shard = Shard::from(req.current_shard);

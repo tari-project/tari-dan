@@ -129,7 +129,7 @@ impl Block {
         base_layer_block_hash: FixedHash,
     ) -> Self {
         let mut block = Self {
-            id: BlockId::genesis(),
+            id: BlockId::zero(),
             network,
             parent,
             justify,
@@ -204,16 +204,17 @@ impl Block {
         }
     }
 
-    pub fn genesis(network: Network) -> Self {
+    pub fn genesis(network: Network, epoch: Epoch, shard: Shard) -> Self {
         Self::new(
             network,
-            BlockId::genesis(),
+            BlockId::zero(),
             QuorumCertificate::genesis(),
             NodeHeight(0),
-            Epoch(0),
-            Shard::from(0),
+            epoch,
+            shard,
             PublicKey::default(),
             Default::default(),
+            // TODO: the merkle hash should be initialized to something committing to the previous state.
             FixedHash::zero(),
             0,
             IndexMap::new(),
@@ -228,8 +229,8 @@ impl Block {
     pub fn zero_block(network: Network) -> Self {
         Self {
             network,
-            id: BlockId::genesis(),
-            parent: BlockId::genesis(),
+            id: BlockId::zero(),
+            parent: BlockId::zero(),
             justify: QuorumCertificate::genesis(),
             height: NodeHeight(0),
             epoch: Epoch(0),
@@ -265,7 +266,7 @@ impl Block {
         parent_base_layer_block_hash: FixedHash,
     ) -> Self {
         let mut block = Self {
-            id: BlockId::genesis(),
+            id: BlockId::zero(),
             network,
             parent,
             justify: high_qc,
@@ -329,7 +330,7 @@ impl Block {
 
 impl Block {
     pub fn is_genesis(&self) -> bool {
-        self.id.is_genesis()
+        self.height.is_zero()
     }
 
     pub fn is_epoch_end(&self) -> bool {
@@ -513,18 +514,22 @@ impl Block {
         tx.blocks_get(id)
     }
 
-    pub fn get_tip<TTx: StateStoreReadTransaction>(tx: &TTx) -> Result<Self, StorageError> {
-        tx.blocks_get_tip()
-    }
-
     /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
     pub fn get_all_blocks_between<TTx: StateStoreReadTransaction>(
         tx: &TTx,
+        epoch: Epoch,
+        shard: Shard,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
         include_dummy_blocks: bool,
     ) -> Result<Vec<Self>, StorageError> {
-        tx.blocks_get_all_between(start_block_id_exclusive, end_block_id_inclusive, include_dummy_blocks)
+        tx.blocks_get_all_between(
+            epoch,
+            shard,
+            start_block_id_exclusive,
+            end_block_id_inclusive,
+            include_dummy_blocks,
+        )
     }
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
@@ -676,7 +681,8 @@ impl Block {
     }
 
     pub fn get_parent<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
-        if self.id.is_genesis() {
+        // Don't return the zero block
+        if self.parent.is_zero() {
             return Err(StorageError::NotFound {
                 item: "Block".to_string(),
                 key: self.id.to_string(),
@@ -830,7 +836,7 @@ impl Block {
             );
 
             // Commit prepare_node (b)
-            if !prepare_node.is_genesis() {
+            if !prepare_node.is_zero() {
                 let prepare_node = Block::get(&**tx, prepare_node)?;
                 let last_executed = LastExecuted::get(&**tx)?;
                 on_commit_block_recurse(tx, &last_executed, &prepare_node, &mut on_commit)?;
@@ -941,6 +947,10 @@ impl BlockId {
         Self(FixedHash::zero())
     }
 
+    pub const fn zero() -> Self {
+        Self(FixedHash::zero())
+    }
+
     pub fn new<T: Into<FixedHash>>(hash: T) -> Self {
         Self(hash.into())
     }
@@ -953,7 +963,7 @@ impl BlockId {
         self.0.as_slice()
     }
 
-    pub fn is_genesis(&self) -> bool {
+    pub fn is_zero(&self) -> bool {
         self.0.iter().all(|b| *b == 0)
     }
 

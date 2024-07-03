@@ -3,7 +3,7 @@
 
 use std::fmt::Display;
 
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{shard::Shard, Epoch};
 
 use crate::{
     consensus_models::{Block, QuorumCertificate},
@@ -32,11 +32,15 @@ impl EpochCheckpoint {
 }
 
 impl EpochCheckpoint {
-    pub fn generate<TTx: StateStoreReadTransaction>(tx: &TTx, epoch: Epoch) -> Result<Self, StorageError> {
-        let mut blocks = tx.blocks_get_last_n_in_epoch(3, epoch)?;
+    pub fn generate<TTx: StateStoreReadTransaction>(
+        tx: &TTx,
+        epoch: Epoch,
+        shard: Shard,
+    ) -> Result<Self, StorageError> {
+        let mut blocks = tx.blocks_get_last_n_in_epoch(3, epoch, shard)?;
         if blocks.is_empty() {
             return Err(StorageError::NotFound {
-                item: format!("EpochCheckpoint: No blocks found for epoch {}", epoch),
+                item: format!("EpochCheckpoint: No blocks found for epoch {epoch}, shard {shard}"),
                 key: epoch.to_string(),
             });
         }

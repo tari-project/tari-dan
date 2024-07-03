@@ -127,11 +127,11 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         bucket: Shard,
     ) -> Result<u64, Self::Error>;
 
-    fn validator_nodes_set_committee_bucket(
+    fn validator_nodes_set_committee_shard(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         shard_key: SubstateAddress,
-        bucket: Shard,
+        shard: Shard,
         sidechain_id: Option<&PublicKey>,
         epoch: Epoch,
     ) -> Result<(), Self::Error>;

@@ -155,8 +155,6 @@ create table high_qcs
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 
-create unique index high_qcs_uniq_idx_qc_id on high_qcs (qc_id);
-
 create table last_voted
 (
     id         integer   not null primary key autoincrement,

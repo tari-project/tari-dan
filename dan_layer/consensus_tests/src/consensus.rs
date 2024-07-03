@@ -11,9 +11,9 @@
 use std::time::Duration;
 
 use tari_consensus::hotstuff::HotStuffError;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight};
+use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, Command, Decision},
+    consensus_models::{BlockId, Command, Decision},
     StateStore,
     StateStoreReadTransaction,
 };
@@ -39,7 +39,7 @@ async fn single_transaction() {
     let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
     // First get transaction in the mempool
     test.send_transaction_to_all(Decision::Commit, 1, 1).await;
-    test.start_epoch(Epoch(0)).await;
+    test.start_epoch(Epoch(1)).await;
 
     loop {
         test.on_block_committed().await;
@@ -60,7 +60,7 @@ async fn single_transaction() {
     test.get_validator(&TestAddress::new("1"))
         .state_store
         .with_read_tx(|tx| {
-            let mut block = Some(Block::get_tip(tx)?);
+            let mut block = Some(tx.blocks_get_tip(Epoch(1), Shard::from(0))?);
             loop {
                 block = block.as_ref().unwrap().get_parent(tx).optional()?;
                 let Some(b) = block.as_ref() else {
@@ -89,7 +89,7 @@ async fn propose_blocks_with_queued_up_transactions_until_all_committed() {
     for _ in 0..10 {
         test.send_transaction_to_all(Decision::Commit, 1, 5).await;
     }
-    test.start_epoch(Epoch(0)).await;
+    test.start_epoch(Epoch(1)).await;
 
     loop {
         test.on_block_committed().await;
@@ -116,7 +116,7 @@ async fn propose_blocks_with_new_transactions_until_all_committed() {
         // .add_committee(0, vec!["1"])
         .start().await;
     let mut remaining_txs = 10;
-    test.start_epoch(Epoch(0)).await;
+    test.start_epoch(Epoch(1)).await;
     loop {
         if remaining_txs > 0 {
             test.send_transaction_to_all(Decision::Commit, 1, 5).await;
@@ -148,7 +148,7 @@ async fn node_requests_missing_transaction_from_local_leader() {
         test.send_transaction_to(&TestAddress::new("2"), Decision::Commit, 1, 5)
             .await;
     }
-    test.start_epoch(Epoch(0)).await;
+    test.start_epoch(Epoch(1)).await;
     loop {
         let (_, _, _, committed_height) = test.on_block_committed().await;
 
@@ -164,17 +164,17 @@ async fn node_requests_missing_transaction_from_local_leader() {
     test.get_validator(&TestAddress::new("2"))
         .state_store
         .with_read_tx(|tx| {
-            let mut block_id = BlockId::genesis();
+            let mut block_id = BlockId::zero();
             loop {
                 let children = tx.blocks_get_all_by_parent(&block_id).unwrap();
                 if children.is_empty() {
                     break;
                 }
-                if !block_id.is_genesis() {
+                if !block_id.is_zero() {
                     assert_eq!(children.len(), 1);
                 }
                 for block in children {
-                    if block.id().is_genesis() {
+                    if block.is_genesis() {
                         continue;
                     }
                     let missing = tx.blocks_get_pending_transactions(block.id()).unwrap();
@@ -238,7 +238,7 @@ async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() 
         test.send_transaction_to_all(Decision::Commit, 100, 2).await;
     }
 
-    test.start_epoch(Epoch(0)).await;
+    test.start_epoch(Epoch(1)).await;
 
     loop {
         test.on_block_committed().await;
@@ -283,7 +283,7 @@ async fn foreign_shard_decides_to_abort() {
     test.send_transaction_to_destination(TestNetworkDestination::Shard(1), tx2.clone())
         .await;
 
-    test.start_epoch(Epoch(0)).await;
+    test.start_epoch(Epoch(1)).await;
 
     loop {
         test.on_block_committed().await;
@@ -337,7 +337,7 @@ async fn output_conflict_abort() {
     test.send_transaction_to_destination(TestNetworkDestination::All, tx2.clone())
         .await;
 
-    test.start_epoch(Epoch(0)).await;
+    test.start_epoch(Epoch(1)).await;
 
     loop {
         test.on_block_committed().await;
@@ -381,7 +381,7 @@ async fn leader_failure_node_goes_down() {
     for _ in 0..10 {
         test.send_transaction_to_all(Decision::Commit, 1, 2).await;
     }
-    test.start_epoch(Epoch(0)).await;
+    test.start_epoch(Epoch(1)).await;
 
     loop {
         let (_, _, _, committed_height) = test.on_block_committed().await;
@@ -444,7 +444,7 @@ async fn foreign_block_distribution() {
     }
 
     test.network().start();
-    test.start_epoch(Epoch(0)).await;
+    test.start_epoch(Epoch(1)).await;
 
     loop {
         test.on_block_committed().await;
@@ -487,7 +487,7 @@ async fn deferred_execution() {
 
     test.transaction_executions()
         .insert(create_execution_result_for_transaction(
-            BlockId::genesis(),
+            BlockId::zero(),
             *tx.id(),
             Decision::Commit,
             0,
@@ -497,7 +497,7 @@ async fn deferred_execution() {
     test.send_transaction_to_destination(TestNetworkDestination::All, tx)
         .await;
 
-    test.start_epoch(Epoch(0)).await;
+    test.start_epoch(Epoch(1)).await;
 
     loop {
         test.on_block_committed().await;
@@ -518,7 +518,7 @@ async fn deferred_execution() {
     test.get_validator(&TestAddress::new("1"))
         .state_store
         .with_read_tx(|tx| {
-            let mut block = Some(Block::get_tip(tx)?);
+            let mut block = Some(tx.blocks_get_tip(Epoch(1), Shard::from(0))?);
             loop {
                 block = block.as_ref().unwrap().get_parent(tx).optional()?;
                 let Some(b) = block.as_ref() else {

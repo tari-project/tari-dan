@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_common::configuration::Network;
-use tari_dan_common_types::NodeHeight;
+use tari_dan_common_types::{optional::Optional, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, LeafBlock, LockedBlock, QuorumCertificate},
     StateStore,
@@ -115,13 +115,14 @@ where TConsensusSpec: ConsensusSpec
             .store
             .with_read_tx(|tx| Block::record_exists(tx, high_qc.block_id()))?;
         if !exists {
-            let leaf = self
+            let local_height = self
                 .store
                 .with_read_tx(|tx| LeafBlock::get(tx))
-                // We need something for the returned error even if this query fails
-                .unwrap_or_else(|_| LeafBlock::genesis());
+                .optional()?
+                .map(|leaf| leaf.height())
+                .unwrap_or_default();
             return Err(HotStuffError::FallenBehind {
-                local_height: leaf.height(),
+                local_height,
                 qc_height: high_qc.block_height(),
             });
         }

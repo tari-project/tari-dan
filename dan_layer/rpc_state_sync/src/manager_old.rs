@@ -293,7 +293,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             // Check if we need to calculate dummy blocks
             // TODO: Validate before doing this. e.g. block.height() is maliciously larger then block.justify().block_height()
             if !block.justifies_parent() {
-                let mut last_dummy_block = BlockIdAndHeight {id: *block.justify().block_id(), height: block.justify().block_height()};
+                let mut last_dummy_block = BlockIdAndHeight { id: *block.justify().block_id(), height: block.justify().block_height() };
                 info!(target: LOG_TARGET, "🍼 START DUMMY BLOCK: {}. ", last_dummy_block, );
                 // if the block parent is not the justify parent, then we have experienced a leader failure
                 // and should make dummy blocks to fill in the gaps.
@@ -373,7 +373,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         block: &Block,
         updates: &[SubstateUpdate],
     ) -> Result<(), CommsRpcConsensusSyncError> {
-        let pending_tree_updates = PendingStateTreeDiff::get_all_up_to_commit_block(&**tx, block.id())?;
+        let pending_tree_updates =
+            PendingStateTreeDiff::get_all_up_to_commit_block(&**tx, block.epoch(), block.shard(), block.id())?;
         let current_version = block.justify().block_height().as_u64();
         let next_version = block.height().as_u64();
 

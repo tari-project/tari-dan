@@ -32,6 +32,10 @@ use ts_rs::TS;
 pub struct Epoch(#[cfg_attr(feature = "ts", ts(type = "number"))] pub u64);
 
 impl Epoch {
+    pub const fn zero() -> Self {
+        Self(0)
+    }
+
     pub fn as_u64(self) -> u64 {
         self.0
     }

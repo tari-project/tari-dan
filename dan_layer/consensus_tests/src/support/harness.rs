@@ -7,13 +7,12 @@ use std::{
 };
 
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
-use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_consensus::hotstuff::HotstuffEvent;
-use tari_crypto::keys::{PublicKey as _, SecretKey};
 use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, Decision, QcId, SubstateRecord, TransactionRecord},
+    consensus_models::{BlockId, Decision, QcId, SubstateRecord, TransactionRecord},
     StateStore,
+    StateStoreReadTransaction,
     StorageError,
 };
 use tari_engine_types::{
@@ -108,9 +107,9 @@ impl Test {
                     Shard::zero(),
                     Epoch(0),
                     NodeHeight(0),
-                    BlockId::genesis(),
+                    BlockId::zero(),
                     TransactionId::default(),
-                    QcId::genesis(),
+                    QcId::zero(),
                 )
             })
             .collect::<Vec<_>>();
@@ -270,17 +269,22 @@ impl Test {
     }
 
     pub async fn assert_all_validators_at_same_height_except(&self, except: &[TestAddress]) {
+        let current_epoch = self.epoch_manager.current_epoch().await.unwrap();
         let committees = self.epoch_manager.all_committees().await;
         let mut attempts = 0usize;
         'outer: loop {
-            for committee in committees.values() {
+            for (shard, committee) in committees.iter() {
                 let mut heights = self
                     .validators
                     .values()
                     .filter(|vn| committee.contains(&vn.address))
                     .filter(|vn| !except.contains(&vn.address))
                     .map(|v| {
-                        let height = v.state_store.with_read_tx(|tx| Block::get_tip(tx)).unwrap().height();
+                        let height = v
+                            .state_store
+                            .with_read_tx(|tx| tx.blocks_get_tip(current_epoch, *shard))
+                            .unwrap()
+                            .height();
                         (v.address.clone(), height)
                     });
                 let (first_addr, first) = heights.next().unwrap();

@@ -13,20 +13,8 @@ use tari_dan_p2p::proto::rpc::{
     Transactions,
 };
 use tari_dan_storage::{
-    consensus_models::{
-        Block,
-        BlockId,
-        LeafBlock,
-        LockedBlock,
-        QuorumCertificate,
-        StateTransition,
-        StateTransitionId,
-        SubstateRecord,
-        SubstateUpdate,
-        TransactionRecord,
-    },
+    consensus_models::{StateTransition, StateTransitionId},
     StateStore,
-    StateStoreReadTransaction,
     StorageError,
 };
 use tari_rpc_framework::RpcStatus;

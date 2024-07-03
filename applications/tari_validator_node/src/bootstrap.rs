@@ -454,7 +454,7 @@ where
     TTx::Target: StateStoreReadTransaction,
     TTx::Addr: NodeAddressable + Serialize,
 {
-    let genesis_block = Block::genesis(network);
+    let genesis_block = Block::genesis(network, Epoch(0), Shard::zero());
     let substate_id = SubstateId::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let substate_address = SubstateAddress::from_substate_id(&substate_id, 0);
     let mut metadata: Metadata = Default::default();
@@ -477,7 +477,7 @@ where
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
-            created_block: BlockId::genesis(),
+            created_block: BlockId::zero(),
             created_height: NodeHeight(0),
             created_by_shard: Shard::zero(),
             created_at_epoch: Epoch(0),
@@ -507,7 +507,7 @@ where
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
-            created_block: BlockId::genesis(),
+            created_block: BlockId::zero(),
             created_height: NodeHeight(0),
             created_at_epoch: Epoch(0),
             created_by_shard: Shard::zero(),

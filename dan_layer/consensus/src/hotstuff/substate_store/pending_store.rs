@@ -120,7 +120,12 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         let current_version = block.justify().block_height().as_u64();
         let next_version = block.height().as_u64();
 
-        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(self.store, block.justify().block_id())?;
+        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(
+            self.store,
+            block.epoch(),
+            block.shard(),
+            block.justify().block_id(),
+        )?;
 
         let changes = self.diff.iter().map(|ch| match ch {
             SubstateChange::Up { id, substate, .. } => SubstateTreeChange::Up {

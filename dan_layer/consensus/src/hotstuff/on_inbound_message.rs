@@ -128,63 +128,6 @@ impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
         self.buffer.clear();
     }
 
-    // async fn next_message_or_sync(
-    //     &mut self,
-    //     current_epoch: Epoch,
-    //     current_height: NodeHeight,
-    // ) -> Result<Option<(TConsensusSpec::Addr, HotstuffMessage)>, NeedsSync<TConsensusSpec::Addr>> {
-    //     // loop {
-    //     //     if let Some(addr_and_msg) = self.rx_msg_ready.recv().await {
-    //     //         return Ok(Some(addr_and_msg));
-    //     //     }
-    //     //
-    //     //     // Check if we have any proposals that exceed the current view
-    //     //     for queue in self.buffer.values() {
-    //     //         for (from, msg) in queue {
-    //     //             if let Some(proposal) = msg.proposal() {
-    //     //                 if proposal.block.justify().epoch() > current_epoch ||
-    //     //                     proposal.block.justify().block_height() > current_height
-    //     //                 {
-    //     //                     return Err(NeedsSync {
-    //     //                         from: from.clone(),
-    //     //                         local_height: current_height,
-    //     //                         qc_height: proposal.block.justify().block_height(),
-    //     //                         remote_epoch: proposal.block.justify().epoch(),
-    //     //                         local_epoch: current_epoch,
-    //     //                     });
-    //     //                 }
-    //     //             }
-    //     //         }
-    //     //     }
-    //     //
-    //     //     // Don't really like this but because we can receive proposals out of order, we need to wait a bit to
-    // see     //     // if we get a proposal at our height without switching to sync.
-    //     //     //     let timeout = time::sleep(time::Duration::from_secs(2));
-    //     //     //     tokio::pin!(timeout);
-    //     //     //     tokio::select! {
-    //     //     //         msg = self.rx_msg_ready.recv() => return Ok(msg),
-    //     //     //         _ = timeout.as_mut() => {
-    //     //     //             // Check if we have any proposals
-    //     //     //             for queue in self.buffer.values() {
-    //     //     //                 for (from, msg) in queue {
-    //     //     //                    if let Some(proposal) = msg.proposal() {
-    //     //     //                         if proposal.block.justify().epoch() > current_epoch ||
-    //     //     // proposal.block.justify().block_height() > current_height {
-    //     //     // return Err(NeedsSync {                                 from: from.clone(),
-    //     //     //                                 local_height: current_height,
-    //     //     //                                 qc_height: proposal.block.justify().block_height(),
-    //     //     //                                 remote_epoch: proposal.block.justify().epoch(),
-    //     //     //                                 local_epoch: current_epoch
-    //     //     //                             });
-    //     //     //                         }
-    //     //     //                     }
-    //     //     //                 }
-    //     //     //             }
-    //     //     //         }
-    //     //     //     }
-    //     // }
-    // }
-
     fn push_to_buffer(&mut self, epoch: Epoch, height: NodeHeight, from: TConsensusSpec::Addr, msg: HotstuffMessage) {
         self.buffer.entry((epoch, height)).or_default().push_back((from, msg));
     }

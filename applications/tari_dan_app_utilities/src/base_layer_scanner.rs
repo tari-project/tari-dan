@@ -451,7 +451,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         });
         self.state_store
             .with_write_tx(|tx| {
-                let genesis = Block::genesis(self.network);
+                let genesis = Block::genesis(self.network, Epoch(0), Shard::zero());
 
                 // TODO: This should be proposed in a block...
                 SubstateRecord {
