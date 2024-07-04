@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_engine_types::substate::SubstateId;
-use tari_state_tree::{TreeStore, TreeStoreReader, Version};
+use tari_state_tree::{Node, NodeKey, StaleTreeNode, TreeStore, TreeStoreReader, Version};
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
@@ -257,7 +257,6 @@ pub trait StateStoreReadTransaction: Sized {
         &self,
         tx_id: &TransactionId,
     ) -> Result<Vec<SubstateRecord>, StorageError>;
-    fn substates_get_all_for_block(&self, block_id: &BlockId) -> Result<Vec<SubstateRecord>, StorageError>;
     fn substates_get_all_for_transaction(
         &self,
         transaction_id: &TransactionId,
@@ -285,6 +284,8 @@ pub trait StateStoreReadTransaction: Sized {
     ) -> Result<Vec<StateTransition>, StorageError>;
 
     fn state_transitions_get_last_id(&self) -> Result<StateTransitionId, StorageError>;
+
+    fn state_tree_nodes_get(&self, epoch: Epoch, shard: Shard, key: &NodeKey) -> Result<Node<Version>, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -420,7 +421,7 @@ pub trait StateStoreWriteTransaction {
         versioned_substate_id: VersionedSubstateId,
         shard: Shard,
         epoch: Epoch,
-        destroyed_block_id: &BlockId,
+        destroyed_block_height: NodeHeight,
         destroyed_transaction_id: &TransactionId,
         destroyed_qc_id: &QcId,
     ) -> Result<(), StorageError>;
@@ -431,6 +432,22 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         block_id: &BlockId,
     ) -> Result<PendingStateTreeDiff, StorageError>;
+
+    //---------------------------------- State tree --------------------------------------------//
+    fn state_tree_nodes_insert(
+        &mut self,
+        epoch: Epoch,
+        shard: Shard,
+        key: NodeKey,
+        node: Node<Version>,
+    ) -> Result<(), StorageError>;
+
+    fn state_tree_nodes_mark_stale_tree_node(
+        &mut self,
+        epoch: Epoch,
+        shard: Shard,
+        node: StaleTreeNode,
+    ) -> Result<(), StorageError>;
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

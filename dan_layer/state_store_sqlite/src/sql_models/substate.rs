@@ -24,7 +24,7 @@ pub struct SubstateRecord {
     pub created_by_shard: i32,
     pub destroyed_by_transaction: Option<String>,
     pub destroyed_justify: Option<String>,
-    pub destroyed_by_block: Option<String>,
+    pub destroyed_by_block: Option<i64>,
     pub destroyed_at_epoch: Option<i64>,
     pub destroyed_by_shard: Option<i32>,
     pub created_at: PrimitiveDateTime,
@@ -45,11 +45,11 @@ impl TryFrom<SubstateRecord> for consensus_models::SubstateRecord {
                             details: "destroyed_justify not provided".to_string(),
                         }
                     })?)?,
-                    by_block: deserialize_hex_try_from(value.destroyed_by_block.as_deref().ok_or_else(|| {
+                    by_block: value.destroyed_by_block.map(|v| NodeHeight(v as u64)).ok_or_else(|| {
                         StorageError::DataInconsistency {
                             details: "destroyed_by_block not provided".to_string(),
                         }
-                    })?)?,
+                    })?,
                     at_epoch: value.destroyed_at_epoch.map(|x| Epoch(x as u64)).ok_or_else(|| {
                         StorageError::DataInconsistency {
                             details: "destroyed_at_epoch not provided".to_string(),

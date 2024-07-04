@@ -50,6 +50,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_engine_types::substate::SubstateId;
+use tari_state_tree::{Node, NodeKey, StaleTreeNode, TreeNode, Version};
 use tari_transaction::{TransactionId, VersionedSubstateId};
 use tari_utilities::ByteArray;
 use time::{OffsetDateTime, PrimitiveDateTime};
@@ -1356,6 +1357,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             state_transitions::version.eq(substate.version as i32),
             state_transitions::transition.eq("UP"),
             state_transitions::state_hash.eq(serialize_hex(&substate.state_hash)),
+            state_transitions::state_version.eq(substate.created_height.as_u64() as i64),
         );
 
         diesel::insert_into(state_transitions::table)
@@ -1374,7 +1376,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         versioned_substate_id: VersionedSubstateId,
         shard: Shard,
         epoch: Epoch,
-        destroyed_block_id: &BlockId,
+        destroyed_block_height: NodeHeight,
         destroyed_transaction_id: &TransactionId,
         destroyed_qc_id: &QcId,
     ) -> Result<(), StorageError> {
@@ -1383,7 +1385,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let changes = (
             substates::destroyed_at.eq(diesel::dsl::now),
             substates::destroyed_by_transaction.eq(Some(serialize_hex(destroyed_transaction_id))),
-            substates::destroyed_by_block.eq(Some(serialize_hex(destroyed_block_id))),
+            substates::destroyed_by_block.eq(Some(destroyed_block_height.as_u64() as i64)),
             substates::destroyed_at_epoch.eq(Some(epoch.as_u64() as i64)),
             substates::destroyed_by_shard.eq(Some(shard.as_u32() as i32)),
             substates::destroyed_justify.eq(Some(serialize_hex(destroyed_qc_id))),
@@ -1418,6 +1420,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             state_transitions::substate_id.eq(versioned_substate_id.substate_id.to_string()),
             state_transitions::version.eq(versioned_substate_id.version as i32),
             state_transitions::transition.eq("DOWN"),
+            state_transitions::state_version.eq(destroyed_block_height.as_u64() as i64),
         );
 
         diesel::insert_into(state_transitions::table)
@@ -1470,6 +1473,63 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "pending_state_tree_diffs_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn state_tree_nodes_insert(
+        &mut self,
+        epoch: Epoch,
+        shard: Shard,
+        key: NodeKey,
+        node: Node<Version>,
+    ) -> Result<(), StorageError> {
+        use crate::schema::state_tree;
+
+        let node = TreeNode::new_latest(node);
+        let node = serde_json::to_string(&node).map_err(|e| StorageError::QueryError {
+            reason: format!("Failed to serialize node: {}", e),
+        })?;
+
+        let values = (
+            state_tree::epoch.eq(epoch.as_u64() as i64),
+            state_tree::shard.eq(shard.as_u32() as i32),
+            state_tree::key.eq(key.to_string()),
+            state_tree::node.eq(node),
+        );
+        diesel::insert_into(state_tree::table)
+            .values(&values)
+            .on_conflict((state_tree::epoch, state_tree::shard, state_tree::key))
+            .do_update()
+            .set(values.clone())
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "state_tree_nodes_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn state_tree_nodes_mark_stale_tree_node(
+        &mut self,
+        epoch: Epoch,
+        shard: Shard,
+        node: StaleTreeNode,
+    ) -> Result<(), StorageError> {
+        use crate::schema::state_tree;
+
+        let key = node.as_node_key();
+        diesel::update(state_tree::table)
+            .filter(state_tree::epoch.eq(epoch.as_u64() as i64))
+            .filter(state_tree::shard.eq(shard.as_u32() as i32))
+            .filter(state_tree::key.eq(key.to_string()))
+            .set(state_tree::is_stale.eq(true))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "state_tree_nodes_mark_stale_tree_node",
                 source: e,
             })?;
 

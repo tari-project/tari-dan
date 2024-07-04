@@ -211,6 +211,7 @@ diesel::table! {
         version -> Integer,
         transition -> Text,
         state_hash -> Nullable<Text>,
+        state_version -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -218,6 +219,8 @@ diesel::table! {
 diesel::table! {
     state_tree (id) {
         id -> Integer,
+        epoch -> BigInt,
+        shard -> Integer,
         key -> Text,
         node -> Text,
         is_stale -> Bool,
@@ -253,7 +256,7 @@ diesel::table! {
         created_by_shard -> Integer,
         destroyed_by_transaction -> Nullable<Text>,
         destroyed_justify -> Nullable<Text>,
-        destroyed_by_block -> Nullable<Text>,
+        destroyed_by_block -> Nullable<BigInt>,
         destroyed_at_epoch -> Nullable<BigInt>,
         destroyed_by_shard -> Nullable<Integer>,
         created_at -> Timestamp,

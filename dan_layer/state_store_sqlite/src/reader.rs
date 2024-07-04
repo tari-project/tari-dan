@@ -65,6 +65,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_engine_types::substate::SubstateId;
+use tari_state_tree::{Node, NodeKey, TreeNode, Version};
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 use tari_utilities::ByteArray;
 
@@ -216,6 +217,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
         start_block: &BlockId,
         end_block: &BlockId,
     ) -> Result<Vec<String>, SqliteStorageError> {
+        error!(target: LOG_TARGET, "get_block_ids_between: {epoch} {shard} start: {start_block}, end: {end_block}");
         let block_ids = sql_query(
             r#"
             WITH RECURSIVE tree(bid, parent) AS (
@@ -1852,31 +1854,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         substates.into_iter().map(TryInto::try_into).collect()
     }
 
-    fn substates_get_all_for_block(&self, block_id: &BlockId) -> Result<Vec<SubstateRecord>, StorageError> {
-        use crate::schema::substates;
-
-        let block_id_hex = serialize_hex(block_id);
-
-        let substates = substates::table
-            .filter(
-                substates::created_block
-                    .eq(&block_id_hex)
-                    .or(substates::destroyed_by_block.eq(Some(&block_id_hex))),
-            )
-            .get_results::<sql_models::SubstateRecord>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substates_get_all_for_block",
-                source: e,
-            })?;
-
-        let substates = substates
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(substates)
-    }
-
     fn substates_get_all_for_transaction(
         &self,
         transaction_id: &TransactionId,
@@ -1988,8 +1965,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         let mut block_ids = self.get_block_ids_between(epoch, shard, &committed_block_id, block_id)?;
 
-        // Exclude commit block
-        block_ids.pop();
         if block_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -2072,6 +2047,28 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         let seq = seq as u64;
 
         Ok(StateTransitionId::new(epoch, shard, seq))
+    }
+
+    fn state_tree_nodes_get(&self, epoch: Epoch, shard: Shard, key: &NodeKey) -> Result<Node<Version>, StorageError> {
+        use crate::schema::state_tree;
+
+        let node = state_tree::table
+            .select(state_tree::node)
+            .filter(state_tree::epoch.eq(epoch.as_u64() as i64))
+            .filter(state_tree::shard.eq(shard.as_u32() as i32))
+            .filter(state_tree::key.eq(key.to_string()))
+            .filter(state_tree::is_stale.eq(false))
+            .first::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "state_tree_nodes_get",
+                source: e,
+            })?;
+
+        let node = serde_json::from_str::<TreeNode>(&node).map_err(|e| StorageError::DataInconsistency {
+            details: format!("Failed to deserialize state tree node: {}", e),
+        })?;
+
+        Ok(node.into_node())
     }
 }
 

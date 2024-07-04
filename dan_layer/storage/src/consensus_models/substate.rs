@@ -8,11 +8,10 @@ use std::{
     fmt::Display,
     hash::Hash,
     iter,
-    ops::{Deref, RangeInclusive},
+    ops::RangeInclusive,
     str::FromStr,
 };
 
-use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeHeight, SubstateAddress};
@@ -20,13 +19,11 @@ use tari_engine_types::substate::{hash_substate, Substate, SubstateId, SubstateV
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 
 use crate::{
-    consensus_models::{Block, BlockId, LockedSubstate, QcId, QuorumCertificate},
+    consensus_models::{BlockId, LockedSubstate, QcId, QuorumCertificate},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
 };
-
-const LOG_TARGET: &str = "tari::dan::storage::consensus_models::substate";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
@@ -64,7 +61,7 @@ pub struct SubstateDestroyed {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub justify: QcId,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub by_block: BlockId,
+    pub by_block: NodeHeight,
     pub at_epoch: Epoch,
     pub by_shard: Shard,
 }
@@ -313,7 +310,7 @@ impl SubstateRecord {
         versioned_substate_id: VersionedSubstateId,
         shard: Shard,
         epoch: Epoch,
-        destroyed_by_block: &BlockId,
+        destroyed_by_block: NodeHeight,
         destroyed_justify: &QcId,
         destroyed_by_transaction: &TransactionId,
     ) -> Result<(), StorageError> {
@@ -380,65 +377,6 @@ impl SubstateUpdate {
 
     pub fn is_destroy(&self) -> bool {
         matches!(self, Self::Destroy { .. })
-    }
-}
-
-impl SubstateUpdate {
-    pub fn apply<TTx>(self, tx: &mut TTx, block: &Block) -> Result<(), StorageError>
-    where
-        TTx: StateStoreWriteTransaction + Deref,
-        TTx::Target: StateStoreReadTransaction,
-    {
-        match self {
-            Self::Create(proof) => {
-                debug!(
-                    target: LOG_TARGET,
-                    "🌲 Applying substate CREATE for {} v{}",
-                    proof.substate.substate_id, proof.substate.version
-                );
-                proof.created_qc.save(tx)?;
-                SubstateRecord {
-                    substate_id: proof.substate.substate_id,
-                    version: proof.substate.version,
-                    state_hash: hash_substate(&proof.substate.substate_value, proof.substate.version),
-                    substate_value: proof.substate.substate_value,
-                    created_by_transaction: proof.substate.created_by_transaction,
-                    created_justify: *proof.created_qc.id(),
-                    created_block: *block.id(),
-                    created_height: block.height(),
-                    created_by_shard: block.shard(),
-                    created_at_epoch: block.epoch(),
-                    destroyed: None,
-                }
-                .create(tx)?;
-            },
-            Self::Destroy(SubstateDestroyedProof {
-                substate_id,
-                version,
-                justify: proof,
-                destroyed_by_transaction,
-            }) => {
-                debug!(
-                    target: LOG_TARGET,
-                    "🔥 Applying substate DESTROY for substate {}v{} (transaction {})",
-                    substate_id,
-                    version,
-                    destroyed_by_transaction
-                );
-                proof.save(tx)?;
-                SubstateRecord::destroy(
-                    tx,
-                    VersionedSubstateId::new(substate_id, version),
-                    block.shard(),
-                    block.epoch(),
-                    block.id(),
-                    proof.id(),
-                    &destroyed_by_transaction,
-                )?;
-            },
-        }
-
-        Ok(())
     }
 }
 

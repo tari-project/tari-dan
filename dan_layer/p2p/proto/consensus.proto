@@ -212,7 +212,7 @@ message Substate {
 message SubstateDestroyed {
   tari.dan.common.Epoch epoch = 1;
   uint32 shard = 2;
-  bytes block = 3;
+  uint64 block_height = 3;
   bytes transaction = 4;
   bytes justify = 5;
 }

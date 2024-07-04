@@ -12,7 +12,7 @@ use futures::StreamExt;
 use log::*;
 use tari_common::configuration::Network;
 use tari_consensus::{
-    hotstuff::{calculate_state_merkle_diff, ProposalValidationError},
+    hotstuff::{calculate_state_merkle_diff, substate_store::ChainScopedTreeStore, ProposalValidationError},
     traits::{ConsensusSpec, LeaderStrategy, SyncManager, SyncStatus},
 };
 use tari_dan_common_types::{committee::Committee, optional::Optional, shard::Shard, Epoch, NodeHeight, PeerAddress};
@@ -170,6 +170,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 },
             };
 
+            info!(target: LOG_TARGET, "🛜 Next state updates batch of size {}", msg.transitions.len());
+
             self.state_store.with_write_tx(|tx| {
                 for transition in msg.transitions {
                     let transition =
@@ -177,6 +179,23 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                     info!(target: LOG_TARGET, "🛜 Applied state update {transition}");
                     self.commit_update(tx, &checkpoint, transition)?;
                 }
+
+                // let current_version = block.justify().block_height().as_u64();
+                // let next_version = block.height().as_u64();
+                //
+                // let changes = updates.iter().map(|update| match update {
+                //     SubstateUpdate::Create(create) => SubstateTreeChange::Up {
+                //         id: create.substate.substate_id.clone(),
+                //         value_hash: hash_substate(&create.substate.substate_value, create.substate.version),
+                //     },
+                //     SubstateUpdate::Destroy(destroy) => SubstateTreeChange::Down {
+                //         id: destroy.substate_id.clone(),
+                //     },
+                // });
+                //
+                // let mut store = ChainScopedTreeStore::new(epoch, shard, tx);
+                // let mut tree = tari_state_tree::SpreadPrefixStateTree::new(&mut store);
+                // let _state_root = tree.put_substate_changes(current_version, next_version, changes)?;
 
                 Ok::<_, CommsRpcConsensusSyncError>(())
             })?;
@@ -217,7 +236,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                     VersionedSubstateId::new(substate_id, version),
                     transition.id.shard(),
                     transition.id.epoch(),
-                    checkpoint.block().id(),
+                    // TODO
+                    checkpoint.block().height(),
                     justify.id(),
                     &destroyed_by_transaction,
                 )?;

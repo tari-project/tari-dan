@@ -2,6 +2,7 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{shard::Shard, Epoch};
 use tari_dan_storage::{
     consensus_models,
@@ -30,6 +31,7 @@ pub struct StateTransition {
     pub version: i32,
     pub transition: String,
     pub state_hash: Option<String>,
+    pub state_version: i64,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -84,6 +86,7 @@ impl StateTransition {
         Ok(consensus_models::StateTransition {
             id: StateTransitionId::new(epoch, shard, seq),
             update,
+            state_tree_version: self.state_version as u64,
         })
     }
 }

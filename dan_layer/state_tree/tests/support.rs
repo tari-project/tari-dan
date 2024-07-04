@@ -59,7 +59,7 @@ impl<S: TreeStore<Version>> HashTreeTester<S> {
 
     fn apply_database_updates(&mut self, changes: impl IntoIterator<Item = SubstateTreeChange>) -> Hash {
         let next_version = self.current_version.unwrap_or(0) + 1;
-        let current_version = self.current_version.replace(next_version).unwrap_or(0);
+        let current_version = self.current_version.replace(next_version);
         StateTree::<_, IdentityMapper>::new(&mut self.tree_store)
             .put_substate_changes(current_version, next_version, changes)
             .unwrap()

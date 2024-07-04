@@ -40,7 +40,7 @@ use crate::{
         block_change_set::{BlockDecision, ProposedBlockChangeSet},
         error::HotStuffError,
         event::HotstuffEvent,
-        substate_store::PendingSubstateStore,
+        substate_store::{ChainScopedTreeStore, PendingSubstateStore},
         ProposalValidationError,
         EXHAUST_DIVISOR,
     },
@@ -192,7 +192,8 @@ where TConsensusSpec: ConsensusSpec
 
         // Store used for transactions that have inputs without specific versions.
         // It lives through the entire block so multiple transactions can be sequenced together in the same block
-        let mut substate_store = PendingSubstateStore::new(tx);
+        let tree_store = ChainScopedTreeStore::new(block.epoch(), block.shard(), tx);
+        let mut substate_store = PendingSubstateStore::new(tree_store);
         let mut proposed_block_change_set = ProposedBlockChangeSet::new(block.as_leaf_block());
 
         // if epoch_should_start && !block.is_epoch_start() {

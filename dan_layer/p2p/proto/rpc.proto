@@ -240,10 +240,16 @@ message SyncStateRequest {
 
 message SyncStateResponse {
   repeated StateTransition transitions = 1;
-  bytes state_hash = 2;
 }
 
 message StateTransition {
-    bytes id = 1;
-    SubstateUpdate update = 2;
+  StateTransitionId id = 1;
+  SubstateUpdate update = 2;
+  uint64 state_tree_version = 3;
+}
+
+message StateTransitionId {
+  uint64 epoch = 1;
+  uint32 shard = 2;
+  uint64 seq = 3;
 }

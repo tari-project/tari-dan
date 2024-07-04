@@ -15,6 +15,7 @@ use crate::{consensus_models::SubstateUpdate, StateStoreReadTransaction, Storage
 pub struct StateTransition {
     pub id: StateTransitionId,
     pub update: SubstateUpdate,
+    pub state_tree_version: u64,
 }
 
 impl StateTransition {

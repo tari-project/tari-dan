@@ -48,7 +48,7 @@ use crate::{
     hotstuff::{
         calculate_state_merkle_diff,
         error::HotStuffError,
-        substate_store::PendingSubstateStore,
+        substate_store::{ChainScopedTreeStore, PendingSubstateStore},
         EXHAUST_DIVISOR,
     },
     messages::{HotstuffMessage, ProposalMessage},
@@ -484,7 +484,8 @@ where TConsensusSpec: ConsensusSpec
         };
 
         // batch is empty for is_empty, is_epoch_end and is_epoch_start blocks
-        let mut substate_store = PendingSubstateStore::new(tx);
+        let tree_store = ChainScopedTreeStore::new(epoch, local_committee_info.shard(), tx);
+        let mut substate_store = PendingSubstateStore::new(tree_store);
         let mut executed_transactions = HashMap::new();
         for transaction in batch {
             if let Some(command) = self.transaction_pool_record_to_command(
@@ -509,14 +510,14 @@ where TConsensusSpec: ConsensusSpec
             commands.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
         );
 
-        let pending =
+        let pending_tree_diffs =
             PendingStateTreeDiff::get_all_up_to_commit_block(tx, high_qc.epoch(), high_qc.shard(), high_qc.block_id())?;
 
         let (state_root, _) = calculate_state_merkle_diff(
             tx,
             current_version,
             next_height.as_u64(),
-            pending,
+            pending_tree_diffs,
             substate_store.diff().iter().map(|ch| ch.into()),
         )?;
 

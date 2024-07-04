@@ -56,16 +56,12 @@ impl<'a, S: TreeStore<Version>, M: DbKeyMapper> StateTree<'a, S, M> {
     /// Stores the substate changes in the state tree and returns the new root hash.
     pub fn put_substate_changes<I: IntoIterator<Item = SubstateTreeChange>>(
         &mut self,
-        current_version: Version,
+        current_version: Option<Version>,
         next_version: Version,
         changes: I,
     ) -> Result<Hash, StateTreeError> {
-        let (root_hash, update_batch) = calculate_substate_changes::<_, M, _>(
-            self.store,
-            Some(current_version).filter(|v| *v > 0),
-            next_version,
-            changes,
-        )?;
+        let (root_hash, update_batch) =
+            calculate_substate_changes::<_, M, _>(self.store, current_version, next_version, changes)?;
 
         self.commit_diff(update_batch.into())?;
         Ok(root_hash)

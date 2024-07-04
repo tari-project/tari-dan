@@ -112,7 +112,7 @@ create table substates
     created_by_shard         int       not NULL,
     destroyed_by_transaction text      NULL,
     destroyed_justify        text      NULL,
-    destroyed_by_block       text      NULL,
+    destroyed_by_block       bigint    NULL,
     -- <epoch, shard> uniquely identifies the chain
     destroyed_at_epoch       bigint    NULL,
     destroyed_by_shard       int       NULL,
@@ -337,13 +337,17 @@ CREATE TABLE foreign_receive_counters
 CREATE TABLE state_tree
 (
     id       integer not NULL primary key AUTOINCREMENT,
+    epoch    bigint  not NULL,
+    shard    int     not NULL,
     key      text    not NULL,
     node     text    not NULL,
     is_stale boolean not null default '0'
 );
 
+-- Scoping by epoch,shard
+CREATE INDEX state_tree_idx_epoch_shard_key on state_tree (epoch, shard);
 -- Duplicate keys are not allowed
-CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (key);
+CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (epoch, shard, key);
 -- filtering out or by is_stale is used in every query
 CREATE INDEX state_tree_idx_is_stale on state_tree (is_stale);
 
@@ -374,6 +378,7 @@ CREATE TABLE state_transitions
     version          int                                       not NULL,
     transition       text check (transition IN ('UP', 'DOWN')) not NULL,
     state_hash       text                                      NULL,
+    state_version    bigint                                    not NULL,
     created_at       timestamp                                 not NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (substate_address) REFERENCES substates (address)
 );

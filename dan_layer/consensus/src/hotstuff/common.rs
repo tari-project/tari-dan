@@ -104,19 +104,20 @@ pub fn calculate_state_merkle_diff<TTx: TreeStoreReader<Version>, I: IntoIterato
     tx: &TTx,
     current_version: Version,
     next_version: Version,
-    pending_tree_updates: Vec<PendingStateTreeDiff>,
+    pending_tree_diffs: Vec<PendingStateTreeDiff>,
     substate_changes: I,
 ) -> Result<(Hash, StateHashTreeDiff), StateTreeError> {
-    debug!(
+    info!(
         target: LOG_TARGET,
-        "Calculating state merkle diff from version {} to {} with {} update(s)",
+        "Calculating state merkle diff from version {} to {} with {} pending diff(s)",
         current_version,
         next_version,
-        pending_tree_updates.len(),
+        pending_tree_diffs.len(),
     );
     let mut store = StagedTreeStore::new(tx);
-    store.apply_ordered_diffs(pending_tree_updates.into_iter().map(|diff| diff.diff));
+    store.apply_ordered_diffs(pending_tree_diffs.into_iter().map(|diff| diff.diff));
     let mut state_tree = tari_state_tree::SpreadPrefixStateTree::new(&mut store);
-    let state_root = state_tree.put_substate_changes(current_version, next_version, substate_changes)?;
+    let state_root =
+        state_tree.put_substate_changes(Some(current_version).filter(|v| *v > 0), next_version, substate_changes)?;
     Ok((state_root, store.into_diff()))
 }

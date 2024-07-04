@@ -634,7 +634,7 @@ impl Block {
                         id,
                         self.shard(),
                         self.epoch(),
-                        self.id(),
+                        self.height(),
                         self.justify().id(),
                         &transaction_id,
                     )?;

@@ -4,6 +4,7 @@
 use std::collections::HashSet;
 
 use log::*;
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{shard::Shard, Epoch, SubstateAddress};
 use tari_dan_p2p::proto::rpc::{
     sync_blocks_response::SyncData,
@@ -131,7 +132,6 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
     ) -> Result<(), ()> {
         self.send(Ok(SyncStateResponse {
             transitions: state_transitions.into_iter().map(Into::into).collect(),
-            state_hash: vec![],
         }))
         .await?;
 

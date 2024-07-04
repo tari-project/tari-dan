@@ -215,7 +215,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let committee_info = self.epoch_manager.get_local_committee_info(current_epoch).await?;
 
-        self.create_genesis_block_if_required(current_epoch, committee_info.shard())?;
+        self.create_zero_block_if_required(current_epoch, committee_info.shard())?;
 
         let (current_epoch, current_height, high_qc) = self.state_store.with_read_tx(|tx| {
             let leaf = LeafBlock::get(tx)?;
@@ -341,7 +341,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         match self.on_message_validate.handle(current_height, from, msg).await? {
             MessageValidationResult::Ready { from, message: msg } => {
                 if let Err(e) = self.dispatch_hotstuff_message(from, msg).await {
-                    self.on_failure("on_new_hs_message", &e).await;
+                    self.on_failure("on_message_validate", &e).await;
                     return Err(e);
                 }
                 Ok(())
@@ -397,7 +397,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             .await?
         {
             if let Err(e) = self.dispatch_hotstuff_message(from, msg).await {
-                self.on_failure("on_new_hs_message", &e).await;
+                self.on_failure("dispatch_hotstuff_message", &e).await;
                 return Err(e);
             }
         }
@@ -653,7 +653,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         }
     }
 
-    fn create_genesis_block_if_required(&self, epoch: Epoch, shard: Shard) -> Result<(), HotStuffError> {
+    fn create_zero_block_if_required(&self, epoch: Epoch, shard: Shard) -> Result<(), HotStuffError> {
         self.state_store.with_write_tx(|tx| {
             // The parent for genesis blocks refer to this zero block
             let zero_block = Block::zero_block(self.network);
@@ -661,26 +661,26 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 debug!(target: LOG_TARGET, "Creating zero block");
                 zero_block.justify().insert(tx)?;
                 zero_block.insert(tx)?;
-                // zero_block.as_locked_block().set(tx)?;
-                // zero_block.as_leaf_block().set(tx)?;
-                // zero_block.as_last_executed().set(tx)?;
-                // zero_block.as_last_voted().set(tx)?;
-                // zero_block.justify().as_high_qc().set(tx)?;
+                zero_block.as_locked_block().set(tx)?;
+                zero_block.as_leaf_block().set(tx)?;
+                zero_block.as_last_executed().set(tx)?;
+                zero_block.as_last_voted().set(tx)?;
+                zero_block.justify().as_high_qc().set(tx)?;
                 zero_block.commit_diff(tx, BlockDiff::empty(*zero_block.id()))?;
             }
 
-            let genesis = Block::genesis(self.network, epoch, shard);
-            if !genesis.exists(&**tx)? {
-                info!(target: LOG_TARGET, "✨Creating genesis block {genesis}");
-                // genesis.justify().insert(tx)?;
-                genesis.insert(tx)?;
-                genesis.as_locked_block().set(tx)?;
-                genesis.as_leaf_block().set(tx)?;
-                genesis.as_last_executed().set(tx)?;
-                genesis.as_last_voted().set(tx)?;
-                genesis.justify().as_high_qc().set(tx)?;
-                genesis.commit_diff(tx, BlockDiff::empty(*genesis.id()))?;
-            }
+            // let genesis = Block::genesis(self.network, epoch, shard);
+            // if !genesis.exists(&**tx)? {
+            //     info!(target: LOG_TARGET, "✨Creating genesis block {genesis}");
+            //     // genesis.justify().insert(tx)?;
+            //     genesis.insert(tx)?;
+            //     genesis.as_locked_block().set(tx)?;
+            //     genesis.as_leaf_block().set(tx)?;
+            //     genesis.as_last_executed().set(tx)?;
+            //     genesis.as_last_voted().set(tx)?;
+            //     genesis.justify().as_high_qc().set(tx)?;
+            //     genesis.commit_diff(tx, BlockDiff::empty(*genesis.id()))?;
+            // }
 
             Ok(())
         })

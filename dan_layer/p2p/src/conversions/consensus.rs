@@ -651,7 +651,7 @@ impl TryFrom<proto::consensus::SubstateDestroyed> for SubstateDestroyed {
         Ok(Self {
             by_transaction: value.transaction.try_into()?,
             justify: value.justify.try_into()?,
-            by_block: value.block.try_into()?,
+            by_block: NodeHeight(value.block_height),
             at_epoch: value
                 .epoch
                 .map(Into::into)
@@ -666,7 +666,7 @@ impl From<SubstateDestroyed> for proto::consensus::SubstateDestroyed {
         Self {
             transaction: value.by_transaction.as_bytes().to_vec(),
             justify: value.justify.as_bytes().to_vec(),
-            block: value.by_block.as_bytes().to_vec(),
+            block_height: value.by_block.as_u64(),
             epoch: Some(value.at_epoch.into()),
             shard: value.by_shard.as_u32(),
         }
