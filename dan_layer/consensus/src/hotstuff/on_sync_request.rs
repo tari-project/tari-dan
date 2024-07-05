@@ -56,8 +56,8 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     msg.high_qc,
                     leaf_block
                 );
-                // NOTE: We have to send dummy blocks, because the messaging will ignore gaps in the block height when
-                // syncing until eventually the syncing node's pacemaker leader-fails a few times.
+                // NOTE: We have to send dummy blocks, because the messaging will ignore heights > current_view + 1,
+                // until eventually the syncing node's pacemaker leader-fails a few times.
                 let blocks = Block::get_all_blocks_between(
                     tx,
                     leaf_block.epoch(),
@@ -88,7 +88,7 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
             );
 
             for block in blocks {
-                debug!(
+                info!(
                     target: LOG_TARGET,
                     "🌐 Sending block {} to {}",
                     block,
@@ -107,7 +107,7 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
             let maybe_last_vote = match store.with_read_tx(|tx| LastSentVote::get(tx)).optional() {
                 Ok(last_vote) => last_vote,
                 Err(err) => {
-                    warn!(target: LOG_TARGET, "Failed to fetch last vote for sync request: {}", err);
+                    warn!(target: LOG_TARGET, "Failed to fetch last vote for catch-up request: {}", err);
                     return;
                 },
             };
@@ -116,7 +116,7 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     .send(from.clone(), HotstuffMessage::Vote(last_vote.into()))
                     .await
                 {
-                    warn!(target: LOG_TARGET, "Leader channel closed while sending LastVote {err}");
+                    warn!(target: LOG_TARGET, "Failed to send LastVote {err}");
                 }
             }
 

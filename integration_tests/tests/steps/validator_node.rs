@@ -469,20 +469,12 @@ async fn then_validator_node_switches_epoch(world: &mut TariWorld, vn_name: Stri
         let blocks = list_block.unwrap().blocks;
         let newest = blocks.first().expect("Couldn't get blocks");
         if newest.epoch().as_u64() == epoch {
-            // The newest block as expected should be the EpochStart event.
-            assert!(newest
-                .commands()
-                .contains(&tari_dan_storage::consensus_models::Command::EndEpoch(
-                    tari_dan_storage::consensus_models::EpochEvent::Start
-                )));
             // The 3 blocks before it should be all End events. 3 because we need to bury the epoch start to locked
             // block.
             for block in &blocks[1..] {
                 assert!(block
                     .commands()
-                    .contains(&tari_dan_storage::consensus_models::Command::EndEpoch(
-                        tari_dan_storage::consensus_models::EpochEvent::End
-                    )));
+                    .contains(&tari_dan_storage::consensus_models::Command::EndEpoch));
                 // All the epoch ends should be in previous epoch.
                 assert_eq!(block.epoch().as_u64() + 1, epoch);
             }

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_engine_types::substate::SubstateId;
-use tari_state_tree::{Node, NodeKey, StaleTreeNode, TreeStore, TreeStoreReader, Version};
+use tari_state_tree::{Node, NodeKey, StaleTreeNode, Version};
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
@@ -56,11 +56,9 @@ const LOG_TARGET: &str = "tari::dan::storage";
 
 pub trait StateStore {
     type Addr: NodeAddressable;
-    type ReadTransaction<'a>: StateStoreReadTransaction<Addr = Self::Addr> + TreeStoreReader<Version>
+    type ReadTransaction<'a>: StateStoreReadTransaction<Addr = Self::Addr>
     where Self: 'a;
-    type WriteTransaction<'a>: StateStoreWriteTransaction<Addr = Self::Addr>
-        + TreeStore<Version>
-        + Deref<Target = Self::ReadTransaction<'a>>
+    type WriteTransaction<'a>: StateStoreWriteTransaction<Addr = Self::Addr> + Deref<Target = Self::ReadTransaction<'a>>
     where Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError>;
@@ -281,6 +279,7 @@ pub trait StateStoreReadTransaction: Sized {
         &self,
         n: usize,
         id: StateTransitionId,
+        end_epoch: Epoch,
     ) -> Result<Vec<StateTransition>, StorageError>;
 
     fn state_transitions_get_last_id(&self) -> Result<StateTransitionId, StorageError>;

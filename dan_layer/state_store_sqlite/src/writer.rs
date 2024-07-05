@@ -1352,11 +1352,11 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             state_transitions::seq.eq(next_seq),
             state_transitions::epoch.eq(substate.created_at_epoch.as_u64() as i64),
             state_transitions::shard.eq(substate.created_by_shard.as_u32() as i32),
-            state_transitions::substate_address.eq(serialize_hex(&substate.to_substate_address())),
+            state_transitions::substate_address.eq(serialize_hex(substate.to_substate_address())),
             state_transitions::substate_id.eq(substate.substate_id.to_string()),
             state_transitions::version.eq(substate.version as i32),
             state_transitions::transition.eq("UP"),
-            state_transitions::state_hash.eq(serialize_hex(&substate.state_hash)),
+            state_transitions::state_hash.eq(serialize_hex(substate.state_hash)),
             state_transitions::state_version.eq(substate.created_height.as_u64() as i64),
         );
 
@@ -1394,7 +1394,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let address = versioned_substate_id.to_substate_address();
 
         diesel::update(substates::table)
-            .filter(substates::address.eq(serialize_hex(&address)))
+            .filter(substates::address.eq(serialize_hex(address)))
             .set(changes)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -1416,7 +1416,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             state_transitions::seq.eq(next_seq),
             state_transitions::epoch.eq(epoch.as_u64() as i64),
             state_transitions::shard.eq(shard.as_u32() as i32),
-            state_transitions::substate_address.eq(serialize_hex(&address)),
+            state_transitions::substate_address.eq(serialize_hex(address)),
             state_transitions::substate_id.eq(versioned_substate_id.substate_id.to_string()),
             state_transitions::version.eq(versioned_substate_id.version as i32),
             state_transitions::transition.eq("DOWN"),
@@ -1501,9 +1501,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         );
         diesel::insert_into(state_tree::table)
             .values(&values)
-            .on_conflict((state_tree::epoch, state_tree::shard, state_tree::key))
-            .do_update()
-            .set(values.clone())
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "state_tree_nodes_insert",

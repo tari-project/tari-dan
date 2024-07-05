@@ -107,7 +107,7 @@ pub fn calculate_state_merkle_diff<TTx: TreeStoreReader<Version>, I: IntoIterato
     pending_tree_diffs: Vec<PendingStateTreeDiff>,
     substate_changes: I,
 ) -> Result<(Hash, StateHashTreeDiff), StateTreeError> {
-    info!(
+    debug!(
         target: LOG_TARGET,
         "Calculating state merkle diff from version {} to {} with {} pending diff(s)",
         current_version,

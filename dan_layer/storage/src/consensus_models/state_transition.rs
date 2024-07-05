@@ -23,8 +23,9 @@ impl StateTransition {
         tx: &TTx,
         n: usize,
         after_id: StateTransitionId,
+        end_epoch: Epoch,
     ) -> Result<Vec<Self>, StorageError> {
-        tx.state_transitions_get_n_after(n, after_id)
+        tx.state_transitions_get_n_after(n, after_id, end_epoch)
     }
 
     pub fn get_last_id<TTx: StateStoreReadTransaction>(tx: &TTx) -> Result<StateTransitionId, StorageError> {

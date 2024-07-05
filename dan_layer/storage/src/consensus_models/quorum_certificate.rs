@@ -196,7 +196,7 @@ impl QuorumCertificate {
         let mut high_qc = HighQc::get(&**tx)?;
 
         if high_qc.block_height() < self.block_height() {
-            debug!(
+            info!(
                 target: LOG_TARGET,
                 "🔥 UPDATE_HIGH_QC ({}, previous high QC: {} {})",
                 self,

@@ -7,7 +7,7 @@ use log::*;
 use tari_dan_common_types::Epoch;
 use tari_dan_p2p::proto::rpc::{sync_blocks_response::SyncData, QuorumCertificates, SyncBlocksResponse, Transactions};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, LeafBlock, LockedBlock, QuorumCertificate, SubstateUpdate, TransactionRecord},
+    consensus_models::{Block, BlockId, QuorumCertificate, SubstateUpdate, TransactionRecord},
     StateStore,
     StateStoreReadTransaction,
     StorageError,
@@ -30,7 +30,7 @@ type BlockBuffer = Vec<BlockData>;
 pub struct BlockSyncTask<TStateStore: StateStore> {
     store: TStateStore,
     start_block: Block,
-    up_to_epoch: Option<Epoch>,
+    _up_to_epoch: Option<Epoch>,
     sender: mpsc::Sender<Result<SyncBlocksResponse, RpcStatus>>,
 }
 
@@ -44,7 +44,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         Self {
             store,
             start_block,
-            up_to_epoch,
+            _up_to_epoch: up_to_epoch,
             sender,
         }
     }

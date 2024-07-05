@@ -2,7 +2,6 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
-use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{shard::Shard, Epoch};
 use tari_dan_storage::{
     consensus_models,

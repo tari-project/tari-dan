@@ -61,8 +61,9 @@ impl<TConsensusSpec: ConsensusSpec> OnInboundMessage<TConsensusSpec> {
     }
 }
 
+type EpochAndHeight = (Epoch, NodeHeight);
 pub struct MessageBuffer<TConsensusSpec: ConsensusSpec> {
-    buffer: BTreeMap<(Epoch, NodeHeight), VecDeque<(TConsensusSpec::Addr, HotstuffMessage)>>,
+    buffer: BTreeMap<EpochAndHeight, VecDeque<(TConsensusSpec::Addr, HotstuffMessage)>>,
     inbound_messaging: TConsensusSpec::InboundMessaging,
 }
 
@@ -79,44 +80,45 @@ impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
         current_epoch: Epoch,
         current_height: NodeHeight,
     ) -> IncomingMessageResult<TConsensusSpec::Addr> {
-        loop {
-            // Clear buffer with lower (epoch, heights)
-            self.buffer = self.buffer.split_off(&(current_epoch, current_height));
+        // Clear buffer with lower (epoch, heights)
+        self.buffer = self.buffer.split_off(&(current_epoch, current_height));
 
-            // Check if message is in the buffer
-            if let Some(buffer) = self.buffer.get_mut(&(current_epoch, current_height)) {
-                if let Some(msg_tuple) = buffer.pop_front() {
-                    return Ok(Some(msg_tuple));
-                }
+        // Check if message is in the buffer
+        if let Some(buffer) = self.buffer.get_mut(&(current_epoch, current_height)) {
+            if let Some(msg_tuple) = buffer.pop_front() {
+                return Ok(Some(msg_tuple));
             }
-
-            // while let Some((from, msg)) = self.next_message_or_sync(current_epoch, current_height).await? {
-            while let Some(result) = self.inbound_messaging.next_message().await {
-                let (from, msg) = result?;
-                match msg_epoch_and_height(&msg) {
-                    // Discard old message
-                    Some((e, h)) if e < current_epoch || h < current_height => {
-                        info!(target: LOG_TARGET, "Discard message {} is for previous view {}/{}. Current view {}/{}", msg, e, h, current_epoch,current_height);
-                        continue;
-                    },
-                    // Buffer message for future epoch/height
-                    Some((epoch, height)) if epoch > current_epoch || height > current_height => {
-                        if msg.proposal().is_some() {
-                            info!(target: LOG_TARGET, "🦴Proposal {msg} is for future view (Current view: {current_epoch}, {current_height})");
-                        } else {
-                            debug!(target: LOG_TARGET, "🦴Message {msg} is for future view (Current view: {current_epoch}, {current_height})");
-                        }
-                        self.push_to_buffer(epoch, height, from, msg);
-                        continue;
-                    },
-                    // Height is irrelevant or current, return message
-                    _ => return Ok(Some((from, msg))),
-                }
-            }
-
-            // Inbound messaging has terminated
-            return Ok(None);
         }
+
+        while let Some(result) = self.inbound_messaging.next_message().await {
+            let (from, msg) = result?;
+            match msg_epoch_and_height(&msg) {
+                // Discard old message
+                Some((e, h)) if e < current_epoch || h < current_height => {
+                    info!(target: LOG_TARGET, "Discard message {} is for previous view {}/{}. Current view {}/{}", msg, e, h, current_epoch,current_height);
+                    continue;
+                },
+                // Buffer message for future epoch/height
+                Some((epoch, height)) if epoch > current_epoch || height > current_height => {
+                    if msg.proposal().is_some() {
+                        info!(target: LOG_TARGET, "🦴Proposal {msg} is for future view (Current view: {current_epoch}, {current_height})");
+                    } else {
+                        info!(target: LOG_TARGET, "🦴Message {msg} is for future view (Current view: {current_epoch}, {current_height})");
+                    }
+                    self.push_to_buffer(epoch, height, from, msg);
+                    continue;
+                },
+                // Height is irrelevant or current, return message
+                _ => return Ok(Some((from, msg))),
+            }
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "Inbound messaging has terminated. Current view: {}/{}", current_epoch, current_height
+        );
+        // Inbound messaging has terminated
+        Ok(None)
     }
 
     pub async fn discard(&mut self) {
@@ -143,7 +145,7 @@ pub struct NeedsSync<TAddr: NodeAddressable> {
     pub local_epoch: Epoch,
 }
 
-fn msg_epoch_and_height(msg: &HotstuffMessage) -> Option<(Epoch, NodeHeight)> {
+fn msg_epoch_and_height(msg: &HotstuffMessage) -> Option<EpochAndHeight> {
     match msg {
         HotstuffMessage::Proposal(msg) => Some((msg.block.epoch(), msg.block.height())),
         // Votes for block 2, occur at current height 3

@@ -389,8 +389,8 @@ impl From<SubstateCreatedProof> for SubstateUpdate {
 impl Display for SubstateUpdate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Create(proof) => write!(f, "Create: {}v{}", proof.substate.substate_id, proof.substate.version),
-            Self::Destroy(proof) => write!(f, "Destroy: {}v{}", proof.substate_id, proof.version),
+            Self::Create(proof) => write!(f, "Create: {}(v{})", proof.substate.substate_id, proof.substate.version),
+            Self::Destroy(proof) => write!(f, "Destroy: {}(v{})", proof.substate_id, proof.version),
         }
     }
 }

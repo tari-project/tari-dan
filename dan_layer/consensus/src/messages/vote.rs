@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::fmt::Display;
+
 use serde::Serialize;
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::consensus_models::{BlockId, LastSentVote, QuorumDecision, ValidatorSignature};
@@ -23,5 +25,15 @@ impl From<LastSentVote> for VoteMessage {
             decision: value.decision,
             signature: value.signature,
         }
+    }
+}
+
+impl Display for VoteMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "VoteMessage: {}, block_id: {}, {}, decision: {:?}, voter: {:?}",
+            self.epoch, self.block_id, self.block_height, self.decision, self.signature.public_key
+        )
     }
 }

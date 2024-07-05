@@ -17,6 +17,7 @@ use tari_dan_storage::{
         ForeignProposal,
         HighQc,
         LastSentVote,
+        LeafBlock,
         QuorumDecision,
         TransactionAtom,
         TransactionPool,
@@ -119,6 +120,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn process_block(&mut self, current_view: CurrentView, block: Block) -> Result<(), HotStuffError> {
         if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
             return Err(HotStuffError::EpochNotActive {
@@ -362,6 +364,18 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         valid_block.block().justify().save(tx)?;
         valid_block.save_all_dummy_blocks(tx)?;
         valid_block.block().save(tx)?;
+
+        // From the HS paper, on_beat we propose and set the leaf node.
+        // b_leaf -> on_propose(b_leaf , cmd, qc_high)
+        // This is so that we never propose a block at the same height again
+        let current_leaf = LeafBlock::get(&**tx)?;
+        let new_leaf = valid_block.block().as_leaf_block();
+        if current_leaf.epoch < new_leaf.epoch ||
+            (current_leaf.epoch == new_leaf.epoch && current_leaf.height < new_leaf.height)
+        {
+            info!(target: LOG_TARGET, "🍃 Setting new leaf block: {}", new_leaf);
+            new_leaf.set(tx)?;
+        }
 
         let high_qc = valid_block.block().justify().update_high_qc(tx)?;
         Ok(high_qc)

@@ -219,7 +219,7 @@ impl Block {
             0,
             IndexMap::new(),
             None,
-            EpochTime::now().as_u64(),
+            0,
             0,
             FixedHash::zero(),
         )
@@ -681,13 +681,6 @@ impl Block {
     }
 
     pub fn get_parent<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
-        // Don't return the zero block
-        if self.parent.is_zero() {
-            return Err(StorageError::NotFound {
-                item: "Block".to_string(),
-                key: self.id.to_string(),
-            });
-        }
         Block::get(tx, &self.parent)
     }
 
@@ -814,12 +807,14 @@ impl Block {
             return Ok(high_qc);
         };
 
-        if !precommit_node.is_genesis() {
-            let locked = LockedBlock::get(&**tx)?;
-            if precommit_node.height() > locked.height {
-                on_locked_block_recurse(tx, &locked, &precommit_node, &mut on_lock_block)?;
-                precommit_node.as_locked_block().set(tx)?;
-            }
+        if precommit_node.is_genesis() {
+            return Ok(high_qc);
+        }
+
+        let locked = LockedBlock::get(&**tx)?;
+        if precommit_node.height() > locked.height {
+            on_locked_block_recurse(tx, &locked, &precommit_node, &mut on_lock_block)?;
+            precommit_node.as_locked_block().set(tx)?;
         }
 
         // b <- b'.justify.node
@@ -836,12 +831,13 @@ impl Block {
             );
 
             // Commit prepare_node (b)
-            if !prepare_node.is_zero() {
-                let prepare_node = Block::get(&**tx, prepare_node)?;
-                let last_executed = LastExecuted::get(&**tx)?;
-                on_commit_block_recurse(tx, &last_executed, &prepare_node, &mut on_commit)?;
-                prepare_node.as_last_executed().set(tx)?;
+            if prepare_node.is_zero() {
+                return Ok(high_qc);
             }
+            let prepare_node = Block::get(&**tx, prepare_node)?;
+            let last_executed = LastExecuted::get(&**tx)?;
+            on_commit_block_recurse(tx, &last_executed, &prepare_node, &mut on_commit)?;
+            prepare_node.as_last_executed().set(tx)?;
         } else {
             debug!(
                 target: LOG_TARGET,
@@ -1001,7 +997,7 @@ impl TryFrom<&[u8]> for BlockId {
 }
 
 impl Display for BlockId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
     }
 }

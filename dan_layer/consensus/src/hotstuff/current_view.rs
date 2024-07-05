@@ -39,33 +39,33 @@ impl CurrentView {
 
     /// Updates the height and epoch if they are greater than the current values.
     pub fn update(&self, epoch: Epoch, height: NodeHeight) {
-        self.update_epoch(epoch);
+        let current_epoch = self.get_epoch();
+        let mut is_updated = false;
+        if epoch > current_epoch {
+            is_updated = true;
+            self.epoch.store(epoch.as_u64(), atomic::Ordering::SeqCst);
+        }
         let current_height = self.get_height();
         if height > current_height {
-            info!(target: LOG_TARGET, "🧿 PACEMAKER: View updated to height {height}");
+            is_updated = true;
             self.height.store(height.as_u64(), atomic::Ordering::SeqCst);
+        }
+
+        if is_updated {
+            info!(target: LOG_TARGET, "🧿 PACEMAKER: View updated to {self}");
         }
     }
 
     /// Resets the height and epoch. Prefer update.
     pub fn reset(&self, epoch: Epoch, height: NodeHeight) {
-        info!(target: LOG_TARGET, "🧿 PACEMAKER RESET: View updated to epoch {epoch}");
         self.epoch.store(epoch.as_u64(), atomic::Ordering::SeqCst);
-        info!(target: LOG_TARGET, "🧿 PACEMAKER RESET: View updated to height {height}");
         self.height.store(height.as_u64(), atomic::Ordering::SeqCst);
-    }
-
-    pub fn update_epoch(&self, epoch: Epoch) {
-        let current_epoch = self.get_epoch();
-        if epoch > current_epoch {
-            info!(target: LOG_TARGET, "🧿 PACEMAKER: View updated to epoch {epoch}");
-            self.epoch.store(epoch.as_u64(), atomic::Ordering::SeqCst);
-        }
+        info!(target: LOG_TARGET, "🧿 PACEMAKER RESET: View updated to {epoch}/{height}");
     }
 }
 
 impl Display for CurrentView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "epoch: {}, height: {}", self.get_epoch(), self.get_height())
+        write!(f, "{}/{}", self.get_epoch(), self.get_height())
     }
 }

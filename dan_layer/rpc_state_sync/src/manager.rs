@@ -1,59 +1,34 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-    ops::Deref,
-};
+use std::collections::{HashMap, HashSet};
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::StreamExt;
 use log::*;
-use tari_common::configuration::Network;
-use tari_consensus::{
-    hotstuff::{calculate_state_merkle_diff, substate_store::ChainScopedTreeStore, ProposalValidationError},
-    traits::{ConsensusSpec, LeaderStrategy, SyncManager, SyncStatus},
-};
+use tari_consensus::traits::{ConsensusSpec, SyncManager, SyncStatus};
 use tari_dan_common_types::{committee::Committee, optional::Optional, shard::Shard, Epoch, NodeHeight, PeerAddress};
-use tari_dan_p2p::proto::rpc::{
-    GetCheckpointRequest,
-    GetCheckpointResponse,
-    GetHighQcRequest,
-    SyncBlocksRequest,
-    SyncStateRequest,
-};
+use tari_dan_p2p::proto::rpc::{GetCheckpointRequest, GetCheckpointResponse, SyncStateRequest};
 use tari_dan_storage::{
     consensus_models::{
         Block,
-        BlockDiff,
-        BlockId,
         EpochCheckpoint,
-        HighQc,
         LeafBlock,
-        LockedBlock,
-        PendingStateTreeDiff,
-        QuorumCertificate,
         StateTransition,
-        SubstateChange,
         SubstateCreatedProof,
         SubstateDestroyedProof,
         SubstateRecord,
         SubstateUpdate,
-        TransactionPoolRecord,
-        TransactionRecord,
     },
     StateStore,
     StateStoreWriteTransaction,
     StorageError,
 };
-use tari_engine_types::substate::hash_substate;
 use tari_epoch_manager::EpochManagerReader;
-use tari_rpc_framework::RpcError;
-use tari_state_tree::SubstateTreeChange;
-use tari_transaction::{Transaction, VersionedSubstateId};
+use tari_transaction::VersionedSubstateId;
 use tari_validator_node_rpc::{
-    client::{TariValidatorNodeRpcClient, TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory},
+    client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory},
     rpc_service::ValidatorNodeRpcClient,
 };
 
@@ -61,13 +36,9 @@ use crate::error::CommsRpcConsensusSyncError;
 
 const LOG_TARGET: &str = "tari::dan::comms_rpc_state_sync";
 
-const MAX_SUBSTATE_UPDATES: usize = 10000;
-
 pub struct RpcStateSyncManager<TConsensusSpec: ConsensusSpec> {
-    network: Network,
     epoch_manager: TConsensusSpec::EpochManager,
     state_store: TConsensusSpec::StateStore,
-    leader_strategy: TConsensusSpec::LeaderStrategy,
     client_factory: TariValidatorNodeRpcClientFactory,
 }
 
@@ -75,17 +46,13 @@ impl<TConsensusSpec> RpcStateSyncManager<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 {
     pub fn new(
-        network: Network,
         epoch_manager: TConsensusSpec::EpochManager,
         state_store: TConsensusSpec::StateStore,
-        leader_strategy: TConsensusSpec::LeaderStrategy,
         client_factory: TariValidatorNodeRpcClientFactory,
     ) -> Self {
         Self {
-            network,
             epoch_manager,
             state_store,
-            leader_strategy,
             client_factory,
         }
     }
@@ -177,6 +144,14 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                     let transition =
                         StateTransition::try_from(transition).map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
                     info!(target: LOG_TARGET, "🛜 Applied state update {transition}");
+                    if transition.id.epoch() >= current_epoch {
+                        return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow!(
+                            "Received state transition for epoch {} which is at or ahead of our current epoch {}.",
+                            transition.id.epoch(),
+                            current_epoch
+                        )));
+                    }
+
                     self.commit_update(tx, &checkpoint, transition)?;
                 }
 
@@ -345,31 +320,5 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
         }
 
         last_error.map(Err).unwrap_or(Ok(()))
-    }
-}
-
-struct BlockIdAndHeight {
-    id: BlockId,
-    height: NodeHeight,
-}
-
-impl Display for BlockIdAndHeight {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Block: {} (#{})", self.id, self.height)
-    }
-}
-
-// TODO: these are similar structures. Clean this up.
-fn substate_update_to_change(update: SubstateUpdate) -> SubstateChange {
-    match update {
-        SubstateUpdate::Create(create) => SubstateChange::Up {
-            id: VersionedSubstateId::new(create.substate.substate_id.clone(), create.substate.version),
-            transaction_id: create.substate.created_by_transaction,
-            substate: create.substate.into_substate(),
-        },
-        SubstateUpdate::Destroy(destroy) => SubstateChange::Down {
-            id: VersionedSubstateId::new(destroy.substate_id, destroy.version),
-            transaction_id: destroy.destroyed_by_transaction,
-        },
     }
 }

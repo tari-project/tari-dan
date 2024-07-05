@@ -273,7 +273,7 @@ impl Test {
         let committees = self.epoch_manager.all_committees().await;
         let mut attempts = 0usize;
         'outer: loop {
-            for (shard, committee) in committees.iter() {
+            for (shard, committee) in &committees {
                 let mut heights = self
                     .validators
                     .values()

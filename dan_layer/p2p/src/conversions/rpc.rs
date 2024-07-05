@@ -4,8 +4,6 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
-use tari_common_types::types::FixedHash;
-use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{shard::Shard, Epoch};
 use tari_dan_storage::consensus_models::{
     EpochCheckpoint,
@@ -193,7 +191,7 @@ impl From<EpochCheckpoint> for proto::rpc::EpochCheckpoint {
     fn from(value: EpochCheckpoint) -> Self {
         Self {
             block: Some(value.block().into()),
-            qcs: value.qcs().into_iter().map(Into::into).collect(),
+            qcs: value.qcs().iter().map(Into::into).collect(),
         }
     }
 }

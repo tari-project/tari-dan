@@ -1,18 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashSet;
-
 use log::*;
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{shard::Shard, Epoch, SubstateAddress};
-use tari_dan_p2p::proto::rpc::{
-    sync_blocks_response::SyncData,
-    QuorumCertificates,
-    SyncBlocksResponse,
-    SyncStateResponse,
-    Transactions,
-};
+use tari_dan_common_types::Epoch;
+use tari_dan_p2p::proto::rpc::SyncStateResponse;
 use tari_dan_storage::{
     consensus_models::{StateTransition, StateTransitionId},
     StateStore,
@@ -31,7 +22,6 @@ pub struct StateSyncTask<TStateStore: StateStore> {
     store: TStateStore,
     sender: mpsc::Sender<Result<SyncStateResponse, RpcStatus>>,
     start_state_transition_id: StateTransitionId,
-    current_shard: Shard,
     current_epoch: Epoch,
 }
 
@@ -40,14 +30,12 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
         store: TStateStore,
         sender: mpsc::Sender<Result<SyncStateResponse, RpcStatus>>,
         start_state_transition_id: StateTransitionId,
-        current_shard: Shard,
         current_epoch: Epoch,
     ) -> Self {
         Self {
             store,
             sender,
             start_state_transition_id,
-            current_shard,
             current_epoch,
         }
     }
@@ -103,7 +91,8 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
         current_state_transition_id: StateTransitionId,
     ) -> Result<Option<StateTransitionId>, StorageError> {
         self.store.with_read_tx(|tx| {
-            let state_transitions = StateTransition::get_n_after(tx, BATCH_SIZE, current_state_transition_id)?;
+            let state_transitions =
+                StateTransition::get_n_after(tx, BATCH_SIZE, current_state_transition_id, self.current_epoch)?;
 
             let Some(last) = state_transitions.last() else {
                 return Ok(None);
@@ -111,6 +100,7 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
 
             let last_state_transition_id = last.id;
             buffer.extend(state_transitions);
+
             Ok::<_, StorageError>(Some(last_state_transition_id))
         })
     }

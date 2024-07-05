@@ -101,7 +101,7 @@ pub async fn spawn(
     let context = ConsensusWorkerContext {
         epoch_manager: epoch_manager.clone(),
         hotstuff: hotstuff_worker,
-        state_sync: RpcStateSyncManager::new(network, epoch_manager, store, leader_strategy, client_factory),
+        state_sync: RpcStateSyncManager::new(epoch_manager, store, client_factory),
         tx_current_state,
     };
 

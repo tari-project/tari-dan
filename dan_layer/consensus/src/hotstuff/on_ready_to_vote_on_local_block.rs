@@ -101,7 +101,6 @@ where TConsensusSpec: ConsensusSpec
                     tx,
                     |tx, locked, block| {
                         locked_blocks.push(block.clone());
-
                         self.on_lock_block(tx, locked, block)
                     },
                     |tx, last_exec, commit_block| {
@@ -941,7 +940,8 @@ where TConsensusSpec: ConsensusSpec
         tx.substate_locks_remove_many_for_transactions(block.all_accepted_transactions_ids())?;
 
         let pending = PendingStateTreeDiff::remove_by_block(tx, block.id())?;
-        let mut state_tree = tari_state_tree::SpreadPrefixStateTree::new(tx);
+        let mut store = ChainScopedTreeStore::new(block.epoch(), block.shard(), tx);
+        let mut state_tree = tari_state_tree::SpreadPrefixStateTree::new(&mut store);
         state_tree.commit_diff(pending.diff)?;
 
         let total_transaction_fee = block.total_transaction_fee();

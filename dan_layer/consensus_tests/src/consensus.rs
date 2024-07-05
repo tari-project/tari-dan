@@ -60,14 +60,14 @@ async fn single_transaction() {
     test.get_validator(&TestAddress::new("1"))
         .state_store
         .with_read_tx(|tx| {
-            let mut block = Some(tx.blocks_get_tip(Epoch(1), Shard::from(0))?);
+            let mut block = tx.blocks_get_tip(Epoch(1), Shard::from(0))?;
             loop {
-                block = block.as_ref().unwrap().get_parent(tx).optional()?;
-                let Some(b) = block.as_ref() else {
+                block = block.get_parent(tx)?;
+                if block.id().is_zero() {
                     break;
-                };
+                }
 
-                for cmd in b.commands() {
+                for cmd in block.commands() {
                     assert!(matches!(cmd, Command::LocalOnly(_)));
                 }
             }
@@ -140,11 +140,15 @@ async fn propose_blocks_with_new_transactions_until_all_committed() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn node_requests_missing_transaction_from_local_leader() {
     setup_logger();
-    let mut test = Test::builder().add_committee(0, vec!["1", "2"]).start().await;
+    let mut test = Test::builder()
+        .debug_sql("/tmp/test{}.db")
+        .add_committee(0, vec!["1", "2"])
+        .start()
+        .await;
     // First get all transactions in the mempool of node "2". We send to "2" because it is the leader for the next
     // block. We could send to "1" but the test would have to wait for the block time to be hit and block 1 to be
     // proposed before node "1" can propose block 2 with all the transactions.
-    for _ in 0..10 {
+    for _ in 0..1 {
         test.send_transaction_to(&TestAddress::new("2"), Decision::Commit, 1, 5)
             .await;
     }

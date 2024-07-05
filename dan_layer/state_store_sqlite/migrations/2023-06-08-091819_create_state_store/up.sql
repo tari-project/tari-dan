@@ -14,7 +14,7 @@ create table blocks
 (
     id                      integer   not null primary key AUTOINCREMENT,
     block_id                text      not NULL,
-    parent_block_id         text      not NULL,
+    parent_block_id         text      not NULL REFERENCES blocks (block_id),
     merkle_root             text      not NULL,
     network                 text      not NULL,
     height                  bigint    not NULL,

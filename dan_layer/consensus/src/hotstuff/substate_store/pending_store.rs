@@ -136,7 +136,6 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                 id: id.substate_id.clone(),
             },
         });
-
         let (state_root, state_tree_diff) =
             calculate_state_merkle_diff(&self.store, current_version, next_version, pending, changes)?;
 

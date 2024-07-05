@@ -210,7 +210,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
 
     async fn check_proposal(&self, block: &Block) -> Result<(), HotStuffError> {
         block_validations::check_proposal::<TConsensusSpec>(
-            &block,
+            block,
             self.network,
             &self.epoch_manager,
             &self.vote_signing_service,
@@ -257,8 +257,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
                 local_committee.shuffle();
                 match local_committee
                     .into_iter()
-                    .filter(|(addr, _)| *addr != self.local_validator_addr)
-                    .next()
+                    .find(|(addr, _)| *addr != self.local_validator_addr)
                 {
                     Some((addr, _)) => {
                         warn!(target: LOG_TARGET, "⚠️Requesting missing transactions from another validator {addr} because we are (presumably) catching up (local_peer_id = {})", self.local_validator_addr);

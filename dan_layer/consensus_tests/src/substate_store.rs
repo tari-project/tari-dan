@@ -5,7 +5,7 @@ use tari_consensus::{
     hotstuff::substate_store::{ChainScopedTreeStore, PendingSubstateStore, SubstateStoreError},
     traits::{ReadableSubstateStore, WriteableSubstateStore},
 };
-use tari_dan_common_types::{shard::Shard, Epoch, PeerAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, PeerAddress};
 use tari_dan_storage::{
     consensus_models::{
         BlockId,
@@ -220,9 +220,9 @@ fn create_store() -> TestStore {
     SqliteStateStore::connect(":memory:").unwrap()
 }
 
-fn create_pending_store<'a, 'tx, TStore: StateStore>(
-    tx: &'a TStore::ReadTransaction<'tx>,
-) -> PendingSubstateStore<'a, 'tx, TStore> {
+fn create_pending_store<'a, 'tx, TAddr: NodeAddressable>(
+    tx: &'a <SqliteStateStore<TAddr> as StateStore>::ReadTransaction<'tx>,
+) -> PendingSubstateStore<'a, 'tx, SqliteStateStore<TAddr>> {
     let tree_store = ChainScopedTreeStore::new(Epoch::zero(), Shard::zero(), tx);
     PendingSubstateStore::new(tree_store)
 }

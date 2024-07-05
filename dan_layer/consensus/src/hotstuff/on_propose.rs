@@ -350,7 +350,18 @@ where TConsensusSpec: ConsensusSpec
                         tx_rec.transaction_id(),
                     ))
                 })?;
-                substate_store.put_diff(*tx_rec.transaction_id(), diff)?;
+                if let Err(err) = substate_store.put_diff(*tx_rec.transaction_id(), diff) {
+                    warn!(
+                        target: LOG_TARGET,
+                        "🔒 Transaction {} cannot be locked for LocalOnly: {}. Proposing to ABORT...",
+                        tx_rec.transaction_id(),
+                        err,
+                    );
+                    // Only error if it is not related to lock errors
+                    let _err = err.ok_or_fatal_error()?;
+                    // If the transaction does not lock, we propose to abort it
+                    return Ok(Some(Command::LocalOnly(tx_atom.abort())));
+                }
             }
             return Ok(Some(Command::LocalOnly(tx_atom)));
         }
@@ -512,9 +523,9 @@ where TConsensusSpec: ConsensusSpec
 
         let pending_tree_diffs =
             PendingStateTreeDiff::get_all_up_to_commit_block(tx, high_qc.epoch(), high_qc.shard(), high_qc.block_id())?;
-
+        let store = ChainScopedTreeStore::new(epoch, local_committee_info.shard(), tx);
         let (state_root, _) = calculate_state_merkle_diff(
-            tx,
+            &store,
             current_version,
             next_height.as_u64(),
             pending_tree_diffs,

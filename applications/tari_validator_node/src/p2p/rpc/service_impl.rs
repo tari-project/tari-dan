@@ -57,7 +57,6 @@ use tari_dan_storage::{
         TransactionRecord,
     },
     StateStore,
-    StorageError,
 };
 use tari_engine_types::virtual_substate::VirtualSubstateId;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
@@ -377,7 +376,6 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
                 self.shard_state_store.clone(),
                 sender,
                 last_state_transition_for_chain,
-                current_shard,
                 current_epoch,
             )
             .run(),

@@ -17,9 +17,12 @@ pub async fn check_proposal<TConsensusSpec: ConsensusSpec>(
     epoch_manager: &TConsensusSpec::EpochManager,
     vote_signing_service: &TConsensusSpec::SignatureService,
     leader_strategy: &TConsensusSpec::LeaderStrategy,
-    config: &HotstuffConfig,
+    _config: &HotstuffConfig,
 ) -> Result<(), HotStuffError> {
-    check_base_layer_block_hash::<TConsensusSpec>(block, epoch_manager, config).await?;
+    // TODO: in order to do the base layer block has validation, we need to ensure that we have synced to the tip.
+    //       If not, we need some strategy for "parking" the blocks until we are at least at the provided hash or the
+    //       tip. Without this, the check has a race condition between the base layer scanner and consensus.
+    // check_base_layer_block_hash::<TConsensusSpec>(block, epoch_manager, config).await?;
     check_network(block, network)?;
     check_hash_and_height(block)?;
     let committee_for_block = epoch_manager
@@ -42,6 +45,8 @@ pub fn check_network(candidate_block: &Block, network: Network) -> Result<(), Pr
     Ok(())
 }
 
+// TODO: remove allow(dead_code)
+#[allow(dead_code)]
 pub async fn check_base_layer_block_hash<TConsensusSpec: ConsensusSpec>(
     block: &Block,
     epoch_manager: &TConsensusSpec::EpochManager,

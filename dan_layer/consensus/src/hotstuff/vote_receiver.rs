@@ -78,6 +78,10 @@ where TConsensusSpec: ConsensusSpec
         message: VoteMessage,
         check_leadership: bool,
     ) -> Result<bool, HotStuffError> {
+        info!(
+            target: LOG_TARGET,
+            "📬 Received vote {message}"
+        );
         // Is a local committee member that signed this vote?
         let sender_vn = self
             .epoch_manager

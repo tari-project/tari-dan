@@ -217,7 +217,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
         start_block: &BlockId,
         end_block: &BlockId,
     ) -> Result<Vec<String>, SqliteStorageError> {
-        error!(target: LOG_TARGET, "get_block_ids_between: {epoch} {shard} start: {start_block}, end: {end_block}");
+        debug!(target: LOG_TARGET, "get_block_ids_between: {epoch} {shard} start: {start_block}, end: {end_block}");
         let block_ids = sql_query(
             r#"
             WITH RECURSIVE tree(bid, parent) AS (
@@ -752,14 +752,10 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
     ) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
-        let mut block_ids =
-            self.get_block_ids_between(epoch, shard, start_block_id_exclusive, end_block_id_inclusive)?;
+        let block_ids = self.get_block_ids_between(epoch, shard, start_block_id_exclusive, end_block_id_inclusive)?;
         if block_ids.is_empty() {
             return Ok(vec![]);
         }
-
-        // Exclude start block
-        block_ids.pop();
 
         let mut query = blocks::table
             .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
@@ -1963,7 +1959,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         // Get the last committed block
         let committed_block_id = self.get_commit_block_id()?;
 
-        let mut block_ids = self.get_block_ids_between(epoch, shard, &committed_block_id, block_id)?;
+        let block_ids = self.get_block_ids_between(epoch, shard, &committed_block_id, block_id)?;
 
         if block_ids.is_empty() {
             return Ok(Vec::new());
@@ -1985,6 +1981,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         &self,
         n: usize,
         id: StateTransitionId,
+        end_epoch: Epoch,
     ) -> Result<Vec<StateTransition>, StorageError> {
         use crate::schema::{state_transitions, substates};
 
@@ -2006,6 +2003,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .left_join(substates::table.on(state_transitions::substate_address.eq(substates::address)))
             .select((state_transitions::all_columns, substates::all_columns.nullable()))
             .filter(state_transitions::id.gt(start_id))
+            .filter(state_transitions::epoch.lt(end_epoch.as_u64() as i64))
             .limit(n as i64)
             .get_results::<(sql_models::StateTransition, Option<sql_models::SubstateRecord>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {

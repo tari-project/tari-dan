@@ -1,10 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    cmp,
-    fmt::{Debug, Formatter},
-};
+use std::fmt::{Debug, Formatter};
 
 use log::*;
 use tari_common::configuration::Network;
@@ -15,7 +12,6 @@ use tari_dan_storage::{
         BlockDiff,
         ExecutedTransaction,
         HighQc,
-        LastVoted,
         LeafBlock,
         TransactionAtom,
         TransactionPool,
@@ -217,14 +213,15 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
         self.create_zero_block_if_required(current_epoch, committee_info.shard())?;
 
+        // Resume pacemaker from the last epoch/height
         let (current_epoch, current_height, high_qc) = self.state_store.with_read_tx(|tx| {
             let leaf = LeafBlock::get(tx)?;
-            let last_voted = LastVoted::get(tx)?;
-            Ok::<_, HotStuffError>((
-                leaf.epoch(),
-                cmp::max(leaf.height(), last_voted.height()),
-                HighQc::get(tx)?,
-            ))
+            let current_epoch = Some(leaf.epoch()).filter(|e| !e.is_zero()).unwrap_or(current_epoch);
+            let current_height = Some(leaf.height())
+                .filter(|h| !h.is_zero())
+                .unwrap_or_else(NodeHeight::zero);
+
+            Ok::<_, HotStuffError>((current_epoch, current_height, HighQc::get(tx)?))
         })?;
 
         info!(
@@ -341,7 +338,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         match self.on_message_validate.handle(current_height, from, msg).await? {
             MessageValidationResult::Ready { from, message: msg } => {
                 if let Err(e) = self.dispatch_hotstuff_message(from, msg).await {
-                    self.on_failure("on_message_validate", &e).await;
+                    self.on_failure("on_unvalidated_message -> dispatch_hotstuff_message", &e)
+                        .await;
                     return Err(e);
                 }
                 Ok(())
@@ -397,7 +395,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             .await?
         {
             if let Err(e) = self.dispatch_hotstuff_message(from, msg).await {
-                self.on_failure("dispatch_hotstuff_message", &e).await;
+                self.on_failure("on_new_transaction -> dispatch_hotstuff_message", &e)
+                    .await;
                 return Err(e);
             }
         }
@@ -554,48 +553,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage,
     ) -> Result<(), HotStuffError> {
-        // let (from, msg) = match result {
-        //     Ok(Some(msg)) => msg,
-        //     Ok(None) => return Ok(()),
-        //     Err(NeedsSync {
-        //         from,
-        //         local_height,
-        //         qc_height,
-        //         remote_epoch,
-        //         local_epoch,
-        //     }) => {
-        //         self.hooks.on_needs_sync(local_height, qc_height);
-        //         if remote_epoch > local_epoch {
-        //             warn!(
-        //                 target: LOG_TARGET,
-        //                 "⚠️ Node is behind by more than an epoch from peer {} (local epoch: {}, height: {}, qc height:
-        // {})",                 from,
-        //                 local_epoch,
-        //                 local_height,
-        //                 qc_height
-        //             );
-        //             return Err(HotStuffError::FallenBehind {
-        //                 local_height,
-        //                 qc_height,
-        //             });
-        //         }
-        //         self.on_catch_up_sync.request_sync(&from).await?;
-        //         return Ok(());
-        //     },
-        // };
-
-        // if !self
-        //     .epoch_manager
-        //     .is_this_validator_registered_for_epoch(msg.epoch())
-        //     .await?
-        // {
-        //     warn!(
-        //         target: LOG_TARGET,
-        //         "Received message for inactive epoch: {}", msg.epoch()
-        //     );
-        //     return Ok(());
-        // }
-
         // TODO: check the message comes from a local committee member (except foreign proposals which must come from a
         //       registered node)
         match msg {
@@ -623,7 +580,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                         self.on_catch_up_sync.request_sync(current_epoch, &from).await?;
                         Ok(())
                     },
-                    Err(err) => return Err(err),
+                    Err(err) => Err(err),
                 }
             },
             HotstuffMessage::ForeignProposal(msg) => log_err(
@@ -669,18 +626,18 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 zero_block.commit_diff(tx, BlockDiff::empty(*zero_block.id()))?;
             }
 
-            // let genesis = Block::genesis(self.network, epoch, shard);
-            // if !genesis.exists(&**tx)? {
-            //     info!(target: LOG_TARGET, "✨Creating genesis block {genesis}");
-            //     // genesis.justify().insert(tx)?;
-            //     genesis.insert(tx)?;
-            //     genesis.as_locked_block().set(tx)?;
-            //     genesis.as_leaf_block().set(tx)?;
-            //     genesis.as_last_executed().set(tx)?;
-            //     genesis.as_last_voted().set(tx)?;
-            //     genesis.justify().as_high_qc().set(tx)?;
-            //     genesis.commit_diff(tx, BlockDiff::empty(*genesis.id()))?;
-            // }
+            let genesis = Block::genesis(self.network, epoch, shard);
+            if !genesis.exists(&**tx)? {
+                info!(target: LOG_TARGET, "✨Creating genesis block {genesis}");
+                // No genesis.justify() insert because that is the zero block justify
+                genesis.insert(tx)?;
+                genesis.as_locked_block().set(tx)?;
+                genesis.as_leaf_block().set(tx)?;
+                genesis.as_last_executed().set(tx)?;
+                genesis.as_last_voted().set(tx)?;
+                genesis.justify().as_high_qc().set(tx)?;
+                genesis.commit_diff(tx, BlockDiff::empty(*genesis.id()))?;
+            }
 
             Ok(())
         })
