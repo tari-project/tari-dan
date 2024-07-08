@@ -12,12 +12,7 @@ pub trait ValidatorSignatureService {
 }
 
 pub trait VoteSignatureService: ValidatorSignatureService {
-    fn create_challenge(
-        &self,
-        voter_leaf_hash: &FixedHash,
-        block_id: &BlockId,
-        decision: &QuorumDecision,
-    ) -> FixedHash {
+    fn create_message(&self, voter_leaf_hash: &FixedHash, block_id: &BlockId, decision: &QuorumDecision) -> FixedHash {
         vote_signature_hasher()
             .chain(voter_leaf_hash)
             .chain(block_id)
@@ -26,8 +21,8 @@ pub trait VoteSignatureService: ValidatorSignatureService {
     }
 
     fn sign_vote(&self, leaf_hash: &FixedHash, block_id: &BlockId, decision: &QuorumDecision) -> ValidatorSignature {
-        let challenge = self.create_challenge(leaf_hash, block_id, decision);
-        let signature = self.sign(challenge);
+        let message = self.create_message(leaf_hash, block_id, decision);
+        let signature = self.sign(message);
         ValidatorSignature::new(self.public_key().clone(), signature)
     }
 
