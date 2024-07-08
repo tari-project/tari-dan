@@ -142,18 +142,18 @@ where TConsensusSpec: ConsensusSpec
         let local_committee_info = self.epoch_manager.get_local_committee_info(epoch).await?;
         let (current_base_layer_block_height, current_base_layer_block_hash) =
             self.epoch_manager.current_base_layer_block_info().await?;
-        let high_qc = self.store.with_read_tx(|tx| HighQc::get(tx))?;
 
         let base_layer_block_hash = current_base_layer_block_hash;
         let base_layer_block_height = current_base_layer_block_height;
 
         let next_block = self.store.with_write_tx(|tx| {
-            let high_qc = high_qc.get_quorum_certificate(&**tx)?;
+            let high_qc = HighQc::get(&**tx)?;
+            let high_qc_cert = high_qc.get_quorum_certificate(&**tx)?;
             let (next_block, executed_transactions) = self.build_next_block(
                 tx,
                 epoch,
                 &leaf_block,
-                high_qc,
+                high_qc_cert,
                 validator.public_key,
                 &local_committee_info,
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this

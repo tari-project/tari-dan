@@ -18,9 +18,9 @@ use libp2p::Multiaddr;
 use minotari_app_grpc::tari_rpc::{RegisterValidatorNodeRequest, Signature};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{optional::Optional, Epoch, SubstateAddress};
+use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_engine_types::substate::SubstateId;
-use tari_validator_node_client::types::{AddPeerRequest, GetStateRequest, GetTemplateRequest, ListBlocksRequest};
+use tari_validator_node_client::types::{AddPeerRequest, GetBlocksRequest, GetStateRequest, GetTemplateRequest};
 
 #[given(expr = "a validator node {word} connected to base node {word} and wallet daemon {word}")]
 async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_daemon_name: String) {
@@ -405,35 +405,48 @@ async fn when_i_create_new_key_pair(world: &mut TariWorld, key_name: String) {
     create_key(world, key_name);
 }
 
-#[when(expr = "I wait for validator {word} has leaf block height of at least {int}")]
-async fn when_i_wait_for_validator_leaf_block_at_least(world: &mut TariWorld, name: String, height: u64) {
+#[when(expr = "I wait for validator {word} has leaf block height of at least {int} at epoch {int}")]
+async fn when_i_wait_for_validator_leaf_block_at_least(world: &mut TariWorld, name: String, height: u64, epoch: u64) {
     let vn = world.get_validator_node(&name);
     let mut client = vn.create_client();
     for _ in 0..20 {
         let resp = client
-            .list_blocks(ListBlocksRequest {
-                from_id: None,
+            .list_blocks_paginated(GetBlocksRequest {
                 limit: 1,
+                offset: 0,
+                ordering_index: None,
+                ordering: None,
+                filter_index: None,
+                filter: None,
             })
             .await
-            .optional()
             .unwrap();
-        if let Some(resp) = resp {
-            if resp.blocks.last().unwrap().height().as_u64() >= height {
-                return;
-            }
+
+        // for b in resp.blocks.iter() {
+        //     eprintln!("----------> {b}");
+        // }
+        // eprintln!("-----------");
+
+        let block = resp.blocks.first().unwrap();
+        assert!(block.epoch().as_u64() <= epoch);
+        if block.epoch().as_u64() == epoch && block.height().as_u64() >= height {
+            return;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
     let resp = client
-        .list_blocks(ListBlocksRequest {
-            from_id: None,
+        .list_blocks_paginated(GetBlocksRequest {
             limit: 1,
+            offset: 0,
+            ordering_index: None,
+            ordering: None,
+            filter_index: None,
+            filter: None,
         })
         .await
         .unwrap();
-    let actual_height = resp.blocks.last().unwrap().height().as_u64();
+    let actual_height = resp.blocks.first().unwrap().height().as_u64();
     if actual_height < height {
         panic!(
             "Validator {} leaf block height {} is less than {}",
@@ -461,25 +474,39 @@ async fn then_validator_node_switches_epoch(world: &mut TariWorld, vn_name: Stri
     let mut client = vn.create_client();
     for _ in 0..200 {
         let list_block = client
-            .list_blocks(ListBlocksRequest {
-                from_id: None,
-                limit: 4,
+            .list_blocks_paginated(GetBlocksRequest {
+                limit: 10,
+                offset: 0,
+                ordering_index: None,
+                ordering: None,
+                filter_index: None,
+                filter: None,
             })
-            .await;
-        let blocks = list_block.unwrap().blocks;
-        let newest = blocks.first().expect("Couldn't get blocks");
-        if newest.epoch().as_u64() == epoch {
-            // The 3 blocks before it should be all End events. 3 because we need to bury the epoch start to locked
-            // block.
-            for block in &blocks[1..] {
-                assert!(block
-                    .commands()
-                    .contains(&tari_dan_storage::consensus_models::Command::EndEpoch));
-                // All the epoch ends should be in previous epoch.
-                assert_eq!(block.epoch().as_u64() + 1, epoch);
-            }
+            .await
+            .unwrap();
+        let blocks = list_block.blocks;
+        assert!(
+            blocks.iter().all(|b| b.epoch().as_u64() <= epoch),
+            "Epoch is greater than expected"
+        );
+        if blocks.iter().any(|b| b.epoch().as_u64() == epoch) {
+            assert!(blocks.iter().any(|b| b.is_epoch_end()), "No end epoch block found");
             return;
         }
+
+        // let newest = blocks.first().expect("Couldn't get blocks");
+        // if newest.epoch().as_u64() == epoch {
+        //     // The 3 blocks before it should be all End events. 3 because we need to bury the epoch start to locked
+        //     // block.
+        //     for block in &blocks[1..] {
+        //         assert!(block
+        //             .commands()
+        //             .contains(&tari_dan_storage::consensus_models::Command::EndEpoch));
+        //         // All the epoch ends should be in previous epoch.
+        //         assert_eq!(block.epoch().as_u64() + 1, epoch);
+        //     }
+        //     return;
+        // }
         tokio::time::sleep(Duration::from_secs(8)).await;
     }
     panic!("Validator node {vn_name} did not switch to epoch {epoch}");

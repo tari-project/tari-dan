@@ -320,8 +320,8 @@ impl Block {
             .chain(&self.commands)
             .chain(&self.foreign_indexes)
             .chain(&self.timestamp)
-            .chain(&self.base_layer_block_height)
-            .chain(&self.base_layer_block_hash)
+            // .chain(&self.base_layer_block_height)
+            // .chain(&self.base_layer_block_hash)
             .result();
 
         hashing::block_hasher().chain(&self.parent).chain(&inner_hash).result()
@@ -681,6 +681,13 @@ impl Block {
     }
 
     pub fn get_parent<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
+        if self.id.is_zero() && self.parent.is_zero() {
+            return Err(StorageError::NotFound {
+                item: "Block parent".to_string(),
+                key: self.parent.to_string(),
+            });
+        }
+
         Block::get(tx, &self.parent)
     }
 

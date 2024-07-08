@@ -131,11 +131,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         self.update_base_layer_consensus_constants(base_layer_constants)?;
         self.assign_validators_for_epoch(epoch)?;
 
-        // Only publish an epoch change event if we have synced the base layer (see on_scanning_complete)
-        if self.is_initial_base_layer_sync_complete {
-            self.publish_event(EpochManagerEvent::EpochChanged(epoch));
-        }
-
         Ok(())
     }
 
@@ -513,12 +508,13 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
                 target: LOG_TARGET,
                 "🌟 Initial base layer sync complete. Current epoch is {}", self.current_epoch
             );
-            self.publish_event(EpochManagerEvent::EpochChanged(self.current_epoch));
             self.is_initial_base_layer_sync_complete = true;
             for reply in self.waiting_for_scanning_complete.drain(..) {
                 let _ignore = reply.send(Ok(()));
             }
         }
+
+        self.publish_event(EpochManagerEvent::EpochChanged(self.current_epoch));
 
         Ok(())
     }

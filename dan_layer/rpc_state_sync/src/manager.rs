@@ -287,11 +287,11 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
         for (shard, mut committee) in prev_epoch_committees {
             info!(target: LOG_TARGET, "🛜Syncing state for shard {shard} for epoch {}", current_epoch.saturating_sub(Epoch(1)));
             committee.shuffle();
-            for addr in committee.members() {
-                if our_vn.address == *addr {
+            for (addr, public_key) in committee {
+                if our_vn.public_key == public_key {
                     continue;
                 }
-                let mut client = match self.establish_rpc_session(addr).await {
+                let mut client = match self.establish_rpc_session(&addr).await {
                     Ok(c) => c,
                     Err(err) => {
                         warn!(

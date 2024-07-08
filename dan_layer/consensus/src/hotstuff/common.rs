@@ -89,6 +89,68 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
     Some(parent_block)
 }
 
+pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
+    network: Network,
+    epoch: Epoch,
+    shard: Shard,
+    high_qc: &QuorumCertificate,
+    parent_merkle_root: FixedHash,
+    new_height: NodeHeight,
+    leader_strategy: &TLeaderStrategy,
+    local_committee: &Committee<TAddr>,
+    parent_timestamp: u64,
+    parent_base_layer_block_height: u64,
+    parent_base_layer_block_hash: FixedHash,
+) -> Option<LeafBlock> {
+    let mut parent_block = high_qc.as_leaf_block();
+    let mut current_height = high_qc.block_height() + NodeHeight(1);
+    if current_height > new_height {
+        warn!(
+            target: LOG_TARGET,
+            "BUG: 🍼 no dummy blocks to calculate. current height {} is greater than new height {}",
+            current_height,
+            new_height,
+        );
+        return None;
+    }
+
+    debug!(
+        target: LOG_TARGET,
+        "🍼 calculating dummy blocks from {} to {}",
+        current_height,
+        new_height,
+    );
+    loop {
+        let leader = leader_strategy.get_leader_public_key(local_committee, current_height);
+        let dummy_block = Block::dummy_block(
+            network,
+            *parent_block.block_id(),
+            leader.clone(),
+            current_height,
+            high_qc.clone(),
+            epoch,
+            shard,
+            parent_merkle_root,
+            parent_timestamp,
+            parent_base_layer_block_height,
+            parent_base_layer_block_hash,
+        );
+        debug!(
+            target: LOG_TARGET,
+            "🍼 new dummy block: {}",
+            dummy_block,
+        );
+        parent_block = dummy_block.as_leaf_block();
+
+        if current_height == new_height {
+            break;
+        }
+        current_height += NodeHeight(1);
+    }
+
+    Some(parent_block)
+}
+
 pub fn diff_to_substate_changes(diff: &SubstateDiff) -> impl Iterator<Item = SubstateTreeChange> + '_ {
     diff.down_iter()
         .map(|(substate_id, _version)| SubstateTreeChange::Down {

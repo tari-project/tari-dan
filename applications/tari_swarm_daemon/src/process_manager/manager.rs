@@ -224,7 +224,7 @@ impl ProcessManager {
             // inputs for a transaction.
             sleep(Duration::from_secs(2)).await;
         }
-        self.mine(20).await?;
+        self.mine(10).await?;
         Ok(())
     }
 
