@@ -56,7 +56,7 @@ impl ProcessManager {
 
         let num_vns = self.instance_manager.num_validator_nodes();
         // Mine some initial funds, guessing 10 blocks to allow for coinbase maturity
-        self.mine(num_vns + 5).await?;
+        self.mine(num_vns + 10).await?;
         self.wait_for_wallet_funds(num_vns).await?;
 
         self.register_all_validator_nodes().await?;
@@ -219,7 +219,7 @@ impl ProcessManager {
 
             let reg_info = vn.get_registration_info().await?;
             let tx_id = wallet.register_validator_node(reg_info).await?;
-            info!("🟢 Registered validator node with tx_id: {tx_id}");
+            info!("🟢 Registered validator node {vn} with tx_id: {tx_id}");
             // Just wait a bit :shrug: This could be a bug in the console wallet. If we submit too quickly it uses 0
             // inputs for a transaction.
             sleep(Duration::from_secs(2)).await;

@@ -494,19 +494,6 @@ async fn then_validator_node_switches_epoch(world: &mut TariWorld, vn_name: Stri
             return;
         }
 
-        // let newest = blocks.first().expect("Couldn't get blocks");
-        // if newest.epoch().as_u64() == epoch {
-        //     // The 3 blocks before it should be all End events. 3 because we need to bury the epoch start to locked
-        //     // block.
-        //     for block in &blocks[1..] {
-        //         assert!(block
-        //             .commands()
-        //             .contains(&tari_dan_storage::consensus_models::Command::EndEpoch));
-        //         // All the epoch ends should be in previous epoch.
-        //         assert_eq!(block.epoch().as_u64() + 1, epoch);
-        //     }
-        //     return;
-        // }
         tokio::time::sleep(Duration::from_secs(8)).await;
     }
     panic!("Validator node {vn_name} did not switch to epoch {epoch}");

@@ -32,6 +32,7 @@ use tokio::sync::broadcast;
 use super::proposer::Proposer;
 use crate::{
     hotstuff::{
+        calculate_dummy_blocks,
         current_view::CurrentView,
         error::HotStuffError,
         on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
@@ -515,7 +516,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         candidate_block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
-        local_committee_info: &CommitteeInfo,
+        _local_committee_info: &CommitteeInfo,
     ) -> Result<ValidBlock, HotStuffError> {
         if Block::has_been_processed(tx, candidate_block.id())? {
             return Err(ProposalValidationError::BlockAlreadyProcessed {
@@ -572,47 +573,29 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         //     justify_block.id(),
         // )?;
 
-        let justify_block_height = justify_block.height();
         // if the block parent is not the justify parent, then we have experienced a leader failure
         // and should make dummy blocks to fill in the gaps.
-        if justify_block.id() != candidate_block.parent() {
-            let mut dummy_blocks =
-                Vec::with_capacity((candidate_block.height().as_u64() - justify_block_height.as_u64() - 1) as usize);
-            let timestamp = justify_block.timestamp();
-            let base_layer_block_height = justify_block.base_layer_block_height();
-            let base_layer_block_hash = *justify_block.base_layer_block_hash();
-            dummy_blocks.push(justify_block);
-            let mut last_dummy_block = dummy_blocks.last().unwrap();
+        if !candidate_block.justifies_parent() {
+            let dummy_blocks =
+                calculate_dummy_blocks(&candidate_block, &justify_block, &self.leader_strategy, local_committee);
 
-            while last_dummy_block.id() != candidate_block.parent() {
-                if last_dummy_block.height() > candidate_block.height() {
-                    warn!(target: LOG_TARGET, "❌ Bad proposal, unable to find dummy blocks (last dummy: {}) for candidate block {}", last_dummy_block, candidate_block);
-                    return Err(ProposalValidationError::CandidateBlockDoesNotExtendJustify {
-                        justify_block_height,
+            let Some(last_dummy) = dummy_blocks.last() else {
+                warn!(target: LOG_TARGET, "❌ Bad proposal, does not justify parent for candidate block {}", candidate_block);
+                return Err(
+                    ProposalValidationError::CandidateBlockDoesNotExtendJustify {
+                        justify_block_height: justify_block.height(),
                         candidate_block_height: candidate_block.height(),
-                    }
-                    .into());
+                    }.into()
+                );
+            };
+
+            if candidate_block.parent() != last_dummy.id() {
+                warn!(target: LOG_TARGET, "❌ Bad proposal, unable to find dummy blocks (last dummy: {}) for candidate block {}", last_dummy, candidate_block);
+                return Err(ProposalValidationError::CandidateBlockDoesNotExtendJustify {
+                    justify_block_height: justify_block.height(),
+                    candidate_block_height: candidate_block.height(),
                 }
-
-                let next_height = last_dummy_block.height() + NodeHeight(1);
-                let leader = self.leader_strategy.get_leader_public_key(local_committee, next_height);
-
-                // TODO: replace with actual leader's propose
-                dummy_blocks.push(Block::dummy_block(
-                    self.network,
-                    *last_dummy_block.id(),
-                    leader.clone(),
-                    next_height,
-                    candidate_block.justify().clone(),
-                    candidate_block.epoch(),
-                    local_committee_info.shard(),
-                    *candidate_block.merkle_root(),
-                    timestamp,
-                    base_layer_block_height,
-                    base_layer_block_hash,
-                ));
-                last_dummy_block = dummy_blocks.last().unwrap();
-                debug!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", last_dummy_block, leader);
+                .into());
             }
 
             // The logic for not checking is_safe is as follows:

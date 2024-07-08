@@ -4,7 +4,6 @@
 use log::{info, warn};
 use tari_dan_common_types::Epoch;
 use tari_dan_storage::{consensus_models::HighQc, StateStore};
-use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
     hotstuff::{pacemaker_handle::PaceMakerHandle, HotStuffError},
@@ -18,7 +17,6 @@ pub struct OnCatchUpSync<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     pacemaker: PaceMakerHandle,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
-    epoch_manager: TConsensusSpec::EpochManager,
 }
 
 impl<TConsensusSpec: ConsensusSpec> OnCatchUpSync<TConsensusSpec> {
@@ -26,13 +24,11 @@ impl<TConsensusSpec: ConsensusSpec> OnCatchUpSync<TConsensusSpec> {
         store: TConsensusSpec::StateStore,
         pacemaker: PaceMakerHandle,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
-        epoch_manager: TConsensusSpec::EpochManager,
     ) -> Self {
         Self {
             store,
             pacemaker,
             outbound_messaging,
-            epoch_manager,
         }
     }
 
@@ -50,16 +46,12 @@ impl<TConsensusSpec: ConsensusSpec> OnCatchUpSync<TConsensusSpec> {
             .reset_view(epoch, high_qc.block_height(), high_qc.block_height)
             .await?;
 
-        let current_epoch = self.epoch_manager.current_epoch().await?;
         // Request a catch-up
         if self
             .outbound_messaging
             .send(
                 from.clone(),
-                HotstuffMessage::CatchUpSyncRequest(SyncRequestMessage {
-                    epoch: current_epoch,
-                    high_qc,
-                }),
+                HotstuffMessage::CatchUpSyncRequest(SyncRequestMessage { epoch, high_qc }),
             )
             .await
             .is_err()

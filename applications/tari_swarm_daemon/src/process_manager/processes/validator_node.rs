@@ -1,7 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::time::Duration;
+use std::{fmt::Display, time::Duration};
 
 use anyhow::{anyhow, Context};
 use serde::{Deserialize, Serialize};
@@ -86,6 +86,12 @@ impl ValidatorNodeProcess {
             .context("Failed to load registration.json")?;
         let reg = json5::from_str(&info)?;
         Ok(reg)
+    }
+}
+
+impl Display for ValidatorNodeProcess {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ({})", self.instance().name(), self.instance().id())
     }
 }
 

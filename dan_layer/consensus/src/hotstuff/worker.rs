@@ -188,12 +188,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             ),
 
             on_sync_request: OnSyncRequest::new(state_store.clone(), outbound_messaging.clone()),
-            on_catch_up_sync: OnCatchUpSync::new(
-                state_store.clone(),
-                pacemaker.clone_handle(),
-                outbound_messaging,
-                epoch_manager.clone(),
-            ),
+            on_catch_up_sync: OnCatchUpSync::new(state_store.clone(), pacemaker.clone_handle(), outbound_messaging),
 
             state_store,
             leader_strategy,
@@ -252,9 +247,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
         let mut epoch_manager_events = self.epoch_manager.subscribe().await?;
 
-        self.request_initial_catch_up_sync().await?;
-
         let mut prev_height = self.pacemaker.current_view().get_height();
+        let current_epoch = self.pacemaker.current_view().get_epoch();
+        self.request_initial_catch_up_sync(current_epoch).await?;
+
         loop {
             let current_height = self.pacemaker.current_view().get_height() + NodeHeight(1);
             let current_epoch = self.pacemaker.current_view().get_epoch();
@@ -305,7 +301,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 },
 
                 new_height = on_leader_timeout.wait() => {
-                    if let Err(e) = self.on_leader_timeout(new_height).await {
+                    if let Err(e) = self.on_leader_timeout(current_epoch, new_height).await {
                         self.on_failure("on_leader_timeout", &e).await;
                         return Err(e);
                     }
@@ -438,8 +434,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         Ok(())
     }
 
-    async fn request_initial_catch_up_sync(&mut self) -> Result<(), HotStuffError> {
-        let current_epoch = self.epoch_manager.current_epoch().await?;
+    async fn request_initial_catch_up_sync(&mut self, current_epoch: Epoch) -> Result<(), HotStuffError> {
         let committee = self.epoch_manager.get_local_committee(current_epoch).await?;
         for member in committee.shuffled() {
             if *member != self.validator_addr {
@@ -477,9 +472,9 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         }
     }
 
-    async fn on_leader_timeout(&mut self, new_height: NodeHeight) -> Result<(), HotStuffError> {
+    async fn on_leader_timeout(&mut self, current_epoch: Epoch, new_height: NodeHeight) -> Result<(), HotStuffError> {
         self.hooks.on_leader_timeout(new_height);
-        self.on_next_sync_view.handle(new_height).await?;
+        self.on_next_sync_view.handle(current_epoch, new_height).await?;
         self.publish_event(HotstuffEvent::LeaderTimeout { new_height });
         Ok(())
     }
@@ -562,6 +557,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             ),
             HotstuffMessage::Proposal(msg) => {
                 let current_view = self.pacemaker.current_view().clone();
+                let current_epoch = current_view.get_epoch();
                 match log_err(
                     "on_receive_local_proposal",
                     self.on_receive_local_proposal.handle(current_view, msg).await,
@@ -576,7 +572,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                             target: LOG_TARGET,
                             "⚠️This node has fallen behind due to a missing justified block: {err}"
                         );
-                        let current_epoch = self.epoch_manager.current_epoch().await?;
                         self.on_catch_up_sync.request_sync(current_epoch, &from).await?;
                         Ok(())
                     },
