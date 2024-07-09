@@ -24,7 +24,7 @@ impl MinotariMiner {
 impl ProcessDefinition for MinotariMiner {
     async fn get_command(&self, context: ProcessContext<'_>) -> anyhow::Result<Command> {
         let mut command = Command::new(context.bin());
-        let local_ip = context.local_ip();
+        let listen_ip = context.listen_ip();
         let base_node = context
             .minotari_nodes()
             .next()
@@ -60,7 +60,7 @@ impl ProcessDefinition for MinotariMiner {
             .arg(format!("--max-blocks={max_blocks}"))
             .arg(format!("-pminer.wallet_payment_address={wallet_payment_address}"))
             .arg(format!(
-                "-pminer.base_node_grpc_address=/ip4/{local_ip}/tcp/{base_node_grpc_port}",
+                "-pminer.base_node_grpc_address=/ip4/{listen_ip}/tcp/{base_node_grpc_port}",
             ))
             .arg("-pminer.num_mining_threads=1");
 

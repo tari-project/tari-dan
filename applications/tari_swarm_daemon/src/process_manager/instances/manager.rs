@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use log::info;
 use tari_common::configuration::Network;
 use tokio::{
@@ -114,7 +114,12 @@ impl InstanceManager {
         extra_args: HashMap<String, String>,
         ports: Option<AllocatedPorts>,
     ) -> anyhow::Result<InstanceId> {
-        let local_ip = IpAddr::V4(Ipv4Addr::from([127, 0, 0, 1]));
+        let listen_ip = extra_args
+            .get("listen_ip")
+            .map(|s| s.parse())
+            .transpose()
+            .context("Failed to parse listen_ip arg")?
+            .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::from([127, 0, 0, 1])));
         let definition = get_definition(instance_type);
 
         log::info!(
@@ -137,7 +142,7 @@ impl InstanceManager {
             &executable.path,
             base_path.clone(),
             self.network,
-            local_ip,
+            listen_ip,
             &mut allocated_ports,
             self,
             &extra_args,
