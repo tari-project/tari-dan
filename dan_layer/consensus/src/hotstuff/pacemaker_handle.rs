@@ -81,6 +81,10 @@ impl PaceMakerHandle {
         self.on_beat.clone()
     }
 
+    pub fn on_beat(&self) {
+        self.on_beat.beat()
+    }
+
     pub fn get_on_force_beat(&self) -> OnForceBeat {
         self.on_force_beat.clone()
     }

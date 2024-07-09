@@ -483,7 +483,7 @@ where TConsensusSpec: ConsensusSpec
                     foreign_proposal.base_layer_block_height <= base_layer_block_height &&
                         // If the foreign proposal is already pending, don't propose it again
                         !pending_proposals.iter().any(|pending_proposal| {
-                            pending_proposal.bucket == foreign_proposal.bucket &&
+                            pending_proposal.shard == foreign_proposal.shard &&
                                 pending_proposal.block_id == foreign_proposal.block_id
                         })
                 })

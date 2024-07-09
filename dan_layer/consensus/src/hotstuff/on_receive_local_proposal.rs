@@ -243,6 +243,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
                         // Set the pacemaker to next epoch
                         self.pacemaker.set_epoch(next_epoch).await?;
+                        self.pacemaker.on_beat();
                     } else {
                         info!(
                             target: LOG_TARGET,

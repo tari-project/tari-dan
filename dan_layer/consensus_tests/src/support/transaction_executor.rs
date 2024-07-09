@@ -32,7 +32,7 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
         if let Some(execution) = self.store.get(transaction.id()) {
             let mut rec = TransactionRecord::new(transaction);
-            rec.resolved_inputs = Some(execution.resolved_inputs().clone());
+            rec.resolved_inputs = Some(execution.resolved_inputs().to_vec());
             rec.result = Some(execution.result().clone());
             rec.resulting_outputs.clone_from(execution.resulting_outputs());
             rec.execution_time = Some(execution.execution_time());

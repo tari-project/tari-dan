@@ -43,7 +43,7 @@ impl Evidence {
 
     pub fn from_inputs_and_outputs(
         transaction_id: TransactionId,
-        resolved_inputs: &IndexSet<VersionedSubstateIdLockIntent>,
+        resolved_inputs: &[VersionedSubstateIdLockIntent],
         resulting_outputs: &[VersionedSubstateId],
     ) -> Self {
         let mut deduped_evidence = HashMap::new();

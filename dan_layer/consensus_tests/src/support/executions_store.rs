@@ -21,11 +21,12 @@ impl TestTransactionExecutionsStore {
         }
     }
 
-    pub fn insert(&self, execution: TransactionExecution) {
+    pub fn insert(&self, execution: TransactionExecution) -> &Self {
         self.transactions
             .write()
             .unwrap()
             .insert(*execution.transaction_id(), execution);
+        self
     }
 
     pub fn get(&self, transaction_id: &TransactionId) -> Option<TransactionExecution> {

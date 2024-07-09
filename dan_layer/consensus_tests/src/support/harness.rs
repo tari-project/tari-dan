@@ -274,22 +274,21 @@ impl Test {
         let mut attempts = 0usize;
         'outer: loop {
             for (shard, committee) in &committees {
-                let mut heights = self
+                let mut blocks = self
                     .validators
                     .values()
                     .filter(|vn| committee.contains(&vn.address))
                     .filter(|vn| !except.contains(&vn.address))
                     .map(|v| {
-                        let height = v
+                        let block = v
                             .state_store
                             .with_read_tx(|tx| tx.blocks_get_tip(current_epoch, *shard))
-                            .unwrap()
-                            .height();
-                        (v.address.clone(), height)
+                            .unwrap();
+                        (v.address.clone(), block)
                     });
-                let (first_addr, first) = heights.next().unwrap();
-                for (addr, height) in heights {
-                    if first != height && attempts < 5 {
+                let (first_addr, first) = blocks.next().unwrap();
+                for (addr, block) in blocks {
+                    if (first.epoch() != block.epoch() || first.height() != block.height()) && attempts < 5 {
                         attempts += 1;
                         // Send this task to the back of the queue and try again after other tasks have executed
                         // to allow validators to catch up
@@ -297,9 +296,13 @@ impl Test {
                         continue 'outer;
                     }
                     assert_eq!(
-                        first, height,
+                        first.id(),
+                        block.id(),
                         "Validator {} is at height {} but validator {} is at height {}",
-                        first_addr, first, addr, height
+                        first_addr,
+                        first,
+                        addr,
+                        block
                     );
                 }
             }
@@ -358,9 +361,9 @@ impl Test {
         });
     }
 
-    pub async fn assert_clean_shutdown(mut self) {
+    pub async fn assert_clean_shutdown(&mut self) {
         self.shutdown.trigger();
-        for v in self.validators.into_values() {
+        for (_, v) in self.validators.drain() {
             v.handle.await.unwrap();
         }
     }

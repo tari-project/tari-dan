@@ -707,7 +707,7 @@ where
             let num_committees = self.epoch_manager.get_num_committees(current_epoch).await?;
             let input_shards = executed
                 .resolved_inputs()
-                .into_iter()
+                .iter()
                 .map(|s| s.versioned_substate_id().to_committee_shard(num_committees))
                 .collect::<HashSet<_>>();
             let tx_substate_address = SubstateAddress::for_transaction_receipt(executed.id().into_receipt_address());

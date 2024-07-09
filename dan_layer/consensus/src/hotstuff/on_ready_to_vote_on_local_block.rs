@@ -228,7 +228,7 @@ where TConsensusSpec: ConsensusSpec
                     warn!(
                         target: LOG_TARGET,
                         "❌ Foreign proposal for block {block_id} from bucket {bucket} does not exist in the store",
-                        block_id = foreign_proposal.block_id,bucket = foreign_proposal.bucket
+                        block_id = foreign_proposal.block_id,bucket = foreign_proposal.shard
                     );
                     return Ok(proposed_block_change_set.no_vote());
                 }

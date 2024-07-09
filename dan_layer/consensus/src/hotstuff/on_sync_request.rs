@@ -71,7 +71,10 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
             });
 
             let blocks = match result {
-                Ok(blocks) => blocks,
+                Ok(mut blocks) => {
+                    blocks.retain(|b| !b.is_genesis());
+                    blocks
+                },
                 Err(err) => {
                     warn!(target: LOG_TARGET, "Failed to fetch blocks for sync request: {}", err);
                     return;
@@ -80,7 +83,7 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
 
             info!(
                 target: LOG_TARGET,
-                "🌐 Sending {} blocks ({} to {}) to {}",
+                "🌐 Sending {} block(s) ({} to {}) to {}",
                 blocks.len(),
                 blocks.first().map(|b| b.height()).unwrap_or_default(),
                 blocks.last().map(|b| b.height()).unwrap_or_default(),
@@ -103,7 +106,7 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                 }
             }
 
-            // Send last vote. TODO: This isn't quite
+            // Send last vote.
             let maybe_last_vote = match store.with_read_tx(|tx| LastSentVote::get(tx)).optional() {
                 Ok(last_vote) => last_vote,
                 Err(err) => {
@@ -119,16 +122,6 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     warn!(target: LOG_TARGET, "Failed to send LastVote {err}");
                 }
             }
-
-            // let _ignore = outbound_messaging
-            //     .send((
-            //         from,
-            //         HotstuffMessage::SyncResponse(SyncResponseMessage {
-            //             epoch: msg.epoch,
-            //             blocks,
-            //         }),
-            //     ))
-            //     .await;
         });
     }
 }

@@ -518,7 +518,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         use crate::schema::foreign_proposals;
 
         let values = (
-            foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32),
+            foreign_proposals::bucket.eq(foreign_proposal.shard.as_u32() as i32),
             foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)),
             foreign_proposals::state.eq(foreign_proposal.state.to_string()),
             foreign_proposals::proposed_height.eq(foreign_proposal.proposed_height.map(|h| h.as_u64() as i64)),
@@ -543,7 +543,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         use crate::schema::foreign_proposals;
 
         diesel::delete(foreign_proposals::table)
-            .filter(foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32))
+            .filter(foreign_proposals::bucket.eq(foreign_proposal.shard.as_u32() as i32))
             .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {

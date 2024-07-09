@@ -9,7 +9,6 @@ use std::{
     time::Duration,
 };
 
-use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{optional::Optional, SubstateAddress};
 use tari_engine_types::commit_result::ExecuteResult;
@@ -40,7 +39,7 @@ pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
     resulting_outputs: Vec<VersionedSubstateId>,
-    resolved_inputs: IndexSet<VersionedSubstateIdLockIntent>,
+    resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
     #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
     execution_time: Duration,
     final_decision: Option<Decision>,
@@ -53,7 +52,7 @@ impl ExecutedTransaction {
     pub fn new(
         transaction: Transaction,
         result: ExecuteResult,
-        resolved_inputs: IndexSet<VersionedSubstateIdLockIntent>,
+        resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
         resulting_outputs: Vec<VersionedSubstateId>,
         execution_time: Duration,
     ) -> Self {
@@ -144,7 +143,7 @@ impl ExecutedTransaction {
         &self.resulting_outputs
     }
 
-    pub fn resolved_inputs(&self) -> &IndexSet<VersionedSubstateIdLockIntent> {
+    pub fn resolved_inputs(&self) -> &[VersionedSubstateIdLockIntent] {
         &self.resolved_inputs
     }
 
@@ -153,7 +152,7 @@ impl ExecutedTransaction {
     ) -> (
         Transaction,
         ExecuteResult,
-        IndexSet<VersionedSubstateIdLockIntent>,
+        Vec<VersionedSubstateIdLockIntent>,
         Vec<VersionedSubstateId>,
     ) {
         (
@@ -403,6 +402,18 @@ impl VersionedSubstateIdLockIntent {
             versioned_substate_id,
             lock_flag: lock,
         }
+    }
+
+    pub fn read(versioned_substate_id: VersionedSubstateId) -> Self {
+        Self::new(versioned_substate_id, SubstateLockFlag::Read)
+    }
+
+    pub fn write(versioned_substate_id: VersionedSubstateId) -> Self {
+        Self::new(versioned_substate_id, SubstateLockFlag::Write)
+    }
+
+    pub fn output(versioned_substate_id: VersionedSubstateId) -> Self {
+        Self::new(versioned_substate_id, SubstateLockFlag::Output)
     }
 
     pub fn to_substate_address(&self) -> SubstateAddress {

@@ -451,7 +451,7 @@ impl TryFrom<proto::consensus::ForeignProposalState> for ForeignProposalState {
 impl From<&ForeignProposal> for proto::consensus::ForeignProposal {
     fn from(value: &ForeignProposal) -> Self {
         Self {
-            bucket: value.bucket.as_u32(),
+            bucket: value.shard.as_u32(),
             block_id: value.block_id.as_bytes().to_vec(),
             state: proto::consensus::ForeignProposalState::from(value.state).into(),
             mined_at: value.proposed_height.map(|a| a.0).unwrap_or(0),
@@ -466,7 +466,7 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
 
     fn try_from(value: proto::consensus::ForeignProposal) -> Result<Self, Self::Error> {
         Ok(ForeignProposal {
-            bucket: Shard::from(value.bucket),
+            shard: Shard::from(value.bucket),
             block_id: BlockId::try_from(value.block_id)?,
             state: proto::consensus::ForeignProposalState::try_from(value.state)
                 .map_err(|_| anyhow!("Invalid foreign proposal state value {}", value.state))?

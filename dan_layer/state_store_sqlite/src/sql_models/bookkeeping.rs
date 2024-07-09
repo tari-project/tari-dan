@@ -54,7 +54,7 @@ impl TryFrom<ForeignProposal> for consensus_models::ForeignProposal {
 
     fn try_from(value: ForeignProposal) -> Result<Self, Self::Error> {
         Ok(Self {
-            bucket: Shard::from(value.bucket as u32),
+            shard: Shard::from(value.bucket as u32),
             block_id: deserialize_hex_try_from(&value.block_id)?,
             state: parse_from_string(&value.state)?,
             proposed_height: value.mined_at.map(|mined_at| NodeHeight(mined_at as u64)),
