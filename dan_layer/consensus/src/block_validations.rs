@@ -169,7 +169,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     }
 
     for (sign, leaf) in qc.signatures().iter().zip(vns.iter()) {
-        let challenge = vote_signing_service.create_challenge(leaf, qc.block_id(), &qc.decision());
+        let challenge = vote_signing_service.create_message(leaf, qc.block_id(), &qc.decision());
         if !sign.verify(challenge) {
             return Err(ProposalValidationError::QCInvalidSignature { qc: qc.clone() }.into());
         }

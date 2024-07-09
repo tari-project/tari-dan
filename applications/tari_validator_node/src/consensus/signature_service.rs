@@ -36,7 +36,7 @@ impl VoteSignatureService for TariSignatureService {
         block_id: &BlockId,
         decision: &QuorumDecision,
     ) -> bool {
-        let challenge = self.create_challenge(leaf_hash, block_id, decision);
-        signature.verify(challenge)
+        let message = self.create_message(leaf_hash, block_id, decision);
+        signature.verify(message)
     }
 }
