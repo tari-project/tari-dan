@@ -44,7 +44,7 @@ impl ProcessDefinition for MinotariMiner {
             TariAddress::from_bytes(&address).expect("Invalid public key returned from console wallet");
 
         let max_blocks = context
-            .get_arg("max_blocks")
+            .get_setting("max_blocks")
             .map(|s| u64::from_str(s))
             .transpose()
             .context("max_blocks is not a u64")?

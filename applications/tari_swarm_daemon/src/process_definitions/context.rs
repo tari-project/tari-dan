@@ -23,7 +23,7 @@ pub struct ProcessContext<'a> {
     listen_ip: IpAddr,
     port_allocator: &'a mut AllocatedPorts,
     instances: &'a InstanceManager,
-    args: &'a HashMap<String, String>,
+    settings: &'a HashMap<String, String>,
 }
 
 impl<'a> ProcessContext<'a> {
@@ -35,7 +35,7 @@ impl<'a> ProcessContext<'a> {
         listen_ip: IpAddr,
         port_allocator: &'a mut AllocatedPorts,
         instances: &'a InstanceManager,
-        args: &'a HashMap<String, String>,
+        settings: &'a HashMap<String, String>,
     ) -> Self {
         Self {
             instance_id,
@@ -45,7 +45,7 @@ impl<'a> ProcessContext<'a> {
             listen_ip,
             port_allocator,
             instances,
-            args,
+            settings,
         }
     }
 
@@ -65,8 +65,8 @@ impl<'a> ProcessContext<'a> {
         self.network
     }
 
-    pub fn get_arg(&self, key: &str) -> Option<&String> {
-        self.args.get(key)
+    pub fn get_setting(&self, key: &str) -> Option<&String> {
+        self.settings.get(key)
     }
 
     pub async fn get_free_port(&mut self, name: &'static str) -> anyhow::Result<u16> {

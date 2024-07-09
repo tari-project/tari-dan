@@ -84,7 +84,7 @@ impl InstanceManager {
                     executable,
                     instance.instance_type,
                     format!("{}-#{}", instance.name, i),
-                    instance.extra_args.clone(),
+                    instance.settings.clone(),
                 )
                 .await?;
             }
@@ -97,10 +97,10 @@ impl InstanceManager {
         executable: &Executable,
         instance_type: InstanceType,
         instance_name: String,
-        extra_args: HashMap<String, String>,
+        settings: HashMap<String, String>,
     ) -> anyhow::Result<InstanceId> {
         let instance_id = self.next_instance_id();
-        self.fork(instance_id, executable, instance_type, instance_name, extra_args, None)
+        self.fork(instance_id, executable, instance_type, instance_name, settings, None)
             .await
     }
 
@@ -111,10 +111,10 @@ impl InstanceManager {
         executable: &Executable,
         instance_type: InstanceType,
         instance_name: String,
-        extra_args: HashMap<String, String>,
+        settings: HashMap<String, String>,
         ports: Option<AllocatedPorts>,
     ) -> anyhow::Result<InstanceId> {
-        let listen_ip = extra_args
+        let listen_ip = settings
             .get("listen_ip")
             .map(|s| s.parse())
             .transpose()
@@ -145,7 +145,7 @@ impl InstanceManager {
             listen_ip,
             &mut allocated_ports,
             self,
-            &extra_args,
+            &settings,
         );
 
         let mut command = definition.get_command(context).await?;
@@ -177,7 +177,7 @@ impl InstanceManager {
             // This saves us from having to join the network string to the path all over the place, since everything we
             // want is under {base_dir}/{network}
             base_path.join(self.network.to_string()),
-            extra_args,
+            settings,
         );
 
         // Check if the instance is still running after 2 seconds (except miner *cough*)
@@ -286,11 +286,11 @@ impl InstanceManager {
 
         let instance_type = instance.instance_type();
         let instance_name = instance.name().to_string();
-        let extra_args = instance.extra_args().clone();
+        let settings = instance.settings().clone();
         let ports = instance.allocated_ports().clone();
 
         // This will just overwrite the previous instance
-        self.fork(id, executable, instance_type, instance_name, extra_args, Some(ports))
+        self.fork(id, executable, instance_type, instance_name, settings, Some(ports))
             .await?;
 
         Ok(())
