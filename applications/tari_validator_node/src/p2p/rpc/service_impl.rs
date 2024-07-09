@@ -324,14 +324,23 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
 
     async fn get_checkpoint(
         &self,
-        _request: Request<GetCheckpointRequest>,
+        request: Request<GetCheckpointRequest>,
     ) -> Result<Response<GetCheckpointResponse>, RpcStatus> {
-        let prev_epoch = self
+        let msg = request.into_message();
+        let current_epoch = self
             .epoch_manager
             .current_epoch()
             .await
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
-            .saturating_sub(Epoch(1));
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+        if msg.current_epoch != current_epoch {
+            // This may occur if one of the nodes has not fully scanned the base layer
+            return Err(RpcStatus::bad_request(format!(
+                "Peer requested checkpoint with epoch {} but current epoch is {}",
+                msg.current_epoch, current_epoch
+            )));
+        }
+
+        let prev_epoch = current_epoch.saturating_sub(Epoch(1));
         if prev_epoch.is_zero() {
             return Err(RpcStatus::not_found("Cannot generate checkpoint for genesis epoch"));
         }

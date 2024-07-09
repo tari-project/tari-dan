@@ -66,34 +66,27 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         Ok(client)
     }
 
-    async fn fetch_epoch_checkpoint(&self, client: &mut ValidatorNodeRpcClient) -> Option<EpochCheckpoint> {
-        match client.get_checkpoint(GetCheckpointRequest {}).await {
+    async fn fetch_epoch_checkpoint(
+        &self,
+        client: &mut ValidatorNodeRpcClient,
+        current_epoch: Epoch,
+    ) -> Result<EpochCheckpoint, CommsRpcConsensusSyncError> {
+        match client
+            .get_checkpoint(GetCheckpointRequest {
+                current_epoch: current_epoch.as_u64(),
+            })
+            .await
+        {
             Ok(GetCheckpointResponse {
                 checkpoint: Some(checkpoint),
             }) => match EpochCheckpoint::try_from(checkpoint) {
-                Ok(cp) => Some(cp),
-                Err(err) => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Invalid message received from peer: {err}",
-                    );
-                    None
-                },
+                Ok(cp) => Ok(cp),
+                Err(err) => Err(CommsRpcConsensusSyncError::InvalidResponse(err)),
             },
-            Ok(GetCheckpointResponse { checkpoint: None }) => {
-                warn!(
-                    target: LOG_TARGET,
-                    "Invalid response: no checkpoint provided. Attempting to fetch from another validator node",
-                );
-                None
-            },
-            Err(err) => {
-                warn!(
-                    target: LOG_TARGET,
-                    "Failed to fetch checkpoint from peer: {err}",
-                );
-                None
-            },
+            Ok(GetCheckpointResponse { checkpoint: None }) => Err(CommsRpcConsensusSyncError::InvalidResponse(
+                anyhow!("No checkpoint provided."),
+            )),
+            Err(err) => Err(err.into()),
         }
     }
 
@@ -303,8 +296,16 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
                     },
                 };
 
-                let Some(checkpoint) = self.fetch_epoch_checkpoint(&mut client).await else {
-                    continue;
+                let checkpoint = match self.fetch_epoch_checkpoint(&mut client, current_epoch).await {
+                    Ok(cp) => cp,
+                    Err(err) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️Failed to fetch checkpoint from {addr}: {err}. Attempting another peer if available"
+                        );
+                        last_error = Some(err);
+                        continue;
+                    },
                 };
                 info!(target: LOG_TARGET, "🛜 Checkpoint: {checkpoint}");
 

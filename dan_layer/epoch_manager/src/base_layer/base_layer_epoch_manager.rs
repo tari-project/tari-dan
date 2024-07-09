@@ -23,6 +23,7 @@
 use std::{
     cmp,
     collections::{HashMap, HashSet},
+    mem,
     num::NonZeroU32,
 };
 
@@ -509,7 +510,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
                 "🌟 Initial base layer sync complete. Current epoch is {}", self.current_epoch
             );
             self.is_initial_base_layer_sync_complete = true;
-            for reply in self.waiting_for_scanning_complete.drain(..) {
+            for reply in mem::take(&mut self.waiting_for_scanning_complete) {
                 let _ignore = reply.send(Ok(()));
             }
         }

@@ -3,7 +3,7 @@
 
 use std::{collections::HashMap, time::Duration};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use log::info;
 use minotari_node_grpc_client::grpc;
 use tari_crypto::tari_utilities::ByteArray;
@@ -56,10 +56,14 @@ impl ProcessManager {
 
         let num_vns = self.instance_manager.num_validator_nodes();
         // Mine some initial funds, guessing 10 blocks to allow for coinbase maturity
-        self.mine(num_vns + 10).await?;
-        self.wait_for_wallet_funds(num_vns).await?;
+        self.mine(num_vns + 10).await.context("mining failed")?;
+        self.wait_for_wallet_funds(num_vns)
+            .await
+            .context("waiting for wallet funds")?;
 
-        self.register_all_validator_nodes().await?;
+        self.register_all_validator_nodes()
+            .await
+            .context("registering validator node via GRPC")?;
 
         loop {
             tokio::select! {

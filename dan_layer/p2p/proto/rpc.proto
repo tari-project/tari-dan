@@ -217,7 +217,9 @@ message GetHighQcResponse {
   tari.dan.consensus.QuorumCertificate high_qc = 1;
 }
 
-message GetCheckpointRequest {}
+message GetCheckpointRequest {
+  uint64 current_epoch = 1;
+}
 
 message GetCheckpointResponse {
   EpochCheckpoint checkpoint = 1;

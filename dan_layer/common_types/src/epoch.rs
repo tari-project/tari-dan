@@ -36,7 +36,7 @@ impl Epoch {
         Self(0)
     }
 
-    pub fn as_u64(self) -> u64 {
+    pub const fn as_u64(self) -> u64 {
         self.0
     }
 
@@ -60,6 +60,18 @@ impl Epoch {
 impl From<u64> for Epoch {
     fn from(e: u64) -> Self {
         Self(e)
+    }
+}
+
+impl PartialEq<u64> for Epoch {
+    fn eq(&self, other: &u64) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<Epoch> for u64 {
+    fn eq(&self, other: &Epoch) -> bool {
+        *self == other.0
     }
 }
 

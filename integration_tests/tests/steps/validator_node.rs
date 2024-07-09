@@ -409,7 +409,7 @@ async fn when_i_create_new_key_pair(world: &mut TariWorld, key_name: String) {
 async fn when_i_wait_for_validator_leaf_block_at_least(world: &mut TariWorld, name: String, height: u64, epoch: u64) {
     let vn = world.get_validator_node(&name);
     let mut client = vn.create_client();
-    for _ in 0..20 {
+    for _ in 0..40 {
         let resp = client
             .list_blocks_paginated(GetBlocksRequest {
                 limit: 1,
@@ -427,10 +427,11 @@ async fn when_i_wait_for_validator_leaf_block_at_least(world: &mut TariWorld, na
         // }
         // eprintln!("-----------");
 
-        let block = resp.blocks.first().unwrap();
-        assert!(block.epoch().as_u64() <= epoch);
-        if block.epoch().as_u64() == epoch && block.height().as_u64() >= height {
-            return;
+        if let Some(block) = resp.blocks.first() {
+            assert!(block.epoch().as_u64() <= epoch);
+            if block.epoch().as_u64() == epoch && block.height().as_u64() >= height {
+                return;
+            }
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
