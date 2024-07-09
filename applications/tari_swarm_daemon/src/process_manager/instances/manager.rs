@@ -162,10 +162,10 @@ impl InstanceManager {
         self.port_allocator.register(instance_id, allocated_ports.clone());
 
         if let Some(stdout) = child.stdout.take() {
-            forward_logs(stdout_log_path, stdout, format!("{instance_type}#{instance_id}"));
+            forward_logs(stdout_log_path, stdout, instance_name.clone());
         }
         if let Some(stderr) = child.stderr.take() {
-            forward_logs(stderr_log_path, stderr, format!("{instance_type}#{instance_id}"));
+            forward_logs(stderr_log_path, stderr, instance_name.clone());
         }
 
         let mut instance = Instance::new_started(
