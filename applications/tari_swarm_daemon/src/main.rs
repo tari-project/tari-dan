@@ -11,10 +11,12 @@ use tokio::fs;
 use crate::{
     cli::{Cli, Commands, InitArgs},
     config::{CompileConfig, Config, ExecutableConfig, InstanceConfig, InstanceType, ProcessesConfig, WebserverConfig},
+    logger::init_logger,
 };
 
 mod cli;
 mod config;
+mod logger;
 mod process_definitions;
 mod process_manager;
 mod webserver;
@@ -192,8 +194,13 @@ async fn start(cli: &Cli) -> anyhow::Result<()> {
     if let Commands::Start(ref overrides) = cli.command {
         overrides.apply(&mut config)?;
     }
-    let _pid = lockfile::Lockfile::create(config.base_dir.join("tari_swarm.pid"))
-        .context("Failed to acquire lockfile. Is another instance already running?")?;
+    let lock_file = config.base_dir.join("tari_swarm.pid");
+    let _pid = lockfile::Lockfile::create(&lock_file).with_context(|| {
+        anyhow!(
+            "Failed to acquire lockfile at {}. Is another instance already running?",
+            lock_file.display()
+        )
+    })?;
 
     create_paths(&config).await?;
 
@@ -285,30 +292,4 @@ fn start_windows() -> anyhow::Result<BoxFuture<()>> {
         }
     };
     Ok(Box::pin(fut))
-}
-
-fn init_logger() -> Result<(), log::SetLoggerError> {
-    fn should_skip(target: &str) -> bool {
-        const SKIP: [&str; 3] = ["hyper::", "h2::", "tower::"];
-        SKIP.iter().any(|s| target.starts_with(s))
-    }
-
-    let colors = fern::colors::ColoredLevelConfig::new().info(fern::colors::Color::Green);
-    fern::Dispatch::new()
-        .format(move |out, message, record| {
-            if should_skip(record.target()) {
-                return;
-            }
-            out.finish(format_args!(
-                "{} [{}] {} {}",
-                humantime::format_rfc3339(std::time::SystemTime::now()),
-                record.target(),
-                colors.color(record.level()),
-                message
-            ))
-        })
-        .level(log::LevelFilter::Debug)
-        .chain(std::io::stdout())
-        // .chain(fern::log_file("output.log").unwrap())
-        .apply()
 }
