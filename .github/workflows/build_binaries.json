@@ -13,8 +13,9 @@
     "rust": "1.77",
     "target": "aarch64-unknown-linux-gnu",
     "cross": true,
-    "features": "",
-    "build_enabled": false
+    "flags": "--workspace --exclude tari_integration_tests",
+    "build_enabled": true,
+    "best_effort": true
   },
   {
     "name": "linux-riscv64",
@@ -22,14 +23,14 @@
     "rust": "stable",
     "target": "riscv64gc-unknown-linux-gnu",
     "cross": true,
-    "flags": "--workspace --exclude --exclude tari_integration_tests",
+    "flags": "--workspace --exclude tari_integration_tests",
     "build_enabled": true,
     "best_effort": true
   },
 
   {
     "name": "macos-x86_64",
-    "runs-on": "macos-11",
+    "runs-on": "macos-12",
     "rust": "1.77",
     "target": "x86_64-apple-darwin",
     "cross": false,
@@ -61,6 +62,7 @@
     "cross": false,
     "target_bins": "tari_dan_wallet_cli, tari_dan_wallet_daemon, tari_indexer, tari_validator_node, tari_signaling_server",
     "features": "",
-    "build_enabled": false
+    "build_enabled": true,
+    "best_effort": true
   }
 ]

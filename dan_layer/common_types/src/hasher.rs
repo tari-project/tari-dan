@@ -11,10 +11,18 @@ use tari_bor::encode_into;
 use tari_common_types::types::FixedHash;
 use tari_crypto::hashing::DomainSeparation;
 
+/// Create a new `TariHasher` using a given domain-separated hasher and label.
+/// This is just a wrapper,
 pub fn tari_hasher<D: DomainSeparation>(label: &'static str) -> TariHasher {
     TariHasher::new_with_label::<D>(label)
 }
 
+/// A domain-separated hasher that uses CBOR internally to ensure hashing is canonical.
+///
+/// The hasher produces 32 bytes of output using the `Blake2b` hash function.
+///
+/// This assumes that any input type supports `Serialize` canonically; that is, two different values of the same type
+/// must serialize distinctly.
 #[derive(Debug, Clone)]
 pub struct TariHasher {
     hasher: Blake2b<U32>,
@@ -28,6 +36,8 @@ impl TariHasher {
     }
 
     pub fn update<T: Serialize + ?Sized>(&mut self, data: &T) {
+        // Update the hasher using the CBOR encoding of the input, which is assumed to be canonical.
+        //
         // Binary encoding does not make any contract to say that if the writer is infallible (as it is here) then
         // encoding in infallible. However this should be the case. Since it is very unergonomic to return an
         // error in hash chain functions, and therefore all usages of the hasher, we assume all types implement
