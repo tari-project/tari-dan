@@ -3,18 +3,9 @@
 # See https://github.com/marketplace/actions/npm-publish for more information
 name: Publish Packages to npmjs
 
-# TODO: after confirming that the action works, set the trigger on "development" branch commits instead of PRs 
-# on:
-#   push:
-#     branches: development
-
 on:
-  pull_request:
-    types:
-      - opened
-      - reopened
-      - edited
-      - synchronize
+  push:
+    branches: development
 
 jobs:
   # Publish the TypeScript bindings to the NPM registry
