@@ -24,9 +24,9 @@ impl ProcessDefinition for MinotariNode {
         let mut command = Command::new(context.bin());
         let p2p_port = context.get_free_port("p2p").await?;
         let grpc_port = context.get_free_port("grpc").await?;
-        let local_ip = context.local_ip();
+        let listen_ip = context.listen_ip();
 
-        let public_address = format!("/ip4/{local_ip}/tcp/{p2p_port}");
+        let public_address = format!("/ip4/{listen_ip}/tcp/{p2p_port}");
 
         let base_nodes = context.minotari_nodes();
         let mut base_node_addresses = Vec::new();
@@ -47,7 +47,7 @@ impl ProcessDefinition for MinotariNode {
                 "-pbase_node.p2p.transport.tcp.listener_address={public_address}"
             ))
             .arg(format!("-pbase_node.p2p.public_addresses={public_address}"))
-            .arg(format!("-pbase_node.grpc_address=/ip4/{local_ip}/tcp/{grpc_port}"))
+            .arg(format!("-pbase_node.grpc_address=/ip4/{listen_ip}/tcp/{grpc_port}"))
             .args([
                 "--non-interactive",
                 "--enable-grpc",

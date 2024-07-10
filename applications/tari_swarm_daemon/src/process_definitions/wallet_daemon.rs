@@ -24,18 +24,18 @@ impl ProcessDefinition for WalletDaemon {
         let mut command = Command::new(context.bin());
         let jrpc_port = context.get_free_port("jrpc").await?;
         let web_ui_port = context.get_free_port("web").await?;
-        let local_ip = context.local_ip();
+        let listen_ip = context.listen_ip();
 
-        let json_rpc_public_address = format!("{local_ip}:{jrpc_port}");
-        let json_rpc_address = format!("{local_ip}:{jrpc_port}");
-        let web_ui_address = format!("{local_ip}:{web_ui_port}");
+        let json_rpc_public_address = format!("{listen_ip}:{jrpc_port}");
+        let json_rpc_address = format!("{listen_ip}:{jrpc_port}");
+        let web_ui_address = format!("{listen_ip}:{web_ui_port}");
 
         let indexer = context
             .indexers()
             .next()
             .ok_or_else(|| anyhow!("Indexer should be started before wallet daemon"))?;
         let indexer_url = format!(
-            "http://{local_ip}:{}",
+            "http://{listen_ip}:{}",
             indexer
                 .instance()
                 .allocated_ports()
@@ -59,7 +59,7 @@ impl ProcessDefinition for WalletDaemon {
         let maybe_signaling_server = context.signaling_servers().next();
         if let Some(signaling_server) = maybe_signaling_server {
             let signaling_server_url = format!(
-                "{local_ip}:{}",
+                "{listen_ip}:{}",
                 signaling_server
                     .instance()
                     .allocated_ports()

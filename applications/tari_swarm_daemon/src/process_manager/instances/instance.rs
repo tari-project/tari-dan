@@ -16,7 +16,7 @@ pub struct Instance {
     child: Child,
     allocated_ports: AllocatedPorts,
     base_path: PathBuf,
-    extra_args: HashMap<String, String>,
+    settings: HashMap<String, String>,
     is_running: bool,
 }
 
@@ -28,7 +28,7 @@ impl Instance {
         child: Child,
         allocated_ports: AllocatedPorts,
         base_path: PathBuf,
-        extra_args: HashMap<String, String>,
+        settings: HashMap<String, String>,
     ) -> Self {
         Self {
             id,
@@ -37,7 +37,7 @@ impl Instance {
             child,
             allocated_ports,
             base_path,
-            extra_args,
+            settings,
             is_running: true,
         }
     }
@@ -70,8 +70,8 @@ impl Instance {
         &self.base_path
     }
 
-    pub fn extra_args(&self) -> &HashMap<String, String> {
-        &self.extra_args
+    pub fn settings(&self) -> &HashMap<String, String> {
+        &self.settings
     }
 
     pub fn is_running(&self) -> bool {

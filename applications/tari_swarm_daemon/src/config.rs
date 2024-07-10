@@ -89,7 +89,8 @@ pub struct InstanceConfig {
     pub name: String,
     pub instance_type: InstanceType,
     pub num_instances: u32,
-    pub extra_args: HashMap<String, String>,
+    #[serde(alias = "extra_args")]
+    pub settings: HashMap<String, String>,
 }
 
 impl InstanceConfig {
@@ -98,7 +99,7 @@ impl InstanceConfig {
             name: instance_type.to_string(),
             instance_type,
             num_instances: 1,
-            extra_args: HashMap::new(),
+            settings: HashMap::new(),
         }
     }
 
@@ -107,8 +108,8 @@ impl InstanceConfig {
         self
     }
 
-    pub fn with_arg<K: Into<String>, V: ToString>(mut self, key: K, value: V) -> Self {
-        self.extra_args.insert(key.into(), value.to_string());
+    pub fn with_setting<K: Into<String>, V: ToString>(mut self, key: K, value: V) -> Self {
+        self.settings.insert(key.into(), value.to_string());
         self
     }
 
