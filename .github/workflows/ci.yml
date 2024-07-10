@@ -1,7 +1,7 @@
 ---
 name: CI
 
-"on":
+'on':
   workflow_dispatch:
   push:
     branches:
@@ -14,6 +14,11 @@ name: CI
       - reopened
       - synchronize
   merge_group:
+
+concurrency:
+  # https://docs.github.com/en/actions/examples/using-concurrency-expressions-and-a-test-matrix
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') || github.ref != 'refs/heads/development' }}
 
 env:
   nightly_toolchain: nightly-2023-06-12
@@ -50,6 +55,7 @@ jobs:
 
       - name: cargo format
         run: cargo +${{ env.nightly_toolchain }} fmt --all -- --check
+
   prettier:
     name: prettier
     runs-on: [ self-hosted, ubuntu-high-cpu ]
@@ -99,7 +105,7 @@ jobs:
   machete:
     # Checks for unused dependencies.
     name: machete
-    runs-on: ubuntu-latest
+    runs-on: [ ubuntu-latest ]
 
     steps:
       - name: checkout
@@ -181,16 +187,20 @@ jobs:
 
   licenses:
     name: file licenses
-    runs-on: ubuntu-latest
+    runs-on: [ ubuntu-latest ]
 
     steps:
       - name: checkout
         uses: actions/checkout@v4
 
       - name: install ripgrep
+        # https://github.com/BurntSushi/ripgrep/releases
+        env:
+          ripgrep_version: 14.1.0
         run: |
-          wget https://github.com/BurntSushi/ripgrep/releases/download/13.0.0/ripgrep_13.0.0_amd64.deb
-          sudo dpkg -i ripgrep_13.0.0_amd64.deb
+          #wget https://github.com/BurntSushi/ripgrep/releases/download/14.1.0/ripgrep_14.1.0-1_amd64.deb.sha256
+          wget https://github.com/BurntSushi/ripgrep/releases/download/${{ env.ripgrep_version }}/ripgrep_${{ env.ripgrep_version }}-1_amd64.deb
+          sudo dpkg -i ripgrep_${{ env.ripgrep_version }}-1_amd64.deb
           rg --version || exit 1
 
       - name: run the license check
@@ -254,7 +264,7 @@ jobs:
 
   # needed for test results
   event_file:
-    runs-on: ubuntu-latest
+    runs-on: [ ubuntu-latest ]
 
     steps:
       - name: Upload

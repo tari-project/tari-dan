@@ -1,56 +1,54 @@
-[target.x86_64-linux-android.env]
-passthrough = ["CFLAGS"]
-
-[target.aarch64-linux-android.env]
-passthrough = ["CFLAGS"]
-
-[target.arm-linux-androideabi.env]
-passthrough = ["CFLAGS"]
-
-[target.aarch64-unknown-linux-gnu]
-image = "ubuntu:18.04"
-# Mergered all scripts/install_ubuntu_dependencies*.sh scripts
-pre-build = [ """
-apt-get update && \
-apt-get -y install \
-  openssl \
-  libssl-dev \
-  pkg-config \
-  libsqlite3-dev \
-  clang-10 \
-  git \
-  cmake \
-  dh-autoreconf \
-  libc++-dev \
-  libc++abi-dev \
-  libprotobuf-dev \
-  protobuf-compiler \
-  libncurses5-dev \
-  libncursesw5-dev \
-  zip \
-  curl \
-  pkg-config-aarch64-linux-gnu \
-  gcc-aarch64-linux-gnu \
-  g++-aarch64-linux-gnu && \
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
-export PATH="$HOME/.cargo/bin:$PATH" && \
-rustup target add aarch64-unknown-linux-gnu && \
-rustup toolchain install stable-aarch64-unknown-linux-gnu
-""" ]
-
-[target.aarch64-unknown-linux-gnu.env]
+[build.env]
 passthrough = [
   "CFLAGS",
-  "RUST_DEBUG",
-  "RUSTFLAGS",
-  "ARCH",
-  "FEATURES",
-  "ROARING_ARCH",
   "TARGET",
   "RUST_TARGET",
   "BUILD_TARGET",
   "CARGO_BUILD_TARGET",
-  "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc",
-  "BINDGEN_EXTRA_CLANG_ARGS=--sysroot /usr/aarch64-linux-gnu/include/",
+  "TARGET_CFLAGS",
+  "CC_aarch64_unknown_linux_gnu",
+  "PKG_CONFIG_SYSROOT_DIR",
+  "PKG_CONFIG_ALLOW_CROSS",
+  "RUSTFLAGS",
+  "RUST_BACKTRACE",
+  "RUST_DEBUG",
+  "RUST_LOG",
+  "ARCH",
+  "FEATURES",
+  "ROARING_ARCH",
   "TARI_NETWORK",
+  "TARI_TARGET_NETWORK",
+  "TARI_NETWORK_DIR",
+]
+
+# Currently needs cross-rs from git
+# ```cargo install cross --git https://github.com/cross-rs/cross```
+[target.aarch64-unknown-linux-gnu]
+image.name = "ubuntu:18.04"
+# targetting is needed for apple silicon
+image.toolchain = ["linux/arm64=aarch64-unknown-linux-gnu", "linux/amd64=x86_64-unknown-linux-gnu"]
+pre-build = "./scripts/cross_compile_ubuntu_18-pre-build.sh"
+
+[target.aarch64-unknown-linux-gnu.env]
+passthrough = [
+  "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc",
+  "PKG_CONFIG_SYSROOT_DIR=/usr/lib/aarch64-linux-gnu/",
+  "PKG_CONFIG_ALLOW_CROSS=true",
+]
+
+[target.x86_64-unknown-linux-gnu]
+image = "ubuntu:18.04"
+pre-build = "./scripts/cross_compile_ubuntu_18-pre-build.sh"
+
+[target.riscv64gc-unknown-linux-gnu]
+#image.name = "riscv64/ubuntu:20.04"
+image.name = "ubuntu:20.04"
+image.toolchain = ["linux/riscv64=riscv64gc-unknown-linux-gnu", "linux/arm64=aarch64-unknown-linux-gnu", "linux/amd64=x86_64-unknown-linux-gnu"]
+pre-build = "./scripts/cross_compile_ubuntu_18-pre-build.sh"
+
+[target.riscv64gc-unknown-linux-gnu.env]
+passthrough = [
+  "RISCV64GC_UNKNOWN_LINUX_GNU_OPENSSL_NO_VENDOR=true",
+  "PKG_CONFIG_SYSROOT_DIR=/usr/lib/riscv64-linux-gnu/",
+  "PKG_CONFIG_ALLOW_CROSS=true",
 ]
