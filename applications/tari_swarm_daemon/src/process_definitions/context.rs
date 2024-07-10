@@ -20,10 +20,10 @@ pub struct ProcessContext<'a> {
     bin: &'a PathBuf,
     base_path: PathBuf,
     network: Network,
-    local_ip: IpAddr,
+    listen_ip: IpAddr,
     port_allocator: &'a mut AllocatedPorts,
     instances: &'a InstanceManager,
-    args: &'a HashMap<String, String>,
+    settings: &'a HashMap<String, String>,
 }
 
 impl<'a> ProcessContext<'a> {
@@ -32,20 +32,20 @@ impl<'a> ProcessContext<'a> {
         bin: &'a PathBuf,
         base_path: PathBuf,
         network: Network,
-        local_ip: IpAddr,
+        listen_ip: IpAddr,
         port_allocator: &'a mut AllocatedPorts,
         instances: &'a InstanceManager,
-        args: &'a HashMap<String, String>,
+        settings: &'a HashMap<String, String>,
     ) -> Self {
         Self {
             instance_id,
             bin,
             base_path,
             network,
-            local_ip,
+            listen_ip,
             port_allocator,
             instances,
-            args,
+            settings,
         }
     }
 
@@ -65,16 +65,16 @@ impl<'a> ProcessContext<'a> {
         self.network
     }
 
-    pub fn get_arg(&self, key: &str) -> Option<&String> {
-        self.args.get(key)
+    pub fn get_setting(&self, key: &str) -> Option<&String> {
+        self.settings.get(key)
     }
 
     pub async fn get_free_port(&mut self, name: &'static str) -> anyhow::Result<u16> {
         Ok(self.port_allocator.get_or_next_port(name).await)
     }
 
-    pub fn local_ip(&self) -> &IpAddr {
-        &self.local_ip
+    pub fn listen_ip(&self) -> &IpAddr {
+        &self.listen_ip
     }
 
     pub fn environment(&self) -> Vec<(&str, &str)> {

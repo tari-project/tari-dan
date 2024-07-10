@@ -24,11 +24,11 @@ impl ProcessDefinition for Indexer {
         let mut command = Command::new(context.bin());
         let jrpc_port = context.get_free_port("jrpc").await?;
         let web_ui_port = context.get_free_port("web").await?;
-        let local_ip = context.local_ip();
+        let listen_ip = context.listen_ip();
 
-        let json_rpc_public_address = format!("{local_ip}:{jrpc_port}");
-        let json_rpc_address = format!("{local_ip}:{jrpc_port}");
-        let web_ui_address = format!("{local_ip}:{web_ui_port}");
+        let json_rpc_public_address = format!("{listen_ip}:{jrpc_port}");
+        let json_rpc_address = format!("{listen_ip}:{jrpc_port}");
+        let web_ui_address = format!("{listen_ip}:{web_ui_port}");
 
         let base_node = context
             .minotari_nodes()
@@ -39,7 +39,7 @@ impl ProcessDefinition for Indexer {
             .instance()
             .allocated_ports()
             .get("grpc")
-            .map(|port| format!("{local_ip}:{port}"))
+            .map(|port| format!("{listen_ip}:{port}"))
             .ok_or_else(|| anyhow!("grpc port not found for base node"))?;
 
         command

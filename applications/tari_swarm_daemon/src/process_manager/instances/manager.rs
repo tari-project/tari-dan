@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use log::info;
 use tari_common::configuration::Network;
 use tokio::{
@@ -84,7 +84,7 @@ impl InstanceManager {
                     executable,
                     instance.instance_type,
                     format!("{}-#{}", instance.name, i),
-                    instance.extra_args.clone(),
+                    instance.settings.clone(),
                 )
                 .await?;
             }
@@ -97,10 +97,10 @@ impl InstanceManager {
         executable: &Executable,
         instance_type: InstanceType,
         instance_name: String,
-        extra_args: HashMap<String, String>,
+        settings: HashMap<String, String>,
     ) -> anyhow::Result<InstanceId> {
         let instance_id = self.next_instance_id();
-        self.fork(instance_id, executable, instance_type, instance_name, extra_args, None)
+        self.fork(instance_id, executable, instance_type, instance_name, settings, None)
             .await
     }
 
@@ -111,10 +111,15 @@ impl InstanceManager {
         executable: &Executable,
         instance_type: InstanceType,
         instance_name: String,
-        extra_args: HashMap<String, String>,
+        settings: HashMap<String, String>,
         ports: Option<AllocatedPorts>,
     ) -> anyhow::Result<InstanceId> {
-        let local_ip = IpAddr::V4(Ipv4Addr::from([127, 0, 0, 1]));
+        let listen_ip = settings
+            .get("listen_ip")
+            .map(|s| s.parse())
+            .transpose()
+            .context("Failed to parse listen_ip arg")?
+            .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::from([127, 0, 0, 1])));
         let definition = get_definition(instance_type);
 
         log::info!(
@@ -137,10 +142,10 @@ impl InstanceManager {
             &executable.path,
             base_path.clone(),
             self.network,
-            local_ip,
+            listen_ip,
             &mut allocated_ports,
             self,
-            &extra_args,
+            &settings,
         );
 
         let mut command = definition.get_command(context).await?;
@@ -157,10 +162,10 @@ impl InstanceManager {
         self.port_allocator.register(instance_id, allocated_ports.clone());
 
         if let Some(stdout) = child.stdout.take() {
-            forward_logs(stdout_log_path, stdout, format!("{instance_type}#{instance_id}"));
+            forward_logs(stdout_log_path, stdout, instance_name.clone());
         }
         if let Some(stderr) = child.stderr.take() {
-            forward_logs(stderr_log_path, stderr, format!("{instance_type}#{instance_id}"));
+            forward_logs(stderr_log_path, stderr, instance_name.clone());
         }
 
         let mut instance = Instance::new_started(
@@ -172,7 +177,7 @@ impl InstanceManager {
             // This saves us from having to join the network string to the path all over the place, since everything we
             // want is under {base_dir}/{network}
             base_path.join(self.network.to_string()),
-            extra_args,
+            settings,
         );
 
         // Check if the instance is still running after 2 seconds (except miner *cough*)
@@ -281,11 +286,11 @@ impl InstanceManager {
 
         let instance_type = instance.instance_type();
         let instance_name = instance.name().to_string();
-        let extra_args = instance.extra_args().clone();
+        let settings = instance.settings().clone();
         let ports = instance.allocated_ports().clone();
 
         // This will just overwrite the previous instance
-        self.fork(id, executable, instance_type, instance_name, extra_args, Some(ports))
+        self.fork(id, executable, instance_type, instance_name, settings, Some(ports))
             .await?;
 
         Ok(())

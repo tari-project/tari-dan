@@ -20,8 +20,8 @@ impl ProcessDefinition for SignalingServer {
     async fn get_command(&self, mut context: ProcessContext<'_>) -> anyhow::Result<Command> {
         let mut command = Command::new(context.bin());
         let jrpc_port = context.get_free_port("jrpc").await?;
-        let local_ip = context.local_ip();
-        let listen_addr = format!("{local_ip}:{jrpc_port}");
+        let listen_ip = context.listen_ip();
+        let listen_addr = format!("{listen_ip}:{jrpc_port}");
 
         command
             .arg("-b")
