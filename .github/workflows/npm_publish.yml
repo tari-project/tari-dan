@@ -1,0 +1,50 @@
+---
+# Publishing all NPM packages to the npm registry when the version number changes
+# See https://github.com/marketplace/actions/npm-publish for more information
+name: Publish Packages to npmjs
+
+on:
+  push:
+    branches: development
+
+jobs:
+  # Publish the TypeScript bindings to the NPM registry
+  publish-typescript-bindings:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./bindings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm test
+      - uses: JS-DevTools/npm-publish@v3
+        id: publish
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+      - if: ${{ steps.publish.outputs.type }}
+        run: echo "Published to NPM registry '${{ steps.publish.outputs.name }}' version '${{ steps.publish.outputs.version }}'"
+
+  # Publish the Tari Wallet Daemon client to the NPM registry
+  publish-wallet-daemon-client:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./clients/javascript/wallet_daemon_client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm test
+      - uses: JS-DevTools/npm-publish@v3
+        id: publish
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+      - if: ${{ steps.publish.outputs.type }}
+        run: echo "Published to NPM registry '${{ steps.publish.outputs.name }}' version '${{ steps.publish.outputs.version }}'"
+      
