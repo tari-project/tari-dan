@@ -21,16 +21,14 @@ jobs:
           node-version: "20"
       - run: npm ci
       - uses: JS-DevTools/npm-publish@v3
-        id: publish
         with:
           token: ${{ secrets.NPM_TOKEN }}
           package: bindings
-      - if: ${{ steps.publish.outputs.type }}
-        run: echo "Published to NPM registry '${{ steps.publish.outputs.name }}' version '${{ steps.publish.outputs.version }}'"
 
   # Publish the Tari Wallet Daemon client to the NPM registry
   publish-wallet-daemon-client:
     runs-on: ubuntu-latest
+    needs: publish-typescript-bindings
     defaults:
       run:
         working-directory: clients/javascript/wallet_daemon_client
@@ -41,10 +39,7 @@ jobs:
           node-version: "20"
       - run: npm ci
       - uses: JS-DevTools/npm-publish@v3
-        id: publish
         with:
           token: ${{ secrets.NPM_TOKEN }}
           package: clients/javascript/wallet_daemon_client
-      - if: ${{ steps.publish.outputs.type }}
-        run: echo "Published to NPM registry '${{ steps.publish.outputs.name }}' version '${{ steps.publish.outputs.version }}'"
       
