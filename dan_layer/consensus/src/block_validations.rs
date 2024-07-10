@@ -139,7 +139,7 @@ pub fn check_signature(candidate_block: &Block) -> Result<(), ProposalValidation
         return Ok(());
     }
     let validator_signature = candidate_block
-        .get_signature()
+        .signature()
         .ok_or(ProposalValidationError::MissingSignature {
             block_id: *candidate_block.id(),
             height: candidate_block.height(),

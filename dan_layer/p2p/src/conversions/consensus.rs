@@ -264,7 +264,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             total_leader_fee: value.total_leader_fee(),
             commands: value.commands().iter().map(Into::into).collect(),
             foreign_indexes: encode(value.foreign_indexes()).unwrap(),
-            signature: value.get_signature().map(Into::into),
+            signature: value.signature().map(Into::into),
             timestamp: value.timestamp(),
             base_layer_block_height: value.base_layer_block_height(),
             base_layer_block_hash: value.base_layer_block_hash().as_bytes().to_vec(),

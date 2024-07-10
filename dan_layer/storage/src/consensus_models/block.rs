@@ -488,7 +488,7 @@ impl Block {
         self.timestamp
     }
 
-    pub fn get_signature(&self) -> Option<&ValidatorSchnorrSignature> {
+    pub fn signature(&self) -> Option<&ValidatorSchnorrSignature> {
         self.signature.as_ref()
     }
 
