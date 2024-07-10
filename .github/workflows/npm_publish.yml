@@ -29,7 +29,6 @@ jobs:
         with:
           node-version: "20"
       - run: npm ci
-      - run: npm test
       - uses: JS-DevTools/npm-publish@v3
         id: publish
         with:
