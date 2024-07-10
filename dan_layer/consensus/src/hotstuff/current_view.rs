@@ -11,7 +11,7 @@ use tari_dan_common_types::{Epoch, NodeHeight};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::current_view";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CurrentView {
     height: Arc<AtomicU64>,
     epoch: Arc<AtomicU64>,
@@ -19,13 +19,10 @@ pub struct CurrentView {
 
 impl CurrentView {
     pub fn new() -> Self {
-        Self {
-            height: Arc::new(AtomicU64::new(0)),
-            epoch: Arc::new(AtomicU64::new(0)),
-        }
+        Self::default()
     }
 
-    pub fn set_next_height(&self) {
+    pub(crate) fn set_next_height(&self) {
         self.height.fetch_add(1, atomic::Ordering::SeqCst);
     }
 
@@ -38,7 +35,7 @@ impl CurrentView {
     }
 
     /// Updates the height and epoch if they are greater than the current values.
-    pub fn update(&self, epoch: Epoch, height: NodeHeight) {
+    pub(crate) fn update(&self, epoch: Epoch, height: NodeHeight) {
         let current_epoch = self.get_epoch();
         let mut is_updated = false;
         if epoch > current_epoch {
@@ -57,7 +54,7 @@ impl CurrentView {
     }
 
     /// Resets the height and epoch. Prefer update.
-    pub fn reset(&self, epoch: Epoch, height: NodeHeight) {
+    pub(crate) fn reset(&self, epoch: Epoch, height: NodeHeight) {
         self.epoch.store(epoch.as_u64(), atomic::Ordering::SeqCst);
         self.height.store(height.as_u64(), atomic::Ordering::SeqCst);
         info!(target: LOG_TARGET, "🧿 PACEMAKER RESET: View updated to {epoch}/{height}");

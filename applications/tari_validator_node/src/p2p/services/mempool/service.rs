@@ -260,7 +260,7 @@ where
             output_shards: unverified_output_shards,
         } = *msg;
 
-        if !self.consensus_handle.get_current_state().is_running() {
+        if !self.consensus_handle.is_running() {
             info!(
                 target: LOG_TARGET,
                 "🎱 Transaction {} received while not in running state. Ignoring",
@@ -280,7 +280,7 @@ where
             transaction
         );
 
-        let current_epoch = self.epoch_manager.current_epoch().await?;
+        let current_epoch = self.consensus_handle.current_view().get_epoch();
         let num_committees = self.epoch_manager.get_num_committees(current_epoch).await?;
         let maybe_sender_shard = self
             .epoch_manager
@@ -356,7 +356,7 @@ where
             warn!(target: LOG_TARGET, "⚠ No involved shards for payload");
         }
 
-        let current_epoch = self.epoch_manager.current_epoch().await?;
+        let current_epoch = self.consensus_handle.current_view().get_epoch();
         let tx_substate_address = SubstateAddress::for_transaction_receipt(transaction.id().into_receipt_address());
 
         let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
@@ -535,15 +535,13 @@ where
     async fn handle_deferred_execution(&mut self, transaction: Transaction) -> Result<(), MempoolError> {
         let transaction_id = *transaction.id();
 
-        let is_consensus_running = self.consensus_handle.get_current_state().is_running();
-
         let pending_exec_size = self.pending_executions.len();
-        if is_consensus_running &&
-            // Notify consensus about the transaction
-            self.tx_executed_transactions
-                .send((transaction_id, pending_exec_size))
-                .await
-                .is_err()
+        // Notify consensus about the transaction
+        if self
+            .tx_executed_transactions
+            .send((transaction_id, pending_exec_size))
+            .await
+            .is_err()
         {
             debug!(
                 target: LOG_TARGET,
@@ -584,8 +582,6 @@ where
             );
             return Ok(());
         }
-
-        let is_consensus_running = self.consensus_handle.get_current_state().is_running();
 
         let executed = match exec_result {
             Ok(mut executed) => {
@@ -694,7 +690,7 @@ where
             },
         };
 
-        let current_epoch = self.epoch_manager.current_epoch().await?;
+        let current_epoch = self.consensus_handle.current_view().get_epoch();
 
         let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
         let all_inputs_iter = executed.all_inputs_iter().map(|i| i.to_substate_address());
@@ -746,11 +742,11 @@ where
 
         // Notify consensus that a transaction is ready to go!
         let pending_exec_size = self.pending_executions.len();
-        if is_consensus_running &&
-            self.tx_executed_transactions
-                .send((*executed.id(), pending_exec_size))
-                .await
-                .is_err()
+        if self
+            .tx_executed_transactions
+            .send((*executed.id(), pending_exec_size))
+            .await
+            .is_err()
         {
             debug!(
                 target: LOG_TARGET,

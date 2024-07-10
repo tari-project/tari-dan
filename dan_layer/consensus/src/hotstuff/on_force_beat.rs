@@ -30,3 +30,9 @@ impl OnForceBeat {
         self.sender.send(parent_block).expect("receiver can never be dropped")
     }
 }
+
+impl Default for OnForceBeat {
+    fn default() -> Self {
+        Self::new()
+    }
+}

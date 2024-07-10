@@ -33,6 +33,7 @@ mod worker;
 
 pub use common::*;
 pub use config::HotstuffConfig;
+pub use current_view::*;
 pub use error::*;
 pub use event::*;
 pub use state_machine::*;

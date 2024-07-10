@@ -364,7 +364,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         valid_block.block().save_foreign_send_counters(tx)?;
         valid_block.block().justify().save(tx)?;
         valid_block.save_all_dummy_blocks(tx)?;
-        valid_block.block().save(tx)?;
+        valid_block.block().insert(tx)?;
 
         let high_qc = valid_block.block().justify().update_high_qc(tx)?;
         Ok(high_qc)

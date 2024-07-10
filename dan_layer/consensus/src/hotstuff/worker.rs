@@ -202,6 +202,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         }
     }
 
+    pub fn pacemaker(&self) -> &PaceMakerHandle {
+        &self.pacemaker
+    }
+
     pub async fn start(&mut self) -> Result<(), HotStuffError> {
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let committee_info = self.epoch_manager.get_local_committee_info(current_epoch).await?;
@@ -353,9 +357,15 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     ) -> Result<(), HotStuffError> {
         let exists = self.state_store.with_write_tx(|tx| {
             if self.transaction_pool.exists(&**tx, &tx_id)? {
-                return Ok(true);
+                return Ok(Some(true));
             }
             let transaction = TransactionRecord::get(&**tx, &tx_id)?;
+            if transaction.is_finalized() {
+                warn!(
+                    target: LOG_TARGET, "Transaction {} is already finalized. Consensus will ignore it.", transaction.id()
+                );
+                return Ok(None);
+            }
             // Did the mempool execute it?
             if transaction.is_executed() {
                 // This should never fail
@@ -370,8 +380,12 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 self.transaction_pool
                     .insert(tx, TransactionAtom::deferred(*transaction.id()))?;
             }
-            Ok::<_, HotStuffError>(false)
+            Ok::<_, HotStuffError>(Some(false))
         })?;
+
+        let Some(exists) = exists else {
+            return Ok(());
+        };
 
         debug!(
             target: LOG_TARGET,

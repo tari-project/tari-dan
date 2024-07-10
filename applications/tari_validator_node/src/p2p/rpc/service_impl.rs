@@ -360,10 +360,11 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         let checkpoint = self
             .shard_state_store
             .with_read_tx(|tx| EpochCheckpoint::generate(tx, prev_epoch, local_committee_info.shard()))
+            .optional()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
         Ok(Response::new(GetCheckpointResponse {
-            checkpoint: Some(checkpoint.into()),
+            checkpoint: checkpoint.map(Into::into),
         }))
     }
 

@@ -70,7 +70,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         &self,
         client: &mut ValidatorNodeRpcClient,
         current_epoch: Epoch,
-    ) -> Result<EpochCheckpoint, CommsRpcConsensusSyncError> {
+    ) -> Result<Option<EpochCheckpoint>, CommsRpcConsensusSyncError> {
         match client
             .get_checkpoint(GetCheckpointRequest {
                 current_epoch: current_epoch.as_u64(),
@@ -80,12 +80,10 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             Ok(GetCheckpointResponse {
                 checkpoint: Some(checkpoint),
             }) => match EpochCheckpoint::try_from(checkpoint) {
-                Ok(cp) => Ok(cp),
+                Ok(cp) => Ok(Some(cp)),
                 Err(err) => Err(CommsRpcConsensusSyncError::InvalidResponse(err)),
             },
-            Ok(GetCheckpointResponse { checkpoint: None }) => Err(CommsRpcConsensusSyncError::InvalidResponse(
-                anyhow!("No checkpoint provided."),
-            )),
+            Ok(GetCheckpointResponse { checkpoint: None }) => Ok(None),
             Err(err) => Err(err.into()),
         }
     }
@@ -297,7 +295,16 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
                 };
 
                 let checkpoint = match self.fetch_epoch_checkpoint(&mut client, current_epoch).await {
-                    Ok(cp) => cp,
+                    Ok(Some(cp)) => cp,
+                    Ok(None) => {
+                        // EDGE-CASE: This may occur because the previous epoch had not started consensus, typically in
+                        // testing cases where transactions
+                        warn!(
+                            target: LOG_TARGET,
+                            "❓No checkpoint for epoch {current_epoch}. This may mean that this is the first epoch in the network"
+                        );
+                        return Ok(());
+                    },
                     Err(err) => {
                         warn!(
                             target: LOG_TARGET,
