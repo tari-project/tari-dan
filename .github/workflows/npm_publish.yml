@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./bindings
+        working-directory: bindings
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
@@ -24,6 +24,7 @@ jobs:
         id: publish
         with:
           token: ${{ secrets.NPM_TOKEN }}
+          package: bindings
       - if: ${{ steps.publish.outputs.type }}
         run: echo "Published to NPM registry '${{ steps.publish.outputs.name }}' version '${{ steps.publish.outputs.version }}'"
 
@@ -32,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./clients/javascript/wallet_daemon_client
+        working-directory: clients/javascript/wallet_daemon_client
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
@@ -43,6 +44,7 @@ jobs:
         id: publish
         with:
           token: ${{ secrets.NPM_TOKEN }}
+          package: clients/javascript/wallet_daemon_client
       - if: ${{ steps.publish.outputs.type }}
         run: echo "Published to NPM registry '${{ steps.publish.outputs.name }}' version '${{ steps.publish.outputs.version }}'"
       
