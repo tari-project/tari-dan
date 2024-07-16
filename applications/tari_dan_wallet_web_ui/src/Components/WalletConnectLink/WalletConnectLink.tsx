@@ -36,7 +36,9 @@ import CheckMark from "./CheckMark";
 import ConnectorLogo from "./ConnectorLogo";
 import ConfirmTransaction from "./ConfirmTransaction";
 import { useTheme } from "@mui/material/styles";
-import { TariPermission, TariPermissionAccountList, TariPermissionKeyList, TariPermissionTransactionGet, TariPermissionTransactionSend } from "../../utils/tari_permissions";
+import { TariPermission, TariPermissionKeyList, TariPermissionTransactionGet, TariPermissionTransactionSend } from "../../utils/tari_permissions";
+import { Core } from '@walletconnect/core'
+import { Web3Wallet } from '@walletconnect/web3wallet'
 
 const projectId: string | null = import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID || null;
 
@@ -49,6 +51,8 @@ const ConnectorDialog = () => {
   const theme = useTheme();
   const [_chosenOptionalPermissions, setChosenOptionalPermissions] = useState<boolean[]>([]);
 
+  const [web3wallet, setWeb3wallet] = useState<Web3Wallet | undefined>();
+
   // TODO: send permissions on WC request
   const permissions: TariPermission[] = [
     new TariPermissionKeyList(),
@@ -56,6 +60,70 @@ const ConnectorDialog = () => {
     new TariPermissionTransactionSend(),
   ];
   const optionalPermissions: TariPermission[] = [];
+
+  async function createWallet(): Web3Wallet | null {
+    const core = new Core({ projectId });
+    const wallet = await Web3Wallet.init({
+      core: core,
+      metadata: {
+        name: 'Example WalletConnect Wallet',
+        description: 'Example WalletConnect Integration',
+        url: 'myexamplewallet.com',
+        icons: []
+      }
+    });
+
+    wallet.on('session_proposal', async proposal => {
+      console.log({ proposal });
+
+      const session = await wallet.approveSession({
+        id: proposal.id,
+        namespaces: {
+          polkadot: {
+            methods: ['polkadot_signTransaction', 'polkadot_signMessage'],
+            chains: [
+              'polkadot:91b171bb158e2d3848fa23a9f1c25182', // polkadot
+            ],
+            events: ['chainChanged", "accountsChanged'],
+            accounts: [
+              "polkadot:91b171bb158e2d3848fa23a9f1c25182:8PSDc8otpZMGviGVSwzCzBCLPi5WuT8K9phaUWbfUtSYet3",
+              "polkadot:91b171bb158e2d3848fa23a9f1c25182:A1MbgM4mdFBH4LiTPZWmtVZ3zBGUJApN24FoSK32ZACPGP6"
+            ],
+          }
+        }
+      })
+
+      // create response object
+      const response = { id: proposal.id, result: 'session approved', jsonrpc: '2.0' }
+
+      // respond to the dapp request with the approved session's topic and response
+      await wallet.respondSessionRequest({ topic: session.topic, response })
+
+    });
+
+    wallet.on('session_request', async requestEvent => {
+      console.log({ requestEvent });
+      const { params, id, topic } = requestEvent;
+      const { request } = params;
+
+      switch (request.method) {
+        case 'polkadot_signTransaction':
+          const { ping } = request.params.transactionPayload;
+          console.log({ping});
+
+          // create the response containing the signature in the result
+          const response = { id, result: { pong: 'pong' }, jsonrpc: '2.0' }
+
+          // respond to the dapp request with the response and topic
+          await wallet.respondSessionRequest({ topic, response });
+          break;
+        default:
+          throw new Error("Invalid method")
+      }      
+    });
+
+    return wallet;
+  }
 
   async function getClipboardContent() {
     if (navigator.clipboard && navigator.clipboard.readText) {
@@ -98,22 +166,30 @@ const ConnectorDialog = () => {
     setPage(page + 1);
   };
 
-  const handleAuth = () => {
+  const handleAuth = async () => {
+    let wallet = web3wallet;
+    if (!wallet) {
+      wallet = await createWallet();
+      setWeb3wallet(wallet);
+    }
 
-    // TODO: pairing
+    if (!link) {
+      console.error("No WalletConnect link found");
+      return;
+    }
+
+    console.log({wallet});
+    console.log({link});
+
+    const result = await wallet.pair({ uri: link });
+    console.log({ result });
 
     setPage(page + 1);
-
-    // TODO: auth
-    console.log("WC auth");
-    console.log({projectId});
   };
 
   useEffect(() => {
     getClipboardContent();
   }, []);
-
-  useEffect(() => setChosenOptionalPermissions(Array(optionalPermissions.length).fill(true)), [optionalPermissions]);
 
   const renderPage = () => {
     switch (page) {
@@ -165,7 +241,7 @@ const ConnectorDialog = () => {
               <Button onClick={handleClose} variant="outlined">
                 Cancel
               </Button>
-              <Button onClick={handleAuth} variant="contained">
+              <Button onClick={async () => await handleAuth()} variant="contained">
                 Authorize
               </Button>
             </DialogActions>
@@ -181,7 +257,6 @@ const ConnectorDialog = () => {
           </div>
         );
       default:
-        console.log("default");
         return (<></>);
     }
   };
