@@ -23,6 +23,7 @@
 use std::{
     cmp,
     collections::{HashMap, HashSet},
+    mem,
     num::NonZeroU32,
 };
 
@@ -42,13 +43,12 @@ use tari_dan_common_types::{
 use tari_dan_storage::global::{models::ValidatorNode, DbBaseLayerBlockInfo, DbEpoch, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, oneshot};
 
 use crate::{base_layer::config::EpochManagerConfig, error::EpochManagerError, EpochManagerEvent};
 
 const LOG_TARGET: &str = "tari::dan::epoch_manager::base_layer";
 
-#[derive(Clone)]
 pub struct BaseLayerEpochManager<TGlobalStore, TBaseNodeClient> {
     global_db: GlobalDb<TGlobalStore>,
     base_node_client: TBaseNodeClient,
@@ -57,6 +57,7 @@ pub struct BaseLayerEpochManager<TGlobalStore, TBaseNodeClient> {
     current_block_info: (u64, FixedHash),
     last_block_of_current_epoch: FixedHash,
     tx_events: broadcast::Sender<EpochManagerEvent>,
+    waiting_for_scanning_complete: Vec<oneshot::Sender<Result<(), EpochManagerError>>>,
     node_public_key: PublicKey,
     current_shard_key: Option<SubstateAddress>,
     base_layer_consensus_constants: Option<BaseLayerConsensusConstants>,
@@ -80,6 +81,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
             current_epoch: Epoch(0),
             current_block_info: (0, Default::default()),
             last_block_of_current_epoch: Default::default(),
+            waiting_for_scanning_complete: Vec::new(),
             tx_events,
             node_public_key,
             current_shard_key: None,
@@ -130,11 +132,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         self.update_base_layer_consensus_constants(base_layer_constants)?;
         self.assign_validators_for_epoch(epoch)?;
 
-        // Only publish an epoch change event if we have synced the base layer (see on_scanning_complete)
-        if self.is_initial_base_layer_sync_complete {
-            self.publish_event(EpochManagerEvent::EpochChanged(epoch));
-        }
-
         Ok(())
     }
 
@@ -147,7 +144,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
 
         for vn in &vns {
-            validator_nodes.set_committee_bucket(
+            validator_nodes.set_committee_shard(
                 vn.shard_key,
                 vn.shard_key.to_shard(num_committees),
                 self.config.validator_node_sidechain_id.as_ref(),
@@ -512,11 +509,23 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
                 target: LOG_TARGET,
                 "🌟 Initial base layer sync complete. Current epoch is {}", self.current_epoch
             );
-            self.publish_event(EpochManagerEvent::EpochChanged(self.current_epoch));
             self.is_initial_base_layer_sync_complete = true;
+            for reply in mem::take(&mut self.waiting_for_scanning_complete) {
+                let _ignore = reply.send(Ok(()));
+            }
         }
 
+        self.publish_event(EpochManagerEvent::EpochChanged(self.current_epoch));
+
         Ok(())
+    }
+
+    pub fn add_notify_on_scanning_complete(&mut self, reply: oneshot::Sender<Result<(), EpochManagerError>>) {
+        if self.is_initial_base_layer_sync_complete {
+            let _ignore = reply.send(Ok(()));
+        } else {
+            self.waiting_for_scanning_complete.push(reply);
+        }
     }
 
     pub async fn remaining_registration_epochs(&mut self) -> Result<Option<Epoch>, EpochManagerError> {

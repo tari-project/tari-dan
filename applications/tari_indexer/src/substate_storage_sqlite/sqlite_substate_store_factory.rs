@@ -38,6 +38,7 @@ use diesel::{
 };
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use log::*;
+use tari_crypto::tari_utilities::hex::to_hex;
 use tari_dan_common_types::{shard::Shard, substate_type::SubstateType, Epoch};
 use tari_dan_storage::{consensus_models::BlockId, StorageError};
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
@@ -802,9 +803,9 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
                 reason: format!("save_scanned_block_id error: {}", e),
             })?;
 
-        info!(
+        debug!(
             target: LOG_TARGET,
-            "Added new scanned block id {:?} for epoch {} and shard {:?}", new.last_block_id, new.epoch, new.shard
+            "Added new scanned block id {} for epoch {} and shard {:?}", to_hex(&new.last_block_id), new.epoch, new.shard
         );
 
         Ok(())

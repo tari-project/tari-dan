@@ -14,7 +14,7 @@ create table blocks
 (
     id                      integer   not null primary key AUTOINCREMENT,
     block_id                text      not NULL,
-    parent_block_id         text      not NULL,
+    parent_block_id         text      not NULL REFERENCES blocks (block_id),
     merkle_root             text      not NULL,
     network                 text      not NULL,
     height                  bigint    not NULL,
@@ -73,6 +73,7 @@ create table leaf_blocks
     id           integer   not null primary key AUTOINCREMENT,
     block_id     text      not NULL,
     block_height bigint    not NULL,
+    epoch        bigint    not NULL,
     created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
@@ -83,13 +84,13 @@ create table block_diffs
     block_id       text      NOT NULL,
     transaction_id text      NOT NULL,
     substate_id    text      NOT NULL,
-    version        int      NOT NULL,
+    version        int       NOT NULL,
     -- Up or Down
     change         text      NOT NULL,
     -- NULL for Down
     state          text      NULL,
-    created_at  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
+    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 create index block_diffs_idx_block_id on block_diffs (block_id);
@@ -106,11 +107,15 @@ create table substates
     created_justify          text      not NULL,
     created_block            text      not NULL,
     created_height           bigint    not NULL,
+    -- <epoch, shard> uniquely identifies the chain
+    created_at_epoch         bigint    not NULL,
+    created_by_shard         int       not NULL,
     destroyed_by_transaction text      NULL,
     destroyed_justify        text      NULL,
-    destroyed_by_block       text      NULL,
-    created_at_epoch         bigint    not NULL,
+    destroyed_by_block       bigint    NULL,
+    -- <epoch, shard> uniquely identifies the chain
     destroyed_at_epoch       bigint    NULL,
+    destroyed_by_shard       int       NULL,
     created_at               timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
     destroyed_at             timestamp NULL
 );
@@ -143,19 +148,19 @@ create table high_qcs
     id           integer   not null primary key autoincrement,
     block_id     text      not null,
     block_height bigint    not null,
+    epoch        bigint    not null,
     qc_id        text      not null,
     created_at   timestamp NOT NULL default current_timestamp,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id),
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 
-create unique index high_qcs_uniq_idx_qc_id on high_qcs (qc_id);
-
 create table last_voted
 (
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
+    epoch      bigint    not null,
     created_at timestamp NOT NULL default current_timestamp
 );
 
@@ -176,6 +181,7 @@ create table last_executed
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
+    epoch      bigint    not null,
     created_at timestamp NOT NULL default current_timestamp,
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
@@ -185,6 +191,7 @@ create table last_proposed
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
+    epoch      bigint    not null,
     created_at timestamp NOT NULL default current_timestamp
 );
 
@@ -193,6 +200,7 @@ create table locked_block
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
+    epoch      bigint    not null,
     created_at timestamp NOT NULL default current_timestamp,
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
@@ -329,13 +337,17 @@ CREATE TABLE foreign_receive_counters
 CREATE TABLE state_tree
 (
     id       integer not NULL primary key AUTOINCREMENT,
+    epoch    bigint  not NULL,
+    shard    int     not NULL,
     key      text    not NULL,
     node     text    not NULL,
     is_stale boolean not null default '0'
 );
 
+-- Scoping by epoch,shard
+CREATE INDEX state_tree_idx_epoch_shard_key on state_tree (epoch, shard);
 -- Duplicate keys are not allowed
-CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (key);
+CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (epoch, shard, key);
 -- filtering out or by is_stale is used in every query
 CREATE INDEX state_tree_idx_is_stale on state_tree (is_stale);
 
@@ -351,6 +363,25 @@ CREATE TABLE pending_state_tree_diffs
 
 CREATE UNIQUE INDEX pending_state_tree_diffs_uniq_idx_block_id on pending_state_tree_diffs (block_id);
 
+-- An append-only store of state transitions
+CREATE TABLE state_transitions
+(
+    id               integer                                   not NULL primary key AUTOINCREMENT,
+    -- <epoch, shard> tuple uniquely identifies the "chain" that created the state transition
+    epoch            bigint                                    not NULL,
+    shard            int                                       not NULL,
+    -- in conjunction with the <epoch, shard>, this uniquely identifies and orders the state transition
+    seq              bigint                                    not NULL,
+    substate_address text                                      not NULL,
+    -- substate_id and version not required, just to make DB inspection easier
+    substate_id      text                                      not NULL,
+    version          int                                       not NULL,
+    transition       text check (transition IN ('UP', 'DOWN')) not NULL,
+    state_hash       text                                      NULL,
+    state_version    bigint                                    not NULL,
+    created_at       timestamp                                 not NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (substate_address) REFERENCES substates (address)
+);
 
 -- Debug Triggers
 CREATE TABLE transaction_pool_history

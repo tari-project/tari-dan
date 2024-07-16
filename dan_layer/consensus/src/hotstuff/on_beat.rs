@@ -28,3 +28,9 @@ impl OnBeat {
         self.sender.send(()).expect("receiver can never be dropped")
     }
 }
+
+impl Default for OnBeat {
+    fn default() -> Self {
+        Self::new()
+    }
+}

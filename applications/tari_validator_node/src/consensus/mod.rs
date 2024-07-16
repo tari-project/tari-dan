@@ -96,12 +96,13 @@ pub async fn spawn(
             max_base_layer_blocks_ahead: consensus_constants.max_base_layer_blocks_ahead,
         },
     );
+    let current_view = hotstuff_worker.pacemaker().current_view().clone();
 
     let (tx_current_state, rx_current_state) = watch::channel(Default::default());
     let context = ConsensusWorkerContext {
         epoch_manager: epoch_manager.clone(),
         hotstuff: hotstuff_worker,
-        state_sync: RpcStateSyncManager::new(network, epoch_manager, store, leader_strategy, client_factory),
+        state_sync: RpcStateSyncManager::new(epoch_manager, store, client_factory),
         tx_current_state,
     };
 
@@ -109,7 +110,11 @@ pub async fn spawn(
 
     (
         handle,
-        ConsensusHandle::new(rx_current_state, EventSubscription::new(tx_hotstuff_events)),
+        ConsensusHandle::new(
+            rx_current_state,
+            EventSubscription::new(tx_hotstuff_events),
+            current_view,
+        ),
         rx_mempool,
     )
 }

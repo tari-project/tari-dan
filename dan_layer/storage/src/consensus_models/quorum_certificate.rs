@@ -55,7 +55,7 @@ impl QuorumCertificate {
     ) -> Self {
         leaf_hashes.sort();
         let mut qc = Self {
-            qc_id: QcId::genesis(),
+            qc_id: QcId::zero(),
             block_id: block,
             block_height,
             epoch,
@@ -70,7 +70,7 @@ impl QuorumCertificate {
 
     pub fn genesis() -> Self {
         Self::new(
-            BlockId::genesis(),
+            BlockId::zero(),
             NodeHeight::zero(),
             Epoch(0),
             Shard::from(0),
@@ -92,15 +92,11 @@ impl QuorumCertificate {
             .result()
             .into()
     }
-
-    pub fn is_valid(&self) -> bool {
-        true
-    }
 }
 
 impl QuorumCertificate {
-    pub fn is_genesis(&self) -> bool {
-        self.block_id.is_genesis()
+    pub fn is_zero(&self) -> bool {
+        self.block_id.is_zero()
     }
 
     pub fn id(&self) -> &QcId {
@@ -139,6 +135,7 @@ impl QuorumCertificate {
         HighQc {
             block_id: self.block_id,
             block_height: self.block_height,
+            epoch: self.epoch,
             qc_id: self.qc_id,
         }
     }
@@ -147,6 +144,7 @@ impl QuorumCertificate {
         LeafBlock {
             block_id: self.block_id,
             height: self.block_height,
+            epoch: self.epoch,
         }
     }
 
@@ -154,6 +152,7 @@ impl QuorumCertificate {
         LastVoted {
             block_id: self.block_id,
             height: self.block_height,
+            epoch: self.epoch,
         }
     }
 }
@@ -197,7 +196,7 @@ impl QuorumCertificate {
         let mut high_qc = HighQc::get(&**tx)?;
 
         if high_qc.block_height() < self.block_height() {
-            debug!(
+            info!(
                 target: LOG_TARGET,
                 "🔥 UPDATE_HIGH_QC ({}, previous high QC: {} {})",
                 self,
@@ -247,7 +246,8 @@ impl Display for QuorumCertificate {
 pub struct QcId(#[serde(with = "serde_with::hex")] FixedHash);
 
 impl QcId {
-    pub const fn genesis() -> Self {
+    /// Represents a zero/null QC. This QC is used to represent the unsigned initial QC.
+    pub const fn zero() -> Self {
         Self(FixedHash::zero())
     }
 
@@ -263,7 +263,7 @@ impl QcId {
         self.0.as_slice()
     }
 
-    pub fn is_genesis(&self) -> bool {
+    pub fn is_zero(&self) -> bool {
         self.0.iter().all(|b| *b == 0)
     }
 }

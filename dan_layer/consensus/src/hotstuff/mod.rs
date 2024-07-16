@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 mod common;
 mod config;
-mod current_height;
+mod current_view;
 mod error;
 mod event;
 mod on_beat;
@@ -21,6 +21,8 @@ mod on_receive_vote;
 mod on_sync_request;
 // mod on_sync_response;
 mod block_change_set;
+mod on_catch_up_sync;
+mod on_message_validate;
 mod pacemaker;
 mod pacemaker_handle;
 mod proposer;
@@ -31,6 +33,7 @@ mod worker;
 
 pub use common::*;
 pub use config::HotstuffConfig;
+pub use current_view::*;
 pub use error::*;
 pub use event::*;
 pub use state_machine::*;

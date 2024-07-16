@@ -57,7 +57,7 @@ pub struct Handler<TCodec: Codec> {
 
 impl<TCodec: Codec> Handler<TCodec> {
     pub fn new(peer_id: PeerId, protocol: StreamProtocol, config: &Config) -> Self {
-        let (pending_events_sender, pending_events_receiver) = mpsc::channel(10);
+        let (pending_events_sender, pending_events_receiver) = mpsc::channel(20);
         Self {
             peer_id,
             protocol,

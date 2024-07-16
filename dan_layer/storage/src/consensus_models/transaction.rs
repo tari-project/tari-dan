@@ -3,7 +3,6 @@
 
 use std::{collections::HashSet, ops::Deref, time::Duration};
 
-use indexmap::IndexSet;
 use serde::Deserialize;
 use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
 use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
@@ -22,7 +21,7 @@ pub struct TransactionRecord {
     pub result: Option<ExecuteResult>,
     pub execution_time: Option<Duration>,
     pub resulting_outputs: Vec<VersionedSubstateId>,
-    pub resolved_inputs: Option<IndexSet<VersionedSubstateIdLockIntent>>,
+    pub resolved_inputs: Option<Vec<VersionedSubstateIdLockIntent>>,
     pub final_decision: Option<Decision>,
     pub finalized_time: Option<Duration>,
     pub abort_details: Option<String>,
@@ -45,7 +44,7 @@ impl TransactionRecord {
     pub fn load(
         transaction: Transaction,
         result: Option<ExecuteResult>,
-        resolved_inputs: Option<IndexSet<VersionedSubstateIdLockIntent>>,
+        resolved_inputs: Option<Vec<VersionedSubstateIdLockIntent>>,
         execution_time: Option<Duration>,
         final_decision: Option<Decision>,
         finalized_time: Option<Duration>,
@@ -92,8 +91,8 @@ impl TransactionRecord {
         &self.resulting_outputs
     }
 
-    pub fn resolved_inputs(&self) -> Option<&IndexSet<VersionedSubstateIdLockIntent>> {
-        self.resolved_inputs.as_ref()
+    pub fn resolved_inputs(&self) -> Option<&[VersionedSubstateIdLockIntent]> {
+        self.resolved_inputs.as_deref()
     }
 
     pub fn final_decision(&self) -> Option<Decision> {

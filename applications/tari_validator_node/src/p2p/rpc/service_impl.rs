@@ -24,10 +24,12 @@ use std::convert::{TryFrom, TryInto};
 
 use log::*;
 use tari_bor::{decode_exact, encode};
-use tari_dan_common_types::{optional::Optional, PeerAddress, SubstateAddress};
+use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, PeerAddress, SubstateAddress};
 use tari_dan_p2p::{
     proto,
     proto::rpc::{
+        GetCheckpointRequest,
+        GetCheckpointResponse,
         GetHighQcRequest,
         GetHighQcResponse,
         GetSubstateRequest,
@@ -38,14 +40,26 @@ use tari_dan_p2p::{
         SubstateStatus,
         SyncBlocksRequest,
         SyncBlocksResponse,
+        SyncStateRequest,
+        SyncStateResponse,
     },
 };
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, HighQc, LockedBlock, QuorumCertificate, SubstateRecord, TransactionRecord},
+    consensus_models::{
+        Block,
+        BlockId,
+        EpochCheckpoint,
+        HighQc,
+        LockedBlock,
+        QuorumCertificate,
+        StateTransitionId,
+        SubstateRecord,
+        TransactionRecord,
+    },
     StateStore,
 };
 use tari_engine_types::virtual_substate::VirtualSubstateId;
-use tari_epoch_manager::base_layer::EpochManagerHandle;
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_rpc_framework::{Request, Response, RpcStatus, Streaming};
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
@@ -53,13 +67,17 @@ use tari_validator_node_rpc::rpc_service::ValidatorNodeRpcService;
 use tokio::{sync::mpsc, task};
 
 use crate::{
-    p2p::{rpc::sync_task::BlockSyncTask, services::mempool::MempoolHandle},
+    p2p::{
+        rpc::{block_sync_task::BlockSyncTask, state_sync_task::StateSyncTask},
+        services::mempool::MempoolHandle,
+    },
     virtual_substate::VirtualSubstateManager,
 };
 
 const LOG_TARGET: &str = "tari::dan::p2p::rpc";
 
 pub struct ValidatorNodeRpcServiceImpl {
+    epoch_manager: EpochManagerHandle<PeerAddress>,
     shard_state_store: SqliteStateStore<PeerAddress>,
     mempool: MempoolHandle,
     virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PeerAddress>, EpochManagerHandle<PeerAddress>>,
@@ -67,6 +85,7 @@ pub struct ValidatorNodeRpcServiceImpl {
 
 impl ValidatorNodeRpcServiceImpl {
     pub fn new(
+        epoch_manager: EpochManagerHandle<PeerAddress>,
         shard_state_store: SqliteStateStore<PeerAddress>,
         mempool: MempoolHandle,
         virtual_substate_manager: VirtualSubstateManager<
@@ -75,6 +94,7 @@ impl ValidatorNodeRpcServiceImpl {
         >,
     ) -> Self {
         Self {
+            epoch_manager,
             shard_state_store,
             mempool,
             virtual_substate_manager,
@@ -93,14 +113,14 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             .transaction
             .ok_or_else(|| RpcStatus::bad_request("Missing transaction"))?
             .try_into()
-            .map_err(|e| RpcStatus::bad_request(&format!("Malformed transaction: {}", e)))?;
+            .map_err(|e| RpcStatus::bad_request(format!("Malformed transaction: {}", e)))?;
 
         let transaction_id = *transaction.id();
 
         self.mempool
             .submit_transaction(transaction)
             .await
-            .map_err(|e| RpcStatus::bad_request(&format!("Invalid transaction: {}", e)))?;
+            .map_err(|e| RpcStatus::bad_request(format!("Invalid transaction: {}", e)))?;
 
         debug!(target: LOG_TARGET, "Accepted instruction into mempool");
 
@@ -113,7 +133,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         let req = req.into_message();
 
         let address = SubstateAddress::from_bytes(&req.address)
-            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate id: {}", e)))?;
+            .map_err(|e| RpcStatus::bad_request(format!("Invalid encoded substate id: {}", e)))?;
 
         let tx = self
             .shard_state_store
@@ -177,7 +197,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         let req = req.into_message();
 
         let address = decode_exact::<VirtualSubstateId>(&req.address)
-            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate id: {}", e)))?;
+            .map_err(|e| RpcStatus::bad_request(format!("Invalid encoded substate id: {}", e)))?;
 
         let substate = self
             .virtual_substate_manager
@@ -186,8 +206,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
         let resp = proto::rpc::GetVirtualSubstateResponse {
-            substate: encode(&substate)
-                .map_err(|e| RpcStatus::general(&format!("Unable to encode substate: {}", e)))?,
+            substate: encode(&substate).map_err(|e| RpcStatus::general(format!("Unable to encode substate: {}", e)))?,
             // TODO: evidence for the correctness of the substate
             quorum_certificates: vec![],
         };
@@ -254,12 +273,12 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         let (sender, receiver) = mpsc::channel(10);
 
         let start_block_id = BlockId::try_from(req.start_block_id)
-            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded block id: {}", e)))?;
+            .map_err(|e| RpcStatus::bad_request(format!("Invalid encoded block id: {}", e)))?;
         // Check if we have the blocks
         let start_block = store
             .with_read_tx(|tx| Block::get(tx, &start_block_id).optional())
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
-            .ok_or_else(|| RpcStatus::not_found(&format!("start_block_id {start_block_id} not found")))?;
+            .ok_or_else(|| RpcStatus::not_found(format!("start_block_id {start_block_id} not found")))?;
 
         // Check that the start block
         let locked_block = store
@@ -267,7 +286,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
             .ok_or_else(|| RpcStatus::not_found("No locked block"))?;
         if start_block.height() > locked_block.height() {
-            return Err(RpcStatus::not_found(&format!(
+            return Err(RpcStatus::not_found(format!(
                 "start_block_id {} is after locked block {}",
                 start_block_id, locked_block
             )));
@@ -301,5 +320,77 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         Ok(Response::new(GetHighQcResponse {
             high_qc: Some((&high_qc).into()),
         }))
+    }
+
+    async fn get_checkpoint(
+        &self,
+        request: Request<GetCheckpointRequest>,
+    ) -> Result<Response<GetCheckpointResponse>, RpcStatus> {
+        let msg = request.into_message();
+        let current_epoch = self
+            .epoch_manager
+            .current_epoch()
+            .await
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+        if msg.current_epoch != current_epoch {
+            // This may occur if one of the nodes has not fully scanned the base layer
+            return Err(RpcStatus::bad_request(format!(
+                "Peer requested checkpoint with epoch {} but current epoch is {}",
+                msg.current_epoch, current_epoch
+            )));
+        }
+
+        let prev_epoch = current_epoch.saturating_sub(Epoch(1));
+        if prev_epoch.is_zero() {
+            return Err(RpcStatus::not_found("Cannot generate checkpoint for genesis epoch"));
+        }
+
+        let Some(local_committee_info) = self
+            .epoch_manager
+            .get_local_committee_info(prev_epoch)
+            .await
+            .optional()
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))? else
+        {
+            return Err(RpcStatus::bad_request(format!(
+                "This validator node is not registered for the previous epoch {prev_epoch}"
+            )));
+        };
+
+        let checkpoint = self
+            .shard_state_store
+            .with_read_tx(|tx| EpochCheckpoint::generate(tx, prev_epoch, local_committee_info.shard()))
+            .optional()
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+
+        Ok(Response::new(GetCheckpointResponse {
+            checkpoint: checkpoint.map(Into::into),
+        }))
+    }
+
+    async fn sync_state(&self, request: Request<SyncStateRequest>) -> Result<Streaming<SyncStateResponse>, RpcStatus> {
+        let req = request.into_message();
+
+        let (sender, receiver) = mpsc::channel(10);
+
+        let last_state_transition_for_chain =
+            StateTransitionId::new(Epoch(req.start_epoch), Shard::from(req.start_shard), req.start_seq);
+
+        // TODO: validate that we can provide the required sync data
+        let current_shard = Shard::from(req.current_shard);
+        let current_epoch = Epoch(req.current_epoch);
+        info!(target: LOG_TARGET, "🌍peer initiated sync with this node ({current_epoch}, {current_shard})");
+
+        task::spawn(
+            StateSyncTask::new(
+                self.shard_state_store.clone(),
+                sender,
+                last_state_transition_for_chain,
+                current_epoch,
+            )
+            .run(),
+        );
+
+        Ok(Streaming::new(receiver))
     }
 }

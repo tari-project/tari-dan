@@ -563,6 +563,10 @@ impl JsonRpcHandlers {
 
     pub async fn get_epoch_manager_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
+        self.epoch_manager
+            .wait_for_initial_scanning_to_complete()
+            .await
+            .map_err(internal_error(answer_id))?;
         let current_epoch = self.epoch_manager.current_epoch().await.map_err(|e| {
             JsonRpcResponse::error(
                 answer_id,

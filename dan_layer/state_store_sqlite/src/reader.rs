@@ -14,7 +14,7 @@ use diesel::{
     dsl,
     query_builder::SqlQuery,
     sql_query,
-    sql_types::{BigInt, Text},
+    sql_types::{BigInt, Integer, Text},
     BoolExpressionMethods,
     ExpressionMethods,
     JoinOnDsl,
@@ -29,7 +29,7 @@ use indexmap::IndexMap;
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -51,6 +51,8 @@ use tari_dan_storage::{
         PendingStateTreeDiff,
         QcId,
         QuorumCertificate,
+        StateTransition,
+        StateTransitionId,
         SubstateRecord,
         TransactionExecution,
         TransactionPoolRecord,
@@ -63,6 +65,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_engine_types::substate::SubstateId;
+use tari_state_tree::{Node, NodeKey, TreeNode, Version};
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 use tari_utilities::ByteArray;
 
@@ -209,24 +212,32 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
     /// Returns the blocks from the start_block (inclusive) to the end_block (inclusive).
     fn get_block_ids_between(
         &self,
+        epoch: Epoch,
+        shard: Shard,
         start_block: &BlockId,
         end_block: &BlockId,
     ) -> Result<Vec<String>, SqliteStorageError> {
+        debug!(target: LOG_TARGET, "get_block_ids_between: {epoch} {shard} start: {start_block}, end: {end_block}");
         let block_ids = sql_query(
             r#"
             WITH RECURSIVE tree(bid, parent) AS (
-                SELECT block_id, parent_block_id FROM blocks where block_id = ?
+                SELECT block_id, parent_block_id FROM blocks where block_id = ? AND epoch = ? AND shard = ?
             UNION ALL
                 SELECT block_id, parent_block_id
                 FROM blocks JOIN tree ON
                     block_id = tree.parent
                     AND tree.bid != ?
+                WHERE epoch = ? AND shard = ?
                 LIMIT 1000
             )
             SELECT bid FROM tree"#,
         )
         .bind::<Text, _>(serialize_hex(end_block))
+        .bind::<BigInt, _>(epoch.as_u64() as i64)
+        .bind::<Integer, _>(shard.as_u32() as i32)
         .bind::<Text, _>(serialize_hex(start_block))
+        .bind::<BigInt, _>(epoch.as_u64() as i64)
+        .bind::<Integer, _>(shard.as_u32() as i32)
         .load_iter::<BlockIdSqlValue, _>(self.connection())
         .map_err(|e| SqliteStorageError::DieselError {
             operation: "get_block_ids_that_change_state_between",
@@ -421,7 +432,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         use crate::schema::foreign_proposals;
 
         let foreign_proposals = foreign_proposals::table
-            .filter(foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32))
+            .filter(foreign_proposals::bucket.eq(foreign_proposal.shard.as_u32() as i32))
             .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
             .filter(foreign_proposals::transactions.eq(serialize_json(&foreign_proposal.transactions)?))
             .filter(foreign_proposals::base_layer_block_height.eq(foreign_proposal.base_layer_block_height as i64))
@@ -632,8 +643,8 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
     ) -> Result<TransactionExecution, StorageError> {
         use crate::schema::transaction_executions;
 
-        // TODO: This get slower as the chain progresses.
-        let block_ids = self.get_block_ids_that_change_state_between(&BlockId::genesis(), from_block_id)?;
+        // TODO: This gets slower as the chain progresses.
+        let block_ids = self.get_block_ids_that_change_state_between(&BlockId::zero(), from_block_id)?;
 
         let execution = transaction_executions::table
             .filter(transaction_executions::transaction_id.eq(serialize_hex(tx_id)))
@@ -672,12 +683,14 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         block.try_convert(qc)
     }
 
-    fn blocks_get_tip(&self) -> Result<Block, StorageError> {
+    fn blocks_get_tip(&self, epoch: Epoch, shard: Shard) -> Result<Block, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let (block, qc) = blocks::table
             .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
             .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .filter(blocks::epoch.eq(epoch.as_u64() as i64))
+            .filter(blocks::shard.eq(shard.as_u32() as i32))
             .order_by(blocks::height.desc())
             .first::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -696,21 +709,53 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         block.try_convert(qc)
     }
 
+    fn blocks_get_last_n_in_epoch(&self, n: usize, epoch: Epoch, shard: Shard) -> Result<Vec<Block>, StorageError> {
+        use crate::schema::{blocks, quorum_certificates};
+
+        let blocks = blocks::table
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .filter(blocks::epoch.eq(epoch.as_u64() as i64))
+            .filter(blocks::shard.eq(shard.as_u32() as i32))
+            .filter(blocks::is_committed.eq(true))
+            .order_by(blocks::height.desc())
+            .limit(n as i64)
+            .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_get_last_n_in_epoch",
+                source: e,
+            })?;
+
+        blocks
+            .into_iter()
+            // Order from lowest to highest height
+            .rev()
+            .map(|(b, qc)| {
+                qc.ok_or_else(|| StorageError::DataInconsistency {
+                    details: format!(
+                        "blocks_get_last_n_in_epoch: block {} references non-existent quorum certificate {}",
+                        b.block_id, b.qc_id
+                    ),
+                })
+                .and_then(|qc| b.try_convert(qc))
+            })
+            .collect()
+    }
+
     fn blocks_get_all_between(
         &self,
+        epoch: Epoch,
+        shard: Shard,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
         include_dummy_blocks: bool,
     ) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
-        let mut block_ids = self.get_block_ids_between(start_block_id_exclusive, end_block_id_inclusive)?;
+        let block_ids = self.get_block_ids_between(epoch, shard, start_block_id_exclusive, end_block_id_inclusive)?;
         if block_ids.is_empty() {
             return Ok(vec![]);
         }
-
-        // Exclude start block
-        block_ids.pop();
 
         let mut query = blocks::table
             .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
@@ -723,6 +768,8 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         }
 
         let results = query
+            .filter(blocks::epoch.eq(epoch.as_u64() as i64))
+            .filter(blocks::shard.eq(shard.as_u32() as i32))
             .order_by(blocks::height.asc())
             .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -971,24 +1018,28 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             Some(Ordering::Ascending) => match ordering_index {
                 Some(0) => query.order_by(blocks::block_id.asc()),
                 Some(1) => query.order_by(blocks::epoch.asc()),
-                Some(2) => query.order_by(blocks::height.asc()),
+                Some(2) => query.order_by(blocks::epoch.asc()).then_order_by(blocks::height.asc()),
                 Some(4) => query.order_by(blocks::command_count.asc()),
                 Some(5) => query.order_by(blocks::total_leader_fee.asc()),
                 Some(6) => query.order_by(blocks::block_time.asc()),
                 Some(7) => query.order_by(blocks::created_at.asc()),
                 Some(8) => query.order_by(blocks::proposed_by.asc()),
-                _ => query.order_by(blocks::height.asc()),
+                _ => query.order_by(blocks::epoch.asc()).then_order_by(blocks::height.asc()),
             },
             _ => match ordering_index {
                 Some(0) => query.order_by(blocks::block_id.desc()),
                 Some(1) => query.order_by(blocks::epoch.desc()),
-                Some(2) => query.order_by(blocks::height.desc()),
+                Some(2) => query
+                    .order_by(blocks::epoch.desc())
+                    .then_order_by(blocks::height.desc()),
                 Some(4) => query.order_by(blocks::command_count.desc()),
                 Some(5) => query.order_by(blocks::total_leader_fee.desc()),
                 Some(6) => query.order_by(blocks::block_time.desc()),
                 Some(7) => query.order_by(blocks::created_at.desc()),
                 Some(8) => query.order_by(blocks::proposed_by.desc()),
-                _ => query.order_by(blocks::height.desc()),
+                _ => query
+                    .order_by(blocks::epoch.desc())
+                    .then_order_by(blocks::height.desc()),
             },
         };
 
@@ -1720,6 +1771,31 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         Ok(count > 0)
     }
 
+    fn substates_get_n_after(&self, n: usize, after: &SubstateAddress) -> Result<Vec<SubstateRecord>, StorageError> {
+        use crate::schema::substates;
+
+        let start_id = substates::table
+            .select(substates::id)
+            .filter(substates::address.eq(after.to_string()))
+            .get_result::<i32>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_n_after",
+                source: e,
+            })?;
+
+        let substates = substates::table
+            .filter(substates::id.gt(start_id))
+            .limit(n as i64)
+            .order_by(substates::id.asc())
+            .get_results::<sql_models::SubstateRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_n_after",
+                source: e,
+            })?;
+
+        substates.into_iter().map(TryInto::try_into).collect()
+    }
+
     fn substates_get_many_within_range(
         &self,
         start: &SubstateAddress,
@@ -1774,31 +1850,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         substates.into_iter().map(TryInto::try_into).collect()
     }
 
-    fn substates_get_all_for_block(&self, block_id: &BlockId) -> Result<Vec<SubstateRecord>, StorageError> {
-        use crate::schema::substates;
-
-        let block_id_hex = serialize_hex(block_id);
-
-        let substates = substates::table
-            .filter(
-                substates::created_block
-                    .eq(&block_id_hex)
-                    .or(substates::destroyed_by_block.eq(Some(&block_id_hex))),
-            )
-            .get_results::<sql_models::SubstateRecord>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substates_get_all_for_block",
-                source: e,
-            })?;
-
-        let substates = substates
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(substates)
-    }
-
     fn substates_get_all_for_transaction(
         &self,
         transaction_id: &TransactionId,
@@ -1840,7 +1891,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         // block, then we just have to exclude locks for the forked chain and load everything else.
         // For now, we just fetch all block ids in the chain relevant to the given block, which will be slower and more
         // memory intensive as the chain progresses.
-        let block_ids = self.get_block_ids_that_change_state_between(&BlockId::genesis(), &block_id)?;
+        let block_ids = self.get_block_ids_that_change_state_between(&BlockId::zero(), &block_id)?;
 
         let lock_recs = substate_locks::table
             .filter(substate_locks::block_id.eq_any(block_ids))
@@ -1899,6 +1950,8 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
     fn pending_state_tree_diffs_get_all_up_to_commit_block(
         &self,
+        epoch: Epoch,
+        shard: Shard,
         block_id: &BlockId,
     ) -> Result<Vec<PendingStateTreeDiff>, StorageError> {
         use crate::schema::pending_state_tree_diffs;
@@ -1906,10 +1959,8 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         // Get the last committed block
         let committed_block_id = self.get_commit_block_id()?;
 
-        let mut block_ids = self.get_block_ids_between(&committed_block_id, block_id)?;
+        let block_ids = self.get_block_ids_between(epoch, shard, &committed_block_id, block_id)?;
 
-        // Exclude commit block
-        block_ids.pop();
         if block_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -1924,6 +1975,98 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             })?;
 
         diffs.into_iter().map(TryInto::try_into).collect()
+    }
+
+    fn state_transitions_get_n_after(
+        &self,
+        n: usize,
+        id: StateTransitionId,
+        end_epoch: Epoch,
+    ) -> Result<Vec<StateTransition>, StorageError> {
+        use crate::schema::{state_transitions, substates};
+
+        let start_id = state_transitions::table
+            .select(state_transitions::id)
+            .filter(state_transitions::epoch.eq(id.epoch().as_u64() as i64))
+            .filter(state_transitions::shard.eq(id.shard().as_u32() as i32))
+            .filter(state_transitions::seq.eq(0i64))
+            .order_by(state_transitions::id.asc())
+            .first::<i32>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "state_transitions_get_n_after",
+                source: e,
+            })?;
+
+        let start_id = start_id + (id.seq() as i32);
+
+        let transitions = state_transitions::table
+            .left_join(substates::table.on(state_transitions::substate_address.eq(substates::address)))
+            .select((state_transitions::all_columns, substates::all_columns.nullable()))
+            .filter(state_transitions::id.gt(start_id))
+            .filter(state_transitions::epoch.lt(end_epoch.as_u64() as i64))
+            .limit(n as i64)
+            .get_results::<(sql_models::StateTransition, Option<sql_models::SubstateRecord>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "state_transitions_get_n_after",
+                source: e,
+            })?;
+
+        transitions
+            .into_iter()
+            .map(|(t, s)| {
+                let s = s.ok_or_else(|| StorageError::DataInconsistency {
+                    details: format!("substate entry does not exist for transition {}", t.id),
+                })?;
+
+                t.try_convert(s)
+            })
+            .collect()
+    }
+
+    fn state_transitions_get_last_id(&self) -> Result<StateTransitionId, StorageError> {
+        use crate::schema::state_transitions;
+
+        let (seq, epoch, shard) = state_transitions::table
+            .select((
+                state_transitions::seq,
+                state_transitions::epoch,
+                state_transitions::shard,
+            ))
+            .order_by(state_transitions::epoch.desc())
+            .then_order_by(state_transitions::seq.desc())
+            .first::<(i64, i64, i32)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "state_transitions_get_last_id",
+                source: e,
+            })?;
+
+        let epoch = Epoch(epoch as u64);
+        let shard = Shard::from(shard as u32);
+        let seq = seq as u64;
+
+        Ok(StateTransitionId::new(epoch, shard, seq))
+    }
+
+    fn state_tree_nodes_get(&self, epoch: Epoch, shard: Shard, key: &NodeKey) -> Result<Node<Version>, StorageError> {
+        use crate::schema::state_tree;
+
+        let node = state_tree::table
+            .select(state_tree::node)
+            .filter(state_tree::epoch.eq(epoch.as_u64() as i64))
+            .filter(state_tree::shard.eq(shard.as_u32() as i32))
+            .filter(state_tree::key.eq(key.to_string()))
+            .filter(state_tree::is_stale.eq(false))
+            .first::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "state_tree_nodes_get",
+                source: e,
+            })?;
+
+        let node = serde_json::from_str::<TreeNode>(&node).map_err(|e| StorageError::DataInconsistency {
+            details: format!("Failed to deserialize state tree node: {}", e),
+        })?;
+
+        Ok(node.into_node())
     }
 }
 

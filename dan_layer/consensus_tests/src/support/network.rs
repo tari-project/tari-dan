@@ -343,6 +343,7 @@ impl TestNetworkWorker {
         }
         log::debug!("✉️ Message {} from {} to {}", msg, from, to);
         if from != to && self.is_offline_destination(&from, u32::MAX.into()).await {
+            log::info!("🛑 Discarding message {msg}. Leader {from} is offline");
             return;
         }
         self.on_message.send(Some(msg.clone())).unwrap();

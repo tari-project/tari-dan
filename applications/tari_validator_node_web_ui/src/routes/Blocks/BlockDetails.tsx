@@ -34,7 +34,7 @@ import Loading from "../../Components/Loading";
 import { getBlock, getIdentity } from "../../utils/json_rpc";
 import Transactions from "./Transactions";
 import { primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../utils/helpers";
-import type { Block, EpochEvent, TransactionAtom } from "@tariproject/typescript-bindings";
+import type { Block, TransactionAtom } from "@tariproject/typescript-bindings";
 import type { GetIdentityResponse } from "@tariproject/typescript-bindings/validator-node-client";
 
 export default function BlockDetails() {
@@ -47,7 +47,7 @@ export default function BlockDetails() {
   const [prepare, setPrepare] = useState<TransactionAtom[]>([]);
   const [localPrepared, setLocalPrepared] = useState<TransactionAtom[]>([]);
   const [accept, setAccept] = useState<TransactionAtom[]>([]);
-  const [epochEvents, setEpochEvents] = useState<EpochEvent[]>([]);
+  const [epochEvents, setEpochEvents] = useState<string[]>([]);
   const [identity, setIdentity] = useState<GetIdentityResponse>();
   const [blockTime, setBlockTime] = useState<number>(0);
 
@@ -72,21 +72,22 @@ export default function BlockDetails() {
           setAccept([]);
           setEpochEvents([]);
           for (let command of resp.block.commands) {
-            if ("LocalOnly" in command) {
-              let newLocalOnly = command.LocalOnly;
-              setLocalOnly((localOnly: TransactionAtom[]) => [...localOnly, newLocalOnly]);
-            } else if ("Prepare" in command) {
-              let newPrepare = command.Prepare;
-              setPrepare((prepare: TransactionAtom[]) => [...prepare, newPrepare]);
-            } else if ("LocalPrepared" in command) {
-              let newLocalPrepared = command.LocalPrepared;
-              setLocalPrepared((localPrepared: TransactionAtom[]) => [...localPrepared, newLocalPrepared]);
-            } else if ("Accept" in command) {
-              let newAccept = command.Accept;
-              setAccept((accept: TransactionAtom[]) => [...accept, newAccept]);
-            } else if ("EpochEvent" in command) {
-              const newEpochEvent = command.EpochEvent;
-              setEpochEvents((epochEvents: EpochEvent[]) => [...epochEvents, newEpochEvent]);
+            if (typeof command === "object") {
+              if ("LocalOnly" in command) {
+                let newLocalOnly = command.LocalOnly;
+                setLocalOnly((localOnly: TransactionAtom[]) => [...localOnly, newLocalOnly]);
+              } else if ("Prepare" in command) {
+                let newPrepare = command.Prepare;
+                setPrepare((prepare: TransactionAtom[]) => [...prepare, newPrepare]);
+              } else if ("LocalPrepared" in command) {
+                let newLocalPrepared = command.LocalPrepared;
+                setLocalPrepared((localPrepared: TransactionAtom[]) => [...localPrepared, newLocalPrepared]);
+              } else if ("Accept" in command) {
+                let newAccept = command.Accept;
+                setAccept((accept: TransactionAtom[]) => [...accept, newAccept]);
+              }
+            } else {
+              setEpochEvents((epochEvents: string[]) => [...epochEvents, command as string]);
             }
           }
         })

@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
@@ -53,7 +53,7 @@ impl ExecutionOutput {
     pub fn resolve_inputs(
         &self,
         inputs: IndexMap<VersionedSubstateId, Substate>,
-    ) -> IndexSet<VersionedSubstateIdLockIntent> {
+    ) -> Vec<VersionedSubstateIdLockIntent> {
         if let Some(diff) = self.result.finalize.accept() {
             inputs
                 .into_iter()

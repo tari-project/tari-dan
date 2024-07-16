@@ -48,7 +48,7 @@ use tari_dan_app_utilities::{
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
 };
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PeerAddress, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, PeerAddress, SubstateAddress};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
@@ -331,6 +331,7 @@ pub async fn spawn_services(
     spawn_p2p_rpc(
         config,
         &mut networking,
+        epoch_manager.clone(),
         state_store.clone(),
         mempool.clone(),
         virtual_substate_manager,
@@ -422,6 +423,7 @@ impl Services {
 async fn spawn_p2p_rpc(
     config: &ApplicationConfig,
     networking: &mut NetworkingHandle<TariMessagingSpec>,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
     shard_store_store: SqliteStateStore<PeerAddress>,
     mempool: MempoolHandle,
     virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PeerAddress>, EpochManagerHandle<PeerAddress>>,
@@ -431,6 +433,7 @@ async fn spawn_p2p_rpc(
         .with_maximum_sessions_per_client(config.validator_node.rpc.max_sessions_per_client)
         .finish()
         .add_service(create_tari_validator_node_rpc_service(
+            epoch_manager,
             shard_store_store,
             mempool,
             virtual_substate_manager,
@@ -451,7 +454,7 @@ where
     TTx::Target: StateStoreReadTransaction,
     TTx::Addr: NodeAddressable + Serialize,
 {
-    let genesis_block = Block::genesis(network);
+    let genesis_block = Block::genesis(network, Epoch(0), Shard::zero());
     let substate_id = SubstateId::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let substate_address = SubstateAddress::from_substate_id(&substate_id, 0);
     let mut metadata: Metadata = Default::default();
@@ -474,8 +477,9 @@ where
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
-            created_block: BlockId::genesis(),
+            created_block: BlockId::zero(),
             created_height: NodeHeight(0),
+            created_by_shard: Shard::zero(),
             created_at_epoch: Epoch(0),
             destroyed: None,
         }
@@ -503,9 +507,10 @@ where
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
-            created_block: BlockId::genesis(),
+            created_block: BlockId::zero(),
             created_height: NodeHeight(0),
             created_at_epoch: Epoch(0),
+            created_by_shard: Shard::zero(),
             destroyed: None,
         }
         .create(tx)?;

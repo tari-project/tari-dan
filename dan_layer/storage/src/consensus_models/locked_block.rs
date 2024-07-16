@@ -3,7 +3,7 @@
 
 use std::fmt::Display;
 
-use tari_dan_common_types::NodeHeight;
+use tari_dan_common_types::{Epoch, NodeHeight};
 
 use crate::{
     consensus_models::{Block, BlockId},
@@ -16,6 +16,7 @@ use crate::{
 pub struct LockedBlock {
     pub height: NodeHeight,
     pub block_id: BlockId,
+    pub epoch: Epoch,
 }
 
 impl LockedBlock {
@@ -25,6 +26,10 @@ impl LockedBlock {
 
     pub fn block_id(&self) -> &BlockId {
         &self.block_id
+    }
+
+    pub fn epoch(&self) -> Epoch {
+        self.epoch
     }
 }
 

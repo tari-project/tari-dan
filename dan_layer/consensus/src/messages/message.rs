@@ -18,7 +18,8 @@ pub enum HotstuffMessage {
     Vote(VoteMessage),
     RequestMissingTransactions(RequestMissingTransactionsMessage),
     RequestedTransaction(RequestedTransactionMessage),
-    SyncRequest(SyncRequestMessage),
+    CatchUpSyncRequest(SyncRequestMessage),
+    // TODO: remove unused
     SyncResponse(SyncResponseMessage),
 }
 
@@ -31,7 +32,7 @@ impl HotstuffMessage {
             HotstuffMessage::Vote(_) => "Vote",
             HotstuffMessage::RequestMissingTransactions(_) => "RequestMissingTransactions",
             HotstuffMessage::RequestedTransaction(_) => "RequestedTransaction",
-            HotstuffMessage::SyncRequest(_) => "SyncRequest",
+            HotstuffMessage::CatchUpSyncRequest(_) => "CatchUpSyncRequest",
             HotstuffMessage::SyncResponse(_) => "SyncResponse",
         }
     }
@@ -44,7 +45,7 @@ impl HotstuffMessage {
             Self::Vote(msg) => msg.epoch,
             Self::RequestMissingTransactions(msg) => msg.epoch,
             Self::RequestedTransaction(msg) => msg.epoch,
-            Self::SyncRequest(msg) => msg.epoch,
+            Self::CatchUpSyncRequest(msg) => msg.epoch,
             Self::SyncResponse(msg) => msg.epoch,
         }
     }
@@ -61,8 +62,10 @@ impl Display for HotstuffMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HotstuffMessage::NewView(msg) => write!(f, "NewView({})", msg.new_height),
-            HotstuffMessage::Proposal(msg) => write!(f, "Proposal({})", msg.block.height()),
-            HotstuffMessage::ForeignProposal(msg) => write!(f, "ForeignProposal({})", msg.block.height()),
+            HotstuffMessage::Proposal(msg) => {
+                write!(f, "Proposal(Epoch={},Height={})", msg.block.epoch(), msg.block.height(),)
+            },
+            HotstuffMessage::ForeignProposal(msg) => write!(f, "ForeignProposal({})", msg),
             HotstuffMessage::Vote(msg) => write!(f, "Vote({}, {}, {})", msg.block_height, msg.block_id, msg.decision),
             HotstuffMessage::RequestMissingTransactions(msg) => {
                 write!(
@@ -80,7 +83,7 @@ impl Display for HotstuffMessage {
                 msg.block_id,
                 msg.epoch
             ),
-            HotstuffMessage::SyncRequest(msg) => write!(f, "SyncRequest({})", msg.high_qc),
+            HotstuffMessage::CatchUpSyncRequest(msg) => write!(f, "SyncRequest({})", msg.high_qc),
             HotstuffMessage::SyncResponse(msg) => write!(f, "SyncResponse({} block(s))", msg.blocks.len()),
         }
     }

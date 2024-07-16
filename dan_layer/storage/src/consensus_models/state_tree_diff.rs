@@ -6,7 +6,7 @@
 
 use std::ops::Deref;
 
-use tari_dan_common_types::NodeHeight;
+use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight};
 
 use crate::{consensus_models::BlockId, StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
@@ -29,9 +29,16 @@ impl PendingStateTreeDiff {
 
 impl PendingStateTreeDiff {
     /// Returns all pending state tree diffs from the last committed block (exclusive) to the given block (inclusive).
-    pub fn get_all_up_to_commit_block<TTx>(tx: &TTx, block_id: &BlockId) -> Result<Vec<Self>, StorageError>
-    where TTx: StateStoreReadTransaction {
-        tx.pending_state_tree_diffs_get_all_up_to_commit_block(block_id)
+    pub fn get_all_up_to_commit_block<TTx>(
+        tx: &TTx,
+        epoch: Epoch,
+        shard: Shard,
+        block_id: &BlockId,
+    ) -> Result<Vec<Self>, StorageError>
+    where
+        TTx: StateStoreReadTransaction,
+    {
+        tx.pending_state_tree_diffs_get_all_up_to_commit_block(epoch, shard, block_id)
     }
 
     pub fn remove_by_block<TTx>(tx: &mut TTx, block_id: &BlockId) -> Result<Self, StorageError>

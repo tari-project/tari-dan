@@ -1,7 +1,6 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use indexmap::IndexSet;
 use log::*;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
 use tari_dan_common_types::Epoch;
@@ -74,7 +73,7 @@ where
         let versioned_inputs = local_substates
             .iter()
             .map(|(id, substate)| VersionedSubstateId::new(id.clone(), substate.version()))
-            .collect::<IndexSet<_>>();
+            .collect::<Vec<_>>();
         let state_db = new_state_db();
         state_db.set_many(local_substates).expect("memory db is infallible");
 
@@ -94,7 +93,7 @@ where
                             };
                             VersionedSubstateIdLockIntent::new(versioned_id, lock_flag)
                         })
-                        .collect::<IndexSet<_>>()
+                        .collect()
                 } else {
                     versioned_inputs
                         .into_iter()
@@ -105,7 +104,7 @@ where
                             // involved.
                             VersionedSubstateIdLockIntent::new(versioned_id, SubstateLockFlag::Write)
                         })
-                        .collect::<IndexSet<_>>()
+                        .collect()
                 };
 
                 Ok(ExecutedTransaction::new(

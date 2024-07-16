@@ -5,7 +5,6 @@ use std::{
     collections::{BTreeSet, HashSet},
     fmt::{Debug, Display, Formatter},
     hash::Hash,
-    iter,
     ops::{Deref, RangeInclusive},
 };
 
@@ -130,7 +129,7 @@ impl Block {
         base_layer_block_hash: FixedHash,
     ) -> Self {
         let mut block = Self {
-            id: BlockId::genesis(),
+            id: BlockId::zero(),
             network,
             parent,
             justify,
@@ -205,21 +204,22 @@ impl Block {
         }
     }
 
-    pub fn genesis(network: Network) -> Self {
+    pub fn genesis(network: Network, epoch: Epoch, shard: Shard) -> Self {
         Self::new(
             network,
-            BlockId::genesis(),
+            BlockId::zero(),
             QuorumCertificate::genesis(),
             NodeHeight(0),
-            Epoch(0),
-            Shard::from(0),
+            epoch,
+            shard,
             PublicKey::default(),
             Default::default(),
+            // TODO: the merkle hash should be initialized to something committing to the previous state.
             FixedHash::zero(),
             0,
             IndexMap::new(),
             None,
-            EpochTime::now().as_u64(),
+            0,
             0,
             FixedHash::zero(),
         )
@@ -229,8 +229,8 @@ impl Block {
     pub fn zero_block(network: Network) -> Self {
         Self {
             network,
-            id: BlockId::genesis(),
-            parent: BlockId::genesis(),
+            id: BlockId::zero(),
+            parent: BlockId::zero(),
             justify: QuorumCertificate::genesis(),
             height: NodeHeight(0),
             epoch: Epoch(0),
@@ -256,7 +256,7 @@ impl Block {
         network: Network,
         parent: BlockId,
         proposed_by: PublicKey,
-        node_height: NodeHeight,
+        height: NodeHeight,
         high_qc: QuorumCertificate,
         epoch: Epoch,
         shard: Shard,
@@ -265,24 +265,30 @@ impl Block {
         parent_base_layer_block_height: u64,
         parent_base_layer_block_hash: FixedHash,
     ) -> Self {
-        let mut block = Self::new(
+        let mut block = Self {
+            id: BlockId::zero(),
             network,
             parent,
-            high_qc,
-            node_height,
+            justify: high_qc,
+            height,
             epoch,
             shard,
             proposed_by,
-            Default::default(),
-            parent_merkle_root,
-            0,
-            IndexMap::new(),
-            None,
-            parent_timestamp,
-            parent_base_layer_block_height,
-            parent_base_layer_block_hash,
-        );
-        block.is_dummy = true;
+            merkle_root: parent_merkle_root,
+            commands: BTreeSet::new(),
+            total_leader_fee: 0,
+            is_dummy: true,
+            is_processed: false,
+            is_committed: false,
+            foreign_indexes: IndexMap::new(),
+            stored_at: None,
+            signature: None,
+            block_time: None,
+            timestamp: parent_timestamp,
+            base_layer_block_height: parent_base_layer_block_height,
+            base_layer_block_hash: parent_base_layer_block_hash,
+        };
+        block.id = block.calculate_hash().into();
         block.is_processed = false;
         block
     }
@@ -310,6 +316,7 @@ impl Block {
             .chain(&self.shard)
             .chain(&self.proposed_by)
             .chain(&self.merkle_root)
+            .chain(&self.is_dummy)
             .chain(&self.commands)
             .chain(&self.foreign_indexes)
             .chain(&self.timestamp)
@@ -323,11 +330,7 @@ impl Block {
 
 impl Block {
     pub fn is_genesis(&self) -> bool {
-        self.id.is_genesis()
-    }
-
-    pub fn is_epoch_start(&self) -> bool {
-        self.commands.iter().any(|c| c.is_epoch_start())
+        self.height.is_zero()
     }
 
     pub fn is_epoch_end(&self) -> bool {
@@ -357,6 +360,7 @@ impl Block {
         LockedBlock {
             height: self.height,
             block_id: self.id,
+            epoch: self.epoch,
         }
     }
 
@@ -364,6 +368,7 @@ impl Block {
         LastExecuted {
             height: self.height,
             block_id: self.id,
+            epoch: self.epoch,
         }
     }
 
@@ -371,6 +376,7 @@ impl Block {
         LastVoted {
             height: self.height,
             block_id: self.id,
+            epoch: self.epoch,
         }
     }
 
@@ -378,6 +384,7 @@ impl Block {
         LeafBlock {
             height: self.height,
             block_id: self.id,
+            epoch: self.epoch,
         }
     }
 
@@ -385,6 +392,7 @@ impl Block {
         LastProposed {
             height: self.height,
             block_id: self.id,
+            epoch: self.epoch,
         }
     }
 
@@ -402,6 +410,10 @@ impl Block {
 
     pub fn justify(&self) -> &QuorumCertificate {
         &self.justify
+    }
+
+    pub fn into_justify(self) -> QuorumCertificate {
+        self.justify
     }
 
     pub fn justifies_parent(&self) -> bool {
@@ -476,7 +488,7 @@ impl Block {
         self.timestamp
     }
 
-    pub fn get_signature(&self) -> Option<&ValidatorSchnorrSignature> {
+    pub fn signature(&self) -> Option<&ValidatorSchnorrSignature> {
         self.signature.as_ref()
     }
 
@@ -502,18 +514,22 @@ impl Block {
         tx.blocks_get(id)
     }
 
-    pub fn get_tip<TTx: StateStoreReadTransaction>(tx: &TTx) -> Result<Self, StorageError> {
-        tx.blocks_get_tip()
-    }
-
     /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
     pub fn get_all_blocks_between<TTx: StateStoreReadTransaction>(
         tx: &TTx,
+        epoch: Epoch,
+        shard: Shard,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
         include_dummy_blocks: bool,
     ) -> Result<Vec<Self>, StorageError> {
-        tx.blocks_get_all_between(start_block_id_exclusive, end_block_id_inclusive, include_dummy_blocks)
+        tx.blocks_get_all_between(
+            epoch,
+            shard,
+            start_block_id_exclusive,
+            end_block_id_inclusive,
+            include_dummy_blocks,
+        )
     }
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
@@ -603,6 +619,7 @@ impl Block {
                         id.substate_id,
                         id.version,
                         substate.into_substate_value(),
+                        self.shard(),
                         self.epoch(),
                         self.height(),
                         *self.id(),
@@ -612,11 +629,12 @@ impl Block {
                     .create(tx)?;
                 },
                 SubstateChange::Down { id, transaction_id } => {
-                    SubstateRecord::destroy_many(
+                    SubstateRecord::destroy(
                         tx,
-                        iter::once(id.to_substate_address()),
+                        id,
+                        self.shard(),
                         self.epoch(),
-                        self.id(),
+                        self.height(),
                         self.justify().id(),
                         &transaction_id,
                     )?;
@@ -663,12 +681,13 @@ impl Block {
     }
 
     pub fn get_parent<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
-        if self.id.is_genesis() {
+        if self.id.is_zero() && self.parent.is_zero() {
             return Err(StorageError::NotFound {
-                item: "Block".to_string(),
-                key: self.id.to_string(),
+                item: "Block parent".to_string(),
+                key: self.parent.to_string(),
             });
         }
+
         Block::get(tx, &self.parent)
     }
 
@@ -731,7 +750,7 @@ impl Block {
         let committed = self
             .commands()
             .iter()
-            .filter_map(|c| c.local_only().or_else(|| c.accept()))
+            .filter_map(|c| c.committing())
             .filter(|t| t.decision.is_commit())
             .collect::<Vec<_>>();
 
@@ -795,12 +814,14 @@ impl Block {
             return Ok(high_qc);
         };
 
-        if !precommit_node.is_genesis() {
-            let locked = LockedBlock::get(&**tx)?;
-            if precommit_node.height() > locked.height {
-                on_locked_block_recurse(tx, &locked, &precommit_node, &mut on_lock_block)?;
-                precommit_node.as_locked_block().set(tx)?;
-            }
+        if precommit_node.is_genesis() {
+            return Ok(high_qc);
+        }
+
+        let locked = LockedBlock::get(&**tx)?;
+        if precommit_node.height() > locked.height {
+            on_locked_block_recurse(tx, &locked, &precommit_node, &mut on_lock_block)?;
+            precommit_node.as_locked_block().set(tx)?;
         }
 
         // b <- b'.justify.node
@@ -817,12 +838,13 @@ impl Block {
             );
 
             // Commit prepare_node (b)
-            if !prepare_node.is_genesis() {
-                let prepare_node = Block::get(&**tx, prepare_node)?;
-                let last_executed = LastExecuted::get(&**tx)?;
-                on_commit_block_recurse(tx, &last_executed, &prepare_node, &mut on_commit)?;
-                prepare_node.as_last_executed().set(tx)?;
+            if prepare_node.is_zero() {
+                return Ok(high_qc);
             }
+            let prepare_node = Block::get(&**tx, prepare_node)?;
+            let last_executed = LastExecuted::get(&**tx)?;
+            on_commit_block_recurse(tx, &last_executed, &prepare_node, &mut on_commit)?;
+            prepare_node.as_last_executed().set(tx)?;
         } else {
             debug!(
                 target: LOG_TARGET,
@@ -910,8 +932,9 @@ impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "[{}, {}, {} command(s)]",
+            "[{}, {}, {}, {} command(s)]",
             self.height(),
+            self.epoch(),
             self.id(),
             self.commands().len()
         )
@@ -927,6 +950,10 @@ impl BlockId {
         Self(FixedHash::zero())
     }
 
+    pub const fn zero() -> Self {
+        Self(FixedHash::zero())
+    }
+
     pub fn new<T: Into<FixedHash>>(hash: T) -> Self {
         Self(hash.into())
     }
@@ -939,7 +966,7 @@ impl BlockId {
         self.0.as_slice()
     }
 
-    pub fn is_genesis(&self) -> bool {
+    pub fn is_zero(&self) -> bool {
         self.0.iter().all(|b| *b == 0)
     }
 
@@ -977,7 +1004,7 @@ impl TryFrom<&[u8]> for BlockId {
 }
 
 impl Display for BlockId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
     }
 }

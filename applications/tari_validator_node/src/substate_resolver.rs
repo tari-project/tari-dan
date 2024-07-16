@@ -68,6 +68,9 @@ where
         let mut missing_substates = HashSet::with_capacity(missing_substate_ids.len());
         for requested_input in transaction.all_inputs_iter() {
             if missing_substate_ids.contains(requested_input.substate_id()) {
+                // TODO/NOTE: This assumes that consensus is up to date (i.e. doesnt need to sync, or catch up). We need
+                // to check the if the substate is in our shard range. The best action then may be to
+                // let consensus handle it (deferred) which is what happens currently anyway.
                 missing_substates.insert(requested_input);
                 // Not a local substate, so we will need to fetch it remotely
                 continue;

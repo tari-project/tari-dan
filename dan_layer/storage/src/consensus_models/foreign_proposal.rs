@@ -51,7 +51,7 @@ impl FromStr for ForeignProposalState {
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ForeignProposal {
     #[cfg_attr(feature = "ts", ts(type = "number"))]
-    pub bucket: Shard,
+    pub shard: Shard,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub block_id: BlockId,
     pub state: ForeignProposalState,
@@ -64,13 +64,13 @@ pub struct ForeignProposal {
 
 impl ForeignProposal {
     pub fn new(
-        bucket: Shard,
+        shard: Shard,
         block_id: BlockId,
         transactions: Vec<TransactionId>,
         base_layer_block_height: u64,
     ) -> Self {
         Self {
-            bucket,
+            shard,
             block_id,
             state: ForeignProposalState::New,
             proposed_height: None,

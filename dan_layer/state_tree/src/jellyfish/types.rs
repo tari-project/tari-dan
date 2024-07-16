@@ -1159,23 +1159,23 @@ impl<K> From<LeafNode<K>> for SparseMerkleLeafNode {
 
 /// The concrete node type of [`JellyfishMerkleTree`].
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Node<K> {
+pub enum Node<P> {
     /// A wrapper of [`InternalNode`].
     Internal(InternalNode),
     /// A wrapper of [`LeafNode`].
-    Leaf(LeafNode<K>),
+    Leaf(LeafNode<P>),
     /// Represents empty tree only
     Null,
 }
 
-impl<K> From<InternalNode> for Node<K> {
+impl<P> From<InternalNode> for Node<P> {
     fn from(node: InternalNode) -> Self {
         Node::Internal(node)
     }
 }
 
-impl<K: Clone> From<LeafNode<K>> for Node<K> {
-    fn from(node: LeafNode<K>) -> Self {
+impl<P: Clone> From<LeafNode<P>> for Node<P> {
+    fn from(node: LeafNode<P>) -> Self {
         Node::Leaf(node)
     }
 }

@@ -26,14 +26,14 @@ use tari_transaction::{TransactionId, VersionedSubstateId};
 
 use super::error::SubstateStoreError;
 use crate::{
-    hotstuff::calculate_state_merkle_diff,
+    hotstuff::{calculate_state_merkle_diff, substate_store::chain_scoped_tree_store::ChainScopedTreeStore},
     traits::{ReadableSubstateStore, WriteableSubstateStore},
 };
 
 const LOG_TARGET: &str = "tari::dan::hotstuff::substate_store::pending_store";
 
 pub struct PendingSubstateStore<'a, 'tx, TStore: StateStore + 'a + 'tx> {
-    store: &'a TStore::ReadTransaction<'tx>,
+    store: ChainScopedTreeStore<&'a TStore::ReadTransaction<'tx>>,
     /// Map from substate address to the index in the diff list
     pending: HashMap<SubstateAddress, usize>,
     /// Append only list of changes ordered oldest to newest
@@ -42,9 +42,9 @@ pub struct PendingSubstateStore<'a, 'tx, TStore: StateStore + 'a + 'tx> {
 }
 
 impl<'a, 'tx, TStore: StateStore + 'a> PendingSubstateStore<'a, 'tx, TStore> {
-    pub fn new(tx: &'a TStore::ReadTransaction<'tx>) -> Self {
+    pub fn new(store: ChainScopedTreeStore<&'a TStore::ReadTransaction<'tx>>) -> Self {
         Self {
-            store: tx,
+            store,
             pending: HashMap::new(),
             diff: Vec::new(),
             new_locks: IndexMap::new(),
@@ -52,7 +52,7 @@ impl<'a, 'tx, TStore: StateStore + 'a> PendingSubstateStore<'a, 'tx, TStore> {
     }
 
     pub fn read_transaction(&self) -> &'a TStore::ReadTransaction<'tx> {
-        self.store
+        self.store.transaction()
     }
 }
 
@@ -66,7 +66,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> ReadableSubstateStore for PendingSu
             });
         }
 
-        let Some(substate) = SubstateRecord::get(self.store, key).optional()? else {
+        let Some(substate) = SubstateRecord::get(self.read_transaction(), key).optional()? else {
             return Err(SubstateStoreError::SubstateNotFound { address: *key });
         };
         Ok(substate.into_substate())
@@ -109,7 +109,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             return Ok(substate.clone());
         }
 
-        let substate = SubstateRecord::get_latest(self.store, id)?;
+        let substate = SubstateRecord::get_latest(self.read_transaction(), id)?;
         Ok(substate.into_substate())
     }
 
@@ -120,7 +120,12 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         let current_version = block.justify().block_height().as_u64();
         let next_version = block.height().as_u64();
 
-        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(self.store, block.justify().block_id())?;
+        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(
+            self.read_transaction(),
+            block.epoch(),
+            block.shard(),
+            block.justify().block_id(),
+        )?;
 
         let changes = self.diff.iter().map(|ch| match ch {
             SubstateChange::Up { id, substate, .. } => SubstateTreeChange::Up {
@@ -131,9 +136,8 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                 id: id.substate_id.clone(),
             },
         });
-
         let (state_root, state_tree_diff) =
-            calculate_state_merkle_diff(self.store, current_version, next_version, pending, changes)?;
+            calculate_state_merkle_diff(&self.store, current_version, next_version, pending, changes)?;
 
         Ok((state_root, state_tree_diff))
     }
@@ -329,7 +333,10 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             return Ok(Some(Cow::Borrowed(lock)));
         }
 
-        let maybe_lock = self.store.substate_locks_get_latest_for_substate(id).optional()?;
+        let maybe_lock = self
+            .read_transaction()
+            .substate_locks_get_latest_for_substate(id)
+            .optional()?;
         Ok(maybe_lock.map(Cow::Owned))
     }
 
@@ -346,7 +353,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             return Ok(());
         }
 
-        let is_up = SubstateRecord::substate_is_up(self.store, &address)
+        let is_up = SubstateRecord::substate_is_up(self.read_transaction(), &address)
             .optional()?
             .unwrap_or(false);
         if !is_up {
@@ -365,7 +372,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             return Ok(());
         }
 
-        let Some(is_up) = SubstateRecord::substate_is_up(self.store, &address).optional()? else {
+        let Some(is_up) = SubstateRecord::substate_is_up(self.read_transaction(), &address).optional()? else {
             debug!(target: LOG_TARGET, "Expected substate {} to be DOWN but it does not exist", address);
             return Err(SubstateStoreError::SubstateNotFound { address });
         };
@@ -385,7 +392,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             return Ok(());
         }
 
-        if SubstateRecord::exists(self.store, &address)? {
+        if SubstateRecord::exists(self.read_transaction(), &address)? {
             return Err(SubstateStoreError::ExpectedSubstateNotExist { id: id.clone() });
         }
 

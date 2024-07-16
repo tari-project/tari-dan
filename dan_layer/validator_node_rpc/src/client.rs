@@ -84,6 +84,10 @@ pub struct TariValidatorNodeRpcClient<TMsg: MessageSpec> {
 }
 
 impl<TMsg: MessageSpec> TariValidatorNodeRpcClient<TMsg> {
+    pub fn address(&self) -> &PeerAddress {
+        &self.address
+    }
+
     pub async fn client_connection(
         &mut self,
     ) -> Result<rpc_service::ValidatorNodeRpcClient, ValidatorNodeRpcClientError> {

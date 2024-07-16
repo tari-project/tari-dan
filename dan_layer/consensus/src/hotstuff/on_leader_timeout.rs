@@ -32,3 +32,9 @@ impl OnLeaderTimeout {
         self.sender.send(new_height).expect("receiver can never be dropped")
     }
 }
+
+impl Default for OnLeaderTimeout {
+    fn default() -> Self {
+        Self::new()
+    }
+}

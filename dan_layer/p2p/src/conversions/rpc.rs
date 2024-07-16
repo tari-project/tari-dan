@@ -4,7 +4,16 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
-use tari_dan_storage::consensus_models::{SubstateCreatedProof, SubstateData, SubstateDestroyedProof, SubstateUpdate};
+use tari_dan_common_types::{shard::Shard, Epoch};
+use tari_dan_storage::consensus_models::{
+    EpochCheckpoint,
+    StateTransition,
+    StateTransitionId,
+    SubstateCreatedProof,
+    SubstateData,
+    SubstateDestroyedProof,
+    SubstateUpdate,
+};
 use tari_engine_types::substate::{SubstateId, SubstateValue};
 
 use crate::proto;
@@ -108,6 +117,81 @@ impl From<SubstateData> for proto::rpc::SubstateData {
             version: value.version,
             substate_value: value.substate_value.to_bytes(),
             created_transaction: value.created_by_transaction.as_bytes().to_vec(),
+        }
+    }
+}
+
+//---------------------------------- StateTransition --------------------------------------------//
+
+impl TryFrom<proto::rpc::StateTransition> for StateTransition {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::rpc::StateTransition) -> Result<Self, Self::Error> {
+        let id = value
+            .id
+            .map(StateTransitionId::try_from)
+            .transpose()?
+            .ok_or_else(|| anyhow::anyhow!("StateTransitionId is missing"))?;
+        let update = value
+            .update
+            .ok_or_else(|| anyhow::anyhow!("Missing state transition update"))?;
+        let update = SubstateUpdate::try_from(update)?;
+        Ok(Self {
+            id,
+            update,
+            state_tree_version: value.state_tree_version,
+        })
+    }
+}
+
+impl From<StateTransition> for proto::rpc::StateTransition {
+    fn from(value: StateTransition) -> Self {
+        Self {
+            id: Some(value.id.into()),
+            update: Some(value.update.into()),
+            state_tree_version: value.state_tree_version,
+        }
+    }
+}
+
+//---------------------------------- StateTransitionId --------------------------------------------//
+
+impl TryFrom<proto::rpc::StateTransitionId> for StateTransitionId {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::rpc::StateTransitionId) -> Result<Self, Self::Error> {
+        Ok(Self::new(Epoch(value.epoch), Shard::from(value.shard), value.seq))
+    }
+}
+
+impl From<StateTransitionId> for proto::rpc::StateTransitionId {
+    fn from(value: StateTransitionId) -> Self {
+        Self {
+            epoch: value.epoch().as_u64(),
+            shard: value.shard().as_u32(),
+            seq: value.seq(),
+        }
+    }
+}
+
+//---------------------------------- EpochCheckpoint --------------------------------------------//
+
+impl TryFrom<proto::rpc::EpochCheckpoint> for EpochCheckpoint {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::rpc::EpochCheckpoint) -> Result<Self, Self::Error> {
+        Ok(Self::new(
+            value.block.ok_or_else(|| anyhow!("block not provided"))?.try_into()?,
+            value.qcs.into_iter().map(TryInto::try_into).collect::<Result<_, _>>()?,
+        ))
+    }
+}
+
+impl From<EpochCheckpoint> for proto::rpc::EpochCheckpoint {
+    fn from(value: EpochCheckpoint) -> Self {
+        Self {
+            block: Some(value.block().into()),
+            qcs: value.qcs().iter().map(Into::into).collect(),
         }
     }
 }

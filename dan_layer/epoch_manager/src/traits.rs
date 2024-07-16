@@ -42,6 +42,8 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn subscribe(&self) -> Result<broadcast::Receiver<EpochManagerEvent>, EpochManagerError>;
 
+    async fn wait_for_initial_scanning_to_complete(&self) -> Result<(), EpochManagerError>;
+
     async fn get_all_validator_nodes(&self, epoch: Epoch) -> Result<Vec<ValidatorNode<Self::Addr>>, EpochManagerError>;
 
     async fn get_committees(&self, epoch: Epoch) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError>;

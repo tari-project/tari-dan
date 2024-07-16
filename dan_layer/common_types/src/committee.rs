@@ -203,6 +203,10 @@ impl CommitteeInfo {
         self.shard
     }
 
+    pub fn to_substate_address_range(&self) -> RangeInclusive<SubstateAddress> {
+        self.shard.to_substate_address_range(self.num_committees)
+    }
+
     pub fn includes_substate_address(&self, substate_address: &SubstateAddress) -> bool {
         let s = substate_address.to_shard(self.num_committees);
         self.shard == s

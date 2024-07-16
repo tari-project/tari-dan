@@ -1,7 +1,7 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
-@block_sync
-Feature: Block Sync
+@state_sync
+Feature: State Sync
 
   @serial @fixed
   Scenario: New validator node registers and syncs
@@ -32,7 +32,7 @@ Feature: Block Sync
     When I create an account UNUSED2 via the wallet daemon WALLET_D
     When I create an account UNUSED3 via the wallet daemon WALLET_D
 
-    When I wait for validator VN has leaf block height of at least 15
+    # When I wait for validator VN has leaf block height of at least 15
 
     # Start a new VN that needs to sync
     Given a validator node VN2 connected to base node BASE and wallet daemon WALLET_D
@@ -45,12 +45,11 @@ Feature: Block Sync
     Then VN2 has scanned to height 37
     Then the validator node VN2 is listed as registered
 
-    When I wait for validator VN2 has leaf block height of at least 15
-# FIXME: This part fails because epoch change is not yet fully implemented.
-#
-#    When I create an account UNUSED4 via the wallet daemon WALLET_D
-#    When I create an account UNUSED5 via the wallet daemon WALLET_D
-#
-#    When I wait for validator VN has leaf block height of at least 18
-#    When I wait for validator VN2 has leaf block height of at least 18
+    When I wait for validator VN2 has leaf block height of at least 1 at epoch 3
+
+    When I create an account UNUSED4 via the wallet daemon WALLET_D
+    When I create an account UNUSED5 via the wallet daemon WALLET_D
+
+    When I wait for validator VN has leaf block height of at least 5 at epoch 3
+    When I wait for validator VN2 has leaf block height of at least 5 at epoch 3
 
