@@ -38,6 +38,8 @@ import ConfirmTransaction from "./ConfirmTransaction";
 import { useTheme } from "@mui/material/styles";
 import { TariPermission, TariPermissionAccountList, TariPermissionKeyList, TariPermissionTransactionGet, TariPermissionTransactionSend } from "../../utils/tari_permissions";
 
+const projectId: string | null = import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID || null;
+
 const ConnectorDialog = () => {
   const [page, setPage] = useState(1);
   const [isOpen, setIsOpen] = useState(false);
@@ -104,6 +106,7 @@ const ConnectorDialog = () => {
 
     // TODO: auth
     console.log("WC auth");
+    console.log({projectId});
   };
 
   useEffect(() => {
@@ -183,31 +186,36 @@ const ConnectorDialog = () => {
     }
   };
 
-  return (
-    <>
-      <Button
-        variant="contained"
-        color="primary"
-        onClick={handleOpen}
-        style={{
-          height: "48px",
-        }}
-      >
-        Connect with WalletConnect
-      </Button>
-      <Dialog open={isOpen} onClose={handleClose}>
-        <div className="dialog-heading">
-          <div style={{ height: "24px", width: "24px" }}></div>
-          <ConnectorLogo fill={theme.palette.text.primary} />
-          <IconButton onClick={handleClose}>
-            <CloseIcon />
-          </IconButton>
-        </div>
-        <DialogContent>{renderPage()}</DialogContent>
-      </Dialog>
-      <ConfirmTransaction />
-    </>
-  );
+  // Don't render anything if wallet connect is not set up in the wallet daemon
+  if (!projectId) {
+    return (<></>);
+  } else {
+    return (
+      <>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={handleOpen}
+          style={{
+            height: "48px",
+          }}
+        >
+          Connect with WalletConnect
+        </Button>
+        <Dialog open={isOpen} onClose={handleClose}>
+          <div className="dialog-heading">
+            <div style={{ height: "24px", width: "24px" }}></div>
+            <ConnectorLogo fill={theme.palette.text.primary} />
+            <IconButton onClick={handleClose}>
+              <CloseIcon />
+            </IconButton>
+          </div>
+          <DialogContent>{renderPage()}</DialogContent>
+        </Dialog>
+        <ConfirmTransaction />
+      </>
+    )
+  };
 };
 
 export default ConnectorDialog;
