@@ -72,6 +72,8 @@ import type {
   WebRtcStartResponse,
   AccountsTransferRequest,
   AccountsTransferResponse,
+  SubstatesGetRequest,
+  SubstatesGetResponse,
 } from "@tariproject/typescript-bindings/wallet-daemon-client";
 import { WalletDaemonClient } from "@tariproject/wallet_daemon_client";
 
@@ -196,3 +198,9 @@ export const nftList = (request: ListAccountNftRequest): Promise<ListAccountNftR
 
 export const validatorsClaimFees = (request: ClaimValidatorFeesRequest): Promise<ClaimValidatorFeesResponse> =>
   client().then((c) => c.validatorsClaimFees(request));
+
+
+// substates
+
+export const substatesGet = (request: SubstatesGetRequest): Promise<SubstatesGetResponse> =>
+  client().then((c) => c.substatesGet(request));

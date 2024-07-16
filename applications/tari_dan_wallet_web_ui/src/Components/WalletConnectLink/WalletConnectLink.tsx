@@ -39,6 +39,7 @@ import { useTheme } from "@mui/material/styles";
 import { TariPermission, TariPermissionKeyList, TariPermissionTransactionGet, TariPermissionTransactionSend } from "../../utils/tari_permissions";
 import { Core } from '@walletconnect/core'
 import { Web3Wallet } from '@walletconnect/web3wallet'
+import { substatesGet, client as wallet_daemon_client } from "../../utils/json_rpc";
 
 const projectId: string | null = import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID || null;
 
@@ -76,6 +77,8 @@ const ConnectorDialog = () => {
     wallet.on('session_proposal', async proposal => {
       console.log({ proposal });
 
+      // TODO: using polkadot params as a placeholder to be able to use walletconnet,
+      //       we must replace all this with the proper Tari namespace when available
       const session = await wallet.approveSession({
         id: proposal.id,
         namespaces: {
@@ -106,23 +109,30 @@ const ConnectorDialog = () => {
       const { params, id, topic } = requestEvent;
       const { request } = params;
 
+      // TODO: we don't have walletconnect support for tari yet
+      //       so we use a transaction payload as a workaround to pass the actual requests to the wallet daemon
       switch (request.method) {
         case 'polkadot_signTransaction':
-          const { ping } = request.params.transactionPayload;
-          console.log({ping});
-
-          // create the response containing the signature in the result
-          const response = { id, result: { pong: 'pong' }, jsonrpc: '2.0' }
-
-          // respond to the dapp request with the response and topic
+          const { method, params } = request.params.transactionPayload;
+          const result = await send_wallet_daemon_request(method, params);
+          const response = { id, result, jsonrpc: '2.0' }
           await wallet.respondSessionRequest({ topic, response });
           break;
         default:
-          throw new Error("Invalid method")
+          throw new Error("Invalid walletconnect method")
       }      
     });
 
     return wallet;
+  }
+
+  async function send_wallet_daemon_request(method, params) {
+    switch(method) {
+      case "substates.get":
+        return substatesGet(params);
+      default:
+        throw new Error("Invalid wallet daemon method")
+    }
   }
 
   async function getClipboardContent() {
