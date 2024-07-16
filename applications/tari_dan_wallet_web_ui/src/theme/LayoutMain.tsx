@@ -32,7 +32,7 @@ import IconButton from "@mui/material/IconButton";
 import MenuOpenOutlinedIcon from "@mui/icons-material/MenuOpenOutlined";
 import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
 import MenuItems from "../Components/MenuItems";
-import { ThemeProvider } from "@mui/material";
+import { Stack, ThemeProvider } from "@mui/material";
 import { Outlet, Link } from "react-router-dom";
 import Logo from "../assets/Logo";
 import Container from "@mui/material/Container";
@@ -44,6 +44,7 @@ import useThemeStore from "../store/themeStore";
 import { createTheme } from "@mui/material/styles";
 import { light, dark, componentSettings } from "./tokens";
 import { lightAlpha } from "./colors";
+import WalletConnectLink from "../Components/WalletConnectLink";
 
 const drawerWidth = 300;
 
@@ -160,7 +161,10 @@ export default function Layout() {
               >
                 <Logo fill={theme.palette.text.primary} />
               </Link>
-              <ConnectorLink />
+              <Stack direction="row" spacing={1}>
+                <ConnectorLink />
+                <WalletConnectLink />
+              </Stack>          
             </Box>
           </Toolbar>
         </AppBar>

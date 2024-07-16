@@ -55,7 +55,7 @@ const ConnectorDialog = () => {
   const theme = useTheme();
 
   const setLink = (value: string) => {
-    const re = /tari:\/\/([^\\]*)\/([a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+)\/(.*)\/(.*)/i;
+    const re = /wc:\/\/([^\\]*)\/([a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+)\/(.*)\/(.*)/i;
     let groups;
     if ((groups = re.exec(value))) {
       setName(decodeURIComponent(groups[1]));
@@ -72,7 +72,7 @@ const ConnectorDialog = () => {
     if (navigator.clipboard && navigator.clipboard.readText) {
       try {
         const clipboardData = await navigator.clipboard.readText();
-        if (clipboardData.startsWith("tari://")) {
+        if (clipboardData.startsWith("wc://")) {
           setIsOpen(true);
           setLinkDetected(true);
           setLink(clipboardData);
@@ -139,7 +139,7 @@ const ConnectorDialog = () => {
           return (
             <div className="dialog-inner">
               <DialogContentText style={{ paddingBottom: "20px" }}>
-                A WalletConnect link was detected. <br />
+                A connector link was detected. <br />
                 Would you like to connect to <code style={{ color: "purple", fontSize: "14px" }}>{link}</code>?
               </DialogContentText>
               <DialogActions>
@@ -155,7 +155,7 @@ const ConnectorDialog = () => {
         } else {
           return (
             <div className="dialog-inner">
-              <DialogContentText>To connect your wallet, add a connector link here:</DialogContentText>
+              <DialogContentText>To connect your wallet, add a wallet connect link here:</DialogContentText>
               <form
                 onSubmit={handleConnect}
                 style={{
@@ -242,7 +242,7 @@ const ConnectorDialog = () => {
           height: "48px",
         }}
       >
-        Connect with Tari Connector
+        Connect with WalletConnect
       </Button>
       <Dialog open={isOpen} onClose={handleClose}>
         <div className="dialog-heading">

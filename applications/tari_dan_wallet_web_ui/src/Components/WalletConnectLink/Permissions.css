@@ -1,0 +1,6 @@
+.permissions-switch {
+  margin-left: 0 !important;
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+}
