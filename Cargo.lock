@@ -9735,6 +9735,7 @@ dependencies = [
  "tari_common_types",
  "tari_core",
  "tari_crypto",
+ "tari_dan_engine",
  "tari_engine_types",
  "tari_shutdown",
  "tari_validator_node_client",

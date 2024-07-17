@@ -19,7 +19,7 @@ type WalletSdk = DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>
 pub struct Runner {
     pub(crate) sdk: WalletSdk,
     pub(crate) _cli: CommonArgs,
-    pub(crate) faucet_template: TemplateMetadata,
+    pub(crate) _faucet_template: TemplateMetadata,
     pub(crate) tariswap_template: TemplateMetadata,
     pub(crate) stats: Stats,
 }
@@ -27,11 +27,11 @@ pub struct Runner {
 impl Runner {
     pub async fn init(cli: CommonArgs) -> anyhow::Result<Self> {
         let sdk = initialize_wallet_sdk(&cli.db_path, cli.indexer_url.clone())?;
-        let (faucet_template, tariswap_template) = get_templates(&cli.validator_node_url).await?;
+        let (faucet_template, tariswap_template) = get_templates(&cli).await?;
         Ok(Self {
             sdk,
             _cli: cli,
-            faucet_template,
+            _faucet_template: faucet_template,
             tariswap_template,
             stats: Stats::default(),
         })
@@ -44,6 +44,7 @@ impl Runner {
     }
 
     pub async fn submit_transaction(&mut self, transaction: Transaction) -> anyhow::Result<TransactionId> {
+        // TODO: remove the filled inputs here and allow consensus to figure out input versions
         let inputs = transaction
             .to_referenced_substates()?
             .into_iter()

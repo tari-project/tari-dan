@@ -11,6 +11,7 @@ use axum::{
 };
 use log::{error, info};
 use tari_crypto::tari_utilities::hex;
+use tari_dan_engine::wasm::WasmModule;
 use tari_engine_types::calculate_template_binary_hash;
 use tokio::{fs, io::AsyncWriteExt};
 use url::Url;
@@ -32,6 +33,10 @@ pub async fn upload(
     let hash = calculate_template_binary_hash(&bytes);
     let dest_file = format!("{}-{}.wasm", slug(&name), hex::to_hex(hash.as_ref()));
     let dest_path = context.config().base_dir.join("templates").join(&dest_file);
+
+    // Load the struct name from the wasm.
+    let loaded = WasmModule::load_template_from_code(&bytes).map_err(|e| UploadError::Other(e.into()))?;
+    let name = loaded.template_def().template_name().to_string();
     let mut file = fs::File::create(dest_path).await?;
     file.write_all(&bytes).await?;
     info!("🌐 Upload template {} bytes", bytes.len());
