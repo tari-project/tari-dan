@@ -39,7 +39,7 @@ import { useTheme } from "@mui/material/styles";
 import { TariPermission, TariPermissionKeyList, TariPermissionTransactionGet, TariPermissionTransactionSend } from "../../utils/tari_permissions";
 import { Core } from '@walletconnect/core'
 import { Web3Wallet } from '@walletconnect/web3wallet'
-import { substatesGet, client as wallet_daemon_client } from "../../utils/json_rpc";
+import { accountsGetBalances, accountsGetDefault, confidentialViewVaultBalance, keysCreate, substatesGet, templatesGet, transactionsGet, transactionsGetResult, transactionsSubmit } from "../../utils/json_rpc";
 
 const projectId: string | null = import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID || null;
 
@@ -126,10 +126,24 @@ const ConnectorDialog = () => {
     return wallet;
   }
 
-  async function send_wallet_daemon_request(method, params) {
+  async function send_wallet_daemon_request(method: string, params: any) {
     switch(method) {
       case "substates.get":
         return substatesGet(params);
+      case "accounts.get_default":
+        return accountsGetDefault(params);
+      case "accounts.get_balances":
+        return accountsGetBalances(params);
+      case "transactions.submit":
+        return transactionsSubmit(params);
+      case "transactions.get_result":
+        return transactionsGetResult(params);
+      case "templates.get":
+        return templatesGet(params);
+      case "keys.create":
+        return keysCreate(params);
+      case "confidential.view_vault_balance":
+        return confidentialViewVaultBalance(params);
       default:
         throw new Error("Invalid wallet daemon method")
     }
