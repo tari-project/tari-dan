@@ -38,7 +38,7 @@ pub struct MemoryStateStore {
 }
 
 impl MemoryStateStore {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 

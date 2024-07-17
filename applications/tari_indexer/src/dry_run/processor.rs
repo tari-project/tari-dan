@@ -29,7 +29,7 @@ use tari_dan_app_utilities::{
     transaction_executor::{TariDanTransactionProcessor, TransactionExecutor as _},
 };
 use tari_dan_common_types::{Epoch, PeerAddress, SubstateAddress};
-use tari_dan_engine::{fees::FeeTable, state_store::memory::MemoryStateStore};
+use tari_dan_engine::{fees::FeeTable, state_store::new_memory_store};
 use tari_engine_types::{
     commit_result::ExecuteResult,
     instruction::Instruction,
@@ -111,7 +111,7 @@ where TSubstateCache: SubstateCache + 'static
 
         let virtual_substates = self.get_virtual_substates(&transaction, epoch).await?;
 
-        let state_store = new_state_store();
+        let state_store = new_memory_store();
         state_store.set_many(found_substates)?;
 
         // execute the payload in the WASM engine and return the result
@@ -266,8 +266,4 @@ where TSubstateCache: SubstateCache + 'static
 
         Ok(virtual_substates)
     }
-}
-
-fn new_state_store() -> MemoryStateStore {
-    MemoryStateStore::new()
 }

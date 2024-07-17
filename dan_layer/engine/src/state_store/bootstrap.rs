@@ -1,21 +1,32 @@
-//   Copyright 2023 The Tari Project
-//   SPDX-License-Identifier: BSD-3-Clause
+//    Copyright 2024 The Tari Project
+//    SPDX-License-Identifier: BSD-3-Clause
 
 use tari_engine_types::{
     resource::Resource,
     substate::{Substate, SubstateId},
 };
 use tari_template_lib::{
-    auth::{AccessRule, ResourceAccessRules},
+    auth::ResourceAccessRules,
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
     models::Metadata,
     prelude::{OwnerRule, ResourceType},
     resource::TOKEN_SYMBOL,
 };
 
-use crate::state_store::{StateStoreError, StateWriter};
+use crate::state_store::{memory::MemoryStateStore, AtomicDb, StateStoreError, StateWriter};
 
-pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStoreError> {
+pub fn new_memory_store() -> MemoryStateStore {
+    let state_db = MemoryStateStore::new();
+    // unwrap: Memory state store is infallible
+    let mut tx = state_db.write_access().unwrap();
+    // Add shared global resources
+    add_global_resources(&mut tx).unwrap();
+    tx.commit().unwrap();
+    state_db
+}
+
+/// These are implicitly included in every transaction. These are immutable and pledging them is not required.
+fn add_global_resources<T: StateWriter>(state_db: &mut T) -> Result<(), StateStoreError> {
     let address = SubstateId::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let mut metadata = Metadata::new();
     metadata.insert(TOKEN_SYMBOL, "ID".to_string());
@@ -39,8 +50,7 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
     // Create the second layer tari resource
     let address = SubstateId::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let mut metadata = Metadata::new();
-    // TODO: decide on symbol for L2 tari
-    metadata.insert(TOKEN_SYMBOL, "tXTR".to_string());
+    metadata.insert(TOKEN_SYMBOL, "XTR".to_string());
     state_db.set_state(
         &address,
         Substate::new(
@@ -49,9 +59,7 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
                 ResourceType::Confidential,
                 None,
                 OwnerRule::None,
-                ResourceAccessRules::new()
-                    .withdrawable(AccessRule::AllowAll)
-                    .depositable(AccessRule::AllowAll),
+                ResourceAccessRules::new(),
                 metadata,
                 None,
                 None,

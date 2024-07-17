@@ -32,7 +32,7 @@ use tari_key_manager::key_manager::DerivedKey;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
-    constants::{XTR, XTR_FAUCET_COMPONENT_ADDRESS, XTR_FAUCET_VAULT_ADDRESS},
+    constants::{XTR_FAUCET_COMPONENT_ADDRESS, XTR_FAUCET_VAULT_ADDRESS},
     models::{Amount, UnclaimedConfidentialOutputAddress},
     prelude::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
 };
@@ -102,11 +102,10 @@ pub async fn handle_create(
     }
 
     let default_account = sdk.accounts_api().get_default()?;
-    let mut inputs = sdk
+    let inputs = sdk
         .substate_api()
         .locate_dependent_substates(&[default_account.address.clone()])
         .await?;
-    inputs.push(SubstateRequirement::unversioned(XTR));
 
     let signing_key_index = req.key_id.unwrap_or(default_account.key_index);
     let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
@@ -739,7 +738,6 @@ pub async fn handle_create_free_test_coins(
     }
 
     let mut inputs = vec![
-        SubstateRequirement::unversioned(XTR),
         SubstateRequirement::unversioned(XTR_FAUCET_COMPONENT_ADDRESS),
         SubstateRequirement::unversioned(XTR_FAUCET_VAULT_ADDRESS),
     ];

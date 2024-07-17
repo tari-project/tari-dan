@@ -9,7 +9,6 @@ use tari_template_lib::{
     args,
     constants::{XTR_FAUCET_COMPONENT_ADDRESS, XTR_FAUCET_VAULT_ADDRESS},
     models::Amount,
-    prelude::XTR,
 };
 use tari_transaction::{SubstateRequirement, Transaction};
 
@@ -31,7 +30,6 @@ pub fn builder(_: u64) -> Transaction {
                 .call_method(account_address, "pay_fee", args![Amount(1000)])
         })
         .with_inputs([
-            SubstateRequirement::unversioned(XTR),
             SubstateRequirement::unversioned(XTR_FAUCET_COMPONENT_ADDRESS),
             SubstateRequirement::unversioned(XTR_FAUCET_VAULT_ADDRESS),
         ])

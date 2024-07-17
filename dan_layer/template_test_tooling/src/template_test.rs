@@ -24,6 +24,7 @@ use tari_dan_engine::{
     runtime::{AuthParams, RuntimeModule},
     state_store::{
         memory::{MemoryStateStore, MemoryWriteTransaction},
+        new_memory_store,
         AtomicDb,
         StateWriter,
     },
@@ -55,12 +56,7 @@ use tari_template_lib::{
 use tari_transaction::{Transaction, VersionedSubstateId};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
-use crate::{
-    bootstrap::bootstrap_state,
-    read_only_state_store::ReadOnlyStateStore,
-    track_calls::TrackCallsModule,
-    Package,
-};
+use crate::{read_only_state_store::ReadOnlyStateStore, track_calls::TrackCallsModule, Package};
 
 pub fn test_faucet_component() -> ComponentAddress {
     ComponentAddress::new(ObjectKey::from_array([0xfau8; ObjectKey::LENGTH]))
@@ -120,8 +116,6 @@ impl TemplateTest {
             }
         }
 
-        let state_store = MemoryStateStore::default();
-
         let mut virtual_substates = VirtualSubstates::new();
         virtual_substates.insert(VirtualSubstateId::CurrentEpoch, VirtualSubstate::CurrentEpoch(0));
 
@@ -132,7 +126,7 @@ impl TemplateTest {
             secret_key,
             name_to_template,
             last_outputs: HashSet::new(),
-            state_store,
+            state_store: new_memory_store(),
             virtual_substates,
             enable_fees: false,
             fee_table: FeeTable {
@@ -147,7 +141,6 @@ impl TemplateTest {
 
     pub fn bootstrap_state(&self, amount: Amount) {
         let mut tx = self.state_store.write_access().unwrap();
-        bootstrap_state(&mut tx).unwrap();
         Self::initial_tari_faucet_supply(
             &mut tx,
             &self.public_key,

@@ -11,7 +11,7 @@ use tari_consensus::{
 };
 use tari_dan_app_utilities::transaction_executor::TransactionExecutor;
 use tari_dan_common_types::{optional::Optional, Epoch};
-use tari_dan_engine::state_store::{memory::MemoryStateStore, AtomicDb, StateWriter};
+use tari_dan_engine::state_store::{memory::MemoryStateStore, new_memory_store, AtomicDb, StateWriter};
 use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, TransactionRecord},
     StateStore,
@@ -106,16 +106,6 @@ impl<TEpochManager, TExecutor, TValidator> TariDanBlockTransactionExecutor<TEpoc
 
         Ok(())
     }
-
-    fn new_state_db() -> MemoryStateStore {
-        MemoryStateStore::new()
-        // unwrap: Memory state store is infallible
-        // let mut tx = state_db.write_access().unwrap();
-        // Add bootstrapped substates
-        // bootstrap_state(&mut tx).unwrap();
-        // tx.commit().unwrap();
-        // state_db
-    }
 }
 
 impl<TEpochManager, TExecutor, TStateStore, TValidator> BlockTransactionExecutor<TStateStore>
@@ -158,7 +148,7 @@ where
         info!(target: LOG_TARGET, "Transaction {} executing. Inputs: {:?}", id, inputs);
 
         // Create a memory db with all the input substates, needed for the transaction execution
-        let state_db = Self::new_state_db();
+        let state_db = new_memory_store();
         self.add_substates_to_memory_db(&inputs, &state_db)?;
 
         // TODO: create the virtual substates for execution

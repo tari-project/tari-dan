@@ -11,7 +11,6 @@ use tari_template_lib::{
     args,
     constants::{XTR_FAUCET_COMPONENT_ADDRESS, XTR_FAUCET_VAULT_ADDRESS},
     models::Amount,
-    prelude::XTR,
 };
 use tari_transaction::{Instruction, SubstateRequirement, Transaction};
 
@@ -37,7 +36,6 @@ impl Runner {
                     .call_method(account_address, "pay_fee", args![Amount(1000)])
             })
             .with_inputs([
-                SubstateRequirement::unversioned(XTR),
                 SubstateRequirement::unversioned(XTR_FAUCET_COMPONENT_ADDRESS),
                 SubstateRequirement::unversioned(XTR_FAUCET_VAULT_ADDRESS),
             ])
@@ -137,7 +135,6 @@ impl Runner {
 
         let transaction = builder
             .with_inputs([
-                SubstateRequirement::unversioned(XTR),
                 SubstateRequirement::unversioned(XTR_FAUCET_COMPONENT_ADDRESS),
                 SubstateRequirement::unversioned(XTR_FAUCET_VAULT_ADDRESS),
             ])
