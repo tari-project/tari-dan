@@ -56,14 +56,14 @@ Feature: Account transfers
     # Fund the sender account with faucet tokens
     When I print the cucumber world
     When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT" named "TX1"
-    ```
-    let faucet = global!["FAUCET/components/TestFaucet"];
-    let mut acc1 = global!["ACCOUNT/components/Account"];
+  ```
+  let faucet = global!["FAUCET/components/TestFaucet"];
+  let mut acc1 = global!["ACCOUNT/components/Account"];
 
-    // get tokens from the faucet
-    let faucet_bucket = faucet.take_free_coins();
-    acc1.deposit(faucet_bucket);
-    ```
+  // get tokens from the faucet
+  let faucet_bucket = faucet.take_free_coins();
+  acc1.deposit(faucet_bucket);
+  ```
 
     # Wait for the wallet daemon account monitor to update the sender account information
 
@@ -76,11 +76,11 @@ Feature: Account transfers
 
     # Check that ACC_2 component was created and has funds
     When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, TRANSFER" named "TX2"
-    ```
-    let mut acc2 = global!["TRANSFER/components/Account"];
-    let faucet_resource = global!["FAUCET/resources/0"];
-    acc2.balance(faucet_resource);
-    ```
+  ```
+  let mut acc2 = global!["TRANSFER/components/Account"];
+  let faucet_resource = global!["FAUCET/resources/0"];
+  acc2.balance(faucet_resource);
+  ```
     When I print the cucumber world
 
   @serial
@@ -137,14 +137,14 @@ Feature: Account transfers
     # Fund the sender account with faucet tokens
     When I print the cucumber world
     When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT_1" named "TX1"
-    ```
-    let faucet = global!["FAUCET/components/TestFaucet"];
-    let mut acc1 = global!["ACCOUNT_1/components/Account"];
+  ```
+  let faucet = global!["FAUCET/components/TestFaucet"];
+  let mut acc1 = global!["ACCOUNT_1/components/Account"];
 
-    // get tokens from the faucet
-    let faucet_bucket = faucet.take_free_coins();
-    acc1.deposit(faucet_bucket);
-    ```
+  // get tokens from the faucet
+  let faucet_bucket = faucet.take_free_coins();
+  acc1.deposit(faucet_bucket);
+  ```
 
     When I wait 3 seconds
 
@@ -153,11 +153,11 @@ Feature: Account transfers
 
     # Check that ACCOUNT_2 component now has funds
     When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT_2" named "TX2"
-    ```
-    let mut acc2 = global!["ACCOUNT_2/components/Account"];
-    let faucet_resource = global!["FAUCET/resources/0"];
-    acc2.balance(faucet_resource);
-    ```
+  ```
+  let mut acc2 = global!["ACCOUNT_2/components/Account"];
+  let faucet_resource = global!["FAUCET/resources/0"];
+  acc2.balance(faucet_resource);
+  ```
     When I print the cucumber world
 
   @serial

@@ -70,7 +70,6 @@ pub async fn spawn(
     hooks: <TariConsensusSpec as ConsensusSpec>::Hooks,
     shutdown_signal: ShutdownSignal,
     transaction_executor: TariDanBlockTransactionExecutor<
-        EpochManagerHandle<PeerAddress>,
         TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
         ConsensusTransactionValidator,
     >,

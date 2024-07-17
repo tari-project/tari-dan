@@ -43,7 +43,6 @@ impl ConsensusSpec for TariConsensusSpec {
     type StateStore = SqliteStateStore<Self::Addr>;
     type SyncManager = RpcStateSyncManager<Self>;
     type TransactionExecutor = TariDanBlockTransactionExecutor<
-        Self::EpochManager,
         TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
         ConsensusTransactionValidator,
     >;

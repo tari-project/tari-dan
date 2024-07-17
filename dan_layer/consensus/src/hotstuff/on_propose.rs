@@ -237,13 +237,14 @@ where TConsensusSpec: ConsensusSpec
     fn execute_transaction(
         &self,
         store: &PendingSubstateStore<TConsensusSpec::StateStore>,
+        current_epoch: Epoch,
         transaction_id: &TransactionId,
     ) -> Result<ExecutedTransaction, HotStuffError> {
         let transaction = TransactionRecord::get(store.read_transaction(), transaction_id)?;
 
         let executed = self
             .transaction_executor
-            .execute(transaction.into_transaction(), store)
+            .execute(transaction.into_transaction(), store, current_epoch)
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
         Ok(executed)
@@ -267,7 +268,7 @@ where TConsensusSpec: ConsensusSpec
         );
 
         if tx_rec.current_stage().is_new() {
-            let executed = self.execute_transaction(substate_store, tx_rec.transaction_id())?;
+            let executed = self.execute_transaction(substate_store, parent_block.epoch(), tx_rec.transaction_id())?;
             // Update the decision so that we can propose it
             tx_rec.set_local_decision(executed.decision());
             tx_rec.set_evidence(executed.to_initial_evidence());

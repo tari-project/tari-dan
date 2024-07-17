@@ -5,7 +5,7 @@
 use std::num::NonZeroU64;
 
 use log::*;
-use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, Epoch};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -267,7 +267,8 @@ where TConsensusSpec: ConsensusSpec
                         block,
                     );
 
-                    let executed = self.execute_transaction_if_required(&substate_store, &atom.id, block.id())?;
+                    let executed =
+                        self.execute_transaction_if_required(&substate_store, &atom.id, block.id(), block.epoch())?;
                     tx_rec.set_local_decision(executed.decision());
                     tx_rec.set_evidence(executed.to_initial_evidence());
                     tx_rec.set_transaction_fee(executed.transaction_fee());
@@ -432,7 +433,8 @@ where TConsensusSpec: ConsensusSpec
                         block,
                     );
 
-                    let executed = self.execute_transaction_if_required(&substate_store, &atom.id, block.id())?;
+                    let executed =
+                        self.execute_transaction_if_required(&substate_store, &atom.id, block.id(), block.epoch())?;
                     tx_rec.set_local_decision(executed.decision());
                     tx_rec.set_evidence(executed.to_initial_evidence());
                     tx_rec.set_transaction_fee(executed.transaction_fee());
@@ -746,6 +748,7 @@ where TConsensusSpec: ConsensusSpec
         store: &PendingSubstateStore<TConsensusSpec::StateStore>,
         transaction_id: &TransactionId,
         block_id: &BlockId,
+        current_epoch: Epoch,
     ) -> Result<TransactionExecution, HotStuffError> {
         // If the transaction is already executed in the propose phase we simply load it for this block
         if let Some(execution) =
@@ -758,7 +761,7 @@ where TConsensusSpec: ConsensusSpec
 
         let executed = self
             .transaction_executor
-            .execute(transaction.into_transaction(), store)
+            .execute(transaction.into_transaction(), store, current_epoch)
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
         Ok(executed.into_execution_for_block(*block_id))

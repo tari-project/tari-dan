@@ -48,6 +48,7 @@ pub trait BlockTransactionExecutor<TStateStore: StateStore> {
         &self,
         transaction: Transaction,
         store: &PendingSubstateStore<TStateStore>,
+        current_epoch: Epoch,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError>;
     // fn accept(
     //     &self,

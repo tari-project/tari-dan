@@ -48,6 +48,7 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
         &self,
         transaction: Transaction,
         store: &PendingSubstateStore<TStateStore>,
+        _current_epoch: Epoch,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
         if let Some(execution) = self.store.get(transaction.id()) {
             let mut rec = TransactionRecord::new(transaction);

@@ -18,7 +18,7 @@ use tari_dan_storage::{
 };
 use tari_engine_types::{
     substate::{Substate, SubstateId},
-    virtual_substate::VirtualSubstates,
+    virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates},
 };
 use tari_transaction::{Transaction, VersionedSubstateId};
 
@@ -27,18 +27,14 @@ use crate::{transaction_validators::TransactionValidationError, validator::Valid
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::block_transaction_executor";
 
 #[derive(Debug)]
-pub struct TariDanBlockTransactionExecutor<TEpochManager, TExecutor, TValidator> {
-    // TODO: we will need the epoch manager for virtual substates and other operations in the future
-    #[allow(dead_code)]
-    epoch_manager: TEpochManager,
+pub struct TariDanBlockTransactionExecutor<TExecutor, TValidator> {
     executor: TExecutor,
     validator: Arc<TValidator>,
 }
 
-impl<TEpochManager, TExecutor, TValidator> TariDanBlockTransactionExecutor<TEpochManager, TExecutor, TValidator> {
-    pub fn new(epoch_manager: TEpochManager, executor: TExecutor, validator: TValidator) -> Self {
+impl<TExecutor, TValidator> TariDanBlockTransactionExecutor<TExecutor, TValidator> {
+    pub fn new(executor: TExecutor, validator: TValidator) -> Self {
         Self {
-            epoch_manager,
             executor,
             validator: Arc::new(validator),
         }
@@ -108,8 +104,8 @@ impl<TEpochManager, TExecutor, TValidator> TariDanBlockTransactionExecutor<TEpoc
     }
 }
 
-impl<TEpochManager, TExecutor, TStateStore, TValidator> BlockTransactionExecutor<TStateStore>
-    for TariDanBlockTransactionExecutor<TEpochManager, TExecutor, TValidator>
+impl<TExecutor, TStateStore, TValidator> BlockTransactionExecutor<TStateStore>
+    for TariDanBlockTransactionExecutor<TExecutor, TValidator>
 where
     TStateStore: StateStore,
     TExecutor: TransactionExecutor,
@@ -140,6 +136,7 @@ where
         &self,
         transaction: Transaction,
         store: &PendingSubstateStore<TStateStore>,
+        current_epoch: Epoch,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
         let id: tari_transaction::TransactionId = *transaction.id();
 
@@ -151,8 +148,11 @@ where
         let state_db = new_memory_store();
         self.add_substates_to_memory_db(&inputs, &state_db)?;
 
-        // TODO: create the virtual substates for execution
-        let virtual_substates = VirtualSubstates::new();
+        let mut virtual_substates = VirtualSubstates::new();
+        virtual_substates.insert(
+            VirtualSubstateId::CurrentEpoch,
+            VirtualSubstate::CurrentEpoch(current_epoch.as_u64()),
+        );
 
         // Execute the transaction and get the result
         let exec_output = self
@@ -176,12 +176,9 @@ where
     }
 }
 
-impl<TEpochManager: Clone, TExecutor: Clone, TValidator> Clone
-    for TariDanBlockTransactionExecutor<TEpochManager, TExecutor, TValidator>
-{
+impl<TExecutor: Clone, TValidator> Clone for TariDanBlockTransactionExecutor<TExecutor, TValidator> {
     fn clone(&self) -> Self {
         Self {
-            epoch_manager: self.epoch_manager.clone(),
             executor: self.executor.clone(),
             validator: self.validator.clone(),
         }

@@ -244,7 +244,6 @@ pub async fn spawn_services(
     // Consensus
     let payload_processor = TariDanTransactionProcessor::new(config.network, template_manager.clone(), fee_table);
     let transaction_executor = TariDanBlockTransactionExecutor::new(
-        epoch_manager.clone(),
         payload_processor.clone(),
         consensus::create_transaction_validator(&config.validator_node, template_manager.clone()),
     );
