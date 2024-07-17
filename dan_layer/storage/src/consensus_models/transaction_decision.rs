@@ -19,8 +19,6 @@ pub enum Decision {
     Commit,
     /// Decision to ABORT the transaction
     Abort,
-    /// Decision has not yet been reached
-    Deferred,
 }
 
 impl Decision {
@@ -32,15 +30,10 @@ impl Decision {
         matches!(self, Decision::Abort)
     }
 
-    pub fn is_deferred(&self) -> bool {
-        matches!(self, Decision::Deferred)
-    }
-
     pub fn and(self, other: Self) -> Self {
         match self {
             Decision::Commit => other,
             Decision::Abort => Decision::Abort,
-            Decision::Deferred => Decision::Deferred,
         }
     }
 
@@ -48,7 +41,6 @@ impl Decision {
         match self {
             Decision::Commit => "Commit",
             Decision::Abort => "Abort",
-            Decision::Deferred => "Deferred",
         }
     }
 }
@@ -66,7 +58,6 @@ impl FromStr for Decision {
         match s {
             "Commit" => Ok(Decision::Commit),
             "Abort" => Ok(Decision::Abort),
-            "Deferred" => Ok(Decision::Deferred),
             _ => Err(()),
         }
     }

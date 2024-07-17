@@ -21,12 +21,10 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
-use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
 use tari_dan_common_types::PeerAddress;
-use tari_dan_storage::consensus_models::ExecutedTransaction;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_state_store_sqlite::SqliteStateStore;
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::Transaction;
 use tokio::{sync::mpsc, task, task::JoinHandle};
 
 #[cfg(feature = "metrics")]
@@ -34,32 +32,25 @@ use super::metrics::PrometheusMempoolMetrics;
 use crate::{
     consensus::ConsensusHandle,
     p2p::services::{
-        mempool::{handle::MempoolHandle, service::MempoolService, MempoolError, SubstateResolver, Validator},
+        mempool::{handle::MempoolHandle, service::MempoolService},
         messaging::Gossip,
     },
-    substate_resolver::SubstateResolverError,
+    transaction_validators::TransactionValidationError,
+    validator::Validator,
 };
 
 const LOG_TARGET: &str = "tari::dan::validator_node::mempool";
 
-pub fn spawn<TExecutor, TValidator, TExecutedValidator, TSubstateResolver>(
+pub fn spawn<TValidator>(
     gossip: Gossip,
-    tx_executed_transactions: mpsc::Sender<(TransactionId, usize)>,
     epoch_manager: EpochManagerHandle<PeerAddress>,
-    transaction_executor: TExecutor,
-    substate_resolver: TSubstateResolver,
-    validator: TValidator,
-    after_executed_validator: TExecutedValidator,
+    transaction_validator: TValidator,
     state_store: SqliteStateStore<PeerAddress>,
-    rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
     consensus_handle: ConsensusHandle,
     #[cfg(feature = "metrics")] metrics_registry: &prometheus::Registry,
 ) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
 where
-    TValidator: Validator<Transaction, Error = MempoolError> + Send + Sync + 'static,
-    TExecutedValidator: Validator<ExecutedTransaction, Error = MempoolError> + Send + Sync + 'static,
-    TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Clone + Send + Sync + 'static,
-    TSubstateResolver: SubstateResolver<Error = SubstateResolverError> + Clone + Send + Sync + 'static,
+    TValidator: Validator<Transaction, Context = (), Error = TransactionValidationError> + Send + Sync + 'static,
 {
     // This channel only needs to be size 1, because each mempool request must wait for a reply and the mempool is
     // running on a single task and so there is no benefit to buffering multiple requests.
@@ -70,14 +61,9 @@ where
     let mempool = MempoolService::new(
         rx_mempool_request,
         gossip,
-        tx_executed_transactions,
         epoch_manager,
-        transaction_executor,
-        substate_resolver,
-        validator,
-        after_executed_validator,
+        transaction_validator,
         state_store,
-        rx_consensus_to_mempool,
         consensus_handle,
         #[cfg(feature = "metrics")]
         metrics,

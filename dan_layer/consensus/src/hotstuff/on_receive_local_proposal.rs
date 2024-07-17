@@ -13,14 +13,11 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         Decision,
-        ExecutedTransaction,
         ForeignProposal,
         HighQc,
         LastSentVote,
         QuorumDecision,
-        TransactionAtom,
         TransactionPool,
-        TransactionPoolStage,
         TransactionRecord,
         ValidBlock,
     },
@@ -33,7 +30,6 @@ use super::proposer::Proposer;
 use crate::{
     hotstuff::{
         calculate_dummy_blocks,
-        current_view::CurrentView,
         error::HotStuffError,
         on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
         pacemaker_handle::PaceMakerHandle,
@@ -100,7 +96,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         }
     }
 
-    pub async fn handle(&mut self, current_view: CurrentView, message: ProposalMessage) -> Result<(), HotStuffError> {
+    pub async fn handle(&mut self, current_epoch: Epoch, message: ProposalMessage) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = message;
 
         debug!(
@@ -110,7 +106,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             block.proposed_by()
         );
 
-        match self.process_block(current_view, block).await {
+        match self.process_block(current_epoch, block).await {
             Ok(()) => Ok(()),
             Err(err @ HotStuffError::ProposalValidationError(_)) => {
                 self.hooks.on_block_validation_failed(&err);
@@ -121,7 +117,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn process_block(&mut self, current_view: CurrentView, block: Block) -> Result<(), HotStuffError> {
+    async fn process_block(&mut self, current_epoch: Epoch, block: Block) -> Result<(), HotStuffError> {
         if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
             return Err(HotStuffError::EpochNotActive {
                 epoch: block.epoch(),
@@ -152,22 +148,22 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             // Ensure all transactions are inserted in the pool
             // TODO(hacky): If the block has transactions (invariant: we have the transaction stored at this point) but
             // it's not in the pool (race condition: transaction
-            for tx_id in valid_block.block().all_transaction_ids() {
-                if self.transaction_pool.exists(&**tx, tx_id)? {
-                    continue;
-                }
-                let transaction = TransactionRecord::get(&**tx, tx_id)?;
-                // Did the mempool execute it?
-                if transaction.is_executed() {
-                    // This should never fail
-                    let executed = ExecutedTransaction::try_from(transaction)?;
-                    self.transaction_pool.insert(tx, executed.to_atom())?;
-                } else {
-                    // Deferred execution
-                    self.transaction_pool
-                        .insert(tx, TransactionAtom::deferred(*transaction.id()))?;
-                }
-            }
+            // for tx_id in valid_block.block().all_transaction_ids() {
+            //     if self.transaction_pool.exists(&**tx, tx_id)? {
+            //         continue;
+            //     }
+            //     let transaction = TransactionRecord::get(&**tx, tx_id)?;
+            //     // Did the mempool execute it?
+            //     if transaction.is_executed() {
+            //         // This should never fail
+            //         let executed = ExecutedTransaction::try_from(transaction)?;
+            //         self.transaction_pool.insert(tx, executed.to_atom())?;
+            //     } else {
+            //         // Deferred execution
+            //         self.transaction_pool
+            //             .insert(tx, TransactionAtom::deferred(*transaction.id()))?;
+            //     }
+            // }
 
             // Save the block as soon as it is valid to ensure we have a valid pacemaker height.
             let high_qc = self.save_block(tx, &valid_block)?;
@@ -176,8 +172,8 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         })?;
 
         if let Some((high_qc, valid_block)) = maybe_high_qc_and_block {
-            let current_epoch = self.epoch_manager.current_epoch().await?;
-            let can_propose_epoch_end = current_epoch > current_view.get_epoch();
+            let em_epoch = self.epoch_manager.current_epoch().await?;
+            let can_propose_epoch_end = em_epoch > current_epoch;
 
             let block_decision = self.on_ready_to_vote_on_local_block.handle(
                 &valid_block,
@@ -425,7 +421,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                         .get(&**tx, block.as_leaf_block(), transaction.id())?;
                     // If the transaction is still in the pool we have to check if it was at least locally prepared,
                     // otherwise abort it.
-                    if tx_rec.stage() == TransactionPoolStage::New || tx_rec.stage() == TransactionPoolStage::Prepared {
+                    if tx_rec.current_stage().is_new() || tx_rec.current_stage().is_prepared() {
                         tx_rec.update_local_decision(tx, Decision::Abort)?;
                         has_unresolved_transactions = true;
                     }

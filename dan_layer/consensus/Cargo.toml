@@ -19,7 +19,6 @@ tari_state_tree = { workspace = true }
 # Used for PublicKey and Signature and Network enum
 tari_common = { workspace = true }
 tari_common_types = { workspace = true }
-tari_mmr = { workspace = true }
 tari_shutdown = { workspace = true }
 
 anyhow = { workspace = true }

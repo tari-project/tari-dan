@@ -3,6 +3,7 @@
 
 use std::{
     collections::{hash_map, HashMap, HashSet},
+    fmt::Display,
     time::Duration,
 };
 
@@ -10,7 +11,7 @@ use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{BlockId, Decision, QcId, SubstateRecord, TransactionRecord},
+    consensus_models::{BlockId, Decision, QcId, SubstateRecord, TransactionExecution, TransactionRecord},
     StateStore,
     StateStoreReadTransaction,
     StorageError,
@@ -25,11 +26,10 @@ use tari_template_lib::models::ComponentAddress;
 use tari_transaction::{TransactionId, VersionedSubstateId};
 use tokio::{sync::broadcast, task, time::sleep};
 
-use super::{helpers, MessageFilter};
+use super::{create_execution_result_for_transaction, helpers, MessageFilter};
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
-    executions_store::TestTransactionExecutionsStore,
     network::{spawn_network, TestNetwork, TestNetworkDestination},
     transaction::build_transaction,
     validator::Validator,
@@ -40,7 +40,6 @@ use crate::support::{
 pub struct Test {
     validators: HashMap<TestAddress, Validator>,
     network: TestNetwork,
-    transaction_executions: TestTransactionExecutionsStore,
     _leader_strategy: RoundRobinLeaderStrategy,
     epoch_manager: TestEpochManager,
     shutdown: Shutdown,
@@ -52,11 +51,18 @@ impl Test {
         TestBuilder::new()
     }
 
-    pub async fn send_transaction_to(&self, addr: &TestAddress, decision: Decision, fee: u64, num_shards: usize) {
+    pub async fn send_transaction_to(
+        &self,
+        addr: &TestAddress,
+        decision: Decision,
+        fee: u64,
+        num_shards: usize,
+    ) -> TransactionRecord {
         let num_committees = self.epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
         let transaction = build_transaction(decision, fee, num_shards, num_committees);
-        self.send_transaction_to_destination(TestNetworkDestination::Address(addr.clone()), transaction)
+        self.send_transaction_to_destination(TestNetworkDestination::Address(addr.clone()), transaction.clone())
             .await;
+        transaction
     }
 
     pub async fn send_transaction_to_all(&self, decision: Decision, fee: u64, num_shards: usize) {
@@ -67,17 +73,31 @@ impl Test {
     }
 
     pub async fn send_transaction_to_destination(&self, dest: TestNetworkDestination, transaction: TransactionRecord) {
-        let num_committees = self.epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
-        self.validators.values().for_each(|v| {
-            if dest.is_for(&v.address, v.substate_address.to_shard(num_committees)) {
-                v.state_store.with_write_tx(|tx| transaction.insert(tx)).unwrap();
-            }
-        });
+        self.create_execution_at_destination(
+            dest.clone(),
+            create_execution_result_for_transaction(
+                BlockId::zero(),
+                *transaction.id(),
+                transaction.current_decision(),
+                0,
+                transaction.resolved_inputs.clone().unwrap_or_default(),
+                transaction.resulting_outputs.clone(),
+            ),
+        );
         self.network.send_transaction(dest, transaction).await;
     }
 
-    pub fn transaction_executions(&self) -> &TestTransactionExecutionsStore {
-        &self.transaction_executions
+    pub fn create_execution_at_destination(
+        &self,
+        dest: TestNetworkDestination,
+        execution: TransactionExecution,
+    ) -> &Self {
+        for vn in self.validators.values() {
+            if dest.is_for(&vn.address, vn.shard) {
+                vn.transaction_executions.insert(execution.clone());
+            }
+        }
+        self
     }
 
     pub fn create_substates_on_all_vns(&self, num: usize) -> Vec<VersionedSubstateId> {
@@ -230,12 +250,44 @@ impl Test {
         })
     }
 
+    // pub fn all_transactions_finalized(&self) -> bool {
+    //     self.validators.values().all(|v| {
+    //         let transactions = v
+    //             .state_store
+    //             .with_read_tx(|tx| tx.transactions_get_paginated(10000, 0, None))
+    //             .unwrap();
+    //         log::info!("{} has {} transactions in pool", v.address, transactions.len());
+    //         transactions.iter().all(|tx| tx.is_finalized())
+    //     })
+    // }
+
+    pub async fn wait_for_n_to_be_finalized(&self, n: usize) {
+        self.wait_all_for_predicate("waiting for n to be finalized", |vn| {
+            let transactions = vn
+                .state_store
+                .with_read_tx(|tx| tx.transactions_get_paginated(10000, 0, None))
+                .unwrap();
+            log::info!("{} has {} transactions in pool", vn.address, transactions.len());
+            transactions.iter().filter(|tx| tx.is_finalized()).count() >= n
+        })
+        .await
+    }
+
+    // pub async fn wait_for_n_known_transactions(&self, n: usize) {
+    //     self.wait_all_for_predicate("Wait for n known transactions".to_string(), |vn| {
+    //         vn.state_store
+    //             .with_read_tx(|tx| tx.transactions_count().map_err(StorageError::from))
+    //             .unwrap() >=
+    //             n as u64
+    //     })
+    //     .await
+    // }
+
     pub fn with_all_validators(&self, f: impl FnMut(&Validator)) {
         self.validators.values().for_each(f);
     }
 
-    #[allow(dead_code)]
-    async fn wait_all_for_predicate<P: FnMut(&Validator) -> bool>(&self, description: String, mut predicate: P) {
+    async fn wait_all_for_predicate<T: Display, P: FnMut(&Validator) -> bool>(&self, description: T, mut predicate: P) {
         let mut complete = vec![];
         let mut remaining_loops = 100usize; // ~10 seconds
         loop {
@@ -330,6 +382,7 @@ impl Test {
                     attempts += 1;
                     // Send this task to the back of the queue and try again after other tasks have executed
                     // to allow validators to catch up
+                    // tokio::time::sleep(Duration::from_millis(50)).await;
                     task::yield_now().await;
                     continue 'outer;
                 }
@@ -348,16 +401,6 @@ impl Test {
     pub fn assert_all_validators_committed(&self) {
         self.validators.values().for_each(|v| {
             assert!(v.has_committed_substates(), "Validator {} did not commit", v.address);
-        });
-    }
-
-    pub fn assert_all_validators_did_not_commit(&self) {
-        self.validators.values().for_each(|v| {
-            assert!(
-                !v.has_committed_substates(),
-                "Validator {} committed but we expected it not to",
-                v.address
-            );
         });
     }
 
@@ -434,7 +477,6 @@ impl TestBuilder {
         &self,
         leader_strategy: &RoundRobinLeaderStrategy,
         epoch_manager: &TestEpochManager,
-        transaction_executions: TestTransactionExecutionsStore,
         shutdown_signal: ShutdownSignal,
     ) -> (Vec<ValidatorChannels>, HashMap<TestAddress, Validator>) {
         epoch_manager
@@ -447,7 +489,6 @@ impl TestBuilder {
 
                 let (channels, validator) = Validator::builder()
                     .with_sql_url(sql_address)
-                    .with_transaction_executions(transaction_executions.clone())
                     .with_address_and_secret_key(address.clone(), sk)
                     .with_shard(shard)
                     .with_bucket(bucket)
@@ -478,21 +519,14 @@ impl TestBuilder {
         let epoch_manager = TestEpochManager::new(tx_epoch_events);
         epoch_manager.add_committees(self.committees.clone()).await;
         let shutdown = Shutdown::new();
-        let transaction_executions = TestTransactionExecutionsStore::new();
         let (channels, validators) = self
-            .build_validators(
-                &leader_strategy,
-                &epoch_manager,
-                transaction_executions.clone(),
-                shutdown.to_signal(),
-            )
+            .build_validators(&leader_strategy, &epoch_manager, shutdown.to_signal())
             .await;
         let network = spawn_network(channels, shutdown.to_signal(), self.message_filter);
 
         Test {
             validators,
             network,
-            transaction_executions,
 
             _leader_strategy: leader_strategy,
             epoch_manager,

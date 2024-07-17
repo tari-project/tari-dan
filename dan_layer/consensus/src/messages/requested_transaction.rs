@@ -7,7 +7,8 @@ use tari_dan_storage::consensus_models::BlockId;
 use tari_transaction::Transaction;
 
 #[derive(Debug, Clone, Serialize)]
-pub struct RequestedTransactionMessage {
+pub struct MissingTransactionsResponse {
+    pub request_id: u32,
     pub epoch: Epoch,
     pub block_id: BlockId,
     pub transactions: Vec<Transaction>,

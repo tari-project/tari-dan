@@ -52,7 +52,7 @@ use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, Pe
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, ExecutedTransaction, SubstateRecord},
+    consensus_models::{Block, BlockId, SubstateRecord},
     global::GlobalDb,
     StateStore,
     StateStoreReadTransaction,
@@ -86,24 +86,13 @@ use crate::{
     p2p::{
         create_tari_validator_node_rpc_service,
         services::{
-            mempool::{
-                self,
-                ClaimFeeTransactionValidator,
-                EpochRangeValidator,
-                FeeTransactionValidator,
-                HasInputs,
-                HasInvolvedShards,
-                MempoolError,
-                MempoolHandle,
-                OutputsDontExistLocally,
-                TemplateExistsValidator,
-                TransactionSignatureValidator,
-                Validator,
-            },
+            mempool::{self, MempoolHandle},
             messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, Gossip},
         },
     },
     substate_resolver::TariSubstateResolver,
+    transaction_validators::{FeeTransactionValidator, HasInputs, TemplateExistsValidator, TransactionValidationError},
+    validator::Validator,
     validator_registration_file::ValidatorRegistrationFile,
     virtual_substate::VirtualSubstateManager,
     ApplicationConfig,
@@ -227,13 +216,8 @@ pub async fn spawn_services(
             per_log_cost: 1,
         }
     };
-    let payload_processor = TariDanTransactionProcessor::new(config.network, template_manager.clone(), fee_table);
 
-    let validator_node_client_factory = TariValidatorNodeRpcClientFactory::new(networking.clone());
-
-    // Consensus
-    let (tx_executed_transaction, rx_executed_transaction) = mpsc::channel(10);
-
+    // Messaging
     let local_address = PeerAddress::from(keypair.public_key().clone());
     let (loopback_sender, loopback_receiver) = mpsc::unbounded_channel();
     let inbound_messaging = ConsensusInboundMessaging::new(
@@ -245,19 +229,27 @@ pub async fn spawn_services(
     let outbound_messaging =
         ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
 
-    let transaction_executor = TariDanBlockTransactionExecutor::new(epoch_manager.clone(), payload_processor.clone());
+    // Consensus
+    let payload_processor = TariDanTransactionProcessor::new(config.network, template_manager.clone(), fee_table);
+    let transaction_executor = TariDanBlockTransactionExecutor::new(
+        epoch_manager.clone(),
+        payload_processor.clone(),
+        consensus::create_transaction_validator(&config.validator_node, template_manager.clone()),
+    );
 
     #[cfg(feature = "metrics")]
     let metrics = PrometheusConsensusMetrics::new(state_store.clone(), metrics_registry);
     #[cfg(not(feature = "metrics"))]
     let metrics = NoopHooks;
 
-    let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
+    let validator_node_client_factory = TariValidatorNodeRpcClientFactory::new(networking.clone());
+    let signing_service = consensus::TariSignatureService::new(keypair.clone());
+    let (consensus_join_handle, consensus_handle) = consensus::spawn(
         config.network,
         state_store.clone(),
-        keypair.clone(),
+        local_address,
+        signing_service,
         epoch_manager.clone(),
-        rx_executed_transaction,
         inbound_messaging,
         outbound_messaging.clone(),
         validator_node_client_factory.clone(),
@@ -269,41 +261,13 @@ pub async fn spawn_services(
     .await;
     handles.push(consensus_join_handle);
 
-    // substate cache
-    let substate_cache_dir = config.common.base_path.join("substate_cache");
-    let substate_cache = SubstateFileCache::new(substate_cache_dir)
-        .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Substate cache error: {}", e)))?;
-
-    // Mempool
-    let virtual_substate_manager = VirtualSubstateManager::new(state_store.clone(), epoch_manager.clone());
-    let scanner = SubstateScanner::new(
-        epoch_manager.clone(),
-        validator_node_client_factory.clone(),
-        substate_cache,
-    );
-    let substate_resolver = TariSubstateResolver::new(
-        state_store.clone(),
-        scanner,
-        epoch_manager.clone(),
-        virtual_substate_manager.clone(),
-    );
-
     let gossip = Gossip::new(networking.clone(), rx_gossip_messages);
 
     let (mempool, join_handle) = mempool::spawn(
         gossip,
-        tx_executed_transaction,
         epoch_manager.clone(),
-        payload_processor.clone(),
-        substate_resolver.clone(),
-        create_mempool_before_execute_validator(
-            &config.validator_node,
-            template_manager.clone(),
-            epoch_manager.clone(),
-        ),
-        create_mempool_after_execute_validator(state_store.clone()),
+        create_mempool_transaction_validator(&config.validator_node, template_manager.clone()),
         state_store.clone(),
-        rx_consensus_to_mempool,
         consensus_handle.clone(),
         #[cfg(feature = "metrics")]
         metrics_registry,
@@ -327,6 +291,25 @@ pub async fn spawn_services(
         config.validator_node.burnt_utxo_sidechain_id.clone(),
     );
     handles.push(join_handle);
+
+    // substate cache
+    let substate_cache_dir = config.common.base_path.join("substate_cache");
+    let substate_cache = SubstateFileCache::new(substate_cache_dir)
+        .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Substate cache error: {}", e)))?;
+
+    // Dry-run services (TODO: should we implement dry-run on validator nodes, or just keep it in the indexer?)
+    let virtual_substate_manager = VirtualSubstateManager::new(state_store.clone(), epoch_manager.clone());
+    let scanner = SubstateScanner::new(
+        epoch_manager.clone(),
+        validator_node_client_factory.clone(),
+        substate_cache,
+    );
+    let substate_resolver = TariSubstateResolver::new(
+        state_store.clone(),
+        scanner,
+        epoch_manager.clone(),
+        virtual_substate_manager.clone(),
+    );
 
     spawn_p2p_rpc(
         config,
@@ -519,16 +502,11 @@ where
     Ok(())
 }
 
-fn create_mempool_before_execute_validator(
+fn create_mempool_transaction_validator(
     config: &ValidatorNodeConfig,
     template_manager: TemplateManager<PeerAddress>,
-    epoch_manager: EpochManagerHandle<PeerAddress>,
-) -> impl Validator<Transaction, Error = MempoolError> {
-    let mut validator = TransactionSignatureValidator
-        .and_then(TemplateExistsValidator::new(template_manager))
-        .and_then(EpochRangeValidator::new(epoch_manager.clone()))
-        .and_then(ClaimFeeTransactionValidator::new(epoch_manager))
-        .boxed();
+) -> impl Validator<Transaction, Context = (), Error = TransactionValidationError> {
+    let mut validator = TemplateExistsValidator::new(template_manager).boxed();
     if !config.no_fees {
         // A transaction without fee payment may have 0 inputs.
         validator = HasInputs::new()
@@ -539,8 +517,8 @@ fn create_mempool_before_execute_validator(
     validator
 }
 
-fn create_mempool_after_execute_validator<TAddr: NodeAddressable>(
-    store: SqliteStateStore<TAddr>,
-) -> impl Validator<ExecutedTransaction, Error = MempoolError> {
-    HasInvolvedShards::new().and_then(OutputsDontExistLocally::new(store))
-}
+// fn create_mempool_after_execute_validator<TAddr: NodeAddressable>(
+//     store: SqliteStateStore<TAddr>,
+// ) -> impl MempoolValidator<ExecutedTransaction, Error = MempoolError> {
+//     HasInvolvedShards::new().and_then(OutputsDontExistLocally::new(store))
+// }

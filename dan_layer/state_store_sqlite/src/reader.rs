@@ -1285,21 +1285,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         deserialize_json(&qc_json)
     }
 
-    fn transaction_pool_get(&self, transaction_id: &TransactionId) -> Result<TransactionPoolRecord, StorageError> {
-        use crate::schema::transaction_pool;
-
-        let transaction_id = serialize_hex(transaction_id);
-        let rec = transaction_pool::table
-            .filter(transaction_pool::transaction_id.eq(&transaction_id))
-            .first::<sql_models::TransactionPoolRecord>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transaction_pool_get",
-                source: e,
-            })?;
-
-        rec.try_convert(None)
-    }
-
     fn transaction_pool_get_for_blocks(
         &self,
         from_block_id: &BlockId,

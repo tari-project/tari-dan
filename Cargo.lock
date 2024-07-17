@@ -8761,7 +8761,6 @@ dependencies = [
  "tari_dan_storage",
  "tari_engine_types",
  "tari_epoch_manager",
- "tari_mmr",
  "tari_shutdown",
  "tari_state_tree",
  "tari_transaction",

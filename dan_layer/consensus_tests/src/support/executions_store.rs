@@ -9,9 +9,11 @@ use std::{
 use tari_dan_storage::consensus_models::TransactionExecution;
 use tari_transaction::TransactionId;
 
+type TestExecutionStore = HashMap<TransactionId, TransactionExecution>;
+
 #[derive(Debug, Clone, Default)]
 pub struct TestTransactionExecutionsStore {
-    transactions: Arc<RwLock<HashMap<TransactionId, TransactionExecution>>>,
+    transactions: Arc<RwLock<TestExecutionStore>>,
 }
 
 impl TestTransactionExecutionsStore {

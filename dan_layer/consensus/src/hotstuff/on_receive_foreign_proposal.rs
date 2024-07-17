@@ -187,7 +187,7 @@ where TConsensusSpec: ConsensusSpec
             // If all shards are complete and we've already received our LocalPrepared, we can set out LocalPrepared
             // transaction as ready to propose ACCEPT. If we have not received the local LocalPrepared, the transition
             // will happen when we receive the local block.
-            if tx_rec.current_stage().is_local_prepared() && tx_rec.atom().evidence.all_shards_justified() {
+            if tx_rec.current_stage().is_local_prepared() && tx_rec.evidence().all_shards_justified() {
                 info!(
                     target: LOG_TARGET,
                     "🔥 FOREIGN PROPOSAL: Transaction is ready for propose ACCEPT({}, {}) Local Stage: {}",

@@ -353,14 +353,11 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             return Ok(());
         }
 
-        let is_up = SubstateRecord::substate_is_up(self.read_transaction(), &address)
-            .optional()?
-            .unwrap_or(false);
-        if !is_up {
-            return Err(SubstateStoreError::SubstateIsDown { id: id.clone() });
+        match SubstateRecord::substate_is_up(self.read_transaction(), &address).optional()? {
+            Some(true) => Ok(()),
+            Some(false) => Err(SubstateStoreError::SubstateIsDown { id: id.clone() }),
+            None => Err(SubstateStoreError::SubstateNotFound { address }),
         }
-
-        Ok(())
     }
 
     fn assert_is_down(&self, id: &VersionedSubstateId) -> Result<(), SubstateStoreError> {

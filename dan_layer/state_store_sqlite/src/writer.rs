@@ -14,7 +14,7 @@ use diesel::{
     SqliteConnection,
 };
 use log::*;
-use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeAddressable, NodeHeight};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -22,7 +22,6 @@ use tari_dan_storage::{
         BlockId,
         Decision,
         Evidence,
-        ExecutedTransaction,
         ForeignProposal,
         ForeignReceiveCounters,
         ForeignSendCounters,
@@ -610,7 +609,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
             transactions::resolved_inputs.eq(tx_rec.resolved_inputs().map(serialize_json).transpose()?),
             transactions::resulting_outputs.eq(serialize_json(tx_rec.resulting_outputs())?),
-            transactions::result.eq(tx_rec.result().map(serialize_json).transpose()?),
+            transactions::result.eq(tx_rec.execution_result().map(serialize_json).transpose()?),
             transactions::execution_time_ms.eq(tx_rec
                 .execution_time()
                 .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))),
@@ -660,7 +659,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         }
 
         let change_set = Changes {
-            result: transaction_rec.result().map(serialize_json).transpose()?,
+            result: transaction_rec.execution_result().map(serialize_json).transpose()?,
             filled_inputs: serialize_json(transaction.filled_inputs())?,
             resulting_outputs: serialize_json(transaction_rec.resulting_outputs())?,
             resolved_inputs: transaction_rec.resolved_inputs().map(serialize_json).transpose()?,
@@ -714,7 +713,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                     transactions::resolved_inputs.eq(rec.resolved_inputs().map(serialize_json).transpose()?),
                     transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
                     transactions::resulting_outputs.eq(serialize_json(rec.resulting_outputs())?),
-                    transactions::result.eq(rec.result().map(serialize_json).transpose()?),
+                    transactions::result.eq(rec.execution_result().map(serialize_json).transpose()?),
                 ))
             })
             .collect::<Result<Vec<_>, StorageError>>()?;
@@ -741,21 +740,20 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .into_iter()
             .map(|atom| {
                 // TODO(perf): 2n queries, query is slow
-                let exec = self
-                    .transaction_executions_get_pending_for_block(&atom.id, &block_id)
-                    .optional()?;
+                let exec = self.transaction_executions_get_pending_for_block(&atom.id, &block_id)?;
+                // .optional()?;
 
-                let exec = match exec {
-                    Some(exec) => exec,
-                    None => {
-                        // Executed in the mempool.
-                        // TODO: this is kinda hacky. Either the mempool should add a block_id=null execution or we
-                        // should remove mempool execution
-                        let transaction = self.transactions_get(&atom.id)?;
-                        let executed = ExecutedTransaction::try_from(transaction)?;
-                        executed.into_execution_for_block(block_id)
-                    },
-                };
+                // let exec = match exec {
+                //     Some(exec) => exec,
+                //     None => {
+                //         // Executed in the mempool.
+                //         // TODO: this is kinda hacky. Either the mempool should add a block_id=null execution or we
+                //         // should remove mempool execution
+                //         let transaction = self.transactions_get(&atom.id)?;
+                //         let executed = ExecutedTransaction::try_from(transaction)?;
+                //         executed.into_execution_for_block(block_id)
+                //     },
+                // };
 
                 Ok((
                     transactions::transaction_id.eq(serialize_hex(atom.id())),
@@ -813,24 +811,18 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn transaction_pool_insert(
+    fn transaction_pool_insert_new(
         &mut self,
-        transaction: TransactionAtom,
-        stage: TransactionPoolStage,
-        is_ready: bool,
+        transaction_id: TransactionId,
+        decision: Decision,
     ) -> Result<(), StorageError> {
         use crate::schema::transaction_pool;
 
         let insert = (
-            transaction_pool::transaction_id.eq(serialize_hex(transaction.id)),
-            transaction_pool::original_decision.eq(transaction.decision.to_string()),
-            transaction_pool::transaction_fee.eq(transaction.transaction_fee as i64),
-            transaction_pool::evidence.eq(serialize_json(&transaction.evidence)?),
-            transaction_pool::leader_fee.eq(transaction.leader_fee.as_ref().map(|f| f.fee as i64)),
-            transaction_pool::global_exhaust_burn
-                .eq(transaction.leader_fee.as_ref().map(|f| f.global_exhaust_burn as i64)),
-            transaction_pool::stage.eq(stage.to_string()),
-            transaction_pool::is_ready.eq(is_ready),
+            transaction_pool::transaction_id.eq(serialize_hex(transaction_id)),
+            transaction_pool::original_decision.eq(decision.to_string()),
+            transaction_pool::stage.eq(TransactionPoolStage::New.to_string()),
+            transaction_pool::is_ready.eq(true),
         );
 
         diesel::insert_into(transaction_pool::table)
@@ -1058,7 +1050,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             })?;
 
         txs.into_iter()
-            .map(|tx| tx.try_convert(None).map(|t| t.into_atom()))
+            .map(|tx| tx.try_convert(None).map(|t| t.into_local_transaction_atom()))
             .collect()
     }
 

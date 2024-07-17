@@ -1,6 +1,8 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::sync::Arc;
+
 use indexmap::IndexMap;
 use log::info;
 use tari_consensus::{
@@ -8,79 +10,40 @@ use tari_consensus::{
     traits::{BlockTransactionExecutor, BlockTransactionExecutorError, ReadableSubstateStore},
 };
 use tari_dan_app_utilities::transaction_executor::TransactionExecutor;
-use tari_dan_common_types::optional::Optional;
+use tari_dan_common_types::{optional::Optional, Epoch};
 use tari_dan_engine::{
     bootstrap_state,
     state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
 };
-use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
+use tari_dan_storage::{
+    consensus_models::{ExecutedTransaction, TransactionRecord},
+    StateStore,
+};
 use tari_engine_types::{
     substate::{Substate, SubstateId},
     virtual_substate::VirtualSubstates,
 };
 use tari_transaction::{Transaction, VersionedSubstateId};
 
+use crate::{transaction_validators::TransactionValidationError, validator::Validator};
+
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::block_transaction_executor";
 
-#[derive(Debug, Clone)]
-pub struct TariDanBlockTransactionExecutor<TEpochManager, TExecutor> {
+#[derive(Debug)]
+pub struct TariDanBlockTransactionExecutor<TEpochManager, TExecutor, TValidator> {
     // TODO: we will need the epoch manager for virtual substates and other operations in the future
     #[allow(dead_code)]
     epoch_manager: TEpochManager,
     executor: TExecutor,
+    validator: Arc<TValidator>,
 }
 
-impl<TEpochManager, TExecutor, TStateStore> BlockTransactionExecutor<TStateStore>
-    for TariDanBlockTransactionExecutor<TEpochManager, TExecutor>
-where
-    TStateStore: StateStore,
-    TExecutor: TransactionExecutor,
-{
-    fn execute(
-        &self,
-        transaction: Transaction,
-        store: &PendingSubstateStore<TStateStore>,
-    ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
-        let id: tari_transaction::TransactionId = *transaction.id();
-
-        // Get the latest input substates
-        let inputs = self.resolve_substates::<TStateStore>(&transaction, store)?;
-        info!(target: LOG_TARGET, "Transaction {} executing. Inputs: {:?}", id, inputs);
-
-        // Create a memory db with all the input substates, needed for the transaction execution
-        let state_db = Self::new_state_db();
-        self.add_substates_to_memory_db(&inputs, &state_db)?;
-
-        // TODO: create the virtual substates for execution
-        let virtual_substates = VirtualSubstates::new();
-
-        // Execute the transaction and get the result
-        let exec_output = self
-            .executor
-            .execute(transaction, state_db, virtual_substates)
-            .map_err(|e| BlockTransactionExecutorError::ExecutionThreadFailure(e.to_string()))?;
-
-        // Generate the resolved inputs to set the specific version and required lock flag, as we know it after
-        // execution
-        let resolved_inputs = exec_output.resolve_inputs(inputs);
-
-        let executed = ExecutedTransaction::new(
-            exec_output.transaction,
-            exec_output.result,
-            resolved_inputs,
-            exec_output.outputs,
-            exec_output.execution_time,
-        );
-        info!(target: LOG_TARGET, "Transaction {} executed. {}", id,executed.result().finalize.result);
-        Ok(executed)
-    }
-}
-
-impl<TEpochManager, TExecutor> TariDanBlockTransactionExecutor<TEpochManager, TExecutor> {
-    pub fn new(epoch_manager: TEpochManager, executor: TExecutor) -> Self {
+impl<TEpochManager, TExecutor, TValidator> TariDanBlockTransactionExecutor<TEpochManager, TExecutor, TValidator> {
+    pub fn new(epoch_manager: TEpochManager, executor: TExecutor, validator: TValidator) -> Self {
         Self {
             epoch_manager,
             executor,
+            validator: Arc::new(validator),
         }
     }
 
@@ -156,4 +119,87 @@ impl<TEpochManager, TExecutor> TariDanBlockTransactionExecutor<TEpochManager, TE
         tx.commit().unwrap();
         state_db
     }
+}
+
+impl<TEpochManager, TExecutor, TStateStore, TValidator> BlockTransactionExecutor<TStateStore>
+    for TariDanBlockTransactionExecutor<TEpochManager, TExecutor, TValidator>
+where
+    TStateStore: StateStore,
+    TExecutor: TransactionExecutor,
+    for<'a> TValidator: Validator<Transaction, Context = ValidationContext, Error = TransactionValidationError>,
+{
+    fn validate(
+        &self,
+        _tx: &TStateStore::ReadTransaction<'_>,
+        current_epoch: Epoch,
+        transaction: &Transaction,
+    ) -> Result<(), BlockTransactionExecutorError> {
+        self.validator
+            .validate(&ValidationContext { current_epoch }, transaction)
+            // TODO: see if we can avoid the err as string
+            .map_err(|e| BlockTransactionExecutorError::TransactionValidationError(e.to_string()))
+    }
+
+    fn prepare(
+        &self,
+        transaction: Transaction,
+        store: &TStateStore,
+    ) -> Result<TransactionRecord, BlockTransactionExecutorError> {
+        let t = store.with_read_tx(|tx| TransactionRecord::get(tx, transaction.id()))?;
+        Ok(t)
+    }
+
+    fn execute(
+        &self,
+        transaction: Transaction,
+        store: &PendingSubstateStore<TStateStore>,
+    ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
+        let id: tari_transaction::TransactionId = *transaction.id();
+
+        // Get the latest input substates
+        let inputs = self.resolve_substates::<TStateStore>(&transaction, store)?;
+        info!(target: LOG_TARGET, "Transaction {} executing. Inputs: {:?}", id, inputs);
+
+        // Create a memory db with all the input substates, needed for the transaction execution
+        let state_db = Self::new_state_db();
+        self.add_substates_to_memory_db(&inputs, &state_db)?;
+
+        // TODO: create the virtual substates for execution
+        let virtual_substates = VirtualSubstates::new();
+
+        // Execute the transaction and get the result
+        let exec_output = self
+            .executor
+            .execute(transaction, state_db, virtual_substates)
+            .map_err(|e| BlockTransactionExecutorError::ExecutionThreadFailure(e.to_string()))?;
+
+        // Generate the resolved inputs to set the specific version and required lock flag, as we know it after
+        // execution
+        let resolved_inputs = exec_output.resolve_inputs(inputs);
+
+        let executed = ExecutedTransaction::new(
+            exec_output.transaction,
+            exec_output.result,
+            resolved_inputs,
+            exec_output.outputs,
+            exec_output.execution_time,
+        );
+        info!(target: LOG_TARGET, "Transaction {} executed. {}", id,executed.result().finalize.result);
+        Ok(executed)
+    }
+}
+
+impl<TEpochManager: Clone, TExecutor: Clone, TValidator> Clone
+    for TariDanBlockTransactionExecutor<TEpochManager, TExecutor, TValidator>
+{
+    fn clone(&self) -> Self {
+        Self {
+            epoch_manager: self.epoch_manager.clone(),
+            executor: self.executor.clone(),
+            validator: self.validator.clone(),
+        }
+    }
+}
+pub struct ValidationContext {
+    pub current_epoch: Epoch,
 }
