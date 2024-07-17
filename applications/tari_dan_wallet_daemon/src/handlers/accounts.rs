@@ -17,7 +17,7 @@ use tari_dan_common_types::optional::Optional;
 use tari_dan_wallet_crypto::ConfidentialProofStatement;
 use tari_dan_wallet_sdk::{
     apis::{confidential_transfer::TransferParams, jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
-    models::{NewAccountInfo, VersionedSubstateId},
+    models::NewAccountInfo,
     storage::WalletStore,
     DanWalletSdk,
 };
@@ -32,6 +32,7 @@ use tari_key_manager::key_manager::DerivedKey;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
+    constants::{XTR, XTR_FAUCET_COMPONENT_ADDRESS, XTR_FAUCET_VAULT_ADDRESS},
     models::{Amount, UnclaimedConfidentialOutputAddress},
     prelude::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
 };
@@ -101,10 +102,11 @@ pub async fn handle_create(
     }
 
     let default_account = sdk.accounts_api().get_default()?;
-    let inputs = sdk
+    let mut inputs = sdk
         .substate_api()
         .locate_dependent_substates(&[default_account.address.clone()])
         .await?;
+    inputs.push(SubstateRequirement::unversioned(XTR));
 
     let signing_key_index = req.key_id.unwrap_or(default_account.key_index);
     let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
@@ -124,11 +126,7 @@ pub async fn handle_create(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(default_account.address.as_component_address().unwrap(), max_fee)
         .create_account(owner_pk.clone())
-        .with_inputs(
-            inputs
-                .iter()
-                .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version))),
-        )
+        .with_inputs(inputs)
         .sign(&signing_key.key)
         .build();
 
@@ -541,12 +539,8 @@ pub async fn handle_claim_burn(
 
     // Add all versioned account child addresses as inputs
     // add the commitment substate id as input to the claim burn transaction
-    let commitment_substate_address = VersionedSubstateId {
-        substate_id: SubstateId::UnclaimedConfidentialOutput(UnclaimedConfidentialOutputAddress::try_from(
-            commitment.as_slice(),
-        )?),
-        version: 0,
-    };
+    let commitment_substate_address =
+        SubstateRequirement::unversioned(UnclaimedConfidentialOutputAddress::try_from(commitment.as_slice())?);
     inputs.push(commitment_substate_address.clone());
 
     info!(
@@ -561,7 +555,7 @@ pub async fn handle_claim_burn(
         .substate_api()
         .scan_for_substate(
             &commitment_substate_address.substate_id,
-            Some(commitment_substate_address.version),
+            commitment_substate_address.version,
         )
         .await?;
     let output = output.into_unclaimed_confidential_output().unwrap();
@@ -648,7 +642,7 @@ async fn finish_claiming<T: WalletStore>(
     account_address: SubstateId,
     new_account_name: Option<String>,
     sdk: &DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>,
-    mut inputs: Vec<VersionedSubstateId>,
+    mut inputs: Vec<SubstateRequirement>,
     account_public_key: &RistrettoPublicKey,
     max_fee: Amount,
     account_secret_key: DerivedKey<RistrettoPublicKey>,
@@ -670,7 +664,7 @@ async fn finish_claiming<T: WalletStore>(
     if new_account_name.is_none() {
         // Add all versioned account child addresses as inputs unless the account is new
         let child_addresses = sdk.substate_api().load_dependent_substates(&[&account_address])?;
-        inputs.extend(child_addresses);
+        inputs.extend(child_addresses.into_iter().map(Into::into));
         instructions.push(Instruction::CallMethod {
             component_address: account_component_address,
             method: "deposit".to_string(),
@@ -687,9 +681,6 @@ async fn finish_claiming<T: WalletStore>(
         method: "pay_fee".to_string(),
         args: args![max_fee],
     });
-    let inputs = inputs
-        .into_iter()
-        .map(|s| SubstateRequirement::new(s.substate_id.clone(), Some(s.version)));
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
         .with_inputs(inputs)
@@ -727,7 +718,6 @@ async fn finish_claiming<T: WalletStore>(
 }
 
 /// Mints free test coins into an account. If an account name is provided which does not exist, that account is created
-#[allow(clippy::too_many_lines)]
 pub async fn handle_create_free_test_coins(
     context: &HandlerContext,
     token: Option<String>,
@@ -748,24 +738,22 @@ pub async fn handle_create_free_test_coins(
         return Err(invalid_params("fee", Some("cannot be negative")));
     }
 
-    let mut inputs = vec![];
+    let mut inputs = vec![
+        SubstateRequirement::unversioned(XTR),
+        SubstateRequirement::unversioned(XTR_FAUCET_COMPONENT_ADDRESS),
+        SubstateRequirement::unversioned(XTR_FAUCET_VAULT_ADDRESS),
+    ];
     let accounts_api = sdk.accounts_api();
     let (account_address, account_secret_key, new_account_name) =
         get_or_create_account(&account, &accounts_api, key_id, sdk, &mut inputs)?;
 
     let account_public_key = PublicKey::from_secret_key(&account_secret_key.key);
-    let output = sdk
-        .confidential_crypto_api()
-        .generate_output_for_dest(&account_public_key, amount)?;
 
-    let instructions = vec![
-        // TODO: We create double what is expected, amount confidential and amount revealed. Should let the caller
-        //       specify these values separately.
-        Instruction::CreateFreeTestCoins {
-            revealed_amount: amount,
-            output: Some(output),
-        },
-    ];
+    let instructions = vec![Instruction::CallMethod {
+        component_address: XTR_FAUCET_COMPONENT_ADDRESS,
+        method: "take".to_string(),
+        args: args![amount],
+    }];
 
     // ------------------------------
     let (tx_id, finalized) = finish_claiming(
@@ -799,7 +787,7 @@ fn get_or_create_account<T: WalletStore>(
     accounts_api: &tari_dan_wallet_sdk::apis::accounts::AccountsApi<'_, T>,
     key_id: Option<u64>,
     sdk: &DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>,
-    inputs: &mut Vec<VersionedSubstateId>,
+    inputs: &mut Vec<SubstateRequirement>,
 ) -> Result<(SubstateId, DerivedKey<RistrettoPublicKey>, Option<String>), anyhow::Error> {
     let maybe_account = match account {
         Some(ref addr_or_name) => get_account(addr_or_name, accounts_api).optional()?,
@@ -819,7 +807,7 @@ fn get_or_create_account<T: WalletStore>(
                 .key_manager_api()
                 .derive_key(key_manager::TRANSACTION_BRANCH, key_index)?;
             let account_substate = sdk.substate_api().get_substate(&account.address)?;
-            inputs.push(account_substate.address);
+            inputs.push(account_substate.address.into());
 
             (account.address, account_secret_key, None)
         },

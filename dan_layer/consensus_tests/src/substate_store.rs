@@ -87,7 +87,7 @@ fn it_allows_down_then_up() {
         })
         .unwrap();
 
-    let s = store.get(&id.to_next_version().to_substate_address()).unwrap();
+    let s = store.get(&id.to_next_version()).unwrap();
     assert_substate_eq(s, new_substate(1, 1));
     let s = store.get_latest(id.substate_id()).unwrap();
     assert_substate_eq(s, new_substate(1, 1));
@@ -224,7 +224,7 @@ fn create_pending_store<'a, 'tx, TAddr: NodeAddressable>(
     tx: &'a <SqliteStateStore<TAddr> as StateStore>::ReadTransaction<'tx>,
 ) -> PendingSubstateStore<'a, 'tx, SqliteStateStore<TAddr>> {
     let tree_store = ChainScopedTreeStore::new(Epoch::zero(), Shard::zero(), tx);
-    PendingSubstateStore::new(tree_store)
+    PendingSubstateStore::new(BlockId::zero(), tree_store)
 }
 
 fn new_substate_id(seed: u8) -> SubstateId {

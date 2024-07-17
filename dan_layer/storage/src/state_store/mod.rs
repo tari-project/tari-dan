@@ -40,6 +40,7 @@ use crate::{
         QuorumCertificate,
         StateTransition,
         StateTransitionId,
+        SubstateChange,
         SubstateRecord,
         TransactionAtom,
         TransactionExecution,
@@ -179,6 +180,11 @@ pub trait StateStoreReadTransaction: Sized {
     fn blocks_max_height(&self) -> Result<NodeHeight, StorageError>;
 
     fn block_diffs_get(&self, block_id: &BlockId) -> Result<BlockDiff, StorageError>;
+    fn block_diffs_get_last_change_for_substate(
+        &self,
+        block_id: &BlockId,
+        substate_id: &SubstateId,
+    ) -> Result<SubstateChange, StorageError>;
 
     fn parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
 

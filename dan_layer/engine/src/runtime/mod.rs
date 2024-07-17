@@ -59,7 +59,7 @@ use tari_dan_common_types::Epoch;
 use tari_engine_types::{
     commit_result::FinalizeResult,
     component::ComponentHeader,
-    confidential::{ConfidentialClaim, ConfidentialOutput},
+    confidential::ConfidentialClaim,
     indexed_value::IndexedValue,
     lock::LockFlag,
     substate::SubstateValue,
@@ -87,7 +87,7 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{Amount, BucketId, ComponentAddress, EntityId, Metadata, NonFungibleAddress, VaultRef},
+    models::{ComponentAddress, EntityId, Metadata, NonFungibleAddress, VaultRef},
 };
 pub use tracker::StateTracker;
 
@@ -159,11 +159,6 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn claim_validator_fees(&self, epoch: Epoch, validator_public_key: PublicKey) -> Result<(), RuntimeError>;
 
-    fn create_free_test_coins(
-        &self,
-        revealed_amount: Amount,
-        confidential_output: Option<ConfidentialOutput>,
-    ) -> Result<BucketId, RuntimeError>;
     fn set_fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError>;

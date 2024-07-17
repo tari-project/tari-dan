@@ -7,8 +7,13 @@ use tari_crypto::{keys::PublicKey as _, ristretto::RistrettoPublicKey};
 use tari_dan_wallet_sdk::{apis::key_manager::TRANSACTION_BRANCH, models::Account};
 use tari_engine_types::component::new_component_address_from_public_key;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::{args, models::Amount};
-use tari_transaction::{Instruction, Transaction};
+use tari_template_lib::{
+    args,
+    constants::{XTR_FAUCET_COMPONENT_ADDRESS, XTR_FAUCET_VAULT_ADDRESS},
+    models::Amount,
+    prelude::XTR,
+};
+use tari_transaction::{Instruction, SubstateRequirement, Transaction};
 
 use crate::{faucet::Faucet, runner::Runner};
 
@@ -22,14 +27,20 @@ impl Runner {
         let transaction = Transaction::builder()
             .with_fee_instructions_builder(|builder| {
                 builder
-                    .add_instruction(Instruction::CreateFreeTestCoins {
-                        revealed_amount: 1_000_000_000.into(),
-                        output: None,
+                    .add_instruction(Instruction::CallMethod {
+                        component_address: XTR_FAUCET_COMPONENT_ADDRESS,
+                        method: "take".to_string(),
+                        args: args![Amount(5000)],
                     })
                     .put_last_instruction_output_on_workspace("coins")
                     .create_account_with_bucket(owner_public_key, "coins")
                     .call_method(account_address, "pay_fee", args![Amount(1000)])
             })
+            .with_inputs([
+                SubstateRequirement::unversioned(XTR),
+                SubstateRequirement::unversioned(XTR_FAUCET_COMPONENT_ADDRESS),
+                SubstateRequirement::unversioned(XTR_FAUCET_VAULT_ADDRESS),
+            ])
             .sign(&key.key)
             .build();
 
@@ -113,9 +124,10 @@ impl Runner {
                 .call_method(account.address.as_component_address().unwrap(), "deposit", args![
                     Workspace("faucet")
                 ])
-                .add_instruction(Instruction::CreateFreeTestCoins {
-                    revealed_amount: 1_000_000.into(),
-                    output: None,
+                .add_instruction(Instruction::CallMethod {
+                    component_address: XTR_FAUCET_COMPONENT_ADDRESS,
+                    method: "take".to_string(),
+                    args: args![Amount(5000)],
                 })
                 .put_last_instruction_output_on_workspace("xtr")
                 .call_method(account.address.as_component_address().unwrap(), "deposit", args![
@@ -123,7 +135,14 @@ impl Runner {
                 ]);
         }
 
-        let transaction = builder.sign(&key.key).build();
+        let transaction = builder
+            .with_inputs([
+                SubstateRequirement::unversioned(XTR),
+                SubstateRequirement::unversioned(XTR_FAUCET_COMPONENT_ADDRESS),
+                SubstateRequirement::unversioned(XTR_FAUCET_VAULT_ADDRESS),
+            ])
+            .sign(&key.key)
+            .build();
 
         self.submit_transaction_and_wait(transaction).await?;
 

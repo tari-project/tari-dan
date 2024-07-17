@@ -12,6 +12,7 @@ license.workspace = true
 transaction_generator = { workspace = true }
 tari_validator_node_client = { workspace = true }
 tari_transaction = { workspace = true }
+tari_dan_common_types = { workspace = true }
 
 anyhow = { workspace = true }
 # if we set clap version 4 in the workspace it would break other crates

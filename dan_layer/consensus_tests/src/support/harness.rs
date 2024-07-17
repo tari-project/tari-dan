@@ -250,17 +250,6 @@ impl Test {
         })
     }
 
-    // pub fn all_transactions_finalized(&self) -> bool {
-    //     self.validators.values().all(|v| {
-    //         let transactions = v
-    //             .state_store
-    //             .with_read_tx(|tx| tx.transactions_get_paginated(10000, 0, None))
-    //             .unwrap();
-    //         log::info!("{} has {} transactions in pool", v.address, transactions.len());
-    //         transactions.iter().all(|tx| tx.is_finalized())
-    //     })
-    // }
-
     pub async fn wait_for_n_to_be_finalized(&self, n: usize) {
         self.wait_all_for_predicate("waiting for n to be finalized", |vn| {
             let transactions = vn
@@ -272,16 +261,6 @@ impl Test {
         })
         .await
     }
-
-    // pub async fn wait_for_n_known_transactions(&self, n: usize) {
-    //     self.wait_all_for_predicate("Wait for n known transactions".to_string(), |vn| {
-    //         vn.state_store
-    //             .with_read_tx(|tx| tx.transactions_count().map_err(StorageError::from))
-    //             .unwrap() >=
-    //             n as u64
-    //     })
-    //     .await
-    // }
 
     pub fn with_all_validators(&self, f: impl FnMut(&Validator)) {
         self.validators.values().for_each(f);

@@ -606,7 +606,7 @@ impl Block {
             });
         }
 
-        // block_diff.remove(tx)?;
+        block_diff.remove(tx)?;
 
         for change in block_diff.into_changes() {
             match change {

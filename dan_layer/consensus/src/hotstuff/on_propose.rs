@@ -454,7 +454,7 @@ where TConsensusSpec: ConsensusSpec
         propose_epoch_end: bool,
     ) -> Result<(Block, HashMap<TransactionId, ExecutedTransaction>), HotStuffError> {
         // TODO: Configure
-        const TARGET_BLOCK_SIZE: usize = 1000;
+        const TARGET_BLOCK_SIZE: usize = 500;
         let batch = if dont_propose_transactions || propose_epoch_end {
             vec![]
         } else {
@@ -489,7 +489,7 @@ where TConsensusSpec: ConsensusSpec
 
         // batch is empty for is_empty, is_epoch_end and is_epoch_start blocks
         let tree_store = ChainScopedTreeStore::new(epoch, local_committee_info.shard(), tx);
-        let mut substate_store = PendingSubstateStore::new(tree_store);
+        let mut substate_store = PendingSubstateStore::new(*parent_block.block_id(), tree_store);
         let mut executed_transactions = HashMap::new();
         for transaction in batch {
             if let Some(command) = self.transaction_pool_record_to_command(

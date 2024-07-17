@@ -10,6 +10,8 @@ use tari_dan_common_types::{optional::Optional, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{
         Block,
+        BlockDiff,
+        BlockId,
         LockedSubstate,
         PendingStateTreeDiff,
         SubstateChange,
@@ -39,15 +41,17 @@ pub struct PendingSubstateStore<'a, 'tx, TStore: StateStore + 'a + 'tx> {
     /// Append only list of changes ordered oldest to newest
     diff: Vec<SubstateChange>,
     new_locks: IndexMap<SubstateId, Vec<LockedSubstate>>,
+    parent_block: BlockId,
 }
 
 impl<'a, 'tx, TStore: StateStore + 'a> PendingSubstateStore<'a, 'tx, TStore> {
-    pub fn new(store: ChainScopedTreeStore<&'a TStore::ReadTransaction<'tx>>) -> Self {
+    pub fn new(parent_block: BlockId, store: ChainScopedTreeStore<&'a TStore::ReadTransaction<'tx>>) -> Self {
         Self {
             store,
             pending: HashMap::new(),
             diff: Vec::new(),
             new_locks: IndexMap::new(),
+            parent_block,
         }
     }
 
@@ -59,15 +63,23 @@ impl<'a, 'tx, TStore: StateStore + 'a> PendingSubstateStore<'a, 'tx, TStore> {
 impl<'a, 'tx, TStore: StateStore + 'a + 'tx> ReadableSubstateStore for PendingSubstateStore<'a, 'tx, TStore> {
     type Error = SubstateStoreError;
 
-    fn get(&self, key: &SubstateAddress) -> Result<Substate, Self::Error> {
-        if let Some(change) = self.get_pending(key) {
+    fn get(&self, id: &VersionedSubstateId) -> Result<Substate, Self::Error> {
+        if let Some(change) = self.get_pending(id) {
             return change.up().cloned().ok_or_else(|| SubstateStoreError::SubstateIsDown {
                 id: change.versioned_substate_id().clone(),
             });
         }
 
-        let Some(substate) = SubstateRecord::get(self.read_transaction(), key).optional()? else {
-            return Err(SubstateStoreError::SubstateNotFound { address: *key });
+        if let Some(change) =
+            BlockDiff::get_for_substate(self.read_transaction(), &self.parent_block, &id.substate_id).optional()?
+        {
+            return change
+                .into_up()
+                .ok_or_else(|| SubstateStoreError::SubstateIsDown { id: id.clone() });
+        }
+
+        let Some(substate) = SubstateRecord::get(self.read_transaction(), &id.to_substate_address()).optional()? else {
+            return Err(SubstateStoreError::SubstateNotFound { address: id.to_substate_address() });
         };
         Ok(substate.into_substate())
     }
@@ -96,9 +108,6 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> WriteableSubstateStore for PendingS
 
 impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStore> {
     pub fn get_latest(&self, id: &SubstateId) -> Result<Substate, SubstateStoreError> {
-        // TODO: This returns the pledged inputs (local or foreign)
-
-        // TODO(perf): O(n) lookup. Can be improved by maintaining a map of latest substates
         if let Some(substate) = self
             .diff
             .iter()
@@ -107,6 +116,13 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             .and_then(|ch| ch.up())
         {
             return Ok(substate.clone());
+        }
+
+        if let Some(change) = BlockDiff::get_for_substate(self.read_transaction(), &self.parent_block, id).optional()? {
+            let id = change.versioned_substate_id().clone();
+            return change
+                .into_up()
+                .ok_or_else(|| SubstateStoreError::SubstateIsDown { id });
         }
 
         let substate = SubstateRecord::get_latest(self.read_transaction(), id)?;
@@ -220,7 +236,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                         transaction_id,
                         requested_lock.versioned_substate_id().version(),
                         requested_lock_flag,
-                        true,
+                        is_local_only,
                     ),
                 );
             },
@@ -265,7 +281,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                         transaction_id,
                         requested_lock.versioned_substate_id().version(),
                         SubstateLockFlag::Output,
-                        true,
+                        is_local_only,
                     ),
                 );
             },
@@ -308,7 +324,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                         requested_lock.versioned_substate_id().version(),
                         // WRITE or READ
                         requested_lock_flag,
-                        true,
+                        is_local_only,
                     ),
                 );
             },
@@ -317,9 +333,9 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         Ok(())
     }
 
-    fn get_pending(&self, key: &SubstateAddress) -> Option<&SubstateChange> {
+    fn get_pending(&self, key: &VersionedSubstateId) -> Option<&SubstateChange> {
         self.pending
-            .get(key)
+            .get(&key.to_substate_address())
             .map(|&pos| self.diff.get(pos).expect("Index map and diff are out of sync"))
     }
 
@@ -345,30 +361,40 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
     }
 
     fn assert_is_up(&self, id: &VersionedSubstateId) -> Result<(), SubstateStoreError> {
-        let address = id.to_substate_address();
-        if let Some(change) = self.get_pending(&address) {
+        if let Some(change) = self.get_pending(id) {
             if change.is_down() {
                 return Err(SubstateStoreError::SubstateIsDown { id: id.clone() });
             }
             return Ok(());
         }
 
-        match SubstateRecord::substate_is_up(self.read_transaction(), &address).optional()? {
+        if let Some(change) =
+            BlockDiff::get_for_substate(self.read_transaction(), &self.parent_block, &id.substate_id).optional()?
+        {
+            if change.is_up() {
+                return Ok(());
+            }
+            return Err(SubstateStoreError::SubstateIsDown { id: id.clone() });
+        }
+
+        match SubstateRecord::substate_is_up(self.read_transaction(), &id.to_substate_address()).optional()? {
             Some(true) => Ok(()),
             Some(false) => Err(SubstateStoreError::SubstateIsDown { id: id.clone() }),
-            None => Err(SubstateStoreError::SubstateNotFound { address }),
+            None => Err(SubstateStoreError::SubstateNotFound {
+                address: id.to_substate_address(),
+            }),
         }
     }
 
     fn assert_is_down(&self, id: &VersionedSubstateId) -> Result<(), SubstateStoreError> {
-        let address = id.to_substate_address();
-        if let Some(change) = self.get_pending(&address) {
+        if let Some(change) = self.get_pending(id) {
             if change.is_up() {
                 return Err(SubstateStoreError::ExpectedSubstateDown { id: id.clone() });
             }
             return Ok(());
         }
 
+        let address = id.to_substate_address();
         let Some(is_up) = SubstateRecord::substate_is_up(self.read_transaction(), &address).optional()? else {
             debug!(target: LOG_TARGET, "Expected substate {} to be DOWN but it does not exist", address);
             return Err(SubstateStoreError::SubstateNotFound { address });
@@ -381,15 +407,14 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
     }
 
     fn assert_not_exist(&self, id: &VersionedSubstateId) -> Result<(), SubstateStoreError> {
-        let address = id.to_substate_address();
-        if let Some(change) = self.get_pending(&address) {
+        if let Some(change) = self.get_pending(id) {
             if change.is_up() {
                 return Err(SubstateStoreError::ExpectedSubstateNotExist { id: id.clone() });
             }
             return Ok(());
         }
 
-        if SubstateRecord::exists(self.read_transaction(), &address)? {
+        if SubstateRecord::exists(self.read_transaction(), id)? {
             return Err(SubstateStoreError::ExpectedSubstateNotExist { id: id.clone() });
         }
 

@@ -42,7 +42,6 @@ message Instruction {
     CLAIM_VALIDATOR_FEES = 5;
     DROP_ALL_PROOFS_IN_WORKSPACE = 6;
     CREATE_ACCOUNT = 7;
-    CREATE_FREE_TEST_COINS = 101;
   }
   InstructionType instruction_type = 1;
 
@@ -75,9 +74,6 @@ message Instruction {
   bytes create_account_owner_public_key = 17;
   string create_account_workspace_bucket = 18;
 
-  // DEBUGGING: Test coins
-  uint64 create_free_test_coins_amount = 101;
-  bytes create_free_test_coins_output_blob = 102;
 }
 
 message Arg {

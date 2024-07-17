@@ -3,7 +3,7 @@
 
 //! A collection of convenient constant values
 
-use crate::models::{ObjectKey, ResourceAddress};
+use crate::models::{ComponentAddress, ObjectKey, ResourceAddress, VaultId};
 
 // TODO: This is set pretty arbitrarily.
 
@@ -19,3 +19,13 @@ pub const CONFIDENTIAL_TARI_RESOURCE_ADDRESS: ResourceAddress =
 
 /// Shorthand version of the `CONFIDENTIAL_TARI_RESOURCE_ADDRESS` constant
 pub const XTR: ResourceAddress = CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
+
+/// Address of testnet faucet component
+pub const XTR_FAUCET_COMPONENT_ADDRESS: ComponentAddress = ComponentAddress::new(ObjectKey::from_array([
+    1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+]));
+
+/// Address of the faucet vault
+pub const XTR_FAUCET_VAULT_ADDRESS: VaultId = VaultId::new(ObjectKey::from_array([
+    1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+]));

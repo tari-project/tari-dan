@@ -24,7 +24,7 @@ use tari_dan_storage::{
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tokio::sync::broadcast;
+use tokio::{sync::broadcast, task};
 
 use super::proposer::Proposer;
 use crate::{
@@ -145,26 +145,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 return Ok(None);
             };
 
-            // Ensure all transactions are inserted in the pool
-            // TODO(hacky): If the block has transactions (invariant: we have the transaction stored at this point) but
-            // it's not in the pool (race condition: transaction
-            // for tx_id in valid_block.block().all_transaction_ids() {
-            //     if self.transaction_pool.exists(&**tx, tx_id)? {
-            //         continue;
-            //     }
-            //     let transaction = TransactionRecord::get(&**tx, tx_id)?;
-            //     // Did the mempool execute it?
-            //     if transaction.is_executed() {
-            //         // This should never fail
-            //         let executed = ExecutedTransaction::try_from(transaction)?;
-            //         self.transaction_pool.insert(tx, executed.to_atom())?;
-            //     } else {
-            //         // Deferred execution
-            //         self.transaction_pool
-            //             .insert(tx, TransactionAtom::deferred(*transaction.id()))?;
-            //     }
-            // }
-
             // Save the block as soon as it is valid to ensure we have a valid pacemaker height.
             let high_qc = self.save_block(tx, &valid_block)?;
             info!(target: LOG_TARGET, "✅ Block {} is valid and persisted. HighQc({})", valid_block, high_qc);
@@ -175,11 +155,17 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             let em_epoch = self.epoch_manager.current_epoch().await?;
             let can_propose_epoch_end = em_epoch > current_epoch;
 
-            let block_decision = self.on_ready_to_vote_on_local_block.handle(
-                &valid_block,
-                local_committee_info,
-                can_propose_epoch_end,
-            )?;
+            let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
+            let (block_decision, valid_block) = task::spawn_blocking(move || {
+                let decision = on_ready_to_vote_on_local_block.handle(
+                    &valid_block,
+                    local_committee_info,
+                    can_propose_epoch_end,
+                )?;
+                Ok::<_, HotStuffError>((decision, valid_block))
+            })
+            .await
+            .unwrap()?;
 
             self.hooks
                 .on_local_block_decide(&valid_block, block_decision.quorum_decision);

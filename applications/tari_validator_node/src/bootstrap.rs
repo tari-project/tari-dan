@@ -30,6 +30,7 @@ use minotari_app_utilities::identity_management;
 use serde::Serialize;
 use sqlite_message_logger::SqliteMessageLogger;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
+use tari_bor::cbor;
 use tari_common::{
     configuration::Network,
     exit_codes::{ExitCode, ExitError},
@@ -48,7 +49,7 @@ use tari_dan_app_utilities::{
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
 };
-use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, PeerAddress, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, PeerAddress};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
@@ -60,7 +61,13 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
-use tari_engine_types::{resource::Resource, substate::SubstateId};
+use tari_engine_types::{
+    component::{ComponentBody, ComponentHeader},
+    resource::Resource,
+    resource_container::ResourceContainer,
+    substate::{SubstateId, SubstateValue},
+    vault::Vault,
+};
 use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
 use tari_indexer_lib::substate_scanner::SubstateScanner;
 use tari_networking::{MessagingMode, NetworkingHandle, RelayCircuitLimits, RelayReservationLimits, SwarmConfig};
@@ -69,12 +76,17 @@ use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::{
     auth::ResourceAccessRules,
-    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
-    models::Metadata,
-    prelude::{OwnerRule, ResourceType},
+    constants::{
+        CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+        PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+        XTR_FAUCET_COMPONENT_ADDRESS,
+        XTR_FAUCET_VAULT_ADDRESS,
+    },
+    models::{Amount, EntityId, Metadata},
+    prelude::{ComponentAccessRules, OwnerRule, ResourceType},
     resource::TOKEN_SYMBOL,
 };
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, VersionedSubstateId};
 use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{sync::mpsc, task::JoinHandle};
 
@@ -430,75 +442,103 @@ async fn spawn_p2p_rpc(
     Ok(())
 }
 
-// TODO: Figure out the best way to have the engine shard store mirror these bootstrapped states.
 fn bootstrap_state<TTx>(tx: &mut TTx, network: Network) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + Deref,
     TTx::Target: StateStoreReadTransaction,
     TTx::Addr: NodeAddressable + Serialize,
 {
+    // Assume that if the public identity resource exists, then the rest of the state has been bootstrapped
+    if SubstateRecord::exists(
+        &**tx,
+        &VersionedSubstateId::new(PUBLIC_IDENTITY_RESOURCE_ADDRESS.into(), 0),
+    )? {
+        return Ok(());
+    }
+
+    let value = Resource::new(
+        ResourceType::NonFungible,
+        None,
+        OwnerRule::None,
+        ResourceAccessRules::new(),
+        Metadata::from([(TOKEN_SYMBOL, "ID".to_string())]),
+        None,
+        None,
+    );
+    create_substate(tx, network, PUBLIC_IDENTITY_RESOURCE_ADDRESS, value)?;
+
+    let mut xtr_resource = Resource::new(
+        ResourceType::Confidential,
+        None,
+        OwnerRule::None,
+        ResourceAccessRules::new(),
+        Metadata::from([(TOKEN_SYMBOL, "XTR".to_string())]),
+        None,
+        None,
+    );
+
+    // Create faucet component
+    if !matches!(network, Network::MainNet) {
+        let value = ComponentHeader {
+            template_address: tari_template_builtin::FAUCET_TEMPLATE_ADDRESS,
+            module_name: "XtrFaucet".to_string(),
+            owner_key: None,
+            owner_rule: OwnerRule::None,
+            access_rules: ComponentAccessRules::allow_all(),
+            entity_id: EntityId::default(),
+            body: ComponentBody {
+                state: cbor!({"vault" => XTR_FAUCET_VAULT_ADDRESS}).unwrap(),
+            },
+        };
+        create_substate(tx, network, XTR_FAUCET_COMPONENT_ADDRESS, value)?;
+
+        xtr_resource.increase_total_supply(Amount::MAX);
+        let value = Vault::new(ResourceContainer::Confidential {
+            address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            commitments: Default::default(),
+            revealed_amount: Amount::MAX,
+            locked_commitments: Default::default(),
+            locked_revealed_amount: Default::default(),
+        });
+
+        create_substate(tx, network, XTR_FAUCET_VAULT_ADDRESS, value)?;
+    }
+
+    create_substate(tx, network, CONFIDENTIAL_TARI_RESOURCE_ADDRESS, xtr_resource)?;
+
+    Ok(())
+}
+
+fn create_substate<TTx, TId, TVal>(
+    tx: &mut TTx,
+    network: Network,
+    substate_id: TId,
+    value: TVal,
+) -> Result<(), StorageError>
+where
+    TTx: StateStoreWriteTransaction + Deref,
+    TTx::Target: StateStoreReadTransaction,
+    TTx::Addr: NodeAddressable + Serialize,
+    TId: Into<SubstateId>,
+    TVal: Into<SubstateValue>,
+{
     let genesis_block = Block::genesis(network, Epoch(0), Shard::zero());
-    let substate_id = SubstateId::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
-    let substate_address = SubstateAddress::from_substate_id(&substate_id, 0);
-    let mut metadata: Metadata = Default::default();
-    metadata.insert(TOKEN_SYMBOL, "ID".to_string());
-    if !SubstateRecord::exists(&**tx, &substate_address)? {
-        // Create the resource for public identity
-        SubstateRecord {
-            substate_id,
-            version: 0,
-            substate_value: Resource::new(
-                ResourceType::NonFungible,
-                None,
-                OwnerRule::None,
-                ResourceAccessRules::new(),
-                metadata,
-                None,
-                None,
-            )
-            .into(),
-            state_hash: Default::default(),
-            created_by_transaction: Default::default(),
-            created_justify: *genesis_block.justify().id(),
-            created_block: BlockId::zero(),
-            created_height: NodeHeight(0),
-            created_by_shard: Shard::zero(),
-            created_at_epoch: Epoch(0),
-            destroyed: None,
-        }
-        .create(tx)?;
+    let substate_id = substate_id.into();
+    let id = VersionedSubstateId::new(substate_id, 0);
+    SubstateRecord {
+        substate_id: id.substate_id,
+        version: id.version,
+        substate_value: value.into(),
+        state_hash: Default::default(),
+        created_by_transaction: Default::default(),
+        created_justify: *genesis_block.justify().id(),
+        created_block: BlockId::zero(),
+        created_height: NodeHeight(0),
+        created_by_shard: Shard::zero(),
+        created_at_epoch: Epoch(0),
+        destroyed: None,
     }
-
-    let substate_id = SubstateId::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
-    let substate_address = SubstateAddress::from_substate_id(&substate_id, 0);
-    let mut metadata = Metadata::new();
-    metadata.insert(TOKEN_SYMBOL, "tXTR".to_string());
-    if !SubstateRecord::exists(&**tx, &substate_address)? {
-        SubstateRecord {
-            substate_id,
-            version: 0,
-            substate_value: Resource::new(
-                ResourceType::Confidential,
-                None,
-                OwnerRule::None,
-                ResourceAccessRules::new(),
-                metadata,
-                None,
-                None,
-            )
-            .into(),
-            state_hash: Default::default(),
-            created_by_transaction: Default::default(),
-            created_justify: *genesis_block.justify().id(),
-            created_block: BlockId::zero(),
-            created_height: NodeHeight(0),
-            created_at_epoch: Epoch(0),
-            created_by_shard: Shard::zero(),
-            destroyed: None,
-        }
-        .create(tx)?;
-    }
-
+    .create(tx)?;
     Ok(())
 }
 

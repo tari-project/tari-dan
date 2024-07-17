@@ -93,7 +93,7 @@ create table block_diffs
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
-create index block_diffs_idx_block_id on block_diffs (block_id);
+create index block_diffs_idx_block_id_substate_id on block_diffs (block_id, substate_id);
 
 create table substates
 (

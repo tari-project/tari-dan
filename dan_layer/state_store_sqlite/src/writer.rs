@@ -280,29 +280,31 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         use crate::schema::block_diffs;
 
         let block_id = serialize_hex(block_diff.block_id);
-        let values = block_diff
-            .changes
-            .iter()
-            .map(|ch| {
-                Ok((
-                    block_diffs::block_id.eq(&block_id),
-                    block_diffs::transaction_id.eq(serialize_hex(ch.transaction_id())),
-                    block_diffs::substate_id.eq(ch.versioned_substate_id().substate_id().to_string()),
-                    block_diffs::version.eq(ch.versioned_substate_id().version() as i32),
-                    block_diffs::change.eq(ch.as_change_string()),
-                    block_diffs::state.eq(ch.substate().map(serialize_json).transpose()?),
-                ))
-            })
-            .collect::<Result<Vec<_>, StorageError>>()?;
+        // We commit in chunks because we can hit the SQL variable limit
+        for chunk in block_diff.changes.chunks(1000) {
+            let values = chunk
+                .iter()
+                .map(|ch| {
+                    Ok((
+                        block_diffs::block_id.eq(&block_id),
+                        block_diffs::transaction_id.eq(serialize_hex(ch.transaction_id())),
+                        block_diffs::substate_id.eq(ch.versioned_substate_id().substate_id().to_string()),
+                        block_diffs::version.eq(ch.versioned_substate_id().version() as i32),
+                        block_diffs::change.eq(ch.as_change_string()),
+                        block_diffs::state.eq(ch.substate().map(serialize_json).transpose()?),
+                    ))
+                })
+                .collect::<Result<Vec<_>, StorageError>>()?;
 
-        diesel::insert_into(block_diffs::table)
-            .values(values)
-            .execute(self.connection())
-            .map(|_| ())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "block_diffs_insert",
-                source: e,
-            })?;
+            diesel::insert_into(block_diffs::table)
+                .values(values)
+                .execute(self.connection())
+                .map(|_| ())
+                .map_err(|e| SqliteStorageError::DieselError {
+                    operation: "block_diffs_insert",
+                    source: e,
+                })?;
+        }
 
         Ok(())
     }
@@ -1253,29 +1255,44 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     ) -> Result<(), StorageError> {
         use crate::schema::substate_locks;
 
-        let locks = locks
-            .into_iter()
-            .flat_map(|(id, locks)| {
-                locks.into_iter().map(move |lock| {
-                    (
-                        substate_locks::block_id.eq(serialize_hex(block_id)),
-                        substate_locks::substate_id.eq(id.to_string()),
-                        substate_locks::version.eq(lock.version() as i32),
-                        substate_locks::transaction_id.eq(serialize_hex(lock.transaction_id())),
-                        substate_locks::lock.eq(lock.substate_lock().to_string()),
-                        substate_locks::is_local_only.eq(lock.is_local_only()),
-                    )
+        let mut iter = locks.into_iter();
+        const CHUNK_SIZE: usize = 100;
+        // We have to break up into multiple queries because we can hit max SQL variable limit
+        loop {
+            let locks = iter
+                .by_ref()
+                .take(CHUNK_SIZE)
+                .flat_map(|(id, locks)| {
+                    locks.into_iter().map(move |lock| {
+                        (
+                            substate_locks::block_id.eq(serialize_hex(block_id)),
+                            substate_locks::substate_id.eq(id.to_string()),
+                            substate_locks::version.eq(lock.version() as i32),
+                            substate_locks::transaction_id.eq(serialize_hex(lock.transaction_id())),
+                            substate_locks::lock.eq(lock.substate_lock().to_string()),
+                            substate_locks::is_local_only.eq(lock.is_local_only()),
+                        )
+                    })
                 })
-            })
-            .collect::<Vec<_>>();
+                .collect::<Vec<_>>();
 
-        diesel::insert_into(substate_locks::table)
-            .values(locks)
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substate_locks_insert_all",
-                source: e,
-            })?;
+            let count = locks.len();
+            if count == 0 {
+                break;
+            }
+
+            diesel::insert_into(substate_locks::table)
+                .values(locks)
+                .execute(self.connection())
+                .map_err(|e| SqliteStorageError::DieselError {
+                    operation: "substate_locks_insert_all",
+                    source: e,
+                })?;
+
+            if count < CHUNK_SIZE {
+                break;
+            }
+        }
 
         Ok(())
     }

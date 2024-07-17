@@ -201,7 +201,7 @@ fn it_prevents_access_to_vault_id_in_component_context() {
     // take_bucket_zero fails because the component didnt create the vault
     assert_reject_reason(reason, RuntimeError::SubstateNotOwned {
         address: vault_id.into(),
-        requested_owner: shenanigans.into(),
+        requested_owner: Box::new(shenanigans.into()),
     });
 }
 
@@ -234,7 +234,7 @@ fn it_prevents_access_to_out_of_scope_component() {
     // Fails because the engine does not lock this component
     assert_reject_reason(reason, RuntimeError::AccessDeniedSetComponentState {
         attempted_on: account.into(),
-        attempted_by: shenanigans.into(),
+        attempted_by: Box::new(shenanigans.into()),
     });
 }
 

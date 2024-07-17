@@ -11,10 +11,7 @@ use tari_consensus::{
 };
 use tari_dan_app_utilities::transaction_executor::TransactionExecutor;
 use tari_dan_common_types::{optional::Optional, Epoch};
-use tari_dan_engine::{
-    bootstrap_state,
-    state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
-};
+use tari_dan_engine::state_store::{memory::MemoryStateStore, AtomicDb, StateWriter};
 use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, TransactionRecord},
     StateStore,
@@ -58,7 +55,7 @@ impl<TEpochManager, TExecutor, TValidator> TariDanBlockTransactionExecutor<TEpoc
             match input.version() {
                 Some(version) => {
                     let id = VersionedSubstateId::new(input.substate_id, version);
-                    let substate = store.get(&id.to_substate_address())?;
+                    let substate = store.get(&id)?;
                     info!(target: LOG_TARGET, "Resolved substate: {id}");
                     resolved_substates.insert(id, substate);
                 },
@@ -111,13 +108,13 @@ impl<TEpochManager, TExecutor, TValidator> TariDanBlockTransactionExecutor<TEpoc
     }
 
     fn new_state_db() -> MemoryStateStore {
-        let state_db = MemoryStateStore::new();
+        MemoryStateStore::new()
         // unwrap: Memory state store is infallible
-        let mut tx = state_db.write_access().unwrap();
+        // let mut tx = state_db.write_access().unwrap();
         // Add bootstrapped substates
-        bootstrap_state(&mut tx).unwrap();
-        tx.commit().unwrap();
-        state_db
+        // bootstrap_state(&mut tx).unwrap();
+        // tx.commit().unwrap();
+        // state_db
     }
 }
 

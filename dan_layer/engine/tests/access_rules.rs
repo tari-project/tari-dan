@@ -1060,7 +1060,7 @@ mod resource_access_rules {
 
         assert_reject_reason(result, RuntimeError::AccessDeniedSetComponentState {
             attempted_on: user_account.into(),
-            attempted_by: component_address.into(),
+            attempted_by: Box::new(component_address.into()),
         });
     }
 

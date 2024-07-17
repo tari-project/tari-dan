@@ -296,11 +296,16 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
 
         if is_input_shard || is_output_shard {
             debug!(target: LOG_TARGET, "🎱 New transaction {} in mempool", transaction.id());
+            // let transaction = TransactionRecord::new(transaction);
+            // self.state_store.with_write_tx(|tx| transaction.insert(tx))?;
+            // let transaction = transaction.into_transaction();
             self.transactions.insert(*transaction.id());
             self.consensus_handle
                 .notify_new_transaction(transaction.clone(), 0)
                 .await
                 .map_err(|_| MempoolError::ConsensusChannelClosed)?;
+
+            // self.queue_transaction_for_execution(transaction.clone(), current_epoch, should_propagate, sender_shard);
 
             if should_propagate {
                 // This validator is involved, we to send the transaction to local replicas

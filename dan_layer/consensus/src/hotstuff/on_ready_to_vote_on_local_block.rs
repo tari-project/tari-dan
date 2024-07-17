@@ -48,6 +48,7 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_ready_to_vote_on_local_block";
 
+#[derive(Debug, Clone)]
 pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     local_validator_addr: TConsensusSpec::Addr,
     store: TConsensusSpec::StateStore,
@@ -191,26 +192,8 @@ where TConsensusSpec: ConsensusSpec
         // Store used for transactions that have inputs without specific versions.
         // It lives through the entire block so multiple transactions can be sequenced together in the same block
         let tree_store = ChainScopedTreeStore::new(block.epoch(), block.shard(), tx);
-        let mut substate_store = PendingSubstateStore::new(tree_store);
+        let mut substate_store = PendingSubstateStore::new(*block.parent(), tree_store);
         let mut proposed_block_change_set = ProposedBlockChangeSet::new(block.as_leaf_block());
-
-        // if epoch_should_start && !block.is_epoch_start() {
-        //     warn!(
-        //         target: LOG_TARGET,
-        //         "❌ EpochEvent::Start command expected for block {} but not found",
-        //         block.id()
-        //     );
-        //     return Ok(proposed_block_change_set.no_vote());
-        // }
-        //
-        // if epoch_should_end && !block.is_epoch_end() {
-        //     warn!(
-        //         target: LOG_TARGET,
-        //         "❌ EpochEvent::End command expected for block {} but not found",
-        //         block.id()
-        //     );
-        //     return Ok(proposed_block_change_set.no_vote());
-        // }
 
         if block.is_epoch_end() && block.commands().len() > 1 {
             warn!(
@@ -350,6 +333,8 @@ where TConsensusSpec: ConsensusSpec
                                         t.id, block
                                     ))
                                 })?;
+                        // TODO: If we proposed this block, we shouldn't have to reprocess the locks. Locks are
+                        // currently fairly expensive.
                         if !self.try_obtain_locks(execution, local_committee_info, &mut substate_store)? {
                             // They want to ABORT a successfully executed transaction because of a lock conflict, which
                             // we also have.

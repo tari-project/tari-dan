@@ -29,11 +29,7 @@ use tari_dan_app_utilities::{
     transaction_executor::{TariDanTransactionProcessor, TransactionExecutor as _},
 };
 use tari_dan_common_types::{Epoch, PeerAddress, SubstateAddress};
-use tari_dan_engine::{
-    bootstrap_state,
-    fees::FeeTable,
-    state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
-};
+use tari_dan_engine::{fees::FeeTable, state_store::memory::MemoryStateStore};
 use tari_engine_types::{
     commit_result::ExecuteResult,
     instruction::Instruction,
@@ -273,9 +269,5 @@ where TSubstateCache: SubstateCache + 'static
 }
 
 fn new_state_store() -> MemoryStateStore {
-    let state_store = MemoryStateStore::new();
-    let mut tx = state_store.write_access().unwrap();
-    bootstrap_state(&mut tx).unwrap();
-    tx.commit().unwrap();
-    state_store
+    MemoryStateStore::new()
 }

@@ -20,7 +20,6 @@ use tari_crypto::{
 };
 use tari_dan_common_types::crypto::create_key_pair_from_seed;
 use tari_dan_engine::{
-    bootstrap_state,
     fees::{FeeModule, FeeTable},
     runtime::{AuthParams, RuntimeModule},
     state_store::{
@@ -56,7 +55,12 @@ use tari_template_lib::{
 use tari_transaction::{Transaction, VersionedSubstateId};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
-use crate::{read_only_state_store::ReadOnlyStateStore, track_calls::TrackCallsModule, Package};
+use crate::{
+    bootstrap::bootstrap_state,
+    read_only_state_store::ReadOnlyStateStore,
+    track_calls::TrackCallsModule,
+    Package,
+};
 
 pub fn test_faucet_component() -> ComponentAddress {
     ComponentAddress::new(ObjectKey::from_array([0xfau8; ObjectKey::LENGTH]))
@@ -95,11 +99,11 @@ impl TemplateTest {
         let package = builder.build();
 
         let test = Self::from_package(package);
-        test.bootstrap_faucet(100_000.into());
+        test.bootstrap_state(100_000.into());
         test
     }
 
-    pub fn from_package(package: Package) -> Self {
+    fn from_package(package: Package) -> Self {
         let secret_key =
             RistrettoSecretKey::from_hex("8a39567509bf2f7074e5fd153337405292cdc9f574947313b62fbf8fb4cffc02").unwrap();
 
@@ -117,11 +121,6 @@ impl TemplateTest {
         }
 
         let state_store = MemoryStateStore::default();
-        {
-            let mut tx = state_store.write_access().unwrap();
-            bootstrap_state(&mut tx).unwrap();
-            tx.commit().unwrap();
-        }
 
         let mut virtual_substates = VirtualSubstates::new();
         virtual_substates.insert(VirtualSubstateId::CurrentEpoch, VirtualSubstate::CurrentEpoch(0));
@@ -146,8 +145,9 @@ impl TemplateTest {
         }
     }
 
-    pub fn bootstrap_faucet(&self, amount: Amount) {
+    pub fn bootstrap_state(&self, amount: Amount) {
         let mut tx = self.state_store.write_access().unwrap();
+        bootstrap_state(&mut tx).unwrap();
         Self::initial_tari_faucet_supply(
             &mut tx,
             &self.public_key,
@@ -480,7 +480,6 @@ impl TemplateTest {
 
         {
             let access = self.state_store.read_access().unwrap();
-
             transaction.filled_inputs_mut().extend(
                 access
                     .iter_raw()
