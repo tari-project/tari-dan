@@ -102,12 +102,12 @@ pub struct TransactionSubmitRequest {
     pub transaction: Option<UnsignedTransaction>,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub signing_key_index: Option<u64>,
-    pub inputs: Vec<SubstateRequirement>,
     pub override_inputs: bool,
     pub is_dry_run: bool,
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub proof_ids: Vec<ConfidentialProofId>,
     // TODO: remove the following fields
+    pub inputs: Vec<SubstateRequirement>,
     pub fee_instructions: Vec<Instruction>,
     pub instructions: Vec<Instruction>,
     pub min_epoch: Option<Epoch>,

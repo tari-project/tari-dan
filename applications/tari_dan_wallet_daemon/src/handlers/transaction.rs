@@ -105,7 +105,13 @@ pub async fn handle_submit(
     let (_, key) = key_api.get_key_or_active(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
 
     let inputs = if req.override_inputs {
-        req.inputs
+        req.transaction
+            .as_ref()
+            .into_iter()
+            .flat_map(|t| &t.inputs)
+            .map(|s| s.substate_id.clone())
+            .chain(req.inputs)
+            .collect()
     } else {
         // If we are not overriding inputs, we will use inputs that we know about in the local substate id db
         let mut substates = get_referenced_substate_addresses(
@@ -120,6 +126,13 @@ pub async fn handle_submit(
                 .map(|t| &t.fee_instructions)
                 .unwrap_or(&req.fee_instructions),
         )?);
+        substates.extend(
+            req.transaction
+                .as_ref()
+                .into_iter()
+                .flat_map(|t| &t.inputs)
+                .map(|s| s.substate_id.clone()),
+        );
         let substates = substates.into_iter().collect::<Vec<_>>();
         let loaded_dependent_substates = sdk
             .substate_api()
