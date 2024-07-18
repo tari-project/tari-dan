@@ -77,20 +77,26 @@ const ConnectorDialog = () => {
     wallet.on('session_proposal', async proposal => {
       console.log({ proposal });
 
-      // TODO: using polkadot params as a placeholder to be able to use walletconnet,
-      //       we must replace all this with the proper Tari namespace when available
       const session = await wallet.approveSession({
         id: proposal.id,
         namespaces: {
           polkadot: {
-            methods: ['polkadot_signTransaction', 'polkadot_signMessage'],
+            methods: [
+              'tari_getSubstate',
+              'tari_getDefaultAccount',
+              'tari_getAccountBalances',
+              'tari_submitTransaction',
+              'tari_getTransactionResult',
+              'tari_getTemplate',
+              'tari_createKey',
+              'tari_viewConfidentialVaultBalance'
+            ],
             chains: [
-              'polkadot:91b171bb158e2d3848fa23a9f1c25182', // polkadot
+              'tari:devnet',
             ],
             events: ['chainChanged", "accountsChanged'],
             accounts: [
-              "polkadot:91b171bb158e2d3848fa23a9f1c25182:8PSDc8otpZMGviGVSwzCzBCLPi5WuT8K9phaUWbfUtSYet3",
-              "polkadot:91b171bb158e2d3848fa23a9f1c25182:A1MbgM4mdFBH4LiTPZWmtVZ3zBGUJApN24FoSK32ZACPGP6"
+              "tari:devnet:component_d43f1d674a0df0579354659d1b0c8dd4a397b072afa9dd027e41c8bc"
             ],
           }
         }
@@ -101,51 +107,42 @@ const ConnectorDialog = () => {
 
       // respond to the dapp request with the approved session's topic and response
       await wallet.respondSessionRequest({ topic: session.topic, response })
-
     });
 
     wallet.on('session_request', async requestEvent => {
       console.log({ requestEvent });
       const { params, id, topic } = requestEvent;
       const { request } = params;
-
-      // TODO: we don't have walletconnect support for tari yet
-      //       so we use a transaction payload as a workaround to pass the actual requests to the wallet daemon
-      switch (request.method) {
-        case 'polkadot_signTransaction':
-          const { method, params } = request.params.transactionPayload;
-          const result = await send_wallet_daemon_request(method, params);
-          const response = { id, result, jsonrpc: '2.0' }
-          await wallet.respondSessionRequest({ topic, response });
-          break;
-        default:
-          throw new Error("Invalid walletconnect method")
-      }      
+      
+      const result = await executed_method(request.method, request.params);
+      
+      const response = { id, result, jsonrpc: '2.0' }
+      await wallet.respondSessionRequest({ topic, response });
     });
 
     return wallet;
   }
 
-  async function send_wallet_daemon_request(method: string, params: any) {
+  async function executed_method(method: string, params: any) {
     switch(method) {
-      case "substates.get":
+      case "tari_getSubstate":
         return substatesGet(params);
-      case "accounts.get_default":
+      case "tari_getDefaultAccount":
         return accountsGetDefault(params);
-      case "accounts.get_balances":
+      case "tari_getAccountBalances":
         return accountsGetBalances(params);
-      case "transactions.submit":
+      case "tari_submitTransaction":
         return transactionsSubmit(params);
-      case "transactions.get_result":
+      case "tari_getTransactionResult":
         return transactionsGetResult(params);
-      case "templates.get":
+      case "tari_getTemplate":
         return templatesGet(params);
-      case "keys.create":
+      case "tari_createKey":
         return keysCreate(params);
-      case "confidential.view_vault_balance":
+      case "tari_viewConfidentialVaultBalance":
         return confidentialViewVaultBalance(params);
       default:
-        throw new Error("Invalid wallet daemon method")
+        throw new Error("Invalid method")
     }
   }
 
