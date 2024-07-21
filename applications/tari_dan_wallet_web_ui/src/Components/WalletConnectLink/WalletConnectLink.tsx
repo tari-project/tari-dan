@@ -80,7 +80,7 @@ const ConnectorDialog = () => {
       const session = await wallet.approveSession({
         id: proposal.id,
         namespaces: {
-          polkadot: {
+          tari: {
             methods: [
               'tari_getSubstate',
               'tari_getDefaultAccount',
