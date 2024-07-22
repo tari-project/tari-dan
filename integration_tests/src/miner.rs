@@ -28,14 +28,17 @@ use minotari_app_grpc::{
 };
 use minotari_node_grpc_client::BaseNodeGrpcClient;
 use tari_common::configuration::Network;
-use tari_common_types::{tari_address::TariAddress, types::PublicKey};
+use tari_common_types::{
+    tari_address::{TariAddress, TariAddressFeatures},
+    types::PublicKey,
+};
 use tari_core::{
     consensus::ConsensusManager,
     transactions::{
         generate_coinbase_with_wallet_output,
         key_manager::{MemoryDbKeyManager, TariKeyId},
         tari_amount::MicroMinotari,
-        transaction_components::{RangeProofType, WalletOutput},
+        transaction_components::{encrypted_data::PaymentId, RangeProofType, WalletOutput},
     },
 };
 use tari_crypto::tari_utilities::ByteArray;
@@ -74,7 +77,11 @@ pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: 
             .public_key,
     )
     .unwrap();
-    let payment_address = TariAddress::new(wallet_pk, Network::LocalNet);
+    let payment_address = TariAddress::new_single_address(
+        wallet_pk,
+        Network::LocalNet,
+        TariAddressFeatures::create_interactive_and_one_sided(),
+    );
 
     for _ in 0..num_blocks {
         mine_block(world, &payment_address, &mut base_client).await;
@@ -163,6 +170,7 @@ async fn create_block_template_with_coinbase(
         stealth_payment,
         consensus_manager.consensus_constants(height),
         RangeProofType::BulletProofPlus,
+        PaymentId::Empty,
     )
     .await
     .unwrap();

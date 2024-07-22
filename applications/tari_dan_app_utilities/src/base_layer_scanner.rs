@@ -447,7 +447,9 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
 
         let substate = SubstateValue::UnclaimedConfidentialOutput(UnclaimedConfidentialOutput {
             commitment: output.commitment.clone(),
-            encrypted_data: EncryptedData(output.encrypted_data.to_bytes()),
+            encrypted_data: EncryptedData::try_from(output.encrypted_data.as_bytes()).map_err(|_| {
+                BaseLayerScannerError::InvalidSideChainUtxoResponse("Encrypted data exceeds maximum size".to_string())
+            })?,
         });
         self.state_store
             .with_write_tx(|tx| {

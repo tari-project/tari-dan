@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::mem::size_of;
+
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
 #[cfg(feature = "ts")]
@@ -181,7 +183,12 @@ pub struct EncryptedData(#[serde_as(as = "Bytes")] pub [u8; EncryptedData::size(
 
 impl EncryptedData {
     pub const fn size() -> usize {
-        80
+        const SIZE_NONCE: usize = 24;
+        const SIZE_VALUE: usize = size_of::<u64>();
+        const SIZE_MASK: usize = 32;
+        const SIZE_TAG: usize = 16;
+        pub const STATIC_ENCRYPTED_DATA_SIZE_TOTAL: usize = SIZE_NONCE + SIZE_VALUE + SIZE_MASK + SIZE_TAG;
+        STATIC_ENCRYPTED_DATA_SIZE_TOTAL
     }
 
     pub fn as_bytes(&self) -> &[u8] {

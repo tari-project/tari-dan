@@ -3,7 +3,7 @@ import type { ForeignProposalState } from "./ForeignProposalState";
 import type { NodeHeight } from "./NodeHeight";
 
 export interface ForeignProposal {
-  bucket: number;
+  shard: number;
   block_id: string;
   state: ForeignProposalState;
   proposed_height: NodeHeight | null;
