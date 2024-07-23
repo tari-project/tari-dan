@@ -75,6 +75,8 @@ import type {
   SubstatesGetRequest,
   SubstatesGetResponse,
   TemplatesGetResponse,
+  SubstatesListRequest,
+  SubstatesListResponse,
 } from "@tariproject/typescript-bindings/wallet-daemon-client";
 import { AccountGetDefaultRequest, TemplatesGetRequest, WalletDaemonClient } from "@tariproject/wallet_daemon_client";
 
@@ -205,6 +207,9 @@ export const validatorsClaimFees = (request: ClaimValidatorFeesRequest): Promise
 // substates
 export const substatesGet = (request: SubstatesGetRequest): Promise<SubstatesGetResponse> =>
   client().then((c) => c.substatesGet(request));
+
+export const substatesList = (request: SubstatesListRequest): Promise<SubstatesListResponse> =>
+  client().then((c) => c.substatesList(request));
 
 // templates
 export const templatesGet = (request: TemplatesGetRequest): Promise<TemplatesGetResponse> =>

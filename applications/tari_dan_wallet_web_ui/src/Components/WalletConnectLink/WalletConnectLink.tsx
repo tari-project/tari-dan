@@ -39,7 +39,7 @@ import { useTheme } from "@mui/material/styles";
 import { TariPermission, TariPermissionKeyList, TariPermissionTransactionGet, TariPermissionTransactionSend } from "../../utils/tari_permissions";
 import { Core } from '@walletconnect/core'
 import { Web3Wallet } from '@walletconnect/web3wallet'
-import { accountsGetBalances, accountsGetDefault, confidentialViewVaultBalance, keysCreate, substatesGet, templatesGet, transactionsGet, transactionsGetResult, transactionsSubmit } from "../../utils/json_rpc";
+import { accountsCreateFreeTestCoins, accountsGetBalances, accountsGetDefault, confidentialViewVaultBalance, keysCreate, substatesGet, substatesList, templatesGet, transactionsGetResult, transactionsSubmit } from "../../utils/json_rpc";
 
 const projectId: string | null = import.meta.env.VITE_WALLET_CONNECT_PROJECT_ID || null;
 
@@ -89,7 +89,9 @@ const ConnectorDialog = () => {
               'tari_getTransactionResult',
               'tari_getTemplate',
               'tari_createKey',
-              'tari_viewConfidentialVaultBalance'
+              'tari_viewConfidentialVaultBalance',
+              'tari_createFreeTestCoins',
+              'tari_listSubstates',
             ],
             chains: [
               'tari:devnet',
@@ -141,6 +143,10 @@ const ConnectorDialog = () => {
         return keysCreate(params);
       case "tari_viewConfidentialVaultBalance":
         return confidentialViewVaultBalance(params);
+      case "tari_createFreeTestCoins":
+        return accountsCreateFreeTestCoins(params);
+      case "tari_listSubstates":
+        return substatesList(params);
       default:
         throw new Error("Invalid method")
     }
