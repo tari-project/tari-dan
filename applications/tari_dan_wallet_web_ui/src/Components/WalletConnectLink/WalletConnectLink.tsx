@@ -116,7 +116,7 @@ const ConnectorDialog = () => {
       const { params, id, topic } = requestEvent;
       const { request } = params;
       
-      const result = await executed_method(request.method, request.params);
+      const result = await executeMethod(request.method, request.params);
       
       const response = { id, result, jsonrpc: '2.0' }
       await wallet.respondSessionRequest({ topic, response });
@@ -125,7 +125,7 @@ const ConnectorDialog = () => {
     return wallet;
   }
 
-  async function executed_method(method: string, params: any) {
+  async function executeMethod(method: string, params: any) {
     switch(method) {
       case "tari_getSubstate":
         return substatesGet(params);
