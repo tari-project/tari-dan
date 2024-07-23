@@ -1,5 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
+
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
 
@@ -14,6 +15,10 @@ pub struct BalanceProofSignature(#[serde_as(as = "Bytes")] [u8; BalanceProofSign
 impl BalanceProofSignature {
     pub const fn length() -> usize {
         64
+    }
+
+    pub fn zero() -> Self {
+        Self([0u8; Self::length()])
     }
 
     pub fn try_from_parts(public_nonce: &[u8], signature: &[u8]) -> Result<Self, InvalidByteLengthError> {

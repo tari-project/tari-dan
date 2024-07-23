@@ -150,7 +150,7 @@ impl ConfidentialWithdrawProof {
     pub fn revealed_withdraw<T: Into<Amount>>(amount: T) -> Self {
         // There are no confidential inputs or outputs (this amounts to the same thing as a Fungible resource transfer)
         // So signature s = 0 + e.x where x is a 0 excess, is valid.
-        let balance_proof = BalanceProofSignature::try_from_parts(&[0u8; 32], &[0u8; 32]).unwrap();
+        let balance_proof = BalanceProofSignature::zero();
 
         let amount = amount.into();
         Self {
@@ -159,6 +159,28 @@ impl ConfidentialWithdrawProof {
             output_proof: ConfidentialOutputStatement::mint_revealed(amount),
             balance_proof,
         }
+    }
+
+    /// Returns true if the withdraw proof is only transferring revealed funds, otherwise false
+    /// The method for determining this is strict, as this can be used to determine whether to
+    /// safely skip the balance proof check. To return true it requires:
+    /// - Empty inputs
+    /// - Output and Change outputs must be None
+    /// - Empty range proof
+    /// - Zero balance proof
+    /// - Revealed funds > 0 in the inputs and outputs
+    pub fn is_revealed_only(&self) -> bool {
+        // Range proof must be empty
+        self.output_proof.range_proof.is_empty() &&
+        // Excess will be zero
+        self.inputs.is_empty() &&
+            self.output_proof.output_statement.is_none() &&
+            self.output_proof.change_statement.is_none() &&
+            // zero balance proof
+            self.balance_proof == BalanceProofSignature::zero() &&
+            // There are revealed funds
+            self.input_revealed_amount > Amount::zero() &&
+            self.output_proof.output_revealed_amount + self.output_proof.change_revealed_amount > Amount::zero()
     }
 
     pub fn revealed_input_amount(&self) -> Amount {
