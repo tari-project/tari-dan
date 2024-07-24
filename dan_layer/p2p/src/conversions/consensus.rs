@@ -28,10 +28,10 @@ use tari_common_types::types::PublicKey;
 use tari_consensus::messages::{
     FullBlock,
     HotstuffMessage,
+    MissingTransactionsRequest,
+    MissingTransactionsResponse,
     NewViewMessage,
     ProposalMessage,
-    RequestMissingTransactionsMessage,
-    RequestedTransactionMessage,
     SyncRequestMessage,
     SyncResponseMessage,
     VoteMessage,
@@ -69,10 +69,10 @@ impl From<&HotstuffMessage> for proto::consensus::HotStuffMessage {
                 proto::consensus::hot_stuff_message::Message::ForeignProposal(msg.into())
             },
             HotstuffMessage::Vote(msg) => proto::consensus::hot_stuff_message::Message::Vote(msg.into()),
-            HotstuffMessage::RequestMissingTransactions(msg) => {
+            HotstuffMessage::MissingTransactionsRequest(msg) => {
                 proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg.into())
             },
-            HotstuffMessage::RequestedTransaction(msg) => {
+            HotstuffMessage::MissingTransactionsResponse(msg) => {
                 proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg.into())
             },
             HotstuffMessage::CatchUpSyncRequest(msg) => {
@@ -99,10 +99,10 @@ impl TryFrom<proto::consensus::HotStuffMessage> for HotstuffMessage {
             },
             proto::consensus::hot_stuff_message::Message::Vote(msg) => HotstuffMessage::Vote(msg.try_into()?),
             proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg) => {
-                HotstuffMessage::RequestMissingTransactions(msg.try_into()?)
+                HotstuffMessage::MissingTransactionsRequest(msg.try_into()?)
             },
             proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg) => {
-                HotstuffMessage::RequestedTransaction(msg.try_into()?)
+                HotstuffMessage::MissingTransactionsResponse(msg.try_into()?)
             },
             proto::consensus::hot_stuff_message::Message::SyncRequest(msg) => {
                 HotstuffMessage::CatchUpSyncRequest(msg.try_into()?)
@@ -195,10 +195,11 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
     }
 }
 
-//---------------------------------- RequestMissingTransactionsMessage --------------------------------------------//
-impl From<&RequestMissingTransactionsMessage> for proto::consensus::RequestMissingTransactionsMessage {
-    fn from(msg: &RequestMissingTransactionsMessage) -> Self {
+//---------------------------------- MissingTransactionsRequest --------------------------------------------//
+impl From<&MissingTransactionsRequest> for proto::consensus::MissingTransactionsRequest {
+    fn from(msg: &MissingTransactionsRequest) -> Self {
         Self {
+            request_id: msg.request_id,
             epoch: msg.epoch.as_u64(),
             block_id: msg.block_id.as_bytes().to_vec(),
             transaction_ids: msg.transactions.iter().map(|tx_id| tx_id.as_bytes().to_vec()).collect(),
@@ -206,11 +207,12 @@ impl From<&RequestMissingTransactionsMessage> for proto::consensus::RequestMissi
     }
 }
 
-impl TryFrom<proto::consensus::RequestMissingTransactionsMessage> for RequestMissingTransactionsMessage {
+impl TryFrom<proto::consensus::MissingTransactionsRequest> for MissingTransactionsRequest {
     type Error = anyhow::Error;
 
-    fn try_from(value: proto::consensus::RequestMissingTransactionsMessage) -> Result<Self, Self::Error> {
-        Ok(RequestMissingTransactionsMessage {
+    fn try_from(value: proto::consensus::MissingTransactionsRequest) -> Result<Self, Self::Error> {
+        Ok(MissingTransactionsRequest {
+            request_id: value.request_id,
             epoch: Epoch(value.epoch),
             block_id: BlockId::try_from(value.block_id)?,
             transactions: value
@@ -221,11 +223,12 @@ impl TryFrom<proto::consensus::RequestMissingTransactionsMessage> for RequestMis
         })
     }
 }
-//---------------------------------- RequestedTransactionMessage --------------------------------------------//
+//---------------------------------- MissingTransactionsResponse --------------------------------------------//
 
-impl From<&RequestedTransactionMessage> for proto::consensus::RequestedTransactionMessage {
-    fn from(msg: &RequestedTransactionMessage) -> Self {
+impl From<&MissingTransactionsResponse> for proto::consensus::MissingTransactionsResponse {
+    fn from(msg: &MissingTransactionsResponse) -> Self {
         Self {
+            request_id: msg.request_id,
             epoch: msg.epoch.as_u64(),
             block_id: msg.block_id.as_bytes().to_vec(),
             transactions: msg.transactions.iter().map(|tx| tx.into()).collect(),
@@ -233,11 +236,12 @@ impl From<&RequestedTransactionMessage> for proto::consensus::RequestedTransacti
     }
 }
 
-impl TryFrom<proto::consensus::RequestedTransactionMessage> for RequestedTransactionMessage {
+impl TryFrom<proto::consensus::MissingTransactionsResponse> for MissingTransactionsResponse {
     type Error = anyhow::Error;
 
-    fn try_from(value: proto::consensus::RequestedTransactionMessage) -> Result<Self, Self::Error> {
-        Ok(RequestedTransactionMessage {
+    fn try_from(value: proto::consensus::MissingTransactionsResponse) -> Result<Self, Self::Error> {
+        Ok(MissingTransactionsResponse {
+            request_id: value.request_id,
             epoch: Epoch(value.epoch),
             block_id: BlockId::try_from(value.block_id)?,
             transactions: value
@@ -493,7 +497,6 @@ impl From<Decision> for proto::consensus::Decision {
         match value {
             Decision::Commit => proto::consensus::Decision::Commit,
             Decision::Abort => proto::consensus::Decision::Abort,
-            Decision::Deferred => proto::consensus::Decision::Deferred,
         }
     }
 }
@@ -505,7 +508,6 @@ impl TryFrom<proto::consensus::Decision> for Decision {
         match value {
             proto::consensus::Decision::Commit => Ok(Decision::Commit),
             proto::consensus::Decision::Abort => Ok(Decision::Abort),
-            proto::consensus::Decision::Deferred => Ok(Decision::Deferred),
             proto::consensus::Decision::Unknown => Err(anyhow!("Decision not provided")),
         }
     }

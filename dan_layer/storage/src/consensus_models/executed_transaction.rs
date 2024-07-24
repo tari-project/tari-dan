@@ -164,7 +164,7 @@ impl ExecutedTransaction {
     }
 
     pub fn to_initial_evidence(&self) -> Evidence {
-        Evidence::from_inputs_and_outputs(*self.id(), &self.resolved_inputs, &self.resulting_outputs)
+        Evidence::from_inputs_and_outputs(&self.resolved_inputs, &self.resulting_outputs)
     }
 
     pub fn transaction_fee(&self) -> u64 {
@@ -239,7 +239,7 @@ impl ExecutedTransaction {
 
     pub fn get<TTx: StateStoreReadTransaction>(tx: &TTx, tx_id: &TransactionId) -> Result<Self, StorageError> {
         let rec = tx.transactions_get(tx_id)?;
-        if rec.result.is_none() {
+        if rec.execution_result.is_none() {
             return Err(StorageError::NotFound {
                 item: "ExecutedTransaction".to_string(),
                 key: tx_id.to_string(),
@@ -256,7 +256,7 @@ impl ExecutedTransaction {
     ) -> Result<ExecuteResult, StorageError> {
         // TODO(perf): consider optimising
         let rec = tx.transactions_get(tx_id)?;
-        let Some(result) = rec.result else {
+        let Some(result) = rec.execution_result else {
             return Err(StorageError::NotFound {
                 item: "ExecutedTransaction result".to_string(),
                 key: tx_id.to_string(),
@@ -292,7 +292,7 @@ impl ExecutedTransaction {
         tx_id: &TransactionId,
     ) -> Result<bool, StorageError> {
         match tx.transactions_get(tx_id).optional()? {
-            Some(rec) => Ok(rec.result.is_some()),
+            Some(rec) => Ok(rec.execution_result.is_some()),
             None => Ok(false),
         }
     }
@@ -360,7 +360,7 @@ impl TryFrom<TransactionRecord> for ExecutedTransaction {
 
         Ok(Self {
             transaction: value.transaction,
-            result: value.result.unwrap(),
+            result: value.execution_result.unwrap(),
             execution_time: value.execution_time.unwrap_or_default(),
             resolved_inputs,
             final_decision: value.final_decision,

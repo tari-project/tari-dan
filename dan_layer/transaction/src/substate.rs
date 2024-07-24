@@ -27,9 +27,16 @@ impl SubstateRequirement {
         }
     }
 
-    pub fn with_version(address: SubstateId, version: u32) -> Self {
+    pub fn unversioned<T: Into<SubstateId>>(id: T) -> Self {
         Self {
-            substate_id: address,
+            substate_id: id.into(),
+            version: None,
+        }
+    }
+
+    pub fn with_version<T: Into<SubstateId>>(id: T, version: u32) -> Self {
+        Self {
+            substate_id: id.into(),
             version: Some(version),
         }
     }

@@ -31,13 +31,13 @@ use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     component::new_component_address_from_public_key,
     entity_id_provider::EntityIdProvider,
-    indexed_value::{IndexedValue, IndexedWellKnownTypes},
+    indexed_value::IndexedWellKnownTypes,
     instruction::Instruction,
     instruction_result::InstructionResult,
     lock::LockFlag,
     virtual_substate::VirtualSubstates,
 };
-use tari_template_abi::{FunctionDef, Type};
+use tari_template_abi::FunctionDef;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     arg,
@@ -262,18 +262,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     .interface()
                     .claim_validator_fees(Epoch(epoch), validator_public_key)?;
                 Ok(InstructionResult::empty())
-            },
-            Instruction::CreateFreeTestCoins {
-                revealed_amount: amount,
-                output,
-            } => {
-                let bucket_id = runtime.interface().create_free_test_coins(amount, output)?;
-                Ok(InstructionResult {
-                    indexed: IndexedValue::from_type(&bucket_id)?,
-                    return_type: Type::Other {
-                        name: "BucketId".to_string(),
-                    },
-                })
             },
         }
     }

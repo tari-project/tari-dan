@@ -22,10 +22,7 @@ use tari_engine_types::{
 };
 use tari_template_lib::{models::ObjectKey, Hash};
 
-use crate::{
-    shard::Shard,
-    uint::{U256, U256_ZERO},
-};
+use crate::{shard::Shard, uint::U256};
 
 /// This is u16::MAX / 2 as a u32 = 32767 shards. Any number of shards greater than this will be clamped to this value.
 /// This is done to limit the number of addresses that are added to the final shard to allow the same shard boundaries.
@@ -113,6 +110,10 @@ impl SubstateAddress {
         Ok(Self(hash.into_array()))
     }
 
+    pub fn is_zero(&self) -> bool {
+        self.as_bytes().iter().all(|&b| b == 0)
+    }
+
     pub const fn into_array(self) -> [u8; 32] {
         self.0
     }
@@ -140,16 +141,10 @@ impl SubstateAddress {
     /// Calculates and returns the shard number that this SubstateAddress belongs.
     /// A shard is a division of the 256-bit shard space where the boundary of the division if always a power of two.
     pub fn to_shard(&self, num_shards: u32) -> Shard {
-        if num_shards == 0 {
+        if num_shards <= 1 || self.is_zero() {
             return Shard::from(0u32);
         }
         let addr_u256 = self.to_u256();
-        if addr_u256 == U256_ZERO {
-            return Shard::from(0u32);
-        }
-        if num_shards == 1 {
-            return Shard::from(0u32);
-        }
 
         if num_shards.is_power_of_two() {
             let shard_size = U256::MAX >> num_shards.trailing_zeros();

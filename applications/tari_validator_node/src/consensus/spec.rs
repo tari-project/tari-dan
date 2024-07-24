@@ -20,6 +20,7 @@ use crate::{
     consensus::{
         leader_selection::RoundRobinLeaderStrategy,
         signature_service::TariSignatureService,
+        ConsensusTransactionValidator,
         TariDanBlockTransactionExecutor,
     },
     p2p::services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
@@ -41,6 +42,8 @@ impl ConsensusSpec for TariConsensusSpec {
     type SignatureService = TariSignatureService;
     type StateStore = SqliteStateStore<Self::Addr>;
     type SyncManager = RpcStateSyncManager<Self>;
-    type TransactionExecutor =
-        TariDanBlockTransactionExecutor<Self::EpochManager, TariDanTransactionProcessor<TemplateManager<PeerAddress>>>;
+    type TransactionExecutor = TariDanBlockTransactionExecutor<
+        TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
+        ConsensusTransactionValidator,
+    >;
 }

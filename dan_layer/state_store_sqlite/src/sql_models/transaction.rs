@@ -112,7 +112,7 @@ impl TryFrom<Transaction> for consensus_models::ExecutedTransaction {
     fn try_from(value: Transaction) -> Result<Self, Self::Error> {
         let rec = consensus_models::TransactionRecord::try_from(value)?;
 
-        if rec.result.is_none() {
+        if rec.execution_result.is_none() {
             return Err(StorageError::QueryError {
                 reason: format!("Transaction {} has not executed", rec.transaction.id()),
             });

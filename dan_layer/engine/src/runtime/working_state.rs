@@ -171,26 +171,39 @@ impl WorkingState {
         Ok(component)
     }
 
-    pub fn modify_component_with<R, F: FnOnce(&mut ComponentHeader) -> R>(
+    pub fn modify_component_with<F: FnOnce(&mut ComponentHeader) -> bool>(
         &mut self,
         locked: &LockedSubstate,
         f: F,
-    ) -> Result<R, RuntimeError> {
-        let (address, substate_mut) = self.store.get_locked_substate_mut(locked.lock_id())?;
-        let component_mut = substate_mut
-            .component_mut()
-            .ok_or_else(|| RuntimeError::LockSubstateMismatch {
-                lock_id: locked.lock_id(),
-                address,
-                expected_type: "Component",
-            })?;
-        let before = IndexedWellKnownTypes::from_value(component_mut.state())?;
-        let ret = f(component_mut);
+    ) -> Result<(), RuntimeError> {
+        let maybe_before_and_after = self
+            .store
+            .mutate_locked_substate_with(locked.lock_id(), |_, substate_mut| {
+                let component_mut = substate_mut
+                    .component_mut()
+                    .ok_or_else(|| RuntimeError::LockSubstateMismatch {
+                        lock_id: locked.lock_id(),
+                        address: locked.address().clone(),
+                        expected_type: "Component",
+                    })?;
 
-        let after = IndexedWellKnownTypes::from_value(component_mut.state())?;
+                let before = IndexedWellKnownTypes::from_value(component_mut.state())?;
+                if !f(component_mut) {
+                    // rollback
+                    return Ok(None);
+                }
+
+                let after = IndexedWellKnownTypes::from_value(component_mut.state())?;
+                Ok(Some((before, after)))
+            })?;
+
+        let Some((before, after))= maybe_before_and_after else {
+            return Ok(());
+        };
+
         self.validate_component_state(Some(&before), &after)?;
 
-        Ok(ret)
+        Ok(())
     }
 
     pub fn get_resource(&self, locked: &LockedSubstate) -> Result<&Resource, RuntimeError> {
@@ -1176,7 +1189,7 @@ impl WorkingState {
             );
             return Err(RuntimeError::SubstateNotOwned {
                 address: address.clone(),
-                requested_owner: component_lock.address().clone(),
+                requested_owner: Box::new(component_lock.address().clone()),
             });
         }
 

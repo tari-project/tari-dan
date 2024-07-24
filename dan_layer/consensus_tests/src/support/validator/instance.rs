@@ -8,7 +8,7 @@ use tari_consensus::{
 use tari_dan_common_types::{shard::Shard, SubstateAddress};
 use tari_dan_storage::{consensus_models::LeafBlock, StateStore, StateStoreReadTransaction};
 use tari_state_store_sqlite::SqliteStateStore;
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::Transaction;
 use tokio::{
     sync::{broadcast, mpsc, watch},
     task::JoinHandle,
@@ -17,27 +17,29 @@ use tokio::{
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
+    executions_store::TestTransactionExecutionsStore,
     RoundRobinLeaderStrategy,
     ValidatorBuilder,
 };
 
 pub struct ValidatorChannels {
     pub address: TestAddress,
-    pub bucket: Shard,
+    pub shard: Shard,
     pub state_store: SqliteStateStore<TestAddress>,
 
-    pub tx_new_transactions: mpsc::Sender<(TransactionId, usize)>,
+    pub tx_new_transactions: mpsc::Sender<(Transaction, usize)>,
     pub tx_hs_message: mpsc::Sender<(TestAddress, HotstuffMessage)>,
     pub rx_broadcast: mpsc::Receiver<(Vec<TestAddress>, HotstuffMessage)>,
     pub rx_leader: mpsc::Receiver<(TestAddress, HotstuffMessage)>,
-    pub rx_mempool: mpsc::UnboundedReceiver<Transaction>,
 }
 
 pub struct Validator {
     pub address: TestAddress,
-    pub substate_address: SubstateAddress,
+    pub shard_address: SubstateAddress,
+    pub shard: Shard,
 
     pub state_store: SqliteStateStore<TestAddress>,
+    pub transaction_executions: TestTransactionExecutionsStore,
     pub epoch_manager: TestEpochManager,
     pub leader_strategy: RoundRobinLeaderStrategy,
     pub events: broadcast::Receiver<HotstuffEvent>,

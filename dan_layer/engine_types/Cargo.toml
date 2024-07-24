@@ -30,9 +30,7 @@ thiserror = { workspace = true }
 ts-rs = { workspace = true, optional = true }
 
 [features]
-default = ["debugging"]
-# Includes the ability to create free test coins
-debugging = []
+default = []
 ts = ["ts-rs"]
 # This feature is used to temporarily fix the issue with the ts-rs crate. Because when we run cargo test --all-feature 
 # it will trigger the ts files generation. But there are some problems that are fixed during the npm run build. But 

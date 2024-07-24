@@ -67,6 +67,41 @@ impl WorkingStateStore {
         Ok((lock.address().clone(), substate))
     }
 
+    pub fn mutate_locked_substate_with<
+        R,
+        F: FnOnce(&SubstateId, &mut SubstateValue) -> Result<Option<R>, RuntimeError>,
+    >(
+        &mut self,
+        lock_id: LockId,
+        callback: F,
+    ) -> Result<Option<R>, RuntimeError> {
+        let lock = self.locked_substates.get(lock_id, LockFlag::Write)?;
+        if let Some(mut substate) = self.loaded_substates.remove(lock.address()) {
+            return match callback(lock.address(), &mut substate)? {
+                Some(ret) => {
+                    self.new_substates.insert(lock.address().clone(), substate);
+                    Ok(Some(ret))
+                },
+                None => {
+                    // It is undefined to mutate the state and return None from the callback. We do not assert this
+                    // however which is risky.
+                    self.loaded_substates.insert(lock.address().clone(), substate);
+                    Ok(None)
+                },
+            };
+        }
+
+        let substate_mut = self
+            .new_substates
+            .get_mut(lock.address())
+            .ok_or_else(|| LockError::SubstateNotLocked {
+                address: lock.address().clone(),
+            })?;
+
+        // Since the substate is already mutated, we dont really care if the callback mutates it again or not
+        callback(lock.address(), substate_mut)
+    }
+
     pub fn get_locked_substate(&self, lock_id: LockId) -> Result<(SubstateId, &SubstateValue), RuntimeError> {
         let lock = self.locked_substates.get(lock_id, LockFlag::Read)?;
         let substate = self.get_ref(lock.address())?;

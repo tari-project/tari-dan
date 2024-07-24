@@ -22,34 +22,34 @@ pub struct BlockDiff {
 
 impl BlockDiff {
     pub fn try_load(block_id: BlockId, diff: Vec<Self>) -> Result<consensus_models::BlockDiff, StorageError> {
-        let mut changes = Vec::with_capacity(diff.len());
-        for d in diff {
-            let substate_id = d.substate_id.parse().map_err(|err| StorageError::DataInconsistency {
-                details: format!("Invalid substate id {}: {}", d.substate_id, err),
-            })?;
-            let id = VersionedSubstateId::new(substate_id, d.version as u32);
-            let transaction_id = deserialize_hex_try_from(&d.transaction_id)?;
-            match d.change.as_str() {
-                "Up" => {
-                    let state = d.state.ok_or(StorageError::DataInconsistency {
-                        details: "Block diff change type is Up but state is missing".to_string(),
-                    })?;
-                    changes.push(consensus_models::SubstateChange::Up {
-                        id,
-                        transaction_id,
-                        substate: deserialize_json(&state)?,
-                    });
-                },
-                "Down" => {
-                    changes.push(consensus_models::SubstateChange::Down { id, transaction_id });
-                },
-                _ => {
-                    return Err(StorageError::DataInconsistency {
-                        details: format!("Invalid block diff change type: {}", d.change),
-                    });
-                },
-            }
-        }
+        let changes = diff
+            .into_iter()
+            .map(Self::try_convert_change)
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(consensus_models::BlockDiff { block_id, changes })
+    }
+
+    pub fn try_convert_change(d: Self) -> Result<consensus_models::SubstateChange, StorageError> {
+        let substate_id = d.substate_id.parse().map_err(|err| StorageError::DataInconsistency {
+            details: format!("Invalid substate id {}: {}", d.substate_id, err),
+        })?;
+        let id = VersionedSubstateId::new(substate_id, d.version as u32);
+        let transaction_id = deserialize_hex_try_from(&d.transaction_id)?;
+        match d.change.as_str() {
+            "Up" => {
+                let state = d.state.ok_or(StorageError::DataInconsistency {
+                    details: "Block diff change type is Up but state is missing".to_string(),
+                })?;
+                Ok(consensus_models::SubstateChange::Up {
+                    id,
+                    transaction_id,
+                    substate: deserialize_json(&state)?,
+                })
+            },
+            "Down" => Ok(consensus_models::SubstateChange::Down { id, transaction_id }),
+            _ => Err(StorageError::DataInconsistency {
+                details: format!("Invalid block diff change type: {}", d.change),
+            }),
+        }
     }
 }

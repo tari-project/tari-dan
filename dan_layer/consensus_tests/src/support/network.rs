@@ -10,7 +10,7 @@ use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::shard::Shard;
-use tari_dan_storage::{consensus_models::TransactionRecord, StateStore};
+use tari_dan_storage::consensus_models::TransactionRecord;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
@@ -37,7 +37,7 @@ pub fn spawn_network(
         .map(|c| {
             (
                 c.address.clone(),
-                (c.bucket, c.tx_new_transactions.clone(), c.state_store.clone()),
+                (c.shard, c.tx_new_transactions.clone(), c.state_store.clone()),
             )
         })
         .collect();
@@ -45,15 +45,9 @@ pub fn spawn_network(
         .iter()
         .map(|c| (c.address.clone(), c.tx_hs_message.clone()))
         .collect();
-    let (rx_broadcast, rx_leader, rx_mempool) = channels
+    let (rx_broadcast, rx_leader) = channels
         .into_iter()
-        .map(|c| {
-            (
-                (c.address.clone(), c.rx_broadcast),
-                (c.address.clone(), c.rx_leader),
-                (c.address, c.rx_mempool),
-            )
-        })
+        .map(|c| ((c.address.clone(), c.rx_broadcast), (c.address.clone(), c.rx_leader)))
         .multiunzip();
     let (tx_new_transaction, rx_new_transaction) = mpsc::channel(100);
     let (tx_network_status, network_status) = watch::channel(NetworkStatus::Paused);
@@ -70,7 +64,6 @@ pub fn spawn_network(
         tx_hs_message,
         rx_broadcast: Some(rx_broadcast),
         rx_leader: Some(rx_leader),
-        rx_mempool: Some(rx_mempool),
         on_message: tx_on_message,
         num_sent_messages: num_sent_messages.clone(),
         num_filtered_messages: num_filtered_messages.clone(),
@@ -180,20 +173,13 @@ impl TestNetworkDestination {
 pub struct TestNetworkWorker {
     rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, TransactionRecord)>>,
     #[allow(clippy::type_complexity)]
-    tx_new_transactions: HashMap<
-        TestAddress,
-        (
-            Shard,
-            mpsc::Sender<(TransactionId, usize)>,
-            SqliteStateStore<TestAddress>,
-        ),
-    >,
+    tx_new_transactions:
+        HashMap<TestAddress, (Shard, mpsc::Sender<(Transaction, usize)>, SqliteStateStore<TestAddress>)>,
     tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage)>>,
     #[allow(clippy::type_complexity)]
     rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Vec<TestAddress>, HotstuffMessage)>>>,
     #[allow(clippy::type_complexity)]
     rx_leader: Option<HashMap<TestAddress, mpsc::Receiver<(TestAddress, HotstuffMessage)>>>,
-    rx_mempool: Option<HashMap<TestAddress, mpsc::UnboundedReceiver<Transaction>>>,
     network_status: watch::Receiver<NetworkStatus>,
     on_message: watch::Sender<Option<HotstuffMessage>>,
     num_sent_messages: Arc<AtomicUsize>,
@@ -213,7 +199,6 @@ impl TestNetworkWorker {
     async fn run(mut self) {
         let mut rx_broadcast = self.rx_broadcast.take().unwrap();
         let mut rx_leader = self.rx_leader.take().unwrap();
-        let mut rx_mempool = self.rx_mempool.take().unwrap();
 
         let mut rx_new_transaction = self.rx_new_transaction.take().unwrap();
         let tx_new_transactions = self.tx_new_transactions.clone();
@@ -242,13 +227,13 @@ impl TestNetworkWorker {
                 for (addr, (shard, tx_new_transaction_to_consensus, _)) in &tx_new_transactions {
                     if dest.is_for(addr, *shard) {
                         tx_new_transaction_to_consensus
-                            .send((*tx_record.id(), remaining))
+                            .send((tx_record.transaction().clone(), remaining))
                             .await
                             .unwrap();
                         log::info!("🐞 New transaction {} for vn {}", tx_record.id(), addr);
                     } else {
-                        log::warn!(
-                            "⚠️🐞 New transaction {} for vn {} was not sent to consensus (dest = {:?})",
+                        log::debug!(
+                            "ℹ️🐞 New transaction {} not destined for vn {} (dest = {:?})",
                             tx_record.id(),
                             addr,
                             dest
@@ -265,11 +250,6 @@ impl TestNetworkWorker {
                 .map(|(from, rx)| rx.recv().map(|r| (from.clone(), r)))
                 .collect::<FuturesUnordered<_>>();
             let mut rx_leader = rx_leader
-                .iter_mut()
-                .map(|(from, rx)| rx.recv().map(|r| (from.clone(), r)))
-                .collect::<FuturesUnordered<_>>();
-
-            let mut rx_mempool = rx_mempool
                 .iter_mut()
                 .map(|(from, rx)| rx.recv().map(|r| (from.clone(), r)))
                 .collect::<FuturesUnordered<_>>();
@@ -299,7 +279,6 @@ impl TestNetworkWorker {
 
                 Some((from, Some((to, msg)))) = rx_broadcast.next() => self.handle_broadcast(from, to, msg).await,
                 Some((from, Some((to, msg)))) = rx_leader.next() => self.handle_leader(from, to, msg).await,
-                Some((from, Some(msg))) = rx_mempool.next() => self.handle_mempool(from, msg).await,
             }
         }
 
@@ -352,29 +331,8 @@ impl TestNetworkWorker {
         self.tx_hs_message.get(&to).unwrap().send((from, msg)).await.unwrap();
     }
 
-    async fn is_offline_destination(&self, addr: &TestAddress, bucket: Shard) -> bool {
+    async fn is_offline_destination(&self, addr: &TestAddress, shard: Shard) -> bool {
         let lock = self.offline_destinations.read().await;
-        lock.iter().any(|d| d.is_for(addr, bucket))
-    }
-
-    /// Handles transactions that come in from missing transactions
-    async fn handle_mempool(&mut self, from: TestAddress, msg: Transaction) {
-        let (_, sender, state_store) = self
-            .tx_new_transactions
-            .get(&from)
-            .unwrap_or_else(|| panic!("No new transaction channel for {}", from));
-
-        // In the normal case, we need to provide the same execution results to consensus. In future, we could add code
-        // here to make a local decision to ABORT.
-        let existing_tx = self.transaction_store.read().await.get(msg.id()).unwrap().clone();
-        state_store
-            .with_write_tx(|tx| {
-                // Add the transaction from the store to the node's db
-                existing_tx.upsert(tx)?;
-                Ok::<_, anyhow::Error>(())
-            })
-            .unwrap();
-
-        sender.send((*existing_tx.id(), 0)).await.unwrap();
+        lock.iter().any(|d| d.is_for(addr, shard))
     }
 }

@@ -40,6 +40,7 @@ use crate::{
         QuorumCertificate,
         StateTransition,
         StateTransitionId,
+        SubstateChange,
         SubstateRecord,
         TransactionAtom,
         TransactionExecution,
@@ -179,6 +180,11 @@ pub trait StateStoreReadTransaction: Sized {
     fn blocks_max_height(&self) -> Result<NodeHeight, StorageError>;
 
     fn block_diffs_get(&self, block_id: &BlockId) -> Result<BlockDiff, StorageError>;
+    fn block_diffs_get_last_change_for_substate(
+        &self,
+        block_id: &BlockId,
+        substate_id: &SubstateId,
+    ) -> Result<SubstateChange, StorageError>;
 
     fn parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
 
@@ -191,7 +197,6 @@ pub trait StateStoreReadTransaction: Sized {
     fn quorum_certificates_get_by_block_id(&self, block_id: &BlockId) -> Result<QuorumCertificate, StorageError>;
 
     // -------------------------------- Transaction Pools -------------------------------- //
-    fn transaction_pool_get(&self, transaction_id: &TransactionId) -> Result<TransactionPoolRecord, StorageError>;
     fn transaction_pool_get_for_blocks(
         &self,
         from_block_id: &BlockId,
@@ -351,12 +356,7 @@ pub trait StateStoreWriteTransaction {
     ) -> Result<(), StorageError>;
 
     // -------------------------------- Transaction Pool -------------------------------- //
-    fn transaction_pool_insert(
-        &mut self,
-        transaction: TransactionAtom,
-        stage: TransactionPoolStage,
-        is_ready: bool,
-    ) -> Result<(), StorageError>;
+    fn transaction_pool_insert_new(&mut self, tx_id: TransactionId, decision: Decision) -> Result<(), StorageError>;
     fn transaction_pool_set_atom(&mut self, transaction: TransactionAtom) -> Result<(), StorageError>;
     fn transaction_pool_add_pending_update(
         &mut self,

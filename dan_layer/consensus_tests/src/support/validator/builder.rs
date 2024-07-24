@@ -32,8 +32,8 @@ pub struct ValidatorBuilder {
     pub address: TestAddress,
     pub secret_key: PrivateKey,
     pub public_key: PublicKey,
-    pub shard: SubstateAddress,
-    pub bucket: Shard,
+    pub shard_address: SubstateAddress,
+    pub shard: Shard,
     pub sql_url: String,
     pub leader_strategy: RoundRobinLeaderStrategy,
     pub epoch_manager: Option<TestEpochManager>,
@@ -46,8 +46,8 @@ impl ValidatorBuilder {
             address: TestAddress::new("default"),
             secret_key: PrivateKey::default(),
             public_key: PublicKey::default(),
-            shard: SubstateAddress::zero(),
-            bucket: Shard::from(0),
+            shard_address: SubstateAddress::zero(),
+            shard: Shard::from(0),
             sql_url: ":memory".to_string(),
             leader_strategy: RoundRobinLeaderStrategy::new(),
             epoch_manager: None,
@@ -62,18 +62,13 @@ impl ValidatorBuilder {
         self
     }
 
-    pub fn with_transaction_executions(&mut self, transaction_executions: TestTransactionExecutionsStore) -> &mut Self {
-        self.transaction_executions = transaction_executions;
-        self
-    }
-
     pub fn with_bucket(&mut self, bucket: Shard) -> &mut Self {
-        self.bucket = bucket;
+        self.shard = bucket;
         self
     }
 
     pub fn with_shard(&mut self, shard: SubstateAddress) -> &mut Self {
-        self.shard = shard;
+        self.shard_address = shard;
         self
     }
 
@@ -103,7 +98,6 @@ impl ValidatorBuilder {
         let (tx_new_transactions, rx_new_transactions) = mpsc::channel(100);
         let (tx_hs_message, rx_hs_message) = mpsc::channel(100);
         let (tx_leader, rx_leader) = mpsc::channel(100);
-        let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
 
         let (outbound_messaging, rx_loopback) = TestOutboundMessaging::create(tx_leader, tx_broadcast);
         let inbound_messaging = TestInboundMessaging::new(self.address.clone(), rx_hs_message, rx_loopback);
@@ -113,11 +107,11 @@ impl ValidatorBuilder {
         let transaction_pool = TransactionPool::new();
         let (tx_events, _) = broadcast::channel(100);
 
-        let epoch_manager =
-            self.epoch_manager
-                .as_ref()
-                .unwrap()
-                .clone_for(self.address.clone(), self.public_key.clone(), self.shard);
+        let epoch_manager = self.epoch_manager.as_ref().unwrap().clone_for(
+            self.address.clone(),
+            self.public_key.clone(),
+            self.shard_address,
+        );
 
         let transaction_executor = TestBlockTransactionProcessor::new(self.transaction_executions.clone());
 
@@ -134,7 +128,6 @@ impl ValidatorBuilder {
             transaction_pool,
             transaction_executor,
             tx_events.clone(),
-            tx_mempool,
             NoopHooks,
             shutdown_signal.clone(),
             HotstuffConfig {
@@ -156,18 +149,19 @@ impl ValidatorBuilder {
 
         let channels = ValidatorChannels {
             address: self.address.clone(),
-            bucket: self.bucket,
+            shard: self.shard,
             state_store: store.clone(),
             tx_new_transactions,
             tx_hs_message,
             rx_broadcast,
             rx_leader,
-            rx_mempool,
         };
 
         let validator = Validator {
             address: self.address.clone(),
-            substate_address: self.shard,
+            shard_address: self.shard_address,
+            shard: self.shard,
+            transaction_executions: self.transaction_executions.clone(),
             state_store: store,
             epoch_manager,
             leader_strategy: self.leader_strategy,

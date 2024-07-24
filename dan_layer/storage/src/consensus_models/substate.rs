@@ -14,7 +14,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeHeight, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight, SubstateAddress};
 use tari_engine_types::substate::{hash_substate, Substate, SubstateId, SubstateValue};
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 
@@ -177,10 +177,9 @@ impl SubstateRecord {
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &TTx,
-        address: &SubstateAddress,
+        id: &VersionedSubstateId,
     ) -> Result<bool, StorageError> {
-        // TODO: optimise
-        Ok(Self::get(tx, address).optional()?.is_some())
+        Self::any_exist(tx, Some(id))
     }
 
     pub fn any_exist<

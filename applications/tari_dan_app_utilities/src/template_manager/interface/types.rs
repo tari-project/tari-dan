@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_common_types::types::FixedHash;
 use tari_dan_storage::global::{DbTemplate, DbTemplateType};
 use tari_template_lib::models::TemplateAddress;
 use tari_validator_node_client::types::TemplateAbi;
@@ -34,7 +35,7 @@ pub struct TemplateMetadata {
     // this must be in the form of "https://example.com/my_template.wasm"
     pub url: String,
     /// SHA hash of binary
-    pub binary_sha: Vec<u8>,
+    pub binary_sha: FixedHash,
     /// Block height in which the template was published
     pub height: u64,
 }
@@ -45,7 +46,9 @@ impl From<TemplateRegistration> for TemplateMetadata {
             name: reg.template_name,
             address: reg.template_address,
             url: reg.registration.binary_url.into_string(),
-            binary_sha: reg.registration.binary_sha.into_vec(),
+            binary_sha: FixedHash::try_from(reg.registration.binary_sha.into_vec())
+                // TODO: impl Fallible conversion
+                .expect("binary_sha must be 32 bytes long"),
             height: reg.mined_height,
         }
     }
@@ -58,7 +61,7 @@ impl From<DbTemplate> for TemplateMetadata {
             name: record.template_name,
             address: (*record.template_address).into(),
             url: record.url,
-            binary_sha: vec![],
+            binary_sha: FixedHash::zero(),
             height: record.height,
         }
     }
@@ -87,7 +90,7 @@ impl From<DbTemplate> for Template {
                 address: (*record.template_address).into(),
                 url: record.url,
                 // TODO: add field to db
-                binary_sha: vec![],
+                binary_sha: FixedHash::zero(),
                 height: record.height,
             },
             executable: match record.template_type {

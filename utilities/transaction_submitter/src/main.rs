@@ -4,6 +4,7 @@
 use std::{cmp, fs::File, io::Write, time::Duration};
 
 use anyhow::bail;
+use tari_dan_common_types::optional::Optional;
 use tari_transaction::TransactionId;
 use tari_validator_node_client::{
     types::{GetTransactionResultRequest, SubmitTransactionRequest, SubmitTransactionResponse},
@@ -132,6 +133,7 @@ async fn stress_test(args: StressTestArgs) -> anyhow::Result<Option<StressTestRe
     Ok(Some(results))
 }
 
+#[allow(clippy::too_many_lines)]
 async fn fetch_result_summary(
     clients: Vec<ValidatorNodeClient>,
     mut submitted_rx: mpsc::UnboundedReceiver<TransactionId>,
@@ -183,8 +185,9 @@ async fn fetch_result_summary(
                     match client
                         .get_transaction_result(GetTransactionResultRequest { transaction_id })
                         .await
+                        .optional()
                     {
-                        Ok(result) => {
+                        Ok(Some(result)) => {
                             if let Some(ref exec_result) = result.result {
                                 let result = if let Some(diff) = exec_result.finalize.result.accept() {
                                     TxFinalized {
@@ -209,6 +212,14 @@ async fn fetch_result_summary(
                             } else {
                                 sleep(Duration::from_secs(1)).await;
                             }
+                        },
+                        Ok(None) => {
+                            println!(
+                                "Transaction result not found: {}. This is likely due to a race condition. Retrying \
+                                 later...",
+                                transaction_id
+                            );
+                            sleep(Duration::from_secs(1)).await;
                         },
                         Err(e) => {
                             println!("Failed to get transaction result: {}", e);

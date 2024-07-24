@@ -6,7 +6,7 @@ use tari_dan_storage::{consensus_models::TransactionRecord, StateStore};
 
 use crate::{
     hotstuff::error::HotStuffError,
-    messages::{HotstuffMessage, RequestMissingTransactionsMessage, RequestedTransactionMessage},
+    messages::{HotstuffMessage, MissingTransactionsRequest, MissingTransactionsResponse},
     traits::{ConsensusSpec, OutboundMessaging},
 };
 
@@ -30,7 +30,7 @@ where TConsensusSpec: ConsensusSpec
     pub async fn handle(
         &mut self,
         from: TConsensusSpec::Addr,
-        msg: RequestMissingTransactionsMessage,
+        msg: MissingTransactionsRequest,
     ) -> Result<(), HotStuffError> {
         info!(target: LOG_TARGET, "{} requested {} missing transaction(s) from block {}", from, msg.transactions.len(), msg.block_id);
         let (txs, missing) = self
@@ -46,7 +46,8 @@ where TConsensusSpec: ConsensusSpec
         self.outbound_messaging
             .send(
                 from,
-                HotstuffMessage::RequestedTransaction(RequestedTransactionMessage {
+                HotstuffMessage::MissingTransactionsResponse(MissingTransactionsResponse {
+                    request_id: msg.request_id,
                     epoch: msg.epoch,
                     block_id: msg.block_id,
                     transactions: txs.into_iter().map(|tx| tx.into_transaction()).collect(),

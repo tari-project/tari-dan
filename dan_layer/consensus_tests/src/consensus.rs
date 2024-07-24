@@ -10,6 +10,7 @@
 
 use std::time::Duration;
 
+use tari_common_types::types::PrivateKey;
 use tari_consensus::hotstuff::HotStuffError;
 use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeHeight};
 use tari_dan_storage::{
@@ -22,7 +23,6 @@ use tari_transaction::{SubstateRequirement, Transaction};
 use crate::support::{
     build_transaction,
     build_transaction_from,
-    build_transaction_with_inputs,
     change_decision,
     create_execution_result_for_transaction,
     logging::setup_logger,
@@ -145,8 +145,21 @@ async fn node_requests_missing_transaction_from_local_leader() {
     // block. We could send to "1" but the test would have to wait for the block time to be hit and block 1 to be
     // proposed before node "1" can propose block 2 with all the transactions.
     for _ in 0..10 {
-        test.send_transaction_to(&TestAddress::new("2"), Decision::Commit, 1, 5)
+        let transaction = test
+            .send_transaction_to(&TestAddress::new("2"), Decision::Commit, 1, 5)
             .await;
+        // All VNs will decide the same thing
+        test.create_execution_at_destination(
+            TestNetworkDestination::All,
+            create_execution_result_for_transaction(
+                BlockId::zero(),
+                *transaction.id(),
+                transaction.current_decision(),
+                0,
+                transaction.resolved_inputs.clone().unwrap_or_default(),
+                transaction.resulting_outputs.clone(),
+            ),
+        );
     }
     test.start_epoch(Epoch(1)).await;
     loop {
@@ -279,6 +292,7 @@ async fn foreign_shard_decides_to_abort() {
         .await;
     let tx2 = change_decision(tx1.clone().try_into().unwrap(), Decision::Abort);
     assert_eq!(tx1.id(), tx2.id());
+    assert!(tx2.current_decision().is_abort());
     test.send_transaction_to_destination(TestNetworkDestination::Shard(1), tx2.clone())
         .await;
 
@@ -302,12 +316,11 @@ async fn foreign_shard_decides_to_abort() {
     }
 
     test.assert_all_validators_at_same_height().await;
-    test.assert_all_validators_have_decision(tx1.id(), Decision::Abort)
+    test.assert_all_validators_have_decision(tx2.id(), Decision::Abort)
         .await;
-    test.assert_all_validators_did_not_commit();
 
-    log::info!("total messages sent: {}", test.network().total_messages_sent());
     test.assert_clean_shutdown().await;
+    log::info!("total messages sent: {}", test.network().total_messages_sent());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -367,7 +380,72 @@ async fn output_conflict_abort() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn inputs_depend_on_outputs_multishard() {
+async fn single_shard_inputs_from_previous_outputs() {
+    setup_logger();
+    let mut test = Test::builder()
+        .debug_sql("/tmp/test{}.db")
+        .add_committee(0, vec!["1", "2"])
+        .start()
+        .await;
+
+    let tx1 = build_transaction(Decision::Commit, 1, 5, 2);
+    let resulting_outputs = tx1.resulting_outputs().to_vec();
+    test.send_transaction_to_destination(TestNetworkDestination::All, tx1.clone())
+        .await;
+
+    let tx2 = Transaction::builder()
+        .with_inputs(resulting_outputs.clone().into_iter().map(Into::into))
+        .sign(&Default::default())
+        .build();
+    let tx2 = build_transaction_from(
+        tx2.clone(),
+        Decision::Commit,
+        1,
+        resulting_outputs
+            .clone()
+            .into_iter()
+            .map(VersionedSubstateIdLockIntent::write)
+            .collect(),
+        vec![],
+    );
+
+    test.send_transaction_to_destination(TestNetworkDestination::All, tx2.clone())
+        .await;
+
+    test.start_epoch(Epoch(1)).await;
+
+    test.wait_for_n_to_be_finalized(2).await;
+
+    let leaf1 = test.get_validator(&TestAddress::new("1")).get_leaf_block();
+    let leaf2 = test.get_validator(&TestAddress::new("2")).get_leaf_block();
+    if leaf1.height > NodeHeight(30) || leaf2.height > NodeHeight(30) {
+        panic!(
+            "Not all transaction committed after {}/{} blocks",
+            leaf1.height, leaf2.height,
+        );
+    }
+
+    test.assert_all_validators_at_same_height().await;
+    // We do not work out input dependencies when we sequence transactions in blocks. Currently ordering within a block
+    // is lexicographical by transaction id, therefore both will only be committed if tx1 happens to be sequenced
+    // first.
+    if tx1.id() < tx2.id() {
+        test.assert_all_validators_have_decision(tx1.id(), Decision::Commit)
+            .await;
+        test.assert_all_validators_have_decision(tx2.id(), Decision::Commit)
+            .await;
+    } else {
+        test.assert_all_validators_have_decision(tx1.id(), Decision::Commit)
+            .await;
+        test.assert_all_validators_have_decision(tx2.id(), Decision::Abort)
+            .await;
+    }
+
+    test.assert_clean_shutdown().await;
+    log::info!("total messages sent: {}", test.network().total_messages_sent());
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn multishard_inputs_from_previous_outputs() {
     setup_logger();
     let mut test = Test::builder()
         .with_test_timeout(Duration::from_secs(60))
@@ -395,7 +473,6 @@ async fn inputs_depend_on_outputs_multishard() {
             .collect(),
         vec![],
     );
-    assert_ne!(tx1.id(), tx2.id());
 
     test.send_transaction_to_destination(TestNetworkDestination::All, tx2.clone())
         .await;
@@ -431,7 +508,7 @@ async fn inputs_depend_on_outputs_multishard() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn deferred_input_conflict() {
+async fn single_shard_input_conflict() {
     setup_logger();
     let mut test = Test::builder().add_committee(0, vec!["1", "2"]).start().await;
 
@@ -449,31 +526,38 @@ async fn deferred_input_conflict() {
         .build();
     let tx2 = TransactionRecord::new(tx2);
 
-    test.transaction_executions()
-        .insert(create_execution_result_for_transaction(
+    test.create_execution_at_destination(
+        TestNetworkDestination::All,
+        create_execution_result_for_transaction(
             BlockId::zero(),
             *tx1.id(),
             Decision::Commit,
             0,
             vec![VersionedSubstateIdLockIntent::read(substate_id.clone())],
             vec![],
-        ))
-        .insert(create_execution_result_for_transaction(
+        ),
+    )
+    .create_execution_at_destination(
+        TestNetworkDestination::All,
+        create_execution_result_for_transaction(
             BlockId::zero(),
             *tx2.id(),
             Decision::Commit,
             0,
             vec![VersionedSubstateIdLockIntent::write(substate_id)],
             vec![],
-        ));
+        ),
+    );
     // Transactions are sorted in the blocks, because we have a "first come first serve" policy for locking objects
     // the "first" will be Committed and the "last" Aborted
     let mut sorted_tx_ids = [tx1.id(), tx2.id()];
     sorted_tx_ids.sort();
 
-    test.send_transaction_to_destination(TestNetworkDestination::All, tx1.clone())
+    test.network()
+        .send_transaction(TestNetworkDestination::All, tx1.clone())
         .await;
-    test.send_transaction_to_destination(TestNetworkDestination::All, tx2.clone())
+    test.network()
+        .send_transaction(TestNetworkDestination::All, tx2.clone())
         .await;
 
     test.start_epoch(Epoch(1)).await;
@@ -667,28 +751,34 @@ async fn foreign_block_distribution() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn deferred_execution() {
+async fn single_shard_unversioned_inputs() {
     setup_logger();
-    let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
+    let mut test = Test::builder().add_committee(0, vec!["1", "2"]).start().await;
     // First get transaction in the mempool
     let inputs = test.create_substates_on_all_vns(1);
     // Remove versions from inputs to allow deferred transactions
     let unversioned_inputs = inputs
         .iter()
         .map(|i| SubstateRequirement::new(i.substate_id.clone(), None));
-    let tx = build_transaction_with_inputs(Decision::Deferred, 1, unversioned_inputs);
+    let tx = Transaction::builder()
+        .with_inputs(unversioned_inputs)
+        .sign(&PrivateKey::default())
+        .build();
+    let tx = TransactionRecord::new(tx);
 
-    test.transaction_executions()
-        .insert(create_execution_result_for_transaction(
+    test.send_transaction_to_destination(TestNetworkDestination::All, tx.clone())
+        .await;
+    test.create_execution_at_destination(
+        TestNetworkDestination::All,
+        create_execution_result_for_transaction(
             BlockId::zero(),
             *tx.id(),
             Decision::Commit,
             0,
             inputs.into_iter().map(VersionedSubstateIdLockIntent::write).collect(),
             vec![],
-        ));
-    test.send_transaction_to_destination(TestNetworkDestination::All, tx)
-        .await;
+        ),
+    );
 
     test.start_epoch(Epoch(1)).await;
 

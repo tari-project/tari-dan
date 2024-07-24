@@ -161,6 +161,19 @@ impl ConfidentialWithdrawProof {
         }
     }
 
+    pub fn revealed_to_confidential<T: Into<Amount>>(
+        input_revealed_amount: T,
+        output_proof: ConfidentialOutputStatement,
+        balance_proof: BalanceProofSignature,
+    ) -> Self {
+        Self {
+            inputs: vec![],
+            input_revealed_amount: input_revealed_amount.into(),
+            output_proof,
+            balance_proof,
+        }
+    }
+
     /// Returns true if the withdraw proof is only transferring revealed funds, otherwise false
     /// The method for determining this is strict, as this can be used to determine whether to
     /// safely skip the balance proof check. To return true it requires:

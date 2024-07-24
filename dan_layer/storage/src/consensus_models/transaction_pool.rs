@@ -18,12 +18,14 @@ use tari_transaction::TransactionId;
 
 use crate::{
     consensus_models::{
+        BlockId,
         Decision,
         Evidence,
         LeafBlock,
         LockedBlock,
         QcId,
         TransactionAtom,
+        TransactionExecution,
         TransactionPoolStatusUpdate,
         TransactionRecord,
     },
@@ -159,12 +161,13 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         Ok(exists)
     }
 
-    pub fn insert(
+    pub fn insert_new(
         &self,
         tx: &mut TStateStore::WriteTransaction<'_>,
-        transaction: TransactionAtom,
+        tx_id: TransactionId,
+        decision: Decision,
     ) -> Result<(), TransactionPoolError> {
-        tx.transaction_pool_insert(transaction, TransactionPoolStage::New, true)?;
+        tx.transaction_pool_insert_new(tx_id, decision)?;
         Ok(())
     }
 
@@ -271,9 +274,15 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
     ts(export, export_to = "../../bindings/src/types/")
 )]
 pub struct TransactionPoolRecord {
-    atom: TransactionAtom,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    transaction_id: TransactionId,
+    evidence: Evidence,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    transaction_fee: u64,
+    leader_fee: Option<LeaderFee>,
     stage: TransactionPoolStage,
     pending_stage: Option<TransactionPoolStage>,
+    original_decision: Decision,
     local_decision: Option<Decision>,
     remote_decision: Option<Decision>,
     is_ready: bool,
@@ -281,17 +290,25 @@ pub struct TransactionPoolRecord {
 
 impl TransactionPoolRecord {
     pub fn load(
-        transaction: TransactionAtom,
+        id: TransactionId,
+        evidence: Evidence,
+        transaction_fee: Option<u64>,
+        leader_fee: Option<LeaderFee>,
         stage: TransactionPoolStage,
         pending_stage: Option<TransactionPoolStage>,
+        original_decision: Decision,
         local_decision: Option<Decision>,
         remote_decision: Option<Decision>,
         is_ready: bool,
     ) -> Self {
         Self {
-            atom: transaction,
+            transaction_id: id,
+            evidence,
+            transaction_fee: transaction_fee.unwrap_or(0),
+            leader_fee,
             stage,
             pending_stage,
+            original_decision,
             local_decision,
             remote_decision,
             is_ready,
@@ -302,12 +319,7 @@ impl TransactionPoolRecord {
         self.remote_decision()
             // Prioritize remote ABORT i.e. if accept we look at our local decision
             .filter(|d| d.is_abort())
-            .or_else(|| self.local_decision())
-            .unwrap_or(self.original_decision())
-    }
-
-    pub fn is_deferred(&self) -> bool {
-        self.current_local_decision().is_deferred()
+            .unwrap_or_else(|| self.current_local_decision())
     }
 
     pub fn current_local_decision(&self) -> Decision {
@@ -315,7 +327,7 @@ impl TransactionPoolRecord {
     }
 
     pub fn original_decision(&self) -> Decision {
-        self.atom.decision
+        self.original_decision
     }
 
     pub fn local_decision(&self) -> Option<Decision> {
@@ -327,21 +339,24 @@ impl TransactionPoolRecord {
     }
 
     pub fn transaction_id(&self) -> &TransactionId {
-        &self.atom.id
+        &self.transaction_id
     }
 
-    pub fn atom(&self) -> &TransactionAtom {
-        &self.atom
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
     }
 
-    pub fn into_atom(self) -> TransactionAtom {
-        self.atom
+    pub fn transaction_fee(&self) -> u64 {
+        self.transaction_fee
     }
 
-    pub fn stage(&self) -> TransactionPoolStage {
+    /// Returns the committed stage of the transaction. This is the stage that has been confirmed by the local shard.
+    pub fn committed_stage(&self) -> TransactionPoolStage {
         self.stage
     }
 
+    /// Returns the pending stage of the transaction. This is the stage that the transaction is current but has not been
+    /// confirmed by the local shard.
     pub fn pending_stage(&self) -> Option<TransactionPoolStage> {
         self.pending_stage
     }
@@ -356,23 +371,37 @@ impl TransactionPoolRecord {
 
     pub fn get_final_transaction_atom(&self, leader_fee: LeaderFee) -> TransactionAtom {
         TransactionAtom {
+            id: self.transaction_id,
             decision: self.current_decision(),
+            evidence: self.evidence.clone(),
+            transaction_fee: self.transaction_fee,
             leader_fee: Some(leader_fee),
-            ..self.atom.clone()
         }
     }
 
     pub fn get_local_transaction_atom(&self) -> TransactionAtom {
         TransactionAtom {
+            id: self.transaction_id,
             decision: self.current_local_decision(),
-            ..self.atom.clone()
+            evidence: self.evidence.clone(),
+            transaction_fee: self.transaction_fee,
+            leader_fee: None,
+        }
+    }
+
+    pub fn into_local_transaction_atom(self) -> TransactionAtom {
+        TransactionAtom {
+            id: self.transaction_id,
+            decision: self.current_local_decision(),
+            evidence: self.evidence,
+            transaction_fee: self.transaction_fee,
+            leader_fee: None,
         }
     }
 
     pub fn calculate_leader_fee(&self, num_involved_shards: NonZeroU64, exhaust_divisor: u64) -> LeaderFee {
-        let transaction_fee = self.atom.transaction_fee;
-        let target_burn = transaction_fee.checked_div(exhaust_divisor).unwrap_or(0);
-        let block_fee_after_burn = transaction_fee - target_burn;
+        let target_burn = self.transaction_fee.checked_div(exhaust_divisor).unwrap_or(0);
+        let block_fee_after_burn = self.transaction_fee - target_burn;
 
         let mut leader_fee = block_fee_after_burn / num_involved_shards;
         // The extra amount that is burnt from dividing the number of shards involved
@@ -386,7 +415,7 @@ impl TransactionPoolRecord {
             // If the div floor burn accounts for 1 less fee for more than half of number of shards, and ...
             excess_remainder_burn >= num_involved_shards.get() / 2 &&
             // ... if there are enough fees to pay out an additional 1 to all shards
-            (leader_fee + 1) * num_involved_shards.get() <= transaction_fee
+            (leader_fee + 1) * num_involved_shards.get() <= self.transaction_fee
         {
             // Pay each leader 1 more
             leader_fee += 1;
@@ -415,18 +444,18 @@ impl TransactionPoolRecord {
         self
     }
 
-    pub fn set_initial_evidence(&mut self, evidence: Evidence) -> &mut Self {
-        self.atom.evidence = evidence;
+    pub fn set_evidence(&mut self, evidence: Evidence) -> &mut Self {
+        self.evidence = evidence;
         self
     }
 
     pub fn set_transaction_fee(&mut self, transaction_fee: u64) -> &mut Self {
-        self.atom.transaction_fee = transaction_fee;
+        self.transaction_fee = transaction_fee;
         self
     }
 
     pub fn add_evidence(&mut self, committee_info: &CommitteeInfo, qc_id: QcId) -> &mut Self {
-        let evidence = &mut self.atom.evidence;
+        let evidence = &mut self.evidence;
         for (address, evidence_mut) in evidence.iter_mut() {
             if committee_info.includes_substate_address(address) {
                 evidence_mut.qc_ids.insert(qc_id);
@@ -467,9 +496,9 @@ impl TransactionPoolRecord {
         let update = TransactionPoolStatusUpdate {
             block_id: block.block_id,
             block_height: block.height,
-            transaction_id: self.atom.id,
+            transaction_id: self.transaction_id,
             stage: pending_stage,
-            evidence: self.atom.evidence.clone(),
+            evidence: self.evidence.clone(),
             is_ready,
             local_decision: self.current_local_decision(),
         };
@@ -489,7 +518,7 @@ impl TransactionPoolRecord {
     ) -> Result<(), TransactionPoolError> {
         self.add_evidence(foreign_committee_info, foreign_qc_id);
         self.set_remote_decision(decision);
-        tx.transaction_pool_update(&self.atom.id, None, Some(decision), Some(&self.atom.evidence))?;
+        tx.transaction_pool_update(&self.transaction_id, None, Some(decision), Some(&self.evidence))?;
         Ok(())
     }
 
@@ -500,13 +529,13 @@ impl TransactionPoolRecord {
     ) -> Result<(), TransactionPoolError> {
         if self.local_decision.map(|d| d != decision).unwrap_or(true) {
             self.set_local_decision(decision);
-            tx.transaction_pool_update(&self.atom.id, Some(decision), None, None)?;
+            tx.transaction_pool_update(&self.transaction_id, Some(decision), None, None)?;
         }
         Ok(())
     }
 
     pub fn remove<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), TransactionPoolError> {
-        tx.transaction_pool_remove(&self.atom.id)?;
+        tx.transaction_pool_remove(&self.transaction_id)?;
         Ok(())
     }
 
@@ -542,12 +571,13 @@ impl TransactionPoolRecord {
         Ok(transaction)
     }
 
-    pub fn get<TTx: StateStoreReadTransaction>(
+    pub fn get_execution_for_block<TTx: StateStoreReadTransaction>(
+        &self,
         tx: &TTx,
-        id: &TransactionId,
-    ) -> Result<TransactionPoolRecord, TransactionPoolError> {
-        let rec = tx.transaction_pool_get(id)?;
-        Ok(rec)
+        from_block_id: &BlockId,
+    ) -> Result<TransactionExecution, TransactionPoolError> {
+        let exec = TransactionExecution::get_pending_for_block(tx, self.transaction_id(), from_block_id)?;
+        Ok(exec)
     }
 }
 
@@ -612,13 +642,11 @@ mod tests {
 
         fn create_record_with_fee(fee: u64) -> TransactionPoolRecord {
             TransactionPoolRecord {
-                atom: TransactionAtom {
-                    id: TransactionId::new([0; 32]),
-                    decision: Decision::Commit,
-                    evidence: Default::default(),
-                    transaction_fee: fee,
-                    leader_fee: None,
-                },
+                transaction_id: TransactionId::new([0; 32]),
+                original_decision: Decision::Commit,
+                evidence: Default::default(),
+                transaction_fee: fee,
+                leader_fee: None,
                 stage: TransactionPoolStage::New,
                 pending_stage: None,
                 local_decision: None,

@@ -19,7 +19,7 @@ use tari_engine_types::{
     fees::FeeReceipt,
     substate::{Substate, SubstateDiff},
 };
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId, VersionedSubstateId};
+use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
 
 use crate::support::helpers::random_substate_in_shard;
 
@@ -31,23 +31,24 @@ pub fn build_transaction_from(
     resulting_outputs: Vec<VersionedSubstateId>,
 ) -> TransactionRecord {
     let mut tx = TransactionRecord::new(tx);
-
-    if !decision.is_deferred() {
-        let execution = create_execution_result_for_transaction(
-            // We're just building the execution here for DRY purposes, so genesis block id isn't used
-            BlockId::zero(),
-            *tx.id(),
-            decision,
-            fee,
-            resolved_inputs,
-            resulting_outputs.clone(),
-        );
-
-        tx.result = Some(execution.result);
-        tx.resulting_outputs = execution.resulting_outputs;
-        tx.execution_time = Some(execution.execution_time);
-        tx.resolved_inputs = Some(execution.resolved_inputs);
+    if decision.is_abort() {
+        tx.set_current_decision_to_abort("Test aborted");
     }
+
+    let execution = create_execution_result_for_transaction(
+        // We're just building the execution here for DRY purposes, so genesis block id isn't used
+        BlockId::zero(),
+        *tx.id(),
+        decision,
+        fee,
+        resolved_inputs,
+        resulting_outputs.clone(),
+    );
+
+    tx.execution_result = Some(execution.result);
+    tx.resulting_outputs = execution.resulting_outputs;
+    tx.execution_time = Some(execution.execution_time);
+    tx.resolved_inputs = Some(execution.resolved_inputs);
     tx
 }
 
@@ -117,16 +118,6 @@ pub fn build_transaction(
         .collect::<Vec<_>>();
 
     build_transaction_from(tx, decision, fee, vec![], outputs)
-}
-
-pub fn build_transaction_with_inputs<I: IntoIterator<Item = SubstateRequirement>>(
-    decision: Decision,
-    fee: u64,
-    inputs: I,
-) -> TransactionRecord {
-    let k = PrivateKey::default();
-    let tx = Transaction::builder().with_inputs(inputs).sign(&k).build();
-    build_transaction_from(tx, decision, fee, vec![], vec![])
 }
 
 pub fn change_decision(tx: ExecutedTransaction, new_decision: Decision) -> TransactionRecord {

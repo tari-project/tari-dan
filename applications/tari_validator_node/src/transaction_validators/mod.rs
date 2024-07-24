@@ -1,5 +1,6 @@
-//   Copyright 2023 The Tari Project
+//   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
+
 mod claim_fee_instructions;
 mod epoch_range;
 mod fee;
@@ -13,3 +14,9 @@ pub use fee::*;
 pub use has_inputs::*;
 pub use signature::*;
 pub use template_exists::*;
+
+mod error;
+mod with_context;
+
+pub use error::*;
+pub use with_context::*;

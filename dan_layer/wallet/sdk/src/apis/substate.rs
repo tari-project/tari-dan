@@ -14,7 +14,7 @@ use tari_engine_types::{
     transaction_receipt::TransactionReceiptAddress,
     TemplateAddress,
 };
-use tari_transaction::TransactionId;
+use tari_transaction::{SubstateRequirement, TransactionId};
 
 use crate::{
     models::{SubstateModel, VersionedSubstateId},
@@ -79,7 +79,7 @@ where
     pub async fn locate_dependent_substates(
         &self,
         parents: &[SubstateId],
-    ) -> Result<Vec<VersionedSubstateId>, SubstateApiError> {
+    ) -> Result<Vec<SubstateRequirement>, SubstateApiError> {
         let mut substate_addresses = HashMap::with_capacity(parents.len());
 
         for parent_addr in parents {
@@ -151,10 +151,7 @@ where
 
         Ok(substate_addresses
             .into_iter()
-            .map(|(address, version)| VersionedSubstateId {
-                substate_id: address,
-                version,
-            })
+            .map(|(address, version)| SubstateRequirement::with_version(address, version))
             .collect())
     }
 

@@ -25,13 +25,32 @@ pub const ACCOUNT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_arra
 pub const ACCOUNT_NFT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
 ]);
+pub const FAUCET_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([
+    1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+]);
 
 pub fn get_template_builtin(address: &TemplateAddress) -> &'static [u8] {
-    if *address == ACCOUNT_TEMPLATE_ADDRESS {
-        include_bytes!("../templates/account/account.wasm")
-    } else if *address == ACCOUNT_NFT_TEMPLATE_ADDRESS {
-        include_bytes!("../templates/account_nfts/account_nfts.wasm")
-    } else {
-        panic!("Unknown builtin template address")
-    }
+    try_get_template_builtin(address).unwrap_or_else(|| panic!("Unknown builtin template address {address}"))
+}
+
+pub fn try_get_template_builtin(address: &TemplateAddress) -> Option<&'static [u8]> {
+    all_builtin_templates().find(|(a, _)| a == address).map(|(_, b)| b)
+}
+
+pub fn all_builtin_templates() -> impl Iterator<Item = (TemplateAddress, &'static [u8])> {
+    [
+        (
+            ACCOUNT_TEMPLATE_ADDRESS,
+            include_bytes!("../templates/account/account.wasm").as_slice(),
+        ),
+        (
+            ACCOUNT_NFT_TEMPLATE_ADDRESS,
+            include_bytes!("../templates/account_nfts/account_nfts.wasm").as_slice(),
+        ),
+        (
+            FAUCET_TEMPLATE_ADDRESS,
+            include_bytes!("../templates/faucet/faucet.wasm").as_slice(),
+        ),
+    ]
+    .into_iter()
 }

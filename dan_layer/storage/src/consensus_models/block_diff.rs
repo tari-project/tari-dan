@@ -4,9 +4,11 @@
 use std::fmt::Debug;
 
 use tari_dan_common_types::committee::CommitteeInfo;
+use tari_engine_types::substate::SubstateId;
 
 use crate::{
     consensus_models::{substate_change::SubstateChange, BlockId},
+    StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
 };
@@ -66,5 +68,13 @@ impl BlockDiff {
 
     pub fn remove<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.block_diffs_remove(&self.block_id)
+    }
+
+    pub fn get_for_substate<TTx: StateStoreReadTransaction>(
+        tx: &TTx,
+        block_id: &BlockId,
+        substate_id: &SubstateId,
+    ) -> Result<SubstateChange, StorageError> {
+        tx.block_diffs_get_last_change_for_substate(block_id, substate_id)
     }
 }

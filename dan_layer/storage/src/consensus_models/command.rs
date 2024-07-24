@@ -3,7 +3,6 @@
 
 use std::{
     cmp::Ordering,
-    collections::HashMap,
     fmt::{Display, Formatter},
 };
 
@@ -11,8 +10,6 @@ use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::SubstateAddress;
 use tari_transaction::{TransactionId, VersionedSubstateId};
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
 use super::{
     ExecutedTransaction,
@@ -29,7 +26,11 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct Evidence {
     evidence: IndexMap<SubstateAddress, ShardEvidence>,
 }
@@ -42,34 +43,31 @@ impl Evidence {
     }
 
     pub fn from_inputs_and_outputs(
-        transaction_id: TransactionId,
         resolved_inputs: &[VersionedSubstateIdLockIntent],
         resulting_outputs: &[VersionedSubstateId],
     ) -> Self {
-        let mut deduped_evidence = HashMap::new();
-        deduped_evidence.extend(resolved_inputs.iter().map(|input| {
-            (input.to_substate_address(), ShardEvidence {
-                qc_ids: IndexSet::new(),
-                lock: input.lock_flag(),
+        resolved_inputs
+            .iter()
+            .map(|input| {
+                (input.to_substate_address(), ShardEvidence {
+                    qc_ids: IndexSet::new(),
+                    lock: input.lock_flag(),
+                })
             })
-        }));
-
-        let tx_reciept_address = SubstateAddress::for_transaction_receipt(transaction_id.into_receipt_address());
-        deduped_evidence.extend(
-            resulting_outputs
+            .chain(
+                resulting_outputs
                 .iter()
+                // Exclude transaction receipt from evidence since all involved shards will commit it
+                .filter(|output| !output.substate_id.is_transaction_receipt())
                 .map(|output| output.to_substate_address())
-                // Exclude transaction receipt address from evidence since all involved shards will commit it
-                .filter(|output| *output != tx_reciept_address)
                 .map(|output| {
                     (output, ShardEvidence {
                         qc_ids: IndexSet::new(),
                         lock: SubstateLockFlag::Write,
                     })
                 }),
-        );
-
-        deduped_evidence.into_iter().collect()
+            )
+            .collect()
     }
 
     pub fn all_shards_justified(&self) -> bool {
@@ -133,7 +131,11 @@ impl FromIterator<(SubstateAddress, ShardEvidence)> for Evidence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct ShardEvidence {
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub qc_ids: IndexSet<QcId>,
@@ -159,7 +161,11 @@ impl ShardEvidence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct TransactionAtom {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub id: TransactionId,
@@ -171,16 +177,6 @@ pub struct TransactionAtom {
 }
 
 impl TransactionAtom {
-    pub fn deferred(transaction_id: TransactionId) -> Self {
-        Self {
-            id: transaction_id,
-            decision: Decision::Deferred,
-            evidence: Evidence::empty(),
-            transaction_fee: 0,
-            leader_fee: None,
-        }
-    }
-
     pub fn id(&self) -> &TransactionId {
         &self.id
     }
@@ -222,7 +218,11 @@ impl Display for TransactionAtom {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub enum Command {
     /// Command to prepare a transaction.
     Prepare(TransactionAtom),

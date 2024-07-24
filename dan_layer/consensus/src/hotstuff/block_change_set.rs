@@ -121,7 +121,7 @@ impl ProposedBlockChangeSet {
             block_height: self.block.height,
             transaction_id: *transaction.transaction_id(),
             stage: next_stage,
-            evidence: transaction.atom().evidence.clone(),
+            evidence: transaction.evidence().clone(),
             is_ready,
             local_decision: transaction.current_decision(),
         });

@@ -80,7 +80,8 @@ pub enum RuntimeError {
     #[error("Substate {address} is not owned by {requested_owner}")]
     SubstateNotOwned {
         address: SubstateId,
-        requested_owner: SubstateId,
+        // To reduce the size of this variant, we box one of the fields
+        requested_owner: Box<SubstateId>,
     },
     #[error("Expected lock {lock_id} to lock {expected_type} but it locks {address}")]
     LockSubstateMismatch {
@@ -149,7 +150,8 @@ pub enum RuntimeError {
     #[error("Access Denied: attempt to set state on component {attempted_on} from another component {attempted_by}")]
     AccessDeniedSetComponentState {
         attempted_on: SubstateId,
-        attempted_by: SubstateId,
+        // To reduce the size of this variant, we box one of the fields
+        attempted_by: Box<SubstateId>,
     },
     #[error("Resource Auth Hook Denied Access for action {action_ident}: {details}")]
     AccessDeniedAuthHook { action_ident: ActionIdent, details: String },

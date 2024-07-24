@@ -20,11 +20,11 @@ use tari_crypto::{
 };
 use tari_dan_common_types::crypto::create_key_pair_from_seed;
 use tari_dan_engine::{
-    bootstrap_state,
     fees::{FeeModule, FeeTable},
     runtime::{AuthParams, RuntimeModule},
     state_store::{
         memory::{MemoryStateStore, MemoryWriteTransaction},
+        new_memory_store,
         AtomicDb,
         StateWriter,
     },
@@ -95,11 +95,11 @@ impl TemplateTest {
         let package = builder.build();
 
         let test = Self::from_package(package);
-        test.bootstrap_faucet(100_000.into());
+        test.bootstrap_state(100_000.into());
         test
     }
 
-    pub fn from_package(package: Package) -> Self {
+    fn from_package(package: Package) -> Self {
         let secret_key =
             RistrettoSecretKey::from_hex("8a39567509bf2f7074e5fd153337405292cdc9f574947313b62fbf8fb4cffc02").unwrap();
 
@@ -116,13 +116,6 @@ impl TemplateTest {
             }
         }
 
-        let state_store = MemoryStateStore::default();
-        {
-            let mut tx = state_store.write_access().unwrap();
-            bootstrap_state(&mut tx).unwrap();
-            tx.commit().unwrap();
-        }
-
         let mut virtual_substates = VirtualSubstates::new();
         virtual_substates.insert(VirtualSubstateId::CurrentEpoch, VirtualSubstate::CurrentEpoch(0));
 
@@ -133,7 +126,7 @@ impl TemplateTest {
             secret_key,
             name_to_template,
             last_outputs: HashSet::new(),
-            state_store,
+            state_store: new_memory_store(),
             virtual_substates,
             enable_fees: false,
             fee_table: FeeTable {
@@ -146,7 +139,7 @@ impl TemplateTest {
         }
     }
 
-    pub fn bootstrap_faucet(&self, amount: Amount) {
+    pub fn bootstrap_state(&self, amount: Amount) {
         let mut tx = self.state_store.write_access().unwrap();
         Self::initial_tari_faucet_supply(
             &mut tx,
@@ -480,7 +473,6 @@ impl TemplateTest {
 
         {
             let access = self.state_store.read_access().unwrap();
-
             transaction.filled_inputs_mut().extend(
                 access
                     .iter_raw()

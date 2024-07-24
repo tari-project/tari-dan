@@ -8,7 +8,6 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
-use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_state_tree::StateTreeError;
 use tari_transaction::{TransactionId, VersionedSubstateIdError};
 
@@ -45,8 +44,6 @@ pub enum HotStuffError {
     DecisionMismatch { block_id: BlockId, pool: &'static str },
     #[error("Not the leader. {details}")]
     NotTheLeader { details: String },
-    #[error("Merkle proof error: {0}")]
-    BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
     #[error("Epoch manager error: {0}")]
     EpochManagerError(anyhow::Error),
     #[error("State manager error: {0}")]
@@ -183,8 +180,6 @@ pub enum ProposalValidationError {
     QCInvalidSignature { qc: QuorumCertificate },
     #[error("Quorum was not reached: {qc}")]
     QuorumWasNotReached { qc: QuorumCertificate },
-    #[error("Merkle proof error: {0}")]
-    BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
     #[error("Invalid network in block {block_id}: expected {expected_network}, given {block_network}")]
     InvalidNetwork {
         expected_network: String,
