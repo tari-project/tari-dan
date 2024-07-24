@@ -36,6 +36,7 @@ use tari_hashing::TransactionSecureNonceKdfDomain;
 use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
     models::{
+        Amount,
         ConfidentialOutputStatement,
         ConfidentialStatement,
         EncryptedData,
@@ -54,8 +55,10 @@ use crate::{
 };
 
 pub fn create_confidential_output_statement(
-    output_statement: &ConfidentialProofStatement,
+    output_statement: Option<&ConfidentialProofStatement>,
+    output_revealed_amount: Amount,
     change_statement: Option<&ConfidentialProofStatement>,
+    change_revealed_amount: Amount,
 ) -> Result<ConfidentialOutputStatement, ConfidentialProofError> {
     let proof_change_statement = change_statement
         .as_ref()
@@ -78,38 +81,34 @@ pub fn create_confidential_output_statement(
             })
         })
         .transpose()?;
-
     let confidential_output_value = output_statement
-        .amount
+        .as_ref()
+        .map(|o| o.amount)
+        .unwrap_or_default()
         .as_u64_checked()
         .ok_or(ConfidentialProofError::NegativeAmount)?;
 
-    let proof_output_statement = if confidential_output_value == 0 {
-        None
-    } else {
-        let commitment = output_statement.to_commitment();
-        let statement = Some(ConfidentialStatement {
+    let proof_output_statement = output_statement.as_ref().map(|stmt| {
+        let commitment = stmt.to_commitment();
+        ConfidentialStatement {
             commitment: copy_fixed(commitment.as_bytes()),
-            sender_public_nonce: copy_fixed(output_statement.sender_public_nonce.as_bytes()),
-            encrypted_data: output_statement.encrypted_data.clone(),
-            minimum_value_promise: output_statement.minimum_value_promise,
-            viewable_balance_proof: output_statement.resource_view_key.as_ref().map(|view_key| {
-                create_viewable_balance_proof(&output_statement.mask, confidential_output_value, &commitment, view_key)
+            sender_public_nonce: copy_fixed(stmt.sender_public_nonce.as_bytes()),
+            encrypted_data: stmt.encrypted_data.clone(),
+            minimum_value_promise: stmt.minimum_value_promise,
+            viewable_balance_proof: stmt.resource_view_key.as_ref().map(|view_key| {
+                create_viewable_balance_proof(&stmt.mask, confidential_output_value, &commitment, view_key)
             }),
-        });
+        }
+    });
 
-        statement
-    };
-
-    let output_range_proof =
-        generate_extended_bullet_proof(Some(output_statement).filter(|s| !s.amount.is_zero()), change_statement)?;
+    let output_range_proof = generate_extended_bullet_proof(output_statement, change_statement)?;
 
     Ok(ConfidentialOutputStatement {
         output_statement: proof_output_statement,
         change_statement: proof_change_statement,
         range_proof: output_range_proof,
-        output_revealed_amount: output_statement.reveal_amount,
-        change_revealed_amount: change_statement.map(|stmt| stmt.reveal_amount).unwrap_or_default(),
+        output_revealed_amount,
+        change_revealed_amount,
     })
 }
 
@@ -314,16 +313,17 @@ mod tests {
         fn create_valid_proof(amount: Amount, minimum_value_promise: u64) -> ConfidentialOutputStatement {
             let mask = RistrettoSecretKey::random(&mut OsRng);
             create_confidential_output_statement(
-                &ConfidentialProofStatement {
+                Some(&ConfidentialProofStatement {
                     amount,
                     minimum_value_promise,
                     mask,
                     sender_public_nonce: Default::default(),
-                    reveal_amount: Default::default(),
                     encrypted_data: EncryptedData([0u8; EncryptedData::size()]),
                     resource_view_key: None,
-                },
+                }),
+                Default::default(),
                 None,
+                Default::default(),
             )
             .unwrap()
         }

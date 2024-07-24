@@ -21,7 +21,6 @@ fn create_output_statement(value: Amount, view_key: &RistrettoPublicKey) -> Conf
         sender_public_nonce: Default::default(),
         minimum_value_promise: 0,
         encrypted_data: Default::default(),
-        reveal_amount: Default::default(),
         resource_view_key: Some(view_key.clone()),
     }
 }
@@ -44,7 +43,8 @@ fn it_errors_no_balance_proof_with_view_key() {
     let (_, view_key) = keypair_from_seed(1);
     let output_statement = create_output_statement(123.into(), &view_key);
 
-    let proof = create_confidential_output_statement(&output_statement, None).unwrap();
+    let proof =
+        create_confidential_output_statement(Some(&output_statement), Amount::zero(), None, Amount::zero()).unwrap();
     let output_statement = proof.output_statement.as_ref().unwrap();
     let viewable_balance_proof = proof
         .output_statement
@@ -69,7 +69,8 @@ fn it_generates_a_valid_proof() {
     let output_statement = create_output_statement(123.into(), &view_key);
 
     let timer = Instant::now();
-    let proof = create_confidential_output_statement(&output_statement, None).unwrap();
+    let proof =
+        create_confidential_output_statement(Some(&output_statement), Amount::zero(), None, Amount::zero()).unwrap();
     let gen_proof_time = timer.elapsed();
 
     let output_statement = proof.output_statement.as_ref().unwrap();
