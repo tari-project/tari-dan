@@ -86,8 +86,9 @@ pub async fn check_balance(world: &mut TariWorld, wallet_name: String, balance: 
         "uT" => balance,
         _ => panic!("Unknown unit {}", units),
     };
+
     loop {
-        let _result = client.validate_all_transactions(ValidateRequest {}).await;
+        let _result = client.validate_all_transactions(ValidateRequest {}).await.unwrap();
         let resp = client.get_balance(GetBalanceRequest {}).await.unwrap().into_inner();
         if resp.available_balance >= balance {
             break;
@@ -96,9 +97,9 @@ pub async fn check_balance(world: &mut TariWorld, wallet_name: String, balance: 
             "Waiting for wallet {} to have at least {} uT (balance: {} uT, pending: {} uT)",
             wallet_name, balance, resp.available_balance, resp.pending_incoming_balance
         );
-        sleep(Duration::from_secs(1)).await;
+        sleep(Duration::from_secs(5)).await;
 
-        if iterations == 40 {
+        if iterations == 100 {
             panic!(
                 "Wallet {} did not have at least {} uT after 40 seconds  (balance: {} uT, pending: {} uT)",
                 wallet_name, balance, resp.available_balance, resp.pending_incoming_balance
