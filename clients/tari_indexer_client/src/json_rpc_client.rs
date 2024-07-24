@@ -101,9 +101,9 @@ impl IndexerJsonRpcClient {
             filter_by_template: req.filter_by_template.map(|t| t.to_string()),
             filter_by_type: req.filter_by_type,
             limit: req.limit,
-            offset: req.offset
+            offset: req.offset,
         };
-        
+
         self.send_request("list_substates", params).await
     }
 
