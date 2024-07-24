@@ -58,6 +58,27 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Comm
     let total_output_revealed_amount =
         withdraw_proof.output_proof.output_revealed_amount + withdraw_proof.output_proof.change_revealed_amount;
 
+    // Balance proof not required if only revealed funds are transferred
+    if withdraw_proof.is_revealed_only() {
+        if input_revealed_amount.checked_sub(total_output_revealed_amount) != Some(Amount::zero()) {
+            return Err(ResourceError::InvalidBalanceProof {
+                details: "Incorrect balance for revealed only withdraw proof".to_string(),
+            });
+        }
+
+        // This only contains revealed funds transfer, so a simple balance check is all that's needed.
+        // The given zero signature _would_ be valid (public_excess == (0)), however the signature implementation
+        // correctly disallows the zero key. See [ConfidentialWithdrawProof::revealed_withdraw].
+        return Ok(ValidatedConfidentialWithdrawProof {
+            output: None,
+            change_output: validated_proof.change_output,
+            range_proof: BulletRangeProof(withdraw_proof.output_proof.range_proof),
+            input_revealed_amount,
+            output_revealed_amount: withdraw_proof.output_proof.output_revealed_amount,
+            change_revealed_amount: withdraw_proof.output_proof.change_revealed_amount,
+        });
+    }
+
     // k.G + v.H or 0.G if None
     let output_commitment = validated_proof
         .output
@@ -92,6 +113,12 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Comm
             .as_ref()
             .map(|output| output.commitment.as_public_key())
             .unwrap_or(&PublicKey::default());
+
+    const LOG_TARGET: &str = "tari::dan::engine::confidential::withdraw";
+    log::error!(target: LOG_TARGET, "🐞public_excess: {public_excess}");
+    log::error!(target: LOG_TARGET, "🐞public_nonce: {}", balance_proof.get_public_nonce());
+    log::error!(target: LOG_TARGET, "🐞input_revealed_amount: {input_revealed_amount}");
+    log::error!(target: LOG_TARGET, "🐞total_output_revealed_amount: {total_output_revealed_amount}");
 
     let challenge = challenges::confidential_withdraw64(
         &public_excess,

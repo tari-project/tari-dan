@@ -25,10 +25,17 @@ use crate::{
 pub fn create_withdraw_proof(
     inputs: &[ConfidentialOutputMaskAndValue],
     input_revealed_amount: Amount,
-    output_statement: &ConfidentialProofStatement,
+    output_statement: Option<&ConfidentialProofStatement>,
+    output_revealed_amount: Amount,
     change_statement: Option<&ConfidentialProofStatement>,
+    change_revealed_amount: Amount,
 ) -> Result<ConfidentialWithdrawProof, WalletCryptoError> {
-    let output_proof = create_confidential_output_statement(output_statement, change_statement)?;
+    let output_proof = create_confidential_output_statement(
+        output_statement,
+        output_revealed_amount,
+        change_statement,
+        change_revealed_amount,
+    )?;
     let (input_commitments, agg_input_mask) = inputs.iter().fold(
         (Vec::with_capacity(inputs.len()), RistrettoSecretKey::default()),
         |(mut commitments, agg_input), input| {
@@ -44,7 +51,7 @@ pub fn create_withdraw_proof(
     let balance_proof = generate_balance_proof(
         &agg_input_mask,
         input_revealed_amount,
-        &output_statement.mask,
+        output_statement.as_ref().map(|o| &o.mask),
         change_statement.as_ref().map(|ch| &ch.mask),
         output_revealed_amount,
     );
@@ -139,17 +146,28 @@ fn create_commitment(mask: &RistrettoSecretKey, value: u64) -> PedersenCommitmen
 fn generate_balance_proof(
     input_mask: &RistrettoSecretKey,
     input_revealed_amount: Amount,
-    output_mask: &RistrettoSecretKey,
+    output_mask: Option<&RistrettoSecretKey>,
     change_mask: Option<&RistrettoSecretKey>,
     output_reveal_amount: Amount,
 ) -> BalanceProofSignature {
-    let secret_excess = input_mask - output_mask - change_mask.unwrap_or(&RistrettoSecretKey::default());
+    let secret_excess = input_mask -
+        output_mask.unwrap_or(&RistrettoSecretKey::default()) -
+        change_mask.unwrap_or(&RistrettoSecretKey::default());
+    if secret_excess == RistrettoSecretKey::default() {
+        // This is a revealed only proof
+        return BalanceProofSignature::zero();
+    }
     let excess = RistrettoPublicKey::from_secret_key(&secret_excess);
     let (nonce, public_nonce) = RistrettoPublicKey::random_keypair(&mut OsRng);
-    let challenge =
+    const LOG_TARGET: &str = "tari::dan::wallet::confidential::withdraw";
+    log::error!(target: LOG_TARGET, "🐞W public_excess: {excess}");
+    log::error!(target: LOG_TARGET, "🐞W public_nonce: {}", public_nonce);
+    log::error!(target: LOG_TARGET, "🐞W input_revealed_amount: {input_revealed_amount}");
+    log::error!(target: LOG_TARGET, "🐞W output_revealed_amount: {output_reveal_amount}");
+    let message =
         challenges::confidential_withdraw64(&excess, &public_nonce, input_revealed_amount, output_reveal_amount);
 
-    let sig = RistrettoSchnorr::sign_raw_uniform(&secret_excess, nonce, &challenge).unwrap();
+    let sig = RistrettoSchnorr::sign_raw_uniform(&secret_excess, nonce, &message).unwrap();
     BalanceProofSignature::try_from_parts(sig.get_public_nonce().as_bytes(), sig.get_signature().as_bytes()).unwrap()
 }
 

@@ -15,7 +15,7 @@ use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-    models::{Amount, ComponentAddress, EncryptedData, ResourceAddress},
+    models::{Amount, ComponentAddress, ResourceAddress},
 };
 use tari_transaction::Transaction;
 
@@ -304,13 +304,7 @@ where
             // No change necessary
             None
         } else {
-            let statement = self.create_confidential_proof_statement(
-                &account_public_key,
-                confidential_change,
-                // We always withdraw the exact amount of revealed required
-                Amount::zero(),
-                None,
-            )?;
+            let statement = self.create_confidential_proof_statement(&account_public_key, confidential_change, None)?;
 
             self.outputs_api.add_output(ConfidentialOutputModel {
                 account_address: account.address.clone(),
@@ -334,16 +328,11 @@ where
         let fee_withdraw_proof = self.crypto_api.generate_withdraw_proof(
             fee_inputs_to_spend.confidential.as_slice(),
             fee_inputs_to_spend.revealed,
-            &ConfidentialProofStatement {
-                amount: Amount::zero(),
-                mask: PrivateKey::default(),
-                sender_public_nonce: PublicKey::default(),
-                encrypted_data: EncryptedData::default(),
-                minimum_value_promise: 0,
-                reveal_amount: params.max_fee,
-                resource_view_key: None,
-            },
+            None,
+            params.max_fee,
             maybe_fee_change_statement.as_ref(),
+            // We always withdraw the exact amount of revealed required
+            Amount::zero(),
         )?;
 
         // Reserve and lock input funds
@@ -395,7 +384,6 @@ where
         let output_statement = self.create_confidential_proof_statement(
             &params.destination_public_key,
             params.confidential_amount(),
-            params.revealed_amount(),
             resource_view_key.clone(),
         )?;
 
@@ -416,7 +404,6 @@ where
             let statement = self.create_confidential_proof_statement(
                 &account_public_key,
                 change_confidential_amount,
-                Amount::zero(),
                 resource_view_key,
             )?;
 
@@ -443,8 +430,10 @@ where
         let proof = self.crypto_api.generate_withdraw_proof(
             &inputs_to_spend.confidential,
             inputs_to_spend.revealed,
-            &output_statement,
+            Some(&output_statement).filter(|o| !o.amount.is_zero()),
+            params.revealed_amount(),
             maybe_change_statement.as_ref(),
+            Amount::zero(),
         )?;
 
         let mut builder = Transaction::builder()
@@ -495,7 +484,6 @@ where
         &self,
         dest_public_key: &PublicKey,
         confidential_amount: Amount,
-        reveal_amount: Amount,
         resource_view_key: Option<PublicKey>,
     ) -> Result<ConfidentialProofStatement, ConfidentialTransferApiError> {
         let mask = if confidential_amount.is_zero() {
@@ -520,7 +508,6 @@ where
             sender_public_nonce: public_nonce,
             encrypted_data,
             minimum_value_promise: 0,
-            reveal_amount,
             resource_view_key,
         })
     }

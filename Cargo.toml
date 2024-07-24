@@ -162,8 +162,8 @@ convert_case = "0.6.0"
 cucumber = "0.21.0"
 d3ne = { git = "https://github.com/stringhandler/d3ne-rs.git", tag = "v0.8.0-pre.3" }
 dashmap = "5.5.0"
-diesel = { version = "2.1", default-features = false }
-diesel_migrations = "2.1"
+diesel = { version = "<=2.1.6", default-features = false }
+diesel_migrations = "<=2.1.0"
 digest = "0.10"
 dirs = "4.0.0"
 env_logger = "0.10.0"

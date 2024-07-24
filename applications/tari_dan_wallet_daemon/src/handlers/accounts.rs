@@ -363,7 +363,6 @@ pub async fn handle_reveal_funds(
             sender_public_nonce: public_nonce,
             minimum_value_promise: 0,
             encrypted_data,
-            reveal_amount: amount_to_reveal,
             resource_view_key: None,
         };
 
@@ -371,9 +370,14 @@ pub async fn handle_reveal_funds(
             .confidential_outputs_api()
             .resolve_output_masks(inputs, key_manager::TRANSACTION_BRANCH)?;
 
-        let reveal_proof =
-            sdk.confidential_crypto_api()
-                .generate_withdraw_proof(&inputs, Amount::zero(), &output_statement, None)?;
+        let reveal_proof = sdk.confidential_crypto_api().generate_withdraw_proof(
+            &inputs,
+            Amount::zero(),
+            Some(&output_statement),
+            amount_to_reveal,
+            None,
+            Amount::zero(),
+        )?;
 
         info!(
             target: LOG_TARGET,
@@ -590,15 +594,16 @@ pub async fn handle_claim_burn(
         sender_public_nonce: output_public_nonce,
         minimum_value_promise: 0,
         encrypted_data,
-        reveal_amount: max_fee,
         resource_view_key: None,
     };
 
     let reveal_proof = sdk.confidential_crypto_api().generate_withdraw_proof(
         &[unmasked_output],
         Amount::zero(),
-        &output_statement,
+        Some(&output_statement).filter(|o| !o.amount.is_zero()),
+        max_fee,
         None,
+        Amount::zero(),
     )?;
 
     let instructions = vec![Instruction::ClaimBurn {

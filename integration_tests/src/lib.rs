@@ -35,7 +35,7 @@ use miner::MinerProcess;
 use rand::rngs::OsRng;
 use tari_common::configuration::Network;
 use tari_common_types::{
-    tari_address::TariAddress,
+    tari_address::{TariAddress, TariAddressFeatures},
     types::{PrivateKey, PublicKey},
 };
 use tari_core::{
@@ -259,8 +259,11 @@ impl TariWorld {
 impl Default for TariWorld {
     fn default() -> Self {
         let wallet_private_key = PrivateKey::random(&mut OsRng);
-        let default_payment_address =
-            TariAddress::new(PublicKey::from_secret_key(&wallet_private_key), Network::LocalNet);
+        let default_payment_address = TariAddress::new_single_address(
+            PublicKey::from_secret_key(&wallet_private_key),
+            Network::LocalNet,
+            TariAddressFeatures::create_interactive_and_one_sided(),
+        );
         Self {
             base_nodes: IndexMap::new(),
             wallets: IndexMap::new(),
@@ -279,7 +282,7 @@ impl Default for TariWorld {
             addresses: IndexMap::new(),
             num_databases_saved: 0,
             account_keys: IndexMap::new(),
-            key_manager: create_memory_db_key_manager(),
+            key_manager: create_memory_db_key_manager().unwrap(),
             wallet_keys: IndexMap::new(),
             claim_public_keys: IndexMap::new(),
             wallet_daemons: IndexMap::new(),
