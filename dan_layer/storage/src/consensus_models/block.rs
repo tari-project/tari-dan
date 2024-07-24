@@ -606,7 +606,7 @@ impl Block {
             });
         }
 
-        // block_diff.remove(tx)?;
+        block_diff.remove(tx)?;
 
         for change in block_diff.into_changes() {
             match change {
@@ -922,7 +922,7 @@ impl Block {
         Ok(transactions
             .into_iter()
             // TODO: following two should never be None
-            .filter_map(|t_rec| t_rec.result)
+            .filter_map(|t_rec| t_rec.execution_result)
             .filter_map(|t_res| t_res.finalize.into_accept())
             .collect())
     }

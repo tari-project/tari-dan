@@ -93,7 +93,7 @@ create table block_diffs
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
-create index block_diffs_idx_block_id on block_diffs (block_id);
+create index block_diffs_idx_block_id_substate_id on block_diffs (block_id, substate_id);
 
 create table substates
 (
@@ -251,9 +251,9 @@ create table transaction_pool
     original_decision   text      not null,
     local_decision      text      null,
     remote_decision     text      null,
-    evidence            text      not null,
+    evidence            text      null,
     remote_evidence     text      null,
-    transaction_fee     bigint    not null,
+    transaction_fee     bigint    null,
     leader_fee          bigint    null,
     global_exhaust_burn bigint    null,
     stage               text      not null,
@@ -392,8 +392,8 @@ CREATE TABLE transaction_pool_history
     original_decision   text      not null,
     local_decision      text      null,
     remote_decision     text      null,
-    evidence            text      not null,
-    transaction_fee     bigint    not null,
+    evidence            text      null,
+    transaction_fee     bigint    null,
     leader_fee          bigint    null,
     global_exhaust_burn bigint    null,
     stage               text      not null,

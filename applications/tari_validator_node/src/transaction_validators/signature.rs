@@ -1,32 +1,31 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use async_trait::async_trait;
 use log::warn;
 use tari_transaction::Transaction;
 
-use crate::p2p::services::mempool::{MempoolError, Validator};
+use crate::{transaction_validators::TransactionValidationError, validator::Validator};
 
 const LOG_TARGET: &str = "tari::dan::mempool::validators::signature";
 
 #[derive(Debug)]
 pub struct TransactionSignatureValidator;
 
-#[async_trait]
 impl Validator<Transaction> for TransactionSignatureValidator {
-    type Error = MempoolError;
+    type Context = ();
+    type Error = TransactionValidationError;
 
-    async fn validate(&self, transaction: &Transaction) -> Result<(), MempoolError> {
+    fn validate(&self, _context: &(), transaction: &Transaction) -> Result<(), TransactionValidationError> {
         if transaction.signatures().is_empty() {
             warn!(target: LOG_TARGET, "TransactionSignatureValidator - FAIL: No signatures");
-            return Err(MempoolError::TransactionNotSigned {
+            return Err(TransactionValidationError::TransactionNotSigned {
                 transaction_id: *transaction.id(),
             });
         }
 
         if !transaction.verify_all_signatures() {
             warn!(target: LOG_TARGET, "TransactionSignatureValidator - FAIL: Invalid signature");
-            return Err(MempoolError::InvalidSignature);
+            return Err(TransactionValidationError::InvalidSignature);
         }
 
         Ok(())

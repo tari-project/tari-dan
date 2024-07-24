@@ -645,12 +645,16 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     if *component_lock.address() != component_address {
                         return Err(RuntimeError::AccessDeniedSetComponentState {
                             attempted_on: component_address.into(),
-                            attempted_by: component_lock.address().clone(),
+                            attempted_by: Box::new(component_lock.address().clone()),
                         });
                     }
 
                     state.modify_component_with(&component_lock, |component| {
+                        if component_state == *component.state() {
+                            return false;
+                        }
                         component.body.set(component_state);
+                        true
                     })?;
 
                     Ok(InvokeResult::unit())
@@ -690,7 +694,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         .require_ownership(ComponentAction::SetAccessRules, component.as_ownership())?;
 
                     state.modify_component_with(&component_lock, |component| {
+                        if access_rules == component.access_rules {
+                            return false;
+                        }
                         component.set_access_rules(access_rules);
+                        true
                     })?;
 
                     Ok::<_, RuntimeError>(())
@@ -2213,25 +2221,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         })?;
 
         Ok(())
-    }
-
-    fn create_free_test_coins(
-        &self,
-        revealed_amount: Amount,
-        output: Option<ConfidentialOutput>,
-    ) -> Result<BucketId, RuntimeError> {
-        let resource = ResourceContainer::confidential(
-            CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-            output.map(|o| (o.commitment.clone(), o)),
-            revealed_amount,
-        );
-
-        self.tracker.write_with(|state| {
-            let bucket_id = state.new_bucket_id();
-            state.new_bucket(bucket_id, resource)?;
-            state.set_last_instruction_output(IndexedValue::from_type(&bucket_id)?);
-            Ok::<_, RuntimeError>(bucket_id)
-        })
     }
 
     fn set_fee_checkpoint(&self) -> Result<(), RuntimeError> {

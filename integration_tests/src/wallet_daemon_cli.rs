@@ -699,7 +699,7 @@ pub async fn confidential_transfer(
         resource_address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
         proof_from_badge_resource: None,
         dry_run: false,
-        input_selection: ConfidentialTransferInputSelection::ConfidentialOnly,
+        input_selection: ConfidentialTransferInputSelection::PreferRevealed,
         output_to_revealed: false,
     };
 

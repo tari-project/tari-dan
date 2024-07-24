@@ -40,7 +40,12 @@ use tari_dan_engine::{
 use tari_dan_storage::global::{DbTemplate, DbTemplateType, DbTemplateUpdate, GlobalDb, TemplateStatus};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_engine_types::calculate_template_binary_hash;
-use tari_template_builtin::{get_template_builtin, ACCOUNT_NFT_TEMPLATE_ADDRESS, ACCOUNT_TEMPLATE_ADDRESS};
+use tari_template_builtin::{
+    get_template_builtin,
+    ACCOUNT_NFT_TEMPLATE_ADDRESS,
+    ACCOUNT_TEMPLATE_ADDRESS,
+    FAUCET_TEMPLATE_ADDRESS,
+};
 use tari_template_lib::models::TemplateAddress;
 
 use super::TemplateConfig;
@@ -90,28 +95,28 @@ impl<TAddr: NodeAddressable> TemplateManager<TAddr> {
 
     fn load_builtin_templates() -> HashMap<TemplateAddress, Template> {
         // for now, we only load the "account" template
-        let mut builtin_templates = HashMap::new();
+        let mut builtin_templates = HashMap::with_capacity(3);
 
         // get the builtin WASM code of the account template
         let compiled_code = get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS);
-        let template = Self::load_builtin_template("account", ACCOUNT_TEMPLATE_ADDRESS, compiled_code.to_vec());
+        let template = Self::convert_code_to_template("Account", ACCOUNT_TEMPLATE_ADDRESS, compiled_code.to_vec());
         builtin_templates.insert(ACCOUNT_TEMPLATE_ADDRESS, template);
 
         // get the builtin WASM code of the account nft template
         let compiled_code = get_template_builtin(&ACCOUNT_NFT_TEMPLATE_ADDRESS);
-        let template = Self::load_builtin_template("account_nft", ACCOUNT_NFT_TEMPLATE_ADDRESS, compiled_code.to_vec());
+        let template =
+            Self::convert_code_to_template("AccountNft", ACCOUNT_NFT_TEMPLATE_ADDRESS, compiled_code.to_vec());
         builtin_templates.insert(ACCOUNT_NFT_TEMPLATE_ADDRESS, template);
+
+        // get the builtin WASM code of the account nft template
+        let compiled_code = get_template_builtin(&FAUCET_TEMPLATE_ADDRESS);
+        let template = Self::convert_code_to_template("XtrFaucet", FAUCET_TEMPLATE_ADDRESS, compiled_code.to_vec());
+        builtin_templates.insert(FAUCET_TEMPLATE_ADDRESS, template);
 
         builtin_templates
     }
 
-    fn load_builtin_template(name: &str, address: TemplateAddress, compiled_code: Vec<u8>) -> Template {
-        let compiled_code_len = compiled_code.len();
-        info!(
-            target: LOG_TARGET,
-            "Loading builtin {} template: {} bytes", name, compiled_code_len
-        );
-
+    fn convert_code_to_template(name: &str, address: TemplateAddress, compiled_code: Vec<u8>) -> Template {
         // build the template object of the account template
         let binary_sha = calculate_template_binary_hash(&compiled_code);
         Template {
@@ -119,7 +124,7 @@ impl<TAddr: NodeAddressable> TemplateManager<TAddr> {
                 name: name.to_string(),
                 address,
                 url: "".to_string(),
-                binary_sha: binary_sha.to_vec(),
+                binary_sha,
                 height: 0,
             },
             executable: TemplateExecutable::CompiledWasm(compiled_code),

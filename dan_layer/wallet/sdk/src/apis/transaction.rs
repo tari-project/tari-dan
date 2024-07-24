@@ -333,11 +333,22 @@ where
             }
         }
 
-        for (addr, substate) in rest {
+        for (id, substate) in rest {
+            if id.is_vault() {
+                if let Some(vault) = tx.vaults_get(id).optional()? {
+                    // The vault for an account may have been mutated without mutating the account component
+                    // If we know this vault, set it as a child of the account
+                    tx.substates_upsert_child(transaction_id, vault.account_address, VersionedSubstateId {
+                        substate_id: id.clone(),
+                        version: substate.version(),
+                    })?;
+                    continue;
+                }
+            }
             tx.substates_upsert_root(
                 transaction_id,
                 VersionedSubstateId {
-                    substate_id: addr.clone(),
+                    substate_id: id.clone(),
                     version: substate.version(),
                 },
                 None,

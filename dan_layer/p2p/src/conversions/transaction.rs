@@ -27,11 +27,7 @@ use tari_bor::decode_exact;
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tari_dan_common_types::Epoch;
-use tari_engine_types::{
-    confidential::{ConfidentialClaim, ConfidentialOutput},
-    instruction::Instruction,
-    substate::SubstateId,
-};
+use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateId};
 use tari_template_lib::{
     args::Arg,
     crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
@@ -250,10 +246,6 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
                 .map_err(|e| anyhow!("claim_validator_fees_validator_public_key: {}", e))?,
             },
             InstructionType::DropAllProofsInWorkspace => Instruction::DropAllProofsInWorkspace,
-            InstructionType::CreateFreeTestCoins => Instruction::CreateFreeTestCoins {
-                revealed_amount: request.create_free_test_coins_amount.try_into()?,
-                output: tari_bor::decode(&request.create_free_test_coins_output_blob)?,
-            },
         };
 
         Ok(instruction)
@@ -320,19 +312,6 @@ impl From<Instruction> for proto::transaction::Instruction {
             },
             Instruction::DropAllProofsInWorkspace => {
                 result.instruction_type = InstructionType::DropAllProofsInWorkspace as i32;
-            },
-            // TODO: debugging feature should not be the default. Perhaps a better way to create faucet coins is to mint
-            //       a faucet vault in the genesis state for dev networks and use faucet builtin template to withdraw
-            //       funds.
-            Instruction::CreateFreeTestCoins {
-                revealed_amount: amount,
-                output,
-            } => {
-                result.instruction_type = InstructionType::CreateFreeTestCoins as i32;
-                result.create_free_test_coins_amount = amount.value() as u64;
-                result.create_free_test_coins_output_blob = output
-                    .map(|o| tari_bor::encode(&o).unwrap())
-                    .unwrap_or_else(|| tari_bor::encode(&None::<ConfidentialOutput>).unwrap());
             },
         }
         result

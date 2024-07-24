@@ -27,14 +27,11 @@ mod initializer;
 pub use initializer::spawn;
 
 mod error;
-mod executor;
 mod gossip;
 #[cfg(feature = "metrics")]
 mod metrics;
 mod service;
 mod traits;
-mod validators;
 
 pub use error::*;
 pub use traits::*;
-pub use validators::*;

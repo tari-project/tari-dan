@@ -53,6 +53,7 @@ use tari_dan_storage::{
         QuorumCertificate,
         StateTransition,
         StateTransitionId,
+        SubstateChange,
         SubstateRecord,
         TransactionExecution,
         TransactionPoolRecord,
@@ -1204,6 +1205,28 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         sql_models::BlockDiff::try_load(*block_id, block_diff)
     }
 
+    fn block_diffs_get_last_change_for_substate(
+        &self,
+        block_id: &BlockId,
+        substate_id: &SubstateId,
+    ) -> Result<SubstateChange, StorageError> {
+        use crate::schema::block_diffs;
+        let commit_block = self.get_commit_block_id()?;
+        let block_ids = self.get_block_ids_that_change_state_between(&commit_block, block_id)?;
+
+        let diff = block_diffs::table
+            .filter(block_diffs::block_id.eq_any(block_ids))
+            .filter(block_diffs::substate_id.eq(substate_id.to_string()))
+            .order_by(block_diffs::id.desc())
+            .first::<sql_models::BlockDiff>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "block_diffs_get_last_change_for_substate",
+                source: e,
+            })?;
+
+        sql_models::BlockDiff::try_convert_change(diff)
+    }
+
     fn parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError> {
         use crate::schema::parked_blocks;
 
@@ -1283,21 +1306,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             })?;
 
         deserialize_json(&qc_json)
-    }
-
-    fn transaction_pool_get(&self, transaction_id: &TransactionId) -> Result<TransactionPoolRecord, StorageError> {
-        use crate::schema::transaction_pool;
-
-        let transaction_id = serialize_hex(transaction_id);
-        let rec = transaction_pool::table
-            .filter(transaction_pool::transaction_id.eq(&transaction_id))
-            .first::<sql_models::TransactionPoolRecord>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transaction_pool_get",
-                source: e,
-            })?;
-
-        rec.try_convert(None)
     }
 
     fn transaction_pool_get_for_blocks(

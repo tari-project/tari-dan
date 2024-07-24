@@ -45,7 +45,7 @@ function Onboarding() {
     mutate(
       {
         accountName: accountFormState.accountName,
-        amount: 100000,
+        amount: 200000,
         fee: 1000,
       },
       {

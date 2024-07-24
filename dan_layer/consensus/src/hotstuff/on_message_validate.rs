@@ -5,16 +5,10 @@ use std::collections::HashSet;
 
 use log::*;
 use tari_common::configuration::Network;
-use tari_dan_common_types::{optional::Optional, NodeHeight};
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{
-        Block,
-        ExecutedTransaction,
-        TransactionAtom,
-        TransactionPool,
-        TransactionPoolRecord,
-        TransactionRecord,
-    },
+    consensus_models::{Block, BlockId, TransactionRecord},
     StateStore,
     StateStoreWriteTransaction,
 };
@@ -26,7 +20,7 @@ use super::config::HotstuffConfig;
 use crate::{
     block_validations,
     hotstuff::{error::HotStuffError, HotstuffEvent},
-    messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage},
+    messages::{HotstuffMessage, MissingTransactionsRequest, ProposalMessage},
     traits::{ConsensusSpec, OutboundMessaging},
 };
 
@@ -41,8 +35,10 @@ pub struct OnMessageValidate<TConsensusSpec: ConsensusSpec> {
     leader_strategy: TConsensusSpec::LeaderStrategy,
     vote_signing_service: TConsensusSpec::SignatureService,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
-    transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     tx_events: broadcast::Sender<HotstuffEvent>,
+    /// Keep track of max 16 in-flight requests
+    active_missing_transaction_requests: SimpleFixedArray<u32, 16>,
+    current_request_id: u32,
 }
 
 impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
@@ -55,7 +51,6 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         leader_strategy: TConsensusSpec::LeaderStrategy,
         vote_signing_service: TConsensusSpec::SignatureService,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
-        transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
     ) -> Self {
         Self {
@@ -67,8 +62,9 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             leader_strategy,
             vote_signing_service,
             outbound_messaging,
-            transaction_pool,
             tx_events,
+            active_missing_transaction_requests: SimpleFixedArray::new(),
+            current_request_id: 0,
         }
     }
 
@@ -93,8 +89,51 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
                     message: HotstuffMessage::ForeignProposal(proposal),
                 })
             },
+            HotstuffMessage::MissingTransactionsResponse(msg) => {
+                if !self.active_missing_transaction_requests.remove_element(&msg.request_id) {
+                    warn!(target: LOG_TARGET, "❓Received missing transactions (req_id = {}) from {} that we did not request. Discarding message", msg.request_id, from);
+                    return Ok(MessageValidationResult::Discard);
+                }
+                if msg.transactions.len() > 1000 {
+                    warn!(target: LOG_TARGET, "⚠️Peer sent more than the maximum amount of transactions. Discarding message");
+                    return Ok(MessageValidationResult::Discard);
+                }
+                Ok(MessageValidationResult::Ready {
+                    from,
+                    message: HotstuffMessage::MissingTransactionsResponse(msg),
+                })
+            },
             msg => Ok(MessageValidationResult::Ready { from, message: msg }),
         }
+    }
+
+    pub async fn request_missing_transactions(
+        &mut self,
+        to: TConsensusSpec::Addr,
+        block_id: BlockId,
+        epoch: Epoch,
+        missing_txs: HashSet<TransactionId>,
+    ) -> Result<(), HotStuffError> {
+        let request_id = self.next_request_id();
+        self.active_missing_transaction_requests.insert(request_id);
+        self.outbound_messaging
+            .send(
+                to,
+                HotstuffMessage::MissingTransactionsRequest(MissingTransactionsRequest {
+                    request_id,
+                    block_id,
+                    epoch,
+                    transactions: missing_txs,
+                }),
+            )
+            .await?;
+        Ok(())
+    }
+
+    fn next_request_id(&mut self) -> u32 {
+        let req_id = self.current_request_id;
+        self.current_request_id += 1;
+        req_id
     }
 
     async fn process_local_proposal(
@@ -132,24 +171,11 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             });
         }
 
-        let Some(ready_block) = self.handle_missing_transactions(block).await? else {
-            // Block not ready -park it
-            return Ok(MessageValidationResult::NotReady);
-        };
-
-        // let vn = self
-        //     .epoch_manager
-        //     .get_validator_node_by_public_key(ready_block.epoch(), ready_block.proposed_by())
-        //     .await?;
-
-        Ok(MessageValidationResult::Ready {
-            from,
-            message: HotstuffMessage::Proposal(ProposalMessage { block: ready_block }),
-        })
+        self.handle_missing_transactions(from, block).await
     }
 
     pub async fn update_parked_blocks(
-        &mut self,
+        &self,
         current_height: NodeHeight,
         transaction_id: &TransactionId,
     ) -> Result<Option<(TConsensusSpec::Addr, HotstuffMessage)>, HotStuffError> {
@@ -162,36 +188,6 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         };
 
         info!(target: LOG_TARGET, "♻️ all transactions for block {unparked_block} are ready for consensus");
-
-        // todo(hacky): ensure that all transactions are in the pool. Race condition: because we have not yet
-        // received it yet in the select! loop.
-        self.store.with_write_tx(|tx| {
-            for tx_id in unparked_block.all_transaction_ids() {
-                if self.transaction_pool.exists(&**tx, tx_id)? {
-                    continue;
-                }
-
-                warn!(
-                    target: LOG_TARGET,
-                    "⚠️ Transaction {} is missing from the transaction pool. Attempting to recover.",
-                    tx_id
-                );
-
-                let transaction = TransactionRecord::get(&**tx, tx_id)?;
-                // Did the mempool execute it?
-                if transaction.is_executed() {
-                    // This should never fail
-                    let executed = ExecutedTransaction::try_from(transaction)?;
-                    self.transaction_pool.insert(tx, executed.to_atom())?;
-                } else {
-                    // Deferred execution
-                    self.transaction_pool
-                        .insert(tx, TransactionAtom::deferred(*transaction.id()))?;
-                }
-            }
-
-            Ok::<_, HotStuffError>(())
-        })?;
 
         let vn = self
             .epoch_manager
@@ -221,120 +217,67 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         Ok(())
     }
 
-    async fn handle_missing_transactions(&mut self, block: Block) -> Result<Option<Block>, HotStuffError> {
-        let (missing_tx_ids, awaiting_execution) = self
+    async fn handle_missing_transactions(
+        &mut self,
+        from: TConsensusSpec::Addr,
+        block: Block,
+    ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
+        let missing_tx_ids = self
             .store
             .with_write_tx(|tx| self.check_for_missing_transactions(tx, &block))?;
 
-        if missing_tx_ids.is_empty() && awaiting_execution.is_empty() {
-            return Ok(Some(block));
+        if missing_tx_ids.is_empty() {
+            return Ok(MessageValidationResult::Ready {
+                from,
+                message: HotstuffMessage::Proposal(ProposalMessage { block }),
+            });
         }
 
         let _ignore = self.tx_events.send(HotstuffEvent::ProposedBlockParked {
             block: block.as_leaf_block(),
             num_missing_txs: missing_tx_ids.len(),
-            num_awaiting_txs: awaiting_execution.len(),
+            // TODO: remove
+            num_awaiting_txs: 0,
         });
 
-        if !missing_tx_ids.is_empty() {
-            let block_id = *block.id();
-            let epoch = block.epoch();
-            let block_proposed_by = block.proposed_by().clone();
-
-            let vn = self
-                .epoch_manager
-                .get_validator_node_by_public_key(epoch, &block_proposed_by)
-                .await?;
-
-            let mut request_from_address = vn.address;
-
-            // (Yet another) Edge case: If we're catching up, we could be the proposer but we no longer have the
-            // transaction (we deleted our database) In this case, request from another random VN
-            // (TODO: not 100% reliable)
-            if request_from_address == self.local_validator_addr {
-                let mut local_committee = self.epoch_manager.get_local_committee(epoch).await?;
-
-                local_committee.shuffle();
-                match local_committee
-                    .into_iter()
-                    .find(|(addr, _)| *addr != self.local_validator_addr)
-                {
-                    Some((addr, _)) => {
-                        warn!(target: LOG_TARGET, "⚠️Requesting missing transactions from another validator {addr} because we are (presumably) catching up (local_peer_id = {})", self.local_validator_addr);
-                        request_from_address = addr;
-                    },
-                    None => {
-                        warn!(
-                            target: LOG_TARGET,
-                            "❌NEVERHAPPEN: We're the only validator in the committee but we need to request missing transactions."
-                        );
-                        return Ok(None);
-                    },
-                }
-            }
-
-            self.outbound_messaging
-                .send(
-                    request_from_address,
-                    HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
-                        block_id,
-                        epoch,
-                        transactions: missing_tx_ids,
-                    }),
-                )
-                .await?;
-        }
-
-        Ok(None)
+        Ok(MessageValidationResult::ParkedProposal {
+            block_id: *block.id(),
+            epoch: block.epoch(),
+            proposed_by: block.proposed_by().clone(),
+            missing_txs: missing_tx_ids,
+        })
     }
 
     fn check_for_missing_transactions(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
-    ) -> Result<(HashSet<TransactionId>, HashSet<TransactionId>), HotStuffError> {
+    ) -> Result<HashSet<TransactionId>, HotStuffError> {
         if block.commands().is_empty() {
             debug!(
                 target: LOG_TARGET,
                 "✅ Block {} is empty (no missing transactions)", block
             );
-            return Ok((HashSet::new(), HashSet::new()));
+            return Ok(HashSet::new());
         }
-        let (transactions, missing_tx_ids) = TransactionRecord::get_any(&**tx, block.all_transaction_ids())?;
-        let awaiting_execution_or_deferred = transactions
-            .into_iter()
-            .filter(|tx| tx.final_decision.is_some())
-            .filter(|tx| tx.result.is_none())
-            .map(|tx| *tx.transaction.id())
-            .collect::<HashSet<_>>();
+        let missing_tx_ids = TransactionRecord::get_missing(&**tx, block.all_transaction_ids())?;
 
-        // TODO(hacky): improve this. We need to account for transactions that are deferred when determining which
-        // transactions are awaiting execution.
-        let mut awaiting_execution = HashSet::new();
-        for id in &awaiting_execution_or_deferred {
-            if let Some(t) = TransactionPoolRecord::get(&**tx, id).optional()? {
-                if !t.is_deferred() {
-                    awaiting_execution.insert(*id);
-                }
-            }
-        }
-
-        if missing_tx_ids.is_empty() && awaiting_execution.is_empty() {
+        if missing_tx_ids.is_empty() {
             debug!(
                 target: LOG_TARGET,
                 "✅ Block {} has no missing transactions", block
             );
-            return Ok((HashSet::new(), HashSet::new()));
+            return Ok(HashSet::new());
         }
 
         info!(
             target: LOG_TARGET,
-            "⏳ Block {} has {} missing transactions and {} awaiting execution", block, missing_tx_ids.len(), awaiting_execution.len(),
+            "⏳ Block {} has {} missing transactions", block, missing_tx_ids.len(),
         );
 
-        tx.missing_transactions_insert(block, &missing_tx_ids, &awaiting_execution)?;
+        tx.missing_transactions_insert(block, &missing_tx_ids, &[])?;
 
-        Ok((missing_tx_ids, awaiting_execution))
+        Ok(missing_tx_ids)
     }
 }
 
@@ -344,11 +287,55 @@ pub enum MessageValidationResult<TAddr> {
         from: TAddr,
         message: HotstuffMessage,
     },
-    NotReady,
+    ParkedProposal {
+        block_id: BlockId,
+        epoch: Epoch,
+        proposed_by: PublicKey,
+        missing_txs: HashSet<TransactionId>,
+    },
     Discard,
     Invalid {
         from: TAddr,
         message: HotstuffMessage,
         err: HotStuffError,
     },
+}
+
+#[derive(Debug, Clone)]
+struct SimpleFixedArray<T, const SZ: usize> {
+    elems: [Option<T>; SZ],
+    ptr: usize,
+}
+
+impl<T: Copy, const SZ: usize> SimpleFixedArray<T, SZ> {
+    pub fn new() -> Self {
+        Self {
+            elems: [None; SZ],
+            ptr: 0,
+        }
+    }
+
+    pub fn insert(&mut self, elem: T) {
+        // We dont care about overwriting "old" elements
+        self.elems[self.ptr] = Some(elem);
+        self.ptr = (self.ptr + 1) % SZ;
+    }
+
+    pub fn remove_element(&mut self, elem: &T) -> bool
+    where T: PartialEq {
+        for (i, e) in self.elems.iter().enumerate() {
+            if e.as_ref() == Some(elem) {
+                // We dont care about "holes" in the collection
+                self.elems[i] = None;
+                return true;
+            }
+        }
+        false
+    }
+}
+
+impl<const SZ: usize, T: Copy> Default for SimpleFixedArray<T, SZ> {
+    fn default() -> Self {
+        Self::new()
+    }
 }

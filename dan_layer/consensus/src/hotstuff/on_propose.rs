@@ -174,7 +174,7 @@ where TConsensusSpec: ConsensusSpec
             for mut executed in executed_transactions.into_values() {
                 // TODO: This is a hacky workaround, if the executed transaction has no shards after execution, we
                 // remove it from the pool so that it does not get proposed again. Ideally we should be
-                // able to catch this in transaction validation.
+                // able to catch this in transaction validation and propose ABORT.
                 if local_committee_info.count_distinct_shards(executed.involved_addresses_iter()) == 0 {
                     self.transaction_pool.remove(tx, *executed.id())?;
                     executed
@@ -237,13 +237,14 @@ where TConsensusSpec: ConsensusSpec
     fn execute_transaction(
         &self,
         store: &PendingSubstateStore<TConsensusSpec::StateStore>,
+        current_epoch: Epoch,
         transaction_id: &TransactionId,
     ) -> Result<ExecutedTransaction, HotStuffError> {
         let transaction = TransactionRecord::get(store.read_transaction(), transaction_id)?;
 
         let executed = self
             .transaction_executor
-            .execute(transaction.into_transaction(), store)
+            .execute(transaction.into_transaction(), store, current_epoch)
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
         Ok(executed)
@@ -254,38 +255,29 @@ where TConsensusSpec: ConsensusSpec
     fn transaction_pool_record_to_command(
         &self,
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        parent_block: &LeafBlock,
         mut tx_rec: TransactionPoolRecord,
         local_committee_info: &CommitteeInfo,
         substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
         executed_transactions: &mut HashMap<TransactionId, ExecutedTransaction>,
     ) -> Result<Option<Command>, HotStuffError> {
-        // Execute deferred transaction
-        if tx_rec.is_deferred() {
-            info!(
-                target: LOG_TARGET,
-                "👨‍🔧 PROPOSE: Executing deferred transaction {}",
-                tx_rec.transaction_id(),
-            );
+        info!(
+            target: LOG_TARGET,
+            "👨‍🔧 PROPOSE: Executing transaction {}",
+            tx_rec.transaction_id(),
+        );
 
-            let executed = self.execute_transaction(substate_store, tx_rec.transaction_id())?;
+        if tx_rec.current_stage().is_new() {
+            let executed = self.execute_transaction(substate_store, parent_block.epoch(), tx_rec.transaction_id())?;
             // Update the decision so that we can propose it
             tx_rec.set_local_decision(executed.decision());
-            tx_rec.set_initial_evidence(executed.to_initial_evidence());
+            tx_rec.set_evidence(executed.to_initial_evidence());
             tx_rec.set_transaction_fee(executed.transaction_fee());
             executed_transactions.insert(*executed.id(), executed);
-        } else if tx_rec.current_decision().is_commit() && tx_rec.current_stage().is_new() {
-            // Executed in mempool. Add to this block's executed transactions
-            let executed = ExecutedTransaction::get(tx, tx_rec.transaction_id())?;
-            tx_rec.set_local_decision(executed.decision());
-            tx_rec.set_initial_evidence(executed.to_initial_evidence());
-            tx_rec.set_transaction_fee(executed.transaction_fee());
-            executed_transactions.insert(*executed.id(), executed);
-        } else {
-            // Continue...
-        };
+        }
 
         let num_involved_shards =
-            local_committee_info.count_distinct_shards(tx_rec.atom().evidence.substate_addresses_iter());
+            local_committee_info.count_distinct_shards(tx_rec.evidence().substate_addresses_iter());
 
         if num_involved_shards == 0 {
             warn!(
@@ -414,15 +406,17 @@ where TConsensusSpec: ConsensusSpec
                 let leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);
                 let tx_atom = tx_rec.get_final_transaction_atom(leader_fee);
                 if tx_atom.decision.is_commit() {
-                    let transaction = tx_rec.get_transaction(tx)?;
-                    let result = transaction.result().ok_or_else(|| {
-                        HotStuffError::InvariantError(format!(
-                            "Transaction {} is committed but has no result when proposing",
-                            tx_rec.transaction_id(),
-                        ))
-                    })?;
+                    let execution = tx_rec
+                        .get_execution_for_block(tx, parent_block.block_id())
+                        .optional()?
+                        .ok_or_else(|| {
+                            HotStuffError::InvariantError(format!(
+                                "Transaction {} is committed but has no result when proposing",
+                                tx_rec.transaction_id(),
+                            ))
+                        })?;
 
-                    let diff = result.finalize.result.accept().ok_or_else(|| {
+                    let diff = execution.result().finalize.accept().ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
                             "Transaction {} has COMMIT decision but execution failed when proposing",
                             tx_rec.transaction_id(),
@@ -455,14 +449,14 @@ where TConsensusSpec: ConsensusSpec
         high_qc: QuorumCertificate,
         proposed_by: PublicKey,
         local_committee_info: &CommitteeInfo,
-        empty_block: bool,
+        dont_propose_transactions: bool,
         base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
         propose_epoch_end: bool,
     ) -> Result<(Block, HashMap<TransactionId, ExecutedTransaction>), HotStuffError> {
         // TODO: Configure
-        const TARGET_BLOCK_SIZE: usize = 1000;
-        let batch = if empty_block || propose_epoch_end {
+        const TARGET_BLOCK_SIZE: usize = 500;
+        let batch = if dont_propose_transactions || propose_epoch_end {
             vec![]
         } else {
             self.transaction_pool.get_batch_for_next_block(tx, TARGET_BLOCK_SIZE)?
@@ -496,11 +490,12 @@ where TConsensusSpec: ConsensusSpec
 
         // batch is empty for is_empty, is_epoch_end and is_epoch_start blocks
         let tree_store = ChainScopedTreeStore::new(epoch, local_committee_info.shard(), tx);
-        let mut substate_store = PendingSubstateStore::new(tree_store);
+        let mut substate_store = PendingSubstateStore::new(*parent_block.block_id(), tree_store);
         let mut executed_transactions = HashMap::new();
         for transaction in batch {
             if let Some(command) = self.transaction_pool_record_to_command(
                 tx,
+                parent_block,
                 transaction,
                 local_committee_info,
                 &mut substate_store,

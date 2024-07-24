@@ -5,7 +5,7 @@
 use std::num::NonZeroU64;
 
 use log::*;
-use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, Epoch};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -13,7 +13,6 @@ use tari_dan_storage::{
         BlockId,
         Command,
         Decision,
-        ExecutedTransaction,
         ForeignProposal,
         LastExecuted,
         LastVoted,
@@ -49,6 +48,7 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_ready_to_vote_on_local_block";
 
+#[derive(Debug, Clone)]
 pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     local_validator_addr: TConsensusSpec::Addr,
     store: TConsensusSpec::StateStore,
@@ -192,26 +192,8 @@ where TConsensusSpec: ConsensusSpec
         // Store used for transactions that have inputs without specific versions.
         // It lives through the entire block so multiple transactions can be sequenced together in the same block
         let tree_store = ChainScopedTreeStore::new(block.epoch(), block.shard(), tx);
-        let mut substate_store = PendingSubstateStore::new(tree_store);
+        let mut substate_store = PendingSubstateStore::new(*block.parent(), tree_store);
         let mut proposed_block_change_set = ProposedBlockChangeSet::new(block.as_leaf_block());
-
-        // if epoch_should_start && !block.is_epoch_start() {
-        //     warn!(
-        //         target: LOG_TARGET,
-        //         "❌ EpochEvent::Start command expected for block {} but not found",
-        //         block.id()
-        //     );
-        //     return Ok(proposed_block_change_set.no_vote());
-        // }
-        //
-        // if epoch_should_end && !block.is_epoch_end() {
-        //     warn!(
-        //         target: LOG_TARGET,
-        //         "❌ EpochEvent::End command expected for block {} but not found",
-        //         block.id()
-        //     );
-        //     return Ok(proposed_block_change_set.no_vote());
-        // }
 
         if block.is_epoch_end() && block.commands().len() > 1 {
             warn!(
@@ -278,37 +260,19 @@ where TConsensusSpec: ConsensusSpec
             );
             match cmd {
                 Command::LocalOnly(t) => {
-                    if tx_rec.is_deferred() {
-                        info!(
-                            target: LOG_TARGET,
-                            "👨‍🔧 LOCAL-ONLY: Executing deferred transaction {} in block {}",
-                            tx_rec.transaction_id(),
-                            block,
-                        );
+                    info!(
+                        target: LOG_TARGET,
+                        "👨‍🔧 LOCAL-ONLY: Executing deferred transaction {} in block {}",
+                        tx_rec.transaction_id(),
+                        block,
+                    );
 
-                        let executed = self.execute_transaction_if_required(&substate_store, &atom.id, block.id())?;
-                        tx_rec.set_local_decision(executed.decision());
-                        tx_rec.set_initial_evidence(executed.to_initial_evidence());
-                        tx_rec.set_transaction_fee(executed.transaction_fee());
-                        proposed_block_change_set.add_transaction_execution(executed);
-                    } else if tx_rec.current_decision().is_commit() &&
-                        matches!(
-                            tx_rec.current_stage(),
-                            // TODO: Investigate race condition where transaction pool stage is already LocalOnly
-                            TransactionPoolStage::New | TransactionPoolStage::LocalOnly
-                        )
-                    {
-                        // We need to include the transaction execution context for this block if a transaction is yet
-                        // to be prepared.
-                        let execution = ExecutedTransaction::get_pending_execution_for_block(tx, block.id(), &t.id)?;
-                        // Align the TransactionPoolRecord with the relevant execution
-                        tx_rec.set_local_decision(execution.decision());
-                        tx_rec.set_initial_evidence(execution.to_initial_evidence());
-                        tx_rec.set_transaction_fee(execution.transaction_fee());
-                        proposed_block_change_set.add_transaction_execution(execution);
-                    } else {
-                        // continue
-                    }
+                    let executed =
+                        self.execute_transaction_if_required(&substate_store, &atom.id, block.id(), block.epoch())?;
+                    tx_rec.set_local_decision(executed.decision());
+                    tx_rec.set_evidence(executed.to_initial_evidence());
+                    tx_rec.set_transaction_fee(executed.transaction_fee());
+                    proposed_block_change_set.add_transaction_execution(executed);
 
                     if !tx_rec.current_stage().is_new() && !tx_rec.current_stage().is_local_only() {
                         warn!(
@@ -321,13 +285,13 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    if tx_rec.atom().transaction_fee != t.transaction_fee {
+                    if tx_rec.transaction_fee() != t.transaction_fee {
                         warn!(
                             target: LOG_TARGET,
                             "❌ LocalOnly transaction fee disagreement for block {}. Leader proposed {}, we calculated {}",
                             block,
                             t.transaction_fee,
-                            tx_rec.atom().transaction_fee
+                            tx_rec.transaction_fee()
                         );
                         return Ok(proposed_block_change_set.no_vote());
                     }
@@ -349,7 +313,7 @@ where TConsensusSpec: ConsensusSpec
                     }
 
                     if !local_committee_info
-                        .includes_all_substate_addresses(tx_rec.atom().evidence.substate_addresses_iter())
+                        .includes_all_substate_addresses(tx_rec.evidence().substate_addresses_iter())
                     {
                         warn!(
                             target: LOG_TARGET,
@@ -370,6 +334,8 @@ where TConsensusSpec: ConsensusSpec
                                         t.id, block
                                     ))
                                 })?;
+                        // TODO: If we proposed this block, we shouldn't have to reprocess the locks. Locks are
+                        // currently fairly expensive.
                         if !self.try_obtain_locks(execution, local_committee_info, &mut substate_store)? {
                             // They want to ABORT a successfully executed transaction because of a lock conflict, which
                             // we also have.
@@ -460,26 +426,19 @@ where TConsensusSpec: ConsensusSpec
                     );
                 },
                 Command::Prepare(t) => {
-                    if tx_rec.is_deferred() {
-                        info!(
-                            target: LOG_TARGET,
-                            "👨‍🔧 PREPARE: Executing deferred transaction {} in block {}",
-                            tx_rec.transaction_id(),
-                            block,
-                        );
+                    info!(
+                        target: LOG_TARGET,
+                        "👨‍🔧 PREPARE: Executing deferred transaction {} in block {}",
+                        tx_rec.transaction_id(),
+                        block,
+                    );
 
-                        let executed = self.execute_transaction_if_required(&substate_store, &atom.id, block.id())?;
-                        tx_rec.set_local_decision(executed.decision());
-                        tx_rec.set_initial_evidence(executed.to_initial_evidence());
-                        tx_rec.set_transaction_fee(executed.transaction_fee());
-                        proposed_block_change_set.add_transaction_execution(executed);
-                    } else {
-                        let executed = ExecutedTransaction::get_pending_execution_for_block(tx, block.id(), &t.id)?;
-                        tx_rec.set_local_decision(executed.decision());
-                        tx_rec.set_initial_evidence(executed.to_initial_evidence());
-                        tx_rec.set_transaction_fee(executed.transaction_fee());
-                        proposed_block_change_set.add_transaction_execution(executed);
-                    }
+                    let executed =
+                        self.execute_transaction_if_required(&substate_store, &atom.id, block.id(), block.epoch())?;
+                    tx_rec.set_local_decision(executed.decision());
+                    tx_rec.set_evidence(executed.to_initial_evidence());
+                    tx_rec.set_transaction_fee(executed.transaction_fee());
+                    proposed_block_change_set.add_transaction_execution(executed);
 
                     if !tx_rec.current_stage().is_new() && !tx_rec.current_stage().is_prepared() {
                         warn!(
@@ -492,13 +451,13 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    if tx_rec.atom().transaction_fee != t.transaction_fee {
+                    if tx_rec.transaction_fee() != t.transaction_fee {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Accept transaction fee disagreement for block {}. Leader proposed {}, we calculated {}",
                             block,
                             t.transaction_fee,
-                            tx_rec.atom().transaction_fee
+                            tx_rec.transaction_fee()
                         );
                         return Ok(proposed_block_change_set.no_vote());
                     }
@@ -585,14 +544,14 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    if tx_rec.atom().transaction_fee != t.transaction_fee {
+                    if tx_rec.transaction_fee() != t.transaction_fee {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Accept transaction fee disagreement tx {} in block {}. Leader proposed {}, we calculated {}",
                             tx_rec.transaction_id(),
                             block,
                             t.transaction_fee,
-                            tx_rec.atom().transaction_fee
+                            tx_rec.transaction_fee()
                         );
                         return Ok(proposed_block_change_set.no_vote());
                     }
@@ -600,7 +559,7 @@ where TConsensusSpec: ConsensusSpec
                     proposed_block_change_set.set_next_transaction_update(
                         &tx_rec,
                         TransactionPoolStage::LocalPrepared,
-                        tx_rec.atom().evidence.all_shards_justified(),
+                        tx_rec.evidence().all_shards_justified(),
                     );
                 },
                 Command::Accept(t) => {
@@ -629,26 +588,26 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    if !tx_rec.atom().evidence.all_shards_justified() {
+                    if !tx_rec.evidence().all_shards_justified() {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Accept evidence disagreement tx {} in block {}. Evidence for {} out of {} shards",
                             tx_rec.transaction_id(),
                             block,
-                            tx_rec.atom().evidence.num_justified_shards(),
-                            tx_rec.atom().evidence.len(),
+                            tx_rec.evidence().num_justified_shards(),
+                            tx_rec.evidence().len(),
                         );
                         return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    if tx_rec.atom().transaction_fee != t.transaction_fee {
+                    if tx_rec.transaction_fee() != t.transaction_fee {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Accept transaction fee disagreement tx {} in block {}. Leader proposed {}, we calculated {}",
                             tx_rec.transaction_id(),
                             block,
                             t.transaction_fee,
-                            tx_rec.atom().transaction_fee
+                            tx_rec.transaction_fee()
                         );
 
                         return Ok(proposed_block_change_set.no_vote());
@@ -658,18 +617,18 @@ where TConsensusSpec: ConsensusSpec
                     // It is possible that the transaction was not marked as ready yet because of the order we
                     // received messages, but if we are in LocalPrepared and we have all the
                     // evidence, we would have proposed this too so we can continue.
-                    if !tx_rec.is_ready() && !tx_rec.atom().evidence.all_shards_justified() {
+                    if !tx_rec.is_ready() && !tx_rec.evidence().all_shards_justified() {
                         warn!(
                             target: LOG_TARGET,
                             "⚠️ Local proposal received ({}) for transaction {} which is not ready. Not voting.",
                             block,
-                            tx_rec.atom()
+                            tx_rec.transaction_id()
                         );
                         return Ok(proposed_block_change_set.no_vote());
                     }
 
                     let distinct_shards =
-                        local_committee_info.count_distinct_shards(tx_rec.atom().evidence.substate_addresses_iter());
+                        local_committee_info.count_distinct_shards(tx_rec.evidence().substate_addresses_iter());
                     let distinct_shards = NonZeroU64::new(distinct_shards as u64).ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
                             "Distinct shards is zero for transaction {} in block {}",
@@ -789,6 +748,7 @@ where TConsensusSpec: ConsensusSpec
         store: &PendingSubstateStore<TConsensusSpec::StateStore>,
         transaction_id: &TransactionId,
         block_id: &BlockId,
+        current_epoch: Epoch,
     ) -> Result<TransactionExecution, HotStuffError> {
         // If the transaction is already executed in the propose phase we simply load it for this block
         if let Some(execution) =
@@ -799,15 +759,9 @@ where TConsensusSpec: ConsensusSpec
 
         let transaction = TransactionRecord::get(store.read_transaction(), transaction_id)?;
 
-        info!(
-            target: LOG_TARGET,
-            "🔥 Executing transaction {}",
-            transaction_id,
-        );
-
         let executed = self
             .transaction_executor
-            .execute(transaction.into_transaction(), store)
+            .execute(transaction.into_transaction(), store, current_epoch)
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
         Ok(executed.into_execution_for_block(*block_id))

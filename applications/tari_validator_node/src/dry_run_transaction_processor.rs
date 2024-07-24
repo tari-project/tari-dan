@@ -27,10 +27,7 @@ use tari_dan_app_utilities::{
     transaction_executor::{TariDanTransactionProcessor, TransactionExecutor, TransactionProcessorError},
 };
 use tari_dan_common_types::PeerAddress;
-use tari_dan_engine::{
-    bootstrap_state,
-    state_store::{memory::MemoryStateStore, AtomicDb, StateStoreError, StateWriter},
-};
+use tari_dan_engine::state_store::{new_memory_store, StateStoreError};
 use tari_dan_storage::StorageError;
 use tari_engine_types::commit_result::ExecuteResult;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, EpochManagerReader};
@@ -107,12 +104,7 @@ impl DryRunTransactionProcessor {
         transaction: Transaction,
     ) -> Result<ExecuteResult, DryRunTransactionProcessorError> {
         // Resolve all local and foreign substates
-        let temp_state_store = MemoryStateStore::new();
-        {
-            let mut tx = temp_state_store.write_access().map_err(StateStoreError::Custom)?;
-            bootstrap_state(&mut tx)?;
-            tx.commit()?;
-        }
+        let temp_state_store = new_memory_store();
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let virtual_substates = self

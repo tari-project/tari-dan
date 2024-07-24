@@ -466,9 +466,9 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin + Send
                 _ = &mut self.shutdown_signal => {
                     break;
                 },
-                Some(server_msg) = self.framed.next() => {
+                server_msg = self.framed.next() => {
                     match server_msg {
-                        Ok(msg) => {
+                        Some(Ok(msg)) => {
                             if let Err(err) = self.handle_interrupt_server_message(msg) {
                                 #[cfg(feature = "metrics")]
                                 metrics::handshake_errors(&self.peer_id, &self.protocol_id).inc();
@@ -476,10 +476,14 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin + Send
                                 break;
                             }
                         },
-                        Err(err) => {
+                        Some(Err(err)) => {
                             debug!(target: LOG_TARGET, "(peer={}) IO Error: {}. Worker is terminating.", self.peer_id, err);
                             break;
                         },
+                        None => {
+                            debug!(target: LOG_TARGET, "(peer={}) Substream closed. Worker is terminating.", self.peer_id);
+                            break;
+                        }
                     }
                 },
                 req = self.request_rx.recv() => {

@@ -9,7 +9,7 @@ use ts_rs::TS;
 use crate::models::{ComponentAddress, NonFungibleAddress, ResourceAddress, TemplateAddress};
 
 /// Represents the types of possible access control rules over a component method or resource
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum AccessRule {
     AllowAll,
@@ -40,7 +40,7 @@ impl AccessRule {
 }
 
 /// An enum that represents the possible ways to restrict access to components or resources
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum RestrictedAccessRule {
     Require(RequireRule),
@@ -59,7 +59,7 @@ impl RestrictedAccessRule {
 }
 
 /// Specifies a requirement for a [RequireRule].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum RuleRequirement {
     /// Requires ownership of a specific resource
@@ -97,7 +97,7 @@ impl From<TemplateAddress> for RuleRequirement {
 }
 
 /// An enum that represents the possible ways to require access to components or resources
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum RequireRule {
     Require(RuleRequirement),
@@ -106,7 +106,7 @@ pub enum RequireRule {
 }
 
 /// Information needed to specify access rules to methods of a component
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct ComponentAccessRules {
     #[cfg_attr(feature = "ts", ts(type = "Record<string, AccessRule>"))]

@@ -14,8 +14,8 @@ message HotStuffMessage {
     ProposalMessage proposal = 2;
     ProposalMessage foreign_proposal = 3;
     VoteMessage vote = 4;
-    RequestMissingTransactionsMessage request_missing_transactions = 5;
-    RequestedTransactionMessage requested_transaction = 6;
+    MissingTransactionsRequest request_missing_transactions = 5;
+    MissingTransactionsResponse requested_transaction = 6;
     SyncRequest sync_request = 7;
     SyncResponse sync_response = 8;
   }
@@ -103,7 +103,6 @@ enum Decision {
   UNKNOWN = 0;
   COMMIT = 1;
   ABORT = 2;
-  DEFERRED = 3;
 }
 
 message Evidence {
@@ -182,16 +181,18 @@ message DownState {
   uint64 fees_accrued = 2;
 }
 
-message RequestMissingTransactionsMessage {
-  uint64 epoch = 1;
-  bytes block_id = 2;
-  repeated bytes transaction_ids = 3;
+message MissingTransactionsRequest {
+  uint32 request_id = 1;
+  uint64 epoch = 2;
+  bytes block_id = 3;
+  repeated bytes transaction_ids = 4;
 }
 
-message RequestedTransactionMessage {
-  uint64 epoch = 1;
-  bytes block_id = 2;
-  repeated tari.dan.transaction.Transaction transactions = 3;
+message MissingTransactionsResponse {
+  uint32 request_id = 1;
+  uint64 epoch = 2;
+  bytes block_id = 3;
+  repeated tari.dan.transaction.Transaction transactions = 4;
 }
 
 message Substate {

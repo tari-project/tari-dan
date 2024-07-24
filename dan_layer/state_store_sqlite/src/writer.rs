@@ -14,7 +14,7 @@ use diesel::{
     SqliteConnection,
 };
 use log::*;
-use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeAddressable, NodeHeight};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -22,7 +22,6 @@ use tari_dan_storage::{
         BlockId,
         Decision,
         Evidence,
-        ExecutedTransaction,
         ForeignProposal,
         ForeignReceiveCounters,
         ForeignSendCounters,
@@ -281,29 +280,31 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         use crate::schema::block_diffs;
 
         let block_id = serialize_hex(block_diff.block_id);
-        let values = block_diff
-            .changes
-            .iter()
-            .map(|ch| {
-                Ok((
-                    block_diffs::block_id.eq(&block_id),
-                    block_diffs::transaction_id.eq(serialize_hex(ch.transaction_id())),
-                    block_diffs::substate_id.eq(ch.versioned_substate_id().substate_id().to_string()),
-                    block_diffs::version.eq(ch.versioned_substate_id().version() as i32),
-                    block_diffs::change.eq(ch.as_change_string()),
-                    block_diffs::state.eq(ch.substate().map(serialize_json).transpose()?),
-                ))
-            })
-            .collect::<Result<Vec<_>, StorageError>>()?;
+        // We commit in chunks because we can hit the SQL variable limit
+        for chunk in block_diff.changes.chunks(1000) {
+            let values = chunk
+                .iter()
+                .map(|ch| {
+                    Ok((
+                        block_diffs::block_id.eq(&block_id),
+                        block_diffs::transaction_id.eq(serialize_hex(ch.transaction_id())),
+                        block_diffs::substate_id.eq(ch.versioned_substate_id().substate_id().to_string()),
+                        block_diffs::version.eq(ch.versioned_substate_id().version() as i32),
+                        block_diffs::change.eq(ch.as_change_string()),
+                        block_diffs::state.eq(ch.substate().map(serialize_json).transpose()?),
+                    ))
+                })
+                .collect::<Result<Vec<_>, StorageError>>()?;
 
-        diesel::insert_into(block_diffs::table)
-            .values(values)
-            .execute(self.connection())
-            .map(|_| ())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "block_diffs_insert",
-                source: e,
-            })?;
+            diesel::insert_into(block_diffs::table)
+                .values(values)
+                .execute(self.connection())
+                .map(|_| ())
+                .map_err(|e| SqliteStorageError::DieselError {
+                    operation: "block_diffs_insert",
+                    source: e,
+                })?;
+        }
 
         Ok(())
     }
@@ -610,7 +611,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
             transactions::resolved_inputs.eq(tx_rec.resolved_inputs().map(serialize_json).transpose()?),
             transactions::resulting_outputs.eq(serialize_json(tx_rec.resulting_outputs())?),
-            transactions::result.eq(tx_rec.result().map(serialize_json).transpose()?),
+            transactions::result.eq(tx_rec.execution_result().map(serialize_json).transpose()?),
             transactions::execution_time_ms.eq(tx_rec
                 .execution_time()
                 .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))),
@@ -660,7 +661,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         }
 
         let change_set = Changes {
-            result: transaction_rec.result().map(serialize_json).transpose()?,
+            result: transaction_rec.execution_result().map(serialize_json).transpose()?,
             filled_inputs: serialize_json(transaction.filled_inputs())?,
             resulting_outputs: serialize_json(transaction_rec.resulting_outputs())?,
             resolved_inputs: transaction_rec.resolved_inputs().map(serialize_json).transpose()?,
@@ -714,7 +715,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                     transactions::resolved_inputs.eq(rec.resolved_inputs().map(serialize_json).transpose()?),
                     transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
                     transactions::resulting_outputs.eq(serialize_json(rec.resulting_outputs())?),
-                    transactions::result.eq(rec.result().map(serialize_json).transpose()?),
+                    transactions::result.eq(rec.execution_result().map(serialize_json).transpose()?),
                 ))
             })
             .collect::<Result<Vec<_>, StorageError>>()?;
@@ -741,21 +742,20 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .into_iter()
             .map(|atom| {
                 // TODO(perf): 2n queries, query is slow
-                let exec = self
-                    .transaction_executions_get_pending_for_block(&atom.id, &block_id)
-                    .optional()?;
+                let exec = self.transaction_executions_get_pending_for_block(&atom.id, &block_id)?;
+                // .optional()?;
 
-                let exec = match exec {
-                    Some(exec) => exec,
-                    None => {
-                        // Executed in the mempool.
-                        // TODO: this is kinda hacky. Either the mempool should add a block_id=null execution or we
-                        // should remove mempool execution
-                        let transaction = self.transactions_get(&atom.id)?;
-                        let executed = ExecutedTransaction::try_from(transaction)?;
-                        executed.into_execution_for_block(block_id)
-                    },
-                };
+                // let exec = match exec {
+                //     Some(exec) => exec,
+                //     None => {
+                //         // Executed in the mempool.
+                //         // TODO: this is kinda hacky. Either the mempool should add a block_id=null execution or we
+                //         // should remove mempool execution
+                //         let transaction = self.transactions_get(&atom.id)?;
+                //         let executed = ExecutedTransaction::try_from(transaction)?;
+                //         executed.into_execution_for_block(block_id)
+                //     },
+                // };
 
                 Ok((
                     transactions::transaction_id.eq(serialize_hex(atom.id())),
@@ -813,24 +813,18 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn transaction_pool_insert(
+    fn transaction_pool_insert_new(
         &mut self,
-        transaction: TransactionAtom,
-        stage: TransactionPoolStage,
-        is_ready: bool,
+        transaction_id: TransactionId,
+        decision: Decision,
     ) -> Result<(), StorageError> {
         use crate::schema::transaction_pool;
 
         let insert = (
-            transaction_pool::transaction_id.eq(serialize_hex(transaction.id)),
-            transaction_pool::original_decision.eq(transaction.decision.to_string()),
-            transaction_pool::transaction_fee.eq(transaction.transaction_fee as i64),
-            transaction_pool::evidence.eq(serialize_json(&transaction.evidence)?),
-            transaction_pool::leader_fee.eq(transaction.leader_fee.as_ref().map(|f| f.fee as i64)),
-            transaction_pool::global_exhaust_burn
-                .eq(transaction.leader_fee.as_ref().map(|f| f.global_exhaust_burn as i64)),
-            transaction_pool::stage.eq(stage.to_string()),
-            transaction_pool::is_ready.eq(is_ready),
+            transaction_pool::transaction_id.eq(serialize_hex(transaction_id)),
+            transaction_pool::original_decision.eq(decision.to_string()),
+            transaction_pool::stage.eq(TransactionPoolStage::New.to_string()),
+            transaction_pool::is_ready.eq(true),
         );
 
         diesel::insert_into(transaction_pool::table)
@@ -1058,7 +1052,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             })?;
 
         txs.into_iter()
-            .map(|tx| tx.try_convert(None).map(|t| t.into_atom()))
+            .map(|tx| tx.try_convert(None).map(|t| t.into_local_transaction_atom()))
             .collect()
     }
 
@@ -1261,29 +1255,44 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     ) -> Result<(), StorageError> {
         use crate::schema::substate_locks;
 
-        let locks = locks
-            .into_iter()
-            .flat_map(|(id, locks)| {
-                locks.into_iter().map(move |lock| {
-                    (
-                        substate_locks::block_id.eq(serialize_hex(block_id)),
-                        substate_locks::substate_id.eq(id.to_string()),
-                        substate_locks::version.eq(lock.version() as i32),
-                        substate_locks::transaction_id.eq(serialize_hex(lock.transaction_id())),
-                        substate_locks::lock.eq(lock.substate_lock().to_string()),
-                        substate_locks::is_local_only.eq(lock.is_local_only()),
-                    )
+        let mut iter = locks.into_iter();
+        const CHUNK_SIZE: usize = 100;
+        // We have to break up into multiple queries because we can hit max SQL variable limit
+        loop {
+            let locks = iter
+                .by_ref()
+                .take(CHUNK_SIZE)
+                .flat_map(|(id, locks)| {
+                    locks.into_iter().map(move |lock| {
+                        (
+                            substate_locks::block_id.eq(serialize_hex(block_id)),
+                            substate_locks::substate_id.eq(id.to_string()),
+                            substate_locks::version.eq(lock.version() as i32),
+                            substate_locks::transaction_id.eq(serialize_hex(lock.transaction_id())),
+                            substate_locks::lock.eq(lock.substate_lock().to_string()),
+                            substate_locks::is_local_only.eq(lock.is_local_only()),
+                        )
+                    })
                 })
-            })
-            .collect::<Vec<_>>();
+                .collect::<Vec<_>>();
 
-        diesel::insert_into(substate_locks::table)
-            .values(locks)
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substate_locks_insert_all",
-                source: e,
-            })?;
+            let count = locks.len();
+            if count == 0 {
+                break;
+            }
+
+            diesel::insert_into(substate_locks::table)
+                .values(locks)
+                .execute(self.connection())
+                .map_err(|e| SqliteStorageError::DieselError {
+                    operation: "substate_locks_insert_all",
+                    source: e,
+                })?;
+
+            if count < CHUNK_SIZE {
+                break;
+            }
+        }
 
         Ok(())
     }

@@ -121,13 +121,7 @@ pub async fn handle_submit(
                 .unwrap_or(&req.fee_instructions),
         )?);
         let substates = substates.into_iter().collect::<Vec<_>>();
-        let loaded_dependent_substates = sdk
-            .substate_api()
-            .locate_dependent_substates(&substates)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        let loaded_dependent_substates = sdk.substate_api().locate_dependent_substates(&substates).await?;
         [req.inputs, loaded_dependent_substates].concat()
     };
 
