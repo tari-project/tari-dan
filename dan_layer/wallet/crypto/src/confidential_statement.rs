@@ -15,7 +15,6 @@ pub struct ConfidentialProofStatement {
     pub sender_public_nonce: RistrettoPublicKey,
     pub minimum_value_promise: u64,
     pub encrypted_data: EncryptedData,
-    pub reveal_amount: Amount,
     pub resource_view_key: Option<RistrettoPublicKey>,
 }
 

@@ -24,21 +24,19 @@ use std::time::Duration;
 
 use minotari_app_grpc::{
     tari_rpc,
-    tari_rpc::{pow_algo::PowAlgos, GetIdentityRequest, NewBlockTemplate, NewBlockTemplateRequest, PowAlgo},
+    tari_rpc::{pow_algo::PowAlgos, NewBlockTemplate, NewBlockTemplateRequest, PowAlgo},
 };
 use minotari_node_grpc_client::BaseNodeGrpcClient;
-use tari_common::configuration::Network;
-use tari_common_types::{tari_address::TariAddress, types::PublicKey};
+use tari_common_types::tari_address::TariAddress;
 use tari_core::{
     consensus::ConsensusManager,
     transactions::{
         generate_coinbase_with_wallet_output,
         key_manager::{MemoryDbKeyManager, TariKeyId},
         tari_amount::MicroMinotari,
-        transaction_components::{RangeProofType, WalletOutput},
+        transaction_components::{encrypted_data::PaymentId, RangeProofType, WalletOutput},
     },
 };
-use tari_crypto::tari_utilities::ByteArray;
 
 use crate::TariWorld;
 
@@ -65,16 +63,15 @@ pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: 
     let mut base_client = create_base_node_client(world, &miner_name).await;
     let mut wallet_client = world.get_wallet(&miner.wallet_name).create_client().await;
 
-    let wallet_pk = PublicKey::from_canonical_bytes(
+    let payment_address = TariAddress::from_bytes(
         &wallet_client
-            .identify(GetIdentityRequest {})
+            .get_address(tari_rpc::Empty {})
             .await
             .unwrap()
             .into_inner()
-            .public_key,
+            .address,
     )
     .unwrap();
-    let payment_address = TariAddress::new(wallet_pk, Network::LocalNet);
 
     for _ in 0..num_blocks {
         mine_block(world, &payment_address, &mut base_client).await;
@@ -104,6 +101,10 @@ async fn mine_block(world: &TariWorld, payment_address: &TariAddress, base_clien
     )
     .await;
 
+    mine_block_without_wallet_with_template(base_client, block_template).await;
+}
+
+async fn mine_block_without_wallet_with_template(base_client: &mut BaseNodeClient, block_template: NewBlockTemplate) {
     // Ask the base node for a valid block using the template
     let block_result = base_client
         .get_new_block(block_template.clone())
@@ -112,14 +113,14 @@ async fn mine_block(world: &TariWorld, payment_address: &TariAddress, base_clien
         .into_inner();
     let block = block_result.block.unwrap();
 
-    // We don't need to mine, as Localnet blocks have difficulty target of 1s
-    let submit_res = base_client.submit_block(block).await.unwrap().into_inner();
-    log::info!(
-        "Block {} successfully mined at height {:?}",
-        tari_crypto::tari_utilities::hex::to_hex(&submit_res.block_hash),
+    // We don't need to mine, as Localnet blocks have difficulty 1s
+    let _submit_res = base_client.submit_block(block).await.unwrap();
+    println!(
+        "Block successfully mined at height {:?}",
         block_template.header.unwrap().height
     );
 }
+
 async fn create_block_template_with_coinbase(
     base_client: &mut BaseNodeClient,
     weight: u64,
@@ -163,6 +164,7 @@ async fn create_block_template_with_coinbase(
         stealth_payment,
         consensus_manager.consensus_constants(height),
         RangeProofType::BulletProofPlus,
+        PaymentId::Empty,
     )
     .await
     .unwrap();

@@ -38,7 +38,6 @@ fn generate_confidential_proof_internal(
         sender_public_nonce: Default::default(),
         minimum_value_promise: 0,
         encrypted_data: Default::default(),
-        reveal_amount: Default::default(),
         resource_view_key: view_key.clone(),
     };
 
@@ -49,13 +48,16 @@ fn generate_confidential_proof_internal(
         sender_public_nonce: Default::default(),
         minimum_value_promise: 0,
         encrypted_data: Default::default(),
-        reveal_amount: Default::default(),
         resource_view_key: view_key,
     });
 
-    let proof =
-        tari_dan_wallet_crypto::create_confidential_output_statement(&output_statement, change_statement.as_ref())
-            .unwrap();
+    let proof = tari_dan_wallet_crypto::create_confidential_output_statement(
+        Some(&output_statement),
+        Amount::zero(),
+        change_statement.as_ref(),
+        Amount::zero(),
+    )
+    .unwrap();
     (proof, mask, change.map(|_| change_mask))
 }
 
@@ -147,7 +149,6 @@ fn generate_withdraw_proof_internal(
         sender_public_nonce: Default::default(),
         minimum_value_promise: 0,
         encrypted_data: Default::default(),
-        reveal_amount: revealed_output_amount,
         resource_view_key: view_key.clone(),
     };
     let change_proof = change_amount.map(|amount| ConfidentialProofStatement {
@@ -156,7 +157,6 @@ fn generate_withdraw_proof_internal(
         sender_public_nonce: Default::default(),
         minimum_value_promise: 0,
         encrypted_data: Default::default(),
-        reveal_amount: Default::default(),
         resource_view_key: view_key,
     });
 
@@ -169,8 +169,10 @@ fn generate_withdraw_proof_internal(
             })
             .collect::<Vec<_>>(),
         input_revealed_amount,
-        &output_proof,
+        Some(&output_proof),
+        revealed_output_amount,
         change_proof.as_ref(),
+        Amount::zero(),
     )
     .unwrap();
 

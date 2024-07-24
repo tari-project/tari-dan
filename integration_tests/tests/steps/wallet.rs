@@ -86,8 +86,9 @@ pub async fn check_balance(world: &mut TariWorld, wallet_name: String, balance: 
         "uT" => balance,
         _ => panic!("Unknown unit {}", units),
     };
+
     loop {
-        let _result = client.validate_all_transactions(ValidateRequest {}).await;
+        let _result = client.validate_all_transactions(ValidateRequest {}).await.unwrap();
         let resp = client.get_balance(GetBalanceRequest {}).await.unwrap().into_inner();
         if resp.available_balance >= balance {
             break;

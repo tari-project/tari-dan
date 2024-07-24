@@ -120,7 +120,6 @@ pub async fn handle_create_transfer_proof(
         sender_public_nonce: public_nonce,
         minimum_value_promise: 0,
         encrypted_data,
-        reveal_amount: req.reveal_amount,
         resource_view_key: resource_view_key.clone(),
     };
 
@@ -155,7 +154,6 @@ pub async fn handle_create_transfer_proof(
             sender_public_nonce: public_nonce,
             encrypted_data,
             minimum_value_promise: 0,
-            reveal_amount: Amount::zero(),
             resource_view_key,
         })
     } else {
@@ -170,8 +168,10 @@ pub async fn handle_create_transfer_proof(
         &inputs,
         // TODO: support for using revealed funds as input for proof generation
         Amount::zero(),
-        &output_statement,
+        Some(&output_statement).filter(|o| !o.amount.is_zero()),
+        req.reveal_amount,
         maybe_change_statement.as_ref(),
+        Amount::zero(),
     )?;
 
     Ok(ProofsGenerateResponse { proof_id, proof })
@@ -230,11 +230,12 @@ pub async fn handle_create_output_proof(
         sender_public_nonce: public_nonce,
         minimum_value_promise: 0,
         encrypted_data,
-        reveal_amount: Amount::zero(),
         // TODO: the request must include the resource address so that we can fetch the view key
         resource_view_key: None,
     };
-    let proof = sdk.confidential_crypto_api().generate_output_proof(&statement)?;
+    let proof = sdk
+        .confidential_crypto_api()
+        .generate_output_proof(&statement, Amount::zero())?;
     Ok(ConfidentialCreateOutputProofResponse { proof })
 }
 

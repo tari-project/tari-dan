@@ -17,4 +17,6 @@ apt-get install --no-install-recommends --assume-yes \
   libncurses5-dev \
   libncursesw5-dev \
   build-essential \
+  libudev-dev \
+  libhidapi-dev \
   zip

@@ -39,10 +39,19 @@ impl ConfidentialCryptoApi {
         &self,
         inputs: &[ConfidentialOutputMaskAndValue],
         input_revealed_amount: Amount,
-        output_statement: &ConfidentialProofStatement,
+        output_statement: Option<&ConfidentialProofStatement>,
+        output_revealed_amount: Amount,
         change_statement: Option<&ConfidentialProofStatement>,
+        change_revealed_amount: Amount,
     ) -> Result<ConfidentialWithdrawProof, ConfidentialCryptoApiError> {
-        let proof = create_withdraw_proof(inputs, input_revealed_amount, output_statement, change_statement)?;
+        let proof = create_withdraw_proof(
+            inputs,
+            input_revealed_amount,
+            output_statement,
+            output_revealed_amount,
+            change_statement,
+            change_revealed_amount,
+        )?;
         Ok(proof)
     }
 
@@ -70,8 +79,14 @@ impl ConfidentialCryptoApi {
     pub fn generate_output_proof(
         &self,
         statement: &ConfidentialProofStatement,
+        revealed_amount: Amount,
     ) -> Result<ConfidentialOutputStatement, ConfidentialCryptoApiError> {
-        let proof = create_confidential_output_statement(statement, None)?;
+        let proof = create_confidential_output_statement(
+            Some(statement).filter(|s| !s.amount.is_zero()),
+            revealed_amount,
+            None,
+            Amount::zero(),
+        )?;
         Ok(proof)
     }
 
