@@ -8,7 +8,6 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
-use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_state_tree::StateTreeError;
 use tari_transaction::{TransactionId, VersionedSubstateIdError};
 
@@ -33,8 +32,8 @@ pub enum HotStuffError {
     EpochNotActive { epoch: Epoch, details: String },
     #[error("Not registered for current epoch {epoch}")]
     NotRegisteredForCurrentEpoch { epoch: Epoch },
-    #[error("Received message from non-committee member. Epoch: {epoch}, Sender: {sender}, {context}")]
-    ReceivedMessageFromNonCommitteeMember {
+    #[error("Received vote from non-committee member. Epoch: {epoch}, Sender: {sender}, {context}")]
+    ReceivedVoteFromNonCommitteeMember {
         epoch: Epoch,
         sender: String,
         context: String,
@@ -45,16 +44,14 @@ pub enum HotStuffError {
     DecisionMismatch { block_id: BlockId, pool: &'static str },
     #[error("Not the leader. {details}")]
     NotTheLeader { details: String },
-    #[error("Merkle proof error: {0}")]
-    BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
     #[error("Epoch manager error: {0}")]
     EpochManagerError(anyhow::Error),
     #[error("State manager error: {0}")]
     StateManagerError(anyhow::Error),
     #[error("Invalid vote signature from {signer_public_key} (unauthenticated)")]
     InvalidVoteSignature { signer_public_key: String },
-    #[error("Vote sent from peer {address} did not match the expected signer public key {signer_public_key}")]
-    RejectingVoteNotSentBySigner { address: String, signer_public_key: String },
+    #[error("Invalid vote {signer_public_key} (unauthenticated): {details}")]
+    InvalidVote { signer_public_key: String, details: String },
     #[error("Transaction pool error: {0}")]
     TransactionPoolError(#[from] TransactionPoolError),
     #[error("Transaction {transaction_id} does not exist")]
@@ -125,11 +122,11 @@ pub enum ProposalValidationError {
     },
     #[error("Node proposed by {proposed_by} with hash {hash} is the genesis block")]
     ProposingGenesisBlock { proposed_by: String, hash: BlockId },
-    #[error("Justification block {justify_block} for proposed block {block_description} by {proposed_by} not found")]
+    #[error("Justified block {justify_block} for proposed block {block_description} by {proposed_by} not found")]
     JustifyBlockNotFound {
         proposed_by: String,
         block_description: String,
-        justify_block: BlockId,
+        justify_block: LeafBlock,
     },
     #[error("QC in block {block_id} that was proposed by {proposed_by} is invalid: {details}")]
     JustifyBlockInvalid {
@@ -183,8 +180,6 @@ pub enum ProposalValidationError {
     QCInvalidSignature { qc: QuorumCertificate },
     #[error("Quorum was not reached: {qc}")]
     QuorumWasNotReached { qc: QuorumCertificate },
-    #[error("Merkle proof error: {0}")]
-    BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
     #[error("Invalid network in block {block_id}: expected {expected_network}, given {block_network}")]
     InvalidNetwork {
         expected_network: String,

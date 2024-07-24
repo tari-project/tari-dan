@@ -565,7 +565,7 @@ where
                 self.on_autonat_event(event)?;
             },
             PeerSync(peersync::Event::LocalPeerRecordUpdated { record }) => {
-                info!(target: LOG_TARGET, "📝 Local peer record updated: {:?} announce enabled = {}, has_sent_announce = {}",record, self.config.announce, self.has_sent_announce);
+                info!(target: LOG_TARGET, "🧑‍🧑‍🧒‍🧒 Local peer record updated: {:?} announce enabled = {}, has_sent_announce = {}",record, self.config.announce, self.has_sent_announce);
                 if self.config.announce && !self.has_sent_announce && record.is_signed() {
                     info!(target: LOG_TARGET, "📣 Sending local peer announce with {} address(es)", record.addresses().len());
                     self.swarm
@@ -576,7 +576,7 @@ where
                 }
             },
             PeerSync(peersync::Event::PeerBatchReceived { new_peers, from_peer }) => {
-                info!(target: LOG_TARGET, "📝 Peer batch received: from_peer={}, new_peers={}", from_peer, new_peers);
+                info!(target: LOG_TARGET, "🧑‍🧑‍🧒‍🧒 Peer batch received: from_peer={}, new_peers={}", from_peer, new_peers);
             },
             PeerSync(event) => {
                 info!(target: LOG_TARGET, "ℹ️ PeerSync event: {:?}", event);

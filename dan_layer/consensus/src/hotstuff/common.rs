@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::ops::ControlFlow;
+
 use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::FixedHash;
@@ -40,6 +42,80 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
     parent_base_layer_block_height: u64,
     parent_base_layer_block_hash: FixedHash,
 ) -> Option<LeafBlock> {
+    let mut dummy = None;
+    with_dummy_blocks(
+        network,
+        epoch,
+        shard,
+        high_qc,
+        parent_merkle_root,
+        new_height,
+        leader_strategy,
+        local_committee,
+        parent_timestamp,
+        parent_base_layer_block_height,
+        parent_base_layer_block_hash,
+        |dummy_block| {
+            dummy = Some(dummy_block.as_leaf_block());
+            ControlFlow::Continue(())
+        },
+    );
+
+    dummy
+}
+
+/// Calculates the dummy block required to reach the new height
+pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
+    candidate_block: &Block,
+    justify_block: &Block,
+    leader_strategy: &TLeaderStrategy,
+    local_committee: &Committee<TAddr>,
+) -> Vec<Block> {
+    let mut dummies = Vec::new();
+    with_dummy_blocks(
+        candidate_block.network(),
+        justify_block.epoch(),
+        justify_block.shard(),
+        candidate_block.justify(),
+        *justify_block.merkle_root(),
+        candidate_block.height(),
+        leader_strategy,
+        local_committee,
+        justify_block.timestamp(),
+        justify_block.base_layer_block_height(),
+        *justify_block.base_layer_block_hash(),
+        |dummy_block| {
+            if dummy_block.id() == candidate_block.parent() {
+                dummies.push(dummy_block);
+                ControlFlow::Break(())
+            } else {
+                dummies.push(dummy_block);
+                ControlFlow::Continue(())
+            }
+        },
+    );
+
+    dummies
+}
+
+fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
+    network: Network,
+    epoch: Epoch,
+    shard: Shard,
+    high_qc: &QuorumCertificate,
+    parent_merkle_root: FixedHash,
+    new_height: NodeHeight,
+    leader_strategy: &TLeaderStrategy,
+    local_committee: &Committee<TAddr>,
+    parent_timestamp: u64,
+    parent_base_layer_block_height: u64,
+    parent_base_layer_block_hash: FixedHash,
+    mut callback: F,
+) where
+    TAddr: NodeAddressable,
+    TLeaderStrategy: LeaderStrategy<TAddr>,
+    F: FnMut(Block) -> ControlFlow<()>,
+{
     let mut parent_block = high_qc.as_leaf_block();
     let mut current_height = high_qc.block_height() + NodeHeight(1);
     if current_height > new_height {
@@ -49,7 +125,7 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
             current_height,
             new_height,
         );
-        return None;
+        return;
     }
 
     debug!(
@@ -80,13 +156,15 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
         );
         parent_block = dummy_block.as_leaf_block();
 
+        if callback(dummy_block).is_break() {
+            break;
+        }
+
         if current_height == new_height {
             break;
         }
         current_height += NodeHeight(1);
     }
-
-    Some(parent_block)
 }
 
 pub fn diff_to_substate_changes(diff: &SubstateDiff) -> impl Iterator<Item = SubstateTreeChange> + '_ {
@@ -104,19 +182,20 @@ pub fn calculate_state_merkle_diff<TTx: TreeStoreReader<Version>, I: IntoIterato
     tx: &TTx,
     current_version: Version,
     next_version: Version,
-    pending_tree_updates: Vec<PendingStateTreeDiff>,
+    pending_tree_diffs: Vec<PendingStateTreeDiff>,
     substate_changes: I,
 ) -> Result<(Hash, StateHashTreeDiff), StateTreeError> {
     debug!(
         target: LOG_TARGET,
-        "Calculating state merkle diff from version {} to {} with {} update(s)",
+        "Calculating state merkle diff from version {} to {} with {} pending diff(s)",
         current_version,
         next_version,
-        pending_tree_updates.len(),
+        pending_tree_diffs.len(),
     );
     let mut store = StagedTreeStore::new(tx);
-    store.apply_ordered_diffs(pending_tree_updates.into_iter().map(|diff| diff.diff));
+    store.apply_ordered_diffs(pending_tree_diffs.into_iter().map(|diff| diff.diff));
     let mut state_tree = tari_state_tree::SpreadPrefixStateTree::new(&mut store);
-    let state_root = state_tree.put_substate_changes(current_version, next_version, substate_changes)?;
+    let state_root =
+        state_tree.put_substate_changes(Some(current_version).filter(|v| *v > 0), next_version, substate_changes)?;
     Ok((state_root, store.into_diff()))
 }

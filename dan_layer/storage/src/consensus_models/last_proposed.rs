@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::NodeHeight;
+use tari_dan_common_types::{Epoch, NodeHeight};
 
 use crate::{
     consensus_models::{Block, BlockId},
@@ -13,6 +13,7 @@ use crate::{
 pub struct LastProposed {
     pub height: NodeHeight,
     pub block_id: BlockId,
+    pub epoch: Epoch,
 }
 
 impl LastProposed {
@@ -35,6 +36,10 @@ impl LastProposed {
 
 impl std::fmt::Display for LastProposed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(height: {}, block_id: {})", self.height, self.block_id)
+        write!(
+            f,
+            "LastProposed({}, BlockId({}), {})",
+            self.height, self.block_id, self.epoch
+        )
     }
 }

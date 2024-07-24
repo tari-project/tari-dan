@@ -1,14 +1,13 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use async_trait::async_trait;
 use log::warn;
 use tari_dan_app_utilities::template_manager::{implementation::TemplateManager, interface::TemplateManagerError};
 use tari_dan_common_types::NodeAddressable;
 use tari_engine_types::instruction::Instruction;
 use tari_transaction::Transaction;
 
-use crate::p2p::services::mempool::{MempoolError, Validator};
+use crate::{transaction_validators::TransactionValidationError, validator::Validator};
 
 const LOG_TARGET: &str = "tari::dan::mempool::validators::template_exists";
 
@@ -23,21 +22,21 @@ impl<TAddr> TemplateExistsValidator<TAddr> {
     }
 }
 
-#[async_trait]
 impl<TAddr: NodeAddressable> Validator<Transaction> for TemplateExistsValidator<TAddr> {
-    type Error = MempoolError;
+    type Context = ();
+    type Error = TransactionValidationError;
 
-    async fn validate(&self, transaction: &Transaction) -> Result<(), MempoolError> {
+    fn validate(&self, _context: &(), transaction: &Transaction) -> Result<(), TransactionValidationError> {
         let instructions = transaction.instructions();
         for instruction in instructions {
             match instruction {
                 Instruction::CallFunction { template_address, .. } => {
                     let template_exists = self.template_manager.template_exists(template_address);
                     match template_exists {
-                        Err(e) => return Err(MempoolError::InvalidTemplateAddress(e)),
+                        Err(e) => return Err(TransactionValidationError::InvalidTemplateAddress(e)),
                         Ok(false) => {
                             warn!(target: LOG_TARGET, "TemplateExistsValidator - FAIL: Template not found");
-                            return Err(MempoolError::InvalidTemplateAddress(
+                            return Err(TransactionValidationError::InvalidTemplateAddress(
                                 TemplateManagerError::TemplateNotFound {
                                     address: *template_address,
                                 },

@@ -2,11 +2,12 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common::configuration::Network;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_consensus::{
     hotstuff::{ConsensusCurrentState, ConsensusWorker, ConsensusWorkerContext, HotstuffConfig, HotstuffWorker},
     traits::hooks::NoopHooks,
 };
+use tari_crypto::keys::PublicKey as _;
 use tari_dan_common_types::{shard::Shard, SubstateAddress};
 use tari_dan_storage::consensus_models::TransactionPool;
 use tari_shutdown::ShutdownSignal;
@@ -29,9 +30,10 @@ use crate::support::{
 
 pub struct ValidatorBuilder {
     pub address: TestAddress,
+    pub secret_key: PrivateKey,
     pub public_key: PublicKey,
-    pub shard: SubstateAddress,
-    pub bucket: Shard,
+    pub shard_address: SubstateAddress,
+    pub shard: Shard,
     pub sql_url: String,
     pub leader_strategy: RoundRobinLeaderStrategy,
     pub epoch_manager: Option<TestEpochManager>,
@@ -42,9 +44,10 @@ impl ValidatorBuilder {
     pub fn new() -> Self {
         Self {
             address: TestAddress::new("default"),
+            secret_key: PrivateKey::default(),
             public_key: PublicKey::default(),
-            shard: SubstateAddress::zero(),
-            bucket: Shard::from(0),
+            shard_address: SubstateAddress::zero(),
+            shard: Shard::from(0),
             sql_url: ":memory".to_string(),
             leader_strategy: RoundRobinLeaderStrategy::new(),
             epoch_manager: None,
@@ -52,24 +55,20 @@ impl ValidatorBuilder {
         }
     }
 
-    pub fn with_address_and_public_key(&mut self, address: TestAddress, public_key: PublicKey) -> &mut Self {
+    pub fn with_address_and_secret_key(&mut self, address: TestAddress, secret_key: PrivateKey) -> &mut Self {
         self.address = address;
-        self.public_key = public_key;
-        self
-    }
-
-    pub fn with_transaction_executions(&mut self, transaction_executions: TestTransactionExecutionsStore) -> &mut Self {
-        self.transaction_executions = transaction_executions;
+        self.public_key = PublicKey::from_secret_key(&secret_key);
+        self.secret_key = secret_key;
         self
     }
 
     pub fn with_bucket(&mut self, bucket: Shard) -> &mut Self {
-        self.bucket = bucket;
+        self.shard = bucket;
         self
     }
 
     pub fn with_shard(&mut self, shard: SubstateAddress) -> &mut Self {
-        self.shard = shard;
+        self.shard_address = shard;
         self
     }
 
@@ -99,21 +98,20 @@ impl ValidatorBuilder {
         let (tx_new_transactions, rx_new_transactions) = mpsc::channel(100);
         let (tx_hs_message, rx_hs_message) = mpsc::channel(100);
         let (tx_leader, rx_leader) = mpsc::channel(100);
-        let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
 
         let (outbound_messaging, rx_loopback) = TestOutboundMessaging::create(tx_leader, tx_broadcast);
         let inbound_messaging = TestInboundMessaging::new(self.address.clone(), rx_hs_message, rx_loopback);
 
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
-        let signing_service = TestVoteSignatureService::new(self.public_key.clone(), self.address.clone());
+        let signing_service = TestVoteSignatureService::new(self.address.clone());
         let transaction_pool = TransactionPool::new();
         let (tx_events, _) = broadcast::channel(100);
 
-        let epoch_manager =
-            self.epoch_manager
-                .as_ref()
-                .unwrap()
-                .clone_for(self.address.clone(), self.public_key.clone(), self.shard);
+        let epoch_manager = self.epoch_manager.as_ref().unwrap().clone_for(
+            self.address.clone(),
+            self.public_key.clone(),
+            self.shard_address,
+        );
 
         let transaction_executor = TestBlockTransactionProcessor::new(self.transaction_executions.clone());
 
@@ -130,7 +128,6 @@ impl ValidatorBuilder {
             transaction_pool,
             transaction_executor,
             tx_events.clone(),
-            tx_mempool,
             NoopHooks,
             shutdown_signal.clone(),
             HotstuffConfig {
@@ -152,18 +149,19 @@ impl ValidatorBuilder {
 
         let channels = ValidatorChannels {
             address: self.address.clone(),
-            bucket: self.bucket,
+            shard: self.shard,
             state_store: store.clone(),
             tx_new_transactions,
             tx_hs_message,
             rx_broadcast,
             rx_leader,
-            rx_mempool,
         };
 
         let validator = Validator {
             address: self.address.clone(),
-            substate_address: self.shard,
+            shard_address: self.shard_address,
+            shard: self.shard,
+            transaction_executions: self.transaction_executions.clone(),
             state_store: store,
             epoch_manager,
             leader_strategy: self.leader_strategy,

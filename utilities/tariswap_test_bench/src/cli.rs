@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
+use tari_engine_types::TemplateAddress;
 use url::Url;
 
 #[derive(Parser, Debug)]
@@ -35,6 +36,8 @@ pub struct CommonArgs {
     pub indexer_url: Url,
     #[clap(long, short = 'v', alias = "vn", default_value = "http://localhost:18200/json_rpc")]
     pub validator_node_url: Url,
+    #[clap(long, short = 't', alias = "faucet")]
+    pub faucet_template: Option<TemplateAddress>,
 }
 
 #[derive(Subcommand, Debug)]

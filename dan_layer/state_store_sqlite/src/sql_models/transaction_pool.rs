@@ -4,7 +4,7 @@
 use diesel::{Queryable, QueryableByName};
 use tari_dan_storage::{
     consensus_models,
-    consensus_models::{Decision, Evidence, LeaderFee, TransactionAtom},
+    consensus_models::{Evidence, LeaderFee},
     StorageError,
 };
 use time::PrimitiveDateTime;
@@ -18,9 +18,9 @@ pub struct TransactionPoolRecord {
     pub original_decision: String,
     pub local_decision: Option<String>,
     pub remote_decision: Option<String>,
-    pub evidence: String,
+    pub evidence: Option<String>,
     pub remote_evidence: Option<String>,
-    pub transaction_fee: i64,
+    pub transaction_fee: Option<i64>,
     pub leader_fee: Option<i64>,
     pub global_exhaust_burn: Option<i64>,
     pub stage: String,
@@ -35,16 +35,23 @@ pub struct TransactionPoolRecord {
 
 impl TransactionPoolRecord {
     pub fn try_convert(
-        mut self,
+        self,
         update: Option<TransactionPoolStateUpdate>,
     ) -> Result<consensus_models::TransactionPoolRecord, StorageError> {
-        let mut evidence = deserialize_json::<Evidence>(&self.evidence)?;
+        let mut evidence = self
+            .evidence
+            .as_deref()
+            .map(deserialize_json::<Evidence>)
+            .transpose()?
+            .unwrap_or_default();
         let mut pending_stage = None;
+        let mut local_decision = self.local_decision;
+        let mut is_ready = self.is_ready;
         if let Some(update) = update {
             evidence.merge(deserialize_json::<Evidence>(&update.evidence)?);
-            self.is_ready = update.is_ready;
+            is_ready = update.is_ready;
             pending_stage = Some(parse_from_string(&update.stage)?);
-            self.local_decision = update.local_decision;
+            local_decision = update.local_decision;
         }
 
         if let Some(ref remote_evidence) = self.remote_evidence {
@@ -68,31 +75,19 @@ impl TransactionPoolRecord {
             })
             .transpose()?;
         let original_decision = parse_from_string(&self.original_decision)?;
-        let local_decision = self.local_decision.as_deref().map(parse_from_string).transpose()?;
-        let remote_decision = self
-            .remote_decision
-            .as_deref()
-            .map(parse_from_string::<Decision>)
-            .transpose()?;
-        // TODO: sucks to reimplement this logic here
-        let aggregate_decision = remote_decision
-            .filter(|d| d.is_abort())
-            .or(local_decision)
-            .unwrap_or(original_decision);
+        let remote_decision = self.remote_decision.as_deref().map(parse_from_string).transpose()?;
 
         Ok(consensus_models::TransactionPoolRecord::load(
-            TransactionAtom {
-                id: deserialize_hex_try_from(&self.transaction_id)?,
-                decision: aggregate_decision,
-                evidence,
-                transaction_fee: self.transaction_fee as u64,
-                leader_fee,
-            },
+            deserialize_hex_try_from(&self.transaction_id)?,
+            evidence,
+            self.transaction_fee.map(|f| f as u64),
+            leader_fee,
             parse_from_string(&self.stage)?,
             pending_stage,
-            local_decision,
+            original_decision,
+            local_decision.as_deref().map(parse_from_string).transpose()?,
             remote_decision,
-            self.is_ready,
+            is_ready,
         ))
     }
 }

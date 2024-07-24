@@ -480,7 +480,7 @@ impl JsonRpcHandlers {
                     name: t.name,
                     address: t.address,
                     url: t.url,
-                    binary_sha: t.binary_sha,
+                    binary_sha: t.binary_sha.to_vec(),
                     height: t.height,
                 })
                 .collect(),
@@ -508,7 +508,7 @@ impl JsonRpcHandlers {
                 name: template.metadata.name,
                 address: template.metadata.address,
                 url: template.metadata.url,
-                binary_sha: template.metadata.binary_sha,
+                binary_sha: template.metadata.binary_sha.to_vec(),
                 height: template.metadata.height,
             },
             abi,
@@ -563,6 +563,10 @@ impl JsonRpcHandlers {
 
     pub async fn get_epoch_manager_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
+        self.epoch_manager
+            .wait_for_initial_scanning_to_complete()
+            .await
+            .map_err(internal_error(answer_id))?;
         let current_epoch = self.epoch_manager.current_epoch().await.map_err(|e| {
             JsonRpcResponse::error(
                 answer_id,

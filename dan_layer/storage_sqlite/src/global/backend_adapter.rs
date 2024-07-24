@@ -438,17 +438,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         use crate::global::schema::validator_nodes;
 
         let vn = validator_nodes::table
-            .select((
-                validator_nodes::id,
-                validator_nodes::public_key,
-                validator_nodes::shard_key,
-                validator_nodes::registered_at_base_height,
-                validator_nodes::start_epoch,
-                validator_nodes::end_epoch,
-                validator_nodes::fee_claim_public_key,
-                validator_nodes::address,
-                validator_nodes::sidechain_id,
-            ))
             .filter(validator_nodes::start_epoch.le(epoch.as_u64() as i64))
             .filter(validator_nodes::end_epoch.gt(epoch.as_u64() as i64))
             .filter(validator_nodes::public_key.eq(ByteArray::as_bytes(public_key)))
@@ -538,12 +527,12 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             })?;
 
         let mut committees = HashMap::new();
-        for (bucket, address, public_key) in count {
+        for (shard, address, public_key) in count {
             let addr = DbValidatorNode::try_parse_address(&address)?;
             let pk = PublicKey::from_canonical_bytes(&public_key)
                 .map_err(|_| SqliteStorageError::MalformedDbData("Invalid public key".to_string()))?;
             committees
-                .entry(Shard::from(bucket as u32))
+                .entry(Shard::from(shard as u32))
                 .or_insert_with(Committee::empty)
                 .members
                 .push((addr, pk));
@@ -552,11 +541,11 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         Ok(committees)
     }
 
-    fn validator_nodes_set_committee_bucket(
+    fn validator_nodes_set_committee_shard(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         shard_key: SubstateAddress,
-        bucket: Shard,
+        shard: Shard,
         sidechain_id: Option<&PublicKey>,
         epoch: Epoch,
     ) -> Result<(), Self::Error> {
@@ -580,7 +569,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             .values((
                 committees::validator_node_id.eq(validator_id),
                 committees::epoch.eq(epoch.as_u64() as i64),
-                committees::committee_bucket.eq(i64::from(bucket.as_u32())),
+                committees::committee_bucket.eq(i64::from(shard.as_u32())),
             ))
             .execute(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {

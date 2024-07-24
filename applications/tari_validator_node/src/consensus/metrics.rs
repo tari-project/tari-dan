@@ -196,7 +196,6 @@ impl<S: StateStore> ConsensusHooks for PrometheusConsensusMetrics<S> {
             Decision::Abort => {
                 self.transactions_finalized_aborted.inc();
             },
-            Decision::Deferred => {},
         }
     }
 }

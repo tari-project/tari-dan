@@ -52,7 +52,7 @@ where TConsensusSpec: ConsensusSpec
     pub async fn handle(&mut self, from: TConsensusSpec::Addr, message: ProposalMessage) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = message;
 
-        debug!(
+        info!(
             target: LOG_TARGET,
             "🔥 Receive FOREIGN PROPOSAL for block {}, parent {}, height {} from {}",
             block.id(),
@@ -187,7 +187,7 @@ where TConsensusSpec: ConsensusSpec
             // If all shards are complete and we've already received our LocalPrepared, we can set out LocalPrepared
             // transaction as ready to propose ACCEPT. If we have not received the local LocalPrepared, the transition
             // will happen when we receive the local block.
-            if tx_rec.current_stage().is_local_prepared() && tx_rec.atom().evidence.all_shards_justified() {
+            if tx_rec.current_stage().is_local_prepared() && tx_rec.evidence().all_shards_justified() {
                 info!(
                     target: LOG_TARGET,
                     "🔥 FOREIGN PROPOSAL: Transaction is ready for propose ACCEPT({}, {}) Local Stage: {}",
@@ -232,7 +232,7 @@ where TConsensusSpec: ConsensusSpec
         //         ),
         //     });
         // }
-        if candidate_block.height().is_zero() || candidate_block.is_genesis() {
+        if candidate_block.is_genesis() {
             return Err(ProposalValidationError::ProposingGenesisBlock {
                 proposed_by: from.to_string(),
                 hash: *candidate_block.id(),

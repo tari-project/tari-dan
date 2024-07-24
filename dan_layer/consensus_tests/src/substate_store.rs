@@ -2,10 +2,10 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::{
-    hotstuff::substate_store::{PendingSubstateStore, SubstateStoreError},
+    hotstuff::substate_store::{ChainScopedTreeStore, PendingSubstateStore, SubstateStoreError},
     traits::{ReadableSubstateStore, WriteableSubstateStore},
 };
-use tari_dan_common_types::PeerAddress;
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, PeerAddress};
 use tari_dan_storage::{
     consensus_models::{
         BlockId,
@@ -37,7 +37,7 @@ fn it_allows_substate_up_for_v0() {
     let value = new_substate_value(0);
 
     let tx = store.create_read_tx().unwrap();
-    let mut store = PendingSubstateStore::<'_, '_, TestStore>::new(&tx);
+    let mut store = create_pending_store(&tx);
     // Cannot put version 1
     store
         .put(SubstateChange::Up {
@@ -67,7 +67,7 @@ fn it_allows_down_then_up() {
     let id = add_substate(&store, 0, 0);
 
     let tx = store.create_read_tx().unwrap();
-    let mut store = PendingSubstateStore::<'_, '_, TestStore>::new(&tx);
+    let mut store = create_pending_store(&tx);
 
     let s = store.get_latest(id.substate_id()).unwrap();
     assert_substate_eq(s, new_substate(0, 0));
@@ -87,7 +87,7 @@ fn it_allows_down_then_up() {
         })
         .unwrap();
 
-    let s = store.get(&id.to_next_version().to_substate_address()).unwrap();
+    let s = store.get(&id.to_next_version()).unwrap();
     assert_substate_eq(s, new_substate(1, 1));
     let s = store.get_latest(id.substate_id()).unwrap();
     assert_substate_eq(s, new_substate(1, 1));
@@ -100,7 +100,7 @@ fn it_fails_if_previous_version_is_not_down() {
     let id = add_substate(&store, 0, 0);
 
     let tx = store.create_read_tx().unwrap();
-    let mut store = PendingSubstateStore::<'_, '_, TestStore>::new(&tx);
+    let mut store = create_pending_store(&tx);
     let err = store
         .put(SubstateChange::Up {
             id: id.to_next_version(),
@@ -119,7 +119,7 @@ fn it_disallows_more_than_one_write_lock_non_local_only() {
     let id = add_substate(&store, 0, 0);
 
     let tx = store.create_read_tx().unwrap();
-    let mut store = PendingSubstateStore::<'_, '_, TestStore>::new(&tx);
+    let mut store = create_pending_store(&tx);
 
     store
         .try_lock(
@@ -158,7 +158,7 @@ fn it_allows_locks_within_one_transaction() {
     let id = add_substate(&store, 0, 0);
 
     let tx = store.create_read_tx().unwrap();
-    let mut store = PendingSubstateStore::<'_, '_, TestStore>::new(&tx);
+    let mut store = create_pending_store(&tx);
 
     store
         .try_lock(
@@ -202,9 +202,10 @@ fn add_substate(store: &TestStore, seed: u8, version: u32) -> VersionedSubstateI
                 substate_value: value,
                 state_hash: [seed; 32].into(),
                 created_by_transaction: Default::default(),
-                created_justify: QcId::genesis(),
-                created_block: BlockId::genesis(),
+                created_justify: QcId::zero(),
+                created_block: BlockId::zero(),
                 created_height: 0.into(),
+                created_by_shard: Shard::zero(),
                 created_at_epoch: 0.into(),
                 destroyed: None,
             }
@@ -217,6 +218,13 @@ fn add_substate(store: &TestStore, seed: u8, version: u32) -> VersionedSubstateI
 
 fn create_store() -> TestStore {
     SqliteStateStore::connect(":memory:").unwrap()
+}
+
+fn create_pending_store<'a, 'tx, TAddr: NodeAddressable>(
+    tx: &'a <SqliteStateStore<TAddr> as StateStore>::ReadTransaction<'tx>,
+) -> PendingSubstateStore<'a, 'tx, SqliteStateStore<TAddr>> {
+    let tree_store = ChainScopedTreeStore::new(Epoch::zero(), Shard::zero(), tx);
+    PendingSubstateStore::new(BlockId::zero(), tree_store)
 }
 
 fn new_substate_id(seed: u8) -> SubstateId {

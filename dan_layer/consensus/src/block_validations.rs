@@ -11,6 +11,29 @@ use crate::{
     traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
 };
 
+pub async fn check_proposal<TConsensusSpec: ConsensusSpec>(
+    block: &Block,
+    network: Network,
+    epoch_manager: &TConsensusSpec::EpochManager,
+    vote_signing_service: &TConsensusSpec::SignatureService,
+    leader_strategy: &TConsensusSpec::LeaderStrategy,
+    _config: &HotstuffConfig,
+) -> Result<(), HotStuffError> {
+    // TODO: in order to do the base layer block has validation, we need to ensure that we have synced to the tip.
+    //       If not, we need some strategy for "parking" the blocks until we are at least at the provided hash or the
+    //       tip. Without this, the check has a race condition between the base layer scanner and consensus.
+    // check_base_layer_block_hash::<TConsensusSpec>(block, epoch_manager, config).await?;
+    check_network(block, network)?;
+    check_hash_and_height(block)?;
+    let committee_for_block = epoch_manager
+        .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
+        .await?;
+    check_proposed_by_leader(leader_strategy, &committee_for_block, block)?;
+    check_signature(block)?;
+    check_quorum_certificate::<TConsensusSpec>(block, vote_signing_service, epoch_manager).await?;
+    Ok(())
+}
+
 pub fn check_network(candidate_block: &Block, network: Network) -> Result<(), ProposalValidationError> {
     if candidate_block.network() != network {
         return Err(ProposalValidationError::InvalidNetwork {
@@ -22,6 +45,8 @@ pub fn check_network(candidate_block: &Block, network: Network) -> Result<(), Pr
     Ok(())
 }
 
+// TODO: remove allow(dead_code)
+#[allow(dead_code)]
 pub async fn check_base_layer_block_hash<TConsensusSpec: ConsensusSpec>(
     block: &Block,
     epoch_manager: &TConsensusSpec::EpochManager,
@@ -59,17 +84,17 @@ pub async fn check_base_layer_block_hash<TConsensusSpec: ConsensusSpec>(
             current: current_height,
         })?;
     }
-    if block.is_epoch_end() && !epoch_manager.is_last_block_of_epoch(base_layer_block_height).await? {
-        Err(ProposalValidationError::NotLastBlockOfEpoch {
-            block_id: *block.id(),
-            base_layer_block_height,
-        })?;
-    }
+    // if block.is_epoch_end() && !epoch_manager.is_last_block_of_epoch(base_layer_block_height).await? {
+    //     Err(ProposalValidationError::NotLastBlockOfEpoch {
+    //         block_id: *block.id(),
+    //         base_layer_block_height,
+    //     })?;
+    // }
     Ok(())
 }
 
 pub fn check_hash_and_height(candidate_block: &Block) -> Result<(), ProposalValidationError> {
-    if candidate_block.height().is_zero() || candidate_block.is_genesis() {
+    if candidate_block.is_genesis() {
         return Err(ProposalValidationError::ProposingGenesisBlock {
             proposed_by: candidate_block.proposed_by().to_string(),
             hash: *candidate_block.id(),
@@ -114,7 +139,7 @@ pub fn check_signature(candidate_block: &Block) -> Result<(), ProposalValidation
         return Ok(());
     }
     let validator_signature = candidate_block
-        .get_signature()
+        .signature()
         .ok_or(ProposalValidationError::MissingSignature {
             block_id: *candidate_block.id(),
             height: candidate_block.height(),
@@ -134,8 +159,8 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     epoch_manager: &TConsensusSpec::EpochManager,
 ) -> Result<(), HotStuffError> {
     let qc = candidate_block.justify();
-    if qc.is_genesis() {
-        // This is potentially dangerous. There should be a check
+    if qc.is_zero() {
+        // TODO: This is potentially dangerous. There should be a check
         // to make sure this is the start of the chain.
 
         return Ok(());
@@ -146,6 +171,10 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
             candidate_block_height: candidate_block.height(),
         }
         .into());
+    }
+
+    if qc.signatures().is_empty() {
+        return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
     }
 
     let mut vns = vec![];

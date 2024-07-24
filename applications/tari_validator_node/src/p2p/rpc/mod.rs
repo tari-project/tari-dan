@@ -20,8 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+mod block_sync_task;
 mod service_impl;
-mod sync_task;
+mod state_sync_task;
 
 pub use service_impl::ValidatorNodeRpcServiceImpl;
 use tari_dan_common_types::PeerAddress;
@@ -32,11 +33,13 @@ use tari_validator_node_rpc::rpc_service::ValidatorNodeRpcServer;
 use crate::{p2p::services::mempool::MempoolHandle, virtual_substate::VirtualSubstateManager};
 
 pub fn create_tari_validator_node_rpc_service(
+    epoch_manager: EpochManagerHandle<PeerAddress>,
     shard_store_store: SqliteStateStore<PeerAddress>,
     mempool: MempoolHandle,
     virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PeerAddress>, EpochManagerHandle<PeerAddress>>,
 ) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl> {
     ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(
+        epoch_manager,
         shard_store_store,
         mempool,
         virtual_substate_manager,

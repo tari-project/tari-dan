@@ -8,15 +8,12 @@ use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_template_lib::{
     args::{Arg, LogLevel},
-    models::{Amount, ComponentAddress, TemplateAddress},
+    models::{ComponentAddress, TemplateAddress},
 };
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use crate::{
-    confidential::{ConfidentialClaim, ConfidentialOutput},
-    serde_with,
-};
+use crate::{confidential::ConfidentialClaim, serde_with};
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
@@ -61,11 +58,6 @@ pub enum Instruction {
         validator_public_key: PublicKey,
     },
     DropAllProofsInWorkspace,
-    #[cfg(feature = "debugging")]
-    CreateFreeTestCoins {
-        revealed_amount: Amount,
-        output: Option<ConfidentialOutput>,
-    },
 }
 
 impl Display for Instruction {
@@ -126,9 +118,7 @@ impl Display for Instruction {
                     epoch, validator_public_key
                 )
             },
-            Self::CreateFreeTestCoins { .. } => {
-                write!(f, "CreateFreeTestCoins")
-            },
+
             Self::DropAllProofsInWorkspace => {
                 write!(f, "DropAllProofsInWorkspace")
             },

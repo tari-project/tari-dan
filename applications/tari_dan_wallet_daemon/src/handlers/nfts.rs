@@ -180,15 +180,11 @@ async fn mint_account_nft(
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
-    let inputs = sdk
+    let mut inputs = sdk
         .substate_api()
         .locate_dependent_substates(&[account.address.clone()])
         .await?;
 
-    let mut inputs = inputs
-        .iter()
-        .map(|v| SubstateRequirement::new(v.substate_id.clone(), Some(v.version)))
-        .collect::<Vec<_>>();
     inputs.extend([SubstateRequirement::new(SubstateId::Component(component_address), None)]);
 
     let instructions = vec![
@@ -252,9 +248,6 @@ async fn create_account_nft(
         .substate_api()
         .locate_dependent_substates(&[account.address.clone()])
         .await?;
-    let inputs = inputs
-        .iter()
-        .map(|addr| SubstateRequirement::new(addr.substate_id.clone(), Some(addr.version)));
 
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)

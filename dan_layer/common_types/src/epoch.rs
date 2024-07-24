@@ -32,7 +32,11 @@ use ts_rs::TS;
 pub struct Epoch(#[cfg_attr(feature = "ts", ts(type = "number"))] pub u64);
 
 impl Epoch {
-    pub fn as_u64(self) -> u64 {
+    pub const fn zero() -> Self {
+        Self(0)
+    }
+
+    pub const fn as_u64(self) -> u64 {
         self.0
     }
 
@@ -44,8 +48,8 @@ impl Epoch {
         self.0.to_le_bytes()
     }
 
-    pub fn saturating_sub(&self, other: Epoch) -> Epoch {
-        Epoch(self.0.saturating_sub(other.0))
+    pub fn saturating_sub<T: Into<Epoch>>(&self, other: T) -> Epoch {
+        Epoch(self.0.saturating_sub(other.into().0))
     }
 
     pub fn checked_sub(&self, other: Self) -> Option<Epoch> {
@@ -59,9 +63,21 @@ impl From<u64> for Epoch {
     }
 }
 
+impl PartialEq<u64> for Epoch {
+    fn eq(&self, other: &u64) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<Epoch> for u64 {
+    fn eq(&self, other: &Epoch) -> bool {
+        *self == other.0
+    }
+}
+
 impl Display for Epoch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "Epoch({})", self.0)
     }
 }
 

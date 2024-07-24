@@ -14,8 +14,8 @@ message HotStuffMessage {
     ProposalMessage proposal = 2;
     ProposalMessage foreign_proposal = 3;
     VoteMessage vote = 4;
-    RequestMissingTransactionsMessage request_missing_transactions = 5;
-    RequestedTransactionMessage requested_transaction = 6;
+    MissingTransactionsRequest request_missing_transactions = 5;
+    MissingTransactionsResponse requested_transaction = 6;
     SyncRequest sync_request = 7;
     SyncResponse sync_response = 8;
   }
@@ -56,6 +56,7 @@ message Block {
   uint64 timestamp = 13;
   uint64 base_layer_block_height = 14;
   bytes base_layer_block_hash = 15;
+  bool is_dummy = 16;
 }
 
 message LeaderFee {
@@ -70,14 +71,8 @@ message Command {
     TransactionAtom accept = 3;
     TransactionAtom local_only = 4;
     ForeignProposal foreign_proposal = 5;
-    EpochEvent epoch_event = 6;
+    bool end_epoch = 6;
   }
-}
-
-enum EpochEvent {
-  UNKNOWN_EVENT = 0;
-  START = 1;
-  END = 2;
 }
 
 enum ForeignProposalState {
@@ -108,7 +103,6 @@ enum Decision {
   UNKNOWN = 0;
   COMMIT = 1;
   ABORT = 2;
-  DEFERRED = 3;
 }
 
 message Evidence {
@@ -187,16 +181,18 @@ message DownState {
   uint64 fees_accrued = 2;
 }
 
-message RequestMissingTransactionsMessage {
-  uint64 epoch = 1;
-  bytes block_id = 2;
-  repeated bytes transaction_ids = 3;
+message MissingTransactionsRequest {
+  uint32 request_id = 1;
+  uint64 epoch = 2;
+  bytes block_id = 3;
+  repeated bytes transaction_ids = 4;
 }
 
-message RequestedTransactionMessage {
-  uint64 epoch = 1;
-  bytes block_id = 2;
-  repeated tari.dan.transaction.Transaction transactions = 3;
+message MissingTransactionsResponse {
+  uint32 request_id = 1;
+  uint64 epoch = 2;
+  bytes block_id = 3;
+  repeated tari.dan.transaction.Transaction transactions = 4;
 }
 
 message Substate {
@@ -205,19 +201,21 @@ message Substate {
   bytes substate = 3;
 
   uint64 created_epoch = 4;
-  uint64 created_height = 5;
-  bytes created_block = 6;
-  bytes created_transaction = 7;
-  bytes created_justify = 8;
+  uint32 created_by_shard = 5;
+  uint64 created_height = 6;
+  bytes created_block = 7;
+  bytes created_transaction = 8;
+  bytes created_justify = 9;
 
   SubstateDestroyed destroyed = 10;
 }
 
 message SubstateDestroyed {
-  tari.dan.common.Epoch epoch = 9;
-  bytes block = 10;
-  bytes transaction = 11;
-  bytes justify = 12;
+  tari.dan.common.Epoch epoch = 1;
+  uint32 shard = 2;
+  uint64 block_height = 3;
+  bytes transaction = 4;
+  bytes justify = 5;
 }
 
 message SyncRequest {
@@ -228,7 +226,8 @@ message SyncRequest {
 message HighQc {
   bytes block_id = 1;
   uint64 block_height = 2;
-  bytes qc_id = 3;
+  uint64 epoch = 3;
+  bytes qc_id = 4;
 }
 
 message SyncResponse {

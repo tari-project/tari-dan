@@ -8,7 +8,7 @@ mod serialization;
 mod sql_models;
 mod sqlite_transaction;
 mod store;
-mod tree_store;
+// mod tree_store;
 mod writer;
 
 pub use store::SqliteStateStore;

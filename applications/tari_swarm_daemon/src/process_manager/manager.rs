@@ -3,7 +3,7 @@
 
 use std::{collections::HashMap, time::Duration};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use log::info;
 use minotari_node_grpc_client::grpc;
 use tari_crypto::tari_utilities::ByteArray;
@@ -56,10 +56,14 @@ impl ProcessManager {
 
         let num_vns = self.instance_manager.num_validator_nodes();
         // Mine some initial funds, guessing 10 blocks to allow for coinbase maturity
-        self.mine(num_vns + 5).await?;
-        self.wait_for_wallet_funds(num_vns).await?;
+        self.mine(num_vns + 10).await.context("mining failed")?;
+        self.wait_for_wallet_funds(num_vns)
+            .await
+            .context("waiting for wallet funds")?;
 
-        self.register_all_validator_nodes().await?;
+        self.register_all_validator_nodes()
+            .await
+            .context("registering validator node via GRPC")?;
 
         loop {
             tokio::select! {
@@ -180,6 +184,7 @@ impl ProcessManager {
     }
 
     async fn register_all_validator_nodes(&mut self) -> anyhow::Result<()> {
+        let mut skip = vec![];
         for vn in self.instance_manager.validator_nodes_mut() {
             if !vn.instance_mut().check_running() {
                 log::error!(
@@ -187,7 +192,7 @@ impl ProcessManager {
                     vn.instance().id(),
                     vn.instance().name()
                 );
-                continue;
+                skip.push(vn.instance().id());
             }
         }
 
@@ -203,6 +208,9 @@ impl ProcessManager {
             })?;
 
         for vn in self.instance_manager.validator_nodes() {
+            if skip.contains(&vn.instance().id()) {
+                continue;
+            }
             info!("🟡 Registering validator node {}", vn.instance().name());
             if let Err(err) = vn.wait_for_startup(Duration::from_secs(10)).await {
                 log::error!(
@@ -215,12 +223,12 @@ impl ProcessManager {
 
             let reg_info = vn.get_registration_info().await?;
             let tx_id = wallet.register_validator_node(reg_info).await?;
-            info!("🟢 Registered validator node with tx_id: {tx_id}");
+            info!("🟢 Registered validator node {vn} with tx_id: {tx_id}");
             // Just wait a bit :shrug: This could be a bug in the console wallet. If we submit too quickly it uses 0
             // inputs for a transaction.
             sleep(Duration::from_secs(2)).await;
         }
-        self.mine(20).await?;
+        self.mine(10).await?;
         Ok(())
     }
 
@@ -257,7 +265,6 @@ impl ProcessManager {
 
         let reg_info = vn.get_registration_info().await?;
         wallet.register_validator_node(reg_info).await?;
-        self.mine(20).await?;
         Ok(())
     }
 

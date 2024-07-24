@@ -466,9 +466,9 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin + Send
                 _ = &mut self.shutdown_signal => {
                     break;
                 },
-                Some(server_msg) = self.framed.next() => {
+                server_msg = self.framed.next() => {
                     match server_msg {
-                        Ok(msg) => {
+                        Some(Ok(msg)) => {
                             if let Err(err) = self.handle_interrupt_server_message(msg) {
                                 #[cfg(feature = "metrics")]
                                 metrics::handshake_errors(&self.peer_id, &self.protocol_id).inc();
@@ -476,10 +476,14 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin + Send
                                 break;
                             }
                         },
-                        Err(err) => {
+                        Some(Err(err)) => {
                             debug!(target: LOG_TARGET, "(peer={}) IO Error: {}. Worker is terminating.", self.peer_id, err);
                             break;
                         },
+                        None => {
+                            debug!(target: LOG_TARGET, "(peer={}) Substream closed. Worker is terminating.", self.peer_id);
+                            break;
+                        }
                     }
                 },
                 req = self.request_rx.recv() => {
@@ -585,9 +589,9 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin + Send
 
         let resp_flags =
             RpcMessageFlags::from_bits(u8::try_from(resp.flags).map_err(|_| {
-                RpcStatus::protocol_error(&format!("invalid message flag: must be less than {}", u8::MAX))
+                RpcStatus::protocol_error(format!("invalid message flag: must be less than {}", u8::MAX))
             })?)
-            .ok_or(RpcStatus::protocol_error(&format!(
+            .ok_or(RpcStatus::protocol_error(format!(
                 "invalid message flag, does not match any flags ({})",
                 resp.flags
             )))?;
@@ -598,7 +602,7 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin + Send
                 self.peer_id,
                 resp
             );
-            let _result = reply.send(Err(RpcStatus::protocol_error(&format!(
+            let _result = reply.send(Err(RpcStatus::protocol_error(format!(
                 "Received invalid ping response on protocol '{}'",
                 self.protocol_name()
             ))));
@@ -953,13 +957,13 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin
 
     fn check_response(&self, resp: &proto::RpcResponse) -> Result<(), RpcError> {
         let resp_id = u16::try_from(resp.request_id)
-            .map_err(|_| RpcStatus::protocol_error(&format!("invalid request_id: must be less than {}", u16::MAX)))?;
+            .map_err(|_| RpcStatus::protocol_error(format!("invalid request_id: must be less than {}", u16::MAX)))?;
 
         if resp_id != self.request_id {
             return Err(RpcError::ResponseIdDidNotMatchRequest {
                 expected: self.request_id,
                 actual: u16::try_from(resp.request_id).map_err(|_| {
-                    RpcStatus::protocol_error(&format!("invalid request_id: must be less than {}", u16::MAX))
+                    RpcStatus::protocol_error(format!("invalid request_id: must be less than {}", u16::MAX))
                 })?,
             });
         }

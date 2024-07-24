@@ -9,7 +9,6 @@ use std::{
     time::Duration,
 };
 
-use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{optional::Optional, SubstateAddress};
 use tari_engine_types::commit_result::ExecuteResult;
@@ -40,7 +39,7 @@ pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
     resulting_outputs: Vec<VersionedSubstateId>,
-    resolved_inputs: IndexSet<VersionedSubstateIdLockIntent>,
+    resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
     #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
     execution_time: Duration,
     final_decision: Option<Decision>,
@@ -53,7 +52,7 @@ impl ExecutedTransaction {
     pub fn new(
         transaction: Transaction,
         result: ExecuteResult,
-        resolved_inputs: IndexSet<VersionedSubstateIdLockIntent>,
+        resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
         resulting_outputs: Vec<VersionedSubstateId>,
         execution_time: Duration,
     ) -> Self {
@@ -144,7 +143,7 @@ impl ExecutedTransaction {
         &self.resulting_outputs
     }
 
-    pub fn resolved_inputs(&self) -> &IndexSet<VersionedSubstateIdLockIntent> {
+    pub fn resolved_inputs(&self) -> &[VersionedSubstateIdLockIntent] {
         &self.resolved_inputs
     }
 
@@ -153,7 +152,7 @@ impl ExecutedTransaction {
     ) -> (
         Transaction,
         ExecuteResult,
-        IndexSet<VersionedSubstateIdLockIntent>,
+        Vec<VersionedSubstateIdLockIntent>,
         Vec<VersionedSubstateId>,
     ) {
         (
@@ -165,7 +164,7 @@ impl ExecutedTransaction {
     }
 
     pub fn to_initial_evidence(&self) -> Evidence {
-        Evidence::from_inputs_and_outputs(*self.id(), &self.resolved_inputs, &self.resulting_outputs)
+        Evidence::from_inputs_and_outputs(&self.resolved_inputs, &self.resulting_outputs)
     }
 
     pub fn transaction_fee(&self) -> u64 {
@@ -240,7 +239,7 @@ impl ExecutedTransaction {
 
     pub fn get<TTx: StateStoreReadTransaction>(tx: &TTx, tx_id: &TransactionId) -> Result<Self, StorageError> {
         let rec = tx.transactions_get(tx_id)?;
-        if rec.result.is_none() {
+        if rec.execution_result.is_none() {
             return Err(StorageError::NotFound {
                 item: "ExecutedTransaction".to_string(),
                 key: tx_id.to_string(),
@@ -257,7 +256,7 @@ impl ExecutedTransaction {
     ) -> Result<ExecuteResult, StorageError> {
         // TODO(perf): consider optimising
         let rec = tx.transactions_get(tx_id)?;
-        let Some(result) = rec.result else {
+        let Some(result) = rec.execution_result else {
             return Err(StorageError::NotFound {
                 item: "ExecutedTransaction result".to_string(),
                 key: tx_id.to_string(),
@@ -293,7 +292,7 @@ impl ExecutedTransaction {
         tx_id: &TransactionId,
     ) -> Result<bool, StorageError> {
         match tx.transactions_get(tx_id).optional()? {
-            Some(rec) => Ok(rec.result.is_some()),
+            Some(rec) => Ok(rec.execution_result.is_some()),
             None => Ok(false),
         }
     }
@@ -361,7 +360,7 @@ impl TryFrom<TransactionRecord> for ExecutedTransaction {
 
         Ok(Self {
             transaction: value.transaction,
-            result: value.result.unwrap(),
+            result: value.execution_result.unwrap(),
             execution_time: value.execution_time.unwrap_or_default(),
             resolved_inputs,
             final_decision: value.final_decision,
@@ -403,6 +402,18 @@ impl VersionedSubstateIdLockIntent {
             versioned_substate_id,
             lock_flag: lock,
         }
+    }
+
+    pub fn read(versioned_substate_id: VersionedSubstateId) -> Self {
+        Self::new(versioned_substate_id, SubstateLockFlag::Read)
+    }
+
+    pub fn write(versioned_substate_id: VersionedSubstateId) -> Self {
+        Self::new(versioned_substate_id, SubstateLockFlag::Write)
+    }
+
+    pub fn output(versioned_substate_id: VersionedSubstateId) -> Self {
+        Self::new(versioned_substate_id, SubstateLockFlag::Output)
     }
 
     pub fn to_substate_address(&self) -> SubstateAddress {

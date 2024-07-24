@@ -559,8 +559,8 @@ mod basic_nft {
         assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
 
         // NFT and account components changed
-        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
-        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_component()).count(), 1);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_component()).count(), 1);
 
         // One new vault created
         assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_vault()).count(), 0);
@@ -1302,9 +1302,9 @@ mod nft_indexes {
         assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
         assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
 
-        // NFT and account components changed
-        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
-        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
+        // NFT component changed
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_component()).count(), 1);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_component()).count(), 1);
 
         // One new vault created
         assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_vault()).count(), 0);
@@ -1351,43 +1351,6 @@ mod nft_indexes {
         // The total supply of the resource is increased
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![owner_proof]);
         assert_eq!(total_supply, Amount(1));
-    }
-}
-
-// TODO: these tests can be removed when create free test coins is removed
-mod free_test_coins {
-    use tari_engine_types::component::new_component_address_from_public_key;
-
-    use super::*;
-    #[test]
-    fn it_creates_free_test_coins() {
-        let mut test = TemplateTest::new(Vec::<&str>::new());
-        test.enable_fees();
-        let account_template = test.get_template_address("Account");
-        let (other, _, _) = test.create_owner_proof();
-
-        let owner_token = test.get_test_proof();
-        let future_account_component =
-            new_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, test.get_test_public_key());
-
-        test.execute_expect_success(
-            Transaction::builder()
-                .with_fee_instructions_builder(|builder| {
-                    builder
-                        .add_instruction(Instruction::CreateFreeTestCoins {
-                            revealed_amount: Amount(1000),
-                            output: None,
-                        })
-                        .put_last_instruction_output_on_workspace("free")
-                        .create_account_with_bucket(test.get_test_public_key().clone(), "free")
-                        .call_method(future_account_component, "pay_fee", args![Amount(1000)])
-                })
-                // Checking we can create an account for another user in this transaction
-                .call_function(account_template, "create", args![other])
-                .sign(test.get_test_secret_key())
-                .build(),
-            vec![owner_token],
-        );
     }
 }
 

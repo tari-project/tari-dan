@@ -30,6 +30,7 @@ use minotari_app_utilities::identity_management;
 use serde::Serialize;
 use sqlite_message_logger::SqliteMessageLogger;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
+use tari_bor::cbor;
 use tari_common::{
     configuration::Network,
     exit_codes::{ExitCode, ExitError},
@@ -48,11 +49,11 @@ use tari_dan_app_utilities::{
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
 };
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PeerAddress, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, PeerAddress};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, ExecutedTransaction, SubstateRecord},
+    consensus_models::{Block, BlockId, SubstateRecord},
     global::GlobalDb,
     StateStore,
     StateStoreReadTransaction,
@@ -60,7 +61,13 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
-use tari_engine_types::{resource::Resource, substate::SubstateId};
+use tari_engine_types::{
+    component::{ComponentBody, ComponentHeader},
+    resource::Resource,
+    resource_container::ResourceContainer,
+    substate::{SubstateId, SubstateValue},
+    vault::Vault,
+};
 use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
 use tari_indexer_lib::substate_scanner::SubstateScanner;
 use tari_networking::{MessagingMode, NetworkingHandle, RelayCircuitLimits, RelayReservationLimits, SwarmConfig};
@@ -69,12 +76,17 @@ use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::{
     auth::ResourceAccessRules,
-    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
-    models::Metadata,
-    prelude::{OwnerRule, ResourceType},
+    constants::{
+        CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+        PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+        XTR_FAUCET_COMPONENT_ADDRESS,
+        XTR_FAUCET_VAULT_ADDRESS,
+    },
+    models::{Amount, EntityId, Metadata},
+    prelude::{ComponentAccessRules, OwnerRule, ResourceType},
     resource::TOKEN_SYMBOL,
 };
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, VersionedSubstateId};
 use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{sync::mpsc, task::JoinHandle};
 
@@ -86,24 +98,13 @@ use crate::{
     p2p::{
         create_tari_validator_node_rpc_service,
         services::{
-            mempool::{
-                self,
-                ClaimFeeTransactionValidator,
-                EpochRangeValidator,
-                FeeTransactionValidator,
-                HasInputs,
-                HasInvolvedShards,
-                MempoolError,
-                MempoolHandle,
-                OutputsDontExistLocally,
-                TemplateExistsValidator,
-                TransactionSignatureValidator,
-                Validator,
-            },
+            mempool::{self, MempoolHandle},
             messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, Gossip},
         },
     },
     substate_resolver::TariSubstateResolver,
+    transaction_validators::{FeeTransactionValidator, HasInputs, TemplateExistsValidator, TransactionValidationError},
+    validator::Validator,
     validator_registration_file::ValidatorRegistrationFile,
     virtual_substate::VirtualSubstateManager,
     ApplicationConfig,
@@ -227,13 +228,8 @@ pub async fn spawn_services(
             per_log_cost: 1,
         }
     };
-    let payload_processor = TariDanTransactionProcessor::new(config.network, template_manager.clone(), fee_table);
 
-    let validator_node_client_factory = TariValidatorNodeRpcClientFactory::new(networking.clone());
-
-    // Consensus
-    let (tx_executed_transaction, rx_executed_transaction) = mpsc::channel(10);
-
+    // Messaging
     let local_address = PeerAddress::from(keypair.public_key().clone());
     let (loopback_sender, loopback_receiver) = mpsc::unbounded_channel();
     let inbound_messaging = ConsensusInboundMessaging::new(
@@ -245,19 +241,26 @@ pub async fn spawn_services(
     let outbound_messaging =
         ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
 
-    let transaction_executor = TariDanBlockTransactionExecutor::new(epoch_manager.clone(), payload_processor.clone());
+    // Consensus
+    let payload_processor = TariDanTransactionProcessor::new(config.network, template_manager.clone(), fee_table);
+    let transaction_executor = TariDanBlockTransactionExecutor::new(
+        payload_processor.clone(),
+        consensus::create_transaction_validator(&config.validator_node, template_manager.clone()),
+    );
 
     #[cfg(feature = "metrics")]
     let metrics = PrometheusConsensusMetrics::new(state_store.clone(), metrics_registry);
     #[cfg(not(feature = "metrics"))]
     let metrics = NoopHooks;
 
-    let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
+    let validator_node_client_factory = TariValidatorNodeRpcClientFactory::new(networking.clone());
+    let signing_service = consensus::TariSignatureService::new(keypair.clone());
+    let (consensus_join_handle, consensus_handle) = consensus::spawn(
         config.network,
         state_store.clone(),
-        keypair.clone(),
+        local_address,
+        signing_service,
         epoch_manager.clone(),
-        rx_executed_transaction,
         inbound_messaging,
         outbound_messaging.clone(),
         validator_node_client_factory.clone(),
@@ -269,41 +272,13 @@ pub async fn spawn_services(
     .await;
     handles.push(consensus_join_handle);
 
-    // substate cache
-    let substate_cache_dir = config.common.base_path.join("substate_cache");
-    let substate_cache = SubstateFileCache::new(substate_cache_dir)
-        .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Substate cache error: {}", e)))?;
-
-    // Mempool
-    let virtual_substate_manager = VirtualSubstateManager::new(state_store.clone(), epoch_manager.clone());
-    let scanner = SubstateScanner::new(
-        epoch_manager.clone(),
-        validator_node_client_factory.clone(),
-        substate_cache,
-    );
-    let substate_resolver = TariSubstateResolver::new(
-        state_store.clone(),
-        scanner,
-        epoch_manager.clone(),
-        virtual_substate_manager.clone(),
-    );
-
     let gossip = Gossip::new(networking.clone(), rx_gossip_messages);
 
     let (mempool, join_handle) = mempool::spawn(
         gossip,
-        tx_executed_transaction,
         epoch_manager.clone(),
-        payload_processor.clone(),
-        substate_resolver.clone(),
-        create_mempool_before_execute_validator(
-            &config.validator_node,
-            template_manager.clone(),
-            epoch_manager.clone(),
-        ),
-        create_mempool_after_execute_validator(state_store.clone()),
+        create_mempool_transaction_validator(&config.validator_node, template_manager.clone()),
         state_store.clone(),
-        rx_consensus_to_mempool,
         consensus_handle.clone(),
         #[cfg(feature = "metrics")]
         metrics_registry,
@@ -328,9 +303,29 @@ pub async fn spawn_services(
     );
     handles.push(join_handle);
 
+    // substate cache
+    let substate_cache_dir = config.common.base_path.join("substate_cache");
+    let substate_cache = SubstateFileCache::new(substate_cache_dir)
+        .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Substate cache error: {}", e)))?;
+
+    // Dry-run services (TODO: should we implement dry-run on validator nodes, or just keep it in the indexer?)
+    let virtual_substate_manager = VirtualSubstateManager::new(state_store.clone(), epoch_manager.clone());
+    let scanner = SubstateScanner::new(
+        epoch_manager.clone(),
+        validator_node_client_factory.clone(),
+        substate_cache,
+    );
+    let substate_resolver = TariSubstateResolver::new(
+        state_store.clone(),
+        scanner,
+        epoch_manager.clone(),
+        virtual_substate_manager.clone(),
+    );
+
     spawn_p2p_rpc(
         config,
         &mut networking,
+        epoch_manager.clone(),
         state_store.clone(),
         mempool.clone(),
         virtual_substate_manager,
@@ -422,6 +417,7 @@ impl Services {
 async fn spawn_p2p_rpc(
     config: &ApplicationConfig,
     networking: &mut NetworkingHandle<TariMessagingSpec>,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
     shard_store_store: SqliteStateStore<PeerAddress>,
     mempool: MempoolHandle,
     virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PeerAddress>, EpochManagerHandle<PeerAddress>>,
@@ -431,6 +427,7 @@ async fn spawn_p2p_rpc(
         .with_maximum_sessions_per_client(config.validator_node.rpc.max_sessions_per_client)
         .finish()
         .add_service(create_tari_validator_node_rpc_service(
+            epoch_manager,
             shard_store_store,
             mempool,
             virtual_substate_manager,
@@ -444,86 +441,111 @@ async fn spawn_p2p_rpc(
     Ok(())
 }
 
-// TODO: Figure out the best way to have the engine shard store mirror these bootstrapped states.
 fn bootstrap_state<TTx>(tx: &mut TTx, network: Network) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + Deref,
     TTx::Target: StateStoreReadTransaction,
     TTx::Addr: NodeAddressable + Serialize,
 {
-    let genesis_block = Block::genesis(network);
-    let substate_id = SubstateId::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
-    let substate_address = SubstateAddress::from_substate_id(&substate_id, 0);
-    let mut metadata: Metadata = Default::default();
-    metadata.insert(TOKEN_SYMBOL, "ID".to_string());
-    if !SubstateRecord::exists(&**tx, &substate_address)? {
-        // Create the resource for public identity
-        SubstateRecord {
-            substate_id,
-            version: 0,
-            substate_value: Resource::new(
-                ResourceType::NonFungible,
-                None,
-                OwnerRule::None,
-                ResourceAccessRules::new(),
-                metadata,
-                None,
-                None,
-            )
-            .into(),
-            state_hash: Default::default(),
-            created_by_transaction: Default::default(),
-            created_justify: *genesis_block.justify().id(),
-            created_block: BlockId::genesis(),
-            created_height: NodeHeight(0),
-            created_at_epoch: Epoch(0),
-            destroyed: None,
-        }
-        .create(tx)?;
+    // Assume that if the public identity resource exists, then the rest of the state has been bootstrapped
+    if SubstateRecord::exists(
+        &**tx,
+        &VersionedSubstateId::new(PUBLIC_IDENTITY_RESOURCE_ADDRESS.into(), 0),
+    )? {
+        return Ok(());
     }
 
-    let substate_id = SubstateId::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
-    let substate_address = SubstateAddress::from_substate_id(&substate_id, 0);
-    let mut metadata = Metadata::new();
-    metadata.insert(TOKEN_SYMBOL, "tXTR".to_string());
-    if !SubstateRecord::exists(&**tx, &substate_address)? {
-        SubstateRecord {
-            substate_id,
-            version: 0,
-            substate_value: Resource::new(
-                ResourceType::Confidential,
-                None,
-                OwnerRule::None,
-                ResourceAccessRules::new(),
-                metadata,
-                None,
-                None,
-            )
-            .into(),
-            state_hash: Default::default(),
-            created_by_transaction: Default::default(),
-            created_justify: *genesis_block.justify().id(),
-            created_block: BlockId::genesis(),
-            created_height: NodeHeight(0),
-            created_at_epoch: Epoch(0),
-            destroyed: None,
-        }
-        .create(tx)?;
+    let value = Resource::new(
+        ResourceType::NonFungible,
+        None,
+        OwnerRule::None,
+        ResourceAccessRules::new(),
+        Metadata::from([(TOKEN_SYMBOL, "ID".to_string())]),
+        None,
+        None,
+    );
+    create_substate(tx, network, PUBLIC_IDENTITY_RESOURCE_ADDRESS, value)?;
+
+    let mut xtr_resource = Resource::new(
+        ResourceType::Confidential,
+        None,
+        OwnerRule::None,
+        ResourceAccessRules::new(),
+        Metadata::from([(TOKEN_SYMBOL, "XTR".to_string())]),
+        None,
+        None,
+    );
+
+    // Create faucet component
+    if !matches!(network, Network::MainNet) {
+        let value = ComponentHeader {
+            template_address: tari_template_builtin::FAUCET_TEMPLATE_ADDRESS,
+            module_name: "XtrFaucet".to_string(),
+            owner_key: None,
+            owner_rule: OwnerRule::None,
+            access_rules: ComponentAccessRules::allow_all(),
+            entity_id: EntityId::default(),
+            body: ComponentBody {
+                state: cbor!({"vault" => XTR_FAUCET_VAULT_ADDRESS}).unwrap(),
+            },
+        };
+        create_substate(tx, network, XTR_FAUCET_COMPONENT_ADDRESS, value)?;
+
+        xtr_resource.increase_total_supply(Amount::MAX);
+        let value = Vault::new(ResourceContainer::Confidential {
+            address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            commitments: Default::default(),
+            revealed_amount: Amount::MAX,
+            locked_commitments: Default::default(),
+            locked_revealed_amount: Default::default(),
+        });
+
+        create_substate(tx, network, XTR_FAUCET_VAULT_ADDRESS, value)?;
     }
+
+    create_substate(tx, network, CONFIDENTIAL_TARI_RESOURCE_ADDRESS, xtr_resource)?;
 
     Ok(())
 }
 
-fn create_mempool_before_execute_validator(
+fn create_substate<TTx, TId, TVal>(
+    tx: &mut TTx,
+    network: Network,
+    substate_id: TId,
+    value: TVal,
+) -> Result<(), StorageError>
+where
+    TTx: StateStoreWriteTransaction + Deref,
+    TTx::Target: StateStoreReadTransaction,
+    TTx::Addr: NodeAddressable + Serialize,
+    TId: Into<SubstateId>,
+    TVal: Into<SubstateValue>,
+{
+    let genesis_block = Block::genesis(network, Epoch(0), Shard::zero());
+    let substate_id = substate_id.into();
+    let id = VersionedSubstateId::new(substate_id, 0);
+    SubstateRecord {
+        substate_id: id.substate_id,
+        version: id.version,
+        substate_value: value.into(),
+        state_hash: Default::default(),
+        created_by_transaction: Default::default(),
+        created_justify: *genesis_block.justify().id(),
+        created_block: BlockId::zero(),
+        created_height: NodeHeight(0),
+        created_by_shard: Shard::zero(),
+        created_at_epoch: Epoch(0),
+        destroyed: None,
+    }
+    .create(tx)?;
+    Ok(())
+}
+
+fn create_mempool_transaction_validator(
     config: &ValidatorNodeConfig,
     template_manager: TemplateManager<PeerAddress>,
-    epoch_manager: EpochManagerHandle<PeerAddress>,
-) -> impl Validator<Transaction, Error = MempoolError> {
-    let mut validator = TransactionSignatureValidator
-        .and_then(TemplateExistsValidator::new(template_manager))
-        .and_then(EpochRangeValidator::new(epoch_manager.clone()))
-        .and_then(ClaimFeeTransactionValidator::new(epoch_manager))
-        .boxed();
+) -> impl Validator<Transaction, Context = (), Error = TransactionValidationError> {
+    let mut validator = TemplateExistsValidator::new(template_manager).boxed();
     if !config.no_fees {
         // A transaction without fee payment may have 0 inputs.
         validator = HasInputs::new()
@@ -534,8 +556,8 @@ fn create_mempool_before_execute_validator(
     validator
 }
 
-fn create_mempool_after_execute_validator<TAddr: NodeAddressable>(
-    store: SqliteStateStore<TAddr>,
-) -> impl Validator<ExecutedTransaction, Error = MempoolError> {
-    HasInvolvedShards::new().and_then(OutputsDontExistLocally::new(store))
-}
+// fn create_mempool_after_execute_validator<TAddr: NodeAddressable>(
+//     store: SqliteStateStore<TAddr>,
+// ) -> impl MempoolValidator<ExecutedTransaction, Error = MempoolError> {
+//     HasInvolvedShards::new().and_then(OutputsDontExistLocally::new(store))
+// }

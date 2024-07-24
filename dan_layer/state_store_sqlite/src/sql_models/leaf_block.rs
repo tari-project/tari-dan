@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
-use tari_dan_common_types::NodeHeight;
+use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{consensus_models, consensus_models::BlockId, StorageError};
 use time::PrimitiveDateTime;
 
@@ -13,6 +13,7 @@ pub struct LeafBlock {
     pub id: i32,
     pub block_id: String,
     pub block_height: i64,
+    pub epoch: i64,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -28,6 +29,7 @@ impl TryFrom<LeafBlock> for consensus_models::LeafBlock {
                 }
             })?,
             height: NodeHeight(value.block_height as u64),
+            epoch: Epoch(value.epoch as u64),
         })
     }
 }

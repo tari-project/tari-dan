@@ -5,27 +5,25 @@ use std::{
     borrow::Borrow,
     collections::HashSet,
     fmt,
+    fmt::Display,
     hash::Hash,
     iter,
-    ops::{Deref, RangeInclusive},
+    ops::RangeInclusive,
     str::FromStr,
 };
 
-use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight, SubstateAddress};
 use tari_engine_types::substate::{hash_substate, Substate, SubstateId, SubstateValue};
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 
 use crate::{
-    consensus_models::{Block, BlockId, LockedSubstate, QcId, QuorumCertificate},
+    consensus_models::{BlockId, LockedSubstate, QcId, QuorumCertificate},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
 };
-
-const LOG_TARGET: &str = "tari::dan::storage::consensus_models::substate";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
@@ -46,6 +44,7 @@ pub struct SubstateRecord {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub created_block: BlockId,
     pub created_height: NodeHeight,
+    pub created_by_shard: Shard,
     pub created_at_epoch: Epoch,
     pub destroyed: Option<SubstateDestroyed>,
 }
@@ -62,8 +61,9 @@ pub struct SubstateDestroyed {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub justify: QcId,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub by_block: BlockId,
+    pub by_block: NodeHeight,
     pub at_epoch: Epoch,
+    pub by_shard: Shard,
 }
 
 impl SubstateRecord {
@@ -71,6 +71,7 @@ impl SubstateRecord {
         substate_id: SubstateId,
         version: u32,
         substate_value: SubstateValue,
+        created_by_shard: Shard,
         created_at_epoch: Epoch,
         created_height: NodeHeight,
         created_block: BlockId,
@@ -84,6 +85,7 @@ impl SubstateRecord {
             substate_value,
             created_height,
             created_justify,
+            created_by_shard,
             created_at_epoch,
             created_by_transaction,
             created_block,
@@ -175,10 +177,9 @@ impl SubstateRecord {
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &TTx,
-        address: &SubstateAddress,
+        id: &VersionedSubstateId,
     ) -> Result<bool, StorageError> {
-        // TODO: optimise
-        Ok(Self::get(tx, address).optional()?.is_some())
+        Self::any_exist(tx, Some(id))
     }
 
     pub fn any_exist<
@@ -257,6 +258,14 @@ impl SubstateRecord {
         Ok(found)
     }
 
+    pub fn get_n_after<TTx: StateStoreReadTransaction>(
+        tx: &TTx,
+        n: usize,
+        after: &SubstateAddress,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.substates_get_n_after(n, after)
+    }
+
     pub fn get_many_within_range<TTx: StateStoreReadTransaction, B: Borrow<RangeInclusive<SubstateAddress>>>(
         tx: &TTx,
         bounds: B,
@@ -295,16 +304,18 @@ impl SubstateRecord {
             .transpose()
     }
 
-    pub fn destroy_many<TTx: StateStoreWriteTransaction, I: IntoIterator<Item = SubstateAddress>>(
+    pub fn destroy<TTx: StateStoreWriteTransaction>(
         tx: &mut TTx,
-        substate_addresses: I,
+        versioned_substate_id: VersionedSubstateId,
+        shard: Shard,
         epoch: Epoch,
-        destroyed_by_block: &BlockId,
+        destroyed_by_block: NodeHeight,
         destroyed_justify: &QcId,
         destroyed_by_transaction: &TransactionId,
     ) -> Result<(), StorageError> {
-        tx.substate_down_many(
-            substate_addresses,
+        tx.substates_down(
+            versioned_substate_id,
+            shard,
             epoch,
             destroyed_by_block,
             destroyed_by_transaction,
@@ -368,66 +379,18 @@ impl SubstateUpdate {
     }
 }
 
-impl SubstateUpdate {
-    pub fn apply<TTx>(self, tx: &mut TTx, block: &Block) -> Result<(), StorageError>
-    where
-        TTx: StateStoreWriteTransaction + Deref,
-        TTx::Target: StateStoreReadTransaction,
-    {
-        match self {
-            Self::Create(proof) => {
-                debug!(
-                    target: LOG_TARGET,
-                    "🌲 Applying substate CREATE for {} v{}",
-                    proof.substate.substate_id, proof.substate.version
-                );
-                proof.created_qc.save(tx)?;
-                SubstateRecord {
-                    substate_id: proof.substate.substate_id,
-                    version: proof.substate.version,
-                    state_hash: hash_substate(&proof.substate.substate_value, proof.substate.version),
-                    substate_value: proof.substate.substate_value,
-                    created_by_transaction: proof.substate.created_by_transaction,
-                    created_justify: *proof.created_qc.id(),
-                    created_block: *block.id(),
-                    created_height: block.height(),
-                    created_at_epoch: block.epoch(),
-                    destroyed: None,
-                }
-                .create(tx)?;
-            },
-            Self::Destroy(SubstateDestroyedProof {
-                substate_id,
-                version,
-                justify: proof,
-                destroyed_by_transaction,
-            }) => {
-                debug!(
-                    target: LOG_TARGET,
-                    "🔥 Applying substate DESTROY for substate {}v{} (transaction {})",
-                    substate_id,
-                    version,
-                    destroyed_by_transaction
-                );
-                proof.save(tx)?;
-                SubstateRecord::destroy_many(
-                    tx,
-                    iter::once(SubstateAddress::from_substate_id(&substate_id, version)),
-                    block.epoch(),
-                    block.id(),
-                    proof.id(),
-                    &destroyed_by_transaction,
-                )?;
-            },
-        }
-
-        Ok(())
-    }
-}
-
 impl From<SubstateCreatedProof> for SubstateUpdate {
     fn from(value: SubstateCreatedProof) -> Self {
         Self::Create(value)
+    }
+}
+
+impl Display for SubstateUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Create(proof) => write!(f, "Create: {}(v{})", proof.substate.substate_id, proof.substate.version),
+            Self::Destroy(proof) => write!(f, "Destroy: {}(v{})", proof.substate_id, proof.version),
+        }
     }
 }
 

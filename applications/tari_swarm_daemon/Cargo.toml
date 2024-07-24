@@ -18,6 +18,7 @@ tari_engine_types = { workspace = true }
 minotari_node_grpc_client = { workspace = true }
 minotari_wallet_grpc_client = { workspace = true }
 tari_validator_node_client = { workspace = true }
+tari_dan_engine = { workspace = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }

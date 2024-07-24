@@ -17,8 +17,6 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_sync_request";
 
-pub(super) const MAX_BLOCKS_PER_SYNC: usize = 100;
-
 #[derive(Debug)]
 pub struct OnSyncRequest<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
@@ -39,7 +37,7 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
 
         task::spawn(async move {
             let result = store.with_read_tx(|tx| {
-                let leaf_block = LeafBlock::get(tx)?;
+                let leaf_block = LeafBlock::get(tx)?.get_block(tx)?;
 
                 if leaf_block.height() < msg.high_qc.block_height() {
                     return Err(HotStuffError::InvalidSyncRequest {
@@ -58,28 +56,42 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     msg.high_qc,
                     leaf_block
                 );
-                let blocks = Block::get_all_blocks_between(tx, msg.high_qc.block_id(), leaf_block.block_id(), false)?;
-
-                debug!(
-                    target: LOG_TARGET,
-                    "🌐 Sending {} blocks to {}",
-                    blocks.len(),
-                    from
-                );
+                // NOTE: We have to send dummy blocks, because the messaging will ignore heights > current_view + 1,
+                // until eventually the syncing node's pacemaker leader-fails a few times.
+                let blocks = Block::get_all_blocks_between(
+                    tx,
+                    leaf_block.epoch(),
+                    leaf_block.shard(),
+                    msg.high_qc.block_id(),
+                    leaf_block.id(),
+                    true,
+                )?;
 
                 Ok::<_, HotStuffError>(blocks)
             });
 
             let blocks = match result {
-                Ok(blocks) => blocks,
+                Ok(mut blocks) => {
+                    blocks.retain(|b| !b.is_genesis());
+                    blocks
+                },
                 Err(err) => {
                     warn!(target: LOG_TARGET, "Failed to fetch blocks for sync request: {}", err);
                     return;
                 },
             };
 
-            for block in blocks.into_iter().take(MAX_BLOCKS_PER_SYNC) {
-                debug!(
+            info!(
+                target: LOG_TARGET,
+                "🌐 Sending {} block(s) ({} to {}) to {}",
+                blocks.len(),
+                blocks.first().map(|b| b.height()).unwrap_or_default(),
+                blocks.last().map(|b| b.height()).unwrap_or_default(),
+                from
+            );
+
+            for block in blocks {
+                info!(
                     target: LOG_TARGET,
                     "🌐 Sending block {} to {}",
                     block,
@@ -94,11 +106,11 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                 }
             }
 
-            // Send last vote. TODO: This isn't quite
+            // Send last vote.
             let maybe_last_vote = match store.with_read_tx(|tx| LastSentVote::get(tx)).optional() {
                 Ok(last_vote) => last_vote,
                 Err(err) => {
-                    warn!(target: LOG_TARGET, "Failed to fetch last vote for sync request: {}", err);
+                    warn!(target: LOG_TARGET, "Failed to fetch last vote for catch-up request: {}", err);
                     return;
                 },
             };
@@ -107,19 +119,9 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     .send(from.clone(), HotstuffMessage::Vote(last_vote.into()))
                     .await
                 {
-                    warn!(target: LOG_TARGET, "Leader channel closed while sending LastVote {err}");
+                    warn!(target: LOG_TARGET, "Failed to send LastVote {err}");
                 }
             }
-
-            // let _ignore = outbound_messaging
-            //     .send((
-            //         from,
-            //         HotstuffMessage::SyncResponse(SyncResponseMessage {
-            //             epoch: msg.epoch,
-            //             blocks,
-            //         }),
-            //     ))
-            //     .await;
         });
     }
 }

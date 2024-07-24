@@ -22,7 +22,7 @@
 
 use std::fmt::Display;
 
-use tari_dan_common_types::NodeHeight;
+use tari_dan_common_types::{Epoch, NodeHeight};
 
 use crate::{
     consensus_models::{Block, BlockId},
@@ -35,26 +35,20 @@ use crate::{
 pub struct LeafBlock {
     pub block_id: BlockId,
     pub height: NodeHeight,
+    pub epoch: Epoch,
 }
 
 impl LeafBlock {
-    pub fn is_genesis(&self) -> bool {
-        self.block_id.is_genesis()
-    }
-
-    pub fn genesis() -> Self {
-        Self {
-            block_id: BlockId::genesis(),
-            height: NodeHeight(0),
-        }
-    }
-
     pub fn height(&self) -> NodeHeight {
         self.height
     }
 
     pub fn block_id(&self) -> &BlockId {
         &self.block_id
+    }
+
+    pub fn epoch(&self) -> Epoch {
+        self.epoch
     }
 }
 
@@ -74,6 +68,6 @@ impl LeafBlock {
 
 impl Display for LeafBlock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} #{}", self.block_id, self.height)
+        write!(f, "LeafBlock({} {} {})", self.height, self.block_id, self.epoch)
     }
 }

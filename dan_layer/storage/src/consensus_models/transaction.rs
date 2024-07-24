@@ -3,7 +3,6 @@
 
 use std::{collections::HashSet, ops::Deref, time::Duration};
 
-use indexmap::IndexSet;
 use serde::Deserialize;
 use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
 use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
@@ -19,10 +18,10 @@ use crate::{
 #[derive(Debug, Clone, Deserialize)]
 pub struct TransactionRecord {
     pub transaction: Transaction,
-    pub result: Option<ExecuteResult>,
+    pub execution_result: Option<ExecuteResult>,
     pub execution_time: Option<Duration>,
     pub resulting_outputs: Vec<VersionedSubstateId>,
-    pub resolved_inputs: Option<IndexSet<VersionedSubstateIdLockIntent>>,
+    pub resolved_inputs: Option<Vec<VersionedSubstateIdLockIntent>>,
     pub final_decision: Option<Decision>,
     pub finalized_time: Option<Duration>,
     pub abort_details: Option<String>,
@@ -32,7 +31,7 @@ impl TransactionRecord {
     pub fn new(transaction: Transaction) -> Self {
         Self {
             transaction,
-            result: None,
+            execution_result: None,
             resolved_inputs: None,
             execution_time: None,
             final_decision: None,
@@ -45,7 +44,7 @@ impl TransactionRecord {
     pub fn load(
         transaction: Transaction,
         result: Option<ExecuteResult>,
-        resolved_inputs: Option<IndexSet<VersionedSubstateIdLockIntent>>,
+        resolved_inputs: Option<Vec<VersionedSubstateIdLockIntent>>,
         execution_time: Option<Duration>,
         final_decision: Option<Decision>,
         finalized_time: Option<Duration>,
@@ -55,7 +54,7 @@ impl TransactionRecord {
         Self {
             transaction,
             resolved_inputs,
-            result,
+            execution_result: result,
             execution_time,
             final_decision,
             finalized_time,
@@ -80,20 +79,32 @@ impl TransactionRecord {
         self.transaction
     }
 
-    pub fn result(&self) -> Option<&ExecuteResult> {
-        self.result.as_ref()
+    pub fn execution_result(&self) -> Option<&ExecuteResult> {
+        self.execution_result.as_ref()
     }
 
     pub fn has_executed(&self) -> bool {
-        self.result.is_some()
+        self.execution_result.is_some()
     }
 
     pub fn resulting_outputs(&self) -> &[VersionedSubstateId] {
         &self.resulting_outputs
     }
 
-    pub fn resolved_inputs(&self) -> Option<&IndexSet<VersionedSubstateIdLockIntent>> {
-        self.resolved_inputs.as_ref()
+    pub fn resolved_inputs(&self) -> Option<&[VersionedSubstateIdLockIntent]> {
+        self.resolved_inputs.as_deref()
+    }
+
+    pub fn execution_decision(&self) -> Option<Decision> {
+        self.execution_result().map(|r| Decision::from(&r.finalize.result))
+    }
+
+    pub fn current_decision(&self) -> Decision {
+        self.final_decision
+            .or_else(|| self.abort_details.as_ref().map(|_| Decision::Abort))
+            .or_else(|| self.execution_decision())
+            // We will choose to commit a transaction unless (1) we aborted it, (2) the execution has failed
+            .unwrap_or(Decision::Commit)
     }
 
     pub fn final_decision(&self) -> Option<Decision> {
@@ -113,7 +124,7 @@ impl TransactionRecord {
     }
 
     pub fn is_executed(&self) -> bool {
-        self.result.is_some()
+        self.execution_result.is_some()
     }
 
     pub fn abort_details(&self) -> Option<&String> {
@@ -126,6 +137,11 @@ impl TransactionRecord {
         self
     }
 
+    pub fn set_current_decision_to_abort<T: Into<String>>(&mut self, details: T) -> &mut Self {
+        self.abort_details = Some(details.into());
+        self
+    }
+
     pub fn into_final_result(self) -> Option<ExecuteResult> {
         // TODO: This is hacky, result should be broken up into execution result, validation (mempool) result, finality
         //       result. These results are independent of each other.
@@ -133,12 +149,15 @@ impl TransactionRecord {
             if d.is_commit() {
                 // Is is expected that the result is ACCEPT.
                 // TODO: Handle (elsewhere) the edge-case where our execution failed but the committee decided to COMMIT
-                // (fetch the state transitions from a peer)
-                self.result
+                // (fetch the state transitions from a peer?)
+                self.execution_result
             } else {
                 // Only use rejected results for the transaction. If execution ACCEPTed but the final decision is ABORT,
                 // then use abort_details (which should have been set in this case).
-                let finalize_result = self.result.map(|r| r.finalize).filter(|f| !f.result.is_accept());
+                let finalize_result = self
+                    .execution_result
+                    .map(|r| r.finalize)
+                    .filter(|f| !f.result.is_accept());
                 Some(ExecuteResult {
                     finalize: finalize_result.unwrap_or_else(|| {
                         FinalizeResult::new_rejected(
@@ -235,6 +254,15 @@ impl TransactionRecord {
         Ok((recs, tx_ids))
     }
 
+    pub fn get_missing<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+        tx: &TTx,
+        tx_ids: I,
+    ) -> Result<HashSet<TransactionId>, StorageError> {
+        // TODO(perf): optimise
+        let (_, missing) = Self::get_any(tx, tx_ids)?;
+        Ok(missing)
+    }
+
     pub fn get_paginated<TTx: StateStoreReadTransaction>(
         tx: &TTx,
         limit: u64,
@@ -264,7 +292,7 @@ impl From<ExecutedTransaction> for TransactionRecord {
 
         Self {
             transaction,
-            result: Some(result),
+            execution_result: Some(result),
             execution_time: Some(execution_time),
             resolved_inputs: Some(resolved_inputs),
             final_decision,

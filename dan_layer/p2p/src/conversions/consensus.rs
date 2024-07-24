@@ -28,10 +28,10 @@ use tari_common_types::types::PublicKey;
 use tari_consensus::messages::{
     FullBlock,
     HotstuffMessage,
+    MissingTransactionsRequest,
+    MissingTransactionsResponse,
     NewViewMessage,
     ProposalMessage,
-    RequestMissingTransactionsMessage,
-    RequestedTransactionMessage,
     SyncRequestMessage,
     SyncResponseMessage,
     VoteMessage,
@@ -42,7 +42,6 @@ use tari_dan_storage::consensus_models::{
     BlockId,
     Command,
     Decision,
-    EpochEvent,
     Evidence,
     ForeignProposal,
     ForeignProposalState,
@@ -70,13 +69,15 @@ impl From<&HotstuffMessage> for proto::consensus::HotStuffMessage {
                 proto::consensus::hot_stuff_message::Message::ForeignProposal(msg.into())
             },
             HotstuffMessage::Vote(msg) => proto::consensus::hot_stuff_message::Message::Vote(msg.into()),
-            HotstuffMessage::RequestMissingTransactions(msg) => {
+            HotstuffMessage::MissingTransactionsRequest(msg) => {
                 proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg.into())
             },
-            HotstuffMessage::RequestedTransaction(msg) => {
+            HotstuffMessage::MissingTransactionsResponse(msg) => {
                 proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg.into())
             },
-            HotstuffMessage::SyncRequest(msg) => proto::consensus::hot_stuff_message::Message::SyncRequest(msg.into()),
+            HotstuffMessage::CatchUpSyncRequest(msg) => {
+                proto::consensus::hot_stuff_message::Message::SyncRequest(msg.into())
+            },
             HotstuffMessage::SyncResponse(msg) => {
                 proto::consensus::hot_stuff_message::Message::SyncResponse(msg.into())
             },
@@ -98,13 +99,13 @@ impl TryFrom<proto::consensus::HotStuffMessage> for HotstuffMessage {
             },
             proto::consensus::hot_stuff_message::Message::Vote(msg) => HotstuffMessage::Vote(msg.try_into()?),
             proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg) => {
-                HotstuffMessage::RequestMissingTransactions(msg.try_into()?)
+                HotstuffMessage::MissingTransactionsRequest(msg.try_into()?)
             },
             proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg) => {
-                HotstuffMessage::RequestedTransaction(msg.try_into()?)
+                HotstuffMessage::MissingTransactionsResponse(msg.try_into()?)
             },
             proto::consensus::hot_stuff_message::Message::SyncRequest(msg) => {
-                HotstuffMessage::SyncRequest(msg.try_into()?)
+                HotstuffMessage::CatchUpSyncRequest(msg.try_into()?)
             },
             proto::consensus::hot_stuff_message::Message::SyncResponse(msg) => {
                 HotstuffMessage::SyncResponse(msg.try_into()?)
@@ -194,10 +195,11 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
     }
 }
 
-//---------------------------------- RequestMissingTransactionsMessage --------------------------------------------//
-impl From<&RequestMissingTransactionsMessage> for proto::consensus::RequestMissingTransactionsMessage {
-    fn from(msg: &RequestMissingTransactionsMessage) -> Self {
+//---------------------------------- MissingTransactionsRequest --------------------------------------------//
+impl From<&MissingTransactionsRequest> for proto::consensus::MissingTransactionsRequest {
+    fn from(msg: &MissingTransactionsRequest) -> Self {
         Self {
+            request_id: msg.request_id,
             epoch: msg.epoch.as_u64(),
             block_id: msg.block_id.as_bytes().to_vec(),
             transaction_ids: msg.transactions.iter().map(|tx_id| tx_id.as_bytes().to_vec()).collect(),
@@ -205,11 +207,12 @@ impl From<&RequestMissingTransactionsMessage> for proto::consensus::RequestMissi
     }
 }
 
-impl TryFrom<proto::consensus::RequestMissingTransactionsMessage> for RequestMissingTransactionsMessage {
+impl TryFrom<proto::consensus::MissingTransactionsRequest> for MissingTransactionsRequest {
     type Error = anyhow::Error;
 
-    fn try_from(value: proto::consensus::RequestMissingTransactionsMessage) -> Result<Self, Self::Error> {
-        Ok(RequestMissingTransactionsMessage {
+    fn try_from(value: proto::consensus::MissingTransactionsRequest) -> Result<Self, Self::Error> {
+        Ok(MissingTransactionsRequest {
+            request_id: value.request_id,
             epoch: Epoch(value.epoch),
             block_id: BlockId::try_from(value.block_id)?,
             transactions: value
@@ -220,11 +223,12 @@ impl TryFrom<proto::consensus::RequestMissingTransactionsMessage> for RequestMis
         })
     }
 }
-//---------------------------------- RequestedTransactionMessage --------------------------------------------//
+//---------------------------------- MissingTransactionsResponse --------------------------------------------//
 
-impl From<&RequestedTransactionMessage> for proto::consensus::RequestedTransactionMessage {
-    fn from(msg: &RequestedTransactionMessage) -> Self {
+impl From<&MissingTransactionsResponse> for proto::consensus::MissingTransactionsResponse {
+    fn from(msg: &MissingTransactionsResponse) -> Self {
         Self {
+            request_id: msg.request_id,
             epoch: msg.epoch.as_u64(),
             block_id: msg.block_id.as_bytes().to_vec(),
             transactions: msg.transactions.iter().map(|tx| tx.into()).collect(),
@@ -232,11 +236,12 @@ impl From<&RequestedTransactionMessage> for proto::consensus::RequestedTransacti
     }
 }
 
-impl TryFrom<proto::consensus::RequestedTransactionMessage> for RequestedTransactionMessage {
+impl TryFrom<proto::consensus::MissingTransactionsResponse> for MissingTransactionsResponse {
     type Error = anyhow::Error;
 
-    fn try_from(value: proto::consensus::RequestedTransactionMessage) -> Result<Self, Self::Error> {
-        Ok(RequestedTransactionMessage {
+    fn try_from(value: proto::consensus::MissingTransactionsResponse) -> Result<Self, Self::Error> {
+        Ok(MissingTransactionsResponse {
+            request_id: value.request_id,
             epoch: Epoch(value.epoch),
             block_id: BlockId::try_from(value.block_id)?,
             transactions: value
@@ -263,10 +268,11 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             total_leader_fee: value.total_leader_fee(),
             commands: value.commands().iter().map(Into::into).collect(),
             foreign_indexes: encode(value.foreign_indexes()).unwrap(),
-            signature: value.get_signature().map(Into::into),
+            signature: value.signature().map(Into::into),
             timestamp: value.timestamp(),
             base_layer_block_height: value.base_layer_block_height(),
             base_layer_block_hash: value.base_layer_block_hash().as_bytes().to_vec(),
+            is_dummy: value.is_dummy(),
         }
     }
 }
@@ -279,31 +285,51 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
             .map_err(|_| anyhow!("Block conversion: Invalid network byte {}", value.network))?
             .try_into()?;
 
-        Ok(Self::new(
-            network,
-            value.parent_id.try_into()?,
-            value
-                .justify
-                .ok_or_else(|| anyhow!("Block conversion: QC not provided"))?
-                .try_into()?,
-            NodeHeight(value.height),
-            Epoch(value.epoch),
-            Shard::from(value.shard),
-            PublicKey::from_canonical_bytes(&value.proposed_by)
-                .map_err(|_| anyhow!("Block conversion: Invalid proposed_by"))?,
-            value
-                .commands
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<_, _>>()?,
-            value.merkle_root.try_into()?,
-            value.total_leader_fee,
-            decode_exact(&value.foreign_indexes)?,
-            value.signature.map(TryInto::try_into).transpose()?,
-            value.timestamp,
-            value.base_layer_block_height,
-            value.base_layer_block_hash.try_into()?,
-        ))
+        if value.is_dummy {
+            Ok(Self::dummy_block(
+                network,
+                value.parent_id.try_into()?,
+                PublicKey::from_canonical_bytes(&value.proposed_by)
+                    .map_err(|_| anyhow!("Block conversion: Invalid proposed_by"))?,
+                NodeHeight(value.height),
+                value
+                    .justify
+                    .ok_or_else(|| anyhow!("Block conversion: QC not provided"))?
+                    .try_into()?,
+                Epoch(value.epoch),
+                Shard::from(value.shard),
+                value.merkle_root.try_into()?,
+                value.timestamp,
+                value.base_layer_block_height,
+                value.base_layer_block_hash.try_into()?,
+            ))
+        } else {
+            Ok(Self::new(
+                network,
+                value.parent_id.try_into()?,
+                value
+                    .justify
+                    .ok_or_else(|| anyhow!("Block conversion: QC not provided"))?
+                    .try_into()?,
+                NodeHeight(value.height),
+                Epoch(value.epoch),
+                Shard::from(value.shard),
+                PublicKey::from_canonical_bytes(&value.proposed_by)
+                    .map_err(|_| anyhow!("Block conversion: Invalid proposed_by"))?,
+                value
+                    .commands
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<Result<_, _>>()?,
+                value.merkle_root.try_into()?,
+                value.total_leader_fee,
+                decode_exact(&value.foreign_indexes)?,
+                value.signature.map(TryInto::try_into).transpose()?,
+                value.timestamp,
+                value.base_layer_block_height,
+                value.base_layer_block_hash.try_into()?,
+            ))
+        }
     }
 }
 
@@ -319,9 +345,7 @@ impl From<&Command> for proto::consensus::Command {
             Command::ForeignProposal(foreign_proposal) => {
                 proto::consensus::command::Command::ForeignProposal(foreign_proposal.into())
             },
-            Command::EpochEvent(event) => {
-                proto::consensus::command::Command::EpochEvent(proto::consensus::EpochEvent::from(event).into())
-            },
+            Command::EndEpoch => proto::consensus::command::Command::EndEpoch(true),
         };
 
         Self { command: Some(command) }
@@ -341,11 +365,7 @@ impl TryFrom<proto::consensus::Command> for Command {
             proto::consensus::command::Command::ForeignProposal(foreign_proposal) => {
                 Command::ForeignProposal(foreign_proposal.try_into()?)
             },
-            proto::consensus::command::Command::EpochEvent(event) => Command::EpochEvent(
-                proto::consensus::EpochEvent::try_from(event)
-                    .map_err(|_| anyhow!("Invalid epoch event value {}", event))?
-                    .try_into()?,
-            ),
+            proto::consensus::command::Command::EndEpoch(_) => Command::EndEpoch,
         })
     }
 }
@@ -435,7 +455,7 @@ impl TryFrom<proto::consensus::ForeignProposalState> for ForeignProposalState {
 impl From<&ForeignProposal> for proto::consensus::ForeignProposal {
     fn from(value: &ForeignProposal) -> Self {
         Self {
-            bucket: value.bucket.as_u32(),
+            bucket: value.shard.as_u32(),
             block_id: value.block_id.as_bytes().to_vec(),
             state: proto::consensus::ForeignProposalState::from(value.state).into(),
             mined_at: value.proposed_height.map(|a| a.0).unwrap_or(0),
@@ -450,7 +470,7 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
 
     fn try_from(value: proto::consensus::ForeignProposal) -> Result<Self, Self::Error> {
         Ok(ForeignProposal {
-            bucket: Shard::from(value.bucket),
+            shard: Shard::from(value.bucket),
             block_id: BlockId::try_from(value.block_id)?,
             state: proto::consensus::ForeignProposalState::try_from(value.state)
                 .map_err(|_| anyhow!("Invalid foreign proposal state value {}", value.state))?
@@ -470,29 +490,6 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
     }
 }
 
-// ------------------------------- EpochEvent ------------------------------- //
-
-impl From<&EpochEvent> for proto::consensus::EpochEvent {
-    fn from(value: &EpochEvent) -> Self {
-        match value {
-            EpochEvent::Start => proto::consensus::EpochEvent::Start,
-            EpochEvent::End => proto::consensus::EpochEvent::End,
-        }
-    }
-}
-
-impl TryFrom<proto::consensus::EpochEvent> for EpochEvent {
-    type Error = anyhow::Error;
-
-    fn try_from(value: proto::consensus::EpochEvent) -> Result<Self, Self::Error> {
-        match value {
-            proto::consensus::EpochEvent::Start => Ok(EpochEvent::Start),
-            proto::consensus::EpochEvent::End => Ok(EpochEvent::End),
-            proto::consensus::EpochEvent::UnknownEvent => Err(anyhow!("Epoch event not provided")),
-        }
-    }
-}
-
 // -------------------------------- Decision -------------------------------- //
 
 impl From<Decision> for proto::consensus::Decision {
@@ -500,7 +497,6 @@ impl From<Decision> for proto::consensus::Decision {
         match value {
             Decision::Commit => proto::consensus::Decision::Commit,
             Decision::Abort => proto::consensus::Decision::Abort,
-            Decision::Deferred => proto::consensus::Decision::Deferred,
         }
     }
 }
@@ -512,7 +508,6 @@ impl TryFrom<proto::consensus::Decision> for Decision {
         match value {
             proto::consensus::Decision::Commit => Ok(Decision::Commit),
             proto::consensus::Decision::Abort => Ok(Decision::Abort),
-            proto::consensus::Decision::Deferred => Ok(Decision::Deferred),
             proto::consensus::Decision::Unknown => Err(anyhow!("Decision not provided")),
         }
     }
@@ -626,6 +621,7 @@ impl TryFrom<proto::consensus::Substate> for SubstateRecord {
             created_height: NodeHeight(value.created_height),
 
             destroyed: value.destroyed.map(TryInto::try_into).transpose()?,
+            created_by_shard: Shard::from(value.created_by_shard),
         })
     }
 }
@@ -642,6 +638,7 @@ impl From<SubstateRecord> for proto::consensus::Substate {
             created_block: value.created_block.as_bytes().to_vec(),
             created_height: value.created_height.as_u64(),
             created_epoch: value.created_at_epoch.as_u64(),
+            created_by_shard: value.created_by_shard.as_u32(),
 
             destroyed: value.destroyed.map(Into::into),
         }
@@ -656,11 +653,12 @@ impl TryFrom<proto::consensus::SubstateDestroyed> for SubstateDestroyed {
         Ok(Self {
             by_transaction: value.transaction.try_into()?,
             justify: value.justify.try_into()?,
-            by_block: value.block.try_into()?,
+            by_block: NodeHeight(value.block_height),
             at_epoch: value
                 .epoch
                 .map(Into::into)
                 .ok_or_else(|| anyhow!("Epoch not provided"))?,
+            by_shard: Shard::from(value.shard),
         })
     }
 }
@@ -670,8 +668,9 @@ impl From<SubstateDestroyed> for proto::consensus::SubstateDestroyed {
         Self {
             transaction: value.by_transaction.as_bytes().to_vec(),
             justify: value.justify.as_bytes().to_vec(),
-            block: value.by_block.as_bytes().to_vec(),
+            block_height: value.by_block.as_u64(),
             epoch: Some(value.at_epoch.into()),
+            shard: value.by_shard.as_u32(),
         }
     }
 }
@@ -685,6 +684,7 @@ impl From<&SyncRequestMessage> for proto::consensus::SyncRequest {
             high_qc: Some(proto::consensus::HighQc {
                 block_id: value.high_qc.block_id.as_bytes().to_vec(),
                 block_height: value.high_qc.block_height.as_u64(),
+                epoch: value.epoch.as_u64(),
                 qc_id: value.high_qc.qc_id.as_bytes().to_vec(),
             }),
         }
@@ -703,6 +703,7 @@ impl TryFrom<proto::consensus::SyncRequest> for SyncRequestMessage {
                     Ok::<_, anyhow::Error>(HighQc {
                         block_id: BlockId::try_from(value.block_id)?,
                         block_height: NodeHeight(value.block_height),
+                        epoch: Epoch(value.epoch),
                         qc_id: QcId::try_from(value.qc_id)?,
                     })
                 })

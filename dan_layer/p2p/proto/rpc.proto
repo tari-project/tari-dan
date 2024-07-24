@@ -161,15 +161,6 @@ message GetVirtualSubstateResponse {
   repeated tari.dan.consensus.QuorumCertificate quorum_certificates = 2;
 }
 
-message SyncStateRequest {
-  bytes start_block_id = 1;
-  uint64 end_epoch = 2;
-}
-
-message SyncStateResponse {
-  SubstateUpdate update = 1;
-}
-
 message SubstateCreatedProof {
   SubstateData substate = 1;
   tari.dan.consensus.QuorumCertificate created_justify = 2;
@@ -224,4 +215,43 @@ message GetHighQcRequest {}
 
 message GetHighQcResponse {
   tari.dan.consensus.QuorumCertificate high_qc = 1;
+}
+
+message GetCheckpointRequest {
+  uint64 current_epoch = 1;
+}
+
+message GetCheckpointResponse {
+  EpochCheckpoint checkpoint = 1;
+}
+
+message EpochCheckpoint {
+  tari.dan.consensus.Block block = 1;
+  repeated tari.dan.consensus.QuorumCertificate qcs = 2;
+}
+
+message SyncStateRequest {
+  uint64 start_epoch = 1;
+  uint32 start_shard = 2;
+  uint64 start_seq = 3;
+  // The shard in the current shard-epoch that is requested.
+  // This will limit the state transitions returned to those that fall within this shard-epoch.
+  uint64 current_epoch = 4;
+  uint32 current_shard = 5;
+}
+
+message SyncStateResponse {
+  repeated StateTransition transitions = 1;
+}
+
+message StateTransition {
+  StateTransitionId id = 1;
+  SubstateUpdate update = 2;
+  uint64 state_tree_version = 3;
+}
+
+message StateTransitionId {
+  uint64 epoch = 1;
+  uint32 shard = 2;
+  uint64 seq = 3;
 }

@@ -7,7 +7,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
-use tari_rpc_framework::RpcError;
+use tari_rpc_framework::{RpcError, RpcStatus};
 use tari_validator_node_rpc::ValidatorNodeRpcClientError;
 
 #[derive(Debug, thiserror::Error)]
@@ -37,5 +37,11 @@ pub enum CommsRpcConsensusSyncError {
 impl From<CommsRpcConsensusSyncError> for HotStuffError {
     fn from(value: CommsRpcConsensusSyncError) -> Self {
         HotStuffError::SyncError(value.into())
+    }
+}
+
+impl From<RpcStatus> for CommsRpcConsensusSyncError {
+    fn from(value: RpcStatus) -> Self {
+        Self::RpcError(value.into())
     }
 }

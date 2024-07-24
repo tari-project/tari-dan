@@ -123,6 +123,13 @@ impl ValidatorNodeClient {
         self.send_request("list_blocks", request).await
     }
 
+    pub async fn list_blocks_paginated(
+        &mut self,
+        request: GetBlocksRequest,
+    ) -> Result<GetBlocksResponse, ValidatorNodeClientError> {
+        self.send_request("get_blocks", request).await
+    }
+
     pub async fn submit_transaction(
         &mut self,
         request: SubmitTransactionRequest,

@@ -126,10 +126,11 @@ fn transfer_confidential_amounts_between_accounts() {
     let diff = result.finalize.result.expect("Failed to execute manifest");
     assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == account1).count(), 1);
     assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == account1).count(), 1);
-    assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == faucet).count(), 1);
-    assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == faucet).count(), 1);
-    assert_eq!(diff.up_iter().count(), 5);
-    assert_eq!(diff.down_iter().count(), 3);
+    // Faucet is not changed, only the faucet vault.
+    assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == faucet).count(), 0);
+    assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == faucet).count(), 0);
+    assert_eq!(diff.up_iter().count(), 4);
+    assert_eq!(diff.down_iter().count(), 2);
 
     let withdraw_proof = generate_withdraw_proof(&proof.output_mask, Amount(100), Some(Amount(900)), Amount(0));
     let split_proof = generate_withdraw_proof(&withdraw_proof.output_mask, Amount(20), Some(Amount(80)), Amount(0));
@@ -165,12 +166,12 @@ fn transfer_confidential_amounts_between_accounts() {
         )
         .unwrap();
     let diff = result.finalize.result.expect("Failed to execute manifest");
-    assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == account1).count(), 1);
-    assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == account1).count(), 1);
+    assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == account1).count(), 0);
+    assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == account1).count(), 0);
     assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == account2).count(), 1);
     assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == account2).count(), 1);
-    assert_eq!(diff.up_iter().count(), 5);
-    assert_eq!(diff.down_iter().count(), 3);
+    assert_eq!(diff.up_iter().count(), 4);
+    assert_eq!(diff.down_iter().count(), 2);
 }
 
 #[test]

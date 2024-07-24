@@ -25,65 +25,65 @@ impl RpcStatus {
         }
     }
 
-    pub fn unsupported_method<T: ToString + ?Sized>(details: &T) -> Self {
+    pub fn unsupported_method<T: Into<String>>(details: T) -> Self {
         Self {
             code: RpcStatusCode::UnsupportedMethod,
-            details: details.to_string(),
+            details: details.into(),
         }
     }
 
-    pub fn not_implemented<T: ToString + ?Sized>(details: &T) -> Self {
+    pub fn not_implemented<T: Into<String>>(details: T) -> Self {
         Self {
             code: RpcStatusCode::NotImplemented,
-            details: details.to_string(),
+            details: details.into(),
         }
     }
 
-    pub fn bad_request<T: ToString + ?Sized>(details: &T) -> Self {
+    pub fn bad_request<T: Into<String>>(details: T) -> Self {
         Self {
             code: RpcStatusCode::BadRequest,
-            details: details.to_string(),
+            details: details.into(),
         }
     }
 
     /// Returns a general error. As with all other errors care should be taken not to leak sensitive data to remote
     /// peers through error messages.
-    pub fn general<T: ToString + ?Sized>(details: &T) -> Self {
+    pub fn general<T: Into<String>>(details: T) -> Self {
         Self {
             code: RpcStatusCode::General,
-            details: details.to_string(),
+            details: details.into(),
         }
     }
 
     pub fn general_default() -> Self {
-        Self::general(&"General error")
+        Self::general("General error")
     }
 
-    pub fn timed_out<T: ToString + ?Sized>(details: &T) -> Self {
+    pub fn timed_out<T: Into<String>>(details: T) -> Self {
         Self {
             code: RpcStatusCode::Timeout,
-            details: details.to_string(),
+            details: details.into(),
         }
     }
 
-    pub fn not_found<T: ToString + ?Sized>(details: &T) -> Self {
+    pub fn not_found<T: Into<String>>(details: T) -> Self {
         Self {
             code: RpcStatusCode::NotFound,
-            details: details.to_string(),
+            details: details.into(),
         }
     }
 
-    pub fn forbidden<T: ToString + ?Sized>(details: &T) -> Self {
+    pub fn forbidden<T: Into<String>>(details: T) -> Self {
         Self {
             code: RpcStatusCode::Forbidden,
-            details: details.to_string(),
+            details: details.into(),
         }
     }
 
-    pub fn conflict<T: ToString + ?Sized>(details: &T) -> Self {
+    pub fn conflict<T: Into<String>>(details: T) -> Self {
         Self {
             code: RpcStatusCode::Conflict,
-            details: details.to_string(),
+            details: details.into(),
         }
     }
 
@@ -96,10 +96,10 @@ impl RpcStatus {
         }
     }
 
-    pub(super) fn protocol_error<T: ToString>(details: &T) -> Self {
+    pub(super) fn protocol_error<T: Into<String>>(details: T) -> Self {
         Self {
             code: RpcStatusCode::ProtocolError,
-            details: details.to_string(),
+            details: details.into(),
         }
     }
 
@@ -141,7 +141,7 @@ impl From<RpcError> for RpcStatus {
             RpcError::RequestFailed(status) => status,
             err => {
                 error!(target: LOG_TARGET, "Internal error: {}", err);
-                Self::general(&err.to_string())
+                Self::general(err.to_string())
             },
         }
     }
@@ -169,8 +169,8 @@ impl From<prost::DecodeError> for RpcStatus {
 
 pub trait RpcStatusResultExt<T> {
     fn rpc_status_internal_error(self, target: &str) -> Result<T, RpcStatus>;
-    fn rpc_status_not_found<S: ToString>(self, message: S) -> Result<T, RpcStatus>;
-    fn rpc_status_bad_request<S: ToString>(self, message: S) -> Result<T, RpcStatus>;
+    fn rpc_status_not_found<S: Into<String>>(self, message: S) -> Result<T, RpcStatus>;
+    fn rpc_status_bad_request<S: Into<String>>(self, message: S) -> Result<T, RpcStatus>;
 }
 
 impl<T, E: std::error::Error> RpcStatusResultExt<T> for Result<T, E> {
@@ -178,12 +178,12 @@ impl<T, E: std::error::Error> RpcStatusResultExt<T> for Result<T, E> {
         self.map_err(RpcStatus::log_internal_error(target))
     }
 
-    fn rpc_status_not_found<S: ToString>(self, message: S) -> Result<T, RpcStatus> {
-        self.map_err(|_| RpcStatus::not_found(&message))
+    fn rpc_status_not_found<S: Into<String>>(self, message: S) -> Result<T, RpcStatus> {
+        self.map_err(|_| RpcStatus::not_found(message))
     }
 
-    fn rpc_status_bad_request<S: ToString>(self, message: S) -> Result<T, RpcStatus> {
-        self.map_err(|_| RpcStatus::bad_request(&message))
+    fn rpc_status_bad_request<S: Into<String>>(self, message: S) -> Result<T, RpcStatus> {
+        self.map_err(|_| RpcStatus::bad_request(message))
     }
 }
 

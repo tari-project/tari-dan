@@ -9,9 +9,11 @@ use std::{
 use tari_dan_storage::consensus_models::TransactionExecution;
 use tari_transaction::TransactionId;
 
+type TestExecutionStore = HashMap<TransactionId, TransactionExecution>;
+
 #[derive(Debug, Clone, Default)]
 pub struct TestTransactionExecutionsStore {
-    transactions: Arc<RwLock<HashMap<TransactionId, TransactionExecution>>>,
+    transactions: Arc<RwLock<TestExecutionStore>>,
 }
 
 impl TestTransactionExecutionsStore {
@@ -21,11 +23,12 @@ impl TestTransactionExecutionsStore {
         }
     }
 
-    pub fn insert(&self, execution: TransactionExecution) {
+    pub fn insert(&self, execution: TransactionExecution) -> &Self {
         self.transactions
             .write()
             .unwrap()
             .insert(*execution.transaction_id(), execution);
+        self
     }
 
     pub fn get(&self, transaction_id: &TransactionId) -> Option<TransactionExecution> {

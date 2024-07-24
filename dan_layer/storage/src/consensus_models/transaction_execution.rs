@@ -3,7 +3,6 @@
 
 use std::time::Duration;
 
-use indexmap::IndexSet;
 use tari_engine_types::commit_result::ExecuteResult;
 use tari_transaction::{TransactionId, VersionedSubstateId};
 
@@ -19,7 +18,7 @@ pub struct TransactionExecution {
     pub block_id: BlockId,
     pub transaction_id: TransactionId,
     pub result: ExecuteResult,
-    pub resolved_inputs: IndexSet<VersionedSubstateIdLockIntent>,
+    pub resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
     pub resulting_outputs: Vec<VersionedSubstateId>,
     pub execution_time: Duration,
 }
@@ -29,7 +28,7 @@ impl TransactionExecution {
         block_id: BlockId,
         transaction_id: TransactionId,
         result: ExecuteResult,
-        resolved_inputs: IndexSet<VersionedSubstateIdLockIntent>,
+        resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
         resulting_outputs: Vec<VersionedSubstateId>,
         execution_time: Duration,
     ) -> Self {
@@ -59,7 +58,7 @@ impl TransactionExecution {
         &self.result
     }
 
-    pub fn resolved_inputs(&self) -> &IndexSet<VersionedSubstateIdLockIntent> {
+    pub fn resolved_inputs(&self) -> &[VersionedSubstateIdLockIntent] {
         &self.resolved_inputs
     }
 
@@ -72,7 +71,7 @@ impl TransactionExecution {
     }
 
     pub fn to_initial_evidence(&self) -> Evidence {
-        Evidence::from_inputs_and_outputs(self.transaction_id, &self.resolved_inputs, &self.resulting_outputs)
+        Evidence::from_inputs_and_outputs(&self.resolved_inputs, &self.resulting_outputs)
     }
 
     pub fn transaction_fee(&self) -> u64 {

@@ -37,7 +37,7 @@ function ActionMenu() {
   const onClaimFreeCoins = () => {
     mutate({
       accountName: accountName,
-      amount: 100000,
+      amount: 200000,
       fee: 1000,
     });
   };

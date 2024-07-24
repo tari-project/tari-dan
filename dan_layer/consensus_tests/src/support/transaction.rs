@@ -9,7 +9,6 @@ use tari_dan_storage::consensus_models::{
     BlockId,
     Decision,
     ExecutedTransaction,
-    SubstateLockFlag,
     TransactionExecution,
     TransactionRecord,
     VersionedSubstateIdLockIntent,
@@ -20,7 +19,7 @@ use tari_engine_types::{
     fees::FeeReceipt,
     substate::{Substate, SubstateDiff},
 };
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId, VersionedSubstateId};
+use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
 
 use crate::support::helpers::random_substate_in_shard;
 
@@ -28,30 +27,28 @@ pub fn build_transaction_from(
     tx: Transaction,
     decision: Decision,
     fee: u64,
+    resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
     resulting_outputs: Vec<VersionedSubstateId>,
 ) -> TransactionRecord {
     let mut tx = TransactionRecord::new(tx);
-
-    // TODO: cleanup test api- this wont be expected
-    if !resulting_outputs.is_empty() {
-        let execution = create_execution_result_for_transaction(
-            // We're just building the execution here for DRY purposes, so genesis block id isn't used
-            BlockId::genesis(),
-            *tx.id(),
-            decision,
-            fee,
-            vec![],
-            resulting_outputs.clone(),
-        );
-
-        tx.result = Some(execution.result);
-        tx.resulting_outputs = execution.resulting_outputs;
-        tx.execution_time = Some(execution.execution_time);
-        // If the transaction does not require any inputs, we immediately resolve them to an empty set
-        if tx.transaction.all_inputs_iter().next().is_none() {
-            tx.resolved_inputs = Some(execution.resolved_inputs);
-        }
+    if decision.is_abort() {
+        tx.set_current_decision_to_abort("Test aborted");
     }
+
+    let execution = create_execution_result_for_transaction(
+        // We're just building the execution here for DRY purposes, so genesis block id isn't used
+        BlockId::zero(),
+        *tx.id(),
+        decision,
+        fee,
+        resolved_inputs,
+        resulting_outputs.clone(),
+    );
+
+    tx.execution_result = Some(execution.result);
+    tx.resulting_outputs = execution.resulting_outputs;
+    tx.execution_time = Some(execution.execution_time);
+    tx.resolved_inputs = Some(execution.resolved_inputs);
     tx
 }
 
@@ -60,7 +57,7 @@ pub fn create_execution_result_for_transaction(
     tx_id: TransactionId,
     decision: Decision,
     fee: u64,
-    resolved_inputs: Vec<VersionedSubstateId>,
+    resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
     resulting_outputs: Vec<VersionedSubstateId>,
 ) -> TransactionExecution {
     let result = if decision.is_commit() {
@@ -96,10 +93,7 @@ pub fn create_execution_result_for_transaction(
                 cost_breakdown: vec![],
             }),
         },
-        resolved_inputs
-            .into_iter()
-            .map(|v| VersionedSubstateIdLockIntent::new(v, SubstateLockFlag::Write))
-            .collect(),
+        resolved_inputs,
         resulting_outputs,
         Duration::from_secs(0),
     )
@@ -123,17 +117,7 @@ pub fn build_transaction(
         })
         .collect::<Vec<_>>();
 
-    build_transaction_from(tx, decision, fee, outputs)
-}
-
-pub fn build_transaction_with_inputs<I: IntoIterator<Item = SubstateRequirement>>(
-    decision: Decision,
-    fee: u64,
-    inputs: I,
-) -> TransactionRecord {
-    let k = PrivateKey::default();
-    let tx = Transaction::builder().with_inputs(inputs).sign(&k).build();
-    build_transaction_from(tx, decision, fee, vec![])
+    build_transaction_from(tx, decision, fee, vec![], outputs)
 }
 
 pub fn change_decision(tx: ExecutedTransaction, new_decision: Decision) -> TransactionRecord {
@@ -144,6 +128,6 @@ pub fn change_decision(tx: ExecutedTransaction, new_decision: Decision) -> Trans
         .total_allocated_fee_payments()
         .as_u64_checked()
         .unwrap();
-    let resulting_outputs = tx.resulting_outputs().to_vec();
-    build_transaction_from(tx.into_transaction(), new_decision, total_fees_paid, resulting_outputs)
+    let (tx, _, resolved_inputs, resulting_outputs) = tx.dissolve();
+    build_transaction_from(tx, new_decision, total_fees_paid, resolved_inputs, resulting_outputs)
 }

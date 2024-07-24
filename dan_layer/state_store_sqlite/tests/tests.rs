@@ -3,7 +3,7 @@
 
 use rand::{rngs::OsRng, RngCore};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, NodeHeight};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, Command, Decision, TransactionAtom, TransactionPoolStage, TransactionPoolStatusUpdate},
     StateStore,
@@ -12,6 +12,7 @@ use tari_dan_storage::{
 };
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::TransactionId;
+use tari_utilities::epoch_time::EpochTime;
 
 fn create_db() -> SqliteStateStore<String> {
     SqliteStateStore::connect(":memory:").unwrap()
@@ -30,8 +31,6 @@ fn create_tx_atom() -> TransactionAtom {
 }
 
 mod confirm_all_transitions {
-    use tari_dan_common_types::shard::Shard;
-    use tari_utilities::epoch_time::EpochTime;
 
     use super::*;
 
@@ -70,12 +69,9 @@ mod confirm_all_transitions {
         );
         block1.insert(&mut tx).unwrap();
 
-        tx.transaction_pool_insert(atom1.clone(), TransactionPoolStage::New, false)
-            .unwrap();
-        tx.transaction_pool_insert(atom2.clone(), TransactionPoolStage::New, false)
-            .unwrap();
-        tx.transaction_pool_insert(atom3.clone(), TransactionPoolStage::New, false)
-            .unwrap();
+        tx.transaction_pool_insert_new(atom1.id, atom1.decision).unwrap();
+        tx.transaction_pool_insert_new(atom2.id, atom2.decision).unwrap();
+        tx.transaction_pool_insert_new(atom3.id, atom3.decision).unwrap();
         let block_id = *block1.id();
 
         tx.transaction_pool_add_pending_update(&TransactionPoolStatusUpdate {
@@ -112,13 +108,13 @@ mod confirm_all_transitions {
         let rec = tx
             .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom1.id)
             .unwrap();
-        assert!(rec.stage().is_new());
+        assert!(rec.committed_stage().is_new());
         assert!(rec.pending_stage().unwrap().is_local_prepared());
 
         let rec = tx
             .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom2.id)
             .unwrap();
-        assert!(rec.stage().is_new());
+        assert!(rec.committed_stage().is_new());
         assert!(rec.pending_stage().unwrap().is_prepared());
 
         tx.transaction_pool_set_all_transitions(&zero_block.as_locked_block(), &block1.as_locked_block(), &[
@@ -129,19 +125,19 @@ mod confirm_all_transitions {
         let rec = tx
             .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom1.id)
             .unwrap();
-        assert!(rec.stage().is_local_prepared());
+        assert!(rec.committed_stage().is_local_prepared());
         assert!(rec.pending_stage().is_none());
 
         let rec = tx
             .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom2.id)
             .unwrap();
-        assert!(rec.stage().is_new());
+        assert!(rec.committed_stage().is_new());
         assert!(rec.pending_stage().unwrap().is_prepared());
 
         let rec = tx
             .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom3.id)
             .unwrap();
-        assert!(rec.stage().is_prepared());
+        assert!(rec.committed_stage().is_prepared());
         assert!(rec.pending_stage().is_none());
 
         tx.rollback().unwrap();

@@ -34,6 +34,7 @@ where TSpec: ConsensusSpec
     ) -> Result<ConsensusStateEvent, HotStuffError> {
         // Subscribe before checking if we're registered to eliminate the chance that we miss the epoch event
         let mut epoch_events = context.epoch_manager.subscribe().await?;
+        context.epoch_manager.wait_for_initial_scanning_to_complete().await?;
         let current_epoch = context.epoch_manager.current_epoch().await?;
         if self.is_registered_for_epoch(context, current_epoch).await? {
             return Ok(ConsensusStateEvent::RegisteredForEpoch { epoch: current_epoch });
@@ -48,8 +49,8 @@ where TSpec: ConsensusSpec
                                 return Ok(event);
                             }
                         },
-                        Err(broadcast::error::RecvError::Lagged(_)) => {
-                            debug!(target: LOG_TARGET, "Idle state lagged behind epoch manager event stream");
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            debug!(target: LOG_TARGET, "Idle state lagged behind by {n} epoch manager events");
                         },
                         Err(broadcast::error::RecvError::Closed) => {
                             break;

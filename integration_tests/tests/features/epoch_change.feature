@@ -5,7 +5,7 @@
 Feature: Epoch change
 
   @serial @current
-  Scenario: EpochEnd and EpochStart commands are used on epoch change
+  Scenario: EndEpoch command is used on epoch change
     Given fees are disabled
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -20,20 +20,29 @@ Feature: Epoch change
     When miner MINER mines 6 new blocks
     When wallet WALLET has at least 20000 T
 
+    # Create a key for transactions
+    When I use an account key named K1
+
     # VN registration
     When validator node VAL sends a registration transaction to base wallet WALLET
+    When base wallet WALLET registers the template "faucet"
 
     # Mine them into registered epoch
     When miner MINER mines 16 new blocks
     Then VAL has scanned to height 19
     Then the validator node VAL is listed as registered
+    Then the template "faucet" is listed as registered by the validator node VAL
 
-    When Block count on VN VAL is at least 5
-    When miner MINER mines 1 new blocks
+    # Push a transaction through to get blocks
+    When I call function "mint" on template "faucet" on VAL with args "amount_10000" named "FAUCET"
+
+    When Block count on VN VAL is at least 6
+    When miner MINER mines 5 new blocks
+    Then VAL has scanned to height 24
     Then the validator node VAL switches to epoch 2
 
 # @serial
-# Scenario: Commmittee is split into two during epoch change
+# Scenario: Committee is split into two during epoch change
 #   Given fees are disabled
 #   # Initialize a base node, wallet, miner and VN
 #   Given a base node BASE

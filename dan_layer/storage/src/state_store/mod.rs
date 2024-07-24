@@ -10,9 +10,9 @@ use std::{
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_engine_types::substate::SubstateId;
-use tari_state_tree::{TreeStore, TreeStoreReader, Version};
+use tari_state_tree::{Node, NodeKey, StaleTreeNode, Version};
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
@@ -38,6 +38,9 @@ use crate::{
         PendingStateTreeDiff,
         QcId,
         QuorumCertificate,
+        StateTransition,
+        StateTransitionId,
+        SubstateChange,
         SubstateRecord,
         TransactionAtom,
         TransactionExecution,
@@ -54,11 +57,9 @@ const LOG_TARGET: &str = "tari::dan::storage";
 
 pub trait StateStore {
     type Addr: NodeAddressable;
-    type ReadTransaction<'a>: StateStoreReadTransaction<Addr = Self::Addr> + TreeStoreReader<Version>
+    type ReadTransaction<'a>: StateStoreReadTransaction<Addr = Self::Addr>
     where Self: 'a;
-    type WriteTransaction<'a>: StateStoreWriteTransaction<Addr = Self::Addr>
-        + TreeStore<Version>
-        + Deref<Target = Self::ReadTransaction<'a>>
+    type WriteTransaction<'a>: StateStoreWriteTransaction<Addr = Self::Addr> + Deref<Target = Self::ReadTransaction<'a>>
     where Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError>;
@@ -134,10 +135,13 @@ pub trait StateStoreReadTransaction: Sized {
         from_block_id: &BlockId,
     ) -> Result<TransactionExecution, StorageError>;
     fn blocks_get(&self, block_id: &BlockId) -> Result<Block, StorageError>;
-    fn blocks_get_tip(&self) -> Result<Block, StorageError>;
+    fn blocks_get_tip(&self, epoch: Epoch, shard: Shard) -> Result<Block, StorageError>;
+    fn blocks_get_last_n_in_epoch(&self, n: usize, epoch: Epoch, shard: Shard) -> Result<Vec<Block>, StorageError>;
     /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
     fn blocks_get_all_between(
         &self,
+        epoch: Epoch,
+        shard: Shard,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
         include_dummy_blocks: bool,
@@ -176,6 +180,11 @@ pub trait StateStoreReadTransaction: Sized {
     fn blocks_max_height(&self) -> Result<NodeHeight, StorageError>;
 
     fn block_diffs_get(&self, block_id: &BlockId) -> Result<BlockDiff, StorageError>;
+    fn block_diffs_get_last_change_for_substate(
+        &self,
+        block_id: &BlockId,
+        substate_id: &SubstateId,
+    ) -> Result<SubstateChange, StorageError>;
 
     fn parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
 
@@ -188,7 +197,6 @@ pub trait StateStoreReadTransaction: Sized {
     fn quorum_certificates_get_by_block_id(&self, block_id: &BlockId) -> Result<QuorumCertificate, StorageError>;
 
     // -------------------------------- Transaction Pools -------------------------------- //
-    fn transaction_pool_get(&self, transaction_id: &TransactionId) -> Result<TransactionPoolRecord, StorageError>;
     fn transaction_pool_get_for_blocks(
         &self,
         from_block_id: &BlockId,
@@ -235,6 +243,8 @@ pub trait StateStoreReadTransaction: Sized {
 
     fn substates_exists_for_transaction(&self, transaction_id: &TransactionId) -> Result<bool, StorageError>;
 
+    fn substates_get_n_after(&self, n: usize, after: &SubstateAddress) -> Result<Vec<SubstateRecord>, StorageError>;
+
     fn substates_get_many_within_range(
         &self,
         start: &SubstateAddress,
@@ -250,7 +260,6 @@ pub trait StateStoreReadTransaction: Sized {
         &self,
         tx_id: &TransactionId,
     ) -> Result<Vec<SubstateRecord>, StorageError>;
-    fn substates_get_all_for_block(&self, block_id: &BlockId) -> Result<Vec<SubstateRecord>, StorageError>;
     fn substates_get_all_for_transaction(
         &self,
         transaction_id: &TransactionId,
@@ -266,8 +275,21 @@ pub trait StateStoreReadTransaction: Sized {
     fn pending_state_tree_diffs_exists_for_block(&self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn pending_state_tree_diffs_get_all_up_to_commit_block(
         &self,
+        epoch: Epoch,
+        shard: Shard,
         block_id: &BlockId,
     ) -> Result<Vec<PendingStateTreeDiff>, StorageError>;
+
+    fn state_transitions_get_n_after(
+        &self,
+        n: usize,
+        id: StateTransitionId,
+        end_epoch: Epoch,
+    ) -> Result<Vec<StateTransition>, StorageError>;
+
+    fn state_transitions_get_last_id(&self) -> Result<StateTransitionId, StorageError>;
+
+    fn state_tree_nodes_get(&self, epoch: Epoch, shard: Shard, key: &NodeKey) -> Result<Node<Version>, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -334,12 +356,7 @@ pub trait StateStoreWriteTransaction {
     ) -> Result<(), StorageError>;
 
     // -------------------------------- Transaction Pool -------------------------------- //
-    fn transaction_pool_insert(
-        &mut self,
-        transaction: TransactionAtom,
-        stage: TransactionPoolStage,
-        is_ready: bool,
-    ) -> Result<(), StorageError>;
+    fn transaction_pool_insert_new(&mut self, tx_id: TransactionId, decision: Decision) -> Result<(), StorageError>;
     fn transaction_pool_set_atom(&mut self, transaction: TransactionAtom) -> Result<(), StorageError>;
     fn transaction_pool_add_pending_update(
         &mut self,
@@ -397,15 +414,16 @@ pub trait StateStoreWriteTransaction {
         transaction_ids: I,
     ) -> Result<(), StorageError>;
 
-    fn substate_down_many<I: IntoIterator<Item = SubstateAddress>>(
+    fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
+    fn substates_down(
         &mut self,
-        substate_addresses: I,
+        versioned_substate_id: VersionedSubstateId,
+        shard: Shard,
         epoch: Epoch,
-        destroyed_block_id: &BlockId,
+        destroyed_block_height: NodeHeight,
         destroyed_transaction_id: &TransactionId,
         destroyed_qc_id: &QcId,
     ) -> Result<(), StorageError>;
-    fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
 
     // -------------------------------- Pending State Tree Diffs -------------------------------- //
     fn pending_state_tree_diffs_insert(&mut self, diff: &PendingStateTreeDiff) -> Result<(), StorageError>;
@@ -413,6 +431,22 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         block_id: &BlockId,
     ) -> Result<PendingStateTreeDiff, StorageError>;
+
+    //---------------------------------- State tree --------------------------------------------//
+    fn state_tree_nodes_insert(
+        &mut self,
+        epoch: Epoch,
+        shard: Shard,
+        key: NodeKey,
+        node: Node<Version>,
+    ) -> Result<(), StorageError>;
+
+    fn state_tree_nodes_mark_stale_tree_node(
+        &mut self,
+        epoch: Epoch,
+        shard: Shard,
+        node: StaleTreeNode,
+    ) -> Result<(), StorageError>;
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

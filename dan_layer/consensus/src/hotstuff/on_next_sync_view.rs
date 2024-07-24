@@ -2,7 +2,7 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_dan_common_types::{optional::Optional, NodeHeight};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{HighQc, LastSentVote},
     StateStore,
@@ -39,11 +39,10 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
         }
     }
 
-    pub async fn handle(&mut self, new_height: NodeHeight) -> Result<(), HotStuffError> {
-        let current_epoch = self.epoch_manager.current_epoch().await?;
-        info!(target: LOG_TARGET, "⚠️ Leader failure: NEXTSYNCVIEW for epoch {} and node height {}", current_epoch, new_height);
+    pub async fn handle(&mut self, epoch: Epoch, new_height: NodeHeight) -> Result<(), HotStuffError> {
+        info!(target: LOG_TARGET, "⚠️ Leader failure: NEXTSYNCVIEW for epoch {} and node height {}", epoch, new_height);
         // Is the VN registered?
-        if !self.epoch_manager.is_epoch_active(current_epoch).await? {
+        if !self.epoch_manager.is_epoch_active(epoch).await? {
             info!(
                 target: LOG_TARGET,
                 "[on_leader_timeout] Validator is not active within this epoch"
@@ -59,7 +58,7 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
             Ok::<_, HotStuffError>((high_qc, last_sent_vote))
         })?;
 
-        let local_committee = self.epoch_manager.get_local_committee(current_epoch).await?;
+        let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         let next_leader = self
             .leader_strategy
             .get_leader_for_next_block(&local_committee, new_height);
@@ -68,7 +67,7 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
         let message = NewViewMessage {
             high_qc,
             new_height,
-            epoch: current_epoch,
+            epoch,
             last_vote: last_sent_vote.map(VoteMessage::from),
         };
 

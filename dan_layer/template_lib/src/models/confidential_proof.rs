@@ -159,6 +159,19 @@ impl ConfidentialWithdrawProof {
         }
     }
 
+    pub fn revealed_to_confidential<T: Into<Amount>>(
+        input_revealed_amount: T,
+        output_proof: ConfidentialOutputStatement,
+        balance_proof: BalanceProofSignature,
+    ) -> Self {
+        Self {
+            inputs: vec![],
+            input_revealed_amount: input_revealed_amount.into(),
+            output_proof,
+            balance_proof,
+        }
+    }
+
     pub fn revealed_input_amount(&self) -> Amount {
         self.input_revealed_amount
     }

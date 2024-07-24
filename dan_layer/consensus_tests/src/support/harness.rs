@@ -3,17 +3,17 @@
 
 use std::{
     collections::{hash_map, HashMap, HashSet},
+    fmt::Display,
     time::Duration,
 };
 
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
-use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_consensus::hotstuff::HotstuffEvent;
-use tari_crypto::keys::{PublicKey as _, SecretKey};
 use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, Decision, QcId, SubstateRecord, TransactionRecord},
+    consensus_models::{BlockId, Decision, QcId, SubstateRecord, TransactionExecution, TransactionRecord},
     StateStore,
+    StateStoreReadTransaction,
     StorageError,
 };
 use tari_engine_types::{
@@ -26,11 +26,10 @@ use tari_template_lib::models::ComponentAddress;
 use tari_transaction::{TransactionId, VersionedSubstateId};
 use tokio::{sync::broadcast, task, time::sleep};
 
-use super::MessageFilter;
+use super::{create_execution_result_for_transaction, helpers, MessageFilter};
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
-    executions_store::TestTransactionExecutionsStore,
     network::{spawn_network, TestNetwork, TestNetworkDestination},
     transaction::build_transaction,
     validator::Validator,
@@ -41,7 +40,6 @@ use crate::support::{
 pub struct Test {
     validators: HashMap<TestAddress, Validator>,
     network: TestNetwork,
-    transaction_executions: TestTransactionExecutionsStore,
     _leader_strategy: RoundRobinLeaderStrategy,
     epoch_manager: TestEpochManager,
     shutdown: Shutdown,
@@ -53,11 +51,18 @@ impl Test {
         TestBuilder::new()
     }
 
-    pub async fn send_transaction_to(&self, addr: &TestAddress, decision: Decision, fee: u64, num_shards: usize) {
+    pub async fn send_transaction_to(
+        &self,
+        addr: &TestAddress,
+        decision: Decision,
+        fee: u64,
+        num_shards: usize,
+    ) -> TransactionRecord {
         let num_committees = self.epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
         let transaction = build_transaction(decision, fee, num_shards, num_committees);
-        self.send_transaction_to_destination(TestNetworkDestination::Address(addr.clone()), transaction)
+        self.send_transaction_to_destination(TestNetworkDestination::Address(addr.clone()), transaction.clone())
             .await;
+        transaction
     }
 
     pub async fn send_transaction_to_all(&self, decision: Decision, fee: u64, num_shards: usize) {
@@ -68,17 +73,31 @@ impl Test {
     }
 
     pub async fn send_transaction_to_destination(&self, dest: TestNetworkDestination, transaction: TransactionRecord) {
-        let num_committees = self.epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
-        self.validators.values().for_each(|v| {
-            if dest.is_for(&v.address, v.substate_address.to_shard(num_committees)) {
-                v.state_store.with_write_tx(|tx| transaction.insert(tx)).unwrap();
-            }
-        });
+        self.create_execution_at_destination(
+            dest.clone(),
+            create_execution_result_for_transaction(
+                BlockId::zero(),
+                *transaction.id(),
+                transaction.current_decision(),
+                0,
+                transaction.resolved_inputs.clone().unwrap_or_default(),
+                transaction.resulting_outputs.clone(),
+            ),
+        );
         self.network.send_transaction(dest, transaction).await;
     }
 
-    pub fn transaction_executions(&self) -> &TestTransactionExecutionsStore {
-        &self.transaction_executions
+    pub fn create_execution_at_destination(
+        &self,
+        dest: TestNetworkDestination,
+        execution: TransactionExecution,
+    ) -> &Self {
+        for vn in self.validators.values() {
+            if dest.is_for(&vn.address, vn.shard) {
+                vn.transaction_executions.insert(execution.clone());
+            }
+        }
+        self
     }
 
     pub fn create_substates_on_all_vns(&self, num: usize) -> Vec<VersionedSubstateId> {
@@ -105,11 +124,12 @@ impl Test {
                     id,
                     0,
                     value,
+                    Shard::zero(),
                     Epoch(0),
                     NodeHeight(0),
-                    BlockId::genesis(),
+                    BlockId::zero(),
                     TransactionId::default(),
-                    QcId::genesis(),
+                    QcId::zero(),
                 )
             })
             .collect::<Vec<_>>();
@@ -150,7 +170,7 @@ impl Test {
             .unwrap()
     }
 
-    pub async fn on_block_committed(&mut self) -> (TestAddress, BlockId, NodeHeight) {
+    pub async fn on_block_committed(&mut self) -> (TestAddress, BlockId, Epoch, NodeHeight) {
         loop {
             let (address, event) = if let Some(timeout) = self.timeout {
                 tokio::time::timeout(timeout, self.on_hotstuff_event())
@@ -160,7 +180,11 @@ impl Test {
                 self.on_hotstuff_event().await
             };
             match event {
-                HotstuffEvent::BlockCommitted { block_id, height } => return (address, block_id, height),
+                HotstuffEvent::BlockCommitted {
+                    block_id,
+                    epoch,
+                    height,
+                } => return (address, block_id, epoch, height),
                 HotstuffEvent::Failure { message } => panic!("[{}] Consensus failure: {}", address, message),
                 other => {
                     log::info!("[{}] Ignoring event: {:?}", address, other);
@@ -226,12 +250,23 @@ impl Test {
         })
     }
 
+    pub async fn wait_for_n_to_be_finalized(&self, n: usize) {
+        self.wait_all_for_predicate("waiting for n to be finalized", |vn| {
+            let transactions = vn
+                .state_store
+                .with_read_tx(|tx| tx.transactions_get_paginated(10000, 0, None))
+                .unwrap();
+            log::info!("{} has {} transactions in pool", vn.address, transactions.len());
+            transactions.iter().filter(|tx| tx.is_finalized()).count() >= n
+        })
+        .await
+    }
+
     pub fn with_all_validators(&self, f: impl FnMut(&Validator)) {
         self.validators.values().for_each(f);
     }
 
-    #[allow(dead_code)]
-    async fn wait_all_for_predicate<P: FnMut(&Validator) -> bool>(&self, description: String, mut predicate: P) {
+    async fn wait_all_for_predicate<T: Display, P: FnMut(&Validator) -> bool>(&self, description: T, mut predicate: P) {
         let mut complete = vec![];
         let mut remaining_loops = 100usize; // ~10 seconds
         loop {
@@ -265,22 +300,26 @@ impl Test {
     }
 
     pub async fn assert_all_validators_at_same_height_except(&self, except: &[TestAddress]) {
+        let current_epoch = self.epoch_manager.current_epoch().await.unwrap();
         let committees = self.epoch_manager.all_committees().await;
         let mut attempts = 0usize;
         'outer: loop {
-            for committee in committees.values() {
-                let mut heights = self
+            for (shard, committee) in &committees {
+                let mut blocks = self
                     .validators
                     .values()
                     .filter(|vn| committee.contains(&vn.address))
                     .filter(|vn| !except.contains(&vn.address))
                     .map(|v| {
-                        let height = v.state_store.with_read_tx(|tx| Block::get_tip(tx)).unwrap().height();
-                        (v.address.clone(), height)
+                        let block = v
+                            .state_store
+                            .with_read_tx(|tx| tx.blocks_get_tip(current_epoch, *shard))
+                            .unwrap();
+                        (v.address.clone(), block)
                     });
-                let (first_addr, first) = heights.next().unwrap();
-                for (addr, height) in heights {
-                    if first != height && attempts < 5 {
+                let (first_addr, first) = blocks.next().unwrap();
+                for (addr, block) in blocks {
+                    if (first.epoch() != block.epoch() || first.height() != block.height()) && attempts < 5 {
                         attempts += 1;
                         // Send this task to the back of the queue and try again after other tasks have executed
                         // to allow validators to catch up
@@ -288,9 +327,13 @@ impl Test {
                         continue 'outer;
                     }
                     assert_eq!(
-                        first, height,
+                        first.id(),
+                        block.id(),
                         "Validator {} is at height {} but validator {} is at height {}",
-                        first_addr, first, addr, height
+                        first_addr,
+                        first,
+                        addr,
+                        block
                     );
                 }
             }
@@ -318,6 +361,7 @@ impl Test {
                     attempts += 1;
                     // Send this task to the back of the queue and try again after other tasks have executed
                     // to allow validators to catch up
+                    // tokio::time::sleep(Duration::from_millis(50)).await;
                     task::yield_now().await;
                     continue 'outer;
                 }
@@ -339,19 +383,9 @@ impl Test {
         });
     }
 
-    pub fn assert_all_validators_did_not_commit(&self) {
-        self.validators.values().for_each(|v| {
-            assert!(
-                !v.has_committed_substates(),
-                "Validator {} committed but we expected it not to",
-                v.address
-            );
-        });
-    }
-
-    pub async fn assert_clean_shutdown(mut self) {
+    pub async fn assert_clean_shutdown(&mut self) {
         self.shutdown.trigger();
-        for v in self.validators.into_values() {
+        for (_, v) in self.validators.drain() {
             v.handle.await.unwrap();
         }
     }
@@ -399,19 +433,16 @@ impl TestBuilder {
         self
     }
 
-    pub fn add_committee<T: Into<Shard>>(mut self, bucket: T, addresses: Vec<&'static str>) -> Self {
+    pub fn add_committee<T: Into<Shard>>(mut self, shard: T, addresses: Vec<&'static str>) -> Self {
         let entry = self
             .committees
-            .entry(bucket.into())
+            .entry(shard.into())
             .or_insert_with(|| Committee::new(vec![]));
 
         for addr in addresses {
-            let mut bytes = [0u8; 64];
-            bytes[0..addr.as_bytes().len()].copy_from_slice(addr.as_bytes());
-            let secret_key = PrivateKey::from_uniform_bytes(&bytes).unwrap();
-            entry
-                .members
-                .push((TestAddress::new(addr), PublicKey::from_secret_key(&secret_key)));
+            let addr = TestAddress::new(addr);
+            let (_, pk) = helpers::derive_keypair_from_address(&addr);
+            entry.members.push((addr, pk));
         }
         self
     }
@@ -425,19 +456,19 @@ impl TestBuilder {
         &self,
         leader_strategy: &RoundRobinLeaderStrategy,
         epoch_manager: &TestEpochManager,
-        transaction_executions: TestTransactionExecutionsStore,
         shutdown_signal: ShutdownSignal,
     ) -> (Vec<ValidatorChannels>, HashMap<TestAddress, Validator>) {
         epoch_manager
             .all_validators()
             .await
             .into_iter()
-            .map(|(address, bucket, shard, pk, _, _, _)| {
+            .map(|(address, bucket, shard, _, _, _, _)| {
                 let sql_address = self.sql_address.replace("{}", &address.0);
+                let (sk, pk) = helpers::derive_keypair_from_address(&address);
+
                 let (channels, validator) = Validator::builder()
                     .with_sql_url(sql_address)
-                    .with_transaction_executions(transaction_executions.clone())
-                    .with_address_and_public_key(address.clone(), pk.clone())
+                    .with_address_and_secret_key(address.clone(), sk)
                     .with_shard(shard)
                     .with_bucket(bucket)
                     .with_epoch_manager(epoch_manager.clone_for(address.clone(), pk, shard))
@@ -467,21 +498,14 @@ impl TestBuilder {
         let epoch_manager = TestEpochManager::new(tx_epoch_events);
         epoch_manager.add_committees(self.committees.clone()).await;
         let shutdown = Shutdown::new();
-        let transaction_executions = TestTransactionExecutionsStore::new();
         let (channels, validators) = self
-            .build_validators(
-                &leader_strategy,
-                &epoch_manager,
-                transaction_executions.clone(),
-                shutdown.to_signal(),
-            )
+            .build_validators(&leader_strategy, &epoch_manager, shutdown.to_signal())
             .await;
         let network = spawn_network(channels, shutdown.to_signal(), self.message_filter);
 
         Test {
             validators,
             network,
-            transaction_executions,
 
             _leader_strategy: leader_strategy,
             epoch_manager,

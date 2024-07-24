@@ -22,7 +22,6 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         Command,
-        EpochEvent,
         ExecutedTransaction,
         ForeignProposal,
         ForeignSendCounters,
@@ -49,7 +48,7 @@ use crate::{
     hotstuff::{
         calculate_state_merkle_diff,
         error::HotStuffError,
-        substate_store::PendingSubstateStore,
+        substate_store::{ChainScopedTreeStore, PendingSubstateStore},
         EXHAUST_DIVISOR,
     },
     messages::{HotstuffMessage, ProposalMessage},
@@ -104,9 +103,10 @@ where TConsensusSpec: ConsensusSpec
         local_committee: &Committee<TConsensusSpec::Addr>,
         leaf_block: LeafBlock,
         is_newview_propose: bool,
+        propose_epoch_end: bool,
     ) -> Result<(), HotStuffError> {
         if let Some(last_proposed) = self.store.with_read_tx(|tx| LastProposed::get(tx)).optional()? {
-            if last_proposed.height > leaf_block.height {
+            if last_proposed.epoch == leaf_block.epoch && last_proposed.height > leaf_block.height {
                 // is_newview_propose means that a NEWVIEW has reached quorum and nodes are expecting us to propose.
                 // Re-broadcast the previous proposal
                 if is_newview_propose {
@@ -129,7 +129,7 @@ where TConsensusSpec: ConsensusSpec
 
                 info!(
                     target: LOG_TARGET,
-                    "⤵️ SKIPPING propose for leaf {} because we already proposed block {}",
+                    "⤵️ SKIPPING propose for {} because we already proposed block {}",
                     leaf_block,
                     last_proposed,
                 );
@@ -142,54 +142,18 @@ where TConsensusSpec: ConsensusSpec
         let local_committee_info = self.epoch_manager.get_local_committee_info(epoch).await?;
         let (current_base_layer_block_height, current_base_layer_block_hash) =
             self.epoch_manager.current_base_layer_block_info().await?;
-        let (high_qc, qc_block, locked_block) = self.store.with_read_tx(|tx| {
-            let high_qc = HighQc::get(tx)?;
-            let qc_block = high_qc.get_block(tx)?;
-            let locked_block = LockedBlock::get(tx)?.get_block(tx)?;
-            Ok::<_, HotStuffError>((high_qc, qc_block, locked_block))
-        })?;
 
-        let parent_base_layer_block_hash = qc_block.base_layer_block_hash();
-
-        let base_layer_block_hash = if qc_block.base_layer_block_height() >= current_base_layer_block_height {
-            *parent_base_layer_block_hash
-        } else {
-            // We select our current base layer block hash as the base layer block hash for the next block if
-            // and only if we know that the parent block was smaller.
-            current_base_layer_block_hash
-        };
-
-        // If epoch has changed, we should first end the epoch with an EpochEvent::End
-        let propose_epoch_end =
-            // If we didn't locked block with an EpochEvent::End
-            !locked_block.is_epoch_end() &&
-            // The last block is from previous epoch or it is an EpochEnd block
-            (qc_block.epoch() < epoch || qc_block.is_epoch_end()) &&
-            // If the previous epoch is the genesis epoch, we don't need to end it (there was no committee at epoch 0)
-            !qc_block.is_genesis();
-
-        // If the epoch is changed, we use the current epoch
-        let epoch = if propose_epoch_end { qc_block.epoch() } else { epoch };
-        let base_layer_block_hash = if propose_epoch_end {
-            self.epoch_manager.get_last_block_of_current_epoch().await?
-        } else {
-            base_layer_block_hash
-        };
-        let base_layer_block_height = self
-            .epoch_manager
-            .get_base_layer_block_height(base_layer_block_hash)
-            .await?
-            .unwrap();
-        // The epoch is greater only when the EpochEnd event is locked.
-        let propose_epoch_start = qc_block.epoch() < epoch;
+        let base_layer_block_hash = current_base_layer_block_hash;
+        let base_layer_block_height = current_base_layer_block_height;
 
         let next_block = self.store.with_write_tx(|tx| {
-            let high_qc = high_qc.get_quorum_certificate(&**tx)?;
+            let high_qc = HighQc::get(&**tx)?;
+            let high_qc_cert = high_qc.get_quorum_certificate(&**tx)?;
             let (next_block, executed_transactions) = self.build_next_block(
                 tx,
                 epoch,
                 &leaf_block,
-                high_qc,
+                high_qc_cert,
                 validator.public_key,
                 &local_committee_info,
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
@@ -197,7 +161,6 @@ where TConsensusSpec: ConsensusSpec
                 is_newview_propose,
                 base_layer_block_height,
                 base_layer_block_hash,
-                propose_epoch_start,
                 propose_epoch_end,
             )?;
 
@@ -211,7 +174,7 @@ where TConsensusSpec: ConsensusSpec
             for mut executed in executed_transactions.into_values() {
                 // TODO: This is a hacky workaround, if the executed transaction has no shards after execution, we
                 // remove it from the pool so that it does not get proposed again. Ideally we should be
-                // able to catch this in transaction validation.
+                // able to catch this in transaction validation and propose ABORT.
                 if local_committee_info.count_distinct_shards(executed.involved_addresses_iter()) == 0 {
                     self.transaction_pool.remove(tx, *executed.id())?;
                     executed
@@ -230,7 +193,8 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "🌿 PROPOSING new local block {} to {} validators. justify: {} ({}), parent: {}",
+            "🌿 [{}] PROPOSING new local block {} to {} validators. justify: {} ({}), parent: {}",
+            validator.address,
             next_block,
             local_committee.len(),
             next_block.justify().block_id(),
@@ -273,13 +237,14 @@ where TConsensusSpec: ConsensusSpec
     fn execute_transaction(
         &self,
         store: &PendingSubstateStore<TConsensusSpec::StateStore>,
+        current_epoch: Epoch,
         transaction_id: &TransactionId,
     ) -> Result<ExecutedTransaction, HotStuffError> {
         let transaction = TransactionRecord::get(store.read_transaction(), transaction_id)?;
 
         let executed = self
             .transaction_executor
-            .execute(transaction.into_transaction(), store)
+            .execute(transaction.into_transaction(), store, current_epoch)
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
         Ok(executed)
@@ -290,38 +255,29 @@ where TConsensusSpec: ConsensusSpec
     fn transaction_pool_record_to_command(
         &self,
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        parent_block: &LeafBlock,
         mut tx_rec: TransactionPoolRecord,
         local_committee_info: &CommitteeInfo,
         substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
         executed_transactions: &mut HashMap<TransactionId, ExecutedTransaction>,
     ) -> Result<Option<Command>, HotStuffError> {
-        // Execute deferred transaction
-        if tx_rec.is_deferred() {
-            info!(
-                target: LOG_TARGET,
-                "👨‍🔧 PROPOSE: Executing deferred transaction {}",
-                tx_rec.transaction_id(),
-            );
+        info!(
+            target: LOG_TARGET,
+            "👨‍🔧 PROPOSE: Executing transaction {}",
+            tx_rec.transaction_id(),
+        );
 
-            let executed = self.execute_transaction(substate_store, tx_rec.transaction_id())?;
+        if tx_rec.current_stage().is_new() {
+            let executed = self.execute_transaction(substate_store, parent_block.epoch(), tx_rec.transaction_id())?;
             // Update the decision so that we can propose it
             tx_rec.set_local_decision(executed.decision());
-            tx_rec.set_initial_evidence(executed.to_initial_evidence());
+            tx_rec.set_evidence(executed.to_initial_evidence());
             tx_rec.set_transaction_fee(executed.transaction_fee());
             executed_transactions.insert(*executed.id(), executed);
-        } else if tx_rec.current_decision().is_commit() && tx_rec.current_stage().is_new() {
-            // Executed in mempool. Add to this block's executed transactions
-            let executed = ExecutedTransaction::get(tx, tx_rec.transaction_id())?;
-            tx_rec.set_local_decision(executed.decision());
-            tx_rec.set_initial_evidence(executed.to_initial_evidence());
-            tx_rec.set_transaction_fee(executed.transaction_fee());
-            executed_transactions.insert(*executed.id(), executed);
-        } else {
-            // Continue...
-        };
+        }
 
         let num_involved_shards =
-            local_committee_info.count_distinct_shards(tx_rec.atom().evidence.substate_addresses_iter());
+            local_committee_info.count_distinct_shards(tx_rec.evidence().substate_addresses_iter());
 
         if num_involved_shards == 0 {
             warn!(
@@ -386,7 +342,18 @@ where TConsensusSpec: ConsensusSpec
                         tx_rec.transaction_id(),
                     ))
                 })?;
-                substate_store.put_diff(*tx_rec.transaction_id(), diff)?;
+                if let Err(err) = substate_store.put_diff(*tx_rec.transaction_id(), diff) {
+                    warn!(
+                        target: LOG_TARGET,
+                        "🔒 Transaction {} cannot be locked for LocalOnly: {}. Proposing to ABORT...",
+                        tx_rec.transaction_id(),
+                        err,
+                    );
+                    // Only error if it is not related to lock errors
+                    let _err = err.ok_or_fatal_error()?;
+                    // If the transaction does not lock, we propose to abort it
+                    return Ok(Some(Command::LocalOnly(tx_atom.abort())));
+                }
             }
             return Ok(Some(Command::LocalOnly(tx_atom)));
         }
@@ -439,15 +406,17 @@ where TConsensusSpec: ConsensusSpec
                 let leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);
                 let tx_atom = tx_rec.get_final_transaction_atom(leader_fee);
                 if tx_atom.decision.is_commit() {
-                    let transaction = tx_rec.get_transaction(tx)?;
-                    let result = transaction.result().ok_or_else(|| {
-                        HotStuffError::InvariantError(format!(
-                            "Transaction {} is committed but has no result when proposing",
-                            tx_rec.transaction_id(),
-                        ))
-                    })?;
+                    let execution = tx_rec
+                        .get_execution_for_block(tx, parent_block.block_id())
+                        .optional()?
+                        .ok_or_else(|| {
+                            HotStuffError::InvariantError(format!(
+                                "Transaction {} is committed but has no result when proposing",
+                                tx_rec.transaction_id(),
+                            ))
+                        })?;
 
-                    let diff = result.finalize.result.accept().ok_or_else(|| {
+                    let diff = execution.result().finalize.accept().ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
                             "Transaction {} has COMMIT decision but execution failed when proposing",
                             tx_rec.transaction_id(),
@@ -480,15 +449,14 @@ where TConsensusSpec: ConsensusSpec
         high_qc: QuorumCertificate,
         proposed_by: PublicKey,
         local_committee_info: &CommitteeInfo,
-        empty_block: bool,
+        dont_propose_transactions: bool,
         base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
-        propose_epoch_start: bool,
         propose_epoch_end: bool,
     ) -> Result<(Block, HashMap<TransactionId, ExecutedTransaction>), HotStuffError> {
         // TODO: Configure
-        const TARGET_BLOCK_SIZE: usize = 1000;
-        let batch = if empty_block || propose_epoch_end || propose_epoch_start {
+        const TARGET_BLOCK_SIZE: usize = 500;
+        let batch = if dont_propose_transactions || propose_epoch_end {
             vec![]
         } else {
             self.transaction_pool.get_batch_for_next_block(tx, TARGET_BLOCK_SIZE)?
@@ -499,10 +467,8 @@ where TConsensusSpec: ConsensusSpec
         let mut total_leader_fee = 0;
         let locked_block = LockedBlock::get(tx)?;
         let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
-        let mut commands = if propose_epoch_start {
-            BTreeSet::from_iter([Command::EpochEvent(EpochEvent::Start)])
-        } else if propose_epoch_end {
-            BTreeSet::from_iter([Command::EpochEvent(EpochEvent::End)])
+        let mut commands = if propose_epoch_end {
+            BTreeSet::from_iter([Command::EndEpoch])
         } else {
             ForeignProposal::get_all_new(tx)?
                 .into_iter()
@@ -511,7 +477,7 @@ where TConsensusSpec: ConsensusSpec
                     foreign_proposal.base_layer_block_height <= base_layer_block_height &&
                         // If the foreign proposal is already pending, don't propose it again
                         !pending_proposals.iter().any(|pending_proposal| {
-                            pending_proposal.bucket == foreign_proposal.bucket &&
+                            pending_proposal.shard == foreign_proposal.shard &&
                                 pending_proposal.block_id == foreign_proposal.block_id
                         })
                 })
@@ -523,11 +489,13 @@ where TConsensusSpec: ConsensusSpec
         };
 
         // batch is empty for is_empty, is_epoch_end and is_epoch_start blocks
-        let mut substate_store = PendingSubstateStore::new(tx);
+        let tree_store = ChainScopedTreeStore::new(epoch, local_committee_info.shard(), tx);
+        let mut substate_store = PendingSubstateStore::new(*parent_block.block_id(), tree_store);
         let mut executed_transactions = HashMap::new();
         for transaction in batch {
             if let Some(command) = self.transaction_pool_record_to_command(
                 tx,
+                parent_block,
                 transaction,
                 local_committee_info,
                 &mut substate_store,
@@ -548,13 +516,14 @@ where TConsensusSpec: ConsensusSpec
             commands.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
         );
 
-        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(tx, high_qc.block_id())?;
-
+        let pending_tree_diffs =
+            PendingStateTreeDiff::get_all_up_to_commit_block(tx, high_qc.epoch(), high_qc.shard(), high_qc.block_id())?;
+        let store = ChainScopedTreeStore::new(epoch, local_committee_info.shard(), tx);
         let (state_root, _) = calculate_state_merkle_diff(
-            tx,
+            &store,
             current_version,
             next_height.as_u64(),
-            pending,
+            pending_tree_diffs,
             substate_store.diff().iter().map(|ch| ch.into()),
         )?;
 

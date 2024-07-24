@@ -7,8 +7,13 @@ use tari_crypto::{keys::PublicKey as _, ristretto::RistrettoPublicKey};
 use tari_dan_wallet_sdk::{apis::key_manager::TRANSACTION_BRANCH, models::Account};
 use tari_engine_types::component::new_component_address_from_public_key;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::{args, models::Amount};
-use tari_transaction::{Instruction, Transaction};
+use tari_template_lib::{
+    args,
+    constants::{XTR, XTR_FAUCET_COMPONENT_ADDRESS, XTR_FAUCET_VAULT_ADDRESS},
+    models::Amount,
+    resource::ResourceType,
+};
+use tari_transaction::{SubstateRequirement, Transaction};
 
 use crate::{faucet::Faucet, runner::Runner};
 
@@ -22,22 +27,31 @@ impl Runner {
         let transaction = Transaction::builder()
             .with_fee_instructions_builder(|builder| {
                 builder
-                    .add_instruction(Instruction::CreateFreeTestCoins {
-                        revealed_amount: 1_000_000_000.into(),
-                        output: None,
-                    })
+                    .call_method(XTR_FAUCET_COMPONENT_ADDRESS, "take", args![Amount(1_000_000_000)])
                     .put_last_instruction_output_on_workspace("coins")
                     .create_account_with_bucket(owner_public_key, "coins")
                     .call_method(account_address, "pay_fee", args![Amount(1000)])
             })
+            .with_inputs([
+                SubstateRequirement::unversioned(XTR_FAUCET_COMPONENT_ADDRESS),
+                SubstateRequirement::unversioned(XTR_FAUCET_VAULT_ADDRESS),
+            ])
             .sign(&key.key)
             .build();
 
         let finalize = self.submit_transaction_and_wait(transaction).await?;
         let diff = finalize.result.accept().unwrap();
         let (account, _) = diff.up_iter().find(|(addr, _)| addr.is_component()).unwrap();
+        let (vault, _) = diff.up_iter().find(|(addr, _)| addr.is_vault()).unwrap();
 
         self.sdk.accounts_api().add_account(None, account, 0, true)?;
+        self.sdk.accounts_api().add_vault(
+            account.clone(),
+            vault.clone(),
+            XTR,
+            ResourceType::Confidential,
+            Some("XTR".to_string()),
+        )?;
         let account = self.sdk.accounts_api().get_account_by_address(account)?;
 
         Ok(account)
@@ -65,7 +79,10 @@ impl Runner {
         for owner in &owners {
             builder = builder.create_account(RistrettoPublicKey::from_secret_key(&owner.key));
         }
-        let transaction = builder.sign(&key.key).build();
+        let transaction = builder
+            .with_inputs([SubstateRequirement::unversioned(pay_fee_account.address.clone())])
+            .sign(&key.key)
+            .build();
 
         let finalize = self.submit_transaction_and_wait(transaction).await?;
         let diff = finalize.result.accept().unwrap();
@@ -113,17 +130,20 @@ impl Runner {
                 .call_method(account.address.as_component_address().unwrap(), "deposit", args![
                     Workspace("faucet")
                 ])
-                .add_instruction(Instruction::CreateFreeTestCoins {
-                    revealed_amount: 1_000_000.into(),
-                    output: None,
-                })
+                .call_method(XTR_FAUCET_COMPONENT_ADDRESS, "take", args![Amount(1_000_000)])
                 .put_last_instruction_output_on_workspace("xtr")
                 .call_method(account.address.as_component_address().unwrap(), "deposit", args![
                     Workspace("xtr")
                 ]);
         }
 
-        let transaction = builder.sign(&key.key).build();
+        let transaction = builder
+            .with_inputs([
+                SubstateRequirement::unversioned(faucet.component_address),
+                SubstateRequirement::unversioned(faucet.resource_address),
+            ])
+            .sign(&key.key)
+            .build();
 
         self.submit_transaction_and_wait(transaction).await?;
 
