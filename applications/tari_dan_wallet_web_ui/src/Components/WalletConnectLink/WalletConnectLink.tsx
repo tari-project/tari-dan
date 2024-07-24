@@ -52,7 +52,7 @@ const ConnectorDialog = () => {
   const theme = useTheme();
   const [_chosenOptionalPermissions, setChosenOptionalPermissions] = useState<boolean[]>([]);
 
-  const [web3wallet, setWeb3wallet] = useState<Web3Wallet | undefined>();
+  const [web3wallet, setWeb3wallet] = useState<any | undefined>();
 
   // TODO: send permissions on WC request
   const permissions: TariPermission[] = [
@@ -62,7 +62,10 @@ const ConnectorDialog = () => {
   ];
   const optionalPermissions: TariPermission[] = [];
 
-  async function createWallet(): Web3Wallet | null {
+  async function createWallet(): Promise<any| null> {
+    if (!projectId)
+      return null;
+
     const core = new Core({ projectId });
     const wallet = await Web3Wallet.init({
       core: core,
