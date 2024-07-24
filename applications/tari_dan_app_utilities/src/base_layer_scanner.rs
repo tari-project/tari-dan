@@ -444,11 +444,17 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
                 // Technically impossible, but anyway
                 BaseLayerScannerError::InvalidSideChainUtxoResponse(format!("Invalid commitment: {}", e)))?,
         );
+        let encrypted_data_bytes = output.encrypted_data.as_bytes();
+        if encrypted_data_bytes.len() < EncryptedData::size() {
+            return Err(BaseLayerScannerError::InvalidSideChainUtxoResponse(
+                "Encrypted data is the incorrect size".to_string(),
+            ));
+        }
 
         let substate = SubstateValue::UnclaimedConfidentialOutput(UnclaimedConfidentialOutput {
             commitment: output.commitment.clone(),
-            encrypted_data: EncryptedData::try_from(output.encrypted_data.as_bytes()).map_err(|_| {
-                BaseLayerScannerError::InvalidSideChainUtxoResponse("Encrypted data exceeds maximum size".to_string())
+            encrypted_data: EncryptedData::try_from(&encrypted_data_bytes[..EncryptedData::size()]).map_err(|_| {
+                BaseLayerScannerError::InvalidSideChainUtxoResponse("Encrypted data has too few bytes".to_string())
             })?,
         });
         self.state_store

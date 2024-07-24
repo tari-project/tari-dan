@@ -222,7 +222,7 @@ impl EncryptedData {
         const SIZE_VALUE: usize = size_of::<u64>();
         const SIZE_MASK: usize = 32;
         const SIZE_TAG: usize = 16;
-        pub const STATIC_ENCRYPTED_DATA_SIZE_TOTAL: usize = SIZE_NONCE + SIZE_VALUE + SIZE_MASK + SIZE_TAG;
+        const STATIC_ENCRYPTED_DATA_SIZE_TOTAL: usize = SIZE_NONCE + SIZE_VALUE + SIZE_MASK + SIZE_TAG;
         STATIC_ENCRYPTED_DATA_SIZE_TOTAL
     }
 

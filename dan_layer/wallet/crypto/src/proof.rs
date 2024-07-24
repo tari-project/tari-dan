@@ -49,7 +49,7 @@ use zeroize::Zeroizing;
 use crate::{
     byte_utils::copy_fixed,
     error::ConfidentialProofError,
-    kdfs::EncryptedDataKey32,
+    kdfs::EncryptedDataKey,
     ConfidentialProofStatement,
 };
 
@@ -116,8 +116,8 @@ pub fn create_confidential_output_statement(
 fn inner_encrypted_data_kdf_aead(
     encryption_key: &RistrettoSecretKey,
     commitment: &PedersenCommitment,
-) -> EncryptedDataKey32 {
-    let mut aead_key = EncryptedDataKey32::from(SafeArray::default());
+) -> EncryptedDataKey {
+    let mut aead_key = EncryptedDataKey::from(SafeArray::default());
     DomainSeparatedHasher::<Blake2b<U32>, TransactionSecureNonceKdfDomain>::new_with_label("encrypted_value_and_mask")
         .chain(encryption_key.as_bytes())
         .chain(commitment.as_bytes())
@@ -224,9 +224,9 @@ pub(crate) fn encrypt_data(
 
     // Put everything together: nonce, ciphertext, tag
     let mut data = [0u8; SIZE_TOTAL];
-    data[..SIZE_NONCE].clone_from_slice(&nonce);
-    data[SIZE_NONCE..SIZE_NONCE + SIZE_VALUE + SIZE_MASK].clone_from_slice(bytes.as_slice());
-    data[SIZE_NONCE + SIZE_VALUE + SIZE_MASK..].clone_from_slice(&tag);
+    data[..SIZE_TAG].clone_from_slice(&tag);
+    data[SIZE_TAG..SIZE_TAG + SIZE_NONCE].clone_from_slice(&nonce);
+    data[SIZE_NONCE + SIZE_TAG..SIZE_NONCE + SIZE_TAG + SIZE_VALUE + SIZE_MASK].clone_from_slice(bytes.as_slice());
 
     Ok(EncryptedData(data))
 }
@@ -236,11 +236,13 @@ pub fn decrypt_data_and_mask(
     commitment: &PedersenCommitment,
     encrypted_data: &EncryptedData,
 ) -> Result<(u64, RistrettoSecretKey), aead::Error> {
-    // Extract the nonce, ciphertext, and tag
-    let nonce = XNonce::from_slice(&encrypted_data.0.as_bytes()[..SIZE_NONCE]);
+    // Extract the tag, nonce and ciphertext
+    let tag = Tag::from_slice(&encrypted_data.as_bytes()[..SIZE_TAG]);
+    let nonce = XNonce::from_slice(&encrypted_data.0.as_bytes()[SIZE_TAG..SIZE_TAG + SIZE_NONCE]);
     let mut bytes = Zeroizing::new([0u8; SIZE_VALUE + SIZE_MASK]);
-    bytes.clone_from_slice(&encrypted_data.as_bytes()[SIZE_NONCE..SIZE_NONCE + SIZE_VALUE + SIZE_MASK]);
-    let tag = Tag::from_slice(&encrypted_data.as_bytes()[SIZE_NONCE + SIZE_VALUE + SIZE_MASK..]);
+    bytes.clone_from_slice(
+        &encrypted_data.as_bytes()[SIZE_TAG + SIZE_NONCE..SIZE_TAG + SIZE_NONCE + SIZE_VALUE + SIZE_MASK],
+    );
 
     // Set up the AEAD
     let aead_key = inner_encrypted_data_kdf_aead(encryption_key, commitment);
