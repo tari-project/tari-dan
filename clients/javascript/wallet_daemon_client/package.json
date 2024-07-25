@@ -2,6 +2,9 @@
   "name": "@tari-project/wallet_jrpc_client",
   "version": "1.0.7",
   "description": "Tari wallet JSON-RPC client library",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
