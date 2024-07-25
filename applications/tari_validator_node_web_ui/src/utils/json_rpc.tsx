@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import type { GetFilteredBlocksCountRequest } from "@tariproject/typescript-bindings/validator-node-client";
+import type { GetFilteredBlocksCountRequest } from "@tari-project/typescript-bindings/validator-node-client";
 import type {
   AddPeerRequest,
   GetAllVnsRequest,
@@ -62,7 +62,7 @@ import type {
   SubmitTransactionResponse,
   VNGetValidatorFeesRequest,
   VNGetValidatorFeesResponse,
-} from "@tariproject/typescript-bindings/validator-node-client";
+} from "@tari-project/typescript-bindings/validator-node-client";
 
 
 const DEFAULT_ADDRESS = new URL("http://127.0.0.1:18200");

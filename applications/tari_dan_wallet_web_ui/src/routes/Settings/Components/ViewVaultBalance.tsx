@@ -28,7 +28,7 @@ import Box from "@mui/material/Box";
 import { useTheme } from "@mui/material/styles";
 import { Divider } from "@mui/material";
 import { confidentialViewVaultBalance } from "../../../utils/json_rpc";
-import { ConfidentialViewVaultBalanceRequest } from "@tariproject/typescript-bindings/wallet-daemon-client";
+import { ConfidentialViewVaultBalanceRequest } from "@tari-project/typescript-bindings/wallet-daemon-client";
 
 function ViewVaultBalanceForm() {
   const [formState, setFormState] = useState({

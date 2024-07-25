@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { toHexString } from "../routes/VN/Components/helpers";
-import type { SubstateId } from "@tariproject/typescript-bindings";
+import type { SubstateId } from "@tari-project/typescript-bindings";
 
 export const renderJson = (json: any) => {
   if (!json) {
