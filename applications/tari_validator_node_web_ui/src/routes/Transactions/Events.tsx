@@ -29,7 +29,7 @@ import { renderJson } from "../../utils/helpers";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import CodeBlockExpand from "../../Components/CodeBlock";
-import type { Event } from "@tariproject/typescript-bindings";
+import type { Event } from "@tari-project/typescript-bindings";
 
 function RowData({ substate_id, template_address, topic, tx_hash, payload }: Event, index: number) {
   const [open, setOpen] = useState(false);

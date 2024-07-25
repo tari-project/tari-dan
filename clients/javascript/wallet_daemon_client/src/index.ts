@@ -64,7 +64,7 @@ import {
   TransactionWaitResultResponse,
   WebRtcStartRequest,
   WebRtcStartResponse,
-} from "@tariproject/typescript-bindings/wallet-daemon-client";
+} from "@tari-project/typescript-bindings/wallet-daemon-client";
 
 import {
   Arg,
@@ -80,7 +80,7 @@ import {
   substateIdToString,
   stringToSubstateId,
   rejectReasonToString,
-} from "@tariproject/typescript-bindings";
+} from "@tari-project/typescript-bindings";
 import { FetchRpcTransport, RpcTransport } from "./transports";
 
 export * as transports from "./transports";

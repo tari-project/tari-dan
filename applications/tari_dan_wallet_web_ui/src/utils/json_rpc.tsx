@@ -77,8 +77,8 @@ import type {
   TemplatesGetResponse,
   SubstatesListRequest,
   SubstatesListResponse,
-} from "@tariproject/typescript-bindings/wallet-daemon-client";
-import { AccountGetDefaultRequest, TemplatesGetRequest, WalletDaemonClient } from "@tariproject/wallet_daemon_client";
+} from "@tari-project/typescript-bindings/wallet-daemon-client";
+import { AccountGetDefaultRequest, TemplatesGetRequest, WalletDaemonClient } from "@tari-project/wallet_daemon_client";
 
 let clientInstance: WalletDaemonClient | null = null;
 let pendingClientInstance: Promise<WalletDaemonClient> | null = null;

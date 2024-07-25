@@ -29,7 +29,7 @@ import "./ValidatorNode.css";
 import { StyledPaper } from "../../Components/StyledComponents";
 import Grid from "@mui/material/Grid";
 import SecondaryHeading from "../../Components/SecondaryHeading";
-import type { GetIdentityResponse } from "@tariproject/typescript-bindings/tari-indexer-client";
+import type { GetIdentityResponse } from "@tari-project/typescript-bindings/tari-indexer-client";
 
 function ValidatorNode() {
   const [identity, setIdentity] = useState<GetIdentityResponse>();

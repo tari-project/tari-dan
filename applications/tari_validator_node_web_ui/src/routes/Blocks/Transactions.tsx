@@ -23,7 +23,7 @@
 import React from "react";
 import { Table, TableContainer, TableBody, TableHead, TableRow, TableCell } from "@mui/material";
 import StatusChip from "../../Components/StatusChip";
-import type { TransactionAtom } from "@tariproject/typescript-bindings";
+import type { TransactionAtom } from "@tari-project/typescript-bindings";
 
 function Transaction({ transaction }: { transaction: TransactionAtom }) {
   return (

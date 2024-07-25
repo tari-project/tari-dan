@@ -36,7 +36,7 @@ import { TextField } from "@mui/material";
 import { Form } from "react-router-dom";
 import Fade from "@mui/material/Fade";
 import CopyToClipboard from "../../../Components/CopyToClipboard";
-import type { Connection } from "@tariproject/typescript-bindings/tari-indexer-client";
+import type { Connection } from "@tari-project/typescript-bindings/tari-indexer-client";
 import { displayDuration } from "../../../utils/helpers";
 
 
