@@ -3,6 +3,9 @@
   "version": "1.0.3",
   "description": "",
   "main": "index.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "sh build.sh && tsc",
     "tsc": "tsc"
