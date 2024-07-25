@@ -37,11 +37,11 @@ import { DataTableCell } from "../../../Components/StyledComponents";
 import { useAccountNFTsList, useAccountsGetBalances } from "../../../api/hooks/useAccounts";
 import useAccountStore from "../../../store/accountStore";
 import { shortenString } from "../../../utils/helpers";
-import type { BalanceEntry } from "@tariproject/typescript-bindings/wallet-daemon-client";
+import type { BalanceEntry } from "@tari-project/typescript-bindings/wallet-daemon-client";
 import NFTList from "../../../Components/NFTList";
 import { Button } from "@mui/material";
 import { SendMoneyDialog } from "./SendMoney";
-import { ResourceAddress, ResourceType, VaultId } from "@tariproject/typescript-bindings";
+import { ResourceAddress, ResourceType, VaultId } from "@tari-project/typescript-bindings";
 
 interface TabPanelProps {
   children?: React.ReactNode;

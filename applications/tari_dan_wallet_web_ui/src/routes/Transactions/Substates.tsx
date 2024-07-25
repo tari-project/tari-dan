@@ -29,7 +29,7 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import { IoArrowDownCircle, IoArrowUpCircle } from "react-icons/io5";
 import CodeBlockExpand from "../../Components/CodeBlock";
 import { useTheme } from "@mui/material/styles";
-import type { Substate, SubstateId, TransactionResult } from "@tariproject/typescript-bindings";
+import type { Substate, SubstateId, TransactionResult } from "@tari-project/typescript-bindings";
 
 function RowData({ info, state }: { info: [SubstateId, Substate | number]; state: string }, index: number) {
   const [open, setOpen] = useState(false);

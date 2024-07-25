@@ -72,8 +72,8 @@ import type {
   WebRtcStartResponse,
   AccountsTransferRequest,
   AccountsTransferResponse,
-} from "@tariproject/typescript-bindings/wallet-daemon-client";
-import { WalletDaemonClient } from "@tariproject/wallet_daemon_client";
+} from "@tari-project/typescript-bindings/wallet-daemon-client";
+import { WalletDaemonClient } from "@tari-project/wallet_daemon_client";
 
 let clientInstance: WalletDaemonClient | null = null;
 let pendingClientInstance: Promise<WalletDaemonClient> | null = null;

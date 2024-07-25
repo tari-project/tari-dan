@@ -41,7 +41,7 @@ import {
   ResourceType,
   ConfidentialTransferInputSelection,
   TransactionResult,
-} from "@tariproject/typescript-bindings";
+} from "@tari-project/typescript-bindings";
 import InputLabel from "@mui/material/InputLabel";
 
 const XTR2 = "resource_01010101010101010101010101010101010101010101010101010101";

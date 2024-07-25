@@ -41,7 +41,7 @@ import { DataTableCell } from "../../Components/StyledComponents";
 import { useGetAllTransactions } from "../../api/hooks/useTransactions";
 import { emptyRows, handleChangePage, handleChangeRowsPerPage } from "../../utils/helpers";
 import { useAccountsGet } from "../../api/hooks/useAccounts";
-import type { FinalizeResult, Transaction, TransactionStatus } from "@tariproject/typescript-bindings";
+import type { FinalizeResult, Transaction, TransactionStatus } from "@tari-project/typescript-bindings";
 
 export default function Transactions({ accountName }: { accountName: string }) {
   const { data: accountsData } = useAccountsGet(accountName);
