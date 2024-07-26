@@ -20,10 +20,12 @@ jobs:
         with:
           node-version: "20"
       - run: npm ci
+      - run: npm run build
       - uses: JS-DevTools/npm-publish@v3
         with:
           token: ${{ secrets.NPM_TOKEN }}
           package: bindings
+          access: 'public'
 
   # Publish the Tari Wallet Daemon client to the NPM registry
   publish-wallet-daemon-client:
@@ -38,8 +40,10 @@ jobs:
         with:
           node-version: "20"
       - run: npm ci
+      - run: npm run build
       - uses: JS-DevTools/npm-publish@v3
         with:
           token: ${{ secrets.NPM_TOKEN }}
           package: clients/javascript/wallet_daemon_client
+          access: 'public'
       
