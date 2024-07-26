@@ -156,6 +156,8 @@ jobs:
   build-stable:
     name: check stable
     runs-on: [ self-hosted, ubuntu-high-cpu ]
+    env:
+      RUSTUP_PERMIT_COPY_RENAME: true
 
     steps:
       - name: checkout
