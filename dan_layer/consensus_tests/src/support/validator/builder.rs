@@ -21,7 +21,11 @@ use crate::support::{
     messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
     signing_service::TestVoteSignatureService,
     sync::AlwaysSyncedSyncManager,
-    RoundRobinLeaderStrategy, TestBlockTransactionProcessor, TestConsensusSpec, Validator, ValidatorChannels,
+    RoundRobinLeaderStrategy,
+    TestBlockTransactionProcessor,
+    TestConsensusSpec,
+    Validator,
+    ValidatorChannels,
 };
 
 pub struct ValidatorBuilder {

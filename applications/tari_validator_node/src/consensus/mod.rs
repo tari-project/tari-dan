@@ -8,7 +8,8 @@ use tari_consensus::{
     traits::ConsensusSpec,
 };
 use tari_dan_app_utilities::{
-    consensus_constants::ConsensusConstants, template_manager::implementation::TemplateManager,
+    consensus_constants::ConsensusConstants,
+    template_manager::implementation::TemplateManager,
     transaction_executor::TariDanTransactionProcessor,
 };
 use tari_dan_common_types::PeerAddress;
@@ -29,8 +30,13 @@ use crate::{
     event_subscription::EventSubscription,
     p2p::services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
     transaction_validators::{
-        ClaimFeeTransactionValidator, EpochRangeValidator, FeeTransactionValidator, HasInputs, TemplateExistsValidator,
-        TransactionSignatureValidator, TransactionValidationError,
+        ClaimFeeTransactionValidator,
+        EpochRangeValidator,
+        FeeTransactionValidator,
+        HasInputs,
+        TemplateExistsValidator,
+        TransactionSignatureValidator,
+        TransactionValidationError,
     },
     validator::{BoxedValidator, Validator},
     ValidatorNodeConfig,

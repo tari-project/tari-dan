@@ -16,7 +16,9 @@ use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{broadcast, mpsc};
 
 use super::{
-    config::HotstuffConfig, on_receive_new_transaction::OnReceiveNewTransaction, proposer::Proposer,
+    config::HotstuffConfig,
+    on_receive_new_transaction::OnReceiveNewTransaction,
+    proposer::Proposer,
     ProposalValidationError,
 };
 use crate::{
