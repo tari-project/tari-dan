@@ -133,7 +133,7 @@ impl ValidatorBuilder {
             HotstuffConfig {
                 max_base_layer_blocks_ahead: 5,
                 max_base_layer_blocks_behind: 5,
-                max_block_time_threshold: 10,
+                pacemaker_max_base_time: std::time::Duration(10),
             },
         );
 

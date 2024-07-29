@@ -31,7 +31,7 @@ pub struct PaceMaker {
 }
 
 impl PaceMaker {
-    pub fn new(max_base_time: u64) -> Self {
+    pub fn new(max_base_time: Duration) -> Self {
         let (sender, receiver) = mpsc::channel(100);
 
         let on_beat = OnBeat::new();
@@ -50,7 +50,7 @@ impl PaceMaker {
             ),
             current_view: current_height,
             current_high_qc_height: NodeHeight(0),
-            block_time: Duration::from_secs(max_base_time),
+            block_time: max_base_time,
         }
     }
 
