@@ -21,7 +21,6 @@ use crate::hotstuff::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::pacemaker";
 const MAX_DELTA: Duration = Duration::from_secs(300);
-const DEFAULT_BLOCK_TIME: Duration = Duration::from_secs(10);
 
 pub struct PaceMaker {
     pace_maker_handle: PaceMakerHandle,
@@ -32,19 +31,13 @@ pub struct PaceMaker {
 }
 
 impl PaceMaker {
-    pub fn new(max_block_time_threshold: u64) -> Self {
+    pub fn new(max_base_time: u64) -> Self {
         let (sender, receiver) = mpsc::channel(100);
 
         let on_beat = OnBeat::new();
         let on_force_beat = OnForceBeat::new();
         let on_leader_timeout = OnLeaderTimeout::new();
         let current_height = CurrentView::new();
-
-        let block_time = if max_block_time_threshold == 0 {
-            DEFAULT_BLOCK_TIME
-        } else {
-            Duration::from_secs(max_block_time_threshold)
-        };
 
         Self {
             handle_receiver: receiver,
@@ -57,7 +50,7 @@ impl PaceMaker {
             ),
             current_view: current_height,
             current_high_qc_height: NodeHeight(0),
-            block_time,
+            block_time: Duration::from_secs(max_base_time),
         }
     }
 

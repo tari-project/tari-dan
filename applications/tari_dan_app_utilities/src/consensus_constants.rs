@@ -26,7 +26,7 @@ pub struct ConsensusConstants {
     pub committee_size: u32,
     pub max_base_layer_blocks_ahead: u64,
     pub max_base_layer_blocks_behind: u64,
-    pub max_block_time_threshold: u64, // GST in seconds for consensus
+    pub pacemaker_max_base_time: u64, // GST in seconds for consensus
 }
 
 impl ConsensusConstants {
@@ -36,7 +36,7 @@ impl ConsensusConstants {
             committee_size: 7,
             max_base_layer_blocks_ahead: 5,
             max_base_layer_blocks_behind: 5,
-            max_block_time_threshold: 10,
+            pacemaker_max_base_time: 10,
         }
     }
 }
