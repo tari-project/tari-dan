@@ -32,12 +32,7 @@ use tari_template_lib::{
     args::Arg,
     crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{
-        ConfidentialOutputStatement,
-        ConfidentialStatement,
-        ConfidentialWithdrawProof,
-        EncryptedData,
-        ObjectKey,
-        ViewableBalanceProof,
+        Amount, ConfidentialOutputStatement, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedData, ObjectKey, ViewableBalanceProof
     },
 };
 use tari_transaction::{SubstateRequirement, Transaction, UnsignedTransaction, VersionedSubstateId};
@@ -246,6 +241,14 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
                 .map_err(|e| anyhow!("claim_validator_fees_validator_public_key: {}", e))?,
             },
             InstructionType::DropAllProofsInWorkspace => Instruction::DropAllProofsInWorkspace,
+            InstructionType::AssertBucketContains => {
+                let resource_address = ObjectKey::try_from(request.resource_address)?.into();
+                Instruction::AssertBucketContains {
+                    key: request.key,
+                    resource_address,
+                    min_amount: Amount::new(request.min_amount)
+                }
+            },
         };
 
         Ok(instruction)
@@ -312,6 +315,12 @@ impl From<Instruction> for proto::transaction::Instruction {
             },
             Instruction::DropAllProofsInWorkspace => {
                 result.instruction_type = InstructionType::DropAllProofsInWorkspace as i32;
+            },
+            Instruction::AssertBucketContains { key, resource_address, min_amount } => {
+                result.instruction_type = InstructionType::AssertBucketContains as i32;
+                result.key = key;
+                result.resource_address = resource_address.as_bytes().to_vec();
+                result.min_amount = min_amount.0
             },
         }
         result

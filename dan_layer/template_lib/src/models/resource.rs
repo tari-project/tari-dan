@@ -48,6 +48,10 @@ impl ResourceAddress {
         self.0.inner()
     }
 
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+
     pub fn from_hex(hex: &str) -> Result<Self, KeyParseError> {
         let key = ObjectKey::from_hex(hex)?;
         Ok(Self::new(key))

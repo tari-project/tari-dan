@@ -23,6 +23,7 @@
 use std::sync::Arc;
 
 use log::{warn, *};
+use tari_bor::decode_exact;
 use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_crypto::{range_proof::RangeProofService, ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
@@ -48,54 +49,12 @@ use tari_template_abi::{TemplateDef, Type};
 use tari_template_builtin::{ACCOUNT_NFT_TEMPLATE_ADDRESS, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
     args,
-    args::{
-        Arg,
-        BucketAction,
-        BucketRef,
-        BuiltinTemplateAction,
-        CallAction,
-        CallFunctionArg,
-        CallMethodArg,
-        CallerContextAction,
-        ComponentAction,
-        ComponentRef,
-        ConfidentialRevealArg,
-        ConsensusAction,
-        CreateComponentArg,
-        CreateResourceArg,
-        GenerateRandomAction,
-        InvokeResult,
-        LogLevel,
-        MintResourceArg,
-        NonFungibleAction,
-        PayFeeArg,
-        ProofAction,
-        ProofRef,
-        RecallResourceArg,
-        ResourceAction,
-        ResourceGetNonFungibleArg,
-        ResourceRef,
-        ResourceUpdateNonFungibleDataArg,
-        VaultAction,
-        VaultCreateProofByFungibleAmountArg,
-        VaultCreateProofByNonFungiblesArg,
-        VaultWithdrawArg,
-        WorkspaceAction,
-    },
+    args::{Arg, BucketAction, BucketRef, BuiltinTemplateAction, CallAction, CallFunctionArg, CallMethodArg, CallerContextAction, ComponentAction, ComponentRef, ConfidentialRevealArg, ConsensusAction, CreateComponentArg, CreateResourceArg, GenerateRandomAction, InvokeResult, LogLevel, MintResourceArg, NonFungibleAction, PayFeeArg, ProofAction, ProofRef, RecallResourceArg, ResourceAction, ResourceGetNonFungibleArg, ResourceRef, ResourceUpdateNonFungibleDataArg, VaultAction, VaultCreateProofByFungibleAmountArg, VaultCreateProofByNonFungiblesArg, VaultWithdrawArg, WorkspaceAction},
     auth::{AuthHook, AuthHookCaller, ComponentAccessRules, OwnerRule, ResourceAccessRules, ResourceAuthAction},
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, XTR},
     crypto::RistrettoPublicKeyBytes,
     models::{
-        Amount,
-        BucketId,
-        ComponentAddress,
-        EntityId,
-        Metadata,
-        NonFungible,
-        NonFungibleAddress,
-        NotAuthorized,
-        VaultId,
-        VaultRef,
+        Amount, Bucket, BucketId, ComponentAddress, EntityId, Metadata, NonFungible, NonFungibleAddress, NotAuthorized, ResourceAddress, VaultId, VaultRef
     },
     prelude::ResourceType,
     template::BuiltinTemplate,
@@ -104,14 +63,7 @@ use tari_template_lib::{
 use super::{working_state::WorkingState, Runtime};
 use crate::{
     runtime::{
-        engine_args::EngineArgs,
-        locking::{LockError, LockedSubstate},
-        scope::PushCallFrame,
-        tracker::StateTracker,
-        utils::to_ristretto_public_key_bytes,
-        RuntimeError,
-        RuntimeInterface,
-        RuntimeModule,
+        engine_args::EngineArgs, error::AssertError, locking::{LockError, LockedSubstate}, scope::PushCallFrame, tracker::StateTracker, utils::to_ristretto_public_key_bytes, RuntimeError, RuntimeInterface, RuntimeModule
     },
     template::LoadedTemplate,
     transaction::TransactionProcessor,
@@ -2024,6 +1976,32 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     }
                     Ok(InvokeResult::unit())
                 })
+            },
+            WorkspaceAction::AssertBucketContains => {
+                let key: Vec<u8> = args.get(0)?;
+                let resource_address: ResourceAddress = args.get(1)?;
+                let min_amount: Amount = args.get(2)?;
+
+                // get the bucket from the workspace
+                let value = self.tracker.get_from_workspace(&key)?;
+                let value_bytes = value.into_value().into_bytes()
+                    .map_err(|_| RuntimeError::AssertError(AssertError::InvalidBucket))?;
+                let bucket: Bucket = decode_exact(&value_bytes)
+                    .map_err(|_| RuntimeError::AssertError(AssertError::InvalidBucket))?;
+
+                // validate the bucket resource
+                if bucket.resource_address() != resource_address {
+                    return Err(RuntimeError::AssertError(
+                        AssertError::InvalidResource { expected: resource_address, got: bucket.resource_address() }));
+                }
+                
+                // validate the bucket amount
+                if bucket.amount() < min_amount {
+                    return Err(RuntimeError::AssertError(
+                        AssertError::InvalidAmount { expected: min_amount, got: bucket.amount() }));
+                }
+
+                Ok(InvokeResult::unit())
             },
         }
     }

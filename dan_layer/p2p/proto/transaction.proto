@@ -42,6 +42,7 @@ message Instruction {
     CLAIM_VALIDATOR_FEES = 5;
     DROP_ALL_PROOFS_IN_WORKSPACE = 6;
     CREATE_ACCOUNT = 7;
+    ASSERT_BUCKET_CONTAINS = 8;
   }
   InstructionType instruction_type = 1;
 

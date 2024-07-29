@@ -251,6 +251,9 @@ pub enum RuntimeError {
     NumericConversionError { details: String },
     #[error("Auth callback MUST return null, but it returned non-null")]
     UnexpectedNonNullInAuthHookReturn,
+
+    #[error("Assert error: {0}")]
+    AssertError(#[from] AssertError),
 }
 
 impl RuntimeError {
@@ -272,6 +275,16 @@ impl IsNotFoundError for RuntimeError {
                 RuntimeError::ProofNotFound { .. }
         )
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AssertError {
+    #[error("The workspace value is not a bucket")]
+    InvalidBucket,
+    #[error("Assert expected bucket to have resource {expected} but has {got}")]
+    InvalidResource { expected: ResourceAddress, got: ResourceAddress },
+    #[error("Assert expected bucket to have at least {expected} tokens but only has {got}")]
+    InvalidAmount { expected: Amount, got: Amount },
 }
 
 #[derive(Debug, thiserror::Error)]
