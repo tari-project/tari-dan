@@ -79,7 +79,9 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> ReadableSubstateStore for PendingSu
         }
 
         let Some(substate) = SubstateRecord::get(self.read_transaction(), &id.to_substate_address()).optional()? else {
-            return Err(SubstateStoreError::SubstateNotFound { address: id.to_substate_address() });
+            return Err(SubstateStoreError::SubstateNotFound {
+                address: id.to_substate_address(),
+            });
         };
         Ok(substate.into_substate())
     }
