@@ -16,9 +16,7 @@ use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{broadcast, mpsc};
 
 use super::{
-    config::HotstuffConfig,
-    on_receive_new_transaction::OnReceiveNewTransaction,
-    proposer::Proposer,
+    config::HotstuffConfig, on_receive_new_transaction::OnReceiveNewTransaction, proposer::Proposer,
     ProposalValidationError,
 };
 use crate::{
@@ -97,7 +95,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         config: HotstuffConfig,
     ) -> Self {
         let (tx_missing_transactions, rx_missing_transactions) = mpsc::unbounded_channel();
-        let pacemaker = PaceMaker::new();
+        let pacemaker = PaceMaker::new(config.max_block_time_threshold);
         let vote_receiver = VoteReceiver::new(
             network,
             state_store.clone(),

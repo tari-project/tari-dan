@@ -5,4 +5,5 @@
 pub struct HotstuffConfig {
     pub max_base_layer_blocks_ahead: u64,
     pub max_base_layer_blocks_behind: u64,
+    pub max_block_time_threshold: u64,
 }

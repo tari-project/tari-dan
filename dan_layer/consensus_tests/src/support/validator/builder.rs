@@ -21,11 +21,7 @@ use crate::support::{
     messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
     signing_service::TestVoteSignatureService,
     sync::AlwaysSyncedSyncManager,
-    RoundRobinLeaderStrategy,
-    TestBlockTransactionProcessor,
-    TestConsensusSpec,
-    Validator,
-    ValidatorChannels,
+    RoundRobinLeaderStrategy, TestBlockTransactionProcessor, TestConsensusSpec, Validator, ValidatorChannels,
 };
 
 pub struct ValidatorBuilder {
@@ -133,6 +129,7 @@ impl ValidatorBuilder {
             HotstuffConfig {
                 max_base_layer_blocks_ahead: 5,
                 max_base_layer_blocks_behind: 5,
+                max_block_time_threshold: 10,
             },
         );
 

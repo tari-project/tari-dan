@@ -1,5 +1,6 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
+
 use std::{
     cmp,
     time::{Duration, Instant},
@@ -20,23 +21,30 @@ use crate::hotstuff::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::pacemaker";
 const MAX_DELTA: Duration = Duration::from_secs(300);
-const BLOCK_TIME: Duration = Duration::from_secs(10);
+const DEFAULT_BLOCK_TIME: Duration = Duration::from_secs(10);
 
 pub struct PaceMaker {
     pace_maker_handle: PaceMakerHandle,
     handle_receiver: mpsc::Receiver<PacemakerRequest>,
     current_view: CurrentView,
     current_high_qc_height: NodeHeight,
+    block_time: Duration,
 }
 
 impl PaceMaker {
-    pub fn new() -> Self {
+    pub fn new(max_block_time_threshold: u64) -> Self {
         let (sender, receiver) = mpsc::channel(100);
 
         let on_beat = OnBeat::new();
         let on_force_beat = OnForceBeat::new();
         let on_leader_timeout = OnLeaderTimeout::new();
         let current_height = CurrentView::new();
+
+        let block_time = if max_block_time_threshold == 0 {
+            DEFAULT_BLOCK_TIME
+        } else {
+            Duration::from_secs(max_block_time_threshold)
+        };
 
         Self {
             handle_receiver: receiver,
@@ -49,6 +57,7 @@ impl PaceMaker {
             ),
             current_view: current_height,
             current_high_qc_height: NodeHeight(0),
+            block_time,
         }
     }
 
@@ -101,7 +110,7 @@ impl PaceMaker {
                                 info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_view, delta);
                                 leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
                                 // set a timer for when we must send a block...
-                                block_timer.as_mut().reset(tokio::time::Instant::now() + BLOCK_TIME);
+                                block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                            },
                             PacemakerRequest::Start { high_qc_height } => {
                                 info!(target: LOG_TARGET, "🚀 Starting pacemaker at leaf height {} and high QC: {}", self.current_view, high_qc_height);
@@ -112,7 +121,7 @@ impl PaceMaker {
                                 let delta = self.delta_time();
                                 info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_view, delta);
                                 leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
-                                block_timer.as_mut().reset(tokio::time::Instant::now() + BLOCK_TIME);
+                                block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                                 on_beat.beat();
                                 started = true;
                             }
@@ -130,11 +139,11 @@ impl PaceMaker {
                     }
                 },
                 () = &mut block_timer => {
-                    block_timer.as_mut().reset(tokio::time::Instant::now() + BLOCK_TIME);
+                    block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                     on_force_beat.beat(None);
                 }
                 () = &mut leader_timeout => {
-                    block_timer.as_mut().reset(tokio::time::Instant::now() + BLOCK_TIME);
+                    block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
 
                     let delta = self.delta_time();
                     leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
@@ -156,7 +165,7 @@ impl PaceMaker {
         let current_height = self.current_view.get_height();
         if current_height.is_zero() || self.current_high_qc_height.is_zero() {
             // Allow extra time for the first block
-            return BLOCK_TIME * 2;
+            return self.block_time * 2;
         }
         let exp = u32::try_from(cmp::min(
             u64::from(u32::MAX),
@@ -169,7 +178,7 @@ impl PaceMaker {
         );
         // TODO: get real avg latency
         let avg_latency = Duration::from_secs(2);
-        BLOCK_TIME + delta + avg_latency
+        self.block_time + delta + avg_latency
     }
 }
 
