@@ -32,7 +32,13 @@ use tari_template_lib::{
     args::Arg,
     crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{
-        Amount, ConfidentialOutputStatement, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedData, ObjectKey, ViewableBalanceProof
+        Amount,
+        ConfidentialOutputStatement,
+        ConfidentialStatement,
+        ConfidentialWithdrawProof,
+        EncryptedData,
+        ObjectKey,
+        ViewableBalanceProof,
     },
 };
 use tari_transaction::{SubstateRequirement, Transaction, UnsignedTransaction, VersionedSubstateId};
@@ -246,7 +252,7 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
                 Instruction::AssertBucketContains {
                     key: request.key,
                     resource_address,
-                    min_amount: Amount::new(request.min_amount)
+                    min_amount: Amount::new(request.min_amount),
                 }
             },
         };
@@ -316,7 +322,11 @@ impl From<Instruction> for proto::transaction::Instruction {
             Instruction::DropAllProofsInWorkspace => {
                 result.instruction_type = InstructionType::DropAllProofsInWorkspace as i32;
             },
-            Instruction::AssertBucketContains { key, resource_address, min_amount } => {
+            Instruction::AssertBucketContains {
+                key,
+                resource_address,
+                min_amount,
+            } => {
                 result.instruction_type = InstructionType::AssertBucketContains as i32;
                 result.key = key;
                 result.resource_address = resource_address.as_bytes().to_vec();

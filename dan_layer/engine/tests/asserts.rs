@@ -5,7 +5,11 @@ use std::vec;
 
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_engine::runtime::{AssertError, RuntimeError};
-use tari_template_lib::{args, models::{Amount, ComponentAddress, NonFungibleAddress, ResourceAddress}, prelude::XTR};
+use tari_template_lib::{
+    args,
+    models::{Amount, ComponentAddress, NonFungibleAddress, ResourceAddress},
+    prelude::XTR,
+};
 use tari_template_test_tooling::{support::assert_error::assert_reject_reason, TemplateTest};
 use tari_transaction::{Instruction, Transaction};
 
@@ -56,7 +60,7 @@ fn setup() -> AssertTest {
         faucet_resource,
         account,
         account_proof,
-        account_key
+        account_key,
     }
 }
 
@@ -94,7 +98,13 @@ fn it_fails_with_invalid_resource() {
         vec![test.account_proof.clone()],
     );
 
-    assert_reject_reason(reason, RuntimeError::AssertError(AssertError::InvalidResource { expected: invalid_resource_address, got: test.faucet_resource }));
+    assert_reject_reason(
+        reason,
+        RuntimeError::AssertError(AssertError::InvalidResource {
+            expected: invalid_resource_address,
+            got: test.faucet_resource,
+        }),
+    );
 }
 
 #[test]
@@ -115,7 +125,13 @@ fn it_fails_with_invalid_amount() {
         vec![test.account_proof.clone()],
     );
 
-    assert_reject_reason(reason, RuntimeError::AssertError(AssertError::InvalidAmount { expected: min_amount, got: FAUCET_WITHDRAWAL_AMOUNT}));
+    assert_reject_reason(
+        reason,
+        RuntimeError::AssertError(AssertError::InvalidAmount {
+            expected: min_amount,
+            got: FAUCET_WITHDRAWAL_AMOUNT,
+        }),
+    );
 }
 
 #[test]
@@ -154,5 +170,7 @@ fn it_fails_with_invalid_workspace_key() {
         vec![test.account_proof.clone()],
     );
 
-    assert_reject_reason(reason, RuntimeError::ItemNotOnWorkspace { key: "invalid_key".to_string() });
+    assert_reject_reason(reason, RuntimeError::ItemNotOnWorkspace {
+        key: "invalid_key".to_string(),
+    });
 }

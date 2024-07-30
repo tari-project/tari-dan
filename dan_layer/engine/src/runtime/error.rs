@@ -282,7 +282,10 @@ pub enum AssertError {
     #[error("The workspace value is not a bucket")]
     InvalidBucket,
     #[error("Assert expected bucket to have resource {expected} but has {got}")]
-    InvalidResource { expected: ResourceAddress, got: ResourceAddress },
+    InvalidResource {
+        expected: ResourceAddress,
+        got: ResourceAddress,
+    },
     #[error("Assert expected bucket to have at least {expected} tokens but only has {got}")]
     InvalidAmount { expected: Amount, got: Amount },
 }

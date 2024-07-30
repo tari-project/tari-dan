@@ -48,12 +48,55 @@ use tari_template_abi::{TemplateDef, Type};
 use tari_template_builtin::{ACCOUNT_NFT_TEMPLATE_ADDRESS, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
     args,
-    args::{Arg, BucketAction, BucketRef, BuiltinTemplateAction, CallAction, CallFunctionArg, CallMethodArg, CallerContextAction, ComponentAction, ComponentRef, ConfidentialRevealArg, ConsensusAction, CreateComponentArg, CreateResourceArg, GenerateRandomAction, InvokeResult, LogLevel, MintResourceArg, NonFungibleAction, PayFeeArg, ProofAction, ProofRef, RecallResourceArg, ResourceAction, ResourceGetNonFungibleArg, ResourceRef, ResourceUpdateNonFungibleDataArg, VaultAction, VaultCreateProofByFungibleAmountArg, VaultCreateProofByNonFungiblesArg, VaultWithdrawArg, WorkspaceAction},
+    args::{
+        Arg,
+        BucketAction,
+        BucketRef,
+        BuiltinTemplateAction,
+        CallAction,
+        CallFunctionArg,
+        CallMethodArg,
+        CallerContextAction,
+        ComponentAction,
+        ComponentRef,
+        ConfidentialRevealArg,
+        ConsensusAction,
+        CreateComponentArg,
+        CreateResourceArg,
+        GenerateRandomAction,
+        InvokeResult,
+        LogLevel,
+        MintResourceArg,
+        NonFungibleAction,
+        PayFeeArg,
+        ProofAction,
+        ProofRef,
+        RecallResourceArg,
+        ResourceAction,
+        ResourceGetNonFungibleArg,
+        ResourceRef,
+        ResourceUpdateNonFungibleDataArg,
+        VaultAction,
+        VaultCreateProofByFungibleAmountArg,
+        VaultCreateProofByNonFungiblesArg,
+        VaultWithdrawArg,
+        WorkspaceAction,
+    },
     auth::{AuthHook, AuthHookCaller, ComponentAccessRules, OwnerRule, ResourceAccessRules, ResourceAuthAction},
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, XTR},
     crypto::RistrettoPublicKeyBytes,
     models::{
-        Amount, BucketId, ComponentAddress, EntityId, Metadata, NonFungible, NonFungibleAddress, NotAuthorized, ResourceAddress, VaultId, VaultRef
+        Amount,
+        BucketId,
+        ComponentAddress,
+        EntityId,
+        Metadata,
+        NonFungible,
+        NonFungibleAddress,
+        NotAuthorized,
+        ResourceAddress,
+        VaultId,
+        VaultRef,
     },
     prelude::ResourceType,
     template::BuiltinTemplate,
@@ -62,7 +105,15 @@ use tari_template_lib::{
 use super::{working_state::WorkingState, Runtime};
 use crate::{
     runtime::{
-        engine_args::EngineArgs, error::AssertError, locking::{LockError, LockedSubstate}, scope::PushCallFrame, tracker::StateTracker, utils::to_ristretto_public_key_bytes, RuntimeError, RuntimeInterface, RuntimeModule
+        engine_args::EngineArgs,
+        error::AssertError,
+        locking::{LockError, LockedSubstate},
+        scope::PushCallFrame,
+        tracker::StateTracker,
+        utils::to_ristretto_public_key_bytes,
+        RuntimeError,
+        RuntimeInterface,
+        RuntimeModule,
     },
     template::LoadedTemplate,
     transaction::TransactionProcessor,
@@ -1983,24 +2034,28 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 // get the bucket from the workspace
                 let value = self.tracker.get_from_workspace(&key)?;
-                let bucket_id = value.bucket_ids()
+                let bucket_id = value
+                    .bucket_ids()
                     .first()
                     .ok_or_else(|| RuntimeError::AssertError(AssertError::InvalidBucket))?;
-
 
                 self.tracker.read_with(|state| {
                     let bucket = state.get_bucket(*bucket_id)?;
 
                     // validate the bucket resource
                     if *bucket.resource_address() != resource_address {
-                        return Err(RuntimeError::AssertError(
-                            AssertError::InvalidResource { expected: resource_address, got: *bucket.resource_address() }));
+                        return Err(RuntimeError::AssertError(AssertError::InvalidResource {
+                            expected: resource_address,
+                            got: *bucket.resource_address(),
+                        }));
                     }
-                    
+
                     // validate the bucket amount
                     if bucket.amount() < min_amount {
-                        return Err(RuntimeError::AssertError(
-                            AssertError::InvalidAmount { expected: min_amount, got: bucket.amount() }));
+                        return Err(RuntimeError::AssertError(AssertError::InvalidAmount {
+                            expected: min_amount,
+                            got: bucket.amount(),
+                        }));
                     }
 
                     Ok(InvokeResult::unit())

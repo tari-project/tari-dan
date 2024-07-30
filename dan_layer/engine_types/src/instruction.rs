@@ -9,8 +9,8 @@ use tari_crypto::tari_utilities::hex::Hex;
 use tari_template_lib::{
     args::{Arg, LogLevel},
     models::{ComponentAddress, ResourceAddress, TemplateAddress},
+    prelude::Amount,
 };
-use tari_template_lib::prelude::Amount;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -63,8 +63,8 @@ pub enum Instruction {
         key: Vec<u8>,
         #[serde(with = "serde_with::string")]
         resource_address: ResourceAddress,
-        min_amount: Amount
-    }
+        min_amount: Amount,
+    },
 }
 
 impl Display for Instruction {
@@ -129,7 +129,11 @@ impl Display for Instruction {
             Self::DropAllProofsInWorkspace => {
                 write!(f, "DropAllProofsInWorkspace")
             },
-            Self::AssertBucketContains { key, resource_address, min_amount } => {
+            Self::AssertBucketContains {
+                key,
+                resource_address,
+                min_amount,
+            } => {
                 write!(
                     f,
                     "AssertBucketContains {{ key: {:?}, resource_address: {}, min_amount: {} }}",

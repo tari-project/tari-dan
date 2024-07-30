@@ -100,7 +100,12 @@ impl TransactionBuilder {
         })
     }
 
-    pub fn assert_bucket_contains<T: AsRef<[u8]>>(self, label: T, resource_address: ResourceAddress, min_amount: Amount) -> Self {
+    pub fn assert_bucket_contains<T: AsRef<[u8]>>(
+        self,
+        label: T,
+        resource_address: ResourceAddress,
+        min_amount: Amount,
+    ) -> Self {
         self.add_instruction(Instruction::AssertBucketContains {
             key: label.as_ref().to_vec(),
             resource_address,
