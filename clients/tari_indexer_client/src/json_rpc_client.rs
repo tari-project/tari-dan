@@ -24,6 +24,7 @@ use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
+use tari_dan_common_types::substate_type::SubstateType;
 
 use crate::{
     error::IndexerClientError,
@@ -87,7 +88,23 @@ impl IndexerJsonRpcClient {
         &mut self,
         req: ListSubstatesRequest,
     ) -> Result<ListSubstatesResponse, IndexerClientError> {
-        self.send_request("list_substates", req).await
+        // Workaround as the indexer JRPC expects templates as strings
+        #[derive(Serialize)]
+        struct Params {
+            pub filter_by_template: Option<String>,
+            pub filter_by_type: Option<SubstateType>,
+            pub limit: Option<u64>,
+            pub offset: Option<u64>,
+        }
+
+        let params = Params {
+            filter_by_template: req.filter_by_template.map(|t| t.to_string()),
+            filter_by_type: req.filter_by_type,
+            limit: req.limit,
+            offset: req.offset,
+        };
+
+        self.send_request("list_substates", params).await
     }
 
     pub async fn submit_transaction(

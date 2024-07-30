@@ -20,38 +20,5 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from "react";
-import ReactDOM from "react-dom/client";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import App from "./App";
-import "./theme/theme.css";
-import Accounts from "./routes/Accounts/Accounts";
-import TransactionDetails from "./routes/Transactions/TransactionDetails";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import queryClient from "./api/queryClient";
-
-const router = createBrowserRouter([
-  {
-    path: "*",
-    element: <App />,
-    errorElement: <div />,
-    children: [
-      {
-        path: "accounts",
-        element: <Accounts />,
-      },
-      {
-        path: "transactions/:id",
-        element: <TransactionDetails />,
-      },
-    ],
-  },
-]);
-
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <QueryClientProvider client={queryClient}>
-    <RouterProvider router={router} />
-    <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
-  </QueryClientProvider>,
-);
+import WalletConnectLink from "./WalletConnectLink";
+export default WalletConnectLink;

@@ -139,7 +139,7 @@ const ConnectorDialog = () => {
           return (
             <div className="dialog-inner">
               <DialogContentText style={{ paddingBottom: "20px" }}>
-                A connector link was detected. <br />
+                A WalletConnect link was detected. <br />
                 Would you like to connect to <code style={{ color: "purple", fontSize: "14px" }}>{link}</code>?
               </DialogContentText>
               <DialogActions>
@@ -242,7 +242,7 @@ const ConnectorDialog = () => {
           height: "48px",
         }}
       >
-        Connect
+        Connect with Tari Connector
       </Button>
       <Dialog open={isOpen} onClose={handleClose}>
         <div className="dialog-heading">

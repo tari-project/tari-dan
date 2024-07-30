@@ -20,38 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from "react";
-import ReactDOM from "react-dom/client";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import App from "./App";
-import "./theme/theme.css";
-import Accounts from "./routes/Accounts/Accounts";
-import TransactionDetails from "./routes/Transactions/TransactionDetails";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import queryClient from "./api/queryClient";
+import "./CheckMark.css";
 
-const router = createBrowserRouter([
-  {
-    path: "*",
-    element: <App />,
-    errorElement: <div />,
-    children: [
-      {
-        path: "accounts",
-        element: <Accounts />,
-      },
-      {
-        path: "transactions/:id",
-        element: <TransactionDetails />,
-      },
-    ],
-  },
-]);
+const CheckMark = () => {
+  return (
+    <svg className="tari-checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+      {" "}
+      <circle className="tari-checkmark__circle" cx="26" cy="26" r="25" fill="none" />{" "}
+      <path className="tari-checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+    </svg>
+  );
+};
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <QueryClientProvider client={queryClient}>
-    <RouterProvider router={router} />
-    <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
-  </QueryClientProvider>,
-);
+export default CheckMark;

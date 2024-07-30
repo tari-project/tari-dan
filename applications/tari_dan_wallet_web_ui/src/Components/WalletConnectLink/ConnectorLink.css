@@ -1,0 +1,22 @@
+.dialog-inner {
+  min-width: 100%;
+}
+.dialog-heading {
+  width: 100%;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.dialog-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-self: flex-end;
+}
+
+@media screen and (min-width: 767px) {
+  .dialog-inner {
+    min-width: 500px;
+  }
+}
