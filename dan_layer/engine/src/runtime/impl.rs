@@ -1984,24 +1984,28 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 // get the bucket from the workspace
                 let value = self.tracker.get_from_workspace(&key)?;
-                let value_bytes = value.into_value().into_bytes()
-                    .map_err(|_| RuntimeError::AssertError(AssertError::InvalidBucket))?;
-                let bucket: Bucket = decode_exact(&value_bytes)
-                    .map_err(|_| RuntimeError::AssertError(AssertError::InvalidBucket))?;
+                let bucket_id = value.bucket_ids()
+                    .first()
+                    .ok_or_else(|| RuntimeError::AssertError(AssertError::InvalidBucket))?;
 
-                // validate the bucket resource
-                if bucket.resource_address() != resource_address {
-                    return Err(RuntimeError::AssertError(
-                        AssertError::InvalidResource { expected: resource_address, got: bucket.resource_address() }));
-                }
-                
-                // validate the bucket amount
-                if bucket.amount() < min_amount {
-                    return Err(RuntimeError::AssertError(
-                        AssertError::InvalidAmount { expected: min_amount, got: bucket.amount() }));
-                }
 
-                Ok(InvokeResult::unit())
+                self.tracker.read_with(|state| {
+                    let bucket = state.get_bucket(*bucket_id)?;
+
+                    // validate the bucket resource
+                    if *bucket.resource_address() != resource_address {
+                        return Err(RuntimeError::AssertError(
+                            AssertError::InvalidResource { expected: resource_address, got: *bucket.resource_address() }));
+                    }
+                    
+                    // validate the bucket amount
+                    if bucket.amount() < min_amount {
+                        return Err(RuntimeError::AssertError(
+                            AssertError::InvalidAmount { expected: min_amount, got: bucket.amount() }));
+                    }
+
+                    Ok(InvokeResult::unit())
+                })
             },
         }
     }

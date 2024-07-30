@@ -100,6 +100,14 @@ impl TransactionBuilder {
         })
     }
 
+    pub fn assert_bucket_contains<T: AsRef<[u8]>>(self, label: T, resource_address: ResourceAddress, min_amount: Amount) -> Self {
+        self.add_instruction(Instruction::AssertBucketContains {
+            key: label.as_ref().to_vec(),
+            resource_address,
+            min_amount,
+        })
+    }
+
     pub fn claim_burn(self, claim: ConfidentialClaim) -> Self {
         self.add_instruction(Instruction::ClaimBurn { claim: Box::new(claim) })
     }
