@@ -28,11 +28,11 @@ impl TryFrom<proto::rpc::SubstateCreatedProof> for SubstateCreatedProof {
                 .map(TryInto::try_into)
                 .transpose()?
                 .ok_or_else(|| anyhow!("substate not provided"))?,
-            created_qc: value
-                .created_justify
-                .map(TryInto::try_into)
-                .transpose()?
-                .ok_or_else(|| anyhow!("created_justify not provided"))?,
+            // created_qc: value
+            //     .created_justify
+            //     .map(TryInto::try_into)
+            //     .transpose()?
+            //     .ok_or_else(|| anyhow!("created_justify not provided"))?,
         })
     }
 }
@@ -41,7 +41,7 @@ impl From<SubstateCreatedProof> for proto::rpc::SubstateCreatedProof {
     fn from(value: SubstateCreatedProof) -> Self {
         Self {
             substate: Some(value.substate.into()),
-            created_justify: Some((&value.created_qc).into()),
+            // created_justify: Some((&value.created_qc).into()),
         }
     }
 }
@@ -53,11 +53,11 @@ impl TryFrom<proto::rpc::SubstateDestroyedProof> for SubstateDestroyedProof {
         Ok(Self {
             substate_id: SubstateId::from_bytes(&value.substate_id)?,
             version: value.version,
-            justify: value
-                .destroyed_justify
-                .map(TryInto::try_into)
-                .transpose()?
-                .ok_or_else(|| anyhow!("destroyed_justify not provided"))?,
+            // justify: value
+            //     .destroyed_justify
+            //     .map(TryInto::try_into)
+            //     .transpose()?
+            //     .ok_or_else(|| anyhow!("destroyed_justify not provided"))?,
             destroyed_by_transaction: value.destroyed_by_transaction.try_into()?,
         })
     }
@@ -68,7 +68,7 @@ impl From<SubstateDestroyedProof> for proto::rpc::SubstateDestroyedProof {
         Self {
             substate_id: value.substate_id.to_bytes(),
             version: value.version,
-            destroyed_justify: Some((&value.justify).into()),
+            // destroyed_justify: Some((&value.justify).into()),
             destroyed_by_transaction: value.destroyed_by_transaction.as_bytes().to_vec(),
         }
     }

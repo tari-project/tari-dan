@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
-use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight};
+use tari_dan_common_types::{Epoch, NodeHeight, ShardGroup};
 use tari_dan_storage::{
     consensus_models::{self, QuorumDecision},
     StorageError,
@@ -40,7 +40,7 @@ impl TryFrom<HighQc> for consensus_models::HighQc {
 #[derive(Debug, Clone, Queryable)]
 pub struct ForeignProposal {
     pub id: i32,
-    pub bucket: i32,
+    pub shard_group: i32,
     pub block_id: String,
     pub state: String,
     pub mined_at: Option<i64>,
@@ -54,7 +54,11 @@ impl TryFrom<ForeignProposal> for consensus_models::ForeignProposal {
 
     fn try_from(value: ForeignProposal) -> Result<Self, Self::Error> {
         Ok(Self {
-            shard: Shard::from(value.bucket as u32),
+            shard_group: ShardGroup::decode_from_u32(value.shard_group as u32).ok_or_else(|| {
+                StorageError::DataInconsistency {
+                    details: format!("Invalid shard group: {}", value.shard_group),
+                }
+            })?,
             block_id: deserialize_hex_try_from(&value.block_id)?,
             state: parse_from_string(&value.state)?,
             proposed_height: value.mined_at.map(|mined_at| NodeHeight(mined_at as u64)),

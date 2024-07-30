@@ -4,7 +4,7 @@
 use std::ops::Deref;
 
 use indexmap::IndexMap;
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{shard::Shard, Epoch};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -20,13 +20,13 @@ use tari_dan_storage::{
         TransactionPoolRecord,
         TransactionPoolStage,
         TransactionPoolStatusUpdate,
+        VersionedStateHashTreeDiff,
     },
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
 };
 use tari_engine_types::substate::SubstateId;
-use tari_state_tree::StateHashTreeDiff;
 use tari_transaction::TransactionId;
 
 #[derive(Debug, Clone)]
@@ -42,7 +42,7 @@ pub struct ProposedBlockChangeSet {
     block: LeafBlock,
     quorum_decision: Option<QuorumDecision>,
     block_diff: Vec<SubstateChange>,
-    state_tree_diff: StateHashTreeDiff,
+    state_tree_diffs: IndexMap<Shard, VersionedStateHashTreeDiff>,
     substate_locks: IndexMap<SubstateId, Vec<LockedSubstate>>,
     transaction_changes: IndexMap<TransactionId, TransactionChangeSet>,
 }
@@ -55,7 +55,7 @@ impl ProposedBlockChangeSet {
             block_diff: Vec::new(),
             substate_locks: IndexMap::new(),
             transaction_changes: IndexMap::new(),
-            state_tree_diff: StateHashTreeDiff::default(),
+            state_tree_diffs: IndexMap::new(),
         }
     }
 
@@ -66,8 +66,8 @@ impl ProposedBlockChangeSet {
         self
     }
 
-    pub fn set_state_tree_diff(&mut self, diff: StateHashTreeDiff) -> &mut Self {
-        self.state_tree_diff = diff;
+    pub fn set_state_tree_diffs(&mut self, diffs: IndexMap<Shard, VersionedStateHashTreeDiff>) -> &mut Self {
+        self.state_tree_diffs = diffs;
         self
     }
 
@@ -139,8 +139,10 @@ impl ProposedBlockChangeSet {
         // Store the block diff
         block_diff.insert(tx)?;
 
-        // Store the tree diff
-        PendingStateTreeDiff::new(*self.block.block_id(), self.block.height(), self.state_tree_diff).save(tx)?;
+        // Store the tree diffs for each effected shard
+        for (shard, diff) in self.state_tree_diffs {
+            PendingStateTreeDiff::create(tx, *self.block.block_id(), shard, diff)?;
+        }
 
         // Save locks
         SubstateRecord::insert_all_locks(tx, self.block.block_id, self.substate_locks)?;

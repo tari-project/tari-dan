@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -15,6 +15,7 @@ use tari_dan_storage::{
         Block,
         EpochCheckpoint,
         LeafBlock,
+        QcId,
         StateTransition,
         SubstateCreatedProof,
         SubstateDestroyedProof,
@@ -113,7 +114,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 start_shard: last_state_transition_id.shard().as_u32(),
                 start_seq: last_state_transition_id.seq(),
                 current_epoch: current_epoch.as_u64(),
-                current_shard: committee_info.shard().as_u32(),
+                current_shard_group: committee_info.shard_group().encode_as_u32(),
             })
             .await?;
 
@@ -177,7 +178,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         transition: StateTransition,
     ) -> Result<(), StorageError> {
         match transition.update {
-            SubstateUpdate::Create(SubstateCreatedProof { substate, created_qc }) => {
+            SubstateUpdate::Create(SubstateCreatedProof { substate }) => {
                 SubstateRecord::new(
                     substate.substate_id,
                     substate.version,
@@ -187,14 +188,15 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                     NodeHeight(0),
                     *checkpoint.block().id(),
                     substate.created_by_transaction,
-                    *created_qc.id(),
+                    // TODO: correct QC ID
+                    QcId::zero(),
+                    // *created_qc.id(),
                 )
                 .create(tx)?;
             },
             SubstateUpdate::Destroy(SubstateDestroyedProof {
                 substate_id,
                 version,
-                justify,
                 destroyed_by_transaction,
             }) => {
                 SubstateRecord::destroy(
@@ -204,7 +206,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                     transition.id.epoch(),
                     // TODO
                     checkpoint.block().height(),
-                    justify.id(),
+                    &QcId::zero(),
                     &destroyed_by_transaction,
                 )?;
             },
@@ -219,21 +221,12 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         // We are behind at least one epoch.
         // We get the current substate range, and we asks committees from previous epoch in this range to give us
         // data.
-        let local_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
-        let range = local_shard.to_substate_address_range();
+        let local_info = self.epoch_manager.get_local_committee_info(current_epoch).await?;
         let prev_epoch = current_epoch.saturating_sub(Epoch(1));
         info!(target: LOG_TARGET,"Previous epoch is {}", prev_epoch);
-        let prev_num_committee = self.epoch_manager.get_num_committees(prev_epoch).await?;
-        info!(target: LOG_TARGET,"Previous num committee {}", prev_num_committee);
-        let start = range.start().to_shard(prev_num_committee);
-        let end = range.end().to_shard(prev_num_committee);
-        info!(target: LOG_TARGET,"Start: {}, End: {}", start, end);
         let committees = self
             .epoch_manager
-            .get_committees_by_shards(
-                prev_epoch,
-                (start.as_u32()..=end.as_u32()).map(Shard::from).collect::<HashSet<_>>(),
-            )
+            .get_committees_by_shard_group(prev_epoch, local_info.shard_group())
             .await?;
         Ok(committees)
     }

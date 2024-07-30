@@ -13,7 +13,6 @@ use tari_dan_storage::{
         BlockId,
         Command,
         Decision,
-        ForeignProposal,
         LastExecuted,
         LastVoted,
         LockedBlock,
@@ -37,9 +36,11 @@ use tokio::sync::broadcast;
 use crate::{
     hotstuff::{
         block_change_set::{BlockDecision, ProposedBlockChangeSet},
+        calculate_state_merkle_root,
         error::HotStuffError,
         event::HotstuffEvent,
-        substate_store::{ChainScopedTreeStore, PendingSubstateStore},
+        substate_store::{PendingSubstateStore, ShardedStateTree},
+        HotstuffConfig,
         ProposalValidationError,
         EXHAUST_DIVISOR,
     },
@@ -51,6 +52,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_ready_to_vote_on_lo
 #[derive(Debug, Clone)]
 pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     local_validator_addr: TConsensusSpec::Addr,
+    config: HotstuffConfig,
     store: TConsensusSpec::StateStore,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     tx_events: broadcast::Sender<HotstuffEvent>,
@@ -62,6 +64,7 @@ where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
+        config: HotstuffConfig,
         store: TConsensusSpec::StateStore,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
@@ -69,6 +72,7 @@ where TConsensusSpec: ConsensusSpec
     ) -> Self {
         Self {
             local_validator_addr: validator_addr,
+            config,
             store,
             transaction_pool,
             tx_events,
@@ -191,8 +195,8 @@ where TConsensusSpec: ConsensusSpec
 
         // Store used for transactions that have inputs without specific versions.
         // It lives through the entire block so multiple transactions can be sequenced together in the same block
-        let tree_store = ChainScopedTreeStore::new(block.epoch(), block.shard(), tx);
-        let mut substate_store = PendingSubstateStore::new(*block.parent(), tree_store);
+        // let tree_store = ChainScopedTreeStore::new(block.epoch(), block.shard_group(), tx);
+        let mut substate_store = PendingSubstateStore::new(tx, *block.parent(), self.config.num_preshards);
         let mut proposed_block_change_set = ProposedBlockChangeSet::new(block.as_leaf_block());
 
         if block.is_epoch_end() && block.commands().len() > 1 {
@@ -206,11 +210,11 @@ where TConsensusSpec: ConsensusSpec
 
         for cmd in block.commands() {
             if let Some(foreign_proposal) = cmd.foreign_proposal() {
-                if !ForeignProposal::exists(tx, foreign_proposal)? {
+                if !foreign_proposal.exists(tx)? {
                     warn!(
                         target: LOG_TARGET,
                         "❌ Foreign proposal for block {block_id} from bucket {bucket} does not exist in the store",
-                        block_id = foreign_proposal.block_id,bucket = foreign_proposal.shard
+                        block_id = foreign_proposal.block_id,bucket = foreign_proposal.shard_group
                     );
                     return Ok(proposed_block_change_set.no_vote());
                 }
@@ -262,7 +266,7 @@ where TConsensusSpec: ConsensusSpec
                 Command::LocalOnly(t) => {
                     info!(
                         target: LOG_TARGET,
-                        "👨‍🔧 LOCAL-ONLY: Executing deferred transaction {} in block {}",
+                        "👨‍🔧 LOCAL-ONLY: Executing transaction {} in block {}",
                         tx_rec.transaction_id(),
                         block,
                     );
@@ -428,7 +432,7 @@ where TConsensusSpec: ConsensusSpec
                 Command::Prepare(t) => {
                     info!(
                         target: LOG_TARGET,
-                        "👨‍🔧 PREPARE: Executing deferred transaction {} in block {}",
+                        "👨‍🔧 PREPARE: Executing transaction {} in block {}",
                         tx_rec.transaction_id(),
                         block,
                     );
@@ -627,9 +631,9 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(proposed_block_change_set.no_vote());
                     }
 
-                    let distinct_shards =
-                        local_committee_info.count_distinct_shards(tx_rec.evidence().substate_addresses_iter());
-                    let distinct_shards = NonZeroU64::new(distinct_shards as u64).ok_or_else(|| {
+                    let distinct_shard_groups =
+                        local_committee_info.count_distinct_shard_groups(tx_rec.evidence().substate_addresses_iter());
+                    let distinct_shards = NonZeroU64::new(distinct_shard_groups as u64).ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
                             "Distinct shards is zero for transaction {} in block {}",
                             tx_rec.transaction_id(),
@@ -719,7 +723,9 @@ where TConsensusSpec: ConsensusSpec
             // return Ok(proposed_block_change_set.no_vote());
         }
 
-        let (expected_merkle_root, tree_diff) = substate_store.calculate_jmt_diff_for_block(block)?;
+        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(tx, block.justify().block_id())?;
+        let (expected_merkle_root, tree_diffs) =
+            calculate_state_merkle_root(tx, block.shard_group(), pending, substate_store.diff())?;
         if expected_merkle_root != *block.merkle_root() {
             warn!(
                 target: LOG_TARGET,
@@ -734,7 +740,7 @@ where TConsensusSpec: ConsensusSpec
         let (diff, locks) = substate_store.into_parts();
         proposed_block_change_set
             .set_block_diff(diff)
-            .set_state_tree_diff(tree_diff)
+            .set_state_tree_diffs(tree_diffs)
             .set_substate_locks(locks)
             .set_quorum_decision(QuorumDecision::Accept);
 
@@ -874,6 +880,12 @@ where TConsensusSpec: ConsensusSpec
             "🌳 Committing block {} with {} substate change(s)", block, diff.len()
         );
 
+        // NOTE: this must happen before we commit the diff because the state transitions use this version
+        let pending = PendingStateTreeDiff::remove_by_block(tx, block.id())?;
+        let mut state_tree = ShardedStateTree::new(tx);
+        state_tree.commit_diff(pending)?;
+        let tx = state_tree.into_transaction();
+
         let local_diff = diff.into_filtered(local_committee_info);
         block.commit_diff(tx, local_diff)?;
 
@@ -892,11 +904,6 @@ where TConsensusSpec: ConsensusSpec
 
         // Remove locks for finalized transactions
         tx.substate_locks_remove_many_for_transactions(block.all_accepted_transactions_ids())?;
-
-        let pending = PendingStateTreeDiff::remove_by_block(tx, block.id())?;
-        let mut store = ChainScopedTreeStore::new(block.epoch(), block.shard(), tx);
-        let mut state_tree = tari_state_tree::SpreadPrefixStateTree::new(&mut store);
-        state_tree.commit_diff(pending.diff)?;
 
         let total_transaction_fee = block.total_transaction_fee();
         if total_transaction_fee > 0 {

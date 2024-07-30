@@ -81,9 +81,17 @@ pub async fn spawn(
     let transaction_pool = TransactionPool::new();
     let (tx_hotstuff_events, _) = broadcast::channel(100);
 
-    let hotstuff_worker = HotstuffWorker::<TariConsensusSpec>::new(
-        local_addr,
+    let hs_config = HotstuffConfig {
         network,
+        max_base_layer_blocks_behind: consensus_constants.max_base_layer_blocks_behind,
+        max_base_layer_blocks_ahead: consensus_constants.max_base_layer_blocks_ahead,
+        num_preshards: consensus_constants.num_preshards,
+        pacemaker_max_base_time: consensus_constants.pacemaker_max_base_time,
+    };
+
+    let hotstuff_worker = HotstuffWorker::<TariConsensusSpec>::new(
+        hs_config,
+        local_addr,
         inbound_messaging,
         outbound_messaging,
         rx_new_transactions,
@@ -96,11 +104,6 @@ pub async fn spawn(
         tx_hotstuff_events.clone(),
         hooks,
         shutdown_signal.clone(),
-        HotstuffConfig {
-            max_base_layer_blocks_behind: consensus_constants.max_base_layer_blocks_behind,
-            max_base_layer_blocks_ahead: consensus_constants.max_base_layer_blocks_ahead,
-            pacemaker_max_base_time: consensus_constants.pacemaker_max_base_time,
-        },
     );
     let current_view = hotstuff_worker.pacemaker().current_view().clone();
 

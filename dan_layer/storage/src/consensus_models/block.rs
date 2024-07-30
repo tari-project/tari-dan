@@ -22,6 +22,8 @@ use tari_dan_common_types::{
     Epoch,
     NodeAddressable,
     NodeHeight,
+    NumPreshards,
+    ShardGroup,
     SubstateAddress,
 };
 use tari_engine_types::substate::SubstateDiff;
@@ -74,7 +76,7 @@ pub struct Block {
     justify: QuorumCertificate,
     height: NodeHeight,
     epoch: Epoch,
-    shard: Shard,
+    shard_group: ShardGroup,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     proposed_by: PublicKey,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
@@ -117,7 +119,7 @@ impl Block {
         justify: QuorumCertificate,
         height: NodeHeight,
         epoch: Epoch,
-        shard: Shard,
+        shard_group: ShardGroup,
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
         merkle_root: FixedHash,
@@ -135,7 +137,7 @@ impl Block {
             justify,
             height,
             epoch,
-            shard,
+            shard_group,
             proposed_by,
             merkle_root,
             commands,
@@ -163,7 +165,7 @@ impl Block {
         justify: QuorumCertificate,
         height: NodeHeight,
         epoch: Epoch,
-        shard: Shard,
+        shard_group: ShardGroup,
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
         merkle_root: FixedHash,
@@ -186,7 +188,7 @@ impl Block {
             justify,
             height,
             epoch,
-            shard,
+            shard_group,
             proposed_by,
             merkle_root,
             commands,
@@ -204,14 +206,14 @@ impl Block {
         }
     }
 
-    pub fn genesis(network: Network, epoch: Epoch, shard: Shard) -> Self {
+    pub fn genesis(network: Network, epoch: Epoch, shard_group: ShardGroup) -> Self {
         Self::new(
             network,
             BlockId::zero(),
-            QuorumCertificate::genesis(),
-            NodeHeight(0),
+            QuorumCertificate::genesis(epoch, shard_group),
+            NodeHeight::zero(),
             epoch,
-            shard,
+            shard_group,
             PublicKey::default(),
             Default::default(),
             // TODO: the merkle hash should be initialized to something committing to the previous state.
@@ -226,15 +228,15 @@ impl Block {
     }
 
     /// This is the parent block for all genesis blocks. Its block ID is always zero.
-    pub fn zero_block(network: Network) -> Self {
+    pub fn zero_block(network: Network, num_preshards: NumPreshards) -> Self {
         Self {
             network,
             id: BlockId::zero(),
             parent: BlockId::zero(),
-            justify: QuorumCertificate::genesis(),
-            height: NodeHeight(0),
-            epoch: Epoch(0),
-            shard: Shard::from(0),
+            justify: QuorumCertificate::genesis(Epoch::zero(), ShardGroup::all_shards(num_preshards)),
+            height: NodeHeight::zero(),
+            epoch: Epoch::zero(),
+            shard_group: ShardGroup::all_shards(num_preshards),
             proposed_by: PublicKey::default(),
             merkle_root: FixedHash::zero(),
             commands: Default::default(),
@@ -259,7 +261,7 @@ impl Block {
         height: NodeHeight,
         high_qc: QuorumCertificate,
         epoch: Epoch,
-        shard: Shard,
+        shard_group: ShardGroup,
         parent_merkle_root: FixedHash,
         parent_timestamp: u64,
         parent_base_layer_block_height: u64,
@@ -272,7 +274,7 @@ impl Block {
             justify: high_qc,
             height,
             epoch,
-            shard,
+            shard_group,
             proposed_by,
             merkle_root: parent_merkle_root,
             commands: BTreeSet::new(),
@@ -313,7 +315,7 @@ impl Block {
             .chain(&self.height)
             .chain(&self.total_leader_fee)
             .chain(&self.epoch)
-            .chain(&self.shard)
+            .chain(&self.shard_group)
             .chain(&self.proposed_by)
             .chain(&self.merkle_root)
             .chain(&self.is_dummy)
@@ -428,8 +430,8 @@ impl Block {
         self.epoch
     }
 
-    pub fn shard(&self) -> Shard {
-        self.shard
+    pub fn shard_group(&self) -> ShardGroup {
+        self.shard_group
     }
 
     pub fn total_leader_fee(&self) -> u64 {
@@ -518,14 +520,14 @@ impl Block {
     pub fn get_all_blocks_between<TTx: StateStoreReadTransaction>(
         tx: &TTx,
         epoch: Epoch,
-        shard: Shard,
+        shard_group: ShardGroup,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
         include_dummy_blocks: bool,
     ) -> Result<Vec<Self>, StorageError> {
         tx.blocks_get_all_between(
             epoch,
-            shard,
+            shard_group,
             start_block_id_exclusive,
             end_block_id_inclusive,
             include_dummy_blocks,
@@ -612,6 +614,7 @@ impl Block {
             match change {
                 SubstateChange::Up {
                     id,
+                    shard,
                     transaction_id,
                     substate,
                 } => {
@@ -619,7 +622,7 @@ impl Block {
                         id.substate_id,
                         id.version,
                         substate.into_substate_value(),
-                        self.shard(),
+                        shard,
                         self.epoch(),
                         self.height(),
                         *self.id(),
@@ -628,11 +631,15 @@ impl Block {
                     )
                     .create(tx)?;
                 },
-                SubstateChange::Down { id, transaction_id } => {
+                SubstateChange::Down {
+                    id,
+                    transaction_id,
+                    shard,
+                } => {
                     SubstateRecord::destroy(
                         tx,
                         id,
-                        self.shard(),
+                        shard,
                         self.epoch(),
                         self.height(),
                         self.justify().id(),
@@ -766,20 +773,20 @@ impl Block {
                     // because the engine can never emit such a substate diff.
                     if substate.created_by_transaction == transaction.id {
                         updates.push(SubstateUpdate::Create(SubstateCreatedProof {
-                            created_qc: substate.get_created_quorum_certificate(tx)?,
+                            // created_qc: substate.get_created_quorum_certificate(tx)?,
                             substate: substate.into(),
                         }));
                     } else {
                         updates.push(SubstateUpdate::Destroy(SubstateDestroyedProof {
                             substate_id: substate.substate_id.clone(),
                             version: substate.version,
-                            justify: QuorumCertificate::get(tx, &destroyed.justify)?,
+                            // justify: QuorumCertificate::get(tx, &destroyed.justify)?,
                             destroyed_by_transaction: destroyed.by_transaction,
                         }));
                     }
                 } else {
                     updates.push(SubstateUpdate::Create(SubstateCreatedProof {
-                        created_qc: substate.get_created_quorum_certificate(tx)?,
+                        // created_qc: substate.get_created_quorum_certificate(tx)?,
                         substate: substate.into(),
                     }));
                 };

@@ -114,10 +114,6 @@ impl Transaction {
         self.signatures().iter().all(|sig| sig.verify(&self.transaction))
     }
 
-    pub fn involved_shards_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
-        self.versioned_input_addresses_iter()
-    }
-
     pub fn inputs(&self) -> &IndexSet<SubstateRequirement> {
         &self.transaction.inputs
     }

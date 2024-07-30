@@ -195,7 +195,7 @@ where TConsensusSpec: ConsensusSpec
             let last_dummy_block = calculate_last_dummy_block(
                 self.network,
                 epoch,
-                high_qc.shard(),
+                high_qc.shard_group(),
                 &high_qc,
                 *high_qc_block.merkle_root(),
                 new_height,

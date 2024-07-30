@@ -8,11 +8,13 @@ use diesel::{
     sql_types::Text,
     AsChangeset,
     ExpressionMethods,
+    NullableExpressionMethods,
     OptionalExtension,
     QueryDsl,
     RunQueryDsl,
     SqliteConnection,
 };
+use indexmap::IndexMap;
 use log::*;
 use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::{
@@ -42,6 +44,7 @@ use tari_dan_storage::{
         TransactionPoolStage,
         TransactionPoolStatusUpdate,
         TransactionRecord,
+        VersionedStateHashTreeDiff,
         Vote,
     },
     StateStoreReadTransaction,
@@ -151,7 +154,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
             parked_blocks::merkle_root.eq(block.merkle_root().to_string()),
             parked_blocks::height.eq(block.height().as_u64() as i64),
             parked_blocks::epoch.eq(block.epoch().as_u64() as i64),
-            parked_blocks::shard.eq(block.shard().as_u32() as i32),
+            parked_blocks::shard_group.eq(block.shard_group().encode_as_u32() as i32),
             parked_blocks::proposed_by.eq(serialize_hex(block.proposed_by().as_bytes())),
             parked_blocks::command_count.eq(block.commands().len() as i64),
             parked_blocks::commands.eq(serialize_json(block.commands())?),
@@ -202,7 +205,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             blocks::network.eq(block.network().to_string()),
             blocks::height.eq(block.height().as_u64() as i64),
             blocks::epoch.eq(block.epoch().as_u64() as i64),
-            blocks::shard.eq(block.shard().as_u32() as i32),
+            blocks::shard_group.eq(block.shard_group().encode_as_u32() as i32),
             blocks::proposed_by.eq(serialize_hex(block.proposed_by().as_bytes())),
             blocks::command_count.eq(block.commands().len() as i64),
             blocks::commands.eq(serialize_json(block.commands())?),
@@ -290,6 +293,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                         block_diffs::transaction_id.eq(serialize_hex(ch.transaction_id())),
                         block_diffs::substate_id.eq(ch.versioned_substate_id().substate_id().to_string()),
                         block_diffs::version.eq(ch.versioned_substate_id().version() as i32),
+                        block_diffs::shard.eq(ch.shard().as_u32() as i32),
                         block_diffs::change.eq(ch.as_change_string()),
                         block_diffs::state.eq(ch.substate().map(serialize_json).transpose()?),
                     ))
@@ -520,7 +524,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         use crate::schema::foreign_proposals;
 
         let values = (
-            foreign_proposals::bucket.eq(foreign_proposal.shard.as_u32() as i32),
+            foreign_proposals::shard_group.eq(foreign_proposal.shard_group.encode_as_u32() as i32),
             foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)),
             foreign_proposals::state.eq(foreign_proposal.state.to_string()),
             foreign_proposals::proposed_height.eq(foreign_proposal.proposed_height.map(|h| h.as_u64() as i64)),
@@ -529,10 +533,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         );
 
         diesel::insert_into(foreign_proposals::table)
-            .values(&values)
-            .on_conflict((foreign_proposals::bucket, foreign_proposals::block_id))
+            .values(values.clone())
+            .on_conflict((foreign_proposals::shard_group, foreign_proposals::block_id))
             .do_update()
-            .set(values.clone())
+            .set(values)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "foreign_proposal_set",
@@ -545,7 +549,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         use crate::schema::foreign_proposals;
 
         diesel::delete(foreign_proposals::table)
-            .filter(foreign_proposals::bucket.eq(foreign_proposal.shard.as_u32() as i32))
+            .filter(foreign_proposals::shard_group.eq(foreign_proposal.shard_group.encode_as_u32() as i32))
             .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -1358,6 +1362,8 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             })?;
         let next_seq = seq.map(|s| s + 1).unwrap_or(0);
 
+        // This means that we MUST do the state tree updates before inserting substates
+        let version = self.state_tree_versions_get_latest(substate.created_by_shard)?;
         let values = (
             state_transitions::seq.eq(next_seq),
             state_transitions::epoch.eq(substate.created_at_epoch.as_u64() as i64),
@@ -1367,7 +1373,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             state_transitions::version.eq(substate.version as i32),
             state_transitions::transition.eq("UP"),
             state_transitions::state_hash.eq(serialize_hex(substate.state_hash)),
-            state_transitions::state_version.eq(substate.created_height.as_u64() as i64),
+            state_transitions::state_version.eq(version.unwrap_or(0) as i64),
         );
 
         diesel::insert_into(state_transitions::table)
@@ -1447,35 +1453,54 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     fn pending_state_tree_diffs_remove_by_block(
         &mut self,
         block_id: &BlockId,
-    ) -> Result<PendingStateTreeDiff, StorageError> {
+    ) -> Result<IndexMap<Shard, Vec<PendingStateTreeDiff>>, StorageError> {
         use crate::schema::pending_state_tree_diffs;
 
-        let diff = pending_state_tree_diffs::table
+        let diff_recs = pending_state_tree_diffs::table
             .filter(pending_state_tree_diffs::block_id.eq(serialize_hex(block_id)))
-            .first::<sql_models::PendingStateTreeDiff>(self.connection())
+            .order_by(pending_state_tree_diffs::block_height.asc())
+            .get_results::<sql_models::PendingStateTreeDiff>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "pending_state_tree_diffs_remove_by_block",
                 source: e,
             })?;
 
         diesel::delete(pending_state_tree_diffs::table)
-            .filter(pending_state_tree_diffs::id.eq(diff.id))
+            .filter(pending_state_tree_diffs::id.eq_any(diff_recs.iter().map(|d| d.id)))
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "pending_state_tree_diffs_remove_by_block",
                 source: e,
             })?;
 
-        diff.try_into()
+        let mut diffs = IndexMap::new();
+        for diff in diff_recs {
+            let shard = Shard::from(diff.shard as u32);
+            let diff = PendingStateTreeDiff::try_from(diff)?;
+            diffs.entry(shard).or_insert_with(Vec::new).push(diff);
+        }
+
+        Ok(diffs)
     }
 
-    fn pending_state_tree_diffs_insert(&mut self, pending_diff: &PendingStateTreeDiff) -> Result<(), StorageError> {
-        use crate::schema::pending_state_tree_diffs;
+    fn pending_state_tree_diffs_insert(
+        &mut self,
+        block_id: BlockId,
+        shard: Shard,
+        diff: VersionedStateHashTreeDiff,
+    ) -> Result<(), StorageError> {
+        use crate::schema::{blocks, pending_state_tree_diffs};
 
         let insert = (
-            pending_state_tree_diffs::block_id.eq(serialize_hex(pending_diff.block_id)),
-            pending_state_tree_diffs::block_height.eq(pending_diff.block_height.as_u64() as i64),
-            pending_state_tree_diffs::diff_json.eq(serialize_json(&pending_diff.diff)?),
+            pending_state_tree_diffs::block_id.eq(serialize_hex(block_id)),
+            pending_state_tree_diffs::shard.eq(shard.as_u32() as i32),
+            pending_state_tree_diffs::block_height.eq(blocks::table
+                .select(blocks::height)
+                .filter(blocks::block_id.eq(serialize_hex(block_id)))
+                .single_value()
+                .assume_not_null()),
+            pending_state_tree_diffs::version.eq(diff.version as i64),
+            pending_state_tree_diffs::diff_json.eq(serialize_json(&diff.diff)?),
         );
 
         diesel::insert_into(pending_state_tree_diffs::table)
@@ -1489,13 +1514,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn state_tree_nodes_insert(
-        &mut self,
-        epoch: Epoch,
-        shard: Shard,
-        key: NodeKey,
-        node: Node<Version>,
-    ) -> Result<(), StorageError> {
+    fn state_tree_nodes_insert(&mut self, shard: Shard, key: NodeKey, node: Node<Version>) -> Result<(), StorageError> {
         use crate::schema::state_tree;
 
         let node = TreeNode::new_latest(node);
@@ -1504,7 +1523,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         })?;
 
         let values = (
-            state_tree::epoch.eq(epoch.as_u64() as i64),
             state_tree::shard.eq(shard.as_u32() as i32),
             state_tree::key.eq(key.to_string()),
             state_tree::node.eq(node),
@@ -1512,31 +1530,60 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         diesel::insert_into(state_tree::table)
             .values(&values)
             .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "state_tree_nodes_insert",
-                source: e,
+            .map_err(|e| {
+                SqliteStorageError::DbInconsistency {
+                    operation: "state_tree_nodes_insert",
+                    details: format!("Failed to insert node for key: {shard} - {key} {e}"),
+                }
+                // SqliteStorageError::DieselError {
+                //     operation: "state_tree_nodes_insert",
+                //     source: e,
+                // }
             })?;
 
         Ok(())
     }
 
-    fn state_tree_nodes_mark_stale_tree_node(
-        &mut self,
-        epoch: Epoch,
-        shard: Shard,
-        node: StaleTreeNode,
-    ) -> Result<(), StorageError> {
+    fn state_tree_nodes_mark_stale_tree_node(&mut self, shard: Shard, node: StaleTreeNode) -> Result<(), StorageError> {
         use crate::schema::state_tree;
 
         let key = node.as_node_key();
-        diesel::update(state_tree::table)
-            .filter(state_tree::epoch.eq(epoch.as_u64() as i64))
+        let num_effected = diesel::update(state_tree::table)
             .filter(state_tree::shard.eq(shard.as_u32() as i32))
             .filter(state_tree::key.eq(key.to_string()))
             .set(state_tree::is_stale.eq(true))
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "state_tree_nodes_mark_stale_tree_node",
+                source: e,
+            })?;
+
+        if num_effected == 0 {
+            return Err(StorageError::NotFound {
+                item: "state_tree_node".to_string(),
+                key: key.to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
+    fn state_tree_shard_versions_set(&mut self, shard: Shard, version: Version) -> Result<(), StorageError> {
+        use crate::schema::state_tree_shard_versions;
+
+        let values = (
+            state_tree_shard_versions::shard.eq(shard.as_u32() as i32),
+            state_tree_shard_versions::version.eq(version as i64),
+        );
+
+        diesel::insert_into(state_tree_shard_versions::table)
+            .values(&values)
+            .on_conflict(state_tree_shard_versions::shard)
+            .do_update()
+            .set(state_tree_shard_versions::version.eq(version as i64))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "state_tree_shard_versions_increment",
                 source: e,
             })?;
 

@@ -81,8 +81,9 @@
 // Copyright (c) Aptos
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::HashMap, fmt, ops::Range};
+use std::{fmt, ops::Range};
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use tari_crypto::{hash_domain, tari_utilities::ByteArray};
 use tari_dan_common_types::{
@@ -842,7 +843,7 @@ impl Child {
 
 /// [`Children`] is just a collection of children belonging to a [`InternalNode`], indexed from 0 to
 /// 15, inclusive.
-pub(crate) type Children = HashMap<Nibble, Child>;
+pub(crate) type Children = IndexMap<Nibble, Child>;
 
 /// Represents a 4-level subtree with 16 children at the bottom level. Theoretically, this reduces
 /// IOPS to query a tree by 4x since we compress 4 levels in a standard Merkle tree into 1 node.
@@ -858,7 +859,8 @@ pub struct InternalNode {
 
 impl InternalNode {
     /// Creates a new Internal node.
-    pub fn new(children: Children) -> Self {
+    pub fn new(mut children: Children) -> Self {
+        children.sort_keys();
         let leaf_count = children.values().map(Child::leaf_count).sum();
         Self { children, leaf_count }
     }
@@ -882,9 +884,10 @@ impl InternalNode {
     }
 
     pub fn children_sorted(&self) -> impl Iterator<Item = (&Nibble, &Child)> {
-        let mut tmp = self.children.iter().collect::<Vec<_>>();
-        tmp.sort_by_key(|(nibble, _)| **nibble);
-        tmp.into_iter()
+        // let mut tmp = self.children.iter().collect::<Vec<_>>();
+        // tmp.sort_by_key(|(nibble, _)| **nibble);
+        // tmp.into_iter()
+        self.children.iter()
     }
 
     pub fn into_children(self) -> Children {
@@ -1240,6 +1243,9 @@ pub enum JmtStorageError {
 
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
+
+    #[error("Attempted to insert node {0} that already exists")]
+    Conflict(NodeKey),
 }
 
 impl IsNotFoundError for JmtStorageError {

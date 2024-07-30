@@ -5,15 +5,12 @@ use std::{borrow::Cow, collections::HashMap};
 
 use indexmap::IndexMap;
 use log::*;
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{optional::Optional, SubstateAddress};
+use tari_dan_common_types::{optional::Optional, NumPreshards, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{
-        Block,
         BlockDiff,
         BlockId,
         LockedSubstate,
-        PendingStateTreeDiff,
         SubstateChange,
         SubstateLockFlag,
         SubstateRecord,
@@ -22,41 +19,39 @@ use tari_dan_storage::{
     StateStore,
     StateStoreReadTransaction,
 };
-use tari_engine_types::substate::{hash_substate, Substate, SubstateId};
-use tari_state_tree::{StateHashTreeDiff, SubstateTreeChange};
+use tari_engine_types::substate::{Substate, SubstateDiff, SubstateId};
 use tari_transaction::{TransactionId, VersionedSubstateId};
 
 use super::error::SubstateStoreError;
-use crate::{
-    hotstuff::{calculate_state_merkle_diff, substate_store::chain_scoped_tree_store::ChainScopedTreeStore},
-    traits::{ReadableSubstateStore, WriteableSubstateStore},
-};
+use crate::traits::{ReadableSubstateStore, WriteableSubstateStore};
 
 const LOG_TARGET: &str = "tari::dan::hotstuff::substate_store::pending_store";
 
 pub struct PendingSubstateStore<'a, 'tx, TStore: StateStore + 'a + 'tx> {
-    store: ChainScopedTreeStore<&'a TStore::ReadTransaction<'tx>>,
+    store: &'a TStore::ReadTransaction<'tx>,
     /// Map from substate address to the index in the diff list
     pending: HashMap<SubstateAddress, usize>,
     /// Append only list of changes ordered oldest to newest
     diff: Vec<SubstateChange>,
     new_locks: IndexMap<SubstateId, Vec<LockedSubstate>>,
     parent_block: BlockId,
+    num_preshards: NumPreshards,
 }
 
 impl<'a, 'tx, TStore: StateStore + 'a> PendingSubstateStore<'a, 'tx, TStore> {
-    pub fn new(parent_block: BlockId, store: ChainScopedTreeStore<&'a TStore::ReadTransaction<'tx>>) -> Self {
+    pub fn new(store: &'a TStore::ReadTransaction<'tx>, parent_block: BlockId, num_preshards: NumPreshards) -> Self {
         Self {
             store,
             pending: HashMap::new(),
             diff: Vec::new(),
             new_locks: IndexMap::new(),
             parent_block,
+            num_preshards,
         }
     }
 
     pub fn read_transaction(&self) -> &'a TStore::ReadTransaction<'tx> {
-        self.store.transaction()
+        self.store
     }
 }
 
@@ -106,6 +101,31 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> WriteableSubstateStore for PendingS
 
         Ok(())
     }
+
+    fn put_diff(&mut self, transaction_id: TransactionId, diff: &SubstateDiff) -> Result<(), Self::Error> {
+        for (id, version) in diff.down_iter() {
+            let id = VersionedSubstateId::new(id.clone(), *version);
+            let shard = id.to_substate_address().to_shard(self.num_preshards);
+            self.put(SubstateChange::Down {
+                id,
+                shard,
+                transaction_id,
+            })?;
+        }
+
+        for (id, substate) in diff.up_iter() {
+            let id = VersionedSubstateId::new(id.clone(), substate.version());
+            let shard = id.to_substate_address().to_shard(self.num_preshards);
+            self.put(SubstateChange::Up {
+                id,
+                shard,
+                substate: substate.clone(),
+                transaction_id,
+            })?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStore> {
@@ -131,34 +151,34 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         Ok(substate.into_substate())
     }
 
-    pub fn calculate_jmt_diff_for_block(
-        &mut self,
-        block: &Block,
-    ) -> Result<(FixedHash, StateHashTreeDiff), SubstateStoreError> {
-        let current_version = block.justify().block_height().as_u64();
-        let next_version = block.height().as_u64();
-
-        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(
-            self.read_transaction(),
-            block.epoch(),
-            block.shard(),
-            block.justify().block_id(),
-        )?;
-
-        let changes = self.diff.iter().map(|ch| match ch {
-            SubstateChange::Up { id, substate, .. } => SubstateTreeChange::Up {
-                id: id.substate_id.clone(),
-                value_hash: hash_substate(substate.substate_value(), substate.version()),
-            },
-            SubstateChange::Down { id, .. } => SubstateTreeChange::Down {
-                id: id.substate_id.clone(),
-            },
-        });
-        let (state_root, state_tree_diff) =
-            calculate_state_merkle_diff(&self.store, current_version, next_version, pending, changes)?;
-
-        Ok((state_root, state_tree_diff))
-    }
+    // pub fn calculate_jmt_diff_for_block(
+    //     &mut self,
+    //     block: &Block,
+    // ) -> Result<(FixedHash, StateHashTreeDiff), SubstateStoreError> {
+    //     let current_version = block.justify().block_height().as_u64();
+    //     let next_version = block.height().as_u64();
+    //
+    //     let pending = PendingStateTreeDiff::get_all_up_to_commit_block(
+    //         self.read_transaction(),
+    //         block.epoch(),
+    //         block.shard_group(),
+    //         block.justify().block_id(),
+    //     )?;
+    //
+    //     let changes = self.diff.iter().map(|ch| match ch {
+    //         SubstateChange::Up { id, substate, .. } => SubstateTreeChange::Up {
+    //             id: id.substate_id.clone(),
+    //             value_hash: hash_substate(substate.substate_value(), substate.version()),
+    //         },
+    //         SubstateChange::Down { id, .. } => SubstateTreeChange::Down {
+    //             id: id.substate_id.clone(),
+    //         },
+    //     });
+    //     let (state_root, state_tree_diff) =
+    //         calculate_state_merkle_diff(&self.store, current_version, next_version, pending, changes)?;
+    //
+    //     Ok((state_root, state_tree_diff))
+    // }
 
     pub fn try_lock_all<I: IntoIterator<Item = VersionedSubstateIdLockIntent>>(
         &mut self,

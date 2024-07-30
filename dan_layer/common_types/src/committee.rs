@@ -6,13 +6,15 @@ use std::{borrow::Borrow, cmp, ops::RangeInclusive};
 use rand::{rngs::OsRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
-use crate::{shard::Shard, Epoch, SubstateAddress};
+use crate::{shard::Shard, Epoch, NumPreshards, ShardGroup, SubstateAddress};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct Committee<TAddr> {
     // TODO: not pub
     #[cfg_attr(feature = "ts", ts(type = "Array<[TAddr, string]>"))]
@@ -160,56 +162,62 @@ impl<TAddr: PartialEq> FromIterator<Committee<TAddr>> for Committee<TAddr> {
 
 /// Represents a "slice" of the 256-bit shard space
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct CommitteeInfo {
+    num_shards: NumPreshards,
+    num_shard_group_members: u32,
     num_committees: u32,
-    num_members: u32,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
-    shard: Shard,
+    shard_group: ShardGroup,
 }
 
 impl CommitteeInfo {
-    pub fn new(num_committees: u32, num_members: u32, shard: Shard) -> Self {
+    pub fn new(
+        num_shards: NumPreshards,
+        num_shard_group_members: u32,
+        num_committees: u32,
+        shard_group: ShardGroup,
+    ) -> Self {
         Self {
+            num_shards,
+            num_shard_group_members,
             num_committees,
-            num_members,
-            shard,
+            shard_group,
         }
     }
 
     /// Returns $n - f$ where n is the number of committee members and f is the tolerated failure nodes.
     pub fn quorum_threshold(&self) -> u32 {
-        self.num_members - self.max_failures()
+        self.num_shard_group_members - self.max_failures()
     }
 
     /// Returns the maximum number of failures $f$ that can be tolerated by this committee.
     pub fn max_failures(&self) -> u32 {
-        let len = self.num_members;
+        let len = self.num_shard_group_members;
         if len == 0 {
             return 0;
         }
         (len - 1) / 3
     }
 
-    pub fn num_committees(&self) -> u32 {
-        self.num_committees
+    pub fn num_shards(&self) -> NumPreshards {
+        self.num_shards
     }
 
-    pub fn num_members(&self) -> u32 {
-        self.num_members
-    }
-
-    pub fn shard(&self) -> Shard {
-        self.shard
+    pub fn shard_group(&self) -> ShardGroup {
+        self.shard_group
     }
 
     pub fn to_substate_address_range(&self) -> RangeInclusive<SubstateAddress> {
-        self.shard.to_substate_address_range(self.num_committees)
+        self.shard_group.to_substate_address_range(self.num_shards)
     }
 
     pub fn includes_substate_address(&self, substate_address: &SubstateAddress) -> bool {
-        let s = substate_address.to_shard(self.num_committees);
-        self.shard == s
+        let s = substate_address.to_shard(self.num_shards);
+        self.shard_group.contains(&s)
     }
 
     pub fn includes_all_substate_addresses<I: IntoIterator<Item = B>, B: Borrow<SubstateAddress>>(
@@ -240,25 +248,45 @@ impl CommitteeInfo {
             .filter(|substate_address| self.includes_substate_address(substate_address.borrow()))
     }
 
-    /// Calculates the number of distinct shards for a given shard set
-    pub fn count_distinct_shards<B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(&self, shards: I) -> usize {
-        shards
+    /// Calculates the number of distinct shards for the given addresses
+    pub fn count_distinct_shards<B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(&self, addresses: I) -> usize {
+        addresses
             .into_iter()
-            .map(|shard| shard.borrow().to_shard(self.num_committees))
+            .map(|addr| addr.borrow().to_shard(self.num_shards))
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+    }
+
+    /// Calculates the number of distinct shard groups for the given addresses
+    pub fn count_distinct_shard_groups<B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
+        &self,
+        addresses: I,
+    ) -> usize {
+        addresses
+            .into_iter()
+            .map(|addr| addr.borrow().to_shard_group(self.num_shards, self.num_committees))
             .collect::<std::collections::HashSet<_>>()
             .len()
     }
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct NetworkCommitteeInfo<TAddr> {
     pub epoch: Epoch,
     pub committees: Vec<CommitteeShardInfo<TAddr>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct CommitteeShardInfo<TAddr> {
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub shard: Shard,

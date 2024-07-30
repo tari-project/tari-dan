@@ -24,7 +24,7 @@ use std::convert::{TryFrom, TryInto};
 
 use log::*;
 use tari_bor::{decode_exact, encode};
-use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, PeerAddress, SubstateAddress};
+use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, PeerAddress, ShardGroup, SubstateAddress};
 use tari_dan_p2p::{
     proto,
     proto::rpc::{
@@ -51,7 +51,6 @@ use tari_dan_storage::{
         EpochCheckpoint,
         HighQc,
         LockedBlock,
-        QuorumCertificate,
         StateTransitionId,
         SubstateRecord,
         TransactionRecord,
@@ -314,11 +313,10 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
                     .map(|hqc| hqc.get_quorum_certificate(tx))
                     .transpose()
             })
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
-            .unwrap_or_else(QuorumCertificate::genesis);
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
         Ok(Response::new(GetHighQcResponse {
-            high_qc: Some((&high_qc).into()),
+            high_qc: high_qc.as_ref().map(Into::into),
         }))
     }
 
@@ -359,7 +357,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
 
         let checkpoint = self
             .shard_state_store
-            .with_read_tx(|tx| EpochCheckpoint::generate(tx, prev_epoch, local_committee_info.shard()))
+            .with_read_tx(|tx| EpochCheckpoint::generate(tx, prev_epoch, local_committee_info.shard_group()))
             .optional()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
@@ -377,7 +375,8 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             StateTransitionId::new(Epoch(req.start_epoch), Shard::from(req.start_shard), req.start_seq);
 
         // TODO: validate that we can provide the required sync data
-        let current_shard = Shard::from(req.current_shard);
+        let current_shard = ShardGroup::decode_from_u32(req.current_shard_group)
+            .ok_or_else(|| RpcStatus::bad_request("Invalid shard group"))?;
         let current_epoch = Epoch(req.current_epoch);
         info!(target: LOG_TARGET, "🌍peer initiated sync with this node ({current_epoch}, {current_shard})");
 

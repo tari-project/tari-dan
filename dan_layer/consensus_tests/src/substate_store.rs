@@ -2,10 +2,10 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::{
-    hotstuff::substate_store::{ChainScopedTreeStore, PendingSubstateStore, SubstateStoreError},
+    hotstuff::substate_store::{PendingSubstateStore, SubstateStoreError},
     traits::{ReadableSubstateStore, WriteableSubstateStore},
 };
-use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, PeerAddress};
+use tari_dan_common_types::{shard::Shard, NodeAddressable, PeerAddress};
 use tari_dan_storage::{
     consensus_models::{
         BlockId,
@@ -25,7 +25,7 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::models::{ComponentAddress, EntityId, ObjectKey};
 use tari_transaction::VersionedSubstateId;
 
-use crate::support::logging::setup_logger;
+use crate::support::{logging::setup_logger, TEST_NUM_PRESHARDS};
 
 type TestStore = SqliteStateStore<PeerAddress>;
 
@@ -42,6 +42,7 @@ fn it_allows_substate_up_for_v0() {
     store
         .put(SubstateChange::Up {
             id: VersionedSubstateId::new(id.clone(), 1),
+            shard: Shard::zero(),
             transaction_id: tx_id(0),
             substate: Substate::new(1, value.clone()),
         })
@@ -51,6 +52,7 @@ fn it_allows_substate_up_for_v0() {
         .put(SubstateChange::Up {
             id: VersionedSubstateId::new(id.clone(), 0),
             transaction_id: tx_id(0),
+            shard: Shard::zero(),
             substate: Substate::new(0, value),
         })
         .unwrap();
@@ -75,6 +77,7 @@ fn it_allows_down_then_up() {
     store
         .put(SubstateChange::Down {
             id: id.clone(),
+            shard: Shard::zero(),
             transaction_id: Default::default(),
         })
         .unwrap();
@@ -82,6 +85,7 @@ fn it_allows_down_then_up() {
     store
         .put(SubstateChange::Up {
             id: id.to_next_version(),
+            shard: Shard::zero(),
             transaction_id: Default::default(),
             substate: new_substate(1, 1),
         })
@@ -104,6 +108,7 @@ fn it_fails_if_previous_version_is_not_down() {
     let err = store
         .put(SubstateChange::Up {
             id: id.to_next_version(),
+            shard: Shard::zero(),
             transaction_id: Default::default(),
             substate: new_substate(1, 1),
         })
@@ -223,8 +228,7 @@ fn create_store() -> TestStore {
 fn create_pending_store<'a, 'tx, TAddr: NodeAddressable>(
     tx: &'a <SqliteStateStore<TAddr> as StateStore>::ReadTransaction<'tx>,
 ) -> PendingSubstateStore<'a, 'tx, SqliteStateStore<TAddr>> {
-    let tree_store = ChainScopedTreeStore::new(Epoch::zero(), Shard::zero(), tx);
-    PendingSubstateStore::new(BlockId::zero(), tree_store)
+    PendingSubstateStore::new(tx, BlockId::zero(), TEST_NUM_PRESHARDS)
 }
 
 fn new_substate_id(seed: u8) -> SubstateId {

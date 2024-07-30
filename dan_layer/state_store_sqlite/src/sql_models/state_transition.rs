@@ -5,14 +5,7 @@ use diesel::Queryable;
 use tari_dan_common_types::{shard::Shard, Epoch};
 use tari_dan_storage::{
     consensus_models,
-    consensus_models::{
-        QuorumCertificate,
-        StateTransitionId,
-        SubstateCreatedProof,
-        SubstateData,
-        SubstateDestroyedProof,
-        SubstateUpdate,
-    },
+    consensus_models::{StateTransitionId, SubstateCreatedProof, SubstateData, SubstateDestroyedProof, SubstateUpdate},
     StorageError,
 };
 use time::PrimitiveDateTime;
@@ -42,18 +35,14 @@ impl StateTransition {
         let shard = Shard::from(self.shard as u32);
 
         let update = match self.transition.as_str() {
-            "UP" => {
-                SubstateUpdate::Create(SubstateCreatedProof {
-                    substate: SubstateData {
-                        substate_id: substate.substate_id,
-                        version: substate.version,
-                        substate_value: substate.substate_value,
-                        created_by_transaction: substate.created_by_transaction,
-                    },
-                    // TODO
-                    created_qc: QuorumCertificate::genesis(),
-                })
-            },
+            "UP" => SubstateUpdate::Create(SubstateCreatedProof {
+                substate: SubstateData {
+                    substate_id: substate.substate_id,
+                    version: substate.version,
+                    substate_value: substate.substate_value,
+                    created_by_transaction: substate.created_by_transaction,
+                },
+            }),
             "DOWN" => {
                 if !substate.is_destroyed() {
                     return Err(StorageError::DataInconsistency {
@@ -68,8 +57,6 @@ impl StateTransition {
                     destroyed_by_transaction: substate.destroyed().unwrap().by_transaction,
                     substate_id: substate.substate_id,
                     version: substate.version,
-                    // TODO
-                    justify: QuorumCertificate::genesis(),
                 })
             },
             _ => {

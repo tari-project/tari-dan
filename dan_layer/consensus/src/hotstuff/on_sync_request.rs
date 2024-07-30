@@ -61,7 +61,7 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                 let blocks = Block::get_all_blocks_between(
                     tx,
                     leaf_block.epoch(),
-                    leaf_block.shard(),
+                    leaf_block.shard_group(),
                     msg.high_qc.block_id(),
                     leaf_block.id(),
                     true,

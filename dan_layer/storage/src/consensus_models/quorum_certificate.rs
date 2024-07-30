@@ -10,12 +10,10 @@ use tari_dan_common_types::{
     hashing::quorum_certificate_hasher,
     optional::Optional,
     serde_with,
-    shard::Shard,
     Epoch,
     NodeHeight,
+    ShardGroup,
 };
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
 use crate::{
     consensus_models::{Block, BlockId, HighQc, LastVoted, LeafBlock, QuorumDecision, ValidatorSignature},
@@ -27,7 +25,11 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::storage::quorum_certificate";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct QuorumCertificate {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     qc_id: QcId,
@@ -35,7 +37,7 @@ pub struct QuorumCertificate {
     block_id: BlockId,
     block_height: NodeHeight,
     epoch: Epoch,
-    shard: Shard,
+    shard_group: ShardGroup,
     signatures: Vec<ValidatorSignature>,
     #[serde(with = "serde_with::hex::vec")]
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
@@ -48,7 +50,7 @@ impl QuorumCertificate {
         block: BlockId,
         block_height: NodeHeight,
         epoch: Epoch,
-        shard: Shard,
+        shard_group: ShardGroup,
         signatures: Vec<ValidatorSignature>,
         mut leaf_hashes: Vec<FixedHash>,
         decision: QuorumDecision,
@@ -59,7 +61,7 @@ impl QuorumCertificate {
             block_id: block,
             block_height,
             epoch,
-            shard,
+            shard_group,
             signatures,
             leaf_hashes,
             decision,
@@ -68,12 +70,12 @@ impl QuorumCertificate {
         qc
     }
 
-    pub fn genesis() -> Self {
+    pub fn genesis(epoch: Epoch, shard_group: ShardGroup) -> Self {
         Self::new(
             BlockId::zero(),
             NodeHeight::zero(),
-            Epoch(0),
-            Shard::from(0),
+            epoch,
+            shard_group,
             vec![],
             vec![],
             QuorumDecision::Accept,
@@ -83,7 +85,7 @@ impl QuorumCertificate {
     pub fn calculate_id(&self) -> QcId {
         quorum_certificate_hasher()
             .chain(&self.epoch)
-            .chain(&self.shard)
+            .chain(&self.shard_group)
             .chain(&self.block_id)
             .chain(&self.block_height)
             .chain(&self.signatures)
@@ -107,8 +109,8 @@ impl QuorumCertificate {
         self.epoch
     }
 
-    pub fn shard(&self) -> Shard {
-        self.shard
+    pub fn shard_group(&self) -> ShardGroup {
+        self.shard_group
     }
 
     pub fn leaf_hashes(&self) -> &[FixedHash] {

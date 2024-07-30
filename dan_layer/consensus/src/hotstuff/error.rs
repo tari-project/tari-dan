@@ -10,6 +10,7 @@ use tari_dan_storage::{
 use tari_epoch_manager::EpochManagerError;
 use tari_state_tree::StateTreeError;
 use tari_transaction::{TransactionId, VersionedSubstateIdError};
+use tokio::task::JoinError;
 
 use crate::{
     hotstuff::substate_store::SubstateStoreError,
@@ -22,6 +23,8 @@ pub enum HotStuffError {
     StorageError(#[from] StorageError),
     #[error("State tree error: {0}")]
     StateTreeError(#[from] StateTreeError),
+    #[error("Join error: {0}")]
+    JoinError(#[from] JoinError),
     #[error("Internal channel send error when {context}")]
     InternalChannelClosed { context: &'static str },
     #[error("Inbound messaging error: {0}")]

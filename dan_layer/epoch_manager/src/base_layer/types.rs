@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
@@ -10,6 +10,7 @@ use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
     shard::Shard,
     Epoch,
+    ShardGroup,
     SubstateAddress,
 };
 use tari_dan_storage::global::models::ValidatorNode;
@@ -77,7 +78,7 @@ pub enum EpochManagerRequest<TAddr> {
     },
     GetCommittees {
         epoch: Epoch,
-        reply: Reply<HashMap<Shard, Committee<TAddr>>>,
+        reply: Reply<HashMap<ShardGroup, Committee<TAddr>>>,
     },
     GetCommitteeForSubstate {
         epoch: Epoch,
@@ -125,9 +126,9 @@ pub enum EpochManagerRequest<TAddr> {
         epoch: Epoch,
         reply: Reply<u32>,
     },
-    GetCommitteesForShards {
+    GetCommitteesForShardGroup {
         epoch: Epoch,
-        shards: HashSet<Shard>,
+        shard_group: ShardGroup,
         reply: Reply<HashMap<Shard, Committee<TAddr>>>,
     },
     GetBaseLayerBlockHeight {

@@ -20,10 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::{HashMap, HashSet},
-    ops::RangeInclusive,
-};
+use std::{collections::HashMap, ops::RangeInclusive};
 
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
@@ -33,6 +30,7 @@ use tari_dan_common_types::{
     shard::Shard,
     Epoch,
     NodeAddressable,
+    ShardGroup,
     SubstateAddress,
 };
 
@@ -119,19 +117,19 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<u64, Self::Error>;
-    fn validator_nodes_count_for_bucket(
+    fn validator_nodes_count_for_shard_group(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
-        bucket: Shard,
+        shard_group: ShardGroup,
     ) -> Result<u64, Self::Error>;
 
     fn validator_nodes_set_committee_shard(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         shard_key: SubstateAddress,
-        shard: Shard,
+        shard_group: ShardGroup,
         sidechain_id: Option<&PublicKey>,
         epoch: Epoch,
     ) -> Result<(), Self::Error>;
@@ -144,11 +142,11 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         substate_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error>;
 
-    fn validator_nodes_get_for_shards(
+    fn validator_nodes_get_for_shard_group(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
-        shards: HashSet<Shard>,
+        shard_group: ShardGroup,
     ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error>;
 
     fn validator_nodes_get_committees_for_epoch(
@@ -156,7 +154,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
-    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error>;
+    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, Self::Error>;
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;

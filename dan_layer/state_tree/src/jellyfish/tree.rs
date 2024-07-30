@@ -187,13 +187,14 @@ impl<'a, R: 'a + TreeStoreReader<P>, P: Clone> JellyfishMerkleTree<'a, R, P> {
     /// the batch is not reachable from public interfaces before being committed.
     pub fn batch_put_value_set(
         &self,
-        value_set: Vec<(&LeafKey, Option<&(Hash, P)>)>,
+        value_set: Vec<(LeafKey, Option<(Hash, P)>)>,
         node_hashes: Option<&HashMap<NibblePath, Hash>>,
         persisted_version: Option<Version>,
         version: Version,
     ) -> Result<(Hash, TreeUpdateBatch<P>), JmtStorageError> {
         let deduped_and_sorted_kvs = value_set
-            .into_iter()
+            .iter()
+            .map(|(k, v)| (k, v.as_ref()))
             .collect::<BTreeMap<_, _>>()
             .into_iter()
             .collect::<Vec<_>>();
@@ -273,7 +274,7 @@ impl<'a, R: 'a + TreeStoreReader<P>, P: Clone> JellyfishMerkleTree<'a, R, P> {
                     if let Some(child) = child_option {
                         new_created_children.insert(child_nibble, child);
                     } else {
-                        old_children.remove(&child_nibble);
+                        old_children.swap_remove(&child_nibble);
                     }
                 }
 

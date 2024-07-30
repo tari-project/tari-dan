@@ -1,7 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::SubstateAddress;
+use tari_dan_common_types::{shard::Shard, SubstateAddress};
 use tari_engine_types::substate::Substate;
 use tari_state_tree::SubstateTreeChange;
 use tari_transaction::{TransactionId, VersionedSubstateId};
@@ -12,11 +12,13 @@ use crate::consensus_models::SubstateRecord;
 pub enum SubstateChange {
     Up {
         id: VersionedSubstateId,
+        shard: Shard,
         transaction_id: TransactionId,
         substate: Substate,
     },
     Down {
         id: VersionedSubstateId,
+        shard: Shard,
         transaction_id: TransactionId,
     },
 }
@@ -47,6 +49,13 @@ impl SubstateChange {
         match self {
             SubstateChange::Up { transaction_id, .. } => *transaction_id,
             SubstateChange::Down { transaction_id, .. } => *transaction_id,
+        }
+    }
+
+    pub fn shard(&self) -> Shard {
+        match self {
+            SubstateChange::Up { shard, .. } => *shard,
+            SubstateChange::Down { shard, .. } => *shard,
         }
     }
 
@@ -92,11 +101,13 @@ impl From<SubstateRecord> for SubstateChange {
         if let Some(destroyed) = value.destroyed() {
             Self::Down {
                 id: value.to_versioned_substate_id(),
+                shard: destroyed.by_shard,
                 transaction_id: destroyed.by_transaction,
             }
         } else {
             Self::Up {
                 id: value.to_versioned_substate_id(),
+                shard: value.created_by_shard,
                 transaction_id: value.created_by_transaction,
                 substate: value.into_substate(),
             }

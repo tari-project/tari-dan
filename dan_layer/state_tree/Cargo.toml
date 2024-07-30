@@ -17,6 +17,7 @@ hex = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 log = { workspace = true }
+indexmap = { workspace = true }
 
 [dev-dependencies]
 indexmap = { workspace = true }

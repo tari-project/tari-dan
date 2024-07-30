@@ -4,8 +4,7 @@
 use std::fmt::{Debug, Formatter};
 
 use log::*;
-use tari_common::configuration::Network;
-use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight};
+use tari_dan_common_types::{Epoch, NodeHeight, ShardGroup};
 use tari_dan_storage::{
     consensus_models::{Block, BlockDiff, HighQc, LeafBlock, TransactionPool},
     StateStore,
@@ -48,7 +47,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
 
 pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     local_validator_addr: TConsensusSpec::Addr,
-    network: Network,
+    config: HotstuffConfig,
     hooks: TConsensusSpec::Hooks,
 
     tx_events: broadcast::Sender<HotstuffEvent>,
@@ -80,8 +79,8 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
 impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        config: HotstuffConfig,
         validator_addr: TConsensusSpec::Addr,
-        network: Network,
         inbound_messaging: TConsensusSpec::InboundMessaging,
         outbound_messaging: TConsensusSpec::OutboundMessaging,
         rx_new_transactions: mpsc::Receiver<(Transaction, usize)>,
@@ -94,22 +93,22 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         tx_events: broadcast::Sender<HotstuffEvent>,
         hooks: TConsensusSpec::Hooks,
         shutdown: ShutdownSignal,
-        config: HotstuffConfig,
     ) -> Self {
         let (tx_missing_transactions, rx_missing_transactions) = mpsc::unbounded_channel();
         let pacemaker = PaceMaker::new(config.pacemaker_max_base_time);
         let vote_receiver = VoteReceiver::new(
-            network,
+            config.network,
             state_store.clone(),
             leader_strategy.clone(),
             epoch_manager.clone(),
             signing_service.clone(),
             pacemaker.clone_handle(),
         );
-        let proposer = Proposer::<TConsensusSpec>::new(epoch_manager.clone(), outbound_messaging.clone());
+        let proposer =
+            Proposer::<TConsensusSpec>::new(config.clone(), epoch_manager.clone(), outbound_messaging.clone());
         Self {
             local_validator_addr: validator_addr.clone(),
-            network,
+            config: config.clone(),
             tx_events: tx_events.clone(),
             rx_new_transactions,
             rx_missing_transactions,
@@ -117,8 +116,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             on_inbound_message: OnInboundMessage::new(inbound_messaging, hooks.clone()),
             on_message_validate: OnMessageValidate::new(
                 validator_addr.clone(),
-                network,
-                config,
+                config.clone(),
                 state_store.clone(),
                 epoch_manager.clone(),
                 leader_strategy.clone(),
@@ -145,7 +143,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 tx_events,
                 proposer.clone(),
                 transaction_executor.clone(),
-                network,
+                config.clone(),
                 hooks.clone(),
             ),
             on_receive_foreign_proposal: OnReceiveForeignProposalHandler::new(
@@ -156,7 +154,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             ),
             on_receive_vote: OnReceiveVoteHandler::new(vote_receiver.clone()),
             on_receive_new_view: OnReceiveNewViewHandler::new(
-                network,
+                config.network,
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
@@ -174,7 +172,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 tx_missing_transactions,
             ),
             on_propose: OnPropose::new(
-                network,
+                config,
                 state_store.clone(),
                 epoch_manager.clone(),
                 transaction_pool.clone(),
@@ -206,7 +204,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let committee_info = self.epoch_manager.get_local_committee_info(current_epoch).await?;
 
-        self.create_zero_block_if_required(current_epoch, committee_info.shard())?;
+        self.create_zero_block_if_required(current_epoch, committee_info.shard_group())?;
 
         // Resume pacemaker from the last epoch/height
         let (current_epoch, current_height, high_qc) = self.state_store.with_read_tx(|tx| {
@@ -674,10 +672,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         }
     }
 
-    fn create_zero_block_if_required(&self, epoch: Epoch, shard: Shard) -> Result<(), HotStuffError> {
+    fn create_zero_block_if_required(&self, epoch: Epoch, shard_group: ShardGroup) -> Result<(), HotStuffError> {
         self.state_store.with_write_tx(|tx| {
             // The parent for genesis blocks refer to this zero block
-            let zero_block = Block::zero_block(self.network);
+            let zero_block = Block::zero_block(self.config.network, self.config.num_preshards);
             if !zero_block.exists(&**tx)? {
                 debug!(target: LOG_TARGET, "Creating zero block");
                 zero_block.justify().insert(tx)?;
@@ -690,10 +688,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 zero_block.commit_diff(tx, BlockDiff::empty(*zero_block.id()))?;
             }
 
-            let genesis = Block::genesis(self.network, epoch, shard);
+            let genesis = Block::genesis(self.config.network, epoch, shard_group);
             if !genesis.exists(&**tx)? {
                 info!(target: LOG_TARGET, "✨Creating genesis block {genesis}");
-                // No genesis.justify() insert because that is the zero block justify
+                genesis.justify().insert(tx)?;
                 genesis.insert(tx)?;
                 genesis.as_locked_block().set(tx)?;
                 genesis.as_leaf_block().set(tx)?;

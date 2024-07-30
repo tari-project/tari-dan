@@ -294,7 +294,7 @@ fn create_qc(vote_data: VoteData) -> QuorumCertificate {
         *block.id(),
         block.height(),
         block.epoch(),
-        block.shard(),
+        block.shard_group(),
         signatures,
         leaf_hashes,
         quorum_decision,

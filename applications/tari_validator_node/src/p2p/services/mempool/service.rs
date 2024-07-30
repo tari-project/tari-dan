@@ -23,7 +23,7 @@
 use std::{collections::HashSet, fmt::Display, iter};
 
 use log::*;
-use tari_dan_common_types::{optional::Optional, shard::Shard, PeerAddress, SubstateAddress};
+use tari_dan_common_types::{optional::Optional, NumPreshards, PeerAddress, ShardGroup, SubstateAddress};
 use tari_dan_p2p::{DanMessage, NewTransactionMessage};
 use tari_dan_storage::{consensus_models::TransactionRecord, StateStore};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerEvent, EpochManagerReader};
@@ -48,6 +48,7 @@ const LOG_TARGET: &str = "tari::validator_node::mempool::service";
 
 #[derive(Debug)]
 pub struct MempoolService<TValidator> {
+    num_preshards: NumPreshards,
     transactions: HashSet<TransactionId>,
     mempool_requests: mpsc::Receiver<MempoolRequest>,
     epoch_manager: EpochManagerHandle<PeerAddress>,
@@ -63,6 +64,7 @@ impl<TValidator> MempoolService<TValidator>
 where TValidator: Validator<Transaction, Context = (), Error = TransactionValidationError>
 {
     pub(super) fn new(
+        num_preshards: NumPreshards,
         mempool_requests: mpsc::Receiver<MempoolRequest>,
         gossip: Gossip,
         epoch_manager: EpochManagerHandle<PeerAddress>,
@@ -72,7 +74,8 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
         #[cfg(feature = "metrics")] metrics: PrometheusMempoolMetrics,
     ) -> Self {
         Self {
-            gossip: MempoolGossip::new(epoch_manager.clone(), gossip),
+            num_preshards,
+            gossip: MempoolGossip::new(num_preshards, epoch_manager.clone(), gossip),
             transactions: Default::default(),
             mempool_requests,
             epoch_manager,
@@ -202,29 +205,25 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
         );
 
         let current_epoch = self.consensus_handle.current_view().get_epoch();
-        let num_committees = self.epoch_manager.get_num_committees(current_epoch).await?;
-        let maybe_sender_shard = self
+        let maybe_sender_shard_group = self
             .epoch_manager
             .get_committee_info_by_validator_address(current_epoch, &from)
             .await
             .optional()?
-            .map(|c| c.shard());
+            .map(|c| c.shard_group());
 
         // Only input shards propagate transactions to output shards. Check that this is true.
         if !unverified_output_shards.is_empty() {
-            let Some(sender_shard) = maybe_sender_shard else {
+            let Some(sender_shard) = maybe_sender_shard_group else {
                 debug!(target: LOG_TARGET, "Sender {from} isn't registered but tried to send a new transaction with
         output shards");
                 return Ok(());
             };
 
-            let mut is_input_shard = transaction
+            let is_input_shard = transaction
                 .all_inputs_iter()
-                .filter_map(|s| s.to_committee_shard(num_committees))
-                .any(|s| s == sender_shard);
-            // Special temporary case: if there are no input shards an output shard will also propagate. No inputs is
-            // invalid, however we must support them for now because of CreateFreeTestCoin transactions.
-            is_input_shard |= transaction.inputs().is_empty() && transaction.filled_inputs().is_empty();
+                .filter_map(|s| s.to_shard(self.num_preshards))
+                .any(|s| sender_shard.contains(&s));
             if !is_input_shard {
                 warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input
         shard. Ignoring message.");
@@ -232,7 +231,7 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
             }
         }
 
-        self.handle_new_transaction(transaction, unverified_output_shards, true, maybe_sender_shard)
+        self.handle_new_transaction(transaction, unverified_output_shards, true, maybe_sender_shard_group)
             .await?;
 
         Ok(())
@@ -244,7 +243,7 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
         transaction: Transaction,
         unverified_output_shards: Vec<SubstateAddress>,
         should_propagate: bool,
-        sender_shard: Option<Shard>,
+        sender_shard_group: Option<ShardGroup>,
     ) -> Result<(), MempoolError> {
         #[cfg(feature = "metrics")]
         self.metrics.on_transaction_received(&transaction);
@@ -282,10 +281,7 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
 
         let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
         let transaction_inputs = transaction.all_inputs_iter().filter_map(|i| i.to_substate_address());
-        let mut is_input_shard = local_committee_shard.includes_any_shard(transaction_inputs);
-        // Special temporary case: if there are no input shards an output shard will also propagate. No inputs is
-        // invalid, however we must support them for now because of CreateFreeTestCoin transactions.
-        is_input_shard |= transaction.inputs().is_empty() && transaction.filled_inputs().is_empty();
+        let is_input_shard = local_committee_shard.includes_any_shard(transaction_inputs);
         let is_output_shard = local_committee_shard.includes_any_shard(
             // Known output shards
             // This is to allow for the txreceipt output
@@ -347,7 +343,7 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
                                 transaction,
                                 output_shards: vec![],
                             },
-                            sender_shard,
+                            sender_shard_group,
                         )
                         .await
                     {
@@ -369,7 +365,7 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
             if should_propagate {
                 // This validator is not involved, so we forward the transaction to f + 1 replicas per distinct shard
                 // per input shard ID because we may be the only validator that has received this transaction.
-                let substate_addresses = transaction.involved_shards_iter().collect();
+                let substate_addresses = transaction.versioned_input_addresses_iter().collect();
                 if let Err(e) = self
                     .gossip
                     .gossip_to_foreign_replicas(current_epoch, substate_addresses, NewTransactionMessage {

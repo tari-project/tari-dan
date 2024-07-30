@@ -18,24 +18,7 @@ pub trait ReadableSubstateStore {
 pub trait WriteableSubstateStore: ReadableSubstateStore {
     fn put(&mut self, change: SubstateChange) -> Result<(), Self::Error>;
 
-    fn put_diff(&mut self, transaction_id: TransactionId, diff: &SubstateDiff) -> Result<(), Self::Error> {
-        for (id, version) in diff.down_iter() {
-            self.put(SubstateChange::Down {
-                id: VersionedSubstateId::new(id.clone(), *version),
-                transaction_id,
-            })?;
-        }
-
-        for (id, substate) in diff.up_iter() {
-            self.put(SubstateChange::Up {
-                id: VersionedSubstateId::new(id.clone(), substate.version()),
-                substate: substate.clone(),
-                transaction_id,
-            })?;
-        }
-
-        Ok(())
-    }
+    fn put_diff(&mut self, transaction_id: TransactionId, diff: &SubstateDiff) -> Result<(), Self::Error>;
 }
 
 pub trait SubstateStore: ReadableSubstateStore + WriteableSubstateStore {}
