@@ -72,8 +72,13 @@ import type {
   WebRtcStartResponse,
   AccountsTransferRequest,
   AccountsTransferResponse,
+  SubstatesGetRequest,
+  SubstatesGetResponse,
+  TemplatesGetResponse,
+  SubstatesListRequest,
+  SubstatesListResponse,
 } from "@tari-project/typescript-bindings/wallet-daemon-client";
-import { WalletDaemonClient } from "@tari-project/wallet_daemon_client";
+import { AccountGetDefaultRequest, TemplatesGetRequest, WalletDaemonClient } from "@tari-project/wallet_daemon_client";
 
 let clientInstance: WalletDaemonClient | null = null;
 let pendingClientInstance: Promise<WalletDaemonClient> | null = null;
@@ -182,6 +187,8 @@ export const accountsSetDefault = (request: AccountSetDefaultRequest): Promise<A
 export const accountsCreateFreeTestCoins = (
   request: AccountsCreateFreeTestCoinsRequest,
 ): Promise<AccountsCreateFreeTestCoinsResponse> => client().then((c) => c.createFreeTestCoins(request));
+export const accountsGetDefault = (request: AccountGetDefaultRequest): Promise<AccountGetResponse> =>
+  client().then((c) => c.accountsGetDefault(request));
 
 // confidential
 export const confidentialViewVaultBalance = (
@@ -196,3 +203,14 @@ export const nftList = (request: ListAccountNftRequest): Promise<ListAccountNftR
 
 export const validatorsClaimFees = (request: ClaimValidatorFeesRequest): Promise<ClaimValidatorFeesResponse> =>
   client().then((c) => c.validatorsClaimFees(request));
+
+// substates
+export const substatesGet = (request: SubstatesGetRequest): Promise<SubstatesGetResponse> =>
+  client().then((c) => c.substatesGet(request));
+
+export const substatesList = (request: SubstatesListRequest): Promise<SubstatesListResponse> =>
+  client().then((c) => c.substatesList(request));
+
+// templates
+export const templatesGet = (request: TemplatesGetRequest): Promise<TemplatesGetResponse> =>
+  client().then((c) => c.templatesGet(request));

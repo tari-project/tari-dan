@@ -18,6 +18,8 @@
     "@tanstack/react-query-devtools": "^4.33.0",
     "@tari-project/typescript-bindings": "file:../../bindings",
     "@tari-project/wallet_daemon_client": "file:../../clients/javascript/wallet_daemon_client",
+    "@walletconnect/core": "^2.13.3",
+    "@walletconnect/web3wallet": "^1.12.3",
     "file-saver": "^2.0.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
