@@ -197,7 +197,7 @@ impl WorkingState {
                 Ok(Some((before, after)))
             })?;
 
-        let Some((before, after))= maybe_before_and_after else {
+        let Some((before, after)) = maybe_before_and_after else {
             return Ok(());
         };
 

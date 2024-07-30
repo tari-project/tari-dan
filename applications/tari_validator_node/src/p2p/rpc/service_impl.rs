@@ -350,8 +350,8 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             .get_local_committee_info(prev_epoch)
             .await
             .optional()
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))? else
-        {
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+        else {
             return Err(RpcStatus::bad_request(format!(
                 "This validator node is not registered for the previous epoch {prev_epoch}"
             )));

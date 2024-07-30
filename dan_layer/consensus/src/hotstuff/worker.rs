@@ -97,7 +97,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         config: HotstuffConfig,
     ) -> Self {
         let (tx_missing_transactions, rx_missing_transactions) = mpsc::unbounded_channel();
-        let pacemaker = PaceMaker::new();
+        let pacemaker = PaceMaker::new(config.pacemaker_max_base_time);
         let vote_receiver = VoteReceiver::new(
             network,
             state_store.clone(),

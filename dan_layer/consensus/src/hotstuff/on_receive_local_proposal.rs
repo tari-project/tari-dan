@@ -564,12 +564,11 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
             let Some(last_dummy) = dummy_blocks.last() else {
                 warn!(target: LOG_TARGET, "❌ Bad proposal, does not justify parent for candidate block {}", candidate_block);
-                return Err(
-                    ProposalValidationError::CandidateBlockDoesNotExtendJustify {
-                        justify_block_height: justify_block.height(),
-                        candidate_block_height: candidate_block.height(),
-                    }.into()
-                );
+                return Err(ProposalValidationError::CandidateBlockDoesNotExtendJustify {
+                    justify_block_height: justify_block.height(),
+                    candidate_block_height: candidate_block.height(),
+                }
+                .into());
             };
 
             if candidate_block.parent() != last_dummy.id() {

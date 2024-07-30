@@ -99,6 +99,7 @@ pub async fn spawn(
         HotstuffConfig {
             max_base_layer_blocks_behind: consensus_constants.max_base_layer_blocks_behind,
             max_base_layer_blocks_ahead: consensus_constants.max_base_layer_blocks_ahead,
+            pacemaker_max_base_time: consensus_constants.pacemaker_max_base_time,
         },
     );
     let current_view = hotstuff_worker.pacemaker().current_view().clone();

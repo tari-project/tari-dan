@@ -26,6 +26,7 @@ pub struct ConsensusConstants {
     pub committee_size: u32,
     pub max_base_layer_blocks_ahead: u64,
     pub max_base_layer_blocks_behind: u64,
+    pub pacemaker_max_base_time: std::time::Duration,
 }
 
 impl ConsensusConstants {
@@ -35,6 +36,7 @@ impl ConsensusConstants {
             committee_size: 7,
             max_base_layer_blocks_ahead: 5,
             max_base_layer_blocks_behind: 5,
+            pacemaker_max_base_time: std::time::Duration::from_secs(10),
         }
     }
 }
