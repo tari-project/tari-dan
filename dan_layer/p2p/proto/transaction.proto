@@ -75,6 +75,9 @@ message Instruction {
   bytes create_account_owner_public_key = 17;
   string create_account_workspace_bucket = 18;
 
+  // AssertBucketContains
+  bytes resource_address = 19;
+  int64 min_amount = 20;
 }
 
 message Arg {

@@ -23,7 +23,6 @@
 use std::sync::Arc;
 
 use log::{warn, *};
-use tari_bor::decode_exact;
 use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_crypto::{range_proof::RangeProofService, ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
@@ -54,7 +53,7 @@ use tari_template_lib::{
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, XTR},
     crypto::RistrettoPublicKeyBytes,
     models::{
-        Amount, Bucket, BucketId, ComponentAddress, EntityId, Metadata, NonFungible, NonFungibleAddress, NotAuthorized, ResourceAddress, VaultId, VaultRef
+        Amount, BucketId, ComponentAddress, EntityId, Metadata, NonFungible, NonFungibleAddress, NotAuthorized, ResourceAddress, VaultId, VaultRef
     },
     prelude::ResourceType,
     template::BuiltinTemplate,
