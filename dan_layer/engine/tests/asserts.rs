@@ -5,7 +5,7 @@ use std::vec;
 
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_engine::runtime::{AssertError, RuntimeError};
-use tari_template_lib::{args, models::{Amount, ComponentAddress, NonFungibleAddress, ResourceAddress}};
+use tari_template_lib::{args, models::{Amount, ComponentAddress, NonFungibleAddress, ResourceAddress}, prelude::XTR};
 use tari_template_test_tooling::{support::assert_error::assert_reject_reason, TemplateTest};
 use tari_transaction::{Instruction, Transaction};
 
@@ -64,20 +64,37 @@ fn setup() -> AssertTest {
 fn successful_assert() {
     let mut test: AssertTest = setup();
 
-    let min_amount = FAUCET_WITHDRAWAL_AMOUNT;
-
     test.template_test.execute_expect_success(
         Transaction::builder()
             .call_method(test.faucet_component, "take_free_coins", args![])
-            .put_last_instruction_output_on_workspace("free_coins")
-            .assert_bucket_contains("free_coins", test.faucet_resource, min_amount)
-            .call_method(test.account, "deposit", args![Workspace("free_coins")])
+            .put_last_instruction_output_on_workspace("faucet_bucket")
+            .assert_bucket_contains("faucet_bucket", test.faucet_resource, FAUCET_WITHDRAWAL_AMOUNT)
+            .call_method(test.account, "deposit", args![Workspace("faucet_bucket")])
             .sign(&test.account_key)
             .build(),
-        // Because we deny_all on deposits, we need to supply the owner proof to be able to deposit the initial
-        // tokens into the new vaults
         vec![test.account_proof.clone()],
     );
+}
+
+#[test]
+fn it_fails_with_invalid_resource() {
+    let mut test: AssertTest = setup();
+
+    // we are going to assert a different resource than the faucet resource
+    let invalid_resource_address = XTR;
+
+    let reason = test.template_test.execute_expect_failure(
+        Transaction::builder()
+            .call_method(test.faucet_component, "take_free_coins", args![])
+            .put_last_instruction_output_on_workspace("faucet_bucket")
+            .assert_bucket_contains("faucet_bucket", invalid_resource_address, FAUCET_WITHDRAWAL_AMOUNT)
+            .call_method(test.account, "deposit", args![Workspace("faucet_bucket")])
+            .sign(&test.account_key)
+            .build(),
+        vec![test.account_proof.clone()],
+    );
+
+    assert_reject_reason(reason, RuntimeError::AssertError(AssertError::InvalidResource { expected: invalid_resource_address, got: test.faucet_resource }));
 }
 
 #[test]
@@ -90,17 +107,52 @@ fn it_fails_with_invalid_amount() {
     let reason = test.template_test.execute_expect_failure(
         Transaction::builder()
             .call_method(test.faucet_component, "take_free_coins", args![])
-            .put_last_instruction_output_on_workspace("free_coins")
-            .assert_bucket_contains("free_coins", test.faucet_resource, min_amount)
-            .call_method(test.account, "deposit", args![Workspace("free_coins")])
+            .put_last_instruction_output_on_workspace("faucet_bucket")
+            .assert_bucket_contains("faucet_bucket", test.faucet_resource, min_amount)
+            .call_method(test.account, "deposit", args![Workspace("faucet_bucket")])
             .sign(&test.account_key)
             .build(),
-        // Because we deny_all on deposits, we need to supply the owner proof to be able to deposit the initial
-        // tokens into the new vaults
         vec![test.account_proof.clone()],
     );
 
     assert_reject_reason(reason, RuntimeError::AssertError(AssertError::InvalidAmount { expected: min_amount, got: FAUCET_WITHDRAWAL_AMOUNT}));
 }
 
+#[test]
+fn it_fails_with_invalid_bucket() {
+    let mut test: AssertTest = setup();
 
+    let reason = test.template_test.execute_expect_failure(
+        Transaction::builder()
+            .call_method(test.faucet_component, "take_free_coins", args![])
+            // we are going to assert a workspace value that is NOT a bucket
+            .call_method(test.account, "get_balances", args![])
+            .put_last_instruction_output_on_workspace("invalid_bucket")
+            .assert_bucket_contains("invalid_bucket", test.faucet_resource, FAUCET_WITHDRAWAL_AMOUNT)
+            .call_method(test.account, "deposit", args![Workspace("faucet_bucket")])
+            .sign(&test.account_key)
+            .build(),
+        vec![test.account_proof.clone()],
+    );
+
+    assert_reject_reason(reason, RuntimeError::AssertError(AssertError::InvalidBucket {}));
+}
+
+#[test]
+fn it_fails_with_invalid_workspace_key() {
+    let mut test: AssertTest = setup();
+
+    let reason = test.template_test.execute_expect_failure(
+        Transaction::builder()
+            .call_method(test.faucet_component, "take_free_coins", args![])
+            .put_last_instruction_output_on_workspace("faucet_bucket")
+            // we are going to assert a key that does not exist in the workspace
+            .assert_bucket_contains("invalid_key", test.faucet_resource, FAUCET_WITHDRAWAL_AMOUNT)
+            .call_method(test.account, "deposit", args![Workspace("faucet_bucket")])
+            .sign(&test.account_key)
+            .build(),
+        vec![test.account_proof.clone()],
+    );
+
+    assert_reject_reason(reason, RuntimeError::ItemNotOnWorkspace { key: "invalid_key".to_string() });
+}
