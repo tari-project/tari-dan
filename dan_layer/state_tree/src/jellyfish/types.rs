@@ -98,16 +98,16 @@ pub type Hash = tari_common_types::types::FixedHash;
 
 hash_domain!(SparseMerkleTree, "com.tari.dan.state_tree", 0);
 
-fn hasher() -> TariHasher {
-    tari_hasher::<SparseMerkleTree>("hash")
+fn jmt_node_hasher() -> TariHasher {
+    tari_hasher::<SparseMerkleTree>("JmtNode")
 }
 
-pub fn hash<T: Serialize>(data: &T) -> Hash {
-    hasher().chain(data).result()
+pub fn jmt_node_hash<T: Serialize>(data: &T) -> Hash {
+    jmt_node_hasher().chain(data).result()
 }
 
-pub fn hash2(d1: &[u8], d2: &[u8]) -> Hash {
-    hasher().chain(d1).chain(d2).result()
+pub fn jmt_node_hash2(d1: &[u8], d2: &[u8]) -> Hash {
+    jmt_node_hasher().chain(d1).chain(d2).result()
 }
 
 // SOURCE: https://github.com/aptos-labs/aptos-core/blob/1.0.4/types/src/proof/definition.rs#L182
@@ -274,7 +274,7 @@ impl SparseMerkleLeafNode {
     }
 
     pub fn hash(&self) -> Hash {
-        hash2(self.key.bytes.as_slice(), self.value_hash.as_slice())
+        jmt_node_hash2(self.key.bytes.as_slice(), self.value_hash.as_slice())
     }
 }
 
@@ -292,7 +292,7 @@ impl SparseMerkleInternalNode {
     }
 
     fn hash(&self) -> Hash {
-        hash2(self.left_child.as_bytes(), self.right_child.as_bytes())
+        jmt_node_hash2(self.left_child.as_bytes(), self.right_child.as_bytes())
     }
 }
 
@@ -1150,7 +1150,7 @@ impl<P: Clone> LeafNode<P> {
     /// changes within a sparse merkle tree (consider 2 trees, both containing a single element with
     /// the same value, but stored under different keys - we want their root hashes to differ).
     pub fn leaf_hash(&self) -> Hash {
-        hash2(self.leaf_key.bytes.as_slice(), self.value_hash.as_slice())
+        jmt_node_hash2(self.leaf_key.bytes.as_slice(), self.value_hash.as_slice())
     }
 }
 

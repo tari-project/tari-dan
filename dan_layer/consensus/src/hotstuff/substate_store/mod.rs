@@ -9,3 +9,4 @@ mod sharded_store;
 pub use error::*;
 pub use pending_store::*;
 pub use sharded_state_tree::*;
+pub use sharded_store::*;

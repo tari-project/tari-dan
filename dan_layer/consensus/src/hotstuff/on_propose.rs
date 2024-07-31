@@ -242,7 +242,7 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<ExecutedTransaction, HotStuffError> {
         let transaction = TransactionRecord::get(store.read_transaction(), transaction_id)?;
 
-        // TODO: this can fail due to unknown inputs. Need to return an ABORT executed transaction
+        // TODO: check the failure cases for this. Some failures should not cause consensus to fail
         let executed = self
             .transaction_executor
             .execute(transaction.into_transaction(), store, current_epoch)

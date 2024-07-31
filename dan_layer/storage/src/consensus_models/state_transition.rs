@@ -8,6 +8,7 @@ use std::{
 };
 
 use tari_dan_common_types::{shard::Shard, Epoch};
+use tari_state_tree::Version;
 
 use crate::{consensus_models::SubstateUpdate, StateStoreReadTransaction, StorageError};
 
@@ -15,7 +16,7 @@ use crate::{consensus_models::SubstateUpdate, StateStoreReadTransaction, Storage
 pub struct StateTransition {
     pub id: StateTransitionId,
     pub update: SubstateUpdate,
-    pub state_tree_version: u64,
+    pub state_tree_version: Version,
 }
 
 impl StateTransition {
@@ -28,8 +29,11 @@ impl StateTransition {
         tx.state_transitions_get_n_after(n, after_id, end_epoch)
     }
 
-    pub fn get_last_id<TTx: StateStoreReadTransaction>(tx: &TTx) -> Result<StateTransitionId, StorageError> {
-        tx.state_transitions_get_last_id()
+    pub fn get_last_id<TTx: StateStoreReadTransaction>(
+        tx: &TTx,
+        shard: Shard,
+    ) -> Result<StateTransitionId, StorageError> {
+        tx.state_transitions_get_last_id(shard)
     }
 }
 
@@ -50,6 +54,10 @@ impl StateTransitionId {
 
     pub fn new(epoch: Epoch, shard: Shard, seq: u64) -> Self {
         Self { epoch, shard, seq }
+    }
+
+    pub fn initial(shard: Shard) -> Self {
+        Self::new(Epoch(1), shard, 0)
     }
 
     pub fn from_bytes(mut bytes: &[u8]) -> Option<Self> {
@@ -89,7 +97,7 @@ impl Display for StateTransitionId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "StateTransition(epoch = {}, shard = {}, seq = {})",
+            "StateTransition({}, {}, seq = {})",
             self.epoch(),
             self.shard(),
             self.seq()

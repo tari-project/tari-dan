@@ -290,7 +290,7 @@ pub trait StateStoreReadTransaction: Sized {
         end_epoch: Epoch,
     ) -> Result<Vec<StateTransition>, StorageError>;
 
-    fn state_transitions_get_last_id(&self) -> Result<StateTransitionId, StorageError>;
+    fn state_transitions_get_last_id(&self, shard: Shard) -> Result<StateTransitionId, StorageError>;
 
     fn state_tree_nodes_get(&self, shard: Shard, key: &NodeKey) -> Result<Node<Version>, StorageError>;
     fn state_tree_versions_get_latest(&self, shard: Shard) -> Result<Option<Version>, StorageError>;

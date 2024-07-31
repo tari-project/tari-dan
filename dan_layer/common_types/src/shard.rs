@@ -113,7 +113,7 @@ impl PartialEq<Shard> for u32 {
 
 impl Display for Shard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_u32())
+        write!(f, "Shard({})", self.as_u32())
     }
 }
 

@@ -359,6 +359,22 @@ create table state_tree_shard_versions
     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE shard_group_state_tree
+(
+    id       integer not NULL primary key AUTOINCREMENT,
+    epoch    bigint  not NULL,
+    key      text    not NULL,
+    node     text    not NULL,
+    is_stale boolean not null default '0'
+);
+
+-- Scoping by shard
+CREATE INDEX shard_group_state_tree_idx_shard_key on shard_group_state_tree (epoch) WHERE is_stale = false;
+-- Duplicate keys are not allowed
+CREATE UNIQUE INDEX shard_group_state_tree_uniq_idx_key on shard_group_state_tree (epoch, key) WHERE is_stale = false;
+-- filtering out or by is_stale is used in every query
+CREATE INDEX shard_group_state_tree_idx_is_stale on shard_group_state_tree (is_stale);
+
 -- One entry per shard
 CREATE UNIQUE INDEX state_tree_uniq_shard_versions_shard on state_tree_shard_versions (shard);
 
@@ -395,6 +411,8 @@ CREATE TABLE state_transitions
     created_at       timestamp                                 not NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (substate_address) REFERENCES substates (address)
 );
+CREATE UNIQUE INDEX state_transitions_shard_seq on state_transitions (shard, seq);
+CREATE INDEX state_transitions_epoch on state_transitions (epoch);
 
 -- Debug Triggers
 CREATE TABLE transaction_pool_history

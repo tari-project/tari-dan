@@ -151,35 +151,6 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         Ok(substate.into_substate())
     }
 
-    // pub fn calculate_jmt_diff_for_block(
-    //     &mut self,
-    //     block: &Block,
-    // ) -> Result<(FixedHash, StateHashTreeDiff), SubstateStoreError> {
-    //     let current_version = block.justify().block_height().as_u64();
-    //     let next_version = block.height().as_u64();
-    //
-    //     let pending = PendingStateTreeDiff::get_all_up_to_commit_block(
-    //         self.read_transaction(),
-    //         block.epoch(),
-    //         block.shard_group(),
-    //         block.justify().block_id(),
-    //     )?;
-    //
-    //     let changes = self.diff.iter().map(|ch| match ch {
-    //         SubstateChange::Up { id, substate, .. } => SubstateTreeChange::Up {
-    //             id: id.substate_id.clone(),
-    //             value_hash: hash_substate(substate.substate_value(), substate.version()),
-    //         },
-    //         SubstateChange::Down { id, .. } => SubstateTreeChange::Down {
-    //             id: id.substate_id.clone(),
-    //         },
-    //     });
-    //     let (state_root, state_tree_diff) =
-    //         calculate_state_merkle_diff(&self.store, current_version, next_version, pending, changes)?;
-    //
-    //     Ok((state_root, state_tree_diff))
-    // }
-
     pub fn try_lock_all<I: IntoIterator<Item = VersionedSubstateIdLockIntent>>(
         &mut self,
         transaction_id: TransactionId,
@@ -311,6 +282,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             // - it MUST NOT be locked as READ, WRITE or OUTPUT, unless
             // - if Same-Transaction OR Local-Only-Rules:
             //   - it MAY be locked as WRITE or READ
+            //   - it MUST NOT be locked as OUTPUT
             SubstateLockFlag::Output => {
                 if !same_transaction && !has_local_only_rules {
                     warn!(

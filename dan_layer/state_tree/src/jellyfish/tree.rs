@@ -86,6 +86,8 @@ use std::{
     marker::PhantomData,
 };
 
+use tari_dan_common_types::optional::Optional;
+
 use super::{
     store::TreeStoreReader,
     types::{
@@ -607,7 +609,11 @@ impl<'a, R: 'a + TreeStoreReader<P>, P: Clone> JellyfishMerkleTree<'a, R, P> {
     }
 
     pub fn get_root_hash(&self, version: Version) -> Result<Hash, JmtStorageError> {
-        self.get_root_node(version).map(|n| n.hash())
+        Ok(self
+            .get_root_node(version)
+            .map(|n| n.hash())
+            .optional()?
+            .unwrap_or(SPARSE_MERKLE_PLACEHOLDER_HASH))
     }
 
     pub fn get_leaf_count(&self, version: Version) -> Result<usize, JmtStorageError> {

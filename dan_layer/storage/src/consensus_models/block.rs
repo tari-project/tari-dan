@@ -939,11 +939,12 @@ impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "[{}, {}, {}, {} command(s)]",
+            "[{}, {}, {}, {} cmd(s), {}]",
             self.height(),
             self.epoch(),
+            self.shard_group(),
+            self.commands().len(),
             self.id(),
-            self.commands().len()
         )
     }
 }

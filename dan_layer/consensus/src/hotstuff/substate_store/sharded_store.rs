@@ -46,6 +46,10 @@ impl<'a, TTx: StateStoreWriteTransaction> ShardScopedTreeStoreWriter<'a, TTx> {
             .state_tree_shard_versions_set(self.shard, version)
             .map_err(|e| tari_state_tree::JmtStorageError::UnexpectedError(e.to_string()))
     }
+
+    pub fn transaction(&mut self) -> &mut TTx {
+        self.tx
+    }
 }
 
 impl<'a, TTx> TreeStoreReader<Version> for ShardScopedTreeStoreWriter<'a, TTx>

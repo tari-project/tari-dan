@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{optional::Optional, Epoch};
 use tari_dan_p2p::proto::rpc::SyncStateResponse;
 use tari_dan_storage::{
     consensus_models::{StateTransition, StateTransitionId},
@@ -43,7 +43,7 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
     pub async fn run(mut self) -> Result<(), ()> {
         let mut buffer = Vec::with_capacity(BATCH_SIZE);
         let mut current_state_transition_id = self.start_state_transition_id;
-        let mut counter = 0;
+        let mut counter = 0usize;
         loop {
             match self.fetch_next_batch(&mut buffer, current_state_transition_id) {
                 Ok(Some(last_state_transition_id)) => {
@@ -57,6 +57,7 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
                     // ))))
                     // .await?;
 
+                    info!(target: LOG_TARGET, "🌍sync complete ({}). {} update(s) sent.", current_state_transition_id, counter);
                     // Finished
                     return Ok(());
                 },
@@ -92,7 +93,9 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
     ) -> Result<Option<StateTransitionId>, StorageError> {
         self.store.with_read_tx(|tx| {
             let state_transitions =
-                StateTransition::get_n_after(tx, BATCH_SIZE, current_state_transition_id, self.current_epoch)?;
+                StateTransition::get_n_after(tx, BATCH_SIZE, current_state_transition_id, self.current_epoch)
+                    .optional()?
+                    .unwrap_or_default();
 
             let Some(last) = state_transitions.last() else {
                 return Ok(None);

@@ -45,6 +45,12 @@ impl<'a, S: TreeStoreReader<Version>, M: DbKeyMapper> StateTree<'a, S, M> {
         let (maybe_value, proof) = smt.get_with_proof_ext(key.as_ref(), version)?;
         Ok((maybe_value, proof))
     }
+
+    pub fn get_root_hash(&self, version: Version) -> Result<Hash, StateTreeError> {
+        let smt = JellyfishMerkleTree::new(self.store);
+        let root_hash = smt.get_root_hash(version)?;
+        Ok(root_hash)
+    }
 }
 
 impl<'a, S: TreeStore<Version>, M: DbKeyMapper> StateTree<'a, S, M> {

@@ -1354,7 +1354,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
 
         let seq = state_transitions::table
             .select(dsl::max(state_transitions::seq))
-            .filter(state_transitions::epoch.eq(substate.created_at_epoch.as_u64() as i64))
+            .filter(state_transitions::shard.eq(substate.created_by_shard.as_u32() as i32))
             .first::<Option<i64>>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_create",
@@ -1420,7 +1420,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
 
         let seq = state_transitions::table
             .select(dsl::max(state_transitions::seq))
-            .filter(state_transitions::epoch.eq(epoch.as_u64() as i64))
+            .filter(state_transitions::shard.eq(shard.as_u32() as i32))
             .first::<Option<i64>>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_create",
@@ -1428,6 +1428,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             })?;
         let next_seq = seq.map(|s| s + 1).unwrap_or(0);
 
+        let version = self.state_tree_versions_get_latest(shard)?;
         let values = (
             state_transitions::seq.eq(next_seq),
             state_transitions::epoch.eq(epoch.as_u64() as i64),
@@ -1436,7 +1437,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             state_transitions::substate_id.eq(versioned_substate_id.substate_id.to_string()),
             state_transitions::version.eq(versioned_substate_id.version as i32),
             state_transitions::transition.eq("DOWN"),
-            state_transitions::state_version.eq(destroyed_block_height.as_u64() as i64),
+            state_transitions::state_version.eq(version.unwrap_or(0) as i64),
         );
 
         diesel::insert_into(state_transitions::table)

@@ -16,6 +16,7 @@ use tari_state_tree::{
     JmtStorageError,
     SpreadPrefixStateTree,
     StagedTreeStore,
+    StateHashTreeDiff,
     StateTreeError,
     SubstateTreeChange,
     TreeStoreWriter,
@@ -29,7 +30,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::sharded_state_tree";
 pub struct ShardedStateTree<TTx> {
     tx: TTx,
     pending_diffs: HashMap<Shard, Vec<PendingStateTreeDiff>>,
-    current_tree_diffs: IndexMap<Shard, VersionedStateHashTreeDiff>,
+    sharded_tree_diffs: IndexMap<Shard, VersionedStateHashTreeDiff>,
 }
 
 impl<TTx> ShardedStateTree<TTx> {
@@ -37,12 +38,16 @@ impl<TTx> ShardedStateTree<TTx> {
         Self {
             tx,
             pending_diffs: HashMap::new(),
-            current_tree_diffs: IndexMap::new(),
+            sharded_tree_diffs: IndexMap::new(),
         }
     }
 
     pub fn with_pending_diffs(self, pending_diffs: HashMap<Shard, Vec<PendingStateTreeDiff>>) -> Self {
         Self { pending_diffs, ..self }
+    }
+
+    pub fn transaction(&self) -> &TTx {
+        &self.tx
     }
 
     pub fn into_transaction(self) -> TTx {
@@ -69,7 +74,7 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
     }
 
     pub fn into_versioned_tree_diffs(self) -> IndexMap<Shard, VersionedStateHashTreeDiff> {
-        self.current_tree_diffs
+        self.sharded_tree_diffs
     }
 
     pub fn put_substate_tree_changes(
@@ -104,7 +109,7 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
             debug!(target: LOG_TARGET, "v{next_version} contains {} tree change(s) for shard {shard}", changes.len());
             let state_root = state_tree.put_substate_changes(current_version, next_version, changes)?;
             state_roots.update(&state_root);
-            self.current_tree_diffs
+            self.sharded_tree_diffs
                 .insert(shard, VersionedStateHashTreeDiff::new(next_version, store.into_diff()));
         }
 
@@ -114,30 +119,40 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
 }
 
 impl<TTx: StateStoreWriteTransaction> ShardedStateTree<&mut TTx> {
-    pub fn commit_diff(&mut self, diffs: IndexMap<Shard, Vec<PendingStateTreeDiff>>) -> Result<(), StateTreeError> {
+    pub fn commit_diffs(&mut self, diffs: IndexMap<Shard, Vec<PendingStateTreeDiff>>) -> Result<(), StateTreeError> {
         for (shard, pending_diffs) in diffs {
             for pending_diff in pending_diffs {
                 let version = pending_diff.version;
                 let diff = pending_diff.diff;
-                let mut store = ShardScopedTreeStoreWriter::new(self.tx, shard);
-
-                for stale_tree_node in diff.stale_tree_nodes {
-                    debug!(
-                        "(shard={shard}) Recording stale tree node: {}",
-                        stale_tree_node.as_node_key()
-                    );
-                    store.record_stale_tree_node(stale_tree_node)?;
-                }
-
-                for (key, node) in diff.new_nodes {
-                    debug!("(shard={shard}) Inserting node: {}", key);
-                    store.insert_node(key, node)?;
-                }
-
-                store.set_version(version)?;
+                self.commit_diff(shard, version, diff)?;
             }
         }
 
+        Ok(())
+    }
+
+    pub fn commit_diff(
+        &mut self,
+        shard: Shard,
+        version: Version,
+        diff: StateHashTreeDiff,
+    ) -> Result<(), StateTreeError> {
+        let mut store = ShardScopedTreeStoreWriter::new(self.tx, shard);
+
+        for stale_tree_node in diff.stale_tree_nodes {
+            debug!(
+                "(shard={shard}) Recording stale tree node: {}",
+                stale_tree_node.as_node_key()
+            );
+            store.record_stale_tree_node(stale_tree_node)?;
+        }
+
+        for (key, node) in diff.new_nodes {
+            debug!("(shard={shard}) Inserting node: {}", key);
+            store.insert_node(key, node)?;
+        }
+
+        store.set_version(version)?;
         Ok(())
     }
 }

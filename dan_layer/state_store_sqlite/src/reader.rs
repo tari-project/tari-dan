@@ -3,6 +3,7 @@
 
 use std::{
     borrow::Borrow,
+    cmp,
     collections::{HashMap, HashSet},
     marker::PhantomData,
     ops::RangeInclusive,
@@ -678,8 +679,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         // TODO: This gets slower as the chain progresses.
         let block_ids = self.get_block_ids_between(&BlockId::zero(), from_block_id)?;
-
-        log::error!(target: LOG_TARGET, "Block_ids = {}", block_ids.join(", "));
 
         let execution = transaction_executions::table
             .filter(transaction_executions::transaction_id.eq(serialize_hex(tx_id)))
@@ -2017,25 +2016,29 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
     ) -> Result<Vec<StateTransition>, StorageError> {
         use crate::schema::{state_transitions, substates};
 
-        let start_id = state_transitions::table
-            .select(state_transitions::id)
-            .filter(state_transitions::epoch.eq(id.epoch().as_u64() as i64))
+        // Never return epoch 0 state transitions
+        let min_epoch = Some(id.epoch().as_u64()).filter(|e| *e > 0).unwrap_or(1) as i64;
+        let (start_id, seq) = state_transitions::table
+            .select((state_transitions::id, state_transitions::seq))
+            .filter(state_transitions::epoch.ge(min_epoch))
             .filter(state_transitions::shard.eq(id.shard().as_u32() as i32))
-            .filter(state_transitions::seq.eq(0i64))
-            .order_by(state_transitions::id.asc())
-            .first::<i32>(self.connection())
+            .order_by(state_transitions::seq.asc())
+            .first::<(i32, i64)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "state_transitions_get_n_after",
                 source: e,
             })?;
 
-        let start_id = start_id + (id.seq() as i32);
+        let offset = cmp::max(id.seq() as i64, seq);
+        let start_id =
+            start_id + i32::try_from(offset).expect("(likely invalid) seq no for transition is too large for SQLite");
 
         let transitions = state_transitions::table
             .left_join(substates::table.on(state_transitions::substate_address.eq(substates::address)))
             .select((state_transitions::all_columns, substates::all_columns.nullable()))
-            .filter(state_transitions::id.gt(start_id))
+            .filter(state_transitions::id.ge(start_id))
             .filter(state_transitions::epoch.lt(end_epoch.as_u64() as i64))
+            .filter(state_transitions::shard.eq(id.shard().as_u32() as i32))
             .limit(n as i64)
             .get_results::<(sql_models::StateTransition, Option<sql_models::SubstateRecord>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -2055,25 +2058,21 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .collect()
     }
 
-    fn state_transitions_get_last_id(&self) -> Result<StateTransitionId, StorageError> {
+    fn state_transitions_get_last_id(&self, shard: Shard) -> Result<StateTransitionId, StorageError> {
         use crate::schema::state_transitions;
 
-        let (seq, epoch, shard) = state_transitions::table
-            .select((
-                state_transitions::seq,
-                state_transitions::epoch,
-                state_transitions::shard,
-            ))
+        let (seq, epoch) = state_transitions::table
+            .select((state_transitions::seq, state_transitions::epoch))
+            .filter(state_transitions::shard.eq(shard.as_u32() as i32))
             .order_by(state_transitions::epoch.desc())
             .then_order_by(state_transitions::seq.desc())
-            .first::<(i64, i64, i32)>(self.connection())
+            .first::<(i64, i64)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "state_transitions_get_last_id",
                 source: e,
             })?;
 
         let epoch = Epoch(epoch as u64);
-        let shard = Shard::from(shard as u32);
         let seq = seq as u64;
 
         Ok(StateTransitionId::new(epoch, shard, seq))

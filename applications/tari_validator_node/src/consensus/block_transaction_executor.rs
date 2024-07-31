@@ -1,7 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use indexmap::IndexMap;
 use log::info;
@@ -13,10 +13,11 @@ use tari_dan_app_utilities::transaction_executor::TransactionExecutor;
 use tari_dan_common_types::{optional::Optional, Epoch};
 use tari_dan_engine::state_store::{memory::MemoryStateStore, new_memory_store, AtomicDb, StateWriter};
 use tari_dan_storage::{
-    consensus_models::{ExecutedTransaction, TransactionRecord},
+    consensus_models::{ExecutedTransaction, SubstateLockFlag, TransactionRecord, VersionedSubstateIdLockIntent},
     StateStore,
 };
 use tari_engine_types::{
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     substate::{Substate, SubstateId},
     virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates},
 };
@@ -138,10 +139,38 @@ where
         store: &PendingSubstateStore<TStateStore>,
         current_epoch: Epoch,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
-        let id: tari_transaction::TransactionId = *transaction.id();
+        let id = *transaction.id();
 
         // Get the latest input substates
-        let inputs = self.resolve_substates::<TStateStore>(&transaction, store)?;
+        let inputs = match self.resolve_substates::<TStateStore>(&transaction, store) {
+            Ok(inputs) => inputs,
+            Err(err) => {
+                // TODO: Hacky - if a transaction uses DOWNed/non-existent inputs we error here. This changes the hard
+                // error to a propose REJECT. So that we have involved shards, we use the inputs as resolved inputs and
+                // assume v0 if version is not provided.
+                let inputs = transaction
+                    .all_inputs_iter()
+                    .map(|input| VersionedSubstateId::new(input.substate_id, input.version.unwrap_or(0)))
+                    .map(|id| VersionedSubstateIdLockIntent::new(id, SubstateLockFlag::Write))
+                    .collect();
+                return Ok(ExecutedTransaction::new(
+                    transaction,
+                    ExecuteResult {
+                        finalize: FinalizeResult {
+                            transaction_hash: id.into_array().into(),
+                            events: vec![],
+                            logs: vec![],
+                            execution_results: vec![],
+                            result: TransactionResult::Reject(RejectReason::ExecutionFailure(err.to_string())),
+                            fee_receipt: Default::default(),
+                        },
+                    },
+                    inputs,
+                    vec![],
+                    Duration::from_secs(0),
+                ));
+            },
+        };
         info!(target: LOG_TARGET, "Transaction {} executing. Inputs: {:?}", id, inputs);
 
         // Create a memory db with all the input substates, needed for the transaction execution

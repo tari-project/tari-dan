@@ -240,7 +240,6 @@ message SyncStateRequest {
   // The shard in the current shard-epoch that is requested.
   // This will limit the state transitions returned to those that fall within this shard-epoch.
   uint64 current_epoch = 4;
-  uint32 current_shard_group = 5;
 }
 
 message SyncStateResponse {

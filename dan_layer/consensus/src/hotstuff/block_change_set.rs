@@ -63,6 +63,8 @@ impl ProposedBlockChangeSet {
         self.quorum_decision = None;
         self.block_diff = Vec::new();
         self.transaction_changes.clear();
+        self.state_tree_diffs.clear();
+        self.substate_locks.clear();
         self
     }
 

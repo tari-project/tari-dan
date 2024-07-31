@@ -195,7 +195,6 @@ where TConsensusSpec: ConsensusSpec
 
         // Store used for transactions that have inputs without specific versions.
         // It lives through the entire block so multiple transactions can be sequenced together in the same block
-        // let tree_store = ChainScopedTreeStore::new(block.epoch(), block.shard_group(), tx);
         let mut substate_store = PendingSubstateStore::new(tx, *block.parent(), self.config.num_preshards);
         let mut proposed_block_change_set = ProposedBlockChangeSet::new(block.as_leaf_block());
 
@@ -719,8 +718,7 @@ where TConsensusSpec: ConsensusSpec
                 block.total_leader_fee(),
                 total_leader_fee
             );
-            // TODO: investigate
-            // return Ok(proposed_block_change_set.no_vote());
+            return Ok(proposed_block_change_set.no_vote());
         }
 
         let pending = PendingStateTreeDiff::get_all_up_to_commit_block(tx, block.justify().block_id())?;
@@ -883,7 +881,7 @@ where TConsensusSpec: ConsensusSpec
         // NOTE: this must happen before we commit the diff because the state transitions use this version
         let pending = PendingStateTreeDiff::remove_by_block(tx, block.id())?;
         let mut state_tree = ShardedStateTree::new(tx);
-        state_tree.commit_diff(pending)?;
+        state_tree.commit_diffs(pending)?;
         let tx = state_tree.into_transaction();
 
         let local_diff = diff.into_filtered(local_committee_info);

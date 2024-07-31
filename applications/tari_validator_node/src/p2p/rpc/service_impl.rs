@@ -24,7 +24,7 @@ use std::convert::{TryFrom, TryInto};
 
 use log::*;
 use tari_bor::{decode_exact, encode};
-use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, PeerAddress, ShardGroup, SubstateAddress};
+use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, PeerAddress, SubstateAddress};
 use tari_dan_p2p::{
     proto,
     proto::rpc::{
@@ -371,21 +371,19 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
 
         let (sender, receiver) = mpsc::channel(10);
 
-        let last_state_transition_for_chain =
-            StateTransitionId::new(Epoch(req.start_epoch), Shard::from(req.start_shard), req.start_seq);
+        let start_epoch = Epoch(req.start_epoch);
+        let start_shard = Shard::from(req.start_shard);
+        let last_state_transition_for_chain = StateTransitionId::new(start_epoch, start_shard, req.start_seq);
 
-        // TODO: validate that we can provide the required sync data
-        let current_shard = ShardGroup::decode_from_u32(req.current_shard_group)
-            .ok_or_else(|| RpcStatus::bad_request("Invalid shard group"))?;
-        let current_epoch = Epoch(req.current_epoch);
-        info!(target: LOG_TARGET, "🌍peer initiated sync with this node ({current_epoch}, {current_shard})");
+        let end_epoch = Epoch(req.current_epoch);
+        info!(target: LOG_TARGET, "🌍peer initiated sync with this node ({}, {}, seq={}) to {}", start_epoch, start_shard, req.start_seq, end_epoch);
 
         task::spawn(
             StateSyncTask::new(
                 self.shard_state_store.clone(),
                 sender,
                 last_state_transition_for_chain,
-                current_epoch,
+                end_epoch,
             )
             .run(),
         );
