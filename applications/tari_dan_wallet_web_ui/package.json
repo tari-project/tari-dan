@@ -17,7 +17,7 @@
     "@tanstack/react-query": "^4.33.0",
     "@tanstack/react-query-devtools": "^4.33.0",
     "@tari-project/typescript-bindings": "^1.0.3",
-    "@tari-project/wallet_daemon_client": "^1.0.8",
+    "@tari-project/wallet_jrpc_client": "^1.0.8",
     "@walletconnect/core": "^2.13.3",
     "@walletconnect/web3wallet": "^1.12.3",
     "file-saver": "^2.0.5",
