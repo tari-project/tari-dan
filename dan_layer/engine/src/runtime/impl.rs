@@ -94,6 +94,7 @@ use tari_template_lib::{
         NonFungible,
         NonFungibleAddress,
         NotAuthorized,
+        ResourceAddress,
         VaultId,
         VaultRef,
     },
@@ -105,6 +106,7 @@ use super::{working_state::WorkingState, Runtime};
 use crate::{
     runtime::{
         engine_args::EngineArgs,
+        error::AssertError,
         locking::{LockError, LockedSubstate},
         scope::PushCallFrame,
         tracker::StateTracker,
@@ -2022,6 +2024,40 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     for proof_id in proofs {
                         state.drop_proof(proof_id)?;
                     }
+                    Ok(InvokeResult::unit())
+                })
+            },
+            WorkspaceAction::AssertBucketContains => {
+                let key: Vec<u8> = args.get(0)?;
+                let resource_address: ResourceAddress = args.get(1)?;
+                let min_amount: Amount = args.get(2)?;
+
+                // get the bucket from the workspace
+                let value = self.tracker.get_from_workspace(&key)?;
+                let bucket_id = value
+                    .bucket_ids()
+                    .first()
+                    .ok_or_else(|| RuntimeError::AssertError(AssertError::InvalidBucket))?;
+
+                self.tracker.read_with(|state| {
+                    let bucket = state.get_bucket(*bucket_id)?;
+
+                    // validate the bucket resource
+                    if *bucket.resource_address() != resource_address {
+                        return Err(RuntimeError::AssertError(AssertError::InvalidResource {
+                            expected: resource_address,
+                            got: *bucket.resource_address(),
+                        }));
+                    }
+
+                    // validate the bucket amount
+                    if bucket.amount() < min_amount {
+                        return Err(RuntimeError::AssertError(AssertError::InvalidAmount {
+                            expected: min_amount,
+                            got: bucket.amount(),
+                        }));
+                    }
+
                     Ok(InvokeResult::unit())
                 })
             },
