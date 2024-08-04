@@ -364,3 +364,40 @@ fn success_pay_fee_in_main_instructions() {
     let new_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
     assert_eq!(new_balance, orig_balance + Amount(500) - fees.total_fees_charged());
 }
+
+
+#[test]
+fn dangling_bucket_pay_fees() {
+    let mut test = TemplateTest::new(["tests/templates/state"]);
+
+    let (account, owner_token, private_key) = test.create_funded_account();
+    let orig_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
+
+    test.enable_fees();
+
+    let result = test.execute_and_commit_on_success(
+        Transaction::builder()
+            .fee_transaction_pay_from_component(account, Amount(500))
+            .call_method(account, "withdraw", args![
+                CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                Amount(10)
+            ])
+            .put_last_instruction_output_on_workspace("dangling_bucket")
+            .sign(&private_key)
+            .build(),
+        vec![owner_token],
+    );
+
+    // Check that the failure reason is actually the dangling bucket
+    let reason = result.expect_transaction_failure();
+    assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
+    assert!(reason.to_string().contains("dangling bucket"));
+    
+    test.disable_fees();
+
+    // Check the fee was still paid
+    let payment = result.finalize.fee_receipt;
+    let new_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
+    assert!(!payment.total_fees_paid().is_zero());
+    assert_eq!(orig_balance - new_balance, payment.total_fees_paid());
+}
