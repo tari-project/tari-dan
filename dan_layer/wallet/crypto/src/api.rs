@@ -159,11 +159,6 @@ fn generate_balance_proof(
     }
     let excess = RistrettoPublicKey::from_secret_key(&secret_excess);
     let (nonce, public_nonce) = RistrettoPublicKey::random_keypair(&mut OsRng);
-    const LOG_TARGET: &str = "tari::dan::wallet::confidential::withdraw";
-    log::error!(target: LOG_TARGET, "🐞W public_excess: {excess}");
-    log::error!(target: LOG_TARGET, "🐞W public_nonce: {}", public_nonce);
-    log::error!(target: LOG_TARGET, "🐞W input_revealed_amount: {input_revealed_amount}");
-    log::error!(target: LOG_TARGET, "🐞W output_revealed_amount: {output_reveal_amount}");
     let message =
         challenges::confidential_withdraw64(&excess, &public_nonce, input_revealed_amount, output_reveal_amount);
 

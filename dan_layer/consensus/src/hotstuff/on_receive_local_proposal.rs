@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_common::configuration::Network;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
     optional::Optional,
@@ -33,6 +32,7 @@ use crate::{
         error::HotStuffError,
         on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
         pacemaker_handle::PaceMakerHandle,
+        HotstuffConfig,
         HotstuffEvent,
         ProposalValidationError,
     },
@@ -44,7 +44,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_local_propo
 
 pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     local_validator_addr: TConsensusSpec::Addr,
-    network: Network,
+    config: HotstuffConfig,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -71,12 +71,12 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
         transaction_executor: TConsensusSpec::TransactionExecutor,
-        network: Network,
+        config: HotstuffConfig,
         hooks: TConsensusSpec::Hooks,
     ) -> Self {
         Self {
             local_validator_addr: local_validator_addr.clone(),
-            network,
+            config: config.clone(),
             store: store.clone(),
             epoch_manager,
             leader_strategy,
@@ -88,6 +88,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             hooks,
             on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock::new(
                 local_validator_addr,
+                config,
                 store,
                 transaction_pool,
                 tx_events,
@@ -164,8 +165,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 )?;
                 Ok::<_, HotStuffError>((decision, valid_block))
             })
-            .await
-            .unwrap()?;
+            .await??;
 
             self.hooks
                 .on_local_block_decide(&valid_block, block_decision.quorum_decision);
@@ -208,12 +208,13 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
                     // If we're registered for the next epoch. Create a new genesis block.
                     if let Some(vn) = self.epoch_manager.get_our_validator_node(next_epoch).await.optional()? {
-                        // TODO: Change VN db to include the shard in the ValidatorNode struct.
+                        // TODO: Change VN db to include the shard group in the ValidatorNode struct.
                         let num_committees = self.epoch_manager.get_num_committees(next_epoch).await?;
-                        let next_shard = vn.shard_key.to_shard(num_committees);
+                        let next_shard_group = vn.shard_key.to_shard_group(self.config.num_preshards, num_committees);
                         self.store.with_write_tx(|tx| {
-                            let genesis = Block::genesis(self.network, next_epoch, next_shard);
+                            let genesis = Block::genesis(self.config.network, next_epoch, next_shard_group);
                             info!(target: LOG_TARGET, "⭐️ Creating new genesis block {genesis}");
+                            genesis.justify().insert(tx)?;
                             genesis.insert(tx)?;
                             // We'll propose using the new genesis as parent
                             genesis.as_locked_block().set(tx)?;
@@ -325,7 +326,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .epoch_manager
             .get_validator_node(block.epoch(), &self.local_validator_addr)
             .await?;
-        let leaf_hash = vn.get_node_hash(self.network);
+        let leaf_hash = vn.get_node_hash(self.config.network);
 
         let signature = self.vote_signing_service.sign_vote(&leaf_hash, block.id(), &decision);
 

@@ -1,12 +1,9 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-//   Copyright 2024 The Tari Project
-//   SPDX-License-Identifier: BSD-3-Clause
-//   Copyright 2024 The Tari Project
-//   SPDX-License-Identifier: BSD-3-Clause
-
 use std::collections::{HashMap, VecDeque};
+
+use log::debug;
 
 use crate::{
     JmtStorageError,
@@ -18,6 +15,8 @@ use crate::{
     TreeStoreWriter,
     Version,
 };
+
+const LOG_TARGET: &str = "tari::dan::consensus::sharded_state_tree";
 
 pub struct StagedTreeStore<'s, S> {
     readable_store: &'s S,
@@ -36,9 +35,18 @@ impl<'s, S: TreeStoreReader<Version>> StagedTreeStore<'s, S> {
         }
     }
 
-    pub fn apply_ordered_diffs<I: IntoIterator<Item = StateHashTreeDiff>>(&mut self, diffs: I) {
-        for (key, node) in diffs.into_iter().flat_map(|diff| diff.new_nodes) {
+    pub fn apply_pending_diff(&mut self, diff: StateHashTreeDiff) {
+        self.preceding_pending_state.reserve(diff.new_nodes.len());
+        for (key, node) in diff.new_nodes {
+            debug!(target: LOG_TARGET, "PENDING INSERT: node {}", key);
             self.preceding_pending_state.insert(key, node);
+        }
+
+        for stale in diff.stale_tree_nodes {
+            debug!(target: LOG_TARGET, "PENDING DELETE: node {}", stale.as_node_key());
+            if self.preceding_pending_state.remove(stale.as_node_key()).is_some() {
+                debug!(target: LOG_TARGET, "PENDING DELETE: node {} removed", stale.as_node_key());
+            }
         }
     }
 
@@ -65,7 +73,9 @@ impl<'s, S: TreeStoreReader<Version>> TreeStoreReader<Version> for StagedTreeSto
 
 impl<'s, S> TreeStoreWriter<Version> for StagedTreeStore<'s, S> {
     fn insert_node(&mut self, key: NodeKey, node: Node<Version>) -> Result<(), JmtStorageError> {
-        self.new_tree_nodes.insert(key, node);
+        if self.new_tree_nodes.insert(key.clone(), node).is_some() {
+            return Err(JmtStorageError::Conflict(key));
+        }
         Ok(())
     }
 

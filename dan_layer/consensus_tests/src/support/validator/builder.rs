@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::time::Duration;
+
 use tari_common::configuration::Network;
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_consensus::{
@@ -8,7 +10,7 @@ use tari_consensus::{
     traits::hooks::NoopHooks,
 };
 use tari_crypto::keys::PublicKey as _;
-use tari_dan_common_types::{shard::Shard, SubstateAddress};
+use tari_dan_common_types::{ShardGroup, SubstateAddress};
 use tari_dan_storage::consensus_models::TransactionPool;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -26,6 +28,7 @@ use crate::support::{
     TestConsensusSpec,
     Validator,
     ValidatorChannels,
+    TEST_NUM_PRESHARDS,
 };
 
 pub struct ValidatorBuilder {
@@ -33,9 +36,10 @@ pub struct ValidatorBuilder {
     pub secret_key: PrivateKey,
     pub public_key: PublicKey,
     pub shard_address: SubstateAddress,
-    pub shard: Shard,
+    pub shard_group: ShardGroup,
     pub sql_url: String,
     pub leader_strategy: RoundRobinLeaderStrategy,
+    pub num_committees: u32,
     pub epoch_manager: Option<TestEpochManager>,
     pub transaction_executions: TestTransactionExecutionsStore,
 }
@@ -47,7 +51,8 @@ impl ValidatorBuilder {
             secret_key: PrivateKey::default(),
             public_key: PublicKey::default(),
             shard_address: SubstateAddress::zero(),
-            shard: Shard::from(0),
+            num_committees: 0,
+            shard_group: ShardGroup::all_shards(TEST_NUM_PRESHARDS),
             sql_url: ":memory".to_string(),
             leader_strategy: RoundRobinLeaderStrategy::new(),
             epoch_manager: None,
@@ -62,8 +67,8 @@ impl ValidatorBuilder {
         self
     }
 
-    pub fn with_bucket(&mut self, bucket: Shard) -> &mut Self {
-        self.shard = bucket;
+    pub fn with_shard_group(&mut self, shard_group: ShardGroup) -> &mut Self {
+        self.shard_group = shard_group;
         self
     }
 
@@ -84,6 +89,11 @@ impl ValidatorBuilder {
 
     pub fn with_leader_strategy(&mut self, leader_strategy: RoundRobinLeaderStrategy) -> &mut Self {
         self.leader_strategy = leader_strategy;
+        self
+    }
+
+    pub fn with_num_committees(&mut self, num_committees: u32) -> &mut Self {
+        self.num_committees = num_committees;
         self
     }
 
@@ -116,8 +126,14 @@ impl ValidatorBuilder {
         let transaction_executor = TestBlockTransactionProcessor::new(self.transaction_executions.clone());
 
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
+            HotstuffConfig {
+                num_preshards: TEST_NUM_PRESHARDS,
+                max_base_layer_blocks_ahead: 5,
+                max_base_layer_blocks_behind: 5,
+                network: Network::LocalNet,
+                pacemaker_max_base_time: Duration::from_secs(10),
+            },
             self.address.clone(),
-            Network::LocalNet,
             inbound_messaging,
             outbound_messaging,
             rx_new_transactions,
@@ -130,11 +146,6 @@ impl ValidatorBuilder {
             tx_events.clone(),
             NoopHooks,
             shutdown_signal.clone(),
-            HotstuffConfig {
-                max_base_layer_blocks_ahead: 5,
-                max_base_layer_blocks_behind: 5,
-                pacemaker_max_base_time: std::time::Duration::from_secs(10),
-            },
         );
 
         let (tx_current_state, rx_current_state) = watch::channel(ConsensusCurrentState::default());
@@ -150,7 +161,8 @@ impl ValidatorBuilder {
 
         let channels = ValidatorChannels {
             address: self.address.clone(),
-            shard: self.shard,
+            shard_group: self.shard_group,
+            num_committees: self.num_committees,
             state_store: store.clone(),
             tx_new_transactions,
             tx_hs_message,
@@ -161,7 +173,8 @@ impl ValidatorBuilder {
         let validator = Validator {
             address: self.address.clone(),
             shard_address: self.shard_address,
-            shard: self.shard,
+            shard_group: self.shard_group,
+            num_committees: self.num_committees,
             transaction_executions: self.transaction_executions.clone(),
             state_store: store,
             epoch_manager,

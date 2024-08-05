@@ -20,10 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, SubstateAddress};
+use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, ShardGroup, SubstateAddress};
 
 use crate::global::{models::ValidatorNode, GlobalDbAdapter};
 
@@ -69,14 +69,14 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
-    pub fn count_in_bucket(
+    pub fn count_in_shard_group(
         &mut self,
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
-        bucket: Shard,
+        shard_group: ShardGroup,
     ) -> Result<u64, TGlobalDbAdapter::Error> {
         self.backend
-            .validator_nodes_count_for_bucket(self.tx, epoch, sidechain_id, bucket)
+            .validator_nodes_count_for_shard_group(self.tx, epoch, sidechain_id, shard_group)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
@@ -112,32 +112,21 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
-    pub fn get_committees_for_shards(
+    pub fn get_committees_for_shard_group(
         &mut self,
         epoch: Epoch,
-        shards: HashSet<Shard>,
+        shard_group: ShardGroup,
     ) -> Result<HashMap<Shard, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
         self.backend
-            .validator_nodes_get_for_shards(self.tx, epoch, shards)
+            .validator_nodes_get_for_shard_group(self.tx, epoch, shard_group)
             .map_err(TGlobalDbAdapter::Error::into)
-    }
-
-    pub fn get_committee_for_shard(
-        &mut self,
-        epoch: Epoch,
-        shard: Shard,
-    ) -> Result<Option<Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
-        let mut buckets = HashSet::new();
-        buckets.insert(shard);
-        let res = self.get_committees_for_shards(epoch, buckets)?;
-        Ok(res.get(&shard).cloned())
     }
 
     pub fn get_committees(
         &mut self,
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
-    ) -> Result<HashMap<Shard, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
+    ) -> Result<HashMap<ShardGroup, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
         self.backend
             .validator_nodes_get_committees_for_epoch(self.tx, epoch, sidechain_id)
             .map_err(TGlobalDbAdapter::Error::into)
@@ -146,12 +135,12 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
     pub fn set_committee_shard(
         &mut self,
         substate_address: SubstateAddress,
-        shard: Shard,
+        shard_group: ShardGroup,
         sidechain_id: Option<&PublicKey>,
         epoch: Epoch,
     ) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend
-            .validator_nodes_set_committee_shard(self.tx, substate_address, shard, sidechain_id, epoch)
+            .validator_nodes_set_committee_shard(self.tx, substate_address, shard_group, sidechain_id, epoch)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 }

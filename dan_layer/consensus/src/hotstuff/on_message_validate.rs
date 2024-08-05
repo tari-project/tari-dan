@@ -4,7 +4,6 @@
 use std::collections::HashSet;
 
 use log::*;
-use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
@@ -28,7 +27,6 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_message_validate";
 
 pub struct OnMessageValidate<TConsensusSpec: ConsensusSpec> {
     local_validator_addr: TConsensusSpec::Addr,
-    network: Network,
     config: HotstuffConfig,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
@@ -44,7 +42,6 @@ pub struct OnMessageValidate<TConsensusSpec: ConsensusSpec> {
 impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
     pub fn new(
         local_validator_addr: TConsensusSpec::Addr,
-        network: Network,
         config: HotstuffConfig,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
@@ -55,7 +52,6 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
     ) -> Self {
         Self {
             local_validator_addr,
-            network,
             config,
             store,
             epoch_manager,
@@ -207,7 +203,6 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
     async fn check_proposal(&self, block: &Block) -> Result<(), HotStuffError> {
         block_validations::check_proposal::<TConsensusSpec>(
             block,
-            self.network,
             &self.epoch_manager,
             &self.vote_signing_service,
             &self.leader_strategy,

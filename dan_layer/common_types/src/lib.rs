@@ -13,9 +13,11 @@ pub mod hashing;
 pub mod optional;
 
 mod node_height;
-pub mod shard;
 pub use node_height::NodeHeight;
 
+pub mod shard;
+mod shard_group;
+pub use shard_group::*;
 mod validator_metadata;
 pub use validator_metadata::{vn_node_hash, ValidatorMetadata};
 
@@ -31,6 +33,8 @@ pub mod substate_type;
 
 mod peer_address;
 pub use peer_address::*;
+mod num_preshards;
+pub use num_preshards::*;
 pub mod uint;
 
 pub use tari_engine_types::serde_with;

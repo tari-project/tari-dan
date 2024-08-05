@@ -24,7 +24,7 @@ pub enum EpochManagerError {
     SqlLiteStorageError(anyhow::Error),
     #[error("No validator nodes found for current shard key")]
     ValidatorNodesNotFound,
-    #[error("No committee VNs found for shard {substate_address} and epoch {epoch}")]
+    #[error("No committee VNs found for address {substate_address} and epoch {epoch}")]
     NoCommitteeVns {
         substate_address: SubstateAddress,
         epoch: Epoch,

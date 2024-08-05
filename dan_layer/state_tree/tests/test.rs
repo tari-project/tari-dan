@@ -93,6 +93,18 @@ fn hash_computed_consistently_after_adding_higher_tier_sibling() {
 }
 
 #[test]
+fn hash_allows_putting_in_same_version() {
+    let mut tester_1 = HashTreeTester::new_empty();
+    tester_1.put_substate_changes(vec![change(1, Some(30))]);
+    tester_1.put_substate_changes(vec![change(2, Some(31))]);
+    // Append another change to the same version
+    let hash_1 = tester_1.put_changes_at_version(vec![change(3, Some(32))]);
+    let mut tester_2 = HashTreeTester::new_empty();
+    let hash_2 = tester_2.put_substate_changes(vec![change(1, Some(30)), change(2, Some(31)), change(3, Some(32))]);
+    assert_eq!(hash_1, hash_2);
+}
+
+#[test]
 fn hash_differs_when_states_only_differ_by_node_key() {
     let mut tester_1 = HashTreeTester::new_empty();
     let hash_1 = tester_1.put_substate_changes(vec![change(1, Some(30))]);

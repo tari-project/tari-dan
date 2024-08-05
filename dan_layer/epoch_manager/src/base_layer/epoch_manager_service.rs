@@ -240,9 +240,15 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
             EpochManagerRequest::GetNumCommittees { epoch, reply } => {
                 handle(reply, self.inner.get_num_committees(epoch), context)
             },
-            EpochManagerRequest::GetCommitteesForShards { epoch, shards, reply } => {
-                handle(reply, self.inner.get_committees_for_shards(epoch, shards), context)
-            },
+            EpochManagerRequest::GetCommitteesForShardGroup {
+                epoch,
+                shard_group,
+                reply,
+            } => handle(
+                reply,
+                self.inner.get_committees_for_shard_group(epoch, shard_group),
+                context,
+            ),
             EpochManagerRequest::GetFeeClaimPublicKey { reply } => {
                 handle(reply, self.inner.get_fee_claim_public_key(), context)
             },

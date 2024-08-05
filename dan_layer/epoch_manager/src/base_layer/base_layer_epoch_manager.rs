@@ -20,12 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    cmp,
-    collections::{HashMap, HashSet},
-    mem,
-    num::NonZeroU32,
-};
+use std::{cmp, collections::HashMap, mem, num::NonZeroU32};
 
 use log::*;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
@@ -38,6 +33,7 @@ use tari_dan_common_types::{
     DerivableFromPublicKey,
     Epoch,
     NodeAddressable,
+    ShardGroup,
     SubstateAddress,
 };
 use tari_dan_storage::global::{models::ValidatorNode, DbBaseLayerBlockInfo, DbEpoch, GlobalDb, MetadataKey};
@@ -146,7 +142,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         for vn in &vns {
             validator_nodes.set_committee_shard(
                 vn.shard_key,
-                vn.shard_key.to_shard(num_committees),
+                vn.shard_key.to_shard_group(self.config.num_preshards, num_committees),
                 self.config.validator_node_sidechain_id.as_ref(),
                 epoch,
             )?;
@@ -419,7 +415,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         epoch.as_u64() >= current_epoch.as_u64().saturating_sub(10) && epoch.as_u64() <= current_epoch.as_u64()
     }
 
-    pub fn get_committees(&self, epoch: Epoch) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
+    pub fn get_committees(&self, epoch: Epoch) -> Result<HashMap<ShardGroup, Committee<TAddr>>, EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
         Ok(validator_node_db.get_committees(epoch, self.config.validator_node_sidechain_id.as_ref())?)
@@ -444,32 +440,38 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         epoch: Epoch,
         substate_address: SubstateAddress,
     ) -> Result<Vec<ValidatorNode<TAddr>>, EpochManagerError> {
-        // retrieve the validator nodes for this epoch from database, sorted by shard_key
-        let vns = self.get_validator_nodes_per_epoch(epoch)?;
-        if vns.is_empty() {
+        let num_vns = self.get_total_validator_count(epoch)?;
+        if num_vns == 0 {
             return Err(EpochManagerError::NoCommitteeVns {
                 substate_address,
                 epoch,
             });
         }
 
-        let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
+        let num_committees = calculate_num_committees(num_vns, self.config.committee_size);
         if num_committees == 1 {
-            return Ok(vns);
+            // retrieve the validator nodes for this epoch from database, sorted by shard_key
+            return self.get_validator_nodes_per_epoch(epoch);
         }
 
         // A shard a equal slice of the shard space that a validator fits into
-        let shard = substate_address.to_shard(num_committees);
+        let shard_group = substate_address.to_shard_group(self.config.num_preshards, num_committees);
 
-        let mut shards = HashSet::new();
-        shards.insert(shard);
-        let selected = self.get_committees_for_shards(epoch, shards)?;
-        let shard_vns = selected.get(&shard).map(|c| c.members.clone()).unwrap_or_default();
+        // TODO(perf): fetch full validator node records for the shard group in single query (current O(n + 1) queries)
+        let committees = self.get_committees_for_shard_group(epoch, shard_group)?;
 
         let mut res = vec![];
-        for (_, pub_key) in shard_vns {
-            if let Some(vn) = vns.iter().find(|vn| vn.public_key == pub_key) {
-                res.push(vn.clone());
+        for (_, committee) in committees {
+            for pub_key in committee.public_keys() {
+                let vn = self.get_validator_node_by_public_key(epoch, pub_key)?.ok_or_else(|| {
+                    EpochManagerError::ValidatorNodeNotRegistered {
+                        address: TAddr::try_from_public_key(pub_key)
+                            .map(|a| a.to_string())
+                            .unwrap_or_else(|| pub_key.to_string()),
+                        epoch,
+                    }
+                })?;
+                res.push(vn);
             }
         }
         Ok(res)
@@ -557,12 +559,12 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     }
 
     pub fn get_total_validator_count(&self, epoch: Epoch) -> Result<u64, EpochManagerError> {
-        self.get_validator_nodes_per_epoch(epoch)?
-            .len()
-            .try_into()
-            .map_err(|_| EpochManagerError::IntegerOverflow {
-                func: "get_total_validator_count",
-            })
+        let mut tx = self.global_db.create_transaction()?;
+        let db_vns = self
+            .global_db
+            .validator_nodes(&mut tx)
+            .count(epoch, self.config.validator_node_sidechain_id.as_ref())?;
+        Ok(db_vns)
     }
 
     pub fn get_num_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError> {
@@ -578,15 +580,23 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         substate_address: SubstateAddress,
     ) -> Result<CommitteeInfo, EpochManagerError> {
         let num_committees = self.get_number_of_committees(epoch)?;
-        let shard = substate_address.to_shard(num_committees);
+        let shard_group = substate_address.to_shard_group(self.config.num_preshards, num_committees);
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
-        let num_validators =
-            validator_node_db.count_in_bucket(epoch, self.config.validator_node_sidechain_id.as_ref(), shard)?;
+        let num_validators = validator_node_db.count_in_shard_group(
+            epoch,
+            self.config.validator_node_sidechain_id.as_ref(),
+            shard_group,
+        )?;
         let num_validators = u32::try_from(num_validators).map_err(|_| EpochManagerError::IntegerOverflow {
             func: "get_committee_shard",
         })?;
-        Ok(CommitteeInfo::new(num_committees, num_validators, shard))
+        Ok(CommitteeInfo::new(
+            self.config.num_preshards,
+            num_validators,
+            num_committees,
+            shard_group,
+        ))
     }
 
     pub fn get_local_committee_info(&self, epoch: Epoch) -> Result<CommitteeInfo, EpochManagerError> {
@@ -599,14 +609,14 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         self.get_committee_info_for_substate(epoch, vn.shard_key)
     }
 
-    pub(crate) fn get_committees_for_shards(
+    pub(crate) fn get_committees_for_shard_group(
         &self,
         epoch: Epoch,
-        shards: HashSet<Shard>,
+        shard_group: ShardGroup,
     ) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
-        let committees = validator_node_db.get_committees_for_shards(epoch, shards)?;
+        let committees = validator_node_db.get_committees_for_shard_group(epoch, shard_group)?;
         Ok(committees)
     }
 

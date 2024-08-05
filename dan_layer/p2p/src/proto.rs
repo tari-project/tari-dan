@@ -34,6 +34,7 @@ pub mod network {
 }
 
 pub mod rpc {
+    #![allow(clippy::large_enum_variant)]
     include!(concat!(env!("OUT_DIR"), "/tari.dan.rpc.rs"));
 }
 

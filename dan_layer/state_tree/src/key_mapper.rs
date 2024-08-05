@@ -13,7 +13,7 @@ pub struct SpreadPrefixKeyMapper;
 
 impl DbKeyMapper for SpreadPrefixKeyMapper {
     fn map_to_leaf_key(id: &SubstateId) -> LeafKey {
-        let hash = crate::jellyfish::hash(id);
+        let hash = crate::jellyfish::jmt_node_hash(id);
         LeafKey::new(hash.to_vec())
     }
 }

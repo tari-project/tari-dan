@@ -8,7 +8,6 @@ use std::{
 
 use indexmap::IndexMap;
 use log::*;
-use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_dan_common_types::{
@@ -46,9 +45,10 @@ use tari_transaction::TransactionId;
 
 use crate::{
     hotstuff::{
-        calculate_state_merkle_diff,
+        calculate_state_merkle_root,
         error::HotStuffError,
-        substate_store::{ChainScopedTreeStore, PendingSubstateStore},
+        substate_store::PendingSubstateStore,
+        HotstuffConfig,
         EXHAUST_DIVISOR,
     },
     messages::{HotstuffMessage, ProposalMessage},
@@ -64,7 +64,7 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_local_propose";
 
 pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
-    network: Network,
+    config: HotstuffConfig,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
@@ -77,7 +77,7 @@ impl<TConsensusSpec> OnPropose<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
-        network: Network,
+        config: HotstuffConfig,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
@@ -86,7 +86,7 @@ where TConsensusSpec: ConsensusSpec
         outbound_messaging: TConsensusSpec::OutboundMessaging,
     ) -> Self {
         Self {
-            network,
+            config,
             store,
             epoch_manager,
             transaction_pool,
@@ -175,7 +175,7 @@ where TConsensusSpec: ConsensusSpec
                 // TODO: This is a hacky workaround, if the executed transaction has no shards after execution, we
                 // remove it from the pool so that it does not get proposed again. Ideally we should be
                 // able to catch this in transaction validation and propose ABORT.
-                if local_committee_info.count_distinct_shards(executed.involved_addresses_iter()) == 0 {
+                if local_committee_info.count_distinct_shard_groups(executed.involved_addresses_iter()) == 0 {
                     self.transaction_pool.remove(tx, *executed.id())?;
                     executed
                         .set_abort("Transaction has no involved shards after execution")
@@ -242,6 +242,7 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<ExecutedTransaction, HotStuffError> {
         let transaction = TransactionRecord::get(store.read_transaction(), transaction_id)?;
 
+        // TODO: check the failure cases for this. Some failures should not cause consensus to fail
         let executed = self
             .transaction_executor
             .execute(transaction.into_transaction(), store, current_epoch)
@@ -276,10 +277,10 @@ where TConsensusSpec: ConsensusSpec
             executed_transactions.insert(*executed.id(), executed);
         }
 
-        let num_involved_shards =
-            local_committee_info.count_distinct_shards(tx_rec.evidence().substate_addresses_iter());
+        let num_involved_shard_groups =
+            local_committee_info.count_distinct_shard_groups(tx_rec.evidence().substate_addresses_iter());
 
-        if num_involved_shards == 0 {
+        if num_involved_shard_groups == 0 {
             warn!(
                 target: LOG_TARGET,
                 "Transaction {} has no involved shards, skipping...",
@@ -291,7 +292,7 @@ where TConsensusSpec: ConsensusSpec
 
         // If the transaction is local only, propose LocalOnly. If the transaction is not new, it must have been
         // previously prepared in a multi-shard command (TBD if that a valid thing to do).
-        if num_involved_shards == 1 && !tx_rec.current_stage().is_new() {
+        if num_involved_shard_groups == 1 && !tx_rec.current_stage().is_new() {
             warn!(
                 target: LOG_TARGET,
                 "Transaction {} is local only but was not previously proposed as such. It is in stage {}",
@@ -301,13 +302,13 @@ where TConsensusSpec: ConsensusSpec
         }
 
         // LOCAL-ONLY
-        if num_involved_shards == 1 && tx_rec.current_stage().is_new() {
+        if num_involved_shard_groups == 1 && tx_rec.current_stage().is_new() {
             info!(
                 target: LOG_TARGET,
                 "🏠️ Transaction {} is local only, proposing LocalOnly",
                 tx_rec.transaction_id(),
             );
-            let involved = NonZeroU64::new(num_involved_shards as u64).expect("involved is 1");
+            let involved = NonZeroU64::new(num_involved_shard_groups as u64).expect("involved is 1");
             let leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);
             let tx_atom = tx_rec.get_final_transaction_atom(leader_fee);
             if tx_atom.decision.is_commit() {
@@ -397,7 +398,7 @@ where TConsensusSpec: ConsensusSpec
             // prepared. We can now propose to Accept it. We also propose the decision change which everyone
             // should agree with if they received the same foreign LocalPrepare.
             TransactionPoolStage::LocalPrepared => {
-                let involved = NonZeroU64::new(num_involved_shards as u64).ok_or_else(|| {
+                let involved = NonZeroU64::new(num_involved_shard_groups as u64).ok_or_else(|| {
                     HotStuffError::InvariantError(format!(
                         "Number of involved shards is zero for transaction {}",
                         tx_rec.transaction_id(),
@@ -461,7 +462,6 @@ where TConsensusSpec: ConsensusSpec
         } else {
             self.transaction_pool.get_batch_for_next_block(tx, TARGET_BLOCK_SIZE)?
         };
-        let current_version = high_qc.block_height().as_u64();
         let next_height = parent_block.height() + NodeHeight(1);
 
         let mut total_leader_fee = 0;
@@ -477,7 +477,7 @@ where TConsensusSpec: ConsensusSpec
                     foreign_proposal.base_layer_block_height <= base_layer_block_height &&
                         // If the foreign proposal is already pending, don't propose it again
                         !pending_proposals.iter().any(|pending_proposal| {
-                            pending_proposal.shard == foreign_proposal.shard &&
+                            pending_proposal.shard_group == foreign_proposal.shard_group &&
                                 pending_proposal.block_id == foreign_proposal.block_id
                         })
                 })
@@ -489,8 +489,7 @@ where TConsensusSpec: ConsensusSpec
         };
 
         // batch is empty for is_empty, is_epoch_end and is_epoch_start blocks
-        let tree_store = ChainScopedTreeStore::new(epoch, local_committee_info.shard(), tx);
-        let mut substate_store = PendingSubstateStore::new(*parent_block.block_id(), tree_store);
+        let mut substate_store = PendingSubstateStore::new(tx, *parent_block.block_id(), self.config.num_preshards);
         let mut executed_transactions = HashMap::new();
         for transaction in batch {
             if let Some(command) = self.transaction_pool_record_to_command(
@@ -516,15 +515,13 @@ where TConsensusSpec: ConsensusSpec
             commands.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
         );
 
-        let pending_tree_diffs =
-            PendingStateTreeDiff::get_all_up_to_commit_block(tx, high_qc.epoch(), high_qc.shard(), high_qc.block_id())?;
-        let store = ChainScopedTreeStore::new(epoch, local_committee_info.shard(), tx);
-        let (state_root, _) = calculate_state_merkle_diff(
-            &store,
-            current_version,
-            next_height.as_u64(),
+        let pending_tree_diffs = PendingStateTreeDiff::get_all_up_to_commit_block(tx, high_qc.block_id())?;
+
+        let (state_root, _) = calculate_state_merkle_root(
+            tx,
+            local_committee_info.shard_group(),
             pending_tree_diffs,
-            substate_store.diff().iter().map(|ch| ch.into()),
+            substate_store.diff(),
         )?;
 
         let non_local_shards = get_non_local_shards(substate_store.diff(), local_committee_info);
@@ -539,12 +536,12 @@ where TConsensusSpec: ConsensusSpec
         foreign_indexes.sort_keys();
 
         let mut next_block = Block::new(
-            self.network,
+            self.config.network,
             *parent_block.block_id(),
             high_qc,
             next_height,
             epoch,
-            local_committee_info.shard(),
+            local_committee_info.shard_group(),
             proposed_by,
             commands,
             state_root,
@@ -568,8 +565,8 @@ pub fn get_non_local_shards(diff: &[SubstateChange], local_committee_info: &Comm
         .map(|ch| {
             ch.versioned_substate_id()
                 .to_substate_address()
-                .to_shard(local_committee_info.num_committees())
+                .to_shard(local_committee_info.num_shards())
         })
-        .filter(|shard| *shard != local_committee_info.shard())
+        .filter(|shard| local_committee_info.shard_group().contains(shard))
         .collect()
 }

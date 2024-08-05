@@ -8,7 +8,7 @@ use tari_engine_types::substate::SubstateId;
 
 use crate::{
     error::StateTreeError,
-    jellyfish::{Hash, JellyfishMerkleTree, LeafKey, SparseMerkleProofExt, TreeStore, Version},
+    jellyfish::{Hash, JellyfishMerkleTree, SparseMerkleProofExt, TreeStore, Version},
     key_mapper::{DbKeyMapper, SpreadPrefixKeyMapper},
     Node,
     NodeKey,
@@ -23,11 +23,6 @@ pub type SpreadPrefixStateTree<'a, S> = StateTree<'a, S, SpreadPrefixKeyMapper>;
 pub struct StateTree<'a, S, M> {
     store: &'a mut S,
     _mapper: PhantomData<M>,
-}
-
-struct LeafChange {
-    key: LeafKey,
-    new_payload: Option<(Hash, Version)>,
 }
 
 impl<'a, S, M> StateTree<'a, S, M> {
@@ -49,6 +44,12 @@ impl<'a, S: TreeStoreReader<Version>, M: DbKeyMapper> StateTree<'a, S, M> {
         let key = M::map_to_leaf_key(substate_id);
         let (maybe_value, proof) = smt.get_with_proof_ext(key.as_ref(), version)?;
         Ok((maybe_value, proof))
+    }
+
+    pub fn get_root_hash(&self, version: Version) -> Result<Hash, StateTreeError> {
+        let smt = JellyfishMerkleTree::new(self.store);
+        let root_hash = smt.get_root_hash(version)?;
+        Ok(root_hash)
     }
 }
 
@@ -98,26 +99,12 @@ fn calculate_substate_changes<
     let changes = changes
         .into_iter()
         .map(|ch| match ch {
-            SubstateTreeChange::Up { id, value_hash } => LeafChange {
-                key: M::map_to_leaf_key(&id),
-                new_payload: Some((value_hash, next_version)),
-            },
-            SubstateTreeChange::Down { id } => LeafChange {
-                key: M::map_to_leaf_key(&id),
-                new_payload: None,
-            },
+            SubstateTreeChange::Up { id, value_hash } => (M::map_to_leaf_key(&id), Some((value_hash, next_version))),
+            SubstateTreeChange::Down { id } => (M::map_to_leaf_key(&id), None),
         })
         .collect::<Vec<_>>();
 
-    let (root_hash, update_result) = jmt.batch_put_value_set(
-        changes
-            .iter()
-            .map(|change| (&change.key, change.new_payload.as_ref()))
-            .collect(),
-        None,
-        current_version,
-        next_version,
-    )?;
+    let (root_hash, update_result) = jmt.batch_put_value_set(changes, None, current_version, next_version)?;
 
     Ok((root_hash, update_result))
 }

@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
@@ -29,6 +29,7 @@ use tari_dan_common_types::{
     shard::Shard,
     Epoch,
     NodeAddressable,
+    ShardGroup,
     SubstateAddress,
 };
 use tari_dan_storage::global::models::ValidatorNode;
@@ -46,7 +47,10 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn get_all_validator_nodes(&self, epoch: Epoch) -> Result<Vec<ValidatorNode<Self::Addr>>, EpochManagerError>;
 
-    async fn get_committees(&self, epoch: Epoch) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError>;
+    async fn get_committees(
+        &self,
+        epoch: Epoch,
+    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, EpochManagerError>;
     async fn get_committee_info_by_validator_address(
         &self,
         epoch: Epoch,
@@ -110,10 +114,10 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn get_num_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError>;
 
-    async fn get_committees_by_shards(
+    async fn get_committees_by_shard_group(
         &self,
         epoch: Epoch,
-        shards: HashSet<Shard>,
+        shards: ShardGroup,
     ) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError>;
 
     async fn get_local_committee(&self, epoch: Epoch) -> Result<Committee<Self::Addr>, EpochManagerError> {

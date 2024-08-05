@@ -19,7 +19,7 @@ create table blocks
     network                 text      not NULL,
     height                  bigint    not NULL,
     epoch                   bigint    not NULL,
-    shard                   integer   not NULL,
+    shard_group             integer   not NULL,
     proposed_by             text      not NULL,
     qc_id                   text      not NULL,
     command_count           bigint    not NULL,
@@ -50,7 +50,7 @@ create table parked_blocks
     network                 text      not NULL,
     height                  bigint    not NULL,
     epoch                   bigint    not NULL,
-    shard                   integer   not NULL,
+    shard_group             integer   not NULL,
     proposed_by             text      not NULL,
     justify                 text      not NULL,
     command_count           bigint    not NULL,
@@ -85,6 +85,7 @@ create table block_diffs
     transaction_id text      NOT NULL,
     substate_id    text      NOT NULL,
     version        int       NOT NULL,
+    shard          int       NOT NULL,
     -- Up or Down
     change         text      NOT NULL,
     -- NULL for Down
@@ -309,14 +310,14 @@ CREATE TABLE missing_transactions
 CREATE TABLE foreign_proposals
 (
     id                      integer   not NULL primary key AUTOINCREMENT,
-    bucket                  int       not NULL,
+    shard_group             integer   not NULL,
     block_id                text      not NULL,
     state                   text      not NULL,
     proposed_height         bigint    NULL,
     transactions            text      not NULL,
     base_layer_block_height bigint    not NULL,
     created_at              timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (bucket, block_id)
+    UNIQUE (shard_group, block_id)
 );
 
 CREATE TABLE foreign_send_counters
@@ -337,31 +338,59 @@ CREATE TABLE foreign_receive_counters
 CREATE TABLE state_tree
 (
     id       integer not NULL primary key AUTOINCREMENT,
-    epoch    bigint  not NULL,
     shard    int     not NULL,
     key      text    not NULL,
     node     text    not NULL,
     is_stale boolean not null default '0'
 );
 
--- Scoping by epoch,shard
-CREATE INDEX state_tree_idx_epoch_shard_key on state_tree (epoch, shard);
+-- Scoping by shard
+CREATE INDEX state_tree_idx_shard_key on state_tree (shard) WHERE is_stale = false;
 -- Duplicate keys are not allowed
-CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (epoch, shard, key);
+CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (shard, key) WHERE is_stale = false;
 -- filtering out or by is_stale is used in every query
 CREATE INDEX state_tree_idx_is_stale on state_tree (is_stale);
+
+create table state_tree_shard_versions
+(
+    id         integer   not null primary key AUTOINCREMENT,
+    shard      integer   not NULL,
+    version    bigint    not NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE shard_group_state_tree
+(
+    id       integer not NULL primary key AUTOINCREMENT,
+    epoch    bigint  not NULL,
+    key      text    not NULL,
+    node     text    not NULL,
+    is_stale boolean not null default '0'
+);
+
+-- Scoping by shard
+CREATE INDEX shard_group_state_tree_idx_shard_key on shard_group_state_tree (epoch) WHERE is_stale = false;
+-- Duplicate keys are not allowed
+CREATE UNIQUE INDEX shard_group_state_tree_uniq_idx_key on shard_group_state_tree (epoch, key) WHERE is_stale = false;
+-- filtering out or by is_stale is used in every query
+CREATE INDEX shard_group_state_tree_idx_is_stale on shard_group_state_tree (is_stale);
+
+-- One entry per shard
+CREATE UNIQUE INDEX state_tree_uniq_shard_versions_shard on state_tree_shard_versions (shard);
 
 CREATE TABLE pending_state_tree_diffs
 (
     id           integer   not NULL primary key AUTOINCREMENT,
     block_id     text      not NULL,
     block_height bigint    not NULL,
+    shard        integer   not NULL,
+    version      bigint    not NULL,
     diff_json    text      not NULL,
     created_at   timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 
-CREATE UNIQUE INDEX pending_state_tree_diffs_uniq_idx_block_id on pending_state_tree_diffs (block_id);
+CREATE UNIQUE INDEX pending_state_tree_diffs_uniq_idx_block_id_shard on pending_state_tree_diffs (block_id, shard);
 
 -- An append-only store of state transitions
 CREATE TABLE state_transitions
@@ -382,6 +411,8 @@ CREATE TABLE state_transitions
     created_at       timestamp                                 not NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (substate_address) REFERENCES substates (address)
 );
+CREATE UNIQUE INDEX state_transitions_shard_seq on state_transitions (shard, seq);
+CREATE INDEX state_transitions_epoch on state_transitions (epoch);
 
 -- Debug Triggers
 CREATE TABLE transaction_pool_history

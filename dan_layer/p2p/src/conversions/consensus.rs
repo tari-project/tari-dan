@@ -37,7 +37,7 @@ use tari_consensus::messages::{
     VoteMessage,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight, ValidatorMetadata};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight, ShardGroup, ValidatorMetadata};
 use tari_dan_storage::consensus_models::{
     BlockId,
     Command,
@@ -260,7 +260,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             network: value.network().as_byte().into(),
             height: value.height().as_u64(),
             epoch: value.epoch().as_u64(),
-            shard: value.shard().as_u32(),
+            shard_group: value.shard_group().encode_as_u32(),
             parent_id: value.parent().as_bytes().to_vec(),
             proposed_by: ByteArray::as_bytes(value.proposed_by()).to_vec(),
             merkle_root: value.merkle_root().as_slice().to_vec(),
@@ -285,19 +285,25 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
             .map_err(|_| anyhow!("Block conversion: Invalid network byte {}", value.network))?
             .try_into()?;
 
+        let shard_group = ShardGroup::decode_from_u32(value.shard_group)
+            .ok_or_else(|| anyhow!("Block shard_group ({}) is not a valid", value.shard_group))?;
+
+        let proposed_by = PublicKey::from_canonical_bytes(&value.proposed_by)
+            .map_err(|_| anyhow!("Block conversion: Invalid proposed_by"))?;
+        let justify = value
+            .justify
+            .ok_or_else(|| anyhow!("Block conversion: QC not provided"))?
+            .try_into()?;
+
         if value.is_dummy {
             Ok(Self::dummy_block(
                 network,
                 value.parent_id.try_into()?,
-                PublicKey::from_canonical_bytes(&value.proposed_by)
-                    .map_err(|_| anyhow!("Block conversion: Invalid proposed_by"))?,
+                proposed_by,
                 NodeHeight(value.height),
-                value
-                    .justify
-                    .ok_or_else(|| anyhow!("Block conversion: QC not provided"))?
-                    .try_into()?,
+                justify,
                 Epoch(value.epoch),
-                Shard::from(value.shard),
+                shard_group,
                 value.merkle_root.try_into()?,
                 value.timestamp,
                 value.base_layer_block_height,
@@ -307,15 +313,11 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
             Ok(Self::new(
                 network,
                 value.parent_id.try_into()?,
-                value
-                    .justify
-                    .ok_or_else(|| anyhow!("Block conversion: QC not provided"))?
-                    .try_into()?,
+                justify,
                 NodeHeight(value.height),
                 Epoch(value.epoch),
-                Shard::from(value.shard),
-                PublicKey::from_canonical_bytes(&value.proposed_by)
-                    .map_err(|_| anyhow!("Block conversion: Invalid proposed_by"))?,
+                shard_group,
+                proposed_by,
                 value
                     .commands
                     .into_iter()
@@ -455,7 +457,7 @@ impl TryFrom<proto::consensus::ForeignProposalState> for ForeignProposalState {
 impl From<&ForeignProposal> for proto::consensus::ForeignProposal {
     fn from(value: &ForeignProposal) -> Self {
         Self {
-            bucket: value.shard.as_u32(),
+            shard_group: value.shard_group.encode_as_u32(),
             block_id: value.block_id.as_bytes().to_vec(),
             state: proto::consensus::ForeignProposalState::from(value.state).into(),
             mined_at: value.proposed_height.map(|a| a.0).unwrap_or(0),
@@ -470,7 +472,8 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
 
     fn try_from(value: proto::consensus::ForeignProposal) -> Result<Self, Self::Error> {
         Ok(ForeignProposal {
-            shard: Shard::from(value.bucket),
+            shard_group: ShardGroup::decode_from_u32(value.shard_group)
+                .ok_or_else(|| anyhow!("Block shard_group ({}) is not a valid", value.shard_group))?,
             block_id: BlockId::try_from(value.block_id)?,
             state: proto::consensus::ForeignProposalState::try_from(value.state)
                 .map_err(|_| anyhow!("Invalid foreign proposal state value {}", value.state))?
@@ -536,12 +539,11 @@ impl TryFrom<proto::consensus::Evidence> for Evidence {
 
 impl From<&QuorumCertificate> for proto::consensus::QuorumCertificate {
     fn from(source: &QuorumCertificate) -> Self {
-        // TODO: unwrap
         Self {
             block_id: source.block_id().as_bytes().to_vec(),
             block_height: source.block_height().as_u64(),
             epoch: source.epoch().as_u64(),
-            shard: source.shard().as_u32(),
+            shard_group: source.shard_group().encode_as_u32(),
             signatures: source.signatures().iter().map(Into::into).collect(),
             leaf_hashes: source.leaf_hashes().iter().map(|h| h.to_vec()).collect(),
             decision: i32::from(source.decision().as_u8()),
@@ -553,11 +555,13 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::QuorumCertificate) -> Result<Self, Self::Error> {
+        let shard_group = ShardGroup::decode_from_u32(value.shard_group)
+            .ok_or_else(|| anyhow!("QC shard_group ({}) is not a valid", value.shard_group))?;
         Ok(Self::new(
             value.block_id.try_into()?,
             NodeHeight(value.block_height),
             Epoch(value.epoch),
-            Shard::from(value.shard),
+            shard_group,
             value
                 .signatures
                 .into_iter()
@@ -612,6 +616,7 @@ impl TryFrom<proto::consensus::Substate> for SubstateRecord {
             substate_id: SubstateId::from_bytes(&value.substate_id)?,
             version: value.version,
             substate_value: SubstateValue::from_bytes(&value.substate)?,
+            // TODO: Should we add this to the proto?
             state_hash: Default::default(),
 
             created_at_epoch: Epoch(value.created_epoch),

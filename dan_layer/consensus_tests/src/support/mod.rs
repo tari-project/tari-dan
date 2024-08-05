@@ -4,6 +4,8 @@
 // TODO: use all functions
 // #![allow(dead_code)]
 
+pub const TEST_NUM_PRESHARDS: NumPreshards = NumPreshards::SixtyFour;
+
 mod address;
 mod epoch_manager;
 mod executions_store;
@@ -25,6 +27,7 @@ pub use harness::*;
 pub use leader_strategy::*;
 pub use network::*;
 pub use spec::*;
+use tari_dan_common_types::NumPreshards;
 pub use transaction::*;
 pub use transaction_executor::*;
 pub use validator::*;

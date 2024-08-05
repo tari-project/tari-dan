@@ -47,6 +47,7 @@ use tari_dan_common_types::{
     shard::Shard,
     Epoch,
     NodeAddressable,
+    ShardGroup,
     SubstateAddress,
 };
 use tari_dan_storage::{
@@ -460,8 +461,9 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         sidechain_id: Option<&PublicKey>,
     ) -> Result<u64, Self::Error> {
         let db_sidechain_id = sidechain_id.map(|id| id.as_bytes()).unwrap_or(&[0u8; 32]);
+
         let count = sql_query(
-            "SELECT COUNT(distinct public_key) as cnt FROM validator_nodes WHERE start_epoch <= ? AND end_epoch <= ? \
+            "SELECT COUNT(distinct public_key) as cnt FROM validator_nodes WHERE start_epoch <= ? AND end_epoch >= ? \
              AND sidechain_id = ?",
         )
         .bind::<BigInt, _>(epoch.as_u64() as i64)
@@ -476,12 +478,12 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         Ok(count.cnt as u64)
     }
 
-    fn validator_nodes_count_for_bucket(
+    fn validator_nodes_count_for_shard_group(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
-        bucket: Shard,
+        shard_group: ShardGroup,
     ) -> Result<u64, Self::Error> {
         use crate::global::schema::{committees, validator_nodes};
 
@@ -489,7 +491,8 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         let count = committees::table
             .inner_join(validator_nodes::table.on(committees::validator_node_id.eq(validator_nodes::id)))
             .filter(committees::epoch.eq(epoch.as_u64() as i64))
-            .filter(committees::committee_bucket.eq(i64::from(bucket.as_u32())))
+            .filter(committees::shard_start.eq(shard_group.start().as_u32() as i32))
+            .filter(committees::shard_end.eq(shard_group.end().as_u32() as i32))
             .filter(validator_nodes::sidechain_id.eq(db_sidechain_id))
             .count()
             .limit(1)
@@ -507,32 +510,33 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
-    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error> {
+    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, Self::Error> {
         use crate::global::schema::{committees, validator_nodes};
 
         let db_sidechain_id = sidechain_id.map(|id| id.as_bytes()).unwrap_or(&[0u8; 32]);
-        let count = committees::table
+        let results = committees::table
             .inner_join(validator_nodes::table.on(committees::validator_node_id.eq(validator_nodes::id)))
             .select((
-                committees::committee_bucket,
+                committees::shard_start,
+                committees::shard_end,
                 validator_nodes::address,
                 validator_nodes::public_key,
             ))
             .filter(committees::epoch.eq(epoch.as_u64() as i64))
             .filter(validator_nodes::sidechain_id.eq(db_sidechain_id))
-            .load::<(i64, String, Vec<u8>)>(tx.connection())
+            .load::<(i32, i32, String, Vec<u8>)>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "validator_nodes_get_committees".to_string(),
             })?;
 
         let mut committees = HashMap::new();
-        for (shard, address, public_key) in count {
+        for (shard_start, shard_end, address, public_key) in results {
             let addr = DbValidatorNode::try_parse_address(&address)?;
             let pk = PublicKey::from_canonical_bytes(&public_key)
                 .map_err(|_| SqliteStorageError::MalformedDbData("Invalid public key".to_string()))?;
             committees
-                .entry(Shard::from(shard as u32))
+                .entry(ShardGroup::new(shard_start as u32, shard_end as u32))
                 .or_insert_with(Committee::empty)
                 .members
                 .push((addr, pk));
@@ -545,7 +549,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         &self,
         tx: &mut Self::DbTransaction<'_>,
         shard_key: SubstateAddress,
-        shard: Shard,
+        shard_group: ShardGroup,
         sidechain_id: Option<&PublicKey>,
         epoch: Epoch,
     ) -> Result<(), Self::Error> {
@@ -565,11 +569,13 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
                 source,
                 operation: "validator_nodes_set_committee_bucket".to_string(),
             })?;
+
         diesel::insert_into(committees::table)
             .values((
                 committees::validator_node_id.eq(validator_id),
                 committees::epoch.eq(epoch.as_u64() as i64),
-                committees::committee_bucket.eq(i64::from(shard.as_u32())),
+                committees::shard_start.eq(shard_group.start().as_u32() as i32),
+                committees::shard_end.eq(shard_group.end().as_u32() as i32),
             ))
             .execute(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
@@ -619,43 +625,63 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         distinct_validators_sorted(validators)
     }
 
-    fn validator_nodes_get_for_shards(
+    fn validator_nodes_get_for_shard_group(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
-        shards: HashSet<Shard>,
+        shard_group: ShardGroup,
     ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error> {
         use crate::global::schema::{committees, validator_nodes};
-        let mut shards = shards
-            .into_iter()
-            .map(|b| (b, Committee::empty()))
-            .collect::<HashMap<_, _>>();
+        // let mut shards = shard_group
+        //     .shard_iter()
+        //     .map(|b| (b, Committee::empty()))
+        //     .collect::<HashMap<_, _>>();
 
-        for (shard, committee) in &mut shards {
+        let mut committees = HashMap::with_capacity(shard_group.len());
+        for shard in shard_group.shard_iter() {
             let validators = validator_nodes::table
                 .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
                 .select(validator_nodes::all_columns)
                 .filter(committees::epoch.eq(epoch.as_u64() as i64))
-                .filter(committees::committee_bucket.eq(i64::from(shard.as_u32())))
+                .filter(committees::shard_start.le(shard.as_u32() as i32))
+                .filter(committees::shard_end.ge(shard.as_u32() as i32))
                 .get_results::<DbValidatorNode>(tx.connection())
                 .map_err(|source| SqliteStorageError::DieselError {
                     source,
                     operation: "validator_nodes_get_by_buckets".to_string(),
                 })?;
 
-            for validator in validators {
-                committee.members.push((
-                    DbValidatorNode::try_parse_address(&validator.address)?,
-                    PublicKey::from_canonical_bytes(&validator.public_key).map_err(|_| {
-                        SqliteStorageError::MalformedDbData(format!(
-                            "Invalid public key in validator node record id={}",
-                            validator.id
+            committees.insert(
+                shard,
+                validators
+                    .into_iter()
+                    .map(|validator| {
+                        Ok::<_, SqliteStorageError>((
+                            DbValidatorNode::try_parse_address(&validator.address)?,
+                            PublicKey::from_canonical_bytes(&validator.public_key).map_err(|_| {
+                                SqliteStorageError::MalformedDbData(format!(
+                                    "Invalid public key in validator node record id={}",
+                                    validator.id
+                                ))
+                            })?,
                         ))
-                    })?,
-                ));
-            }
+                    })
+                    .collect::<Result<_, _>>()?,
+            );
+
+            // for validator in validators {
+            //     committee.members.push((
+            //         DbValidatorNode::try_parse_address(&validator.address)?,
+            //         PublicKey::from_canonical_bytes(&validator.public_key).map_err(|_| {
+            //             SqliteStorageError::MalformedDbData(format!(
+            //                 "Invalid public key in validator node record id={}",
+            //                 validator.id
+            //             ))
+            //         })?,
+            //     ));
+            // }
         }
-        Ok(shards)
+        Ok(committees)
     }
 
     fn get_validator_nodes_within_epoch(

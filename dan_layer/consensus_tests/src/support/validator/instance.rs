@@ -5,7 +5,7 @@ use tari_consensus::{
     hotstuff::{ConsensusCurrentState, HotstuffEvent},
     messages::HotstuffMessage,
 };
-use tari_dan_common_types::{shard::Shard, SubstateAddress};
+use tari_dan_common_types::{ShardGroup, SubstateAddress};
 use tari_dan_storage::{consensus_models::LeafBlock, StateStore, StateStoreReadTransaction};
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::Transaction;
@@ -24,7 +24,8 @@ use crate::support::{
 
 pub struct ValidatorChannels {
     pub address: TestAddress,
-    pub shard: Shard,
+    pub shard_group: ShardGroup,
+    pub num_committees: u32,
     pub state_store: SqliteStateStore<TestAddress>,
 
     pub tx_new_transactions: mpsc::Sender<(Transaction, usize)>,
@@ -36,7 +37,8 @@ pub struct ValidatorChannels {
 pub struct Validator {
     pub address: TestAddress,
     pub shard_address: SubstateAddress,
-    pub shard: Shard,
+    pub shard_group: ShardGroup,
+    pub num_committees: u32,
 
     pub state_store: SqliteStateStore<TestAddress>,
     pub transaction_executions: TestTransactionExecutionsStore,
