@@ -8,6 +8,7 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::EpochManagerError;
 use tari_rpc_framework::{RpcError, RpcStatus};
+use tari_state_tree::JmtStorageError;
 use tari_validator_node_rpc::ValidatorNodeRpcClientError;
 
 #[derive(Debug, thiserror::Error)]
@@ -34,9 +35,24 @@ pub enum CommsRpcConsensusSyncError {
     StateTreeError(#[from] tari_state_tree::StateTreeError),
 }
 
+impl CommsRpcConsensusSyncError {
+    pub fn error_at_remote(self) -> Result<CommsRpcConsensusSyncError, CommsRpcConsensusSyncError> {
+        match &self {
+            CommsRpcConsensusSyncError::InvalidResponse(_) | CommsRpcConsensusSyncError::RpcError(_) => Err(self),
+            _ => Ok(self),
+        }
+    }
+}
+
 impl From<CommsRpcConsensusSyncError> for HotStuffError {
     fn from(value: CommsRpcConsensusSyncError) -> Self {
         HotStuffError::SyncError(value.into())
+    }
+}
+
+impl From<JmtStorageError> for CommsRpcConsensusSyncError {
+    fn from(value: JmtStorageError) -> Self {
+        Self::StateTreeError(value.into())
     }
 }
 

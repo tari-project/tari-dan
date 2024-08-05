@@ -2,12 +2,10 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    cmp,
     cmp::Ordering,
     fmt,
     fmt::{Display, Formatter},
     mem,
-    ops::RangeInclusive,
     str::FromStr,
 };
 
@@ -22,12 +20,7 @@ use tari_engine_types::{
 };
 use tari_template_lib::{models::ObjectKey, Hash};
 
-use crate::{shard::Shard, uint::U256};
-
-/// This is u16::MAX / 2 as a u32 = 32767 shards. Any number of shards greater than this will be clamped to this value.
-/// This is done to limit the number of addresses that are added to the final shard to allow the same shard boundaries.
-/// TODO: Change num_shards to a u16
-pub(super) const MAX_NUM_SHARDS: u32 = 0x0000_0000_0000_ffff >> 1;
+use crate::{shard::Shard, uint::U256, NumPreshards, ShardGroup};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[cfg_attr(
@@ -140,65 +133,90 @@ impl SubstateAddress {
 
     /// Calculates and returns the shard number that this SubstateAddress belongs.
     /// A shard is a division of the 256-bit shard space where the boundary of the division if always a power of two.
-    pub fn to_shard(&self, num_shards: u32) -> Shard {
-        if num_shards <= 1 || self.is_zero() {
+    pub fn to_shard(&self, num_shards: NumPreshards) -> Shard {
+        if num_shards.as_u32() == 1 || self.is_zero() {
             return Shard::from(0u32);
         }
         let addr_u256 = self.to_u256();
 
-        if num_shards.is_power_of_two() {
-            let shard_size = U256::MAX >> num_shards.trailing_zeros();
-            let mut shard = Shard::from(
-                u32::try_from(addr_u256 / shard_size)
-                    .expect("to_shard: num_shards is a u32, so this cannot fail")
-                    .min(num_shards - 1),
-            );
-            // On boundary
-            if addr_u256 % shard_size == 0 {
-                shard = shard.as_u32().saturating_sub(1).into();
-            }
-            return shard;
-        }
+        let num_shards = num_shards.as_u32();
+        let shard_size = U256::MAX >> num_shards.trailing_zeros();
+        Shard::from(
+            u32::try_from(addr_u256 / shard_size)
+                .expect("to_shard: num_shards is a u32, so this cannot fail")
+                .min(num_shards - 1),
+        )
 
-        // 2^15-1 shards with 40 vns per shard = 1,310,680 validators. This limit exists to prevent next_power_of_two
-        // from panicking.
-        let num_shards = num_shards.min(MAX_NUM_SHARDS);
-
-        // Round down to the next power of two.
-        let next_shards_pow_two = num_shards.next_power_of_two();
-        let half_shard_size = U256::MAX >> next_shards_pow_two.trailing_zeros();
-        let mut next_pow_2_shard =
-            u32::try_from(addr_u256 / half_shard_size).expect("to_shard: num_shards is a u32, so this cannot fail");
-
-        // On boundary
-        if addr_u256 % half_shard_size == 0 {
-            next_pow_2_shard = next_pow_2_shard.saturating_sub(1);
-        }
-
-        // Half the next power of two i.e. num_shards rounded down to previous power of two
-        let num_shards_pow_two = next_shards_pow_two >> 1;
-        // The "extra" half shards in the space
-        let num_half_shards = num_shards % num_shards_pow_two;
-
-        // Shard that we would be in if num_shards was a power of two
-        let shard = next_pow_2_shard / 2;
-
-        // If the shard is higher than all half shards,
-        let shard = if shard >= num_half_shards {
-            // then add those half shards in
-            shard + num_half_shards
-        } else {
-            // otherwise, we use the shard number we'd be in if num_shards was the next power of two
-            next_pow_2_shard
-        };
-
-        // u256::MAX address needs to be clamped to the last shard index
-        cmp::min(shard, num_shards - 1).into()
+        // // 2^15-1 shards with 40 vns per shard = 1,310,680 validators. This limit exists to prevent next_power_of_two
+        // // from panicking.
+        // let num_shards = num_shards.min(MAX_NUM_SHARDS);
+        //
+        // // Round down to the next power of two.
+        // let next_shards_pow_two = num_shards.next_power_of_two();
+        // let half_shard_size = U256::MAX >> next_shards_pow_two.trailing_zeros();
+        // let mut next_pow_2_shard =
+        //     u32::try_from(addr_u256 / half_shard_size).expect("to_shard: num_shards is a u32, so this cannot fail");
+        //
+        // // On boundary
+        // if addr_u256 % half_shard_size == 0 {
+        //     next_pow_2_shard = next_pow_2_shard.saturating_sub(1);
+        // }
+        //
+        // // Half the next power of two i.e. num_shards rounded down to previous power of two
+        // let num_shards_pow_two = next_shards_pow_two >> 1;
+        // // The "extra" half shards in the space
+        // let num_half_shards = num_shards % num_shards_pow_two;
+        //
+        // // Shard that we would be in if num_shards was a power of two
+        // let shard = next_pow_2_shard / 2;
+        //
+        // // If the shard is higher than all half shards,
+        // let shard = if shard >= num_half_shards {
+        //     // then add those half shards in
+        //     shard + num_half_shards
+        // } else {
+        //     // otherwise, we use the shard number we'd be in if num_shards was the next power of two
+        //     next_pow_2_shard
+        // };
+        //
+        // // u256::MAX address needs to be clamped to the last shard index
+        // cmp::min(shard, num_shards - 1).into()
     }
 
-    pub fn to_address_range(&self, num_shards: u32) -> RangeInclusive<SubstateAddress> {
-        let shard = self.to_shard(num_shards);
-        shard.to_substate_address_range(num_shards)
+    pub fn to_shard_group(&self, num_shards: NumPreshards, num_committees: u32) -> ShardGroup {
+        // number of committees can never exceed number of shards
+        let num_committees = num_committees.min(num_shards.as_u32());
+        if num_committees <= 1 {
+            return ShardGroup::new(Shard::zero(), Shard::from(num_shards.as_u32() - 1));
+        }
+
+        let shards_per_committee = num_shards.as_u32() / num_committees;
+        let mut shards_per_committee_rem = num_shards.as_u32() % num_committees;
+
+        let shard = self.to_shard(num_shards).as_u32();
+
+        let mut start = 0u32;
+        let mut end = shards_per_committee;
+        if shards_per_committee_rem > 0 {
+            end += 1;
+        }
+        loop {
+            if end > shard {
+                break;
+            }
+            start += shards_per_committee;
+            if shards_per_committee_rem > 0 {
+                start += 1;
+                shards_per_committee_rem -= 1;
+            }
+
+            end = start + shards_per_committee;
+            if shards_per_committee_rem > 0 {
+                end += 1;
+            }
+        }
+
+        ShardGroup::new(start, end - 1)
     }
 }
 
@@ -268,7 +286,7 @@ impl FromStr for SubstateAddress {
 mod tests {
     use std::{
         iter,
-        ops::{Bound, RangeBounds},
+        ops::{Bound, RangeBounds, RangeInclusive},
     };
 
     use rand::{rngs::OsRng, RngCore};
@@ -287,198 +305,133 @@ mod tests {
     #[test]
     fn to_committee_shard_and_shard_range_match() {
         let address = address_at(1, 8);
-        let shard = address.to_shard(6);
+        let shard = address.to_shard(NumPreshards::Eight);
         assert_eq!(shard, 1);
 
-        let range = Shard::from(0).to_substate_address_range(2);
+        let range = Shard::from(0).to_substate_address_range(NumPreshards::Two);
         assert_range(range, SubstateAddress::zero()..address_at(1, 2));
-        let range = shard.to_substate_address_range(2);
-        assert_range(range, address_at(1, 2)..=SubstateAddress::max());
-        let range = shard.to_substate_address_range(6);
-        assert_range(range, address_at(1, 8)..address_at(2, 8));
-    }
-
-    #[test]
-    fn shard_range() {
-        let range = SubstateAddress::zero().to_address_range(2);
-        assert_range(range, SubstateAddress::zero()..address_at(1, 2));
-        let range = SubstateAddress::max().to_address_range(2);
+        let range = Shard::from(1).to_substate_address_range(NumPreshards::Two);
         assert_range(range, address_at(1, 2)..=SubstateAddress::max());
 
-        // num_shards is a power of two
-        let power_of_twos =
-            iter::successors(Some(MAX_NUM_SHARDS.next_power_of_two() >> 1), |&x| Some(x >> 1)).take(15 - 2);
-        for power_of_two in power_of_twos {
-            for i in 0..power_of_two {
-                let range = address_at(i, power_of_two).to_address_range(power_of_two);
-                if i == 0 {
-                    assert_range(range, SubstateAddress::zero()..address_at(1, power_of_two));
-                } else if i >= power_of_two - 1 {
-                    assert_range(range, address_at(i, power_of_two)..=SubstateAddress::max());
-                } else {
-                    assert_range(range, address_at(i, power_of_two)..address_at(i + 1, power_of_two));
-                }
-            }
+        for n in 0..7 {
+            let range = Shard::from(n).to_substate_address_range(NumPreshards::Eight);
+            assert_range(range, address_at(n, 8)..address_at(n + 1, 8));
         }
 
-        // Half shards
-        let range = address_at(0, 8).to_address_range(6);
-        assert_range(range, SubstateAddress::zero()..address_at(1, 8));
-        let range = address_at(1, 8).to_address_range(6);
-        assert_range(range, address_at(1, 8)..address_at(2, 8));
-        let range = address_at(2, 8).to_address_range(6);
-        assert_range(range, address_at(2, 8)..address_at(3, 8));
-        let range = address_at(3, 8).to_address_range(6);
-        assert_range(range, address_at(3, 8)..address_at(4, 8));
-        // Whole shards
-        let range = address_at(4, 8).to_address_range(6);
-        assert_range(range, address_at(4, 8)..address_at(6, 8));
-        let range = address_at(5, 8).to_address_range(6);
-        assert_range(range, address_at(4, 8)..address_at(6, 8));
-        let range = address_at(6, 8).to_address_range(6);
-        assert_range(range, address_at(6, 8)..=SubstateAddress::max());
-        let range = address_at(7, 8).to_address_range(6);
-        assert_range(range, address_at(6, 8)..=SubstateAddress::max());
-        let range = address_at(8, 8).to_address_range(6);
-        assert_range(range, address_at(6, 8)..=SubstateAddress::max());
-
-        let range = plus_one(address_at(1, 4)).to_address_range(20);
-        // The half shards will split at intervals of END_SHARD_MAX / 32
-        assert_range(range, address_at(8, 32)..address_at(10, 32));
-
-        let range = plus_one(divide_floor(SubstateAddress::max(), 2)).to_address_range(10);
-        assert_range(range, address_at(8, 16)..address_at(10, 16));
-
-        let range = address_at(42, 256).to_address_range(256);
-        assert_range(range, address_at(42, 256)..address_at(43, 256));
-        let range = address_at(128, 256).to_address_range(256);
-        assert_range(range, address_at(128, 256)..address_at(129, 256));
+        let range = Shard::from(7).to_substate_address_range(NumPreshards::Eight);
+        assert_range(range, address_at(7, 8)..=address_at(8, 8));
     }
+
+    // #[test]
+    // fn shard_range() {
+    //     let range = SubstateAddress::zero().to_address_range(2);
+    //     assert_range(range, SubstateAddress::zero()..address_at(1, 2));
+    //     let range = SubstateAddress::max().to_address_range(2);
+    //     assert_range(range, address_at(1, 2)..=SubstateAddress::max());
+    //
+    //     // num_shards is a power of two
+    //     let power_of_twos =
+    //         iter::successors(Some(MAX_NUM_SHARDS.next_power_of_two() >> 1), |&x| Some(x >> 1)).take(15 - 2);
+    //     for power_of_two in power_of_twos {
+    //         for i in 0..power_of_two {
+    //             let range = address_at(i, power_of_two).to_address_range(power_of_two);
+    //             if i == 0 {
+    //                 assert_range(range, SubstateAddress::zero()..address_at(1, power_of_two));
+    //             } else if i >= power_of_two - 1 {
+    //                 assert_range(range, address_at(i, power_of_two)..=SubstateAddress::max());
+    //             } else {
+    //                 assert_range(range, address_at(i, power_of_two)..address_at(i + 1, power_of_two));
+    //             }
+    //         }
+    //     }
+    //
+    //     // Half shards
+    //     let range = address_at(0, 8).to_address_range(6);
+    //     assert_range(range, SubstateAddress::zero()..address_at(1, 8));
+    //     let range = address_at(1, 8).to_address_range(6);
+    //     assert_range(range, address_at(1, 8)..address_at(2, 8));
+    //     let range = address_at(2, 8).to_address_range(6);
+    //     assert_range(range, address_at(2, 8)..address_at(3, 8));
+    //     let range = address_at(3, 8).to_address_range(6);
+    //     assert_range(range, address_at(3, 8)..address_at(4, 8));
+    //     // Whole shards
+    //     let range = address_at(4, 8).to_address_range(6);
+    //     assert_range(range, address_at(4, 8)..address_at(6, 8));
+    //     let range = address_at(5, 8).to_address_range(6);
+    //     assert_range(range, address_at(4, 8)..address_at(6, 8));
+    //     let range = address_at(6, 8).to_address_range(6);
+    //     assert_range(range, address_at(6, 8)..=SubstateAddress::max());
+    //     let range = address_at(7, 8).to_address_range(6);
+    //     assert_range(range, address_at(6, 8)..=SubstateAddress::max());
+    //     let range = address_at(8, 8).to_address_range(6);
+    //     assert_range(range, address_at(6, 8)..=SubstateAddress::max());
+    //
+    //     let range = plus_one(address_at(1, 4)).to_address_range(20);
+    //     // The half shards will split at intervals of END_SHARD_MAX / 32
+    //     assert_range(range, address_at(8, 32)..address_at(10, 32));
+    //
+    //     let range = plus_one(divide_floor(SubstateAddress::max(), 2)).to_address_range(10);
+    //     assert_range(range, address_at(8, 16)..address_at(10, 16));
+    //
+    //     let range = address_at(42, 256).to_address_range(256);
+    //     assert_range(range, address_at(42, 256)..address_at(43, 256));
+    //     let range = address_at(128, 256).to_address_range(256);
+    //     assert_range(range, address_at(128, 256)..address_at(129, 256));
+    // }
 
     #[test]
     fn to_shard() {
-        // Edge cases
-        let shard = SubstateAddress::max().to_shard(0);
+        let shard = SubstateAddress::zero().to_shard(NumPreshards::Two);
         assert_eq!(shard, 0);
-        let shard = SubstateAddress::zero().to_shard(0);
-        assert_eq!(shard, 0);
-        let shard = SubstateAddress::max().to_shard(u32::MAX);
-        assert_eq!(shard, u32::from(u16::MAX >> 1) - 1);
-
-        let shard = SubstateAddress::zero().to_shard(2);
-        assert_eq!(shard, 0);
-        let shard = address_at(1, 2).to_shard(2);
+        let shard = address_at(1, 2).to_shard(NumPreshards::Two);
         assert_eq!(shard, 1);
-        let shard = plus_one(address_at(1, 2)).to_shard(2);
+        let shard = plus_one(address_at(1, 2)).to_shard(NumPreshards::Two);
         assert_eq!(shard, 1);
-        let shard = SubstateAddress::max().to_shard(2);
+        let shard = SubstateAddress::max().to_shard(NumPreshards::Two);
         assert_eq!(shard, 1);
 
         for i in 0..=32 {
-            let shard = divide_shard_space(i, 32).to_shard(1);
+            let shard = divide_shard_space(i, 32).to_shard(NumPreshards::One);
             assert_eq!(shard, 0);
         }
 
         // 2 shards, exactly half of the physical shard space
         for i in 0..=8 {
-            let shard = divide_shard_space(i, 16).to_shard(2);
+            let shard = divide_shard_space(i, 16).to_shard(NumPreshards::Two);
             assert_eq!(shard, 0, "{shard} is not 0 for i: {i}");
         }
 
         for i in 9..16 {
-            let shard = divide_shard_space(i, 16).to_shard(2);
+            let shard = divide_shard_space(i, 16).to_shard(NumPreshards::Two);
             assert_eq!(shard, 1, "{shard} is not 1 for i: {i}");
         }
 
         // If the number of shards is a power of two, then to_shard should always return the equally divided
         // shard number. We test this for the first u16::MAX power of twos.
         // At boundary
-        for power_of_two in iter::successors(Some(1), |&x| Some(x * 2)).take(16) {
+        for power_of_two in iter::successors(Some(1), |&x| Some(x * 2)).take(8) {
             for i in 1..power_of_two {
-                let shard = divide_shard_space(i, power_of_two).to_shard(power_of_two);
-                assert_eq!(
-                    shard,
-                    i - 1,
-                    "Got: {shard}, Expected: {i} for power_of_two: {power_of_two}"
-                );
+                let shard = divide_shard_space(i, power_of_two).to_shard(power_of_two.try_into().unwrap());
+                assert_eq!(shard, i, "Got: {shard}, Expected: {i} for power_of_two: {power_of_two}");
             }
         }
         // +1 boundary
-        for power_of_two in iter::successors(Some(1), |&x| Some(x * 2)).take(16) {
+        for power_of_two in iter::successors(Some(1), |&x| Some(x * 2)).take(8) {
             for i in 0..power_of_two {
-                let shard = plus_one(address_at(i, power_of_two)).to_shard(power_of_two);
+                let shard = plus_one(address_at(i, power_of_two)).to_shard(power_of_two.try_into().unwrap());
                 assert_eq!(shard, i, "Got: {shard}, Expected: {i} for power_of_two: {power_of_two}");
             }
         }
 
-        let shard = address_at(0, 8).to_shard(6);
-        assert_eq!(shard, 0);
-        let shard = minus_one(address_at(1, 8)).to_shard(6);
-        assert_eq!(shard, 0);
-        let shard = address_at(1, 8).to_shard(6);
-        assert_eq!(shard, 1);
-        let shard = address_at(2, 8).to_shard(6);
-        assert_eq!(shard, 2);
-        let shard = plus_one(address_at(1, 8)).to_shard(6);
-        assert_eq!(shard, 1);
-
-        let shard = plus_one(address_at(0, 8)).to_shard(6);
-        assert_eq!(shard, 0);
-        let shard = plus_one(address_at(1, 8)).to_shard(6);
-        assert_eq!(shard, 1);
-        let shard = plus_one(address_at(2, 8)).to_shard(6);
-        assert_eq!(shard, 2);
-        let shard = plus_one(address_at(3, 8)).to_shard(6);
-        assert_eq!(shard, 3);
-        let shard = plus_one(address_at(4, 8)).to_shard(6);
-        assert_eq!(shard, 4);
-        let shard = plus_one(address_at(5, 8)).to_shard(6);
-        assert_eq!(shard, 4);
-        let shard = plus_one(address_at(6, 8)).to_shard(6);
-        assert_eq!(shard, 5);
-        let shard = plus_one(address_at(7, 8)).to_shard(6);
-        assert_eq!(shard, 5);
-        let shard = minus_one(address_at(8, 8)).to_shard(6);
-        assert_eq!(shard, 5);
-        let shard = SubstateAddress::max().to_shard(6);
-        assert_eq!(shard, 5);
-
-        let shard = plus_one(address_at(0, 8)).to_shard(5);
-        assert_eq!(shard, 0);
-        let shard = plus_one(address_at(1, 8)).to_shard(5);
-        assert_eq!(shard, 1);
-        let shard = plus_one(address_at(2, 8)).to_shard(5);
-        assert_eq!(shard, 2);
-        let shard = plus_one(address_at(3, 8)).to_shard(5);
-        assert_eq!(shard, 2);
-        let shard = plus_one(address_at(4, 8)).to_shard(5);
-        assert_eq!(shard, 3);
-        let shard = plus_one(address_at(5, 8)).to_shard(5);
-        assert_eq!(shard, 3);
-        let shard = plus_one(address_at(6, 8)).to_shard(5);
-        assert_eq!(shard, 4);
-        let shard = plus_one(address_at(7, 8)).to_shard(5);
-        assert_eq!(shard, 4);
-        let shard = minus_one(address_at(8, 8)).to_shard(5);
-        assert_eq!(shard, 4);
-        let shard = SubstateAddress::max().to_shard(5);
-        assert_eq!(shard, 4);
-
-        let shard = plus_one(address_at(1, 4)).to_shard(20);
-        // 1/4 * 20 = 5 + 4 half shards in the start of the shard space, - 1 for index
-        assert_eq!(shard, 5 + 4 - 1);
-        let shard = divide_floor(SubstateAddress::max(), 2).to_shard(10);
-        // 8 / 2 = 4 + 2 half shards in the start of the shard space, +1 on boundary, - 1 for index
-        assert_eq!(shard, 4 + 2 + 1 - 1);
-        let shard = divide_floor(SubstateAddress::max(), 2).to_shard(256);
+        let shard = divide_floor(SubstateAddress::max(), 2).to_shard(NumPreshards::TwoFiftySix);
         assert_eq!(shard, 128);
     }
 
     #[test]
     fn max_committees() {
-        let shard = SubstateAddress::max().to_shard(MAX_NUM_SHARDS);
+        let shard = SubstateAddress::max().to_shard(NumPreshards::MAX);
         // When we have n committees, the last committee is n-1.
-        assert_eq!(shard, (u32::from(u16::MAX) >> 1) - 1);
+        assert_eq!(shard, NumPreshards::MAX.as_u32() - 1);
     }
 
     /// Returns the address of the floor division of the shard space
@@ -497,7 +450,7 @@ mod tests {
     /// Returns the start address of the shard with given num_shards
     fn address_at(shard: u32, num_shards: u32) -> SubstateAddress {
         // + shard: For each shard we add 1 to account for remainder
-        add(divide_shard_space(shard, num_shards), shard)
+        add(divide_shard_space(shard, num_shards), shard.saturating_sub(1))
     }
 
     fn divide_floor(shard: SubstateAddress, by: u32) -> SubstateAddress {
@@ -512,8 +465,8 @@ mod tests {
         add(address, 1)
     }
 
-    fn add(shard: SubstateAddress, v: u32) -> SubstateAddress {
-        SubstateAddress::from_u256(shard.to_u256().saturating_add(U256::from(v)))
+    fn add(address: SubstateAddress, v: u32) -> SubstateAddress {
+        SubstateAddress::from_u256(address.to_u256().saturating_add(U256::from(v)))
     }
 
     fn assert_range<R: RangeBounds<SubstateAddress>>(range: RangeInclusive<SubstateAddress>, expected: R) {
@@ -543,5 +496,179 @@ mod tests {
             range.end(),
             end,
         );
+    }
+
+    mod to_shard_group {
+        use super::*;
+
+        #[test]
+        fn it_returns_the_correct_shard_group() {
+            let group = SubstateAddress::zero().to_shard_group(NumPreshards::Four, 2);
+            assert_eq!(group.as_range(), Shard::from(0)..=Shard::from(1));
+
+            let group = plus_one(address_at(0, 4)).to_shard_group(NumPreshards::Four, 2);
+            assert_eq!(group.as_range(), Shard::from(0)..=Shard::from(1));
+
+            let group = address_at(1, 4).to_shard_group(NumPreshards::Four, 2);
+            assert_eq!(group.as_range(), Shard::from(0)..=Shard::from(1));
+
+            let group = address_at(2, 4).to_shard_group(NumPreshards::Four, 2);
+            assert_eq!(group.as_range(), Shard::from(2)..=Shard::from(3));
+
+            let group = address_at(3, 4).to_shard_group(NumPreshards::Four, 2);
+            assert_eq!(group.as_range(), Shard::from(2)..=Shard::from(3));
+
+            let group = SubstateAddress::max().to_shard_group(NumPreshards::Four, 2);
+            assert_eq!(group.as_range(), Shard::from(2)..=Shard::from(3));
+
+            let group = minus_one(address_at(1, 64)).to_shard_group(NumPreshards::SixtyFour, 16);
+            assert_eq!(group.as_range(), Shard::from(0)..=Shard::from(3));
+            let group = address_at(4, 64).to_shard_group(NumPreshards::SixtyFour, 16);
+            assert_eq!(group.as_range(), Shard::from(4)..=Shard::from(7));
+
+            let group = address_at(8, 64).to_shard_group(NumPreshards::SixtyFour, 2);
+            assert_eq!(group.as_range(), Shard::from(0)..=Shard::from(31));
+            let group = address_at(5, 8).to_shard_group(NumPreshards::SixtyFour, 2);
+            assert_eq!(group.as_range(), Shard::from(32)..=Shard::from(63));
+
+            // On boundary
+            let group = address_at(0, 8).to_shard_group(NumPreshards::SixtyFour, 2);
+            assert_eq!(group.as_range(), Shard::from(0)..=Shard::from(31));
+            let group = address_at(4, 8).to_shard_group(NumPreshards::SixtyFour, 2);
+            assert_eq!(group.as_range(), Shard::from(32)..=Shard::from(63));
+
+            let group = address_at(8, 8).to_shard_group(NumPreshards::SixtyFour, 2);
+            assert_eq!(group.as_range(), Shard::from(32)..=Shard::from(63));
+
+            let group = plus_one(address_at(3, 64)).to_shard_group(NumPreshards::SixtyFour, 32);
+            assert_eq!(group.as_range(), Shard::from(2)..=Shard::from(3));
+
+            let group = plus_one(address_at(3, 64)).to_shard_group(NumPreshards::SixtyFour, 32);
+            assert_eq!(group.as_range(), Shard::from(2)..=Shard::from(3));
+
+            let group = address_at(16, 64).to_shard_group(NumPreshards::SixtyFour, 32);
+            assert_eq!(group.as_range(), Shard::from(16)..=Shard::from(17));
+
+            let group = minus_one(address_at(1, 4)).to_shard_group(NumPreshards::SixtyFour, 64);
+            assert_eq!(group.as_range(), Shard::from(16)..=Shard::from(16));
+
+            let group = address_at(66, 256).to_shard_group(NumPreshards::SixtyFour, 16);
+            assert_eq!(group.as_range(), Shard::from(16)..=Shard::from(19));
+        }
+
+        #[test]
+        fn it_returns_the_correct_shard_group_generic() {
+            let all_num_shards_except_1 = [2, 4, 8, 16, 32, 64, 128, 256]
+                .into_iter()
+                .map(|n| NumPreshards::try_from(n).unwrap());
+
+            // Note: this test does not calculate the correct assertions if you change this constant.
+            const NUM_COMMITTEES: u32 = 2;
+            for num_shards in all_num_shards_except_1 {
+                for at in 0..num_shards.as_u32() {
+                    let group = address_at(at, num_shards.as_u32()).to_shard_group(num_shards, NUM_COMMITTEES);
+                    if at < num_shards.as_u32() / NUM_COMMITTEES {
+                        assert_eq!(
+                            group.as_range(),
+                            Shard::from(0)..=Shard::from((num_shards.as_u32() / NUM_COMMITTEES) - 1),
+                            "Failed at {at} for num_shards={num_shards}"
+                        );
+                    } else {
+                        assert_eq!(
+                            group.as_range(),
+                            Shard::from(num_shards.as_u32() / NUM_COMMITTEES)..=Shard::from(num_shards.as_u32() - 1),
+                            "Failed at {at} for num_shards={num_shards}"
+                        );
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn it_returns_the_correct_shard_group_for_odd_num_committees() {
+            // All shard groups except the last have 3 shards each
+
+            let group = address_at(0, 64).to_shard_group(NumPreshards::SixtyFour, 3);
+            // First shard group gets an extra shard to cover the remainder
+            assert_eq!(group.as_range(), Shard::from(0)..=Shard::from(21));
+            assert_eq!(group.len(), 22);
+            let group = address_at(31, 64).to_shard_group(NumPreshards::SixtyFour, 3);
+            assert_eq!(group.as_range(), Shard::from(22)..=Shard::from(42));
+            assert_eq!(group.len(), 21);
+            let group = address_at(50, 64).to_shard_group(NumPreshards::SixtyFour, 3);
+            assert_eq!(group.as_range(), Shard::from(43)..=Shard::from(63));
+            assert_eq!(group.len(), 21);
+
+            let group = address_at(3, 64).to_shard_group(NumPreshards::SixtyFour, 7);
+            assert_eq!(group.as_range(), Shard::from(0)..=Shard::from(9));
+            assert_eq!(group.len(), 10);
+            let group = address_at(11, 64).to_shard_group(NumPreshards::SixtyFour, 7);
+            assert_eq!(group.as_range(), Shard::from(10)..=Shard::from(18));
+            assert_eq!(group.len(), 9);
+            let group = address_at(22, 64).to_shard_group(NumPreshards::SixtyFour, 7);
+            assert_eq!(group.as_range(), Shard::from(19)..=Shard::from(27));
+            assert_eq!(group.len(), 9);
+            let group = address_at(60, 64).to_shard_group(NumPreshards::SixtyFour, 7);
+            assert_eq!(group.as_range(), Shard::from(55)..=Shard::from(63));
+            assert_eq!(group.len(), 9);
+            let group = address_at(64, 64).to_shard_group(NumPreshards::SixtyFour, 7);
+            assert_eq!(group.as_range(), Shard::from(55)..=Shard::from(63));
+            assert_eq!(group.len(), 9);
+            let group = SubstateAddress::zero().to_shard_group(NumPreshards::Eight, 3);
+            assert_eq!(group.as_range(), Shard::from(0)..=Shard::from(2));
+
+            let group = address_at(1, 8).to_shard_group(NumPreshards::Eight, 3);
+            assert_eq!(group.as_range(), Shard::from(0)..=Shard::from(2));
+
+            let group = address_at(1, 8).to_shard_group(NumPreshards::Eight, 3);
+            assert_eq!(group.as_range(), Shard::from(0)..=Shard::from(2));
+
+            let group = address_at(3, 8).to_shard_group(NumPreshards::Eight, 3);
+            assert_eq!(group.as_range(), Shard::from(3)..=Shard::from(5));
+
+            let group = address_at(4, 8).to_shard_group(NumPreshards::Eight, 3);
+            assert_eq!(group.as_range(), Shard::from(3)..=Shard::from(5));
+
+            let group = address_at(5, 8).to_shard_group(NumPreshards::Eight, 3);
+            assert_eq!(group.as_range(), Shard::from(3)..=Shard::from(5));
+            //
+            let group = address_at(6, 8).to_shard_group(NumPreshards::Eight, 3);
+            assert_eq!(group.as_range(), Shard::from(6)..=Shard::from(7));
+
+            let group = address_at(7, 8).to_shard_group(NumPreshards::Eight, 3);
+            assert_eq!(group.as_range(), Shard::from(6)..=Shard::from(7));
+            let group = address_at(8, 8).to_shard_group(NumPreshards::Eight, 3);
+            assert_eq!(group.as_range(), Shard::from(6)..=Shard::from(7));
+
+            // Committee = 5
+            let group = address_at(4, 8).to_shard_group(NumPreshards::Eight, 5);
+            assert_eq!(group.as_range(), Shard::from(4)..=Shard::from(5));
+
+            let group = address_at(7, 8).to_shard_group(NumPreshards::Eight, 5);
+            assert_eq!(group.as_range(), Shard::from(7)..=Shard::from(7));
+
+            let group = address_at(8, 8).to_shard_group(NumPreshards::Eight, 5);
+            assert_eq!(group.as_range(), Shard::from(7)..=Shard::from(7));
+        }
+    }
+
+    mod shard_group_to_substate_address_range {
+        use super::*;
+
+        #[test]
+        fn it_works() {
+            let range = ShardGroup::new(0, 9).to_substate_address_range(NumPreshards::Sixteen);
+            assert_range(range, SubstateAddress::zero()..address_at(10, 16));
+
+            let range = ShardGroup::new(1, 15).to_substate_address_range(NumPreshards::Sixteen);
+            // Last shard always includes SubstateAddress::max
+            assert_range(range, address_at(1, 16)..=address_at(16, 16));
+
+            let range = ShardGroup::new(1, 8).to_substate_address_range(NumPreshards::Sixteen);
+            assert_range(range, address_at(1, 16)..address_at(9, 16));
+
+            let range = ShardGroup::new(8, 15).to_substate_address_range(NumPreshards::Sixteen);
+            assert_range(range, address_at(8, 16)..=address_at(16, 16));
+        }
     }
 }

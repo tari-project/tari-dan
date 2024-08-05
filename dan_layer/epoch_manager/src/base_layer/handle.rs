@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use async_trait::async_trait;
 use tari_base_node_client::types::BaseLayerConsensusConstants;
@@ -12,6 +12,7 @@ use tari_dan_common_types::{
     shard::Shard,
     Epoch,
     NodeAddressable,
+    ShardGroup,
     SubstateAddress,
 };
 use tari_dan_storage::global::models::ValidatorNode;
@@ -157,7 +158,10 @@ impl<TAddr: NodeAddressable> EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    pub async fn get_committees(&self, epoch: Epoch) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
+    pub async fn get_committees(
+        &self,
+        epoch: Epoch,
+    ) -> Result<HashMap<ShardGroup, Committee<TAddr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommittees { epoch, reply: tx })
@@ -201,7 +205,10 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_committees(&self, epoch: Epoch) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
+    async fn get_committees(
+        &self,
+        epoch: Epoch,
+    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommittees { epoch, reply: tx })
@@ -397,16 +404,16 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_committees_by_shards(
+    async fn get_committees_by_shard_group(
         &self,
         epoch: Epoch,
-        shards: HashSet<Shard>,
+        shard_group: ShardGroup,
     ) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(EpochManagerRequest::GetCommitteesForShards {
+            .send(EpochManagerRequest::GetCommitteesForShardGroup {
                 epoch,
-                shards,
+                shard_group,
                 reply: tx,
             })
             .await

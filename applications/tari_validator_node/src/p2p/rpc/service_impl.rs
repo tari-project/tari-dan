@@ -51,7 +51,6 @@ use tari_dan_storage::{
         EpochCheckpoint,
         HighQc,
         LockedBlock,
-        QuorumCertificate,
         StateTransitionId,
         SubstateRecord,
         TransactionRecord,
@@ -314,11 +313,10 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
                     .map(|hqc| hqc.get_quorum_certificate(tx))
                     .transpose()
             })
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
-            .unwrap_or_else(QuorumCertificate::genesis);
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
         Ok(Response::new(GetHighQcResponse {
-            high_qc: Some((&high_qc).into()),
+            high_qc: high_qc.as_ref().map(Into::into),
         }))
     }
 
@@ -359,7 +357,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
 
         let checkpoint = self
             .shard_state_store
-            .with_read_tx(|tx| EpochCheckpoint::generate(tx, prev_epoch, local_committee_info.shard()))
+            .with_read_tx(|tx| EpochCheckpoint::generate(tx, prev_epoch, local_committee_info.shard_group()))
             .optional()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
@@ -373,20 +371,19 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
 
         let (sender, receiver) = mpsc::channel(10);
 
-        let last_state_transition_for_chain =
-            StateTransitionId::new(Epoch(req.start_epoch), Shard::from(req.start_shard), req.start_seq);
+        let start_epoch = Epoch(req.start_epoch);
+        let start_shard = Shard::from(req.start_shard);
+        let last_state_transition_for_chain = StateTransitionId::new(start_epoch, start_shard, req.start_seq);
 
-        // TODO: validate that we can provide the required sync data
-        let current_shard = Shard::from(req.current_shard);
-        let current_epoch = Epoch(req.current_epoch);
-        info!(target: LOG_TARGET, "🌍peer initiated sync with this node ({current_epoch}, {current_shard})");
+        let end_epoch = Epoch(req.current_epoch);
+        info!(target: LOG_TARGET, "🌍peer initiated sync with this node ({}, {}, seq={}) to {}", start_epoch, start_shard, req.start_seq, end_epoch);
 
         task::spawn(
             StateSyncTask::new(
                 self.shard_state_store.clone(),
                 sender,
                 last_state_transition_for_chain,
-                current_epoch,
+                end_epoch,
             )
             .run(),
         );

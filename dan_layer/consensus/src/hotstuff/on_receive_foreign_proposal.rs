@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, shard::Shard};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, ShardGroup};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -54,7 +54,7 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "🔥 Receive FOREIGN PROPOSAL for block {}, parent {}, height {} from {}",
+            "🧩 Receive FOREIGN PROPOSAL for block {}, parent {}, height {} from {}",
             block.id(),
             block.parent(),
             block.height(),
@@ -66,17 +66,17 @@ where TConsensusSpec: ConsensusSpec
             .with_read_tx(|tx| ForeignReceiveCounters::get_or_default(tx))?;
 
         let vn = self.epoch_manager.get_validator_node(block.epoch(), &from).await?;
-        let committee_shard = self
+        let foreign_committee_info = self
             .epoch_manager
             .get_committee_info_for_substate(block.epoch(), vn.shard_key)
             .await?;
 
-        let local_shard = self.epoch_manager.get_local_committee_info(block.epoch()).await?;
+        let local_committee_info = self.epoch_manager.get_local_committee_info(block.epoch()).await?;
         if let Err(err) = self.validate_proposed_block(
             &from,
             &block,
-            committee_shard.shard(),
-            local_shard.shard(),
+            foreign_committee_info.shard_group(),
+            local_committee_info.shard_group(),
             &foreign_receive_counter,
         ) {
             warn!(
@@ -89,14 +89,14 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
-        foreign_receive_counter.increment(&committee_shard.shard());
+        foreign_receive_counter.increment_group(foreign_committee_info.shard_group());
 
         let tx_ids = block
             .commands()
             .iter()
             .filter_map(|command| {
                 if let Some(tx) = command.local_prepared() {
-                    if !committee_shard.includes_any_shard(command.evidence().substate_addresses_iter()) {
+                    if !foreign_committee_info.includes_any_shard(command.evidence().substate_addresses_iter()) {
                         return None;
                     }
                     // We are interested in the commands that are for us, they will be in local prepared and one of the
@@ -110,18 +110,16 @@ where TConsensusSpec: ConsensusSpec
 
         // The block height was validated earlier, so we can use the height only and not store the hash anymore
         let foreign_proposal = ForeignProposal::new(
-            committee_shard.shard(),
+            foreign_committee_info.shard_group(),
             *block.id(),
             tx_ids,
             block.base_layer_block_height(),
         );
-        if self
-            .store
-            .with_read_tx(|tx| ForeignProposal::exists(tx, &foreign_proposal))?
-        {
+
+        if self.store.with_read_tx(|tx| foreign_proposal.exists(tx))? {
             warn!(
                 target: LOG_TARGET,
-                "🔥 FOREIGN PROPOSAL: Already received proposal for block {}",
+                "❌ FOREIGN PROPOSAL: Already received proposal for block {}",
                 block.id(),
             );
             return Ok(());
@@ -130,7 +128,7 @@ where TConsensusSpec: ConsensusSpec
         self.store.with_write_tx(|tx| {
             foreign_receive_counter.save(tx)?;
             foreign_proposal.upsert(tx)?;
-            self.on_receive_foreign_block(tx, &block, &committee_shard)
+            self.on_receive_foreign_block(tx, &block, &foreign_committee_info, &local_committee_info)
         })?;
 
         // We could have ready transactions at this point, so if we're the leader for the next block we can propose
@@ -144,16 +142,28 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
         foreign_committee_info: &CommitteeInfo,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
         let leaf = LeafBlock::get(&**tx)?;
         // We only want to save the QC once if applicable
         let mut is_qc_saved = false;
+        let mut command_count = 0usize;
 
         for cmd in block.commands() {
             let Some(t) = cmd.local_prepared() else {
                 continue;
             };
+
+            if !local_committee_info.includes_any_shard(t.evidence.substate_addresses_iter()) {
+                continue;
+            }
             let Some(mut tx_rec) = self.transaction_pool.get(tx, leaf, &t.id).optional()? else {
+                // TODO: request the transaction
+                warn!(
+                    target: LOG_TARGET,
+                    "⚠️ Foreign proposal received for shard applicable transaction {} but this transaction is unknown. TODO: request it.",
+                    t.id
+                );
                 continue;
             };
 
@@ -165,6 +175,8 @@ where TConsensusSpec: ConsensusSpec
                 );
                 continue;
             }
+
+            command_count += 1;
 
             let remote_decision = t.decision;
             let local_decision = tx_rec.current_local_decision();
@@ -190,7 +202,7 @@ where TConsensusSpec: ConsensusSpec
             if tx_rec.current_stage().is_local_prepared() && tx_rec.evidence().all_shards_justified() {
                 info!(
                     target: LOG_TARGET,
-                    "🔥 FOREIGN PROPOSAL: Transaction is ready for propose ACCEPT({}, {}) Local Stage: {}",
+                    "🧩 FOREIGN PROPOSAL: Transaction is ready for propose ACCEPT({}, {}) Local Stage: {}",
                     tx_rec.transaction_id(),
                     tx_rec.current_decision(),
                     tx_rec.current_stage()
@@ -200,6 +212,20 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
+        info!(
+            target: LOG_TARGET,
+            "🧩 FOREIGN PROPOSAL: Processed {} commands from foreign block {}",
+            command_count,
+            block.id()
+        );
+        if command_count == 0 {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ FOREIGN PROPOSAL: No commands were applicable for foreign block {}. Ignoring.",
+                block.id()
+            );
+        }
+
         Ok(())
     }
 
@@ -207,8 +233,8 @@ where TConsensusSpec: ConsensusSpec
         &self,
         from: &TConsensusSpec::Addr,
         candidate_block: &Block,
-        _foreign_shard: Shard,
-        _local_shard: Shard,
+        _foreign_shard: ShardGroup,
+        _local_shard: ShardGroup,
         _foreign_receive_counter: &ForeignReceiveCounters,
     ) -> Result<(), ProposalValidationError> {
         // TODO: ignoring for now because this is currently broken

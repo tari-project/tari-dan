@@ -19,7 +19,8 @@ diesel::table! {
         id -> Integer,
         validator_node_id -> Integer,
         epoch -> BigInt,
-        committee_bucket -> BigInt,
+        shard_start -> Integer,
+        shard_end -> Integer,
     }
 }
 
@@ -68,6 +69,8 @@ diesel::table! {
         sidechain_id -> Binary,
     }
 }
+
+diesel::joinable!(committees -> validator_nodes (validator_node_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     base_layer_block_info,

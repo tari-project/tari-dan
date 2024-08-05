@@ -9,7 +9,7 @@ use std::{
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
 use tari_consensus::messages::HotstuffMessage;
-use tari_dan_common_types::shard::Shard;
+use tari_dan_common_types::ShardGroup;
 use tari_dan_storage::consensus_models::TransactionRecord;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -23,7 +23,7 @@ use tokio::{
     task,
 };
 
-use crate::support::{address::TestAddress, ValidatorChannels};
+use crate::support::{address::TestAddress, committee_number_to_shard_group, ValidatorChannels, TEST_NUM_PRESHARDS};
 
 pub type MessageFilter = Box<dyn Fn(&TestAddress, &TestAddress, &HotstuffMessage) -> bool + Sync + Send + 'static>;
 
@@ -37,7 +37,12 @@ pub fn spawn_network(
         .map(|c| {
             (
                 c.address.clone(),
-                (c.shard, c.tx_new_transactions.clone(), c.state_store.clone()),
+                (
+                    c.shard_group,
+                    c.num_committees,
+                    c.tx_new_transactions.clone(),
+                    c.state_store.clone(),
+                ),
             )
         })
         .collect();
@@ -117,7 +122,7 @@ impl TestNetwork {
     }
 
     pub async fn go_offline(&self, destination: TestNetworkDestination) -> &Self {
-        if destination.is_bucket() {
+        if destination.is_shard() {
             unimplemented!("Sorry :/ taking a bucket offline is not yet supported in the test harness");
         }
         self.offline_destinations.write().await.push(destination);
@@ -153,28 +158,37 @@ pub enum TestNetworkDestination {
     All,
     Address(TestAddress),
     #[allow(dead_code)]
-    Shard(u32),
+    Committee(u32),
 }
 
 impl TestNetworkDestination {
-    pub fn is_for(&self, addr: &TestAddress, bucket: Shard) -> bool {
+    pub fn is_for(&self, addr: &TestAddress, shard_group: ShardGroup, num_committees: u32) -> bool {
         match self {
             TestNetworkDestination::All => true,
             TestNetworkDestination::Address(a) => a == addr,
-            TestNetworkDestination::Shard(b) => *b == bucket,
+            TestNetworkDestination::Committee(b) => {
+                committee_number_to_shard_group(TEST_NUM_PRESHARDS, *b, num_committees) == shard_group
+            },
         }
     }
 
-    pub fn is_bucket(&self) -> bool {
-        matches!(self, TestNetworkDestination::Shard(_))
+    pub fn is_shard(&self) -> bool {
+        matches!(self, TestNetworkDestination::Committee(_))
     }
 }
 
 pub struct TestNetworkWorker {
     rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, TransactionRecord)>>,
     #[allow(clippy::type_complexity)]
-    tx_new_transactions:
-        HashMap<TestAddress, (Shard, mpsc::Sender<(Transaction, usize)>, SqliteStateStore<TestAddress>)>,
+    tx_new_transactions: HashMap<
+        TestAddress,
+        (
+            ShardGroup,
+            u32, // num_committees
+            mpsc::Sender<(Transaction, usize)>,
+            SqliteStateStore<TestAddress>,
+        ),
+    >,
     tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage)>>,
     #[allow(clippy::type_complexity)]
     rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Vec<TestAddress>, HotstuffMessage)>>>,
@@ -224,8 +238,8 @@ impl TestNetworkWorker {
                     .await
                     .insert(*tx_record.transaction().id(), tx_record.clone());
 
-                for (addr, (shard, tx_new_transaction_to_consensus, _)) in &tx_new_transactions {
-                    if dest.is_for(addr, *shard) {
+                for (addr, (shard_group, num_committees, tx_new_transaction_to_consensus, _)) in &tx_new_transactions {
+                    if dest.is_for(addr, *shard_group, *num_committees) {
                         tx_new_transaction_to_consensus
                             .send((tx_record.transaction().clone(), remaining))
                             .await
@@ -296,7 +310,10 @@ impl TestNetworkWorker {
                 }
             }
             // TODO: support for taking a whole committee bucket offline
-            if vn != from && self.is_offline_destination(&vn, u32::MAX.into()).await {
+            if vn != from &&
+                self.is_offline_destination(&vn, ShardGroup::all_shards(TEST_NUM_PRESHARDS))
+                    .await
+            {
                 continue;
             }
 
@@ -321,7 +338,10 @@ impl TestNetworkWorker {
             }
         }
         log::debug!("✉️ Message {} from {} to {}", msg, from, to);
-        if from != to && self.is_offline_destination(&from, u32::MAX.into()).await {
+        if from != to &&
+            self.is_offline_destination(&from, ShardGroup::all_shards(TEST_NUM_PRESHARDS))
+                .await
+        {
             log::info!("🛑 Discarding message {msg}. Leader {from} is offline");
             return;
         }
@@ -331,8 +351,9 @@ impl TestNetworkWorker {
         self.tx_hs_message.get(&to).unwrap().send((from, msg)).await.unwrap();
     }
 
-    async fn is_offline_destination(&self, addr: &TestAddress, shard: Shard) -> bool {
+    async fn is_offline_destination(&self, addr: &TestAddress, shard: ShardGroup) -> bool {
         let lock = self.offline_destinations.read().await;
-        lock.iter().any(|d| d.is_for(addr, shard))
+        // 99999 is not used TODO: support for taking entire shard group offline
+        lock.iter().any(|d| d.is_for(addr, shard, 99999))
     }
 }

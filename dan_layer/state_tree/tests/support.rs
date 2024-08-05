@@ -64,6 +64,16 @@ impl<S: TreeStore<Version>> HashTreeTester<S> {
             .put_substate_changes(current_version, next_version, changes)
             .unwrap()
     }
+
+    pub fn put_changes_at_version(&mut self, changes: impl IntoIterator<Item = SubstateTreeChange>) -> Hash {
+        let next_version = self
+            .current_version
+            .expect("call put_changes_at_version with None version");
+        let current_version = self.current_version.unwrap();
+        StateTree::<_, IdentityMapper>::new(&mut self.tree_store)
+            .put_substate_changes(Some(current_version), next_version, changes)
+            .unwrap()
+    }
 }
 
 impl HashTreeTester<MemoryTreeStore> {

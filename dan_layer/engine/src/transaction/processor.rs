@@ -270,6 +270,17 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     .claim_validator_fees(Epoch(epoch), validator_public_key)?;
                 Ok(InstructionResult::empty())
             },
+            Instruction::AssertBucketContains {
+                key,
+                resource_address,
+                min_amount,
+            } => {
+                runtime.interface().workspace_invoke(
+                    WorkspaceAction::AssertBucketContains,
+                    invoke_args![key, resource_address, min_amount].into(),
+                )?;
+                Ok(InstructionResult::empty())
+            },
         }
     }
 

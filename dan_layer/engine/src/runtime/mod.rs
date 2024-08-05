@@ -30,7 +30,7 @@ mod engine_args;
 pub use crate::runtime::engine_args::EngineArgs;
 
 mod error;
-pub use error::{RuntimeError, TransactionCommitError};
+pub use error::{AssertError, RuntimeError, TransactionCommitError};
 
 mod actions;
 pub use actions::*;

@@ -447,6 +447,7 @@ pub enum WorkspaceAction {
     Get,
     ListBuckets,
     DropAllProofs,
+    AssertBucketContains,
 }
 
 /// A workspace operation argument

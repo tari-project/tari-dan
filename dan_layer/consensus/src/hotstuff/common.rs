@@ -1,25 +1,27 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::ControlFlow;
+use std::{collections::HashMap, ops::ControlFlow};
 
+use indexmap::IndexMap;
 use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeAddressable, NodeHeight};
-use tari_dan_storage::consensus_models::{Block, LeafBlock, PendingStateTreeDiff, QuorumCertificate};
-use tari_engine_types::substate::SubstateDiff;
-use tari_state_tree::{
-    Hash,
-    StagedTreeStore,
-    StateHashTreeDiff,
-    StateTreeError,
-    SubstateTreeChange,
-    TreeStoreReader,
-    Version,
+use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeAddressable, NodeHeight, ShardGroup};
+use tari_dan_storage::{
+    consensus_models::{
+        Block,
+        LeafBlock,
+        PendingStateTreeDiff,
+        QuorumCertificate,
+        SubstateChange,
+        VersionedStateHashTreeDiff,
+    },
+    StateStoreReadTransaction,
 };
+use tari_state_tree::{Hash, StateTreeError};
 
-use crate::traits::LeaderStrategy;
+use crate::{hotstuff::substate_store::ShardedStateTree, traits::LeaderStrategy};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::common";
 
@@ -32,7 +34,7 @@ pub const EXHAUST_DIVISOR: u64 = 20; // 5%
 pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
     network: Network,
     epoch: Epoch,
-    shard: Shard,
+    shard_group: ShardGroup,
     high_qc: &QuorumCertificate,
     parent_merkle_root: FixedHash,
     new_height: NodeHeight,
@@ -46,7 +48,7 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
     with_dummy_blocks(
         network,
         epoch,
-        shard,
+        shard_group,
         high_qc,
         parent_merkle_root,
         new_height,
@@ -75,7 +77,7 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
     with_dummy_blocks(
         candidate_block.network(),
         justify_block.epoch(),
-        justify_block.shard(),
+        justify_block.shard_group(),
         candidate_block.justify(),
         *justify_block.merkle_root(),
         candidate_block.height(),
@@ -101,7 +103,7 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
 fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
     network: Network,
     epoch: Epoch,
-    shard: Shard,
+    shard_group: ShardGroup,
     high_qc: &QuorumCertificate,
     parent_merkle_root: FixedHash,
     new_height: NodeHeight,
@@ -143,7 +145,7 @@ fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
             current_height,
             high_qc.clone(),
             epoch,
-            shard,
+            shard_group,
             parent_merkle_root,
             parent_timestamp,
             parent_base_layer_block_height,
@@ -167,35 +169,22 @@ fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
     }
 }
 
-pub fn diff_to_substate_changes(diff: &SubstateDiff) -> impl Iterator<Item = SubstateTreeChange> + '_ {
-    diff.down_iter()
-        .map(|(substate_id, _version)| SubstateTreeChange::Down {
-            id: substate_id.clone(),
-        })
-        .chain(diff.up_iter().map(move |(substate_id, value)| SubstateTreeChange::Up {
-            id: substate_id.clone(),
-            value_hash: value.to_value_hash(),
-        }))
-}
-
-pub fn calculate_state_merkle_diff<TTx: TreeStoreReader<Version>, I: IntoIterator<Item = SubstateTreeChange>>(
+pub fn calculate_state_merkle_root<TTx: StateStoreReadTransaction>(
     tx: &TTx,
-    current_version: Version,
-    next_version: Version,
-    pending_tree_diffs: Vec<PendingStateTreeDiff>,
-    substate_changes: I,
-) -> Result<(Hash, StateHashTreeDiff), StateTreeError> {
-    debug!(
-        target: LOG_TARGET,
-        "Calculating state merkle diff from version {} to {} with {} pending diff(s)",
-        current_version,
-        next_version,
-        pending_tree_diffs.len(),
-    );
-    let mut store = StagedTreeStore::new(tx);
-    store.apply_ordered_diffs(pending_tree_diffs.into_iter().map(|diff| diff.diff));
-    let mut state_tree = tari_state_tree::SpreadPrefixStateTree::new(&mut store);
-    let state_root =
-        state_tree.put_substate_changes(Some(current_version).filter(|v| *v > 0), next_version, substate_changes)?;
-    Ok((state_root, store.into_diff()))
+    local_shard_group: ShardGroup,
+    pending_tree_diffs: HashMap<Shard, Vec<PendingStateTreeDiff>>,
+    changes: &[SubstateChange],
+) -> Result<(Hash, IndexMap<Shard, VersionedStateHashTreeDiff>), StateTreeError> {
+    let mut change_map = IndexMap::with_capacity(changes.len());
+
+    changes
+        .iter()
+        .filter(|ch| local_shard_group.contains(&ch.shard()))
+        .for_each(|ch| {
+            change_map.entry(ch.shard()).or_insert_with(Vec::new).push(ch.into());
+        });
+
+    let mut sharded_tree = ShardedStateTree::new(tx).with_pending_diffs(pending_tree_diffs);
+    let state_root = sharded_tree.put_substate_tree_changes(change_map)?;
+    Ok((state_root, sharded_tree.into_versioned_tree_diffs()))
 }

@@ -327,14 +327,14 @@ impl SubstateRecord {
 #[derive(Debug, Clone)]
 pub struct SubstateCreatedProof {
     pub substate: SubstateData,
-    pub created_qc: QuorumCertificate,
+    // TODO: proof that data was created
 }
 
 #[derive(Debug, Clone)]
 pub struct SubstateDestroyedProof {
     pub substate_id: SubstateId,
     pub version: u32,
-    pub justify: QuorumCertificate,
+    // TODO: proof that data was destroyed
     pub destroyed_by_transaction: TransactionId,
 }
 

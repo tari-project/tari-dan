@@ -114,12 +114,6 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Comm
             .map(|output| output.commitment.as_public_key())
             .unwrap_or(&PublicKey::default());
 
-    const LOG_TARGET: &str = "tari::dan::engine::confidential::withdraw";
-    log::error!(target: LOG_TARGET, "🐞public_excess: {public_excess}");
-    log::error!(target: LOG_TARGET, "🐞public_nonce: {}", balance_proof.get_public_nonce());
-    log::error!(target: LOG_TARGET, "🐞input_revealed_amount: {input_revealed_amount}");
-    log::error!(target: LOG_TARGET, "🐞total_output_revealed_amount: {total_output_revealed_amount}");
-
     let challenge = challenges::confidential_withdraw64(
         &public_excess,
         balance_proof.get_public_nonce(),

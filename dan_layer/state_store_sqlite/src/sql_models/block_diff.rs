@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
+use tari_dan_common_types::shard::Shard;
 use tari_dan_storage::{consensus_models, consensus_models::BlockId, StorageError};
 use tari_transaction::VersionedSubstateId;
 use time::PrimitiveDateTime;
@@ -15,6 +16,7 @@ pub struct BlockDiff {
     pub transaction_id: String,
     pub substate_id: String,
     pub version: i32,
+    pub shard: i32,
     pub change: String,
     pub state: Option<String>,
     pub created_at: PrimitiveDateTime,
@@ -35,6 +37,7 @@ impl BlockDiff {
         })?;
         let id = VersionedSubstateId::new(substate_id, d.version as u32);
         let transaction_id = deserialize_hex_try_from(&d.transaction_id)?;
+        let shard = Shard::from(d.shard as u32);
         match d.change.as_str() {
             "Up" => {
                 let state = d.state.ok_or(StorageError::DataInconsistency {
@@ -42,11 +45,16 @@ impl BlockDiff {
                 })?;
                 Ok(consensus_models::SubstateChange::Up {
                     id,
+                    shard,
                     transaction_id,
                     substate: deserialize_json(&state)?,
                 })
             },
-            "Down" => Ok(consensus_models::SubstateChange::Down { id, transaction_id }),
+            "Down" => Ok(consensus_models::SubstateChange::Down {
+                id,
+                transaction_id,
+                shard,
+            }),
             _ => Err(StorageError::DataInconsistency {
                 details: format!("Invalid block diff change type: {}", d.change),
             }),

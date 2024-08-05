@@ -4,6 +4,7 @@ import type { Epoch } from "./Epoch";
 import type { NodeHeight } from "./NodeHeight";
 import type { QuorumCertificate } from "./QuorumCertificate";
 import type { Shard } from "./Shard";
+import type { ShardGroup } from "./ShardGroup";
 
 export interface Block {
   id: string;
@@ -12,7 +13,7 @@ export interface Block {
   justify: QuorumCertificate;
   height: NodeHeight;
   epoch: Epoch;
-  shard: Shard;
+  shard_group: ShardGroup;
   proposed_by: string;
   total_leader_fee: number;
   merkle_root: string;

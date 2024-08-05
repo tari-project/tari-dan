@@ -1,10 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
@@ -12,13 +9,14 @@ use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
     shard::Shard,
     Epoch,
+    ShardGroup,
     SubstateAddress,
 };
 use tari_dan_storage::global::models::ValidatorNode;
 use tari_epoch_manager::{EpochManagerError, EpochManagerEvent, EpochManagerReader};
 use tokio::sync::{broadcast, Mutex, MutexGuard};
 
-use crate::support::{address::TestAddress, helpers::random_substate_in_shard};
+use crate::support::{address::TestAddress, helpers::random_substate_in_shard_group, TEST_NUM_PRESHARDS};
 
 #[derive(Debug, Clone)]
 pub struct TestEpochManager {
@@ -82,16 +80,15 @@ impl TestEpochManager {
         copy
     }
 
-    pub async fn add_committees(&self, committees: HashMap<Shard, Committee<TestAddress>>) {
+    pub async fn add_committees(&self, committees: HashMap<ShardGroup, Committee<TestAddress>>) {
         let mut state = self.state_lock().await;
-        let num_committees = committees.len() as u32;
-        for (shard, committee) in committees {
+        for (shard_group, committee) in committees {
             for (address, pk) in &committee.members {
-                let substate_address = random_substate_in_shard(shard, num_committees);
+                let substate_address = random_substate_in_shard_group(shard_group, TEST_NUM_PRESHARDS);
                 state.validator_shards.insert(
                     address.clone(),
                     (
-                        shard,
+                        shard_group,
                         substate_address.to_substate_address(),
                         pk.clone(),
                         None,
@@ -100,14 +97,16 @@ impl TestEpochManager {
                         Epoch(1),
                     ),
                 );
-                state.address_shard.insert(address.clone(), shard);
+                state.address_shard.insert(address.clone(), shard_group);
             }
 
-            state.committees.insert(shard, committee);
+            state.committees.insert(shard_group, committee);
         }
     }
 
-    pub async fn all_validators(&self) -> Vec<(TestAddress, Shard, SubstateAddress, PublicKey, u64, Epoch, Epoch)> {
+    pub async fn all_validators(
+        &self,
+    ) -> Vec<(TestAddress, ShardGroup, SubstateAddress, PublicKey, u64, Epoch, Epoch)> {
         self.state_lock()
             .await
             .validator_shards
@@ -132,7 +131,7 @@ impl TestEpochManager {
             .collect()
     }
 
-    pub async fn all_committees(&self) -> HashMap<Shard, Committee<TestAddress>> {
+    pub async fn all_committees(&self) -> HashMap<ShardGroup, Committee<TestAddress>> {
         self.state_lock().await.committees.clone()
     }
 }
@@ -151,8 +150,8 @@ impl EpochManagerReader for TestEpochManager {
         substate_address: SubstateAddress,
     ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let state = self.state_lock().await;
-        let shard = substate_address.to_shard(state.committees.len() as u32);
-        Ok(state.committees[&shard].clone())
+        let shard_group = substate_address.to_shard_group(TEST_NUM_PRESHARDS, state.committees.len() as u32);
+        Ok(state.committees[&shard_group].clone())
     }
 
     async fn get_our_validator_node(&self, _epoch: Epoch) -> Result<ValidatorNode<TestAddress>, EpochManagerError> {
@@ -189,10 +188,22 @@ impl EpochManagerReader for TestEpochManager {
     async fn get_local_committee_info(&self, epoch: Epoch) -> Result<CommitteeInfo, EpochManagerError> {
         let our_vn = self.get_our_validator_node(epoch).await?;
         let num_committees = self.get_num_committees(epoch).await?;
-        let committee = self.get_committee_for_substate(epoch, our_vn.shard_key).await?;
-        let our_shard = our_vn.shard_key.to_shard(num_committees);
+        let sg = our_vn.shard_key.to_shard_group(TEST_NUM_PRESHARDS, num_committees);
+        let num_shard_group_members = self
+            .inner
+            .lock()
+            .await
+            .committees
+            .get(&sg)
+            .map(|c| c.len())
+            .unwrap_or(0);
 
-        Ok(CommitteeInfo::new(num_committees, committee.len() as u32, our_shard))
+        Ok(CommitteeInfo::new(
+            TEST_NUM_PRESHARDS,
+            num_shard_group_members as u32,
+            num_committees as u32,
+            sg,
+        ))
     }
 
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError> {
@@ -219,8 +230,11 @@ impl EpochManagerReader for TestEpochManager {
         Ok(self.inner.lock().await.committees.len() as u32)
     }
 
-    async fn get_committees(&self, _epoch: Epoch) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
-        todo!()
+    async fn get_committees(
+        &self,
+        _epoch: Epoch,
+    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, EpochManagerError> {
+        Ok(self.inner.lock().await.committees.clone())
     }
 
     async fn get_committee_info_by_validator_address(
@@ -231,17 +245,17 @@ impl EpochManagerReader for TestEpochManager {
         todo!()
     }
 
-    async fn get_committees_by_shards(
+    async fn get_committees_by_shard_group(
         &self,
         _epoch: Epoch,
-        shards: HashSet<Shard>,
+        shard_group: ShardGroup,
     ) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
         let state = self.state_lock().await;
         Ok(state
             .committees
-            .iter()
-            .filter(|(shard, _)| shards.contains(shard))
-            .map(|(shard, committee)| (*shard, committee.clone()))
+            .get(&shard_group)
+            .into_iter()
+            .flat_map(|committee| shard_group.shard_iter().map(|s| (s, committee.clone())))
             .collect())
     }
 
@@ -251,10 +265,22 @@ impl EpochManagerReader for TestEpochManager {
         substate_address: SubstateAddress,
     ) -> Result<CommitteeInfo, EpochManagerError> {
         let num_committees = self.get_num_committees(epoch).await?;
-        let committee = self.get_committee_for_substate(epoch, substate_address).await?;
-        let shard = substate_address.to_shard(num_committees);
+        let sg = substate_address.to_shard_group(TEST_NUM_PRESHARDS, num_committees);
+        let num_members = self
+            .inner
+            .lock()
+            .await
+            .committees
+            .get(&sg)
+            .map(|c| c.len())
+            .unwrap_or(0);
 
-        Ok(CommitteeInfo::new(num_committees, committee.len() as u32, shard))
+        Ok(CommitteeInfo::new(
+            TEST_NUM_PRESHARDS,
+            num_members as u32,
+            num_committees,
+            sg,
+        ))
     }
 
     // async fn get_committees_by_shards(
@@ -318,10 +344,20 @@ pub struct TestEpochManagerState {
     pub last_block_of_current_epoch: FixedHash,
     pub is_epoch_active: bool,
     #[allow(clippy::type_complexity)]
-    pub validator_shards:
-        HashMap<TestAddress, (Shard, SubstateAddress, PublicKey, Option<PublicKey>, u64, Epoch, Epoch)>,
-    pub committees: HashMap<Shard, Committee<TestAddress>>,
-    pub address_shard: HashMap<TestAddress, Shard>,
+    pub validator_shards: HashMap<
+        TestAddress,
+        (
+            ShardGroup,
+            SubstateAddress,
+            PublicKey,
+            Option<PublicKey>,
+            u64,
+            Epoch,
+            Epoch,
+        ),
+    >,
+    pub committees: HashMap<ShardGroup, Committee<TestAddress>>,
+    pub address_shard: HashMap<TestAddress, ShardGroup>,
 }
 
 impl Default for TestEpochManagerState {

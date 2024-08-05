@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
-use tari_dan_common_types::PeerAddress;
+use tari_dan_common_types::{NumPreshards, PeerAddress};
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::Transaction;
@@ -42,6 +42,7 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::validator_node::mempool";
 
 pub fn spawn<TValidator>(
+    num_preshards: NumPreshards,
     gossip: Gossip,
     epoch_manager: EpochManagerHandle<PeerAddress>,
     transaction_validator: TValidator,
@@ -59,6 +60,7 @@ where
     #[cfg(feature = "metrics")]
     let metrics = PrometheusMempoolMetrics::new(metrics_registry);
     let mempool = MempoolService::new(
+        num_preshards,
         rx_mempool_request,
         gossip,
         epoch_manager,

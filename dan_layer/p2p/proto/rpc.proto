@@ -161,10 +161,6 @@ message GetVirtualSubstateResponse {
   repeated tari.dan.consensus.QuorumCertificate quorum_certificates = 2;
 }
 
-message SubstateCreatedProof {
-  SubstateData substate = 1;
-  tari.dan.consensus.QuorumCertificate created_justify = 2;
-}
 
 // Minimal substate data
 message SubstateData {
@@ -174,18 +170,25 @@ message SubstateData {
   bytes created_transaction = 7;
 }
 
-message SubstateDestroyedProof {
-  bytes substate_id = 1;
-  uint32 version = 2;
-  tari.dan.consensus.QuorumCertificate destroyed_justify = 3;
-  bytes destroyed_by_transaction = 4;
-}
+
 
 message SubstateUpdate {
   oneof update {
     SubstateCreatedProof create = 1;
     SubstateDestroyedProof destroy = 2;
   }
+}
+
+message SubstateCreatedProof {
+  SubstateData substate = 1;
+  //  tari.dan.consensus.QuorumCertificate created_justify = 2;
+}
+
+message SubstateDestroyedProof {
+  bytes substate_id = 1;
+  uint32 version = 2;
+  //  tari.dan.consensus.QuorumCertificate destroyed_justify = 3;
+  bytes destroyed_by_transaction = 4;
 }
 
 message SyncBlocksRequest {
@@ -237,7 +240,6 @@ message SyncStateRequest {
   // The shard in the current shard-epoch that is requested.
   // This will limit the state transitions returned to those that fall within this shard-epoch.
   uint64 current_epoch = 4;
-  uint32 current_shard = 5;
 }
 
 message SyncStateResponse {

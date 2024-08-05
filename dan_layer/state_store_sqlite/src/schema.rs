@@ -7,6 +7,7 @@ diesel::table! {
         transaction_id -> Text,
         substate_id -> Text,
         version -> Integer,
+        shard -> Integer,
         change -> Text,
         state -> Nullable<Text>,
         created_at -> Timestamp,
@@ -22,7 +23,7 @@ diesel::table! {
         network -> Text,
         height -> BigInt,
         epoch -> BigInt,
-        shard -> Integer,
+        shard_group -> Integer,
         proposed_by -> Text,
         qc_id -> Text,
         command_count -> BigInt,
@@ -44,7 +45,7 @@ diesel::table! {
 diesel::table! {
     foreign_proposals (id) {
         id -> Integer,
-        bucket -> Integer,
+        shard_group -> Integer,
         block_id -> Text,
         state -> Text,
         proposed_height -> Nullable<BigInt>,
@@ -164,7 +165,7 @@ diesel::table! {
         network -> Text,
         height -> BigInt,
         epoch -> BigInt,
-        shard -> Integer,
+        shard_group -> Integer,
         proposed_by -> Text,
         justify -> Text,
         command_count -> BigInt,
@@ -185,6 +186,8 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         block_height -> BigInt,
+        shard -> Integer,
+        version -> BigInt,
         diff_json -> Text,
         created_at -> Timestamp,
     }
@@ -219,11 +222,19 @@ diesel::table! {
 diesel::table! {
     state_tree (id) {
         id -> Integer,
-        epoch -> BigInt,
         shard -> Integer,
         key -> Text,
         node -> Text,
         is_stale -> Bool,
+    }
+}
+
+diesel::table! {
+    state_tree_shard_versions (id) {
+        id -> Integer,
+        shard -> Integer,
+        version -> BigInt,
+        created_at -> Timestamp,
     }
 }
 
@@ -305,8 +316,8 @@ diesel::table! {
         original_decision -> Text,
         local_decision -> Nullable<Text>,
         remote_decision -> Nullable<Text>,
-        evidence -> Text,
-        transaction_fee -> BigInt,
+        evidence -> Nullable<Text>,
+        transaction_fee -> Nullable<BigInt>,
         leader_fee -> Nullable<BigInt>,
         global_exhaust_burn -> Nullable<BigInt>,
         stage -> Text,
@@ -387,6 +398,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     quorum_certificates,
     state_transitions,
     state_tree,
+    state_tree_shard_versions,
     substate_locks,
     substates,
     transaction_executions,

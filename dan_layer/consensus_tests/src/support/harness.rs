@@ -9,7 +9,7 @@ use std::{
 
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use tari_consensus::hotstuff::HotstuffEvent;
-use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeHeight};
+use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeHeight, NumPreshards, ShardGroup};
 use tari_dan_storage::{
     consensus_models::{BlockId, Decision, QcId, SubstateRecord, TransactionExecution, TransactionRecord},
     StateStore,
@@ -26,7 +26,7 @@ use tari_template_lib::models::ComponentAddress;
 use tari_transaction::{TransactionId, VersionedSubstateId};
 use tokio::{sync::broadcast, task, time::sleep};
 
-use super::{create_execution_result_for_transaction, helpers, MessageFilter};
+use super::{create_execution_result_for_transaction, helpers, MessageFilter, TEST_NUM_PRESHARDS};
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
@@ -93,7 +93,7 @@ impl Test {
         execution: TransactionExecution,
     ) -> &Self {
         for vn in self.validators.values() {
-            if dest.is_for(&vn.address, vn.shard) {
+            if dest.is_for(&vn.address, vn.shard_group, vn.num_committees) {
                 vn.transaction_executions.insert(execution.clone());
             }
         }
@@ -304,7 +304,7 @@ impl Test {
         let committees = self.epoch_manager.all_committees().await;
         let mut attempts = 0usize;
         'outer: loop {
-            for (shard, committee) in &committees {
+            for (shard_group, committee) in &committees {
                 let mut blocks = self
                     .validators
                     .values()
@@ -313,7 +313,7 @@ impl Test {
                     .map(|v| {
                         let block = v
                             .state_store
-                            .with_read_tx(|tx| tx.blocks_get_tip(current_epoch, *shard))
+                            .with_read_tx(|tx| tx.blocks_get_tip(current_epoch, *shard_group))
                             .unwrap();
                         (v.address.clone(), block)
                     });
@@ -392,7 +392,7 @@ impl Test {
 }
 
 pub struct TestBuilder {
-    committees: HashMap<Shard, Committee<TestAddress>>,
+    committees: HashMap<u32, Committee<TestAddress>>,
     sql_address: String,
     timeout: Option<Duration>,
     debug_sql_file: Option<String>,
@@ -433,10 +433,10 @@ impl TestBuilder {
         self
     }
 
-    pub fn add_committee<T: Into<Shard>>(mut self, shard: T, addresses: Vec<&'static str>) -> Self {
+    pub fn add_committee(mut self, committee_num: u32, addresses: Vec<&'static str>) -> Self {
         let entry = self
             .committees
-            .entry(shard.into())
+            .entry(committee_num)
             .or_insert_with(|| Committee::new(vec![]));
 
         for addr in addresses {
@@ -453,26 +453,28 @@ impl TestBuilder {
     }
 
     async fn build_validators(
-        &self,
         leader_strategy: &RoundRobinLeaderStrategy,
         epoch_manager: &TestEpochManager,
+        sql_address: String,
         shutdown_signal: ShutdownSignal,
     ) -> (Vec<ValidatorChannels>, HashMap<TestAddress, Validator>) {
+        let num_committees = epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
         epoch_manager
             .all_validators()
             .await
             .into_iter()
-            .map(|(address, bucket, shard, _, _, _, _)| {
-                let sql_address = self.sql_address.replace("{}", &address.0);
+            .map(|(address, shard_group, shard_addr, _, _, _, _)| {
+                let sql_address = sql_address.replace("{}", &address.0);
                 let (sk, pk) = helpers::derive_keypair_from_address(&address);
 
                 let (channels, validator) = Validator::builder()
                     .with_sql_url(sql_address)
                     .with_address_and_secret_key(address.clone(), sk)
-                    .with_shard(shard)
-                    .with_bucket(bucket)
-                    .with_epoch_manager(epoch_manager.clone_for(address.clone(), pk, shard))
+                    .with_shard(shard_addr)
+                    .with_shard_group(shard_group)
+                    .with_epoch_manager(epoch_manager.clone_for(address.clone(), pk, shard_addr))
                     .with_leader_strategy(*leader_strategy)
+                    .with_num_committees(num_committees)
                     .spawn(shutdown_signal.clone());
                 (channels, (address, validator))
             })
@@ -493,14 +495,15 @@ impl TestBuilder {
             self.sql_address = format!("sqlite://{sql_file}");
         }
 
+        let committees = build_committees(self.committees);
+
         let leader_strategy = RoundRobinLeaderStrategy::new();
         let (tx_epoch_events, _) = broadcast::channel(10);
         let epoch_manager = TestEpochManager::new(tx_epoch_events);
-        epoch_manager.add_committees(self.committees.clone()).await;
+        epoch_manager.add_committees(committees).await;
         let shutdown = Shutdown::new();
-        let (channels, validators) = self
-            .build_validators(&leader_strategy, &epoch_manager, shutdown.to_signal())
-            .await;
+        let (channels, validators) =
+            Self::build_validators(&leader_strategy, &epoch_manager, self.sql_address, shutdown.to_signal()).await;
         let network = spawn_network(channels, shutdown.to_signal(), self.message_filter);
 
         Test {
@@ -513,4 +516,48 @@ impl TestBuilder {
             timeout: self.timeout,
         }
     }
+}
+
+/// Converts a test committee number to a shard group. E.g. 0 is shard group 0 to 21, 1 is 22 to 42, etc.
+pub fn committee_number_to_shard_group(num_shards: NumPreshards, target_group: u32, num_committees: u32) -> ShardGroup {
+    // number of committees can never exceed number of shards
+    assert!(num_committees <= num_shards.as_u32());
+    if num_committees <= 1 {
+        return ShardGroup::new(Shard::zero(), Shard::from(num_shards.as_u32() - 1));
+    }
+
+    let shards_per_committee = num_shards.as_u32() / num_committees;
+    let mut shards_per_committee_rem = num_shards.as_u32() % num_committees;
+
+    let mut start = 0u32;
+    let mut end = shards_per_committee;
+    if shards_per_committee_rem > 0 {
+        end += 1;
+    }
+
+    for _group in 0..target_group {
+        start += shards_per_committee;
+        if shards_per_committee_rem > 0 {
+            start += 1;
+            shards_per_committee_rem -= 1;
+        }
+
+        end = start + shards_per_committee;
+        if shards_per_committee_rem > 0 {
+            end += 1;
+        }
+    }
+
+    ShardGroup::new(start, end - 1)
+}
+
+fn build_committees(committees: HashMap<u32, Committee<TestAddress>>) -> HashMap<ShardGroup, Committee<TestAddress>> {
+    let num_committees = committees.len() as u32;
+    committees
+        .into_iter()
+        .map(|(num, committee)| {
+            let shard_group = committee_number_to_shard_group(TEST_NUM_PRESHARDS, num, num_committees);
+            (shard_group, committee)
+        })
+        .collect()
 }

@@ -8,16 +8,18 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{shard::Shard, NodeHeight};
+use tari_dan_common_types::{NodeHeight, ShardGroup};
 use tari_transaction::TransactionId;
-#[cfg(feature = "ts")]
-use ts_rs::TS;
 
 use super::BlockId;
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub enum ForeignProposalState {
     New,
     Proposed,
@@ -48,10 +50,14 @@ impl FromStr for ForeignProposalState {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
-#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
 pub struct ForeignProposal {
     #[cfg_attr(feature = "ts", ts(type = "number"))]
-    pub shard: Shard,
+    pub shard_group: ShardGroup,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub block_id: BlockId,
     pub state: ForeignProposalState,
@@ -64,13 +70,13 @@ pub struct ForeignProposal {
 
 impl ForeignProposal {
     pub fn new(
-        shard: Shard,
+        shard_group: ShardGroup,
         block_id: BlockId,
         transactions: Vec<TransactionId>,
         base_layer_block_height: u64,
     ) -> Self {
         Self {
-            shard,
+            shard_group,
             block_id,
             state: ForeignProposalState::New,
             proposed_height: None,
@@ -97,11 +103,8 @@ impl ForeignProposal {
         Ok(())
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &TTx,
-        foreign_proposal: &Self,
-    ) -> Result<bool, StorageError> {
-        tx.foreign_proposal_exists(foreign_proposal)
+    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
+        tx.foreign_proposal_exists(self)
     }
 
     pub fn get_all_new<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx) -> Result<Vec<Self>, StorageError> {

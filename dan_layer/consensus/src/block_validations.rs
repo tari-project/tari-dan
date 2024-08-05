@@ -13,17 +13,16 @@ use crate::{
 
 pub async fn check_proposal<TConsensusSpec: ConsensusSpec>(
     block: &Block,
-    network: Network,
     epoch_manager: &TConsensusSpec::EpochManager,
     vote_signing_service: &TConsensusSpec::SignatureService,
     leader_strategy: &TConsensusSpec::LeaderStrategy,
-    _config: &HotstuffConfig,
+    config: &HotstuffConfig,
 ) -> Result<(), HotStuffError> {
     // TODO: in order to do the base layer block has validation, we need to ensure that we have synced to the tip.
     //       If not, we need some strategy for "parking" the blocks until we are at least at the provided hash or the
     //       tip. Without this, the check has a race condition between the base layer scanner and consensus.
     // check_base_layer_block_hash::<TConsensusSpec>(block, epoch_manager, config).await?;
-    check_network(block, network)?;
+    check_network(block, config.network)?;
     check_hash_and_height(block)?;
     let committee_for_block = epoch_manager
         .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
@@ -182,15 +181,14 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         let vn = epoch_manager
             .get_validator_node_by_public_key(qc.epoch(), signature.public_key())
             .await?;
-        let actual_shard = epoch_manager
+        let committee_info = epoch_manager
             .get_committee_info_for_substate(qc.epoch(), vn.shard_key)
-            .await?
-            .shard();
-        if actual_shard != qc.shard() {
+            .await?;
+        if committee_info.shard_group() != qc.shard_group() {
             return Err(ProposalValidationError::ValidatorNotInCommittee {
                 validator: signature.public_key().to_string(),
-                expected_shard: qc.shard().to_string(),
-                actual_shard: actual_shard.to_string(),
+                expected_shard: qc.shard_group().to_string(),
+                actual_shard: committee_info.shard_group().to_string(),
             }
             .into());
         }

@@ -5,7 +5,7 @@ use diesel::{Connection, SqliteConnection};
 use rand::rngs::OsRng;
 use tari_common_types::types::PublicKey;
 use tari_crypto::keys::PublicKey as _;
-use tari_dan_common_types::{shard::Shard, Epoch, PeerAddress, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, PeerAddress, ShardGroup, SubstateAddress};
 use tari_dan_storage::global::{GlobalDb, ValidatorNodeDb};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_utilities::ByteArray;
@@ -65,14 +65,14 @@ fn insert_vn_with_public_key(
         .unwrap()
 }
 
-fn update_committee_bucket(
+fn set_committee_shard_group(
     validator_nodes: &mut ValidatorNodeDb<'_, '_, SqliteGlobalDbAdapter<PeerAddress>>,
     public_key: &PublicKey,
-    committee_bucket: Shard,
+    shard_group: ShardGroup,
     epoch: Epoch,
 ) {
     validator_nodes
-        .set_committee_shard(derived_substate_address(public_key), committee_bucket, None, epoch)
+        .set_committee_shard(derived_substate_address(public_key), shard_group, None, epoch)
         .unwrap();
 }
 
@@ -94,13 +94,13 @@ fn change_committee_bucket() {
     let mut validator_nodes = db.validator_nodes(&mut tx);
     let pk = new_public_key();
     insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(0), Epoch(4), None);
-    update_committee_bucket(&mut validator_nodes, &pk, Shard::from(1), Epoch(0));
-    update_committee_bucket(&mut validator_nodes, &pk, Shard::from(3), Epoch(1));
-    update_committee_bucket(&mut validator_nodes, &pk, Shard::from(7), Epoch(2));
-    update_committee_bucket(&mut validator_nodes, &pk, Shard::from(4), Epoch(3));
+    set_committee_shard_group(&mut validator_nodes, &pk, ShardGroup::new(1, 2), Epoch(0));
+    set_committee_shard_group(&mut validator_nodes, &pk, ShardGroup::new(3, 4), Epoch(1));
+    set_committee_shard_group(&mut validator_nodes, &pk, ShardGroup::new(7, 8), Epoch(2));
+    set_committee_shard_group(&mut validator_nodes, &pk, ShardGroup::new(4, 5), Epoch(3));
+    set_committee_shard_group(&mut validator_nodes, &pk, ShardGroup::new(4, 5), Epoch(3));
     let vns = validator_nodes
-        .get_committee_for_shard(Epoch(3), Shard::from(4))
-        .unwrap()
+        .get_committees_for_shard_group(Epoch(3), ShardGroup::new(4, 5))
         .unwrap();
-    assert_eq!(vns.len(), 1);
+    assert_eq!(vns.get(&Shard::from(4)).unwrap().len(), 2);
 }

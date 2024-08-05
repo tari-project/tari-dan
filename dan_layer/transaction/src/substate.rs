@@ -4,7 +4,7 @@
 use std::{borrow::Borrow, fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{shard::Shard, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, NumPreshards, ShardGroup, SubstateAddress};
 use tari_engine_types::{serde_with, substate::SubstateId};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -54,14 +54,20 @@ impl SubstateRequirement {
     }
 
     pub fn to_substate_address(&self) -> Option<SubstateAddress> {
-        Some(SubstateAddress::from_substate_id(self.substate_id(), self.version()?))
+        self.version()
+            .map(|v| SubstateAddress::from_substate_id(self.substate_id(), v))
     }
 
     /// Calculates and returns the shard number that this SubstateAddress belongs.
-    /// A shard is a division of the 256-bit shard space.
+    /// A shard is a fixed division of the 256-bit shard space.
     /// If the substate version is not known, None is returned.
-    pub fn to_committee_shard(&self, num_committees: u32) -> Option<Shard> {
-        Some(self.to_substate_address()?.to_shard(num_committees))
+    pub fn to_shard(&self, num_shards: NumPreshards) -> Option<Shard> {
+        self.to_substate_address().map(|a| a.to_shard(num_shards))
+    }
+
+    pub fn to_shard_group(&self, num_shards: NumPreshards, num_committees: u32) -> Option<ShardGroup> {
+        self.to_substate_address()
+            .map(|a| a.to_shard_group(num_shards, num_committees))
     }
 
     pub fn to_versioned(&self) -> Option<VersionedSubstateId> {
@@ -179,8 +185,12 @@ impl VersionedSubstateId {
 
     /// Calculates and returns the shard number that this SubstateAddress belongs.
     /// A shard is an equal division of the 256-bit shard space.
-    pub fn to_committee_shard(&self, num_committees: u32) -> Shard {
-        self.to_substate_address().to_shard(num_committees)
+    pub fn to_shard(&self, num_shards: NumPreshards) -> Shard {
+        self.to_substate_address().to_shard(num_shards)
+    }
+
+    pub fn to_shard_group(&self, num_shards: NumPreshards, num_committees: u32) -> ShardGroup {
+        self.to_substate_address().to_shard_group(num_shards, num_committees)
     }
 
     pub fn to_previous_version(&self) -> Option<Self> {

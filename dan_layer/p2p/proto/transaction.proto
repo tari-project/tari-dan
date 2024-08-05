@@ -42,6 +42,7 @@ message Instruction {
     CLAIM_VALIDATOR_FEES = 5;
     DROP_ALL_PROOFS_IN_WORKSPACE = 6;
     CREATE_ACCOUNT = 7;
+    ASSERT_BUCKET_CONTAINS = 8;
   }
   InstructionType instruction_type = 1;
 
@@ -74,6 +75,9 @@ message Instruction {
   bytes create_account_owner_public_key = 17;
   string create_account_workspace_bucket = 18;
 
+  // AssertBucketContains
+  bytes resource_address = 19;
+  int64 min_amount = 20;
 }
 
 message Arg {

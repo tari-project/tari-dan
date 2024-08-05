@@ -3,7 +3,7 @@
 
 use rand::{rngs::OsRng, RngCore};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight};
+use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, Command, Decision, TransactionAtom, TransactionPoolStage, TransactionPoolStatusUpdate},
     StateStore,
@@ -31,6 +31,7 @@ fn create_tx_atom() -> TransactionAtom {
 }
 
 mod confirm_all_transitions {
+    use tari_dan_common_types::{NumPreshards, ShardGroup};
 
     use super::*;
 
@@ -46,7 +47,7 @@ mod confirm_all_transitions {
         let atom3 = create_tx_atom();
 
         let network = Default::default();
-        let zero_block = Block::zero_block(network);
+        let zero_block = Block::zero_block(network, NumPreshards::SixtyFour);
         zero_block.insert(&mut tx).unwrap();
         let block1 = Block::new(
             network,
@@ -54,7 +55,7 @@ mod confirm_all_transitions {
             zero_block.justify().clone(),
             NodeHeight(1),
             Epoch(0),
-            Shard::from(0),
+            ShardGroup::all_shards(NumPreshards::SixtyFour),
             Default::default(),
             // Need to have a command in, otherwise this block will not be included internally in the query because it
             // cannot cause a state change without any commands

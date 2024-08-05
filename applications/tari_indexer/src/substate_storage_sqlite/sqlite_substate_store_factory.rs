@@ -39,7 +39,7 @@ use diesel::{
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use log::*;
 use tari_crypto::tari_utilities::hex::to_hex;
-use tari_dan_common_types::{shard::Shard, substate_type::SubstateType, Epoch};
+use tari_dan_common_types::{substate_type::SubstateType, Epoch, ShardGroup};
 use tari_dan_storage::{consensus_models::BlockId, StorageError};
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
 use tari_engine_types::substate::SubstateId;
@@ -230,7 +230,11 @@ pub trait SubstateStoreReadTransaction {
         limit: u32,
     ) -> Result<Vec<Event>, StorageError>;
     fn event_exists(&mut self, event: NewEvent) -> Result<bool, StorageError>;
-    fn get_last_scanned_block_id(&mut self, epoch: Epoch, shard: Shard) -> Result<Option<BlockId>, StorageError>;
+    fn get_last_scanned_block_id(
+        &mut self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+    ) -> Result<Option<BlockId>, StorageError>;
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
@@ -597,14 +601,18 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         Ok(exists)
     }
 
-    fn get_last_scanned_block_id(&mut self, epoch: Epoch, shard: Shard) -> Result<Option<BlockId>, StorageError> {
+    fn get_last_scanned_block_id(
+        &mut self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+    ) -> Result<Option<BlockId>, StorageError> {
         use crate::substate_storage_sqlite::schema::scanned_block_ids;
 
         let row: Option<ScannedBlockId> = scanned_block_ids::table
             .filter(
                 scanned_block_ids::epoch
                     .eq(epoch.0 as i64)
-                    .and(scanned_block_ids::shard.eq(i64::from(shard.as_u32()))),
+                    .and(scanned_block_ids::shard_group.eq(shard_group.encode_as_u32() as i32)),
             )
             .first(self.connection())
             .optional()
@@ -795,7 +803,7 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
 
         diesel::insert_into(scanned_block_ids::table)
             .values(&new)
-            .on_conflict((scanned_block_ids::epoch, scanned_block_ids::shard))
+            .on_conflict((scanned_block_ids::epoch, scanned_block_ids::shard_group))
             .do_update()
             .set(new.clone())
             .execute(&mut *self.connection())
@@ -805,7 +813,7 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
 
         debug!(
             target: LOG_TARGET,
-            "Added new scanned block id {} for epoch {} and shard {:?}", to_hex(&new.last_block_id), new.epoch, new.shard
+            "Added new scanned block id {} for epoch {} and shard {:?}", to_hex(&new.last_block_id), new.epoch, new.shard_group
         );
 
         Ok(())

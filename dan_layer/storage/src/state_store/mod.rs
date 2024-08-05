@@ -3,14 +3,14 @@
 
 use std::{
     borrow::Borrow,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     ops::{Deref, RangeInclusive},
 };
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, ShardGroup, SubstateAddress};
 use tari_engine_types::substate::SubstateId;
 use tari_state_tree::{Node, NodeKey, StaleTreeNode, Version};
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
@@ -48,6 +48,7 @@ use crate::{
         TransactionPoolStage,
         TransactionPoolStatusUpdate,
         TransactionRecord,
+        VersionedStateHashTreeDiff,
         Vote,
     },
     StorageError,
@@ -135,13 +136,17 @@ pub trait StateStoreReadTransaction: Sized {
         from_block_id: &BlockId,
     ) -> Result<TransactionExecution, StorageError>;
     fn blocks_get(&self, block_id: &BlockId) -> Result<Block, StorageError>;
-    fn blocks_get_tip(&self, epoch: Epoch, shard: Shard) -> Result<Block, StorageError>;
-    fn blocks_get_last_n_in_epoch(&self, n: usize, epoch: Epoch, shard: Shard) -> Result<Vec<Block>, StorageError>;
+    fn blocks_get_last_n_in_epoch(
+        &self,
+        n: usize,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+    ) -> Result<Vec<Block>, StorageError>;
     /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
     fn blocks_get_all_between(
         &self,
         epoch: Epoch,
-        shard: Shard,
+        shard_group: ShardGroup,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
         include_dummy_blocks: bool,
@@ -275,10 +280,8 @@ pub trait StateStoreReadTransaction: Sized {
     fn pending_state_tree_diffs_exists_for_block(&self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn pending_state_tree_diffs_get_all_up_to_commit_block(
         &self,
-        epoch: Epoch,
-        shard: Shard,
         block_id: &BlockId,
-    ) -> Result<Vec<PendingStateTreeDiff>, StorageError>;
+    ) -> Result<HashMap<Shard, Vec<PendingStateTreeDiff>>, StorageError>;
 
     fn state_transitions_get_n_after(
         &self,
@@ -287,9 +290,10 @@ pub trait StateStoreReadTransaction: Sized {
         end_epoch: Epoch,
     ) -> Result<Vec<StateTransition>, StorageError>;
 
-    fn state_transitions_get_last_id(&self) -> Result<StateTransitionId, StorageError>;
+    fn state_transitions_get_last_id(&self, shard: Shard) -> Result<StateTransitionId, StorageError>;
 
-    fn state_tree_nodes_get(&self, epoch: Epoch, shard: Shard, key: &NodeKey) -> Result<Node<Version>, StorageError>;
+    fn state_tree_nodes_get(&self, shard: Shard, key: &NodeKey) -> Result<Node<Version>, StorageError>;
+    fn state_tree_versions_get_latest(&self, shard: Shard) -> Result<Option<Version>, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -426,27 +430,22 @@ pub trait StateStoreWriteTransaction {
     ) -> Result<(), StorageError>;
 
     // -------------------------------- Pending State Tree Diffs -------------------------------- //
-    fn pending_state_tree_diffs_insert(&mut self, diff: &PendingStateTreeDiff) -> Result<(), StorageError>;
+    fn pending_state_tree_diffs_insert(
+        &mut self,
+        block_id: BlockId,
+        shard: Shard,
+        diff: VersionedStateHashTreeDiff,
+    ) -> Result<(), StorageError>;
     fn pending_state_tree_diffs_remove_by_block(
         &mut self,
         block_id: &BlockId,
-    ) -> Result<PendingStateTreeDiff, StorageError>;
+    ) -> Result<IndexMap<Shard, Vec<PendingStateTreeDiff>>, StorageError>;
 
     //---------------------------------- State tree --------------------------------------------//
-    fn state_tree_nodes_insert(
-        &mut self,
-        epoch: Epoch,
-        shard: Shard,
-        key: NodeKey,
-        node: Node<Version>,
-    ) -> Result<(), StorageError>;
+    fn state_tree_nodes_insert(&mut self, shard: Shard, key: NodeKey, node: Node<Version>) -> Result<(), StorageError>;
 
-    fn state_tree_nodes_mark_stale_tree_node(
-        &mut self,
-        epoch: Epoch,
-        shard: Shard,
-        node: StaleTreeNode,
-    ) -> Result<(), StorageError>;
+    fn state_tree_nodes_mark_stale_tree_node(&mut self, shard: Shard, node: StaleTreeNode) -> Result<(), StorageError>;
+    fn state_tree_shard_versions_set(&mut self, shard: Shard, version: Version) -> Result<(), StorageError>;
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

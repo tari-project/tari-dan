@@ -44,7 +44,7 @@ use tari_crypto::{
     ristretto::RistrettoPublicKey,
     tari_utilities::{hex::Hex, ByteArray},
 };
-use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeAddressable, NodeHeight};
+use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeAddressable, NodeHeight, ShardGroup};
 use tari_dan_storage::{
     consensus_models::{Block, SubstateRecord},
     global::{GlobalDb, MetadataKey},
@@ -459,7 +459,11 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         });
         self.state_store
             .with_write_tx(|tx| {
-                let genesis = Block::genesis(self.network, Epoch(0), Shard::zero());
+                let genesis = Block::genesis(
+                    self.network,
+                    Epoch(0),
+                    ShardGroup::all_shards(self.consensus_constants.num_preshards),
+                );
 
                 // TODO: This should be proposed in a block...
                 SubstateRecord {

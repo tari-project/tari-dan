@@ -27,7 +27,8 @@ use log::*;
 use tari_bor::decode;
 use tari_common::configuration::Network;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
-use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, PeerAddress};
+use tari_dan_app_utilities::consensus_constants::ConsensusConstants;
+use tari_dan_common_types::{committee::Committee, Epoch, NumPreshards, PeerAddress, ShardGroup};
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
 use tari_dan_storage::consensus_models::{Block, BlockId, Decision, TransactionRecord};
 use tari_engine_types::{
@@ -128,15 +129,15 @@ impl EventScanner {
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let current_committees = self.epoch_manager.get_committees(current_epoch).await?;
-        for (shard, mut committee) in current_committees {
+        for (shard_group, mut committee) in current_committees {
             info!(
                 target: LOG_TARGET,
-                "Scanning committee epoch={}, shard={}",
+                "Scanning committee epoch={}, sg={}",
                 current_epoch,
-                shard
+                shard_group
             );
             let new_blocks = self
-                .get_new_blocks_from_committee(shard, &mut committee, current_epoch)
+                .get_new_blocks_from_committee(shard_group, &mut committee, current_epoch)
                 .await?;
             info!(
                 target: LOG_TARGET,
@@ -409,24 +410,27 @@ impl EventScanner {
             .collect()
     }
 
-    fn build_genesis_block_id(&self) -> BlockId {
-        let start_block = Block::zero_block(self.network);
+    fn build_genesis_block_id(&self, num_preshards: NumPreshards) -> BlockId {
+        // TODO: this should return the actual genesis for the shard group and epoch
+        let start_block = Block::zero_block(self.network, num_preshards);
         *start_block.id()
     }
 
     #[allow(unused_assignments)]
     async fn get_new_blocks_from_committee(
         &self,
-        shard: Shard,
+        shard_group: ShardGroup,
         committee: &mut Committee<PeerAddress>,
         epoch: Epoch,
     ) -> Result<Vec<Block>, anyhow::Error> {
         // We start scanning from the last scanned block for this commitee
-        let start_block_id = {
-            let mut tx = self.substate_store.create_read_tx()?;
-            tx.get_last_scanned_block_id(epoch, shard)?
-        };
-        let start_block_id = start_block_id.unwrap_or(self.build_genesis_block_id());
+        let start_block_id = self
+            .substate_store
+            .with_read_tx(|tx| tx.get_last_scanned_block_id(epoch, shard_group))?;
+        let start_block_id = start_block_id.unwrap_or_else(|| {
+            let consensus_constants = ConsensusConstants::from(self.network);
+            self.build_genesis_block_id(consensus_constants.num_preshards)
+        });
 
         committee.shuffle();
         let mut last_block_id = start_block_id;
@@ -436,16 +440,16 @@ impl EventScanner {
             "Scanning new blocks since {} from (epoch={}, shard={})",
             last_block_id,
             epoch,
-            shard
+            shard_group
         );
 
         for member in committee.members() {
             debug!(
                 target: LOG_TARGET,
-                "Trying to get blocks from VN {} (epoch={}, shard={})",
+                "Trying to get blocks from VN {} (epoch={}, shard_group={})",
                 member,
                 epoch,
-                shard
+                shard_group
             );
             let resp = self.get_blocks_from_vn(member, start_block_id).await;
 
@@ -454,27 +458,27 @@ impl EventScanner {
                     // TODO: try more than 1 VN per commitee
                     info!(
                         target: LOG_TARGET,
-                        "Got {} blocks from VN {} (epoch={}, shard={})",
+                        "Got {} blocks from VN {} (epoch={}, shard_group={})",
                         blocks.len(),
                         member,
                         epoch,
-                        shard,
+                        shard_group,
                     );
                     if let Some(block) = blocks.last() {
                         last_block_id = *block.id();
                     }
                     // Store the latest scanned block id in the database for future scans
-                    self.save_scanned_block_id(epoch, shard, last_block_id)?;
+                    self.save_scanned_block_id(epoch, shard_group, last_block_id)?;
                     return Ok(blocks);
                 },
                 Err(e) => {
                     // We do nothing on a single VN failure, we only log it
                     warn!(
                         target: LOG_TARGET,
-                        "Could not get blocks from VN {} (epoch={}, shard={}): {}",
+                        "Could not get blocks from VN {} (epoch={}, shard_group={}): {}",
                         member,
                         epoch,
-                        shard,
+                        shard_group,
                         e
                     );
                 },
@@ -484,22 +488,25 @@ impl EventScanner {
         // We don't raise an error if none of the VNs have blocks, the scanning will retry eventually
         warn!(
             target: LOG_TARGET,
-            "Could not get blocks from any of the VNs of the committee (epoch={}, shard={})",
+            "Could not get blocks from any of the VNs of the committee (epoch={}, shard_group={})",
             epoch,
-            shard
+            shard_group
         );
         Ok(vec![])
     }
 
-    fn save_scanned_block_id(&self, epoch: Epoch, shard: Shard, last_block_id: BlockId) -> Result<(), anyhow::Error> {
+    fn save_scanned_block_id(
+        &self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+        last_block_id: BlockId,
+    ) -> Result<(), anyhow::Error> {
         let row = NewScannedBlockId {
             epoch: epoch.0 as i64,
-            shard: i64::from(shard.as_u32()),
+            shard_group: shard_group.encode_as_u32() as i32,
             last_block_id: last_block_id.as_bytes().to_vec(),
         };
-        let mut tx = self.substate_store.create_write_tx()?;
-        tx.save_scanned_block_id(row)?;
-        tx.commit()?;
+        self.substate_store.with_write_tx(|tx| tx.save_scanned_block_id(row))?;
         Ok(())
     }
 

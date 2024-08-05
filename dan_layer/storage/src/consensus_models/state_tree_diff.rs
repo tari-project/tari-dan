@@ -4,26 +4,23 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::Deref;
+use std::{collections::HashMap, ops::Deref};
 
-use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight};
+use indexmap::IndexMap;
+use tari_dan_common_types::shard::Shard;
+use tari_state_tree::{StateHashTreeDiff, Version};
 
 use crate::{consensus_models::BlockId, StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PendingStateTreeDiff {
-    pub block_id: BlockId,
-    pub block_height: NodeHeight,
-    pub diff: tari_state_tree::StateHashTreeDiff,
+    pub version: Version,
+    pub diff: StateHashTreeDiff,
 }
 
 impl PendingStateTreeDiff {
-    pub fn new(block_id: BlockId, block_height: NodeHeight, diff: tari_state_tree::StateHashTreeDiff) -> Self {
-        Self {
-            block_id,
-            block_height,
-            diff,
-        }
+    pub fn load(version: Version, diff: StateHashTreeDiff) -> Self {
+        Self { version, diff }
     }
 }
 
@@ -31,17 +28,15 @@ impl PendingStateTreeDiff {
     /// Returns all pending state tree diffs from the last committed block (exclusive) to the given block (inclusive).
     pub fn get_all_up_to_commit_block<TTx>(
         tx: &TTx,
-        epoch: Epoch,
-        shard: Shard,
         block_id: &BlockId,
-    ) -> Result<Vec<Self>, StorageError>
+    ) -> Result<HashMap<Shard, Vec<Self>>, StorageError>
     where
         TTx: StateStoreReadTransaction,
     {
-        tx.pending_state_tree_diffs_get_all_up_to_commit_block(epoch, shard, block_id)
+        tx.pending_state_tree_diffs_get_all_up_to_commit_block(block_id)
     }
 
-    pub fn remove_by_block<TTx>(tx: &mut TTx, block_id: &BlockId) -> Result<Self, StorageError>
+    pub fn remove_by_block<TTx>(tx: &mut TTx, block_id: &BlockId) -> Result<IndexMap<Shard, Vec<Self>>, StorageError>
     where
         TTx: Deref + StateStoreWriteTransaction,
         TTx::Target: StateStoreReadTransaction,
@@ -49,16 +44,34 @@ impl PendingStateTreeDiff {
         tx.pending_state_tree_diffs_remove_by_block(block_id)
     }
 
-    pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
+    pub fn create<TTx>(
+        tx: &mut TTx,
+        block_id: BlockId,
+        shard: Shard,
+        diff: VersionedStateHashTreeDiff,
+    ) -> Result<(), StorageError>
     where
         TTx: Deref + StateStoreWriteTransaction,
         TTx::Target: StateStoreReadTransaction,
     {
-        if tx.pending_state_tree_diffs_exists_for_block(&self.block_id)? {
-            Ok(false)
-        } else {
-            tx.pending_state_tree_diffs_insert(self)?;
-            Ok(true)
-        }
+        // if tx.pending_state_tree_diffs_exists_for_block(&block_id)? {
+        //     Ok(false)
+        // } else {
+        tx.pending_state_tree_diffs_insert(block_id, shard, diff)?;
+        // Ok(true)
+        // }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VersionedStateHashTreeDiff {
+    pub version: Version,
+    pub diff: StateHashTreeDiff,
+}
+
+impl VersionedStateHashTreeDiff {
+    pub fn new(version: Version, diff: StateHashTreeDiff) -> Self {
+        Self { version, diff }
     }
 }
