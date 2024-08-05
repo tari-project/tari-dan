@@ -43,6 +43,17 @@ diesel::table! {
 }
 
 diesel::table! {
+    epoch_checkpoints (id) {
+        id -> Integer,
+        epoch -> BigInt,
+        commit_block -> Text,
+        qcs -> Text,
+        shard_roots -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     foreign_proposals (id) {
         id -> Integer,
         shard_group -> Integer,
@@ -382,6 +393,7 @@ diesel::table! {
 diesel::allow_tables_to_appear_in_same_query!(
     block_diffs,
     blocks,
+    epoch_checkpoints,
     foreign_proposals,
     foreign_receive_counters,
     foreign_send_counters,

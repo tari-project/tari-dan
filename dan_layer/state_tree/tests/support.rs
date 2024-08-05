@@ -60,33 +60,32 @@ impl<S: TreeStore<Version>> HashTreeTester<S> {
     fn apply_database_updates(&mut self, changes: impl IntoIterator<Item = SubstateTreeChange>) -> Hash {
         let next_version = self.current_version.unwrap_or(0) + 1;
         let current_version = self.current_version.replace(next_version);
-        StateTree::<_, IdentityMapper>::new(&mut self.tree_store)
-            .put_substate_changes(current_version, next_version, changes)
-            .unwrap()
+        self.put_changes_at_version(current_version, next_version, changes)
     }
 
-    pub fn put_changes_at_version(&mut self, changes: impl IntoIterator<Item = SubstateTreeChange>) -> Hash {
-        let next_version = self
-            .current_version
-            .expect("call put_changes_at_version with None version");
-        let current_version = self.current_version.unwrap();
-        StateTree::<_, IdentityMapper>::new(&mut self.tree_store)
-            .put_substate_changes(Some(current_version), next_version, changes)
+    pub fn put_changes_at_version(
+        &mut self,
+        current_version: Option<Version>,
+        next_version: Version,
+        changes: impl IntoIterator<Item = SubstateTreeChange>,
+    ) -> Hash {
+        StateTree::<_, TestMapper>::new(&mut self.tree_store)
+            .put_substate_changes(current_version, next_version, changes)
             .unwrap()
     }
 }
 
-impl HashTreeTester<MemoryTreeStore> {
+impl HashTreeTester<MemoryTreeStore<Version>> {
     pub fn new_empty() -> Self {
         Self::new(MemoryTreeStore::new(), None)
     }
 }
 
-pub struct IdentityMapper;
+pub struct TestMapper;
 
-impl DbKeyMapper for IdentityMapper {
+impl DbKeyMapper<SubstateId> for TestMapper {
     fn map_to_leaf_key(id: &SubstateId) -> LeafKey {
-        LeafKey::new(test_hasher32().chain(&id).result().to_vec())
+        LeafKey::new(test_hasher32().chain(&id).result().into_array().into())
     }
 }
 

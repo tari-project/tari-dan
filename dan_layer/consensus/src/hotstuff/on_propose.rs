@@ -28,7 +28,7 @@ use tari_dan_storage::{
         LastProposed,
         LeafBlock,
         LockedBlock,
-        PendingStateTreeDiff,
+        PendingShardStateTreeDiff,
         QuorumCertificate,
         SubstateChange,
         SubstateLockFlag,
@@ -515,13 +515,16 @@ where TConsensusSpec: ConsensusSpec
             commands.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
         );
 
-        let pending_tree_diffs = PendingStateTreeDiff::get_all_up_to_commit_block(tx, high_qc.block_id())?;
+        let pending_tree_diffs = PendingShardStateTreeDiff::get_all_up_to_commit_block(tx, high_qc.block_id())?;
 
         let (state_root, _) = calculate_state_merkle_root(
             tx,
             local_committee_info.shard_group(),
             pending_tree_diffs,
-            substate_store.diff(),
+            substate_store
+                .diff()
+                .iter()
+                .filter(|ch| local_committee_info.shard_group().contains(&ch.shard())),
         )?;
 
         let non_local_shards = get_non_local_shards(substate_store.diff(), local_committee_info);

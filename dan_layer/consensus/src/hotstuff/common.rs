@@ -1,7 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, ops::ControlFlow};
+use std::{
+    collections::HashMap,
+    ops::{ControlFlow, Deref},
+};
 
 use indexmap::IndexMap;
 use log::*;
@@ -11,17 +14,26 @@ use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeAddre
 use tari_dan_storage::{
     consensus_models::{
         Block,
+        EpochCheckpoint,
         LeafBlock,
-        PendingStateTreeDiff,
+        PendingShardStateTreeDiff,
         QuorumCertificate,
         SubstateChange,
         VersionedStateHashTreeDiff,
     },
     StateStoreReadTransaction,
+    StateStoreWriteTransaction,
+    StorageError,
 };
-use tari_state_tree::{Hash, StateTreeError};
+use tari_state_tree::{Hash, JellyfishMerkleTree, StateTreeError};
 
-use crate::{hotstuff::substate_store::ShardedStateTree, traits::LeaderStrategy};
+use crate::{
+    hotstuff::{
+        substate_store::{ShardScopedTreeStoreReader, ShardedStateTree},
+        HotStuffError,
+    },
+    traits::LeaderStrategy,
+};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::common";
 
@@ -169,22 +181,63 @@ fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
     }
 }
 
-pub fn calculate_state_merkle_root<TTx: StateStoreReadTransaction>(
+pub fn calculate_state_merkle_root<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a SubstateChange>>(
     tx: &TTx,
-    local_shard_group: ShardGroup,
-    pending_tree_diffs: HashMap<Shard, Vec<PendingStateTreeDiff>>,
-    changes: &[SubstateChange],
+    shard_group: ShardGroup,
+    pending_tree_diffs: HashMap<Shard, Vec<PendingShardStateTreeDiff>>,
+    changes: I,
 ) -> Result<(Hash, IndexMap<Shard, VersionedStateHashTreeDiff>), StateTreeError> {
-    let mut change_map = IndexMap::with_capacity(changes.len());
+    let mut change_map = IndexMap::new();
 
-    changes
-        .iter()
-        .filter(|ch| local_shard_group.contains(&ch.shard()))
-        .for_each(|ch| {
-            change_map.entry(ch.shard()).or_insert_with(Vec::new).push(ch.into());
-        });
-
+    changes.into_iter().for_each(|ch| {
+        // Group by shard
+        change_map.entry(ch.shard()).or_insert_with(Vec::new).push(ch.into());
+    });
     let mut sharded_tree = ShardedStateTree::new(tx).with_pending_diffs(pending_tree_diffs);
-    let state_root = sharded_tree.put_substate_tree_changes(change_map)?;
-    Ok((state_root, sharded_tree.into_versioned_tree_diffs()))
+    let root_hash = sharded_tree.put_substate_tree_changes(shard_group, change_map)?;
+
+    Ok((root_hash, sharded_tree.into_shard_tree_diffs()))
+}
+
+pub(crate) fn create_epoch_checkpoint<TTx>(
+    tx: &mut TTx,
+    epoch: Epoch,
+    shard_group: ShardGroup,
+) -> Result<EpochCheckpoint, HotStuffError>
+where
+    TTx: StateStoreWriteTransaction + Deref,
+    TTx::Target: StateStoreReadTransaction,
+{
+    // Get the last 3 blocks in the previous epoch. These blocks should end the epoch.
+    let mut blocks = Block::get_last_n_in_epoch(&**tx, 3, epoch)?;
+    if blocks.is_empty() {
+        return Err(HotStuffError::StorageError(StorageError::NotFound {
+            item: "Block::get_last_n_in_epoch".to_string(),
+            key: epoch.to_string(),
+        }));
+    }
+
+    let commit_block = blocks.pop().unwrap();
+    let qcs = blocks.into_iter().map(|b| b.into_justify()).collect();
+
+    // Fetch the state roots of the shards in the shard group
+    let mut shard_roots = IndexMap::with_capacity(shard_group.len());
+    for shard in shard_group.shard_iter() {
+        let Some(version) = tx.state_tree_versions_get_latest(shard)? else {
+            // At v0 there have been no state changes
+            continue;
+        };
+
+        let scoped_store = ShardScopedTreeStoreReader::new(&**tx, shard);
+        let jmt = JellyfishMerkleTree::new(&scoped_store);
+        let root_hash = jmt
+            .get_root_hash(version)
+            .map_err(|e| HotStuffError::StateTreeError(e.into()))?;
+
+        shard_roots.insert(shard, root_hash);
+    }
+    let checkpoint = EpochCheckpoint::new(commit_block, qcs, shard_roots);
+    checkpoint.save(tx)?;
+
+    Ok(checkpoint)
 }

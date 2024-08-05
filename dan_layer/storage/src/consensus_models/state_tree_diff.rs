@@ -13,18 +13,18 @@ use tari_state_tree::{StateHashTreeDiff, Version};
 use crate::{consensus_models::BlockId, StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
 #[derive(Debug, Clone, Default)]
-pub struct PendingStateTreeDiff {
+pub struct PendingShardStateTreeDiff {
     pub version: Version,
-    pub diff: StateHashTreeDiff,
+    pub diff: StateHashTreeDiff<Version>,
 }
 
-impl PendingStateTreeDiff {
-    pub fn load(version: Version, diff: StateHashTreeDiff) -> Self {
+impl PendingShardStateTreeDiff {
+    pub fn load(version: Version, diff: StateHashTreeDiff<Version>) -> Self {
         Self { version, diff }
     }
 }
 
-impl PendingStateTreeDiff {
+impl PendingShardStateTreeDiff {
     /// Returns all pending state tree diffs from the last committed block (exclusive) to the given block (inclusive).
     pub fn get_all_up_to_commit_block<TTx>(
         tx: &TTx,
@@ -54,24 +54,18 @@ impl PendingStateTreeDiff {
         TTx: Deref + StateStoreWriteTransaction,
         TTx::Target: StateStoreReadTransaction,
     {
-        // if tx.pending_state_tree_diffs_exists_for_block(&block_id)? {
-        //     Ok(false)
-        // } else {
-        tx.pending_state_tree_diffs_insert(block_id, shard, diff)?;
-        // Ok(true)
-        // }
-        Ok(())
+        tx.pending_state_tree_diffs_insert(block_id, shard, diff)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct VersionedStateHashTreeDiff {
     pub version: Version,
-    pub diff: StateHashTreeDiff,
+    pub diff: StateHashTreeDiff<Version>,
 }
 
 impl VersionedStateHashTreeDiff {
-    pub fn new(version: Version, diff: StateHashTreeDiff) -> Self {
+    pub fn new(version: Version, diff: StateHashTreeDiff<Version>) -> Self {
         Self { version, diff }
     }
 }

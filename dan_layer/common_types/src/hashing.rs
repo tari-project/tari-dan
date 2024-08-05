@@ -36,10 +36,6 @@ pub fn block_hasher() -> TariHasher {
     dan_hasher("Block")
 }
 
-pub fn state_root_hasher() -> TariHasher {
-    dan_hasher("JmtStateRoots")
-}
-
 pub fn quorum_certificate_hasher() -> TariHasher {
     dan_hasher("QuorumCertificate")
 }

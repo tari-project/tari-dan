@@ -23,6 +23,7 @@ use tari_dan_storage::{
         BlockDiff,
         BlockId,
         Decision,
+        EpochCheckpoint,
         Evidence,
         ForeignProposal,
         ForeignReceiveCounters,
@@ -35,7 +36,7 @@ use tari_dan_storage::{
         LeafBlock,
         LockedBlock,
         LockedSubstate,
-        PendingStateTreeDiff,
+        PendingShardStateTreeDiff,
         QcId,
         QuorumCertificate,
         SubstateRecord,
@@ -1454,7 +1455,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     fn pending_state_tree_diffs_remove_by_block(
         &mut self,
         block_id: &BlockId,
-    ) -> Result<IndexMap<Shard, Vec<PendingStateTreeDiff>>, StorageError> {
+    ) -> Result<IndexMap<Shard, Vec<PendingShardStateTreeDiff>>, StorageError> {
         use crate::schema::pending_state_tree_diffs;
 
         let diff_recs = pending_state_tree_diffs::table
@@ -1477,7 +1478,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let mut diffs = IndexMap::new();
         for diff in diff_recs {
             let shard = Shard::from(diff.shard as u32);
-            let diff = PendingStateTreeDiff::try_from(diff)?;
+            let diff = PendingShardStateTreeDiff::try_from(diff)?;
             diffs.entry(shard).or_insert_with(Vec::new).push(diff);
         }
 
@@ -1531,21 +1532,19 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         diesel::insert_into(state_tree::table)
             .values(&values)
             .execute(self.connection())
-            .map_err(|e| {
-                SqliteStorageError::DbInconsistency {
-                    operation: "state_tree_nodes_insert",
-                    details: format!("Failed to insert node for key: {shard} - {key} {e}"),
-                }
-                // SqliteStorageError::DieselError {
-                //     operation: "state_tree_nodes_insert",
-                //     source: e,
-                // }
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "state_tree_nodes_insert",
+                source: e,
             })?;
 
         Ok(())
     }
 
-    fn state_tree_nodes_mark_stale_tree_node(&mut self, shard: Shard, node: StaleTreeNode) -> Result<(), StorageError> {
+    fn state_tree_nodes_record_stale_tree_node(
+        &mut self,
+        shard: Shard,
+        node: StaleTreeNode,
+    ) -> Result<(), StorageError> {
         use crate::schema::state_tree;
 
         let key = node.as_node_key();
@@ -1585,6 +1584,27 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "state_tree_shard_versions_increment",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn epoch_checkpoint_save(&mut self, checkpoint: &EpochCheckpoint) -> Result<(), StorageError> {
+        use crate::schema::epoch_checkpoints;
+
+        let values = (
+            epoch_checkpoints::epoch.eq(checkpoint.block().epoch().as_u64() as i64),
+            epoch_checkpoints::commit_block.eq(serialize_json(checkpoint.block())?),
+            epoch_checkpoints::qcs.eq(serialize_json(checkpoint.qcs())?),
+            epoch_checkpoints::shard_roots.eq(serialize_json(checkpoint.shard_roots())?),
+        );
+
+        diesel::insert_into(epoch_checkpoints::table)
+            .values(values)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "epoch_checkpoint_save",
                 source: e,
             })?;
 

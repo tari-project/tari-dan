@@ -5,27 +5,18 @@ use std::collections::{HashMap, VecDeque};
 
 use log::debug;
 
-use crate::{
-    JmtStorageError,
-    Node,
-    NodeKey,
-    StaleTreeNode,
-    StateHashTreeDiff,
-    TreeStoreReader,
-    TreeStoreWriter,
-    Version,
-};
+use crate::{JmtStorageError, Node, NodeKey, StaleTreeNode, StateHashTreeDiff, TreeStoreReader, TreeStoreWriter};
 
 const LOG_TARGET: &str = "tari::dan::consensus::sharded_state_tree";
 
-pub struct StagedTreeStore<'s, S> {
+pub struct StagedTreeStore<'s, S, P> {
     readable_store: &'s S,
-    preceding_pending_state: HashMap<NodeKey, Node<Version>>,
-    new_tree_nodes: HashMap<NodeKey, Node<Version>>,
+    preceding_pending_state: HashMap<NodeKey, Node<P>>,
+    new_tree_nodes: HashMap<NodeKey, Node<P>>,
     new_stale_nodes: Vec<StaleTreeNode>,
 }
 
-impl<'s, S: TreeStoreReader<Version>> StagedTreeStore<'s, S> {
+impl<'s, S: TreeStoreReader<P>, P> StagedTreeStore<'s, S, P> {
     pub fn new(readable_store: &'s S) -> Self {
         Self {
             readable_store,
@@ -35,7 +26,7 @@ impl<'s, S: TreeStoreReader<Version>> StagedTreeStore<'s, S> {
         }
     }
 
-    pub fn apply_pending_diff(&mut self, diff: StateHashTreeDiff) {
+    pub fn apply_pending_diff(&mut self, diff: StateHashTreeDiff<P>) {
         self.preceding_pending_state.reserve(diff.new_nodes.len());
         for (key, node) in diff.new_nodes {
             debug!(target: LOG_TARGET, "PENDING INSERT: node {}", key);
@@ -50,7 +41,7 @@ impl<'s, S: TreeStoreReader<Version>> StagedTreeStore<'s, S> {
         }
     }
 
-    pub fn into_diff(self) -> StateHashTreeDiff {
+    pub fn into_diff(self) -> StateHashTreeDiff<P> {
         StateHashTreeDiff {
             new_nodes: self.new_tree_nodes.into_iter().collect(),
             stale_tree_nodes: self.new_stale_nodes,
@@ -58,8 +49,8 @@ impl<'s, S: TreeStoreReader<Version>> StagedTreeStore<'s, S> {
     }
 }
 
-impl<'s, S: TreeStoreReader<Version>> TreeStoreReader<Version> for StagedTreeStore<'s, S> {
-    fn get_node(&self, key: &NodeKey) -> Result<Node<Version>, JmtStorageError> {
+impl<'s, S: TreeStoreReader<P>, P: Clone> TreeStoreReader<P> for StagedTreeStore<'s, S, P> {
+    fn get_node(&self, key: &NodeKey) -> Result<Node<P>, JmtStorageError> {
         if let Some(node) = self.new_tree_nodes.get(key).cloned() {
             return Ok(node);
         }
@@ -71,8 +62,8 @@ impl<'s, S: TreeStoreReader<Version>> TreeStoreReader<Version> for StagedTreeSto
     }
 }
 
-impl<'s, S> TreeStoreWriter<Version> for StagedTreeStore<'s, S> {
-    fn insert_node(&mut self, key: NodeKey, node: Node<Version>) -> Result<(), JmtStorageError> {
+impl<'s, S, P> TreeStoreWriter<P> for StagedTreeStore<'s, S, P> {
+    fn insert_node(&mut self, key: NodeKey, node: Node<P>) -> Result<(), JmtStorageError> {
         if self.new_tree_nodes.insert(key.clone(), node).is_some() {
             return Err(JmtStorageError::Conflict(key));
         }

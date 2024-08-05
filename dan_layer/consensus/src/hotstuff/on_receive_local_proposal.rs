@@ -29,6 +29,7 @@ use super::proposer::Proposer;
 use crate::{
     hotstuff::{
         calculate_dummy_blocks,
+        create_epoch_checkpoint,
         error::HotStuffError,
         on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
         pacemaker_handle::PaceMakerHandle,
@@ -212,6 +213,10 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                         let num_committees = self.epoch_manager.get_num_committees(next_epoch).await?;
                         let next_shard_group = vn.shard_key.to_shard_group(self.config.num_preshards, num_committees);
                         self.store.with_write_tx(|tx| {
+                            // Generate checkpoint
+                            create_epoch_checkpoint(tx, epoch, local_committee_info.shard_group())?;
+
+                            // Create the next genesis
                             let genesis = Block::genesis(self.config.network, next_epoch, next_shard_group);
                             info!(target: LOG_TARGET, "⭐️ Creating new genesis block {genesis}");
                             genesis.justify().insert(tx)?;
@@ -221,7 +226,8 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                             genesis.as_leaf_block().set(tx)?;
                             genesis.as_last_executed().set(tx)?;
                             genesis.as_last_voted().set(tx)?;
-                            genesis.justify().as_high_qc().set(tx)
+                            genesis.justify().as_high_qc().set(tx)?;
+                            Ok::<_, HotStuffError>(())
                         })?;
 
                         // Set the pacemaker to next epoch

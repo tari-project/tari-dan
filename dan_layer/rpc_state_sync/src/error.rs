@@ -8,7 +8,7 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::EpochManagerError;
 use tari_rpc_framework::{RpcError, RpcStatus};
-use tari_state_tree::JmtStorageError;
+use tari_state_tree::{Hash, JmtStorageError};
 use tari_validator_node_rpc::ValidatorNodeRpcClientError;
 
 #[derive(Debug, thiserror::Error)]
@@ -33,6 +33,8 @@ pub enum CommsRpcConsensusSyncError {
     ProposalValidationError(#[from] ProposalValidationError),
     #[error("State tree error: {0}")]
     StateTreeError(#[from] tari_state_tree::StateTreeError),
+    #[error("State root mismatch. Expected: {expected}, actual: {actual}")]
+    StateRootMismatch { expected: Hash, actual: Hash },
 }
 
 impl CommsRpcConsensusSyncError {

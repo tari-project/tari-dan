@@ -18,7 +18,7 @@ pub struct PendingStateTreeDiff {
     pub created_at: PrimitiveDateTime,
 }
 
-impl TryFrom<PendingStateTreeDiff> for consensus_models::PendingStateTreeDiff {
+impl TryFrom<PendingStateTreeDiff> for consensus_models::PendingShardStateTreeDiff {
     type Error = StorageError;
 
     fn try_from(value: PendingStateTreeDiff) -> Result<Self, Self::Error> {

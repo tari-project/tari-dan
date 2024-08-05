@@ -12,26 +12,26 @@ use serde::{Deserialize, Serialize};
 )]
 #[derive(Clone, Debug, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NumPreshards {
-    One = 1,
-    Two = 2,
-    Four = 4,
-    Eight = 8,
-    Sixteen = 16,
-    ThirtyTwo = 32,
-    SixtyFour = 64,
-    OneTwentyEight = 128,
-    TwoFiftySix = 256,
+    P1 = 1,
+    P2 = 2,
+    P4 = 4,
+    P8 = 8,
+    P16 = 16,
+    P32 = 32,
+    P64 = 64,
+    P128 = 128,
+    P256 = 256,
 }
 
 impl NumPreshards {
-    pub const MAX: Self = Self::TwoFiftySix;
+    pub const MAX: Self = Self::P256;
 
     pub fn as_u32(self) -> u32 {
         self as u32
     }
 
     pub fn is_one(self) -> bool {
-        self == Self::One
+        self == Self::P1
     }
 }
 
@@ -40,15 +40,15 @@ impl TryFrom<u32> for NumPreshards {
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
-            1 => Ok(Self::One),
-            2 => Ok(Self::Two),
-            4 => Ok(Self::Four),
-            8 => Ok(Self::Eight),
-            16 => Ok(Self::Sixteen),
-            32 => Ok(Self::ThirtyTwo),
-            64 => Ok(Self::SixtyFour),
-            128 => Ok(Self::OneTwentyEight),
-            256 => Ok(Self::TwoFiftySix),
+            1 => Ok(Self::P1),
+            2 => Ok(Self::P2),
+            4 => Ok(Self::P4),
+            8 => Ok(Self::P8),
+            16 => Ok(Self::P16),
+            32 => Ok(Self::P32),
+            64 => Ok(Self::P64),
+            128 => Ok(Self::P128),
+            256 => Ok(Self::P256),
             _ => Err(InvalidNumPreshards(value)),
         }
     }

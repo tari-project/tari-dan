@@ -343,26 +343,15 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             return Err(RpcStatus::not_found("Cannot generate checkpoint for genesis epoch"));
         }
 
-        let Some(local_committee_info) = self
-            .epoch_manager
-            .get_local_committee_info(prev_epoch)
-            .await
-            .optional()
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
-        else {
-            return Err(RpcStatus::bad_request(format!(
-                "This validator node is not registered for the previous epoch {prev_epoch}"
-            )));
-        };
-
         let checkpoint = self
             .shard_state_store
-            .with_read_tx(|tx| EpochCheckpoint::generate(tx, prev_epoch, local_committee_info.shard_group()))
+            .with_read_tx(|tx| EpochCheckpoint::get(tx, prev_epoch))
             .optional()
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+            .ok_or_else(|| RpcStatus::not_found("Epoch checkpoint not found"))?;
 
         Ok(Response::new(GetCheckpointResponse {
-            checkpoint: checkpoint.map(Into::into),
+            checkpoint: Some(checkpoint.into()),
         }))
     }
 
