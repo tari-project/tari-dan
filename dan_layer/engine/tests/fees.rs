@@ -365,7 +365,6 @@ fn success_pay_fee_in_main_instructions() {
     assert_eq!(new_balance, orig_balance + Amount(500) - fees.total_fees_charged());
 }
 
-
 #[test]
 fn dangling_bucket_pay_fees() {
     let mut test = TemplateTest::new(["tests/templates/state"]);
@@ -395,7 +394,7 @@ fn dangling_bucket_pay_fees() {
 
     // The transaction still finishes succesfully
     result.expect_finalization_success();
-    
+
     test.disable_fees();
 
     // Check the fee was still paid
