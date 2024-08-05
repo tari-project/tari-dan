@@ -208,13 +208,15 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         runtime: &Runtime,
         instructions: Vec<Instruction>,
     ) -> Result<Vec<InstructionResult>, TransactionError> {
-        let result = instructions
+        let result: Result<_, _> = instructions
             .into_iter()
             .map(|instruction| Self::process_instruction(template_provider, runtime, instruction))
             .collect();
 
         // check that the finalized state is valid
-        runtime.interface().validate_finalized()?;
+        if result.is_ok() {
+            runtime.interface().validate_finalized()?;
+        }
 
         result
     }

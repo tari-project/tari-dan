@@ -40,7 +40,7 @@ use tari_engine_types::{
     logs::LogEntry,
     resource::Resource,
     resource_container::ResourceContainer,
-    substate::{SubstateDiff, SubstateId, SubstateValue},
+    substate::{SubstateId, SubstateValue},
     vault::Vault,
     TemplateAddress,
 };
