@@ -40,7 +40,7 @@ use tari_engine_types::{
     logs::LogEntry,
     resource::Resource,
     resource_container::ResourceContainer,
-    substate::{SubstateId, SubstateValue},
+    substate::{SubstateDiff, SubstateId, SubstateValue},
     vault::Vault,
     TemplateAddress,
 };
@@ -2265,6 +2265,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         }
 
         Ok(finalized)
+    }
+
+    fn validate_finalized(&self) -> Result<(), RuntimeError> {
+        self.tracker.read_with(|state| {
+            state.validate_finalized()?;
+            Ok(())
+        })
     }
 
     fn check_component_access_rules(&self, method: &str, locked: &LockedSubstate) -> Result<(), RuntimeError> {

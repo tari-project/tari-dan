@@ -392,6 +392,9 @@ fn dangling_bucket_pay_fees() {
     let reason = result.expect_transaction_failure();
     assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
     assert!(reason.to_string().contains("dangling bucket"));
+
+    // The transaction still finishes succesfully
+    result.expect_finalization_success();
     
     test.disable_fees();
 
