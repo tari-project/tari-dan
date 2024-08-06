@@ -289,9 +289,7 @@ impl StateTracker {
 
         let fee_receipt = transaction_receipt.fee_receipt.clone();
 
-        let result = state
-            .validate_finalized()
-            .and_then(|_| state.generate_substate_diff(transaction_receipt, substates_to_persist));
+        let result = state.generate_substate_diff(transaction_receipt, substates_to_persist);
 
         let result = match result {
             Ok(substate_diff) => TransactionResult::Accept(substate_diff),

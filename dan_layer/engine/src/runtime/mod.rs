@@ -162,6 +162,7 @@ pub trait RuntimeInterface: Send + Sync {
     fn set_fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError>;
+    fn validate_finalized(&self) -> Result<(), RuntimeError>;
 
     fn caller_context_invoke(
         &self,
