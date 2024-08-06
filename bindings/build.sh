@@ -38,7 +38,6 @@ for dir in $(find $TYPES_DIR -mindepth 1 -maxdepth 1 -type d | sort); do
     MODULE_NAME="${file%.*}"
     echo "export * from './$MODULE_NAME';" >> "$index_file"
   done
-  # echo "export * from './$(basename $dir)';" >> $INDEX_FILE // TODO: solve namespace conflict between validator-node-client and tari-indexer-client
 done
 
 # Add helpers
