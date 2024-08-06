@@ -16,7 +16,7 @@ use tari_dan_storage::{
         LastExecuted,
         LastVoted,
         LockedBlock,
-        PendingStateTreeDiff,
+        PendingShardStateTreeDiff,
         QuorumDecision,
         SubstateLockFlag,
         TransactionAtom,
@@ -721,9 +721,17 @@ where TConsensusSpec: ConsensusSpec
             return Ok(proposed_block_change_set.no_vote());
         }
 
-        let pending = PendingStateTreeDiff::get_all_up_to_commit_block(tx, block.justify().block_id())?;
-        let (expected_merkle_root, tree_diffs) =
-            calculate_state_merkle_root(tx, block.shard_group(), pending, substate_store.diff())?;
+        let pending = PendingShardStateTreeDiff::get_all_up_to_commit_block(tx, block.justify().block_id())?;
+        let (expected_merkle_root, tree_diffs) = calculate_state_merkle_root(
+            tx,
+            block.shard_group(),
+            pending,
+            substate_store
+                .diff()
+                .iter()
+                // Calculate for local shards only
+                .filter(|ch| block.shard_group().contains(&ch.shard())),
+        )?;
         if expected_merkle_root != *block.merkle_root() {
             warn!(
                 target: LOG_TARGET,
@@ -878,8 +886,8 @@ where TConsensusSpec: ConsensusSpec
             "🌳 Committing block {} with {} substate change(s)", block, diff.len()
         );
 
-        // NOTE: this must happen before we commit the diff because the state transitions use this version
-        let pending = PendingStateTreeDiff::remove_by_block(tx, block.id())?;
+        // NOTE: this must happen before we commit the substate diff because the state transitions use this version
+        let pending = PendingShardStateTreeDiff::remove_by_block(tx, block.id())?;
         let mut state_tree = ShardedStateTree::new(tx);
         state_tree.commit_diffs(pending)?;
         let tx = state_tree.into_transaction();

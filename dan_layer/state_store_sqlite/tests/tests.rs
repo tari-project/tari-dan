@@ -47,7 +47,7 @@ mod confirm_all_transitions {
         let atom3 = create_tx_atom();
 
         let network = Default::default();
-        let zero_block = Block::zero_block(network, NumPreshards::SixtyFour);
+        let zero_block = Block::zero_block(network, NumPreshards::P64);
         zero_block.insert(&mut tx).unwrap();
         let block1 = Block::new(
             network,
@@ -55,7 +55,7 @@ mod confirm_all_transitions {
             zero_block.justify().clone(),
             NodeHeight(1),
             Epoch(0),
-            ShardGroup::all_shards(NumPreshards::SixtyFour),
+            ShardGroup::all_shards(NumPreshards::P64),
             Default::default(),
             // Need to have a command in, otherwise this block will not be included internally in the query because it
             // cannot cause a state change without any commands

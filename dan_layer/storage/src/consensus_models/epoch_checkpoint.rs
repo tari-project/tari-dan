@@ -3,55 +3,60 @@
 
 use std::fmt::Display;
 
-use tari_dan_common_types::{Epoch, ShardGroup};
+use indexmap::IndexMap;
+use tari_dan_common_types::{shard::Shard, Epoch};
+use tari_state_tree::{Hash, SPARSE_MERKLE_PLACEHOLDER_HASH};
 
 use crate::{
     consensus_models::{Block, QuorumCertificate},
     StateStoreReadTransaction,
+    StateStoreWriteTransaction,
     StorageError,
 };
 
 #[derive(Debug, Clone)]
 pub struct EpochCheckpoint {
     block: Block,
-    qcs: Vec<QuorumCertificate>,
+    linked_qcs: Vec<QuorumCertificate>,
+    shard_roots: IndexMap<Shard, Hash>,
 }
 
 impl EpochCheckpoint {
-    pub fn new(block: Block, qcs: Vec<QuorumCertificate>) -> Self {
-        Self { block, qcs }
+    pub fn new(block: Block, linked_qcs: Vec<QuorumCertificate>, shard_roots: IndexMap<Shard, Hash>) -> Self {
+        Self {
+            block,
+            linked_qcs,
+            shard_roots,
+        }
     }
 
     pub fn qcs(&self) -> &[QuorumCertificate] {
-        &self.qcs
+        &self.linked_qcs
     }
 
     pub fn block(&self) -> &Block {
         &self.block
     }
+
+    pub fn shard_roots(&self) -> &IndexMap<Shard, Hash> {
+        &self.shard_roots
+    }
+
+    pub fn get_shard_root(&self, shard: Shard) -> Hash {
+        self.shard_roots
+            .get(&shard)
+            .copied()
+            .unwrap_or(SPARSE_MERKLE_PLACEHOLDER_HASH)
+    }
 }
 
 impl EpochCheckpoint {
-    pub fn generate<TTx: StateStoreReadTransaction>(
-        tx: &TTx,
-        epoch: Epoch,
-        shard_group: ShardGroup,
-    ) -> Result<Self, StorageError> {
-        let mut blocks = tx.blocks_get_last_n_in_epoch(3, epoch, shard_group)?;
-        if blocks.is_empty() {
-            return Err(StorageError::NotFound {
-                item: format!("EpochCheckpoint: No blocks found for epoch {epoch}, shard group {shard_group}"),
-                key: epoch.to_string(),
-            });
-        }
+    pub fn get<TTx: StateStoreReadTransaction>(tx: &TTx, epoch: Epoch) -> Result<Self, StorageError> {
+        tx.epoch_checkpoint_get(epoch)
+    }
 
-        let commit_block = blocks.pop().unwrap();
-        let qcs = blocks.into_iter().map(|b| b.into_justify()).collect();
-
-        Ok(Self {
-            block: commit_block,
-            qcs,
-        })
+    pub fn save<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        tx.epoch_checkpoint_save(self)
     }
 }
 

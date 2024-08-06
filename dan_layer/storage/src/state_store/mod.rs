@@ -23,6 +23,7 @@ use crate::{
         BlockDiff,
         BlockId,
         Decision,
+        EpochCheckpoint,
         Evidence,
         ForeignProposal,
         ForeignReceiveCounters,
@@ -35,7 +36,7 @@ use crate::{
         LeafBlock,
         LockedBlock,
         LockedSubstate,
-        PendingStateTreeDiff,
+        PendingShardStateTreeDiff,
         QcId,
         QuorumCertificate,
         StateTransition,
@@ -136,12 +137,7 @@ pub trait StateStoreReadTransaction: Sized {
         from_block_id: &BlockId,
     ) -> Result<TransactionExecution, StorageError>;
     fn blocks_get(&self, block_id: &BlockId) -> Result<Block, StorageError>;
-    fn blocks_get_last_n_in_epoch(
-        &self,
-        n: usize,
-        epoch: Epoch,
-        shard_group: ShardGroup,
-    ) -> Result<Vec<Block>, StorageError>;
+    fn blocks_get_last_n_in_epoch(&self, n: usize, epoch: Epoch) -> Result<Vec<Block>, StorageError>;
     /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
     fn blocks_get_all_between(
         &self,
@@ -277,11 +273,10 @@ pub trait StateStoreReadTransaction: Sized {
 
     fn substate_locks_get_latest_for_substate(&self, substate_id: &SubstateId) -> Result<LockedSubstate, StorageError>;
 
-    fn pending_state_tree_diffs_exists_for_block(&self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn pending_state_tree_diffs_get_all_up_to_commit_block(
         &self,
         block_id: &BlockId,
-    ) -> Result<HashMap<Shard, Vec<PendingStateTreeDiff>>, StorageError>;
+    ) -> Result<HashMap<Shard, Vec<PendingShardStateTreeDiff>>, StorageError>;
 
     fn state_transitions_get_n_after(
         &self,
@@ -294,6 +289,9 @@ pub trait StateStoreReadTransaction: Sized {
 
     fn state_tree_nodes_get(&self, shard: Shard, key: &NodeKey) -> Result<Node<Version>, StorageError>;
     fn state_tree_versions_get_latest(&self, shard: Shard) -> Result<Option<Version>, StorageError>;
+
+    // -------------------------------- Epoch checkpoint -------------------------------- //
+    fn epoch_checkpoint_get(&self, epoch: Epoch) -> Result<EpochCheckpoint, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -439,13 +437,20 @@ pub trait StateStoreWriteTransaction {
     fn pending_state_tree_diffs_remove_by_block(
         &mut self,
         block_id: &BlockId,
-    ) -> Result<IndexMap<Shard, Vec<PendingStateTreeDiff>>, StorageError>;
+    ) -> Result<IndexMap<Shard, Vec<PendingShardStateTreeDiff>>, StorageError>;
 
     //---------------------------------- State tree --------------------------------------------//
     fn state_tree_nodes_insert(&mut self, shard: Shard, key: NodeKey, node: Node<Version>) -> Result<(), StorageError>;
 
-    fn state_tree_nodes_mark_stale_tree_node(&mut self, shard: Shard, node: StaleTreeNode) -> Result<(), StorageError>;
+    fn state_tree_nodes_record_stale_tree_node(
+        &mut self,
+        shard: Shard,
+        node: StaleTreeNode,
+    ) -> Result<(), StorageError>;
     fn state_tree_shard_versions_set(&mut self, shard: Shard, version: Version) -> Result<(), StorageError>;
+
+    // -------------------------------- Epoch checkpoint -------------------------------- //
+    fn epoch_checkpoint_save(&mut self, checkpoint: &EpochCheckpoint) -> Result<(), StorageError>;
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

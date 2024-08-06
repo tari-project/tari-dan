@@ -86,8 +86,6 @@ use std::{
     marker::PhantomData,
 };
 
-use tari_dan_common_types::optional::Optional;
-
 use super::{
     store::TreeStoreReader,
     types::{
@@ -187,19 +185,15 @@ impl<'a, R: 'a + TreeStoreReader<P>, P: Clone> JellyfishMerkleTree<'a, R, P> {
     /// the returned batch, the state `S_{i+1}` is ready to be read from the tree by calling
     /// [`get_with_proof`](struct.JellyfishMerkleTree.html#method.get_with_proof). Anything inside
     /// the batch is not reachable from public interfaces before being committed.
-    pub fn batch_put_value_set(
+    pub fn batch_put_value_set<I: IntoIterator<Item = (LeafKey, Option<(Hash, P)>)>>(
         &self,
-        value_set: Vec<(LeafKey, Option<(Hash, P)>)>,
+        value_set: I,
         node_hashes: Option<&HashMap<NibblePath, Hash>>,
         persisted_version: Option<Version>,
         version: Version,
     ) -> Result<(Hash, TreeUpdateBatch<P>), JmtStorageError> {
-        let deduped_and_sorted_kvs = value_set
-            .iter()
-            .map(|(k, v)| (k, v.as_ref()))
-            .collect::<BTreeMap<_, _>>()
-            .into_iter()
-            .collect::<Vec<_>>();
+        let value_set = value_set.into_iter().collect::<BTreeMap<_, _>>();
+        let deduped_and_sorted_kvs = value_set.iter().map(|(k, v)| (k, v.as_ref())).collect::<Vec<_>>();
 
         let mut batch = TreeUpdateBatch::new();
         let root_node_opt = if let Some(persisted_version) = persisted_version {
@@ -609,11 +603,7 @@ impl<'a, R: 'a + TreeStoreReader<P>, P: Clone> JellyfishMerkleTree<'a, R, P> {
     }
 
     pub fn get_root_hash(&self, version: Version) -> Result<Hash, JmtStorageError> {
-        Ok(self
-            .get_root_node(version)
-            .map(|n| n.hash())
-            .optional()?
-            .unwrap_or(SPARSE_MERKLE_PLACEHOLDER_HASH))
+        self.get_root_node(version).map(|n| n.hash())
     }
 
     pub fn get_leaf_count(&self, version: Version) -> Result<usize, JmtStorageError> {

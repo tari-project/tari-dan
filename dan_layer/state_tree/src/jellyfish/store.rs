@@ -3,10 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    jellyfish::{JmtStorageError, Node, NodeKey},
-    Version,
-};
+use crate::jellyfish::{JmtStorageError, Node, NodeKey};
 
 /// Implementers are able to read nodes from a tree store.
 pub trait TreeStoreReader<P> {
@@ -52,26 +49,26 @@ impl StaleTreeNode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TreeNode {
-    V1(Node<Version>),
+pub enum TreeNode<P> {
+    V1(Node<P>),
 }
 
-impl TreeNode {
-    pub fn new_latest(node: Node<Version>) -> Self {
+impl<P> TreeNode<P> {
+    pub fn new_latest(node: Node<P>) -> Self {
         Self::new_v1(node)
     }
 
-    pub fn new_v1(node: Node<Version>) -> Self {
+    pub fn new_v1(node: Node<P>) -> Self {
         Self::V1(node)
     }
 
-    pub fn as_node(&self) -> &Node<Version> {
+    pub fn as_node(&self) -> &Node<P> {
         match self {
             Self::V1(node) => node,
         }
     }
 
-    pub fn into_node(self) -> Node<Version> {
+    pub fn into_node(self) -> Node<P> {
         match self {
             Self::V1(node) => node,
         }

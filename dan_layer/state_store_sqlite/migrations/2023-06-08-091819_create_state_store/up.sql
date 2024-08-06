@@ -359,22 +359,6 @@ create table state_tree_shard_versions
     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE shard_group_state_tree
-(
-    id       integer not NULL primary key AUTOINCREMENT,
-    epoch    bigint  not NULL,
-    key      text    not NULL,
-    node     text    not NULL,
-    is_stale boolean not null default '0'
-);
-
--- Scoping by shard
-CREATE INDEX shard_group_state_tree_idx_shard_key on shard_group_state_tree (epoch) WHERE is_stale = false;
--- Duplicate keys are not allowed
-CREATE UNIQUE INDEX shard_group_state_tree_uniq_idx_key on shard_group_state_tree (epoch, key) WHERE is_stale = false;
--- filtering out or by is_stale is used in every query
-CREATE INDEX shard_group_state_tree_idx_is_stale on shard_group_state_tree (is_stale);
-
 -- One entry per shard
 CREATE UNIQUE INDEX state_tree_uniq_shard_versions_shard on state_tree_shard_versions (shard);
 
@@ -391,6 +375,17 @@ CREATE TABLE pending_state_tree_diffs
 );
 
 CREATE UNIQUE INDEX pending_state_tree_diffs_uniq_idx_block_id_shard on pending_state_tree_diffs (block_id, shard);
+
+
+CREATE TABLE epoch_checkpoints
+(
+    id              integer   not NULL primary key AUTOINCREMENT,
+    epoch           bigint    not NULL,
+    commit_block    text      not NULL,
+    qcs             text      not NULL,
+    shard_roots     text      not NULL,
+    created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 -- An append-only store of state transitions
 CREATE TABLE state_transitions

@@ -3,7 +3,6 @@
 
 use std::{
     borrow::Borrow,
-    cmp,
     collections::{HashMap, HashSet},
     marker::PhantomData,
     ops::RangeInclusive,
@@ -38,6 +37,7 @@ use tari_dan_storage::{
         BlockDiff,
         BlockId,
         Command,
+        EpochCheckpoint,
         ForeignProposal,
         ForeignProposalState,
         ForeignReceiveCounters,
@@ -50,7 +50,7 @@ use tari_dan_storage::{
         LeafBlock,
         LockedBlock,
         LockedSubstate,
-        PendingStateTreeDiff,
+        PendingShardStateTreeDiff,
         QcId,
         QuorumCertificate,
         StateTransition,
@@ -717,19 +717,13 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         block.try_convert(qc)
     }
 
-    fn blocks_get_last_n_in_epoch(
-        &self,
-        n: usize,
-        epoch: Epoch,
-        shard_group: ShardGroup,
-    ) -> Result<Vec<Block>, StorageError> {
+    fn blocks_get_last_n_in_epoch(&self, n: usize, epoch: Epoch) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let blocks = blocks::table
             .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
             .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
             .filter(blocks::epoch.eq(epoch.as_u64() as i64))
-            .filter(blocks::shard_group.eq(shard_group.encode_as_u32() as i32))
             .filter(blocks::is_committed.eq(true))
             .order_by(blocks::height.desc())
             .limit(n as i64)
@@ -1953,25 +1947,10 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         lock.try_into_substate_lock()
     }
 
-    fn pending_state_tree_diffs_exists_for_block(&self, block_id: &BlockId) -> Result<bool, StorageError> {
-        use crate::schema::pending_state_tree_diffs;
-
-        let count = pending_state_tree_diffs::table
-            .count()
-            .filter(pending_state_tree_diffs::block_id.eq(serialize_hex(block_id)))
-            .first::<i64>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "pending_state_tree_diffs_exists_for_block",
-                source: e,
-            })?;
-
-        Ok(count > 0)
-    }
-
     fn pending_state_tree_diffs_get_all_up_to_commit_block(
         &self,
         block_id: &BlockId,
-    ) -> Result<HashMap<Shard, Vec<PendingStateTreeDiff>>, StorageError> {
+    ) -> Result<HashMap<Shard, Vec<PendingShardStateTreeDiff>>, StorageError> {
         use crate::schema::pending_state_tree_diffs;
 
         // Get the last committed block
@@ -1995,7 +1974,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         let mut diffs = HashMap::new();
         for diff in diff_recs {
             let shard = Shard::from(diff.shard as u32);
-            let diff = PendingStateTreeDiff::try_from(diff)?;
+            let diff = PendingShardStateTreeDiff::try_from(diff)?;
             diffs
                 .entry(shard)
                 .or_insert_with(Vec::new)//PendingStateTreeDiff::default)
@@ -2018,25 +1997,11 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         // Never return epoch 0 state transitions
         let min_epoch = Some(id.epoch().as_u64()).filter(|e| *e > 0).unwrap_or(1) as i64;
-        let (start_id, seq) = state_transitions::table
-            .select((state_transitions::id, state_transitions::seq))
-            .filter(state_transitions::epoch.ge(min_epoch))
-            .filter(state_transitions::shard.eq(id.shard().as_u32() as i32))
-            .order_by(state_transitions::seq.asc())
-            .first::<(i32, i64)>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "state_transitions_get_n_after",
-                source: e,
-            })?;
-
-        let offset = cmp::max(id.seq() as i64, seq);
-        let start_id =
-            start_id + i32::try_from(offset).expect("(likely invalid) seq no for transition is too large for SQLite");
-
         let transitions = state_transitions::table
             .left_join(substates::table.on(state_transitions::substate_address.eq(substates::address)))
             .select((state_transitions::all_columns, substates::all_columns.nullable()))
-            .filter(state_transitions::id.ge(start_id))
+            .filter(state_transitions::seq.ge(id.seq() as i64))
+            .filter(state_transitions::epoch.ge(min_epoch))
             .filter(state_transitions::epoch.lt(end_epoch.as_u64() as i64))
             .filter(state_transitions::shard.eq(id.shard().as_u32() as i32))
             .limit(n as i64)
@@ -2092,7 +2057,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                 source: e,
             })?;
 
-        let node = serde_json::from_str::<TreeNode>(&node).map_err(|e| StorageError::DataInconsistency {
+        let node = serde_json::from_str::<TreeNode<Version>>(&node).map_err(|e| StorageError::DataInconsistency {
             details: format!("Failed to deserialize state tree node: {}", e),
         })?;
 
@@ -2114,6 +2079,20 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             })?;
 
         Ok(version.map(|v| v as Version))
+    }
+
+    fn epoch_checkpoint_get(&self, epoch: Epoch) -> Result<EpochCheckpoint, StorageError> {
+        use crate::schema::epoch_checkpoints;
+
+        let checkpoint = epoch_checkpoints::table
+            .filter(epoch_checkpoints::epoch.eq(epoch.as_u64() as i64))
+            .first::<sql_models::EpochCheckpoint>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "epoch_checkpoint_get",
+                source: e,
+            })?;
+
+        checkpoint.try_into()
     }
 }
 

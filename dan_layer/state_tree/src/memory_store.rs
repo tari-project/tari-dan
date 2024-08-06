@@ -1,26 +1,17 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, fmt::Debug};
 
-use crate::jellyfish::{
-    JmtStorageError,
-    Node,
-    NodeKey,
-    StaleTreeNode,
-    TreeNode,
-    TreeStoreReader,
-    TreeStoreWriter,
-    Version,
-};
+use crate::jellyfish::{JmtStorageError, Node, NodeKey, StaleTreeNode, TreeNode, TreeStoreReader, TreeStoreWriter};
 
 #[derive(Debug, Default)]
-pub struct MemoryTreeStore {
-    pub nodes: HashMap<NodeKey, TreeNode>,
+pub struct MemoryTreeStore<P> {
+    pub nodes: HashMap<NodeKey, TreeNode<P>>,
     pub stale_nodes: Vec<StaleTreeNode>,
 }
 
-impl MemoryTreeStore {
+impl<P> MemoryTreeStore<P> {
     pub fn new() -> Self {
         Self {
             nodes: HashMap::new(),
@@ -35,8 +26,8 @@ impl MemoryTreeStore {
     }
 }
 
-impl TreeStoreReader<Version> for MemoryTreeStore {
-    fn get_node(&self, key: &NodeKey) -> Result<Node<Version>, JmtStorageError> {
+impl<P: Clone> TreeStoreReader<P> for MemoryTreeStore<P> {
+    fn get_node(&self, key: &NodeKey) -> Result<Node<P>, JmtStorageError> {
         self.nodes
             .get(key)
             .map(|node| node.clone().into_node())
@@ -44,8 +35,8 @@ impl TreeStoreReader<Version> for MemoryTreeStore {
     }
 }
 
-impl TreeStoreWriter<Version> for MemoryTreeStore {
-    fn insert_node(&mut self, key: NodeKey, node: Node<Version>) -> Result<(), JmtStorageError> {
+impl<P> TreeStoreWriter<P> for MemoryTreeStore<P> {
+    fn insert_node(&mut self, key: NodeKey, node: Node<P>) -> Result<(), JmtStorageError> {
         let node = TreeNode::new_latest(node);
         self.nodes.insert(key, node);
         Ok(())
@@ -57,7 +48,7 @@ impl TreeStoreWriter<Version> for MemoryTreeStore {
     }
 }
 
-impl fmt::Display for MemoryTreeStore {
+impl<P: Debug> fmt::Display for MemoryTreeStore<P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "MemoryTreeStore")?;
         writeln!(f, "  Nodes:")?;
