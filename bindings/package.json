@@ -2,28 +2,8 @@
   "name": "@tari-project/typescript-bindings",
   "version": "1.0.5",
   "description": "",
-  "exports": {
-    ".": {
-      "default": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    },
-    "./base-node-client": {
-      "default": "./dist/base-node-client.js",
-      "types": "./dist/base-node-client.d.ts"
-    },
-    "./tari-indexer-client": {
-      "default": "./dist/tari-indexer-client.js",
-      "types": "./dist/tari-indexer-client.d.ts"
-    },
-    "./validator-node-client": {
-      "default": "./dist/validator-node-client.js",
-      "types": "./dist/validator-node-client.d.ts"
-    },
-    "./wallet-daemon-client": {
-      "default": "./dist/wallet-daemon-client.js",
-      "types": "./dist/wallet-daemon-client.d.ts"
-    }
-  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "publishConfig": {
     "access": "public"
   },

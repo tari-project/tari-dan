@@ -1,24 +1,24 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{sync::Arc, time::Duration};
+use std::{ sync::Arc, time::Duration };
 
 use multiaddr::Multiaddr;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 use serde_json::Value as JsonValue;
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{ serde_as, DisplayFromStr };
 use tari_base_node_client::types::BaseLayerValidatorNode;
-use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{substate_type::SubstateType, Epoch};
+use tari_common_types::types::{ FixedHash, PublicKey };
+use tari_dan_common_types::{ substate_type::SubstateType, Epoch };
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
     serde_with as serde_tools,
-    substate::{Substate, SubstateId},
+    substate::{ Substate, SubstateId },
     TemplateAddress,
 };
 use tari_template_abi::TemplateDef;
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{ SubstateRequirement, Transaction, TransactionId };
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -67,7 +67,11 @@ pub struct ListSubstateItem {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerGetSubstateRequest"
+    )
 )]
 pub struct GetSubstateRequest {
     #[serde(with = "serde_tools::string")]
@@ -81,7 +85,11 @@ pub struct GetSubstateRequest {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerGetSubstateResponse"
+    )
 )]
 pub struct GetSubstateResponse {
     #[serde(with = "serde_tools::string")]
@@ -125,7 +133,11 @@ pub struct InspectSubstateResponse {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerSubmitTransactionRequest"
+    )
 )]
 pub struct SubmitTransactionRequest {
     pub transaction: Transaction,
@@ -138,7 +150,11 @@ pub struct SubmitTransactionRequest {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerSubmitTransactionResponse"
+    )
 )]
 pub struct SubmitTransactionResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -188,7 +204,11 @@ pub struct TemplateMetadata {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerGetTransactionResultRequest"
+    )
 )]
 pub struct GetTransactionResultRequest {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -199,7 +219,11 @@ pub struct GetTransactionResultRequest {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerGetTransactionResultResponse"
+    )
 )]
 pub struct GetTransactionResultResponse {
     pub result: IndexerTransactionFinalizedResult,
@@ -230,7 +254,11 @@ pub enum IndexerTransactionFinalizedResult {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerGetIdentityResponse"
+    )
 )]
 pub struct GetIdentityResponse {
     pub peer_id: String,
@@ -244,7 +272,11 @@ pub struct GetIdentityResponse {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerGetAllVnsRequest"
+    )
 )]
 pub struct GetAllVnsRequest {
     pub epoch: Epoch,
@@ -254,7 +286,11 @@ pub struct GetAllVnsRequest {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerGetAllVnsResponse"
+    )
 )]
 pub struct GetAllVnsResponse {
     pub vns: Vec<BaseLayerValidatorNode>,
@@ -362,7 +398,11 @@ pub struct GetRelatedTransactionsResponse {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerAddPeerRequest"
+    )
 )]
 pub struct AddPeerRequest {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -376,7 +416,11 @@ pub struct AddPeerRequest {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerAddPeerResponse"
+    )
 )]
 pub struct AddPeerResponse {}
 
@@ -384,7 +428,11 @@ pub struct AddPeerResponse {}
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerGetCommsStatsResponse"
+    )
 )]
 pub struct GetCommsStatsResponse {
     pub connection_status: String,
@@ -394,7 +442,11 @@ pub struct GetCommsStatsResponse {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerGetEpochManagerStatsResponse"
+    )
 )]
 pub struct GetEpochManagerStatsResponse {
     pub current_epoch: Epoch,
@@ -408,7 +460,11 @@ pub struct GetEpochManagerStatsResponse {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerConnection"
+    )
 )]
 pub struct Connection {
     pub connection_id: String,
@@ -427,7 +483,11 @@ pub struct Connection {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerConnectionDirection"
+    )
 )]
 pub enum ConnectionDirection {
     Inbound,
@@ -438,7 +498,11 @@ pub enum ConnectionDirection {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/tari-indexer-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/tari-indexer-client/",
+        rename = "IndexerGetConnectionsResponse"
+    )
 )]
 pub struct GetConnectionsResponse {
     pub connections: Vec<Connection>,

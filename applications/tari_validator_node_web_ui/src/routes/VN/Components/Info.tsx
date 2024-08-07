@@ -31,8 +31,8 @@ import { DataTableCell } from "../../../Components/StyledComponents";
 import { TextField } from "@mui/material";
 import type {
   GetEpochManagerStatsResponse,
-  GetIdentityResponse,
-} from "@tari-project/typescript-bindings/validator-node-client";
+  VNGetIdentityResponse,
+} from "@tari-project/typescript-bindings";
 
 function Info({
   epoch,
@@ -40,7 +40,7 @@ function Info({
   shardKey,
 }: {
   epoch: GetEpochManagerStatsResponse;
-  identity: GetIdentityResponse;
+  identity: VNGetIdentityResponse;
   shardKey: string | null;
 }) {
   const [registering, setRegistering] = useState(false);

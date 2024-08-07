@@ -24,9 +24,9 @@ import { useState, useEffect } from "react";
 import EChartsReact from "echarts-for-react";
 import "../../theme/echarts.css";
 import type {
-  CommitteeShardInfo,
+  VNCommitteeShardInfo,
   GetNetworkCommitteeResponse,
-} from "@tari-project/typescript-bindings/validator-node-client";
+} from "@tari-project/typescript-bindings";
 
 interface IData {
   value: number;
@@ -41,7 +41,7 @@ const MyChartComponent = ({ chartData }: MyChartComponentProps) => {
   const [titles, setTitles] = useState<string[]>([]);
 
   useEffect(() => {
-    const mappedTitles = chartData.committees.map((shardInfo: CommitteeShardInfo) => {
+    const mappedTitles = chartData.committees.map((shardInfo: VNCommitteeShardInfo) => {
       return `${shardInfo.substate_address_range.start.slice(0, 6)}... - ${shardInfo.substate_address_range.end.slice(
         0,
         6,

@@ -20,14 +20,14 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{ops::RangeInclusive, sync::Arc, time::Duration};
+use std::{ ops::RangeInclusive, sync::Arc, time::Duration };
 
 use multiaddr::Multiaddr;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 use tari_base_node_client::types::BaseLayerValidatorNode;
-use tari_common_types::types::{FixedHash, PublicKey};
+use tari_common_types::types::{ FixedHash, PublicKey };
 use tari_dan_common_types::{
-    committee::{Committee, CommitteeInfo},
+    committee::{ Committee, CommitteeInfo },
     shard::Shard,
     Epoch,
     PeerAddress,
@@ -47,13 +47,13 @@ use tari_dan_storage::{
     Ordering,
 };
 use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult},
+    commit_result::{ ExecuteResult, FinalizeResult },
     fees::FeeCostBreakdown,
     serde_with,
-    substate::{SubstateId, SubstateValue},
+    substate::{ SubstateId, SubstateValue },
     TemplateAddress,
 };
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::{ Transaction, TransactionId };
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -61,7 +61,11 @@ use ts_rs::TS;
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNGetIdentityResponse"
+    )
 )]
 pub struct GetIdentityResponse {
     pub peer_id: String,
@@ -113,7 +117,11 @@ pub struct TemplateAbi {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNFunctionDef"
+    )
 )]
 pub struct FunctionDef {
     pub name: String,
@@ -126,7 +134,7 @@ pub struct FunctionDef {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(export, export_to = "../../bindings/src/types/validator-node-client/", rename = "VNArgDef")
 )]
 pub struct ArgDef {
     pub name: String,
@@ -178,7 +186,11 @@ pub struct TemplateMetadata {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNSubmitTransactionRequest"
+    )
 )]
 pub struct SubmitTransactionRequest {
     pub transaction: Transaction,
@@ -189,7 +201,11 @@ pub struct SubmitTransactionRequest {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNSubmitTransactionResponse"
+    )
 )]
 pub struct SubmitTransactionResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -214,7 +230,11 @@ pub struct DryRunTransactionFinalizeResult {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNGetAllVnsRequest"
+    )
 )]
 pub struct GetAllVnsRequest {
     pub epoch: Epoch,
@@ -224,7 +244,11 @@ pub struct GetAllVnsRequest {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNGetAllVnsResponse"
+    )
 )]
 pub struct GetAllVnsResponse {
     pub vns: Vec<BaseLayerValidatorNode>,
@@ -276,7 +300,11 @@ pub struct GetSubstatesByTransactionResponse {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNGetTransactionResultRequest"
+    )
 )]
 pub struct GetTransactionResultRequest {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -287,7 +315,11 @@ pub struct GetTransactionResultRequest {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNGetTransactionResultResponse"
+    )
 )]
 pub struct GetTransactionResultResponse {
     pub result: Option<ExecuteResult>,
@@ -385,7 +417,7 @@ pub struct GetBlocksCountResponse {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(export, export_to = "../../bindings/src/types/validator-node-client/", rename = "VNLogEntry")
 )]
 pub struct LogEntry {
     #[cfg_attr(feature = "ts", ts(type = "number"))]
@@ -398,7 +430,7 @@ pub struct LogEntry {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(export, export_to = "../../bindings/src/types/validator-node-client/", rename = "VNLogLevel")
 )]
 pub enum LogLevel {
     Error,
@@ -443,7 +475,11 @@ pub struct GetNetworkCommitteeResponse {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNCommitteeShardInfo"
+    )
 )]
 pub struct CommitteeShardInfo {
     #[cfg_attr(feature = "ts", ts(type = "number"))]
@@ -530,7 +566,11 @@ pub struct GetStateResponse {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNGetSubstateRequest"
+    )
 )]
 pub struct GetSubstateRequest {
     pub address: SubstateId,
@@ -541,7 +581,11 @@ pub struct GetSubstateRequest {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNGetSubstateResponse"
+    )
 )]
 pub struct GetSubstateResponse {
     pub value: Option<SubstateValue>,
@@ -566,7 +610,11 @@ pub enum SubstateStatus {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNAddPeerRequest"
+    )
 )]
 pub struct AddPeerRequest {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -580,7 +628,11 @@ pub struct AddPeerRequest {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNAddPeerResponse"
+    )
 )]
 pub struct AddPeerResponse {}
 
@@ -588,7 +640,11 @@ pub struct AddPeerResponse {}
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNGetCommsStatsResponse"
+    )
 )]
 pub struct GetCommsStatsResponse {
     pub connection_status: String,
@@ -718,7 +774,11 @@ pub struct GetFilteredBlocksCountRequest {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNConnection"
+    )
 )]
 pub struct Connection {
     pub connection_id: String,
@@ -737,7 +797,11 @@ pub struct Connection {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNConnectionDirection"
+    )
 )]
 pub enum ConnectionDirection {
     Inbound,
@@ -748,7 +812,11 @@ pub enum ConnectionDirection {
 #[cfg_attr(
     feature = "ts",
     derive(TS),
-    ts(export, export_to = "../../bindings/src/types/validator-node-client/")
+    ts(
+        export,
+        export_to = "../../bindings/src/types/validator-node-client/",
+        rename = "VNGetConnectionsResponse"
+    )
 )]
 pub struct GetConnectionsResponse {
     pub connections: Vec<Connection>,

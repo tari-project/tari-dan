@@ -24,7 +24,7 @@ import { useEffect, useState } from "react";
 import { getNonFungibles } from "../../../utils/json_rpc";
 import { useParams } from "react-router-dom";
 import { ImageList, ImageListItem, ImageListItemBar } from "@mui/material";
-import type { NonFungibleSubstate } from "@tari-project/typescript-bindings/tari-indexer-client";
+import type { NonFungibleSubstate } from "@tari-project/typescript-bindings";
 
 interface IImageData {
   img: string;

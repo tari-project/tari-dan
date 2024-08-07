@@ -6,38 +6,45 @@ set -e
 SOURCE_PATH="./src"
 TYPES_DIR="types"
 HELPERS_DIR="helpers"
-INDEX_FILE="index.ts"
-npx shx rm -rf $SOURCE_PATH/$TYPES_DIR
-npx shx rm -rf $SOURCE_PATH/$INDEX_FILE
+MAIN_INDEX_FILE="index.ts"
+
+if [ -f "$SOURCE_PATH/$TYPES_DIR" ]; then
+  npx shx rm -rf $SOURCE_PATH/$TYPES_DIR
+fi
+if [ -f "$SOURCE_PATH/$TYPES_DIR" ]; then
+  npx shx rm -rf $SOURCE_PATH/$MAIN_INDEX_FILE
+fi
 
 cargo test --workspace --exclude integration_tests export_bindings --features ts
 npx shx mv ../dan_layer/bindings/src/types/* ./src/types/
 npx shx rm -rf ../dan_layer/bindings/
 
 # Add the license header
-echo "//   Copyright 2023 The Tari Project" >> $SOURCE_PATH/$INDEX_FILE
-echo "//   SPDX-License-Identifier: BSD-3-Clause" >> $SOURCE_PATH/$INDEX_FILE
-echo "" >> $SOURCE_PATH/$INDEX_FILE
+echo "//   Copyright 2023 The Tari Project" >> $SOURCE_PATH/$MAIN_INDEX_FILE
+echo "//   SPDX-License-Identifier: BSD-3-Clause" >> $SOURCE_PATH/$MAIN_INDEX_FILE
+echo "" >> $SOURCE_PATH/$MAIN_INDEX_FILE
 
 cd ./src
 # Generate the index file
 for file in $(find $TYPES_DIR -name "*.ts" -maxdepth 1 | sort); do
   MODULE_NAME="${file%.*}"
-  echo "export * from './$MODULE_NAME';" >> $INDEX_FILE
+  echo "export * from './$MODULE_NAME';" >> $MAIN_INDEX_FILE
 done
 
 for dir in $(find $TYPES_DIR -mindepth 1 -maxdepth 1 -type d | sort); do
-  index_file="$(basename $dir).ts"
-  if [ -f "$index_file" ]; then
-    npx shx rm "$index_file"
+  module_dir_name="$(basename $dir)"
+  module_export_file="$module_dir_name.ts"
+  if [ -f "$module_export_file" ]; then
+    npx shx rm "$module_export_file"
   fi
-  echo "//   Copyright 2023 The Tari Project" >> "$index_file"
-  echo "//   SPDX-License-Identifier: BSD-3-Clause" >> "$index_file"
-  echo "" >> "$index_file"
+  echo "//   Copyright 2023 The Tari Project" >> "$module_export_file"
+  echo "//   SPDX-License-Identifier: BSD-3-Clause" >> "$module_export_file"
+  echo "" >> "$module_export_file"
   for file in $(find $dir -name "*.ts" -maxdepth 1); do
     MODULE_NAME="${file%.*}"
-    echo "export * from './$MODULE_NAME';" >> "$index_file"
+    echo "export * from './$MODULE_NAME';" >> "$module_export_file"
   done
+  echo "export * from './$module_dir_name';" >> $MAIN_INDEX_FILE
 done
 
 # Add helpers
@@ -45,7 +52,7 @@ for file in $(find $HELPERS_DIR -name "*.ts" | sort); do
   FILE_NAME=$(basename $file)
   if [ "$FILE_NAME" != "index.ts" ]; then
     MODULE_NAME="${FILE_NAME%.*}"
-    echo "export * from './$HELPERS_DIR/$MODULE_NAME';" >> $INDEX_FILE
+    echo "export * from './$HELPERS_DIR/$MODULE_NAME';" >> $MAIN_INDEX_FILE
   fi
 done
 
