@@ -10135,6 +10135,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_watcher"
+version = "0.7.0"
+dependencies = [
+ "anyhow",
+ "clap 3.2.25",
+ "log",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml 0.8.15",
+]
+
+[[package]]
 name = "tariswap_bench"
 version = "0.7.0"
 dependencies = [

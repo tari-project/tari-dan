@@ -1,0 +1,36 @@
+auto_register = true
+base_node_grpc_address = "localhost:18142"
+base_wallet_grpc_address = "localhost:18143"
+vn_registration_file = "/Users/dkast/go/src/github.com/therealdannzor/tari-dan/applications/tari_watcher/data/watcher/./data/watcher/vn_registration.toml"
+
+[[instance_config]]
+name = "tari_validator_node"
+instance_type = "TariValidatorNode"
+num_instances = 1
+
+[instance_config.settings]
+
+[[instance_config]]
+name = "minotari_wallet"
+instance_type = "MinoTariConsoleWallet"
+num_instances = 1
+
+[instance_config.settings]
+
+[[executable_config]]
+instance_type = "TariValidatorNode"
+executable_path = "target/release/minotari_node"
+env = []
+
+[executable_config.compile]
+working_dir = "../tari"
+package_name = "minotari_node"
+
+[[executable_config]]
+instance_type = "MinoTariConsoleWallet"
+executable_path = "target/release/minotari_wallet"
+env = []
+
+[executable_config.compile]
+working_dir = "../tari"
+package_name = "minotari_wallet"
