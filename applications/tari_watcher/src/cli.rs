@@ -5,6 +5,8 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+use crate::config::Config;
+
 #[derive(Clone, Debug, Parser)]
 pub struct Cli {
     #[clap(flatten)]
@@ -34,15 +36,25 @@ impl Cli {
 pub struct CommonCli {
     #[clap(short = 'b', long, parse(from_os_str))]
     pub base_dir: Option<PathBuf>,
-    #[clap(short, long, parse(from_os_str), default_value = "./data/watcher/config.toml")]
+    #[clap(short = 'c', long, parse(from_os_str), default_value = "./data/watcher/config.toml")]
     pub config_path: PathBuf,
 }
 
 #[derive(Clone, Debug, clap::Subcommand)]
 pub enum Commands {
-    Init,
+    Init(InitArgs),
     Start,
 }
 
 #[derive(Clone, Debug, clap::Args)]
-pub struct Overrides {}
+pub struct InitArgs {
+    #[clap(long)]
+    /// Disable initial and auto registration of the validator node
+    pub no_auto_register: bool,
+}
+
+impl InitArgs {
+    pub fn apply(&self, config: &mut Config) {
+        config.auto_register = !self.no_auto_register;
+    }
+}

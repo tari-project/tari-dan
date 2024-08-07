@@ -1,11 +1,15 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use crate::Cli;
-use std::collections::HashMap;
-use std::fmt::{self, Display};
-use std::path::PathBuf;
+use std::{
+    collections::HashMap,
+    fmt::{self, Display},
+    path::PathBuf,
+};
+
 use tokio::io::{self, AsyncWriteExt};
+
+use crate::Cli;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Config {
@@ -31,6 +35,9 @@ pub struct Config {
 
     /// The process specific configuration for the executables
     pub executable_config: Vec<ExecutableConfig>,
+
+    /// The channel configuration for alerting and monitoring
+    pub channel_config: Vec<ChannelConfig>,
 }
 
 impl Config {
@@ -51,6 +58,13 @@ impl Display for InstanceType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ChannelConfig {
+    pub name: String,
+    pub enabled: bool,
+    pub credentials: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -150,5 +164,17 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
         vn_registration_file: base_dir.join("vn_registration.toml"),
         instance_config: instances.to_vec(),
         executable_config: executables,
+        channel_config: vec![
+            ChannelConfig {
+                name: "mattermost".to_string(),
+                enabled: true,
+                credentials: "".to_string(),
+            },
+            ChannelConfig {
+                name: "telegram".to_string(),
+                enabled: true,
+                credentials: "".to_string(),
+            },
+        ],
     })
 }
