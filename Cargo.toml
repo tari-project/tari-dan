@@ -56,7 +56,7 @@ members = [
     "utilities/tariswap_test_bench",
     "utilities/transaction_submitter",
     "utilities/transaction_submitter",
-    "utilities/generate_ristretto_value_lookup",
+    "utilities/generate_ristretto_value_lookup", "applications/tari_watcher",
 ]
 resolver = "2"
 
