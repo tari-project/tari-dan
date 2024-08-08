@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-use crate::config::Config;
+use crate::config::{Config, InstanceType};
 
 #[derive(Clone, Debug, Parser)]
 pub struct Cli {
@@ -43,7 +43,7 @@ pub struct CommonCli {
 #[derive(Clone, Debug, clap::Subcommand)]
 pub enum Commands {
     Init(InitArgs),
-    Start,
+    Start(Overrides),
 }
 
 #[derive(Clone, Debug, clap::Args)]
@@ -56,5 +56,31 @@ pub struct InitArgs {
 impl InitArgs {
     pub fn apply(&self, config: &mut Config) {
         config.auto_register = !self.no_auto_register;
+    }
+}
+
+#[derive(Clone, Debug, clap::Args)]
+pub struct Overrides {
+    #[clap(long)]
+    pub vn_node_binary_path: Option<PathBuf>,
+}
+
+impl Overrides {
+    pub fn apply(&self, config: &mut Config) {
+        if self.vn_node_binary_path.is_none() {
+            return;
+        }
+
+        if let Some(exec_config) = config
+            .executable_config
+            .iter_mut()
+            .find(|c| c.instance_type == InstanceType::TariValidatorNode)
+        {
+            exec_config.executable_path = self.vn_node_binary_path.clone();
+        }
+        log::info!(
+            "Overriding validator node binary path to {:?}",
+            self.vn_node_binary_path.as_ref().unwrap()
+        );
     }
 }

@@ -40,7 +40,11 @@ async fn main() -> anyhow::Result<()> {
             // if let Err(e) = initialize_logging(..)
             log::info!("Config file created at {}", config_path.display());
         },
-        Commands::Start => {
+        Commands::Start(ref args) => {
+            let mut config = get_base_config(&cli)?;
+            // optionally override config values
+            args.apply(&mut config);
+
             unimplemented!("Start command not implemented");
         },
     }
