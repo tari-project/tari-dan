@@ -62,12 +62,13 @@ impl InitArgs {
 #[derive(Clone, Debug, clap::Args)]
 pub struct Overrides {
     #[clap(long)]
-    pub vn_node_binary_path: Option<PathBuf>,
+    // The path to the validator node binary (optional)
+    pub vn_node_path: Option<PathBuf>,
 }
 
 impl Overrides {
     pub fn apply(&self, config: &mut Config) {
-        if self.vn_node_binary_path.is_none() {
+        if self.vn_node_path.is_none() {
             return;
         }
 
@@ -76,11 +77,11 @@ impl Overrides {
             .iter_mut()
             .find(|c| c.instance_type == InstanceType::TariValidatorNode)
         {
-            exec_config.executable_path = self.vn_node_binary_path.clone();
+            exec_config.executable_path = self.vn_node_path.clone();
         }
         log::info!(
             "Overriding validator node binary path to {:?}",
-            self.vn_node_binary_path.as_ref().unwrap()
+            self.vn_node_path.as_ref().unwrap()
         );
     }
 }

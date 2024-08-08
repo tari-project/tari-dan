@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use anyhow::{anyhow, Context};
+use std::time::SystemTime;
 use tokio::fs;
 
 use crate::{
@@ -16,6 +17,8 @@ mod config;
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::init();
     let config_path = cli.get_config_path();
+
+    setup_logger()?;
 
     match cli.command {
         Commands::Init(ref args) => {
@@ -36,8 +39,6 @@ async fn main() -> anyhow::Result<()> {
                 .canonicalize()
                 .context("Failed to canonicalize config path")?;
 
-            // TODO: use standardised logging
-            // if let Err(e) = initialize_logging(..)
             log::info!("Config file created at {}", config_path.display());
         },
         Commands::Start(ref args) => {
@@ -48,6 +49,31 @@ async fn main() -> anyhow::Result<()> {
             unimplemented!("Start command not implemented");
         },
     }
+
+    Ok(())
+}
+
+fn setup_logger() -> Result<(), fern::InitError> {
+    let colors = fern::colors::ColoredLevelConfig::new()
+        .info(fern::colors::Color::Green)
+        .debug(fern::colors::Color::Cyan)
+        .warn(fern::colors::Color::Yellow)
+        .error(fern::colors::Color::Red);
+
+    fern::Dispatch::new()
+        .format(move |out, message, record| {
+            out.finish(format_args!(
+                "[{} {} {}] {}",
+                humantime::format_rfc3339_seconds(SystemTime::now()),
+                colors.color(record.level()),
+                record.target(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Debug)
+        .chain(std::io::stdout())
+        .chain(fern::log_file("output.log")?)
+        .apply()?;
 
     Ok(())
 }
