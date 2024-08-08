@@ -1,24 +1,24 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{ sync::Arc, time::Duration };
+use std::{sync::Arc, time::Duration};
 
 use multiaddr::Multiaddr;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use serde_with::{ serde_as, DisplayFromStr };
+use serde_with::{serde_as, DisplayFromStr};
 use tari_base_node_client::types::BaseLayerValidatorNode;
-use tari_common_types::types::{ FixedHash, PublicKey };
-use tari_dan_common_types::{ substate_type::SubstateType, Epoch };
+use tari_common_types::types::{FixedHash, PublicKey};
+use tari_dan_common_types::{substate_type::SubstateType, Epoch};
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
     serde_with as serde_tools,
-    substate::{ Substate, SubstateId },
+    substate::{Substate, SubstateId},
     TemplateAddress,
 };
 use tari_template_abi::TemplateDef;
-use tari_transaction::{ SubstateRequirement, Transaction, TransactionId };
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
