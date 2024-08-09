@@ -2303,6 +2303,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         Ok(finalized)
     }
 
+    fn validate_finalized(&self) -> Result<(), RuntimeError> {
+        self.tracker.read_with(|state| {
+            state.validate_finalized()?;
+            Ok(())
+        })
+    }
+
     fn check_component_access_rules(&self, method: &str, locked: &LockedSubstate) -> Result<(), RuntimeError> {
         self.tracker
             .read_with(|state| state.authorization().check_component_access_rules(method, locked))

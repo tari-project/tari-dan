@@ -534,6 +534,14 @@ impl Block {
         )
     }
 
+    pub fn get_last_n_in_epoch<TTx: StateStoreReadTransaction + ?Sized>(
+        tx: &TTx,
+        n: usize,
+        epoch: Epoch,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.blocks_get_last_n_in_epoch(n, epoch)
+    }
+
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
         Self::record_exists(tx, self.id())
     }

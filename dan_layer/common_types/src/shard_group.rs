@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn to_substate_address_range() {
         let sg = ShardGroup::new(0, 63);
-        let range = sg.to_substate_address_range(NumPreshards::SixtyFour);
+        let range = sg.to_substate_address_range(NumPreshards::P64);
         assert_eq!(*range.start(), SubstateAddress::zero());
         assert_eq!(*range.end(), SubstateAddress::max());
     }

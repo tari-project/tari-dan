@@ -4,6 +4,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{shard::Shard, Epoch};
 use tari_dan_storage::consensus_models::{
     EpochCheckpoint,
@@ -180,9 +181,20 @@ impl TryFrom<proto::rpc::EpochCheckpoint> for EpochCheckpoint {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::rpc::EpochCheckpoint) -> Result<Self, Self::Error> {
+        if value.shard_roots.len() > 256 {
+            return Err(anyhow!("too many shard roots"));
+        }
+
+        let shard_roots = value
+            .shard_roots
+            .into_iter()
+            .map(|(k, v)| FixedHash::try_from(v).map(|h| (Shard::from(k), h)))
+            .collect::<Result<_, _>>()?;
+
         Ok(Self::new(
             value.block.ok_or_else(|| anyhow!("block not provided"))?.try_into()?,
             value.qcs.into_iter().map(TryInto::try_into).collect::<Result<_, _>>()?,
+            shard_roots,
         ))
     }
 }
@@ -192,6 +204,11 @@ impl From<EpochCheckpoint> for proto::rpc::EpochCheckpoint {
         Self {
             block: Some(value.block().into()),
             qcs: value.qcs().iter().map(Into::into).collect(),
+            shard_roots: value
+                .shard_roots()
+                .iter()
+                .map(|(k, v)| (k.as_u32(), v.to_vec()))
+                .collect(),
         }
     }
 }

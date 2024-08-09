@@ -4,7 +4,7 @@
 // TODO: use all functions
 // #![allow(dead_code)]
 
-pub const TEST_NUM_PRESHARDS: NumPreshards = NumPreshards::SixtyFour;
+pub const TEST_NUM_PRESHARDS: NumPreshards = NumPreshards::P64;
 
 mod address;
 mod epoch_manager;

@@ -702,17 +702,18 @@ pub struct LeafKey {
     /// becomes unspecified.
     /// All leaf keys must be evenly distributed across their space - otherwise the tree's
     /// performance degrades.
+    /// TARI: always a hash, so replaced heap-allocated Vec<u8> with a Hash
     #[serde(with = "serde_with::hex")]
-    pub bytes: Vec<u8>,
+    pub bytes: Hash,
 }
 
 impl LeafKey {
-    pub fn new(bytes: Vec<u8>) -> Self {
+    pub fn new(bytes: Hash) -> Self {
         Self { bytes }
     }
 
     pub fn as_ref(&self) -> LeafKeyRef<'_> {
-        LeafKeyRef::new(&self.bytes)
+        LeafKeyRef::new(self.bytes.as_slice())
     }
 }
 
@@ -736,7 +737,7 @@ impl<'a> LeafKeyRef<'a> {
 
 impl PartialEq<LeafKey> for LeafKeyRef<'_> {
     fn eq(&self, other: &LeafKey) -> bool {
-        self.bytes == other.bytes
+        self.bytes == other.bytes.as_slice()
     }
 }
 

@@ -75,7 +75,7 @@ impl<'a, TTx: StateStoreWriteTransaction> TreeStoreWriter<Version> for ShardScop
 
     fn record_stale_tree_node(&mut self, node: StaleTreeNode) -> Result<(), tari_state_tree::JmtStorageError> {
         self.tx
-            .state_tree_nodes_mark_stale_tree_node(self.shard, node)
+            .state_tree_nodes_record_stale_tree_node(self.shard, node)
             .map_err(|e| tari_state_tree::JmtStorageError::UnexpectedError(e.to_string()))
     }
 }

@@ -33,7 +33,15 @@ use tari_dan_storage::{
 };
 use tari_engine_types::substate::hash_substate;
 use tari_epoch_manager::EpochManagerReader;
-use tari_state_tree::{Hash, SpreadPrefixStateTree, SubstateTreeChange, Version};
+use tari_state_tree::{
+    memory_store::MemoryTreeStore,
+    Hash,
+    RootStateTree,
+    SpreadPrefixStateTree,
+    SubstateTreeChange,
+    Version,
+    SPARSE_MERKLE_PLACEHOLDER_HASH,
+};
 use tari_transaction::VersionedSubstateId;
 use tari_validator_node_rpc::{
     client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory},
@@ -101,8 +109,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         &self,
         client: &mut ValidatorNodeRpcClient,
         shard: Shard,
-        checkpoint: EpochCheckpoint,
-    ) -> Result<Version, CommsRpcConsensusSyncError> {
+        checkpoint: &EpochCheckpoint,
+    ) -> Result<Option<Version>, CommsRpcConsensusSyncError> {
         let current_epoch = self.epoch_manager.current_epoch().await?;
 
         let last_state_transition_id = self
@@ -113,8 +121,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
         let persisted_version = self
             .state_store
-            .with_read_tx(|tx| tx.state_tree_versions_get_latest(shard))?
-            .unwrap_or(0);
+            .with_read_tx(|tx| tx.state_tree_versions_get_latest(shard))?;
 
         if current_epoch == last_state_transition_id.epoch() {
             info!(target: LOG_TARGET, "🛜Already up to date. No need to sync.");
@@ -168,7 +175,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                     target: LOG_TARGET,
                     "🛜 Next state updates batch of size {} (v{}-v{})",
                     msg.transitions.len(),
-                    current_version,
+                    current_version.unwrap_or(0),
                     msg.transitions.last().unwrap().state_tree_version,
                 );
 
@@ -187,12 +194,12 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         )));
                     }
 
-                    if transition.state_tree_version < current_version {
+                    if current_version.map_or(false, |v| transition.state_tree_version < v) {
                         return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow!(
                             "Received state transition with version {} that is not monotonically increasing (expected \
                              >= {})",
                             transition.state_tree_version,
-                            persisted_version
+                            persisted_version.unwrap_or(0)
                         )));
                     }
 
@@ -220,26 +227,26 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         },
                     };
 
-                    info!(target: LOG_TARGET, "🛜 Applying state update {transition} (v{} to v{})", current_version, transition.state_tree_version);
+                    info!(target: LOG_TARGET, "🛜 Applying state update {transition} (v{} to v{})", current_version.unwrap_or(0), transition.state_tree_version);
                     if next_version != transition.state_tree_version {
                         let mut state_tree = SpreadPrefixStateTree::new(&mut store);
-                        state_tree.put_substate_changes(Some(current_version).filter(|v| *v > 0), next_version, tree_changes.drain(..))?;
-                        current_version = next_version;
+                        state_tree.put_substate_changes(current_version, next_version, tree_changes.drain(..))?;
+                        current_version = Some(next_version);
                         next_version = transition.state_tree_version;
                     }
                     tree_changes.push(change);
 
-                    self.commit_update(store.transaction(), &checkpoint, transition)?;
+                    self.commit_update(store.transaction(), checkpoint, transition)?;
                 }
 
                 if !tree_changes.is_empty() {
                     let mut state_tree = SpreadPrefixStateTree::new(&mut store);
-                    state_tree.put_substate_changes(Some(current_version).filter(|v| *v > 0), next_version, tree_changes.drain(..))?;
+                    state_tree.put_substate_changes(current_version, next_version, tree_changes.drain(..))?;
                 }
-                current_version = next_version;
+                current_version = Some(next_version);
 
-                if current_version > 0 {
-                    store.set_version(current_version)?;
+                if let Some(v) = current_version {
+                    store.set_version(v)?;
                 }
 
                 Ok::<_, CommsRpcConsensusSyncError>(())
@@ -249,7 +256,15 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         Ok(current_version)
     }
 
-    fn get_state_root_for_shard(&self, shard: Shard, version: Version) -> Result<Hash, CommsRpcConsensusSyncError> {
+    fn get_state_root_for_shard(
+        &self,
+        shard: Shard,
+        version: Option<Version>,
+    ) -> Result<Hash, CommsRpcConsensusSyncError> {
+        let Some(version) = version else {
+            return Ok(SPARSE_MERKLE_PLACEHOLDER_HASH);
+        };
+
         self.state_store.with_read_tx(|tx| {
             let mut store = ShardScopedTreeStoreReader::new(tx, shard);
             let state_tree = SpreadPrefixStateTree::new(&mut store);
@@ -322,6 +337,26 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         committees.sort_by_key(|(k, _)| *k);
         Ok(committees)
     }
+
+    fn validate_checkpoint(&self, checkpoint: &EpochCheckpoint) -> Result<(), CommsRpcConsensusSyncError> {
+        // TODO: validate checkpoint
+
+        // Check the merkle root matches the provided shard roots
+        let mut mem_store = MemoryTreeStore::new();
+        let mut root_tree = RootStateTree::new(&mut mem_store);
+        let shard_group = checkpoint.block().shard_group();
+        let hashes = shard_group.shard_iter().map(|shard| checkpoint.get_shard_root(shard));
+        let calculated_root = root_tree.put_root_hash_changes(None, 1, hashes)?;
+        if calculated_root != *checkpoint.block().merkle_root() {
+            return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow!(
+                "Checkpoint merkle root mismatch. Expected {expected} but got {actual}",
+                expected = checkpoint.block().merkle_root(),
+                actual = calculated_root,
+            )));
+        }
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -362,8 +397,10 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
         // NOTE: we don't have to worry about substates in address range because shard boundaries are fixed.
         for (shard, mut committee) in prev_epoch_committees {
             info!(target: LOG_TARGET, "🛜Syncing state for {shard} and {}", current_epoch.saturating_sub(Epoch(1)));
+            let mut remaining_members = committee.len();
             committee.shuffle();
             for (addr, public_key) in committee {
+                remaining_members = remaining_members.saturating_sub(1);
                 if our_vn.public_key == public_key {
                     continue;
                 }
@@ -374,6 +411,9 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
                             target: LOG_TARGET,
                             "Failed to establish RPC session with vn {addr}: {err}. Attempting another VN if available"
                         );
+                        if remaining_members == 0 {
+                            return Err(err);
+                        }
                         last_error = Some(err);
                         continue;
                     },
@@ -395,23 +435,51 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
                             target: LOG_TARGET,
                             "⚠️Failed to fetch checkpoint from {addr}: {err}. Attempting another peer if available"
                         );
+                        if remaining_members == 0 {
+                            return Err(err);
+                        }
                         last_error = Some(err);
                         continue;
                     },
                 };
                 info!(target: LOG_TARGET, "🛜 Checkpoint: {checkpoint}");
 
-                match self.start_state_sync(&mut client, shard, checkpoint).await {
+                self.validate_checkpoint(&checkpoint)?;
+
+                match self.start_state_sync(&mut client, shard, &checkpoint).await {
                     Ok(current_version) => {
-                        // TODO: validate this MR against the checkpoint
-                        let merkle_root = self.get_state_root_for_shard(shard, current_version)?;
-                        info!(target: LOG_TARGET, "🛜Synced state for {shard} to v{current_version} with root {merkle_root}");
+                        let state_root = self.get_state_root_for_shard(shard, current_version)?;
+
+                        if state_root != checkpoint.get_shard_root(shard) {
+                            error!(
+                                target: LOG_TARGET,
+                                "❌State root mismatch for {shard}. Expected {expected} but got {actual}",
+                                expected = checkpoint.get_shard_root(shard),
+                                actual = state_root,
+                            );
+                            last_error = Some(CommsRpcConsensusSyncError::StateRootMismatch {
+                                expected: *checkpoint.block().merkle_root(),
+                                actual: state_root,
+                            });
+                            // TODO: rollback state
+                            if remaining_members == 0 {
+                                return Err(last_error.unwrap());
+                            }
+
+                            continue;
+                        }
+
+                        info!(target: LOG_TARGET, "🛜Synced state for {shard} to v{} with root {state_root}", current_version.unwrap_or(0));
                     },
                     Err(err) => {
                         warn!(
                             target: LOG_TARGET,
                             "⚠️Failed to sync state from {addr}: {err}. Attempting another peer if available"
                         );
+
+                        if remaining_members == 0 {
+                            return Err(err);
+                        }
                         last_error = Some(err);
                         continue;
                     },
@@ -420,6 +488,10 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
             }
         }
 
-        last_error.map(Err).unwrap_or(Ok(()))
+        if let Some(err) = last_error {
+            return Err(err);
+        }
+
+        Ok(())
     }
 }

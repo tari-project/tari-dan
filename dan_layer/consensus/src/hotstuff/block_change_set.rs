@@ -11,7 +11,7 @@ use tari_dan_storage::{
         BlockDiff,
         LeafBlock,
         LockedSubstate,
-        PendingStateTreeDiff,
+        PendingShardStateTreeDiff,
         QuorumDecision,
         SubstateChange,
         SubstateRecord,
@@ -62,9 +62,9 @@ impl ProposedBlockChangeSet {
     pub fn no_vote(mut self) -> Self {
         self.quorum_decision = None;
         self.block_diff = Vec::new();
-        self.transaction_changes.clear();
-        self.state_tree_diffs.clear();
-        self.substate_locks.clear();
+        self.transaction_changes = IndexMap::new();
+        self.state_tree_diffs = IndexMap::new();
+        self.substate_locks = IndexMap::new();
         self
     }
 
@@ -142,8 +142,9 @@ impl ProposedBlockChangeSet {
         block_diff.insert(tx)?;
 
         // Store the tree diffs for each effected shard
-        for (shard, diff) in self.state_tree_diffs {
-            PendingStateTreeDiff::create(tx, *self.block.block_id(), shard, diff)?;
+        let shard_tree_diffs = self.state_tree_diffs;
+        for (shard, diff) in shard_tree_diffs {
+            PendingShardStateTreeDiff::create(tx, *self.block.block_id(), shard, diff)?;
         }
 
         // Save locks
