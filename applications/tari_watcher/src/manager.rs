@@ -1,8 +1,10 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use crate::config::{Config, ExecutableConfig};
-use crate::forker::Forker;
+use crate::{
+    config::{Config, ExecutableConfig},
+    forker::Forker,
+};
 
 pub struct ProcessManager {
     pub validator_config: ExecutableConfig,

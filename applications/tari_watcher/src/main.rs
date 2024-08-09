@@ -1,16 +1,16 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use anyhow::{anyhow, Context};
 use std::time::SystemTime;
+
+use anyhow::{anyhow, Context};
 use tokio::fs;
 
 use crate::{
     cli::{Cli, Commands},
     config::{get_base_config, Config},
+    manager::ProcessManager,
 };
-
-use crate::manager::ProcessManager;
 
 mod cli;
 mod config;

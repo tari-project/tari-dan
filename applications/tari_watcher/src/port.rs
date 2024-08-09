@@ -1,7 +1,10 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
-use std::io;
-use std::net::{IpAddr, SocketAddr};
+use std::{
+    io,
+    net::{IpAddr, SocketAddr},
+};
+
 use tokio::net::TcpListener;
 
 use crate::config::InstanceType;
@@ -62,18 +65,12 @@ impl ValidatorPorts {
     }
 
     pub fn jrpc_pub_address(&self, listen_ip: IpAddr) -> Option<String> {
-        if self.jrpc.is_none() {
-            return None;
-        }
-
+        self.jrpc?;
         Some(format!("{}: {}", listen_ip, self.jrpc.unwrap()))
     }
 
     pub fn web_ui_address(&self, listen_ip: IpAddr) -> Option<String> {
-        if self.web.is_none() {
-            return None;
-        }
-
+        self.web?;
         Some(format!("{}:{}", listen_ip, self.web.unwrap()))
     }
 }
@@ -91,18 +88,12 @@ impl MinotariPorts {
     }
 
     pub fn p2p_port_as_string(&self) -> Option<String> {
-        if self.p2p.is_none() {
-            return None;
-        }
-
+        self.p2p?;
         Some(format!("{}", self.p2p.unwrap()))
     }
 
     pub fn grpc_port_as_string(&self) -> Option<String> {
-        if self.grpc.is_none() {
-            return None;
-        }
-
+        self.grpc?;
         Some(format!("{}", self.grpc.unwrap()))
     }
 }

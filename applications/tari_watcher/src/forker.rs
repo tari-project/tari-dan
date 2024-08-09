@@ -1,21 +1,23 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use crate::{
-    config::{ExecutableConfig, InstanceType},
-    port::PortAllocator,
-};
-
-use tokio::fs;
-use tokio::process::{Child, Command};
-
-use std::{io, path::PathBuf};
 use std::{
+    io,
     net::{IpAddr, Ipv4Addr},
+    path::PathBuf,
     process::Stdio,
 };
 
 use anyhow::bail;
+use tokio::{
+    fs,
+    process::{Child, Command},
+};
+
+use crate::{
+    config::{ExecutableConfig, InstanceType},
+    port::PortAllocator,
+};
 
 const TARI_L2_VN: InstanceType = InstanceType::TariValidatorNode;
 const MINO_L1_WALLET: InstanceType = InstanceType::MinoTariConsoleWallet;
@@ -51,9 +53,7 @@ impl Forker {
         instance.bootstrap().await?;
 
         // verify everything is up and running
-        if let Err(e) = instance.validator_ready() {
-            return Err(e);
-        }
+        instance.validator_ready()?;
 
         self.validator = Some(instance.clone());
 
@@ -63,14 +63,14 @@ impl Forker {
         let mut command = self
             .get_command(
                 config.executable_path.unwrap(),
-                "esmeralda".to_string(), /* TODO: add network to cfg */
+                "esmeralda".to_string(), // TODO: add network to cfg
                 base_node_grpc_address,
                 json_rpc_public_address.unwrap(),
                 web_ui_address.unwrap(),
             )
             .await?;
 
-        //TODO: stdout logs
+        // TODO: stdout logs
         // let process_dir = self.base_dir.join("processes").join("TariValidatorNode");
         // let stdout_log_path = process_dir.join("stdout.log");
         // let stderr_log_path = process_dir.join("stderr.log");
@@ -170,9 +170,9 @@ impl Instance {
             bail!("Validator JSON-RPC address not initialized, this should not happen");
         } else if self.port.validator.web.is_none() {
             bail!("Validator Web UI address not initialized, this should not happen");
+        } else {
+            Ok(())
         }
-
-        Ok(())
     }
 
     #[allow(dead_code)]
@@ -183,7 +183,8 @@ impl Instance {
             bail!("Wallet P2P address not initialized, this should not happen");
         } else if self.port.wallet.grpc.is_none() {
             bail!("Wallet gRPC address not initialized, this should not happen");
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 }
