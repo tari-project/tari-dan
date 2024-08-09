@@ -1,0 +1,11 @@
+import { JrpcPermission } from "../types/JrpcPermission";
+import { RejectReason } from "../types/RejectReason";
+import { SubstateDiff } from "../types/SubstateDiff";
+import { SubstateId } from "../types/SubstateId";
+import { TransactionResult } from "../types/TransactionResult";
+export declare function substateIdToString(substateId: SubstateId | null): string;
+export declare function stringToSubstateId(substateId: string): SubstateId;
+export declare function rejectReasonToString(reason: RejectReason | null): string;
+export declare function getSubstateDiffFromTransactionResult(result: TransactionResult): SubstateDiff | null;
+export declare function getRejectReasonFromTransactionResult(result: TransactionResult): RejectReason | null;
+export declare function jrpcPermissionToString(jrpcPermission: JrpcPermission): string;
