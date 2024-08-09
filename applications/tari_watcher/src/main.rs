@@ -7,11 +7,16 @@ use tokio::fs;
 
 use crate::{
     cli::{Cli, Commands},
-    config::get_base_config,
+    config::{get_base_config, Config},
 };
+
+use crate::manager::ProcessManager;
 
 mod cli;
 mod config;
+mod forker;
+mod manager;
+mod port;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -45,10 +50,19 @@ async fn main() -> anyhow::Result<()> {
             let mut config = get_base_config(&cli)?;
             // optionally override config values
             args.apply(&mut config);
-
-            unimplemented!("Start command not implemented");
+            start(config).await?;
         },
     }
+
+    Ok(())
+}
+
+async fn start(config: Config) -> anyhow::Result<()> {
+    let mut manager = ProcessManager::new(config.clone());
+    manager
+        .forker
+        .start_validator(manager.validator_config, config.base_node_grpc_address)
+        .await?;
 
     Ok(())
 }

@@ -23,6 +23,9 @@ pub struct Config {
     /// The Minotari console wallet gRPC address
     pub base_wallet_grpc_address: String,
 
+    /// The base directory of the watcher with configuration and data files
+    pub base_dir: PathBuf,
+
     /// The path of the validator node registration file, containing signed information required to
     /// submit a registration transaction on behalf of the node
     pub vn_registration_file: PathBuf,
@@ -143,6 +146,7 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
         base_node_grpc_address: "localhost:18142".to_string(),
         base_wallet_grpc_address: "localhost:18143".to_string(),
         sidechain_id: None,
+        base_dir: base_dir.clone(),
         vn_registration_file: base_dir.join("registration.json"),
         instance_config: instances.to_vec(),
         executable_config: executables,

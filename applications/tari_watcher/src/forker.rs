@@ -1,0 +1,189 @@
+// Copyright 2024 The Tari Project
+// SPDX-License-Identifier: BSD-3-Clause
+
+use crate::{
+    config::{ExecutableConfig, InstanceType},
+    port::PortAllocator,
+};
+
+use tokio::fs;
+use tokio::process::{Child, Command};
+
+use std::{io, path::PathBuf};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    process::Stdio,
+};
+
+use anyhow::bail;
+
+const TARI_L2_VN: InstanceType = InstanceType::TariValidatorNode;
+const MINO_L1_WALLET: InstanceType = InstanceType::MinoTariConsoleWallet;
+
+#[allow(dead_code)]
+pub struct Forker {
+    // Used for the validator to connect to the base (L1) node
+    base_node_grpc_address: String,
+    // The base directory of calling the application
+    base_dir: PathBuf,
+    // The Tari L2 validator instance
+    validator: Option<Instance>,
+    // The Minotari L1 wallet instance
+    wallet: Option<Instance>,
+}
+
+impl Forker {
+    pub fn new(base_node_grpc_address: String, base_dir: PathBuf) -> Self {
+        Self {
+            validator: None,
+            wallet: None,
+            base_node_grpc_address,
+            base_dir,
+        }
+    }
+
+    pub async fn start_validator(
+        &mut self,
+        config: ExecutableConfig,
+        base_node_grpc_address: String,
+    ) -> anyhow::Result<Child> {
+        let mut instance = Instance::new(TARI_L2_VN, config.clone());
+        instance.bootstrap().await?;
+
+        // verify everything is up and running
+        if let Err(e) = instance.validator_ready() {
+            return Err(e);
+        }
+
+        self.validator = Some(instance.clone());
+
+        let json_rpc_public_address = instance.port.validator.jrpc_pub_address(instance.listen_ip.unwrap());
+        let web_ui_address = instance.port.validator.web_ui_address(instance.listen_ip.unwrap());
+
+        let mut command = self
+            .get_command(
+                config.executable_path.unwrap(),
+                "esmeralda".to_string(), /* TODO: add network to cfg */
+                base_node_grpc_address,
+                json_rpc_public_address.unwrap(),
+                web_ui_address.unwrap(),
+            )
+            .await?;
+
+        //TODO: stdout logs
+        // let process_dir = self.base_dir.join("processes").join("TariValidatorNode");
+        // let stdout_log_path = process_dir.join("stdout.log");
+        // let stderr_log_path = process_dir.join("stderr.log");
+        command
+            .kill_on_drop(true)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .stdin(Stdio::null());
+
+        let child = command.spawn()?;
+
+        Ok(child)
+    }
+
+    async fn get_command(
+        &self,
+        target_binary: PathBuf,
+        network: String,
+        base_node_grpc_address: String,
+        json_rpc_public_address: String,
+        web_ui_address: String,
+    ) -> anyhow::Result<Command> {
+        log::debug!("Creating validator command from base directory: {:?}", self.base_dir);
+
+        // create directory for the validator process
+        let process_dir = self.base_dir.join("processes").join("TariValidatorNode");
+        fs::create_dir_all(&process_dir).await?;
+
+        log::debug!("Creating validator process to run from: {:?}", process_dir);
+
+        let json_rpc_address = json_rpc_public_address.clone();
+        let mut command = Command::new(target_binary);
+        let empty: Vec<(&str, &str)> = Vec::new();
+        command
+            .envs(empty)
+            .arg("-b")
+            .arg(process_dir)
+            .arg("--network")
+            .arg(network)
+            .arg(format!("--json-rpc-public-address={json_rpc_public_address}"))
+            .arg(format!(
+                "-pvalidator_node.base_node_grpc_address={base_node_grpc_address}"
+            ))
+            .arg(format!("-pvalidator_node.json_rpc_listener_address={json_rpc_address}"))
+            .arg(format!("-pvalidator_node.http_ui_listener_address={web_ui_address}"))
+            .arg("-pvalidator_node.base_layer_scanning_interval=1");
+        Ok(command)
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone)]
+struct Instance {
+    app: InstanceType,
+    config: ExecutableConfig,
+    listen_ip: Option<IpAddr>,
+    port: PortAllocator,
+}
+
+impl Instance {
+    pub fn new(app: InstanceType, config: ExecutableConfig) -> Self {
+        Self {
+            app,
+            config,
+            listen_ip: None,
+            port: PortAllocator::new(),
+        }
+    }
+
+    pub async fn bootstrap(&mut self) -> io::Result<()> {
+        if self.listen_ip.is_some() {
+            log::warn!("Instance {} already bootstrapped, ignore", self.app.to_string());
+            return Ok(());
+        }
+
+        let listen = IpAddr::V4(Ipv4Addr::from([127, 0, 0, 1]));
+        self.listen_ip = Some(listen);
+
+        match self.app {
+            TARI_L2_VN => {
+                self.port.open_at(TARI_L2_VN, "jrpc").await?;
+                self.port.open_at(TARI_L2_VN, "web").await?;
+            },
+            MINO_L1_WALLET => {
+                self.port.open_at(MINO_L1_WALLET, "p2p").await?;
+                self.port.open_at(MINO_L1_WALLET, "grpc").await?;
+            },
+        }
+
+        Ok(())
+    }
+
+    pub fn validator_ready(&self) -> anyhow::Result<()> {
+        if self.listen_ip.is_none() {
+            bail!("Validator listener not initialized, this should not happen");
+        } else if self.port.validator.jrpc.is_none() {
+            bail!("Validator JSON-RPC address not initialized, this should not happen");
+        } else if self.port.validator.web.is_none() {
+            bail!("Validator Web UI address not initialized, this should not happen");
+        }
+
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn wallet_ready(&self) -> anyhow::Result<()> {
+        if self.listen_ip.is_none() {
+            bail!("Wallet listener not initialized, this should not happen");
+        } else if self.port.wallet.p2p.is_none() {
+            bail!("Wallet P2P address not initialized, this should not happen");
+        } else if self.port.wallet.grpc.is_none() {
+            bail!("Wallet gRPC address not initialized, this should not happen");
+        }
+        Ok(())
+    }
+}
