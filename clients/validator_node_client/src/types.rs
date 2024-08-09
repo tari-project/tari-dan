@@ -29,11 +29,19 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
     shard::Shard,
-    Epoch, PeerAddress, SubstateAddress,
+    Epoch,
+    PeerAddress,
+    SubstateAddress,
 };
 use tari_dan_storage::{
     consensus_models::{
-        Block, BlockId, Decision, ExecutedTransaction, QuorumDecision, SubstateRecord, TransactionPoolRecord,
+        Block,
+        BlockId,
+        Decision,
+        ExecutedTransaction,
+        QuorumDecision,
+        SubstateRecord,
+        TransactionPoolRecord,
     },
     global::models,
     Ordering,
