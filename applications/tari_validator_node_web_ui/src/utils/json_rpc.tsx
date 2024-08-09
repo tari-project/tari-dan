@@ -20,11 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import type { GetFilteredBlocksCountRequest } from "@tari-project/typescript-bindings/validator-node-client";
+import type { GetFilteredBlocksCountRequest } from "@tari-project/typescript-bindings";
 import type {
-  AddPeerRequest,
-  GetAllVnsRequest,
-  GetAllVnsResponse,
+  VNAddPeerRequest,
+  VNGetAllVnsRequest,
+  VNGetAllVnsResponse,
   GetBlockRequest,
   GetBlockResponse,
   GetBlocksCountResponse,
@@ -32,10 +32,10 @@ import type {
   GetBlocksResponse,
   GetCommitteeRequest,
   GetCommitteeResponse,
-  GetCommsStatsResponse,
-  GetConnectionsResponse,
+  VNGetCommsStatsResponse,
+  VNGetConnectionsResponse,
   GetEpochManagerStatsResponse,
-  GetIdentityResponse,
+  VNGetIdentityResponse,
   GetMempoolStatsResponse,
   GetNetworkCommitteeResponse,
   GetRecentTransactionsResponse,
@@ -43,8 +43,8 @@ import type {
   GetShardKeyResponse,
   GetStateRequest,
   GetStateResponse,
-  GetSubstateRequest,
-  GetSubstateResponse,
+  VNGetSubstateRequest,
+  VNGetSubstateResponse,
   GetSubstatesByTransactionRequest,
   GetSubstatesByTransactionResponse,
   GetTemplateRequest,
@@ -53,16 +53,16 @@ import type {
   GetTemplatesResponse,
   GetTransactionRequest,
   GetTransactionResponse,
-  GetTransactionResultRequest,
-  GetTransactionResultResponse,
+  VNGetTransactionResultRequest,
+  VNGetTransactionResultResponse,
   GetTxPoolResponse,
   ListBlocksRequest,
   ListBlocksResponse,
-  SubmitTransactionRequest,
-  SubmitTransactionResponse,
+  VNSubmitTransactionRequest,
+  VNSubmitTransactionResponse,
   VNGetValidatorFeesRequest,
   VNGetValidatorFeesResponse,
-} from "@tari-project/typescript-bindings/validator-node-client";
+} from "@tari-project/typescript-bindings";
 
 
 const DEFAULT_ADDRESS = new URL("http://127.0.0.1:18200");
@@ -107,15 +107,15 @@ async function jsonRpc(method: string, params: any = null) {
 }
 
 // Transaction
-export const submitTransaction = (request: SubmitTransactionRequest): Promise<SubmitTransactionResponse> =>
+export const submitTransaction = (request: VNSubmitTransactionRequest): Promise<VNSubmitTransactionResponse> =>
   jsonRpc("submit_transaction", request);
 export const getRecentTransactions = (): Promise<GetRecentTransactionsResponse> => jsonRpc("get_recent_transactions");
 export const getTransaction = (request: GetTransactionRequest): Promise<GetTransactionResponse> =>
   jsonRpc("get_transaction", request);
-export const getTransactionResult = (request: GetTransactionResultRequest): Promise<GetTransactionResultResponse> =>
+export const getTransactionResult = (request: VNGetTransactionResultRequest): Promise<VNGetTransactionResultResponse> =>
   jsonRpc("get_transaction_result", request);
 export const getState = (request: GetStateRequest): Promise<GetStateResponse> => jsonRpc("get_state", request);
-export const getSubstate = (request: GetSubstateRequest): Promise<GetSubstateResponse> =>
+export const getSubstate = (request: VNGetSubstateRequest): Promise<VNGetSubstateResponse> =>
   jsonRpc("get_substate", request);
 export const getUpSubstates = (request: GetSubstatesByTransactionRequest): Promise<GetSubstatesByTransactionResponse> =>
   jsonRpc("get_substates_created_by_transaction", request);
@@ -139,7 +139,7 @@ export const getTemplates = (request: GetTemplatesRequest): Promise<GetTemplates
   jsonRpc("get_templates", request);
 
 // Validator Node
-export const getIdentity = (): Promise<GetIdentityResponse> => jsonRpc("get_identity");
+export const getIdentity = (): Promise<VNGetIdentityResponse> => jsonRpc("get_identity");
 
 export const getMempoolStats = (): Promise<GetMempoolStatsResponse> => jsonRpc("get_mempool_stats");
 export const getEpochManagerStats = (): Promise<GetEpochManagerStatsResponse> => jsonRpc("get_epoch_manager_stats");
@@ -147,12 +147,12 @@ export const getShardKey = (request: GetShardKeyRequest): Promise<GetShardKeyRes
   jsonRpc("get_shard_key", request);
 export const getCommittee = (request: GetCommitteeRequest): Promise<GetCommitteeResponse> =>
   jsonRpc("get_committee", request);
-export const getAllVns = (request: GetAllVnsRequest): Promise<GetAllVnsResponse> => jsonRpc("get_all_vns", request);
+export const getAllVns = (request: VNGetAllVnsRequest): Promise<VNGetAllVnsResponse> => jsonRpc("get_all_vns", request);
 export const getNetworkCommittees = (): Promise<GetNetworkCommitteeResponse> => jsonRpc("get_network_committees", {});
 export const getFees = (request: VNGetValidatorFeesRequest): Promise<VNGetValidatorFeesResponse> =>
   jsonRpc("get_fees", request);
 
 // Comms
-export const addPeer = (request: AddPeerRequest) => jsonRpc("add_peer", request);
-export const getCommsStats = (): Promise<GetCommsStatsResponse> => jsonRpc("get_comms_stats");
-export const getConnections = (): Promise<GetConnectionsResponse> => jsonRpc("get_connections");
+export const addPeer = (request: VNAddPeerRequest) => jsonRpc("add_peer", request);
+export const getCommsStats = (): Promise<VNGetCommsStatsResponse> => jsonRpc("get_comms_stats");
+export const getConnections = (): Promise<VNGetConnectionsResponse> => jsonRpc("get_connections");

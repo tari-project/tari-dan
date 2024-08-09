@@ -44,7 +44,7 @@ import Typography from "@mui/material/Typography";
 import Fade from "@mui/material/Fade";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import { emptyRows } from "../../../utils/helpers";
-import type { TemplateMetadata } from "@tari-project/typescript-bindings/validator-node-client";
+import type { TemplateMetadata } from "@tari-project/typescript-bindings";
 
 type ColumnKey = keyof TemplateMetadata;
 

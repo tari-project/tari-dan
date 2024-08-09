@@ -26,10 +26,10 @@ import EChartsReact from "echarts-for-react";
 import { ICommitteeChart } from "../../utils/interfaces";
 import "../../theme/echarts.css";
 import type {
-  CommitteeShardInfo,
+  VNCommitteeShardInfo,
   GetNetworkCommitteeResponse,
   ValidatorNode,
-} from "@tari-project/typescript-bindings/validator-node-client";
+} from "@tari-project/typescript-bindings";
 
 export default function CommitteesRadial({ committees }: { committees: GetNetworkCommitteeResponse }) {
   const [chartData, setChartData] = useState<ICommitteeChart>({
@@ -60,7 +60,7 @@ export default function CommitteesRadial({ committees }: { committees: GetNetwor
       activeright: [],
     };
 
-    dataset.forEach((data: CommitteeShardInfo) => {
+    dataset.forEach((data: VNCommitteeShardInfo) => {
       const start = fromHexString(data.substate_address_range.start)[0];
       const end = fromHexString(data.substate_address_range.end)[0];
 
@@ -91,7 +91,7 @@ export default function CommitteesRadial({ committees }: { committees: GetNetwor
       }
     });
     setChartData(info);
-    const newTitles = dataset.map((info: CommitteeShardInfo) => `Committee ${info.shard}`);
+    const newTitles = dataset.map((info: VNCommitteeShardInfo) => `Committee ${info.shard}`);
     setTitles(newTitles);
   }, [committees]);
 

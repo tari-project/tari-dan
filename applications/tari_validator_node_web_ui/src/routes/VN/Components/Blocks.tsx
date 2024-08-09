@@ -40,13 +40,13 @@ import Filter from "../../../Components/Filter";
 import Fade from "@mui/material/Fade";
 import StatusChip from "../../../Components/StatusChip";
 import { Ordering, type Block } from "@tari-project/typescript-bindings";
-import type { GetIdentityResponse } from "@tari-project/typescript-bindings/validator-node-client";
+import type { VNGetIdentityResponse } from "@tari-project/typescript-bindings";
 
 function Blocks() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [blocksCount, setBlocksCount] = useState(0);
   const [lastSort, setLastSort] = useState({ column: "height", order: -1 });
-  const [identity, setIdentity] = useState<GetIdentityResponse>();
+  const [identity, setIdentity] = useState<VNGetIdentityResponse>();
 
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
