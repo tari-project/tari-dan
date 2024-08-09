@@ -36,7 +36,7 @@ import { TextField } from "@mui/material";
 import { Form } from "react-router-dom";
 import Fade from "@mui/material/Fade";
 import CopyToClipboard from "../../../Components/CopyToClipboard";
-import type { Connection } from "@tari-project/typescript-bindings/tari-indexer-client";
+import type { IndexerConnection } from "@tari-project/typescript-bindings";
 import { displayDuration } from "../../../utils/helpers";
 
 
@@ -60,7 +60,7 @@ const useInterval = (fn: () => Promise<unknown>, ms: number) => {
 };
 
 function Connections() {
-  const [connections, setConnections] = useState<Array<Connection>>([]);
+  const [connections, setConnections] = useState<Array<IndexerConnection>>([]);
   const [showPeerDialog, setShowAddPeerDialog] = useState(false);
   const [formState, setFormState] = useState({ publicKey: "", address: "" });
 

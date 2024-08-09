@@ -37,14 +37,11 @@ import { createContext, useState, useEffect } from "react";
 import { getEpochManagerStats, getIdentity, getShardKey } from "./utils/json_rpc";
 import TransactionDetails from "./routes/Transactions/TransactionDetails";
 import BlockDetails from "./routes/Blocks/BlockDetails";
-import type {
-  GetEpochManagerStatsResponse,
-  GetIdentityResponse,
-} from "@tari-project/typescript-bindings/validator-node-client";
+import type { GetEpochManagerStatsResponse, VNGetIdentityResponse } from "@tari-project/typescript-bindings";
 
 interface IContext {
   epoch?: GetEpochManagerStatsResponse;
-  identity?: GetIdentityResponse;
+  identity?: VNGetIdentityResponse;
   shardKey?: string | null;
   error?: string;
 }
@@ -126,7 +123,7 @@ export const breadcrumbRoutes = [
 
 export default function App() {
   const [epoch, setEpoch] = useState<GetEpochManagerStatsResponse | undefined>(undefined);
-  const [identity, setIdentity] = useState<GetIdentityResponse | undefined>(undefined);
+  const [identity, setIdentity] = useState<VNGetIdentityResponse | undefined>(undefined);
   const [shardKey, setShardKey] = useState<string | null>(null);
   const [error, setError] = useState("");
 

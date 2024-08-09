@@ -27,9 +27,9 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableRow from "@mui/material/TableRow";
 import { DataTableCell } from "../../../Components/StyledComponents";
-import type { GetIdentityResponse } from "@tari-project/typescript-bindings/tari-indexer-client";
+import type { IndexerGetIdentityResponse } from "@tari-project/typescript-bindings";
 
-function Info({ identity }: { identity: GetIdentityResponse }) {
+function Info({ identity }: { identity: IndexerGetIdentityResponse }) {
   return (
     <div>
       <TableContainer>

@@ -21,13 +21,13 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import type {
-  AddPeerRequest,
-  AddPeerResponse,
-  GetAllVnsResponse,
-  GetCommsStatsResponse,
-  GetConnectionsResponse,
+  IndexerAddPeerRequest,
+  IndexerAddPeerResponse,
+  IndexerGetAllVnsResponse,
+  IndexerGetCommsStatsResponse,
+  IndexerGetConnectionsResponse,
   GetEpochManagerStatsResponse,
-  GetIdentityResponse,
+  IndexerGetIdentityResponse,
   GetNonFungibleCollectionsResponse,
   GetNonFungibleCountRequest,
   GetNonFungibleCountResponse,
@@ -35,14 +35,14 @@ import type {
   GetNonFungiblesResponse,
   GetRelatedTransactionsRequest,
   GetRelatedTransactionsResponse,
-  GetSubstateRequest,
-  GetSubstateResponse,
-  GetTransactionResultRequest,
-  GetTransactionResultResponse,
+  IndexerGetSubstateRequest,
+  IndexerGetSubstateResponse,
+  IndexerGetTransactionResultRequest,
+  IndexerGetTransactionResultResponse,
   InspectSubstateRequest,
   InspectSubstateResponse,
-  SubmitTransactionResponse,
-} from "@tari-project/typescript-bindings/tari-indexer-client";
+  IndexerSubmitTransactionResponse,
+} from "@tari-project/typescript-bindings";
 
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
@@ -76,24 +76,24 @@ async function jsonRpc(method: string, params: any = null) {
 }
 
 export const getOpenRpcSchema = (): Promise<string> => jsonRpc("rpc.discover");
-export const getIdentity = (): Promise<GetIdentityResponse> => jsonRpc("get_identity");
-export const getAllVns = (epoch: number): Promise<GetAllVnsResponse> => jsonRpc("get_all_vns", { epoch });
-export const addPeer = (request: AddPeerRequest): Promise<AddPeerResponse> => jsonRpc("add_peer", request);
-export const getCommsStats = (): Promise<GetCommsStatsResponse> => jsonRpc("get_comms_stats");
-export const getSubstate = (request: GetSubstateRequest): Promise<GetSubstateResponse> =>
+export const getIdentity = (): Promise<IndexerGetIdentityResponse> => jsonRpc("get_identity");
+export const getAllVns = (epoch: number): Promise<IndexerGetAllVnsResponse> => jsonRpc("get_all_vns", { epoch });
+export const addPeer = (request: IndexerAddPeerRequest): Promise<IndexerAddPeerResponse> => jsonRpc("add_peer", request);
+export const getCommsStats = (): Promise<IndexerGetCommsStatsResponse> => jsonRpc("get_comms_stats");
+export const getSubstate = (request: IndexerGetSubstateRequest): Promise<IndexerGetSubstateResponse> =>
   jsonRpc("get_substate", request);
 export const inspectSubstate = (request: InspectSubstateRequest): Promise<InspectSubstateResponse> =>
   jsonRpc("inspect_substate", request);
-export const getConnections = (): Promise<GetConnectionsResponse> => jsonRpc("get_connections");
+export const getConnections = (): Promise<IndexerGetConnectionsResponse> => jsonRpc("get_connections");
 export const getNonFungibleCollections = (): Promise<GetNonFungibleCollectionsResponse> =>
   jsonRpc("get_non_fungible_collections");
 export const getNonFungibleCount = (request: GetNonFungibleCountRequest): Promise<GetNonFungibleCountResponse> =>
   jsonRpc("get_non_fungible_count", request);
 export const getNonFungibles = (request: GetNonFungiblesRequest): Promise<GetNonFungiblesResponse> =>
   jsonRpc("get_non_fungibles", request);
-export const submitTransaction = (request: GetNonFungiblesRequest): Promise<SubmitTransactionResponse> =>
+export const submitTransaction = (request: GetNonFungiblesRequest): Promise<IndexerSubmitTransactionResponse> =>
   jsonRpc("submit_transaction", request);
-export const getTransactionResult = (request: GetTransactionResultRequest): Promise<GetTransactionResultResponse> =>
+export const getTransactionResult = (request: IndexerGetTransactionResultRequest): Promise<IndexerGetTransactionResultResponse> =>
   jsonRpc("get_transaction_result", request);
 export const getSubstateTransactions = (
   request: GetRelatedTransactionsRequest,
