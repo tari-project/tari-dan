@@ -59,15 +59,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn start(config: Config) -> anyhow::Result<()> {
     let mut manager = ProcessManager::new(config.clone());
-    manager
-        .forker
-        .start_validator(
-            manager.validator_config,
-            config.base_node_grpc_address,
-            config.vn_public_json_rpc_address,
-            config.vn_gui_http_address,
-        )
-        .await?;
+    manager.forker.start_validator(manager.validator_config).await?;
 
     Ok(())
 }

@@ -23,12 +23,6 @@ pub struct Config {
     /// The Minotari console wallet gRPC address
     pub base_wallet_grpc_address: String,
 
-    // The L2 validator node JSON RPC address
-    pub vn_public_json_rpc_address: String,
-
-    // The L2 validator node web GUI server address
-    pub vn_gui_http_address: String,
-
     /// The base directory of the watcher with configuration and data files
     pub base_dir: PathBuf,
 
@@ -151,8 +145,6 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
         auto_register: true,
         base_node_grpc_address: "localhost:18142".to_string(),
         base_wallet_grpc_address: "localhost:18143".to_string(),
-        vn_public_json_rpc_address: "".to_string(),
-        vn_gui_http_address: "".to_string(),
         sidechain_id: None,
         base_dir: base_dir.clone(),
         vn_registration_file: base_dir.join("registration.json"),
