@@ -1,13 +1,8 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    net::{IpAddr, Ipv4Addr},
-    path::PathBuf,
-    process::Stdio,
-};
+use std::{net::IpAddr, path::PathBuf, process::Stdio};
 
-use anyhow::bail;
 use tokio::{
     fs,
     process::{Child, Command},
@@ -44,25 +39,19 @@ impl Forker {
         &mut self,
         config: ExecutableConfig,
         base_node_grpc_address: String,
+        vn_public_json_rpc_address: String,
+        vn_gui_http_address: String,
     ) -> anyhow::Result<Child> {
-        let mut instance = Instance::new(InstanceType::TariValidatorNode, config.clone());
-        instance.bootstrap().await?;
-
-        // verify everything is up and running
-        instance.validator_ready()?;
-
+        let instance = Instance::new(InstanceType::TariValidatorNode, config.clone());
         self.validator = Some(instance.clone());
-
-        let json_rpc_public_address = instance.port.validator.jrpc_pub_address(instance.listen_ip.unwrap());
-        let web_ui_address = instance.port.validator.web_ui_address(instance.listen_ip.unwrap());
 
         let mut command = self
             .get_command(
                 config.executable_path.unwrap(),
                 "esmeralda".to_string(), // TODO: add network to cfg
                 base_node_grpc_address,
-                json_rpc_public_address.unwrap(),
-                web_ui_address.unwrap(),
+                vn_public_json_rpc_address,
+                vn_gui_http_address,
             )
             .await?;
 
@@ -132,53 +121,7 @@ impl Instance {
             app,
             config: config.clone(),
             listen_ip: None,
-            port: PortAllocator::new(config.env),
-        }
-    }
-
-    pub async fn bootstrap(&mut self) -> anyhow::Result<()> {
-        if self.listen_ip.is_some() {
-            log::warn!("Instance {} already bootstrapped, ignore", self.app.to_string());
-            return Ok(());
-        }
-
-        let listen = IpAddr::V4(Ipv4Addr::from([127, 0, 0, 1]));
-        self.listen_ip = Some(listen);
-
-        if self.app != InstanceType::TariValidatorNode {
-            bail!(
-                "Attempted to bootstrap unrecognized instance type: {}",
-                self.app.to_string()
-            );
-        }
-
-        self.port.open_vn_ports(InstanceType::TariValidatorNode).await?;
-
-        Ok(())
-    }
-
-    pub fn validator_ready(&self) -> anyhow::Result<()> {
-        if self.listen_ip.is_none() {
-            bail!("Validator listener not initialized, this should not happen");
-        } else if self.port.validator.jrpc.is_none() {
-            bail!("Validator JSON-RPC address not initialized, this should not happen");
-        } else if self.port.validator.web.is_none() {
-            bail!("Validator Web UI address not initialized, this should not happen");
-        } else {
-            Ok(())
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn wallet_ready(&self) -> anyhow::Result<()> {
-        if self.listen_ip.is_none() {
-            bail!("Wallet listener not initialized, this should not happen");
-        } else if self.port.wallet.p2p.is_none() {
-            bail!("Wallet P2P address not initialized, this should not happen");
-        } else if self.port.wallet.grpc.is_none() {
-            bail!("Wallet gRPC address not initialized, this should not happen");
-        } else {
-            Ok(())
+            port: PortAllocator::new(),
         }
     }
 }
