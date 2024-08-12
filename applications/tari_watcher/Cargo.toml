@@ -9,12 +9,13 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-#tari_common = { workspace = true }
 
 clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
 anyhow = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "process", "time", "fs", "io-util"] }
 log = { workspace = true }
+fern = { workspace = true, features = ["colored"] }
 
 toml = "0.8.12"
+humantime = "2.1.0"

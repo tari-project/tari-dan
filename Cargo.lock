@@ -10140,6 +10140,8 @@ version = "0.7.0"
 dependencies = [
  "anyhow",
  "clap 3.2.25",
+ "fern",
+ "humantime 2.1.0",
  "log",
  "serde",
  "tokio",

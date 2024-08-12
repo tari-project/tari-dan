@@ -23,6 +23,9 @@ pub struct Config {
     /// The Minotari console wallet gRPC address
     pub base_wallet_grpc_address: String,
 
+    /// The base directory of the watcher with configuration and data files
+    pub base_dir: PathBuf,
+
     /// The path of the validator node registration file, containing signed information required to
     /// submit a registration transaction on behalf of the node
     pub vn_registration_file: PathBuf,
@@ -71,15 +74,7 @@ pub struct ChannelConfig {
 pub struct ExecutableConfig {
     pub instance_type: InstanceType,
     pub executable_path: Option<PathBuf>,
-    pub compile: Option<CompileConfig>,
     pub env: Vec<(String, String)>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct CompileConfig {
-    pub working_dir: Option<PathBuf>,
-    pub package_name: String,
-    pub target_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -116,22 +111,12 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
     let executables = vec![
         ExecutableConfig {
             instance_type: InstanceType::TariValidatorNode,
-            executable_path: Some("target/release/minotari_node".into()),
-            compile: Some(CompileConfig {
-                working_dir: Some("../tari".into()),
-                package_name: "minotari_node".to_string(),
-                target_dir: None,
-            }),
+            executable_path: Some("target/release/tari_validator_node".into()),
             env: vec![],
         },
         ExecutableConfig {
             instance_type: InstanceType::MinoTariConsoleWallet,
             executable_path: Some("target/release/minotari_wallet".into()),
-            compile: Some(CompileConfig {
-                working_dir: Some("../tari".into()),
-                package_name: "minotari_wallet".to_string(),
-                target_dir: None,
-            }),
             env: vec![],
         },
     ];
@@ -161,7 +146,8 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
         base_node_grpc_address: "localhost:18142".to_string(),
         base_wallet_grpc_address: "localhost:18143".to_string(),
         sidechain_id: None,
-        vn_registration_file: base_dir.join("vn_registration.toml"),
+        base_dir: base_dir.clone(),
+        vn_registration_file: base_dir.join("registration.json"),
         instance_config: instances.to_vec(),
         executable_config: executables,
         channel_config: vec![
