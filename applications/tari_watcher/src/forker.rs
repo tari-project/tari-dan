@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    io,
     net::{IpAddr, Ipv4Addr},
     path::PathBuf,
     process::Stdio,
@@ -18,9 +17,6 @@ use crate::{
     config::{ExecutableConfig, InstanceType},
     port::PortAllocator,
 };
-
-const TARI_L2_VN: InstanceType = InstanceType::TariValidatorNode;
-const MINO_L1_WALLET: InstanceType = InstanceType::MinoTariConsoleWallet;
 
 #[allow(dead_code)]
 pub struct Forker {
@@ -49,7 +45,7 @@ impl Forker {
         config: ExecutableConfig,
         base_node_grpc_address: String,
     ) -> anyhow::Result<Child> {
-        let mut instance = Instance::new(TARI_L2_VN, config.clone());
+        let mut instance = Instance::new(InstanceType::TariValidatorNode, config.clone());
         instance.bootstrap().await?;
 
         // verify everything is up and running
@@ -134,13 +130,13 @@ impl Instance {
     pub fn new(app: InstanceType, config: ExecutableConfig) -> Self {
         Self {
             app,
-            config,
+            config: config.clone(),
             listen_ip: None,
-            port: PortAllocator::new(),
+            port: PortAllocator::new(config.env),
         }
     }
 
-    pub async fn bootstrap(&mut self) -> io::Result<()> {
+    pub async fn bootstrap(&mut self) -> anyhow::Result<()> {
         if self.listen_ip.is_some() {
             log::warn!("Instance {} already bootstrapped, ignore", self.app.to_string());
             return Ok(());
@@ -149,16 +145,14 @@ impl Instance {
         let listen = IpAddr::V4(Ipv4Addr::from([127, 0, 0, 1]));
         self.listen_ip = Some(listen);
 
-        match self.app {
-            TARI_L2_VN => {
-                self.port.open_at(TARI_L2_VN, "jrpc").await?;
-                self.port.open_at(TARI_L2_VN, "web").await?;
-            },
-            MINO_L1_WALLET => {
-                self.port.open_at(MINO_L1_WALLET, "p2p").await?;
-                self.port.open_at(MINO_L1_WALLET, "grpc").await?;
-            },
+        if self.app != InstanceType::TariValidatorNode {
+            bail!(
+                "Attempted to bootstrap unrecognized instance type: {}",
+                self.app.to_string()
+            );
         }
+
+        self.port.open_vn_ports(InstanceType::TariValidatorNode).await?;
 
         Ok(())
     }
