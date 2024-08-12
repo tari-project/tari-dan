@@ -1,22 +1,25 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+use crate::shutdown::exit_signal;
 use std::time::SystemTime;
-
-use anyhow::{anyhow, Context};
-use tokio::fs;
 
 use crate::{
     cli::{Cli, Commands},
     config::{get_base_config, Config},
-    manager::ProcessManager,
+    spawn::spawn,
 };
+use anyhow::{anyhow, Context};
+use tari_shutdown::Shutdown;
+use tokio::fs;
 
 mod cli;
 mod config;
 mod forker;
 mod manager;
 mod port;
+mod shutdown;
+mod spawn;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -58,8 +61,19 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn start(config: Config) -> anyhow::Result<()> {
-    let mut manager = ProcessManager::new(config.clone());
-    manager.forker.start_validator(manager.validator_config).await?;
+    let shutdown = Shutdown::new();
+    let signal = shutdown.to_signal().select(exit_signal()?);
+    let task_handle = spawn(config.clone(), shutdown.to_signal());
+
+    tokio::select! {
+        _ = signal => {
+            log::info!("Shutting down");
+        },
+        result = task_handle => {
+            result??;
+            log::info!("Process manager exited");
+        }
+    }
 
     Ok(())
 }

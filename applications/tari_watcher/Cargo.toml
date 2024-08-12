@@ -10,10 +10,19 @@ license.workspace = true
 
 [dependencies]
 
+tari_shutdown = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
 anyhow = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "process", "time", "fs", "io-util"] }
+tokio = { workspace = true, features = [
+    "rt-multi-thread",
+    "macros",
+    "signal",
+    "process",
+    "time",
+    "fs",
+    "io-util",
+] }
 log = { workspace = true }
 fern = { workspace = true, features = ["colored"] }
 

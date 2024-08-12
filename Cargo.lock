@@ -10144,6 +10144,7 @@ dependencies = [
  "humantime 2.1.0",
  "log",
  "serde",
+ "tari_shutdown",
  "tokio",
  "toml 0.8.15",
 ]

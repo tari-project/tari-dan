@@ -25,6 +25,9 @@ pub struct Forker {
     validator: Option<Instance>,
     // The Minotari L1 wallet instance
     wallet: Option<Instance>,
+    // Child process of the forked validator instance.
+    // Includes PID and a handle to the process.
+    child: Option<Child>,
 }
 
 impl Forker {
@@ -34,10 +37,11 @@ impl Forker {
             wallet: None,
             base_node_grpc_address,
             base_dir,
+            child: None,
         }
     }
 
-    pub async fn start_validator(&mut self, config: ExecutableConfig) -> anyhow::Result<Child> {
+    pub async fn start_validator(&mut self, config: ExecutableConfig) -> anyhow::Result<()> {
         let instance = Instance::new(InstanceType::TariValidatorNode, config.clone());
         self.validator = Some(instance.clone());
 
@@ -59,8 +63,9 @@ impl Forker {
             .stdin(Stdio::null());
 
         let child = cmd.spawn()?;
+        self.child = Some(child);
 
-        Ok(child)
+        Ok(())
     }
 }
 
