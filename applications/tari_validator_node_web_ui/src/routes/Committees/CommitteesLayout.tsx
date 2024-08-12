@@ -31,9 +31,9 @@ import CommitteesRadial from "./CommitteesRadial";
 import CommitteesPieChart from "./CommitteesPieChart";
 import { getNetworkCommittees } from "../../utils/json_rpc";
 import type {
-  CommitteeShardInfo,
+  VNCommitteeShardInfo,
   GetNetworkCommitteeResponse,
-} from "@tari-project/typescript-bindings/validator-node-client";
+} from "@tari-project/typescript-bindings";
 
 function CommitteesLayout() {
   const [committees, setCommittees] = useState<GetNetworkCommitteeResponse | null>(null);
@@ -63,18 +63,18 @@ function CommitteesLayout() {
           Current epoch: {epoch.current_epoch}
           <br />
           Total number of validators:{" "}
-          {committees.committees.reduce((acc: number, info: CommitteeShardInfo) => acc + info.validators.length, 0)}
+          {committees.committees.reduce((acc: number, info: VNCommitteeShardInfo) => acc + info.validators.length, 0)}
           <br />
           Total buckets: {committees.committees.length}
           <br />
           Min committee size:{" "}
           {committees.committees
-            .map((vn: CommitteeShardInfo) => vn.validators.length)
+            .map((vn: VNCommitteeShardInfo) => vn.validators.length)
             .reduce((acc, curr) => Math.min(acc, curr), 100000)}
           <br />
           Max committee size:{" "}
           {committees.committees
-            .map((vn: CommitteeShardInfo) => vn.validators.length)
+            .map((vn: VNCommitteeShardInfo) => vn.validators.length)
             .reduce((acc, curr) => Math.max(acc, curr), 0)}
         </StyledPaper>
       </Grid>

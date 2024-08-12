@@ -35,7 +35,7 @@ import { getBlock, getIdentity } from "../../utils/json_rpc";
 import Transactions from "./Transactions";
 import { primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../utils/helpers";
 import type { Block, TransactionAtom } from "@tari-project/typescript-bindings";
-import type { GetIdentityResponse } from "@tari-project/typescript-bindings/validator-node-client";
+import type { VNGetIdentityResponse } from "@tari-project/typescript-bindings";
 
 export default function BlockDetails() {
   const { blockId } = useParams();
@@ -48,7 +48,7 @@ export default function BlockDetails() {
   const [localPrepared, setLocalPrepared] = useState<TransactionAtom[]>([]);
   const [accept, setAccept] = useState<TransactionAtom[]>([]);
   const [epochEvents, setEpochEvents] = useState<string[]>([]);
-  const [identity, setIdentity] = useState<GetIdentityResponse>();
+  const [identity, setIdentity] = useState<VNGetIdentityResponse>();
   const [blockTime, setBlockTime] = useState<number>(0);
 
   useEffect(() => {

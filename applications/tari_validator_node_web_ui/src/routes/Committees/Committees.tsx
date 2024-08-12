@@ -32,9 +32,9 @@ import TablePagination from "@mui/material/TablePagination";
 import { Typography } from "@mui/material";
 import CommitteesWaterfall from "./CommitteesWaterfall";
 import { emptyRows } from "../../utils/helpers";
-import type { CommitteeShardInfo } from "@tari-project/typescript-bindings/validator-node-client";
+import type { VNCommitteeShardInfo } from "@tari-project/typescript-bindings";
 
-function Committees({ committees, peerId }: { committees: CommitteeShardInfo[] | null; peerId: string }) {
+function Committees({ committees, peerId }: { committees: VNCommitteeShardInfo[] | null; peerId: string }) {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
