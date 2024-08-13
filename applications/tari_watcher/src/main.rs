@@ -1,13 +1,17 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+use crate::manager::ManagerHandle;
 use crate::shutdown::exit_signal;
+use log::*;
 use std::time::SystemTime;
+use tari_shutdown::ShutdownSignal;
+use tokio::task;
 
 use crate::{
     cli::{Cli, Commands},
     config::{get_base_config, Config},
-    spawn::spawn,
+    manager::ProcessManager,
 };
 use anyhow::{anyhow, Context};
 use tari_shutdown::Shutdown;
@@ -17,9 +21,8 @@ mod cli;
 mod config;
 mod forker;
 mod manager;
-mod port;
+mod minotari;
 mod shutdown;
-mod spawn;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -53,17 +56,23 @@ async fn main() -> anyhow::Result<()> {
             let mut config = get_base_config(&cli)?;
             // optionally override config values
             args.apply(&mut config);
-            start(config).await?;
+            let mut handle = start(config).await?;
+
+            let tip = handle.get_tip_info().await;
+            info!("Tip: {:?}", tip);
+
+            let vn_status = handle.get_active_validator_nodes().await;
+            info!("Active validators: {:?}", vn_status);
         },
     }
 
     Ok(())
 }
 
-async fn start(config: Config) -> anyhow::Result<()> {
+async fn start(config: Config) -> anyhow::Result<ManagerHandle> {
     let shutdown = Shutdown::new();
     let signal = shutdown.to_signal().select(exit_signal()?);
-    let task_handle = spawn(config.clone(), shutdown.to_signal());
+    let (task_handle, manager_handle) = spawn(config.clone(), shutdown.to_signal()).await;
 
     tokio::select! {
         _ = signal => {
@@ -75,7 +84,13 @@ async fn start(config: Config) -> anyhow::Result<()> {
         }
     }
 
-    Ok(())
+    Ok(manager_handle)
+}
+
+async fn spawn(config: Config, shutdown: ShutdownSignal) -> (task::JoinHandle<anyhow::Result<()>>, ManagerHandle) {
+    let (manager, manager_handle) = ProcessManager::new(config, shutdown);
+    let task_handle = tokio::spawn(manager.start());
+    (task_handle, manager_handle)
 }
 
 fn setup_logger() -> Result<(), fern::InitError> {

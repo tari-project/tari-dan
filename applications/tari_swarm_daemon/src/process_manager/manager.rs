@@ -17,8 +17,7 @@ use crate::{
         executables::ExecutableManager,
         handle::{ProcessManagerHandle, ProcessManagerRequest},
         instances::InstanceManager,
-        InstanceId,
-        TemplateData,
+        InstanceId, TemplateData,
     },
 };
 

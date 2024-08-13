@@ -10143,10 +10143,15 @@ dependencies = [
  "fern",
  "humantime 2.1.0",
  "log",
+ "minotari_app_grpc",
+ "minotari_node_grpc_client",
+ "minotari_wallet_grpc_client",
  "serde",
+ "tari_common",
  "tari_shutdown",
  "tokio",
  "toml 0.8.15",
+ "tonic 0.8.3",
 ]
 
 [[package]]

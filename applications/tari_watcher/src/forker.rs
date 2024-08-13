@@ -10,15 +10,9 @@ use std::{
 
 use tokio::process::{Child, Command};
 
-use crate::{
-    config::{ExecutableConfig, InstanceType},
-    port::PortAllocator,
-};
+use crate::config::{ExecutableConfig, InstanceType};
 
-#[allow(dead_code)]
 pub struct Forker {
-    // Used for the validator to connect to the base (L1) node
-    base_node_grpc_address: String,
     // The base directory of calling the application
     base_dir: PathBuf,
     // The Tari L2 validator instance
@@ -31,11 +25,10 @@ pub struct Forker {
 }
 
 impl Forker {
-    pub fn new(base_node_grpc_address: String, base_dir: PathBuf) -> Self {
+    pub fn new(base_dir: PathBuf) -> Self {
         Self {
             validator: None,
             wallet: None,
-            base_node_grpc_address,
             base_dir,
             child: None,
         }
@@ -69,13 +62,11 @@ impl Forker {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone)]
 struct Instance {
     app: InstanceType,
     config: ExecutableConfig,
     listen_ip: Option<IpAddr>,
-    port: PortAllocator,
 }
 
 impl Instance {
@@ -84,7 +75,6 @@ impl Instance {
             app,
             config,
             listen_ip: None,
-            port: PortAllocator::new(),
         }
     }
 }
