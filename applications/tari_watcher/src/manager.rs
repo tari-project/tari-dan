@@ -1,15 +1,16 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+use log::*;
+use minotari_app_grpc::tari_rpc::{GetActiveValidatorNodesResponse, TipInfoResponse};
+use tari_shutdown::ShutdownSignal;
+use tokio::sync::{mpsc, oneshot};
+
 use crate::{
     config::{Config, ExecutableConfig},
     forker::Forker,
     minotari::Minotari,
 };
-use log::*;
-use minotari_app_grpc::tari_rpc::{GetActiveValidatorNodesResponse, TipInfoResponse};
-use tari_shutdown::ShutdownSignal;
-use tokio::sync::{mpsc, oneshot};
 
 pub struct ProcessManager {
     pub validator_config: ExecutableConfig,
@@ -46,11 +47,11 @@ impl ProcessManager {
                     match req {
                         ManagerRequest::GetTipInfo { reply } => {
                             let response = self.chain.get_tip_status().await?;
-                            let _ = reply.send(Ok(response));
+                            drop(reply.send(Ok(response)));
                         }
                         ManagerRequest::GetActiveValidatorNodes { reply } => {
                             let response = self.chain.get_active_validator_nodes().await?;
-                            let _ = reply.send(Ok(response));
+                            drop(reply.send(Ok(response)));
                         }
                         ManagerRequest::RegisterValidatorNode => {
                             unimplemented!();

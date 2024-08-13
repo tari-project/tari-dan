@@ -1,23 +1,22 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use crate::manager::ManagerHandle;
-use crate::shutdown::exit_signal;
-use anyhow::bail;
+use std::{
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
+
+use anyhow::{anyhow, bail, Context};
 use log::*;
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
-use tari_shutdown::ShutdownSignal;
-use tokio::task;
+use tari_shutdown::{Shutdown, ShutdownSignal};
+use tokio::{fs, task};
 
 use crate::{
     cli::{Cli, Commands},
     config::{get_base_config, Config},
-    manager::ProcessManager,
+    manager::{ManagerHandle, ProcessManager},
+    shutdown::exit_signal,
 };
-use anyhow::{anyhow, Context};
-use tari_shutdown::Shutdown;
-use tokio::fs;
 
 mod cli;
 mod config;
@@ -62,7 +61,7 @@ async fn main() -> anyhow::Result<()> {
 
             // optionally override config values
             args.apply(&mut cfg);
-            let _ = start(cfg).await?;
+            start(cfg).await?;
         },
     }
 

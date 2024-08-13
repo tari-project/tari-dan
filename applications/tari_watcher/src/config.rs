@@ -58,10 +58,10 @@ impl Config {
         if self.base_wallet_grpc_address.is_empty() {
             v.push("base_wallet_grpc_address");
         }
-        if v.len() > 0 {
-            Some(v)
-        } else {
+        if v.is_empty() {
             None
+        } else {
+            Some(v)
         }
     }
 }

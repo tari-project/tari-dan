@@ -2,12 +2,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use anyhow::bail;
-use minotari_app_grpc::tari_rpc::TipInfoResponse;
-use minotari_app_grpc::tari_rpc::{self as grpc, GetActiveValidatorNodesResponse};
+use minotari_app_grpc::tari_rpc::{self as grpc, GetActiveValidatorNodesResponse, TipInfoResponse};
 use minotari_node_grpc_client::BaseNodeGrpcClient;
 use minotari_wallet_grpc_client::WalletGrpcClient;
-use tari_common::exit_codes::ExitCode;
-use tari_common::exit_codes::ExitError;
+use tari_common::exit_codes::{ExitCode, ExitError};
 use tonic::transport::Channel;
 
 #[derive(Clone)]
