@@ -49,7 +49,7 @@ impl ProcessManager {
                             let _ = reply.send(Ok(response));
                         }
                         ManagerRequest::GetActiveValidatorNodes { reply } => {
-                            let response = self.chain.get_active_validator_nodes().await?.into_inner().message().await?.unwrap();
+                            let response = self.chain.get_active_validator_nodes().await?;
                             let _ = reply.send(Ok(response));
                         }
                         ManagerRequest::RegisterValidatorNode => {
@@ -76,7 +76,7 @@ pub enum ManagerRequest {
         reply: Reply<TipInfoResponse>,
     },
     GetActiveValidatorNodes {
-        reply: Reply<GetActiveValidatorNodesResponse>,
+        reply: Reply<Vec<GetActiveValidatorNodesResponse>>,
     },
 
     #[allow(dead_code)]
@@ -92,7 +92,7 @@ impl ManagerHandle {
         Self { tx_request }
     }
 
-    pub async fn get_active_validator_nodes(&mut self) -> anyhow::Result<GetActiveValidatorNodesResponse> {
+    pub async fn get_active_validator_nodes(&mut self) -> anyhow::Result<Vec<GetActiveValidatorNodesResponse>> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(ManagerRequest::GetActiveValidatorNodes { reply: tx })

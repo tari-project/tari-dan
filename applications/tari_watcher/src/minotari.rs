@@ -8,8 +8,7 @@ use minotari_node_grpc_client::BaseNodeGrpcClient;
 use minotari_wallet_grpc_client::WalletGrpcClient;
 use tari_common::exit_codes::ExitCode;
 use tari_common::exit_codes::ExitError;
-use tonic::Streaming;
-use tonic::{transport::Channel, Response};
+use tonic::transport::Channel;
 
 #[derive(Clone)]
 pub struct Minotari {
@@ -75,9 +74,7 @@ impl Minotari {
             .into_inner())
     }
 
-    pub async fn get_active_validator_nodes(
-        &self,
-    ) -> anyhow::Result<Response<Streaming<GetActiveValidatorNodesResponse>>> {
+    pub async fn get_active_validator_nodes(&self) -> anyhow::Result<Vec<GetActiveValidatorNodesResponse>> {
         if self.node.is_none() {
             bail!("Node client not connected");
         }
@@ -86,7 +83,7 @@ impl Minotari {
         let info = self.node.clone().unwrap().get_tip_info(grpc::Empty {}).await?;
         let block_height = info.into_inner().metadata.unwrap().best_block_height;
 
-        Ok(self
+        let mut stream = self
             .node
             .clone()
             .unwrap()
@@ -94,6 +91,28 @@ impl Minotari {
                 height: block_height,
                 sidechain_id: vec![],
             })
-            .await?)
+            .await?
+            .into_inner();
+
+        let mut vns = Vec::new();
+        loop {
+            match stream.message().await {
+                Ok(Some(val)) => {
+                    vns.push(val);
+                },
+                Ok(None) => {
+                    break;
+                },
+                Err(e) => {
+                    bail!("Error getting active validator nodes: {}", e);
+                },
+            }
+        }
+
+        if vns.is_empty() {
+            log::debug!("No active validator nodes found at height: {}", block_height);
+        }
+
+        Ok(vns)
     }
 }
