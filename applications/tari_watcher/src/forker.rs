@@ -1,35 +1,24 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    env,
-    net::IpAddr,
-    path::{Path, PathBuf},
-    process::Stdio,
-};
+use std::{env, net::IpAddr, path::Path, process::Stdio};
 
 use tokio::process::{Child, Command};
 
 use crate::config::{ExecutableConfig, InstanceType};
 
 pub struct Forker {
-    // The base directory of calling the application
-    base_dir: PathBuf,
     // The Tari L2 validator instance
     validator: Option<Instance>,
-    // The Minotari L1 wallet instance
-    wallet: Option<Instance>,
     // Child process of the forked validator instance.
     // Includes PID and a handle to the process.
     child: Option<Child>,
 }
 
 impl Forker {
-    pub fn new(base_dir: PathBuf) -> Self {
+    pub fn new() -> Self {
         Self {
             validator: None,
-            wallet: None,
-            base_dir,
             child: None,
         }
     }
@@ -62,6 +51,7 @@ impl Forker {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone)]
 struct Instance {
     app: InstanceType,

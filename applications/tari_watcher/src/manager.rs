@@ -26,7 +26,7 @@ impl ProcessManager {
         let this = Self {
             validator_config: config.executable_config[0].clone(),
             wallet_config: config.executable_config[1].clone(),
-            forker: Forker::new(config.base_dir),
+            forker: Forker::new(),
             shutdown_signal,
             rx_request,
             chain: Minotari::new(config.base_node_grpc_address, config.base_wallet_grpc_address),

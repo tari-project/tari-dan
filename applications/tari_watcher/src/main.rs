@@ -3,7 +3,9 @@
 
 use crate::manager::ManagerHandle;
 use crate::shutdown::exit_signal;
+use anyhow::bail;
 use log::*;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tari_shutdown::ShutdownSignal;
 use tokio::task;
@@ -53,26 +55,40 @@ async fn main() -> anyhow::Result<()> {
             log::info!("Config file created at {}", config_path.display());
         },
         Commands::Start(ref args) => {
-            let mut config = get_base_config(&cli)?;
+            let mut cfg = read_file(cli.get_config_path()).await?;
+            if let Some(conf) = cfg.missing_conf() {
+                bail!("Missing configuration values: {:?}", conf);
+            }
+
             // optionally override config values
-            args.apply(&mut config);
-            let mut handle = start(config).await?;
-
-            let tip = handle.get_tip_info().await;
-            info!("Tip: {:?}", tip);
-
-            let vn_status = handle.get_active_validator_nodes().await;
-            info!("Active validators: {:?}", vn_status);
+            args.apply(&mut cfg);
+            let _ = start(cfg).await?;
         },
     }
 
     Ok(())
 }
 
+async fn read_file(path: PathBuf) -> anyhow::Result<Config> {
+    let p = Path::new(path.to_str().unwrap());
+    let content: String = fs::read_to_string(p).await.unwrap();
+    let config: Config = toml::from_str(&content)?;
+
+    Ok(config)
+}
+
 async fn start(config: Config) -> anyhow::Result<ManagerHandle> {
     let shutdown = Shutdown::new();
     let signal = shutdown.to_signal().select(exit_signal()?);
-    let (task_handle, manager_handle) = spawn(config.clone(), shutdown.to_signal()).await;
+    let (task_handle, mut manager_handle) = spawn(config.clone(), shutdown.to_signal()).await;
+
+    // Test ping #1 to base node
+    let tip = manager_handle.get_tip_info().await;
+    info!("[TEST] Tip status: {:?}", tip);
+
+    // Test ping #2 to base node
+    let vn_status = manager_handle.get_active_validator_nodes().await;
+    info!("[TEST] Active validators: {:?}", vn_status);
 
     tokio::select! {
         _ = signal => {
