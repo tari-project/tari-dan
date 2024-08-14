@@ -89,6 +89,10 @@ async fn start(config: Config) -> anyhow::Result<ManagerHandle> {
     let vn_status = manager_handle.get_active_validator_nodes().await;
     info!("[TEST] Active validators: {:?}", vn_status);
 
+    // Attempt to register the validator node
+    let tx_id = manager_handle.register_validator_node().await.unwrap();
+    info!("[TEST] Registered vn, tx id: {}", tx_id);
+
     tokio::select! {
         _ = signal => {
             log::info!("Shutting down");

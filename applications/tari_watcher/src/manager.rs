@@ -1,6 +1,7 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+use crate::minotari::ValidatorExpirationInfo;
 use log::*;
 use minotari_app_grpc::tari_rpc::{GetActiveValidatorNodesResponse, TipInfoResponse};
 use tari_shutdown::ShutdownSignal;
@@ -30,7 +31,11 @@ impl ProcessManager {
             forker: Forker::new(),
             shutdown_signal,
             rx_request,
-            chain: Minotari::new(config.base_node_grpc_address, config.base_wallet_grpc_address),
+            chain: Minotari::new(
+                config.base_node_grpc_address,
+                config.base_wallet_grpc_address,
+                config.vn_registration_file,
+            ),
         };
         (this, ManagerHandle::new(tx_request))
     }
@@ -53,8 +58,13 @@ impl ProcessManager {
                             let response = self.chain.get_active_validator_nodes().await?;
                             drop(reply.send(Ok(response)));
                         }
-                        ManagerRequest::RegisterValidatorNode => {
-                            unimplemented!();
+                        ManagerRequest::RegisterValidatorNode { reply } => {
+                            let response = self.chain.register_validator_node().await?;
+                            drop(reply.send(Ok(response)));
+                        },
+                        ManagerRequest::GetValidatorExpiration { reply } => {
+                            let response = self.chain.get_validator_expiration().await?;
+                            drop(reply.send(Ok(response)));
                         }
                     }
                 }
@@ -79,9 +89,12 @@ pub enum ManagerRequest {
     GetActiveValidatorNodes {
         reply: Reply<Vec<GetActiveValidatorNodesResponse>>,
     },
-
-    #[allow(dead_code)]
-    RegisterValidatorNode, // TODO: populate types
+    GetValidatorExpiration {
+        reply: Reply<ValidatorExpirationInfo>,
+    },
+    RegisterValidatorNode {
+        reply: Reply<u64>,
+    },
 }
 
 pub struct ManagerHandle {
@@ -97,6 +110,14 @@ impl ManagerHandle {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(ManagerRequest::GetActiveValidatorNodes { reply: tx })
+            .await?;
+        rx.await?
+    }
+
+    pub async fn register_validator_node(&mut self) -> anyhow::Result<u64> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(ManagerRequest::RegisterValidatorNode { reply: tx })
             .await?;
         rx.await?
     }
