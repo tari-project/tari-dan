@@ -5,7 +5,10 @@ use std::path::PathBuf;
 
 use anyhow::bail;
 use minotari_app_grpc::tari_rpc::{
-    self as grpc, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse, TipInfoResponse,
+    self as grpc,
+    GetActiveValidatorNodesResponse,
+    RegisterValidatorNodeResponse,
+    TipInfoResponse,
 };
 use minotari_node_grpc_client::BaseNodeGrpcClient;
 use minotari_wallet_grpc_client::WalletGrpcClient;

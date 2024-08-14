@@ -8,7 +8,8 @@ use helpers::read_registration_file;
 use log::*;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tokio::{
-    fs, task,
+    fs,
+    task,
     time::{self, Duration},
 };
 
