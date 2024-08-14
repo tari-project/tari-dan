@@ -49,6 +49,21 @@ impl Config {
         writer.write_all(toml.as_bytes()).await?;
         Ok(())
     }
+
+    pub fn missing_conf(&self) -> Option<Vec<&str>> {
+        let mut v: Vec<&str> = Vec::new();
+        if self.base_node_grpc_address.is_empty() {
+            v.push("base_node_grpc_address");
+        }
+        if self.base_wallet_grpc_address.is_empty() {
+            v.push("base_wallet_grpc_address");
+        }
+        if v.is_empty() {
+            None
+        } else {
+            Some(v)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -143,10 +158,10 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
 
     Ok(Config {
         auto_register: true,
-        base_node_grpc_address: "localhost:18142".to_string(),
-        base_wallet_grpc_address: "localhost:18143".to_string(),
-        sidechain_id: None,
+        base_node_grpc_address: "".to_string(),
+        base_wallet_grpc_address: "".to_string(),
         base_dir: base_dir.clone(),
+        sidechain_id: None,
         vn_registration_file: base_dir.join("registration.json"),
         instance_config: instances.to_vec(),
         executable_config: executables,

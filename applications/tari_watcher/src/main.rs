@@ -1,22 +1,29 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use std::time::SystemTime;
+use std::{
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
-use anyhow::{anyhow, Context};
-use tokio::fs;
+use anyhow::{anyhow, bail, Context};
+use log::*;
+use tari_shutdown::{Shutdown, ShutdownSignal};
+use tokio::{fs, task};
 
 use crate::{
     cli::{Cli, Commands},
     config::{get_base_config, Config},
-    manager::ProcessManager,
+    manager::{ManagerHandle, ProcessManager},
+    shutdown::exit_signal,
 };
 
 mod cli;
 mod config;
 mod forker;
 mod manager;
-mod port;
+mod minotari;
+mod shutdown;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -47,21 +54,58 @@ async fn main() -> anyhow::Result<()> {
             log::info!("Config file created at {}", config_path.display());
         },
         Commands::Start(ref args) => {
-            let mut config = get_base_config(&cli)?;
+            let mut cfg = read_file(cli.get_config_path()).await?;
+            if let Some(conf) = cfg.missing_conf() {
+                bail!("Missing configuration values: {:?}", conf);
+            }
+
             // optionally override config values
-            args.apply(&mut config);
-            start(config).await?;
+            args.apply(&mut cfg);
+            start(cfg).await?;
         },
     }
 
     Ok(())
 }
 
-async fn start(config: Config) -> anyhow::Result<()> {
-    let mut manager = ProcessManager::new(config.clone());
-    manager.forker.start_validator(manager.validator_config).await?;
+async fn read_file(path: PathBuf) -> anyhow::Result<Config> {
+    let p = Path::new(path.to_str().unwrap());
+    let content: String = fs::read_to_string(p).await.unwrap();
+    let config: Config = toml::from_str(&content)?;
 
-    Ok(())
+    Ok(config)
+}
+
+async fn start(config: Config) -> anyhow::Result<ManagerHandle> {
+    let shutdown = Shutdown::new();
+    let signal = shutdown.to_signal().select(exit_signal()?);
+    let (task_handle, mut manager_handle) = spawn(config.clone(), shutdown.to_signal()).await;
+
+    // Test ping #1 to base node
+    let tip = manager_handle.get_tip_info().await;
+    info!("[TEST] Tip status: {:?}", tip);
+
+    // Test ping #2 to base node
+    let vn_status = manager_handle.get_active_validator_nodes().await;
+    info!("[TEST] Active validators: {:?}", vn_status);
+
+    tokio::select! {
+        _ = signal => {
+            log::info!("Shutting down");
+        },
+        result = task_handle => {
+            result??;
+            log::info!("Process manager exited");
+        }
+    }
+
+    Ok(manager_handle)
+}
+
+async fn spawn(config: Config, shutdown: ShutdownSignal) -> (task::JoinHandle<anyhow::Result<()>>, ManagerHandle) {
+    let (manager, manager_handle) = ProcessManager::new(config, shutdown);
+    let task_handle = tokio::spawn(manager.start());
+    (task_handle, manager_handle)
 }
 
 fn setup_logger() -> Result<(), fern::InitError> {
