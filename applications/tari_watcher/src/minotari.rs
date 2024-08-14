@@ -1,17 +1,19 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+use std::path::PathBuf;
+
 use anyhow::bail;
-use minotari_app_grpc::tari_rpc::{self as grpc, GetActiveValidatorNodesResponse, TipInfoResponse};
+use minotari_app_grpc::tari_rpc::{
+    self as grpc, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse, TipInfoResponse,
+};
 use minotari_node_grpc_client::BaseNodeGrpcClient;
 use minotari_wallet_grpc_client::WalletGrpcClient;
-use std::path::PathBuf;
 use tari_common::exit_codes::{ExitCode, ExitError};
-use tari_common_types::types::PublicKey;
-use tari_core::transactions::transaction_components::ValidatorNodeSignature;
 use tari_crypto::tari_utilities::ByteArray;
-use tokio::fs;
 use tonic::transport::Channel;
+
+use crate::helpers::{read_registration_file, to_block_height};
 
 #[derive(Clone)]
 pub struct Minotari {
@@ -84,7 +86,8 @@ impl Minotari {
             bail!("Node client not connected");
         }
 
-        let height = self.get_block_height().await?;
+        let tip_info = self.get_tip_status().await?;
+        let height = to_block_height(tip_info);
         let mut stream = self
             .node
             .clone()
@@ -118,12 +121,12 @@ impl Minotari {
         Ok(vns)
     }
 
-    pub async fn register_validator_node(&self) -> anyhow::Result<u64> {
+    pub async fn register_validator_node(&self) -> anyhow::Result<RegisterValidatorNodeResponse> {
         if !self.bootstrapped {
             bail!("Node client not connected");
         }
 
-        let info = get_registration_info(self.node_registration_file.clone()).await?;
+        let info = read_registration_file(self.node_registration_file.clone()).await?;
         let sig = info.signature.signature();
         let resp = self
             .wallet
@@ -146,21 +149,7 @@ impl Minotari {
             bail!("Failed to register validator node: {}", resp.failure_message);
         }
 
-        Ok(resp.transaction_id)
-    }
-
-    pub async fn get_validator_expiration(&self) -> anyhow::Result<ValidatorExpirationInfo> {
-        if !self.bootstrapped {
-            bail!("Node client not connected");
-        }
-
-        let height = self.get_block_height().await?;
-        let constants = self.get_consensus_constants(height).await?;
-
-        Ok(ValidatorExpirationInfo {
-            validator_node_validity_period: constants.validator_node_validity_period,
-            epoch_length: constants.epoch_length,
-        })
+        Ok(resp)
     }
 
     pub async fn get_consensus_constants(&self, block_height: u64) -> anyhow::Result<grpc::ConsensusConstants> {
@@ -178,31 +167,4 @@ impl Minotari {
 
         Ok(constants)
     }
-
-    async fn get_block_height(&self) -> anyhow::Result<u64> {
-        Ok(self.get_tip_status().await?.metadata.unwrap().best_block_height)
-    }
-}
-
-pub struct ValidatorExpirationInfo {
-    pub validator_node_validity_period: u64,
-    pub epoch_length: u64,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-struct ValidatorNodeRegistration {
-    pub signature: ValidatorNodeSignature,
-    pub public_key: PublicKey,
-    pub claim_fees_public_key: PublicKey,
-}
-
-async fn get_registration_info(vn_registration_file: PathBuf) -> anyhow::Result<ValidatorNodeRegistration> {
-    log::debug!(
-        "Using VN registration file at: {}",
-        vn_registration_file.clone().into_os_string().into_string().unwrap()
-    );
-
-    let info = fs::read_to_string(vn_registration_file).await?;
-    let reg = json5::from_str(&info)?;
-    Ok(reg)
 }

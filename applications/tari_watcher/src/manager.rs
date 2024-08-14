@@ -1,9 +1,10 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use crate::minotari::ValidatorExpirationInfo;
 use log::*;
-use minotari_app_grpc::tari_rpc::{GetActiveValidatorNodesResponse, TipInfoResponse};
+use minotari_app_grpc::tari_rpc::{
+    self as grpc, ConsensusConstants, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse, TipInfoResponse,
+};
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::{mpsc, oneshot};
 
@@ -62,8 +63,8 @@ impl ProcessManager {
                             let response = self.chain.register_validator_node().await?;
                             drop(reply.send(Ok(response)));
                         },
-                        ManagerRequest::GetValidatorExpiration { reply } => {
-                            let response = self.chain.get_validator_expiration().await?;
+                        ManagerRequest::GetConsensusConstants { reply, block_height } => {
+                            let response = self.chain.get_consensus_constants(block_height).await?;
                             drop(reply.send(Ok(response)));
                         }
                     }
@@ -89,11 +90,12 @@ pub enum ManagerRequest {
     GetActiveValidatorNodes {
         reply: Reply<Vec<GetActiveValidatorNodesResponse>>,
     },
-    GetValidatorExpiration {
-        reply: Reply<ValidatorExpirationInfo>,
+    GetConsensusConstants {
+        block_height: u64,
+        reply: Reply<grpc::ConsensusConstants>,
     },
     RegisterValidatorNode {
-        reply: Reply<u64>,
+        reply: Reply<RegisterValidatorNodeResponse>,
     },
 }
 
@@ -114,7 +116,18 @@ impl ManagerHandle {
         rx.await?
     }
 
-    pub async fn register_validator_node(&mut self) -> anyhow::Result<u64> {
+    pub async fn get_consensus_constants(&mut self, block_height: u64) -> anyhow::Result<ConsensusConstants> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(ManagerRequest::GetConsensusConstants {
+                block_height,
+                reply: tx,
+            })
+            .await?;
+        rx.await?
+    }
+
+    pub async fn register_validator_node(&mut self) -> anyhow::Result<RegisterValidatorNodeResponse> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(ManagerRequest::RegisterValidatorNode { reply: tx })

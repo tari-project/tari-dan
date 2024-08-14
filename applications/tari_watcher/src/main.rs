@@ -1,19 +1,21 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    path::{Path, PathBuf},
-    time::SystemTime,
-};
+use std::time::SystemTime;
 
 use anyhow::{anyhow, bail, Context};
+use helpers::read_registration_file;
 use log::*;
 use tari_shutdown::{Shutdown, ShutdownSignal};
-use tokio::{fs, task};
+use tokio::{
+    fs, task,
+    time::{self, Duration},
+};
 
 use crate::{
     cli::{Cli, Commands},
     config::{get_base_config, Config},
+    helpers::{contains_key, read_config_file, to_block_height, to_vn_public_keys},
     manager::{ManagerHandle, ProcessManager},
     shutdown::exit_signal,
 };
@@ -21,6 +23,7 @@ use crate::{
 mod cli;
 mod config;
 mod forker;
+mod helpers;
 mod manager;
 mod minotari;
 mod shutdown;
@@ -54,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
             log::info!("Config file created at {}", config_path.display());
         },
         Commands::Start(ref args) => {
-            let mut cfg = read_file(cli.get_config_path()).await?;
+            let mut cfg = read_config_file(cli.get_config_path()).await?;
             if let Some(conf) = cfg.missing_conf() {
                 bail!("Missing configuration values: {:?}", conf);
             }
@@ -68,30 +71,22 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn read_file(path: PathBuf) -> anyhow::Result<Config> {
-    let p = Path::new(path.to_str().unwrap());
-    let content: String = fs::read_to_string(p).await.unwrap();
-    let config: Config = toml::from_str(&content)?;
-
-    Ok(config)
-}
-
 async fn start(config: Config) -> anyhow::Result<ManagerHandle> {
     let shutdown = Shutdown::new();
     let signal = shutdown.to_signal().select(exit_signal()?);
     let (task_handle, mut manager_handle) = spawn(config.clone(), shutdown.to_signal()).await;
 
-    // Test ping #1 to base node
-    let tip = manager_handle.get_tip_info().await;
-    info!("[TEST] Tip status: {:?}", tip);
-
-    // Test ping #2 to base node
-    let vn_status = manager_handle.get_active_validator_nodes().await;
-    info!("[TEST] Active validators: {:?}", vn_status);
-
-    // Attempt to register the validator node
-    let tx_id = manager_handle.register_validator_node().await.unwrap();
-    info!("[TEST] Registered vn, tx id: {}", tx_id);
+    let mut interval = time::interval(Duration::from_secs(10));
+    let constants = manager_handle.get_consensus_constants(0).await;
+    let validity_period = constants.as_ref().unwrap().validator_node_validity_period;
+    let epoch_length = constants.unwrap().epoch_length;
+    debug!("Registrations are currently valid for {} epochs", validity_period);
+    debug!("Every epoch has {} blocks", epoch_length);
+    let registration_valid_for = validity_period * epoch_length;
+    let mut registered_at_block = 0;
+    let local_node = read_registration_file(config.vn_registration_file).await?;
+    let local_key = local_node.public_key; // 76fd45c0816f7bd78d33e1b9358a48e8c68b97bfd20d9c80f3934afbde848343
+    debug!("Local public key: {}", local_key.clone());
 
     tokio::select! {
         _ = signal => {
@@ -100,7 +95,53 @@ async fn start(config: Config) -> anyhow::Result<ManagerHandle> {
         result = task_handle => {
             result??;
             log::info!("Process manager exited");
-        }
+        },
+        _ = async {
+            loop {
+                interval.tick().await;
+
+                let tip_info = manager_handle.get_tip_info().await;
+                if let Err(e) = tip_info {
+                    error!("Failed to get tip info: {}", e);
+                    continue;
+                }
+                let curr_height = to_block_height(tip_info.unwrap());
+                debug!("Current block height: {}", curr_height);
+
+                let vn_status = manager_handle.get_active_validator_nodes().await;
+                if let Err(e) = vn_status {
+                    error!("Failed to get active validators: {}", e);
+                    continue;
+                }
+                let active_keys = to_vn_public_keys(vn_status.unwrap());
+                info!("Amount of active validator node keys: {}", active_keys.len());
+                for key in &active_keys {
+                    info!("{}", key);
+                }
+
+                // if the node is already registered and still valid, skip registration
+                if contains_key(active_keys.clone(), local_key.clone()) {
+                    info!("Local node is active and still before expiration, skipping registration");
+                    continue;
+                }
+
+                // need to be more refined but proves the concept
+                if curr_height < registered_at_block + registration_valid_for {
+                    info!("Local node still within registration validity period, skipping registration");
+                    continue;
+                }
+
+                info!("Local node not active, attempting to register..");
+                let tx = manager_handle.register_validator_node().await.unwrap();
+                if !tx.is_success {
+                    error!("Failed to register node: {}", tx.failure_message);
+                    continue;
+                }
+                info!("Registered node at height {} with transaction id: {}", curr_height, tx.transaction_id);
+                registered_at_block = curr_height;
+
+            }
+        } => {},
     }
 
     Ok(manager_handle)
