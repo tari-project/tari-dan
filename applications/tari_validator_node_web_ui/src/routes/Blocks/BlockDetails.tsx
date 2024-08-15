@@ -37,6 +37,7 @@ import { primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../utils/he
 import type { Block, TransactionAtom } from "@tari-project/typescript-bindings";
 import type { VNGetIdentityResponse } from "@tari-project/typescript-bindings";
 
+// TODO: refactor this component
 export default function BlockDetails() {
   const { blockId } = useParams();
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
@@ -79,11 +80,11 @@ export default function BlockDetails() {
               } else if ("Prepare" in command) {
                 let newPrepare = command.Prepare;
                 setPrepare((prepare: TransactionAtom[]) => [...prepare, newPrepare]);
-              } else if ("LocalPrepared" in command) {
-                let newLocalPrepared = command.LocalPrepared;
+              } else if ("LocalPrepare" in command) {
+                let newLocalPrepared = command.LocalPrepare;
                 setLocalPrepared((localPrepared: TransactionAtom[]) => [...localPrepared, newLocalPrepared]);
-              } else if ("Accept" in command) {
-                let newAccept = command.Accept;
+              } else if ("AllAccept" in command) {
+                let newAccept = command.AllAccept;
                 setAccept((accept: TransactionAtom[]) => [...accept, newAccept]);
               }
             } else {

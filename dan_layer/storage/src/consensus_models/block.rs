@@ -26,7 +26,6 @@ use tari_dan_common_types::{
     ShardGroup,
     SubstateAddress,
 };
-use tari_engine_types::substate::SubstateDiff;
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
 #[cfg(feature = "ts")]
@@ -34,18 +33,20 @@ use ts_rs::TS;
 
 use super::{
     BlockDiff,
+    BlockPledge,
     ForeignProposal,
     ForeignSendCounters,
     QuorumCertificate,
     SubstateChange,
     SubstateDestroyedProof,
+    SubstatePledge,
     SubstateRecord,
+    TransactionAtom,
     ValidatorSchnorrSignature,
 };
 use crate::{
     consensus_models::{
         Command,
-        HighQc,
         LastExecuted,
         LastProposed,
         LastVoted,
@@ -89,8 +90,8 @@ pub struct Block {
     /// If the block is a dummy block. This is metadata and not sent over
     /// the wire or part of the block hash.
     is_dummy: bool,
-    /// Flag that indicates that the block locked objects and made transaction stage transitions.
-    is_processed: bool,
+    /// Flag that indicates that the block has been justified by a new high QC.
+    is_justified: bool,
     /// Flag that indicates that the block has been committed.
     is_committed: bool,
     /// Counter for each foreign shard for reliable broadcast.
@@ -143,7 +144,7 @@ impl Block {
             commands,
             total_leader_fee,
             is_dummy: false,
-            is_processed: false,
+            is_justified: false,
             is_committed: false,
             foreign_indexes: sorted_foreign_indexes,
             stored_at: None,
@@ -171,7 +172,7 @@ impl Block {
         merkle_root: FixedHash,
         total_leader_fee: u64,
         is_dummy: bool,
-        is_processed: bool,
+        is_justified: bool,
         is_committed: bool,
         sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
@@ -194,7 +195,7 @@ impl Block {
             commands,
             total_leader_fee,
             is_dummy,
-            is_processed,
+            is_justified,
             is_committed,
             foreign_indexes: sorted_foreign_indexes,
             stored_at: Some(created_at),
@@ -242,7 +243,7 @@ impl Block {
             commands: Default::default(),
             total_leader_fee: 0,
             is_dummy: false,
-            is_processed: false,
+            is_justified: false,
             is_committed: true,
             foreign_indexes: IndexMap::new(),
             stored_at: None,
@@ -280,7 +281,7 @@ impl Block {
             commands: BTreeSet::new(),
             total_leader_fee: 0,
             is_dummy: true,
-            is_processed: false,
+            is_justified: false,
             is_committed: false,
             foreign_indexes: IndexMap::new(),
             stored_at: None,
@@ -291,7 +292,7 @@ impl Block {
             base_layer_block_hash: parent_base_layer_block_hash,
         };
         block.id = block.calculate_hash().into();
-        block.is_processed = false;
+        block.is_justified = false;
         block
     }
 
@@ -343,15 +344,20 @@ impl Block {
         self.commands.iter().filter_map(|d| d.transaction().map(|t| t.id()))
     }
 
-    pub fn all_accepted_transactions_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
-        self.commands
-            .iter()
-            .filter_map(|d| d.accept().or_else(|| d.local_only()))
-            .map(|t| t.id())
+    pub fn all_committing_transactions_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
+        self.commands.iter().filter_map(|d| d.committing()).map(|t| t.id())
+    }
+
+    pub fn all_finalising_transactions_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
+        self.commands.iter().filter_map(|d| d.finalising()).map(|t| t.id())
     }
 
     pub fn all_foreign_proposals(&self) -> impl Iterator<Item = &ForeignProposal> + '_ {
-        self.commands.iter().filter_map(|d| d.foreign_proposal())
+        self.commands.iter().filter_map(|c| c.foreign_proposal())
+    }
+
+    pub fn all_some_prepare(&self) -> impl Iterator<Item = &TransactionAtom> + '_ {
+        self.commands.iter().filter_map(|c| c.some_prepare())
     }
 
     pub fn command_count(&self) -> usize {
@@ -441,7 +447,7 @@ impl Block {
     pub fn total_transaction_fee(&self) -> u64 {
         self.commands
             .iter()
-            .filter_map(|c| c.accept().or_else(|| c.local_only()))
+            .filter_map(|c| c.committing())
             .map(|atom| atom.transaction_fee)
             .sum()
     }
@@ -466,8 +472,8 @@ impl Block {
         self.is_dummy
     }
 
-    pub fn is_processed(&self) -> bool {
-        self.is_processed
+    pub fn is_justified(&self) -> bool {
+        self.is_justified
     }
 
     pub fn is_committed(&self) -> bool {
@@ -555,11 +561,11 @@ impl Block {
         block_id: &BlockId,
     ) -> Result<bool, StorageError> {
         // TODO: consider optimising
-        let is_processed = Self::get(tx, block_id)
+        let is_justified = Self::get(tx, block_id)
             .optional()?
-            .map(|b| b.is_processed())
+            .map(|b| b.is_justified())
             .unwrap_or(false);
-        Ok(is_processed)
+        Ok(is_justified)
     }
 
     pub fn record_exists<TTx: StateStoreReadTransaction + ?Sized>(
@@ -616,7 +622,18 @@ impl Block {
             });
         }
 
-        block_diff.remove(tx)?;
+        if self.is_dummy() && !block_diff.is_empty() {
+            return Err(StorageError::QueryError {
+                reason: format!(
+                    "[commit_diff] Dummy block cannot have any substate changes. Block ID: {}",
+                    self.id()
+                ),
+            });
+        }
+
+        if !self.is_dummy() {
+            block_diff.remove(tx)?;
+        }
 
         for change in block_diff.into_changes() {
             match change {
@@ -664,8 +681,8 @@ impl Block {
         tx.block_diffs_get(self.id())
     }
 
-    pub fn set_as_processed<TTx: StateStoreWriteTransaction>(&mut self, tx: &mut TTx) -> Result<(), StorageError> {
-        self.is_processed = true;
+    pub fn set_as_justified<TTx: StateStoreWriteTransaction>(&mut self, tx: &mut TTx) -> Result<(), StorageError> {
+        self.is_justified = true;
         tx.blocks_set_flags(self.id(), None, Some(true))
     }
 
@@ -809,33 +826,29 @@ impl Block {
         tx: &mut TTx,
         mut on_lock_block: TFnOnLock,
         mut on_commit: TFnOnCommit,
-    ) -> Result<HighQc, E>
+    ) -> Result<Self, E>
     where
         TTx: StateStoreWriteTransaction + Deref + ?Sized,
         TTx::Target: StateStoreReadTransaction,
-        TFnOnLock: FnMut(&mut TTx, &LockedBlock, &Block) -> Result<(), E>,
+        TFnOnLock: FnMut(&mut TTx, &LockedBlock, &Block, &QuorumCertificate) -> Result<(), E>,
         TFnOnCommit: FnMut(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
         E: From<StorageError>,
     {
-        let high_qc = self.justify().update_high_qc(tx)?;
+        self.justify().update_high_qc(tx)?;
 
-        // b'' <- b*.justify.node
-        let Some(commit_node) = self.justify().get_block(&**tx).optional()? else {
-            return Ok(high_qc);
-        };
+        // b'' <- b*.justify.node i.e the newly justified block
+        let commit_node = self.justify().get_block(&**tx)?;
 
         // b' <- b''.justify.node
-        let Some(precommit_node) = commit_node.justify().get_block(&**tx).optional()? else {
-            return Ok(high_qc);
-        };
+        let precommit_node = commit_node.justify().get_block(&**tx)?;
 
         if precommit_node.is_genesis() {
-            return Ok(high_qc);
+            return Ok(commit_node);
         }
 
         let locked = LockedBlock::get(&**tx)?;
         if precommit_node.height() > locked.height {
-            on_locked_block_recurse(tx, &locked, &precommit_node, &mut on_lock_block)?;
+            on_locked_block_recurse(tx, &locked, &precommit_node, commit_node.justify(), &mut on_lock_block)?;
             precommit_node.as_locked_block().set(tx)?;
         }
 
@@ -854,7 +867,7 @@ impl Block {
 
             // Commit prepare_node (b)
             if prepare_node.is_zero() {
-                return Ok(high_qc);
+                return Ok(commit_node);
             }
             let prepare_node = Block::get(&**tx, prepare_node)?;
             let last_executed = LastExecuted::get(&**tx)?;
@@ -873,7 +886,7 @@ impl Block {
             );
         }
 
-        Ok(high_qc)
+        Ok(commit_node)
     }
 
     /// safeNode predicate (https://arxiv.org/pdf/1803.05069v6.pdf)
@@ -922,24 +935,39 @@ impl Block {
         Ok(())
     }
 
-    pub fn get_all_substate_diffs<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn get_local_prepared_block_pledge<TTx: StateStoreReadTransaction>(
         &self,
         tx: &TTx,
-    ) -> Result<Vec<SubstateDiff>, StorageError> {
-        let transactions = self
-            .commands()
-            .iter()
-            .filter_map(|c| c.local_only().or_else(|| c.accept()))
-            .filter(|t| t.decision.is_commit())
-            .map(|t| tx.transactions_get(t.id()))
-            .collect::<Result<Vec<_>, _>>()?;
+    ) -> Result<BlockPledge, StorageError> {
+        let mut pledges = BlockPledge::new();
+        for atom in self.commands().iter().filter_map(|cmd| cmd.local_prepare()) {
+            // No pledges for aborted transactions
+            if atom.decision.is_abort() {
+                continue;
+            }
+            // TODO(perf): O(n) queries
+            let locked_values = tx.substate_locks_get_locked_substates_for_transaction(&atom.id)?;
 
-        Ok(transactions
-            .into_iter()
-            // TODO: following two should never be None
-            .filter_map(|t_rec| t_rec.execution_result)
-            .filter_map(|t_res| t_res.finalize.into_accept())
-            .collect())
+            // CASE: We're retrieving pledges for the LocalPrepared stage. If all other pledges were provided already,
+            // we may have progressed to AllPrepared, executed the transaction and locked local outputs.
+            // However, these are not provided in the original LocalPrepare evidence for this atom, so we need to
+            // exclude them.
+            let locks = locked_values
+                .into_iter()
+                .filter(|lock| atom.evidence.contains(&lock.to_substate_address()));
+
+            pledges.reserve(locks.clone().count());
+            for locked_value in locks {
+                let lock_intent = locked_value.to_substate_lock_intent();
+                let pledge = SubstatePledge::try_create(lock_intent.clone(), locked_value.value).ok_or_else(|| {
+                    StorageError::DataInconsistency {
+                        details: format!("SubstatePledge ({}) is not valid", lock_intent),
+                    }
+                })?;
+                pledges.add_substate_pledge(locked_value.lock.transaction_id(), pledge);
+            }
+        }
+        Ok(pledges)
     }
 }
 
@@ -1029,18 +1057,19 @@ fn on_locked_block_recurse<TTx, F, E>(
     tx: &mut TTx,
     locked: &LockedBlock,
     block: &Block,
+    justify_qc: &QuorumCertificate,
     callback: &mut F,
 ) -> Result<(), E>
 where
     TTx: StateStoreWriteTransaction + Deref + ?Sized,
     TTx::Target: StateStoreReadTransaction,
     E: From<StorageError>,
-    F: FnMut(&mut TTx, &LockedBlock, &Block) -> Result<(), E>,
+    F: FnMut(&mut TTx, &LockedBlock, &Block, &QuorumCertificate) -> Result<(), E>,
 {
     if locked.height < block.height() {
         let parent = block.get_parent(&**tx)?;
-        on_locked_block_recurse(tx, locked, &parent, callback)?;
-        callback(tx, locked, block)?;
+        on_locked_block_recurse(tx, locked, &parent, block.justify(), callback)?;
+        callback(tx, locked, block, justify_qc)?;
     }
     Ok(())
 }

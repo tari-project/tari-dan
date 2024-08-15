@@ -95,6 +95,14 @@ pub enum HotStuffError {
     VersionedSubstateIdError(#[from] VersionedSubstateIdError),
     #[error("Substate store error: {0}")]
     SubstateStoreError(#[from] SubstateStoreError),
+    #[error(
+        "Validator node omitted transaction pledges: remote_block_id={foreign_block_id}, \
+         transaction_id={transaction_id}"
+    )]
+    ForeignNodeOmittedTransactionPledges {
+        foreign_block_id: BlockId,
+        transaction_id: TransactionId,
+    },
 }
 
 impl From<EpochManagerError> for HotStuffError {
@@ -215,5 +223,11 @@ pub enum ProposalValidationError {
     NotLastBlockOfEpoch {
         block_id: BlockId,
         base_layer_block_height: u64,
+    },
+    #[error("Foreign node submitted invalid pledge for block {block_id}, transaction {transaction_id}: {details}")]
+    ForeignInvalidPledge {
+        block_id: BlockId,
+        transaction_id: TransactionId,
+        details: String,
     },
 }

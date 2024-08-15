@@ -25,9 +25,9 @@ mod on_catch_up_sync;
 mod on_message_validate;
 mod pacemaker;
 mod pacemaker_handle;
-mod proposer;
 mod state_machine;
 pub mod substate_store;
+mod transaction_manager;
 mod vote_receiver;
 mod worker;
 

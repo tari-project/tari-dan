@@ -98,7 +98,7 @@ impl DanNode {
         let committed_transactions = block
             .commands()
             .iter()
-            .filter_map(|cmd| cmd.accept())
+            .filter_map(|cmd| cmd.committing())
             .map(|t| t.id)
             .collect::<Vec<_>>();
 

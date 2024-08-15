@@ -1566,6 +1566,7 @@ dependencies = [
  "fern",
  "futures 0.3.30",
  "humantime 2.1.0",
+ "indexmap 2.2.6",
  "itertools 0.11.0",
  "log",
  "rand",

@@ -1,10 +1,7 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::sync::Arc;
 
 use indexmap::IndexMap;
 use log::*;
@@ -19,10 +16,10 @@ use tari_dan_engine::{
     template::LoadedTemplate,
     transaction::{TransactionError, TransactionProcessor},
 };
-use tari_dan_storage::consensus_models::{SubstateLockFlag, VersionedSubstateIdLockIntent};
+use tari_dan_storage::consensus_models::{SubstateLockType, VersionedSubstateIdLockIntent};
 use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
-    substate::Substate,
+    commit_result::ExecuteResult,
+    substate::{Substate, SubstateId},
     virtual_substate::VirtualSubstates,
 };
 use tari_template_lib::{crypto::RistrettoPublicKeyBytes, prelude::NonFungibleAddress};
@@ -45,35 +42,38 @@ pub trait TransactionExecutor {
 pub struct ExecutionOutput {
     pub transaction: Transaction,
     pub result: ExecuteResult,
-    pub outputs: Vec<VersionedSubstateId>,
-    pub execution_time: Duration,
 }
 
 impl ExecutionOutput {
-    pub fn resolve_inputs(
-        &self,
-        inputs: IndexMap<VersionedSubstateId, Substate>,
-    ) -> Vec<VersionedSubstateIdLockIntent> {
+    pub fn resolve_inputs(&self, inputs: &IndexMap<SubstateId, Substate>) -> Vec<VersionedSubstateIdLockIntent> {
         if let Some(diff) = self.result.finalize.accept() {
             inputs
-                .into_iter()
-                .map(|(versioned_id, _)| {
-                    let lock_flag = if diff.down_iter().any(|(id, _)| *id == versioned_id.substate_id) {
+                .iter()
+                .map(|(substate_id, substate)| {
+                    let lock_flag = if diff.down_iter().any(|(id, _)| id == substate_id) {
                         // Update all inputs that were DOWNed to be write locked
-                        SubstateLockFlag::Write
+                        SubstateLockType::Write
                     } else {
                         // Any input not downed, gets a read lock
-                        SubstateLockFlag::Read
+                        SubstateLockType::Read
                     };
-                    VersionedSubstateIdLockIntent::new(versioned_id, lock_flag)
+                    VersionedSubstateIdLockIntent::new(
+                        VersionedSubstateId::new(substate_id.clone(), substate.version()),
+                        lock_flag,
+                    )
                 })
                 .collect()
         } else {
             // TODO: we might want to have a SubstateLockFlag::None for rejected transactions so that we still know the
             // shards involved but do not lock them. We dont actually lock anything for rejected transactions anyway.
             inputs
-                .into_iter()
-                .map(|(versioned_id, _)| VersionedSubstateIdLockIntent::new(versioned_id, SubstateLockFlag::Read))
+                .iter()
+                .map(|(substate_id, substate)| {
+                    VersionedSubstateIdLockIntent::new(
+                        VersionedSubstateId::new(substate_id.clone(), substate.version()),
+                        SubstateLockType::Read,
+                    )
+                })
                 .collect()
         }
     }
@@ -107,7 +107,6 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         state_store: MemoryStateStore,
         virtual_substates: VirtualSubstates,
     ) -> Result<ExecutionOutput, Self::Error> {
-        let timer = Instant::now();
         // Include signature public key badges for all transaction signers in the initial auth scope
         // NOTE: we assume all signatures have already been validated.
         let initial_ownership_proofs = transaction
@@ -130,30 +129,19 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             modules,
             self.network,
         );
-        let tx_id = transaction.hash();
-        let result = match processor.execute(transaction.clone()) {
-            Ok(result) => result,
-            Err(err) => ExecuteResult {
-                finalize: FinalizeResult::new_rejected(tx_id, RejectReason::ExecutionFailure(err.to_string())),
-            },
-        };
+        let result = processor.execute(transaction.clone())?;
+        //     Ok(result) => result,
+        //     // TODO: This may occur due to an internal error (e.g. OOM, etc).
+        //     Err(err) => ExecuteResult {
+        //         finalize: FinalizeResult::new_rejected(
+        //             tx_id,
+        //             RejectReason::ExecutionFailure(format!("BUG: {err}")),
+        //         ),
+        //         execution_time: Duration::default(),
+        //     },
+        // };
 
-        let outputs = result
-            .finalize
-            .result
-            .accept()
-            .map(|diff| {
-                diff.up_iter()
-                    .map(|(addr, substate)| VersionedSubstateId::new(addr.clone(), substate.version()))
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        Ok(ExecutionOutput {
-            transaction,
-            result,
-            outputs,
-            execution_time: timer.elapsed(),
-        })
+        Ok(ExecutionOutput { transaction, result })
     }
 }
 

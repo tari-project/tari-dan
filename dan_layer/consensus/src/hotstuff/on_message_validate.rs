@@ -26,7 +26,6 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_message_validate";
 
 pub struct OnMessageValidate<TConsensusSpec: ConsensusSpec> {
-    local_validator_addr: TConsensusSpec::Addr,
     config: HotstuffConfig,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
@@ -41,7 +40,6 @@ pub struct OnMessageValidate<TConsensusSpec: ConsensusSpec> {
 
 impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
     pub fn new(
-        local_validator_addr: TConsensusSpec::Addr,
         config: HotstuffConfig,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
@@ -51,7 +49,6 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         tx_events: broadcast::Sender<HotstuffEvent>,
     ) -> Self {
         Self {
-            local_validator_addr,
             config,
             store,
             epoch_manager,
@@ -76,7 +73,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
                 if let Err(err) = self.check_proposal(&proposal.block).await {
                     return Ok(MessageValidationResult::Invalid {
                         from,
-                        message: HotstuffMessage::Proposal(proposal),
+                        message: HotstuffMessage::ForeignProposal(proposal),
                         err,
                     });
                 }
@@ -142,8 +139,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
 
         info!(
             target: LOG_TARGET,
-            "📜 [{}] new unvalidated PROPOSAL message {} from {} (current height = {})",
-            self.local_validator_addr,
+            "📜 new unvalidated PROPOSAL message {} from {} (current height = {})",
             block,
             block.proposed_by(),
             current_height,

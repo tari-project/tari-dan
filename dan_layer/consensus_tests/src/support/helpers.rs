@@ -42,7 +42,7 @@ fn random_substate_address_range<R: RangeBounds<SubstateAddress>>(range: R) -> S
     let mut bytes = [0u8; 32];
     OsRng.fill_bytes(&mut bytes);
     let rand = U256::from_le_bytes(bytes);
-    SubstateAddress::from_u256(start + (rand % (end - start)))
+    SubstateAddress::from_u256_zero_version(start + (rand % (end - start)))
 }
 
 fn copy_fixed<const SZ: usize>(bytes: &[u8]) -> [u8; SZ] {

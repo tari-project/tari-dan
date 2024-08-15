@@ -6,7 +6,6 @@ use std::{
     collections::{HashMap, HashSet},
     marker::PhantomData,
     ops::RangeInclusive,
-    str::FromStr,
 };
 
 use bigdecimal::{BigDecimal, ToPrimitive};
@@ -26,7 +25,6 @@ use diesel::{
     SqliteConnection,
     TextExpressionMethods,
 };
-use indexmap::IndexMap;
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
@@ -36,6 +34,7 @@ use tari_dan_storage::{
         Block,
         BlockDiff,
         BlockId,
+        BlockTransactionExecution,
         Command,
         EpochCheckpoint,
         ForeignProposal,
@@ -49,18 +48,22 @@ use tari_dan_storage::{
         LastVoted,
         LeafBlock,
         LockedBlock,
-        LockedSubstate,
+        LockedSubstateValue,
         PendingShardStateTreeDiff,
         QcId,
         QuorumCertificate,
         StateTransition,
         StateTransitionId,
         SubstateChange,
+        SubstateLock,
+        SubstatePledge,
+        SubstatePledges,
         SubstateRecord,
-        TransactionExecution,
+        TransactionPoolConfirmedStage,
         TransactionPoolRecord,
         TransactionPoolStage,
         TransactionRecord,
+        VersionedSubstateIdLockIntent,
         Vote,
     },
     Ordering,
@@ -74,7 +77,7 @@ use tari_utilities::ByteArray;
 
 use crate::{
     error::SqliteStorageError,
-    serialization::{deserialize_hex_try_from, deserialize_json, serialize_hex, serialize_json},
+    serialization::{deserialize_hex_try_from, deserialize_json, parse_from_string, serialize_hex, serialize_json},
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };
@@ -141,7 +144,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
                 source: e,
             })?
             .map(|update| update.map(|u| (u.transaction_id.clone(), u)))
-            .collect::<diesel::QueryResult<HashMap<_, _>>>()
+            .collect::<diesel::QueryResult<_>>()
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transaction_pool_get_many_ready",
                 source: e,
@@ -655,7 +658,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         &self,
         tx_id: &TransactionId,
         block: &BlockId,
-    ) -> Result<TransactionExecution, StorageError> {
+    ) -> Result<BlockTransactionExecution, StorageError> {
         use crate::schema::transaction_executions;
 
         let execution = transaction_executions::table
@@ -674,7 +677,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         &self,
         tx_id: &TransactionId,
         from_block_id: &BlockId,
-    ) -> Result<TransactionExecution, StorageError> {
+    ) -> Result<BlockTransactionExecution, StorageError> {
         use crate::schema::transaction_executions;
 
         // TODO: This gets slower as the chain progresses.
@@ -744,7 +747,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                         b.block_id, b.qc_id
                     ),
                 })
-                .and_then(|qc| b.try_convert(qc))
+                    .and_then(|qc| b.try_convert(qc))
             })
             .collect()
     }
@@ -1331,11 +1334,12 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         debug!(
             target: LOG_TARGET,
-            "transaction_pool_get: from_block_id={}, to_block_id={}, transaction_id={}, updates={}",
+            "transaction_pool_get: from_block_id={}, to_block_id={}, transaction_id={}, updates={} [{:?}]",
             from_block_id,
             to_block_id,
             transaction_id,
-            updates.len()
+            updates.len(),
+            updates.values().map(|v| v.id).collect::<Vec<_>>(),
         );
 
         let rec = transaction_pool::table
@@ -1506,7 +1510,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         &self,
         stage: Option<TransactionPoolStage>,
         is_ready: Option<bool>,
-        has_foreign_data: Option<bool>,
+        confirmed_stage: Option<Option<TransactionPoolConfirmedStage>>,
     ) -> Result<usize, StorageError> {
         use crate::schema::transaction_pool;
 
@@ -1524,12 +1528,12 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             query = query.filter(transaction_pool::is_ready.eq(is_ready));
         }
 
-        match has_foreign_data {
-            Some(true) => {
-                query = query.filter(transaction_pool::remote_evidence.is_not_null());
+        match confirmed_stage {
+            Some(Some(stage)) => {
+                query = query.filter(transaction_pool::confirm_stage.eq(stage.to_string()));
             },
-            Some(false) => {
-                query = query.filter(transaction_pool::remote_evidence.is_null());
+            Some(None) => {
+                query = query.filter(transaction_pool::confirm_stage.is_null());
             },
             None => {},
         }
@@ -1893,42 +1897,32 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         Ok(substates)
     }
 
-    fn substate_locks_get_all_for_block(
+    fn substate_locks_get_locked_substates_for_transaction(
         &self,
-        block_id: BlockId,
-    ) -> Result<IndexMap<SubstateId, Vec<LockedSubstate>>, StorageError> {
-        use crate::schema::substate_locks;
+        transaction_id: &TransactionId,
+    ) -> Result<Vec<LockedSubstateValue>, StorageError> {
+        use crate::schema::{substate_locks, substates};
 
-        // TODO: we need to exclude locks from blocks that are not referenced by the given block_id chain. Up to the
-        // locked block we can use this query, but there may be unused locks from blocks that didn't make
-        // it into the chain. If we can ensure that those locks are removed e.g remove all locks with height < commit
-        // block, then we just have to exclude locks for the forked chain and load everything else.
-        // For now, we just fetch all block ids in the chain relevant to the given block, which will be slower and more
-        // memory intensive as the chain progresses.
-        let block_ids = self.get_block_ids_that_change_state_between(&BlockId::zero(), &block_id)?;
-
-        let lock_recs = substate_locks::table
-            .filter(substate_locks::block_id.eq_any(block_ids))
+        let recs = substate_locks::table
+            .left_join(
+                substates::table.on(substate_locks::substate_id
+                    .eq(substates::substate_id)
+                    .and(substate_locks::version.eq(substates::version))),
+            )
+            .filter(substate_locks::transaction_id.eq(serialize_hex(transaction_id)))
             .order_by(substate_locks::id.asc())
-            .get_results::<sql_models::SubstateLock>(self.connection())
+            .get_results::<(sql_models::SubstateLock, Option<sql_models::SubstateRecord>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substate_locks_get_all",
+                operation: "substate_locks_get_value_for_transaction",
                 source: e,
             })?;
 
-        let mut locks = IndexMap::<_, Vec<_>>::with_capacity(lock_recs.len());
-        for lock in lock_recs {
-            let id = SubstateId::from_str(&lock.substate_id).map_err(|e| SqliteStorageError::MalformedDbData {
-                operation: "substate_locks_get_all",
-                details: format!("'{}' is not a valid SubstateId: {}", lock.substate_id, e),
-            })?;
-            locks.entry(id).or_default().push(lock.try_into_substate_lock()?);
-        }
-
-        Ok(locks)
+        recs.into_iter()
+            .map(|(lock, maybe_substate)| lock.try_into_locked_substate_value(maybe_substate))
+            .collect()
     }
 
-    fn substate_locks_get_latest_for_substate(&self, substate_id: &SubstateId) -> Result<LockedSubstate, StorageError> {
+    fn substate_locks_get_latest_for_substate(&self, substate_id: &SubstateId) -> Result<SubstateLock, StorageError> {
         use crate::schema::substate_locks;
 
         // TODO: this may return an invalid lock if:
@@ -1977,7 +1971,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             let diff = PendingShardStateTreeDiff::try_from(diff)?;
             diffs
                 .entry(shard)
-                .or_insert_with(Vec::new)//PendingStateTreeDiff::default)
+                .or_insert_with(Vec::new) //PendingStateTreeDiff::default)
                 .push(diff);
         }
         // diffs
@@ -2093,6 +2087,40 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             })?;
 
         checkpoint.try_into()
+    }
+
+    fn foreign_substate_pledges_get_all_by_transaction_id(
+        &self,
+        transaction_id: &TransactionId,
+    ) -> Result<SubstatePledges, StorageError> {
+        use crate::schema::foreign_substate_pledges;
+
+        let recs = foreign_substate_pledges::table
+            .filter(foreign_substate_pledges::transaction_id.eq(serialize_hex(transaction_id)))
+            .get_results::<sql_models::ForeignSubstatePledge>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_substate_pledges_get",
+                source: e,
+            })?;
+
+        #[allow(clippy::mutable_key_type)]
+        let mut pledges = SubstatePledges::with_capacity(recs.len());
+        for pledge in recs {
+            let substate_id = parse_from_string(&pledge.substate_id)?;
+            let version = pledge.version as u32;
+            let id = VersionedSubstateId::new(substate_id, version);
+            let lock_type = parse_from_string(&pledge.lock_type)?;
+            let lock_intent = VersionedSubstateIdLockIntent::new(id, lock_type);
+            let substate_value = pledge.substate_value.as_deref().map(deserialize_json).transpose()?;
+            let pledge = SubstatePledge::try_create(lock_intent.clone(), substate_value).ok_or_else(|| {
+                StorageError::DataInconsistency {
+                    details: format!("Invalid input substate pledge for {lock_intent}"),
+                }
+            })?;
+            pledges.insert(pledge);
+        }
+
+        Ok(pledges)
     }
 }
 

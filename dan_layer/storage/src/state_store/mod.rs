@@ -4,6 +4,7 @@
 use std::{
     borrow::Borrow,
     collections::{HashMap, HashSet},
+    iter::Peekable,
     ops::{Deref, RangeInclusive},
 };
 
@@ -22,6 +23,7 @@ use crate::{
         Block,
         BlockDiff,
         BlockId,
+        BlockTransactionExecution,
         Decision,
         EpochCheckpoint,
         Evidence,
@@ -35,16 +37,17 @@ use crate::{
         LastVoted,
         LeafBlock,
         LockedBlock,
-        LockedSubstate,
+        LockedSubstateValue,
         PendingShardStateTreeDiff,
         QcId,
         QuorumCertificate,
         StateTransition,
         StateTransitionId,
         SubstateChange,
+        SubstateLock,
+        SubstatePledges,
         SubstateRecord,
-        TransactionAtom,
-        TransactionExecution,
+        TransactionPoolConfirmedStage,
         TransactionPoolRecord,
         TransactionPoolStage,
         TransactionPoolStatusUpdate,
@@ -129,13 +132,13 @@ pub trait StateStoreReadTransaction: Sized {
         &self,
         tx_id: &TransactionId,
         block: &BlockId,
-    ) -> Result<TransactionExecution, StorageError>;
+    ) -> Result<BlockTransactionExecution, StorageError>;
 
     fn transaction_executions_get_pending_for_block(
         &self,
         tx_id: &TransactionId,
         from_block_id: &BlockId,
-    ) -> Result<TransactionExecution, StorageError>;
+    ) -> Result<BlockTransactionExecution, StorageError>;
     fn blocks_get(&self, block_id: &BlockId) -> Result<Block, StorageError>;
     fn blocks_get_last_n_in_epoch(&self, n: usize, epoch: Epoch) -> Result<Vec<Block>, StorageError>;
     /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
@@ -211,7 +214,7 @@ pub trait StateStoreReadTransaction: Sized {
         &self,
         stage: Option<TransactionPoolStage>,
         is_ready: Option<bool>,
-        has_foreign_data: Option<bool>,
+        confirmed_stage: Option<Option<TransactionPoolConfirmedStage>>,
     ) -> Result<usize, StorageError>;
 
     fn transactions_fetch_involved_shards(
@@ -228,7 +231,7 @@ pub trait StateStoreReadTransaction: Sized {
     fn votes_count_for_block(&self, block_id: &BlockId) -> Result<u64, StorageError>;
     fn votes_get_for_block(&self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError>;
     //---------------------------------- Substates --------------------------------------------//
-    fn substates_get(&self, substate_id: &SubstateAddress) -> Result<SubstateRecord, StorageError>;
+    fn substates_get(&self, address: &SubstateAddress) -> Result<SubstateRecord, StorageError>;
     fn substates_get_any(
         &self,
         substate_ids: &HashSet<SubstateRequirement>,
@@ -266,12 +269,12 @@ pub trait StateStoreReadTransaction: Sized {
         transaction_id: &TransactionId,
     ) -> Result<Vec<SubstateRecord>, StorageError>;
 
-    fn substate_locks_get_all_for_block(
+    fn substate_locks_get_locked_substates_for_transaction(
         &self,
-        block_id: BlockId,
-    ) -> Result<IndexMap<SubstateId, Vec<LockedSubstate>>, StorageError>;
+        transaction_id: &TransactionId,
+    ) -> Result<Vec<LockedSubstateValue>, StorageError>;
 
-    fn substate_locks_get_latest_for_substate(&self, substate_id: &SubstateId) -> Result<LockedSubstate, StorageError>;
+    fn substate_locks_get_latest_for_substate(&self, substate_id: &SubstateId) -> Result<SubstateLock, StorageError>;
 
     fn pending_state_tree_diffs_get_all_up_to_commit_block(
         &self,
@@ -292,13 +295,19 @@ pub trait StateStoreReadTransaction: Sized {
 
     // -------------------------------- Epoch checkpoint -------------------------------- //
     fn epoch_checkpoint_get(&self, epoch: Epoch) -> Result<EpochCheckpoint, StorageError>;
+
+    // -------------------------------- Foreign Substate Pledges -------------------------------- //
+    fn foreign_substate_pledges_get_all_by_transaction_id(
+        &self,
+        transaction_id: &TransactionId,
+    ) -> Result<SubstatePledges, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
     type Addr: NodeAddressable;
 
-    fn commit(self) -> Result<(), StorageError>;
-    fn rollback(self) -> Result<(), StorageError>;
+    fn commit(&mut self) -> Result<(), StorageError>;
+    fn rollback(&mut self) -> Result<(), StorageError>;
 
     // -------------------------------- Block -------------------------------- //
     fn blocks_insert(&mut self, block: &Block) -> Result<(), StorageError>;
@@ -306,7 +315,7 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         block_id: &BlockId,
         is_committed: Option<bool>,
-        is_processed: Option<bool>,
+        is_justified: Option<bool>,
     ) -> Result<(), StorageError>;
 
     // -------------------------------- BlockDiff -------------------------------- //
@@ -346,7 +355,7 @@ pub trait StateStoreWriteTransaction {
         transaction: I,
     ) -> Result<(), StorageError>;
 
-    fn transactions_finalize_all<'a, I: IntoIterator<Item = &'a TransactionAtom>>(
+    fn transactions_finalize_all<'a, I: IntoIterator<Item = &'a TransactionPoolRecord>>(
         &mut self,
         block_id: BlockId,
         transaction: I,
@@ -354,12 +363,16 @@ pub trait StateStoreWriteTransaction {
     // -------------------------------- Transaction Executions -------------------------------- //
     fn transaction_executions_insert_or_ignore(
         &mut self,
-        transaction_execution: &TransactionExecution,
-    ) -> Result<(), StorageError>;
+        transaction_execution: &BlockTransactionExecution,
+    ) -> Result<bool, StorageError>;
 
     // -------------------------------- Transaction Pool -------------------------------- //
-    fn transaction_pool_insert_new(&mut self, tx_id: TransactionId, decision: Decision) -> Result<(), StorageError>;
-    fn transaction_pool_set_atom(&mut self, transaction: TransactionAtom) -> Result<(), StorageError>;
+    fn transaction_pool_insert_new(
+        &mut self,
+        tx_id: TransactionId,
+        decision: Decision,
+        is_ready: bool,
+    ) -> Result<(), StorageError>;
     fn transaction_pool_add_pending_update(
         &mut self,
         pool_update: &TransactionPoolStatusUpdate,
@@ -376,8 +389,8 @@ pub trait StateStoreWriteTransaction {
     fn transaction_pool_remove_all<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         transaction_ids: I,
-    ) -> Result<Vec<TransactionAtom>, StorageError>;
-    fn transaction_pool_set_all_transitions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+    ) -> Result<Vec<TransactionPoolRecord>, StorageError>;
+    fn transaction_pool_confirm_all_transitions<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         locked_block: &LockedBlock,
         new_locked_block: &LockedBlock,
@@ -405,15 +418,15 @@ pub trait StateStoreWriteTransaction {
     fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;
 
     //---------------------------------- Substates --------------------------------------------//
-    fn substate_locks_insert_all<I: IntoIterator<Item = (SubstateId, Vec<LockedSubstate>)>>(
+    fn substate_locks_insert_all<I: IntoIterator<Item = (SubstateId, Vec<SubstateLock>)>>(
         &mut self,
         block_id: BlockId,
         locks: I,
     ) -> Result<(), StorageError>;
 
-    fn substate_locks_remove_many_for_transactions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+    fn substate_locks_remove_many_for_transactions<'a, I: Iterator<Item = &'a TransactionId>>(
         &mut self,
-        transaction_ids: I,
+        transaction_ids: Peekable<I>,
     ) -> Result<(), StorageError>;
 
     fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
@@ -425,6 +438,21 @@ pub trait StateStoreWriteTransaction {
         destroyed_block_height: NodeHeight,
         destroyed_transaction_id: &TransactionId,
         destroyed_qc_id: &QcId,
+    ) -> Result<(), StorageError>;
+
+    // -------------------------------- Foreign pledges -------------------------------- //
+
+    #[allow(clippy::mutable_key_type)]
+    fn foreign_substate_pledges_insert(
+        &mut self,
+        transaction_id: TransactionId,
+        shard_group: ShardGroup,
+        pledges: SubstatePledges,
+    ) -> Result<(), StorageError>;
+
+    fn foreign_substate_pledges_remove_many<'a, I: IntoIterator<Item = &'a TransactionId>>(
+        &mut self,
+        transaction_ids: I,
     ) -> Result<(), StorageError>;
 
     // -------------------------------- Pending State Tree Diffs -------------------------------- //

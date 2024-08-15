@@ -29,6 +29,7 @@ pub struct TransactionPoolRecord {
     //       and should not given to TransactionPoolRecord::load.
     pub pending_stage: Option<String>,
     pub is_ready: bool,
+    pub confirm_stage: Option<String>,
     pub updated_at: PrimitiveDateTime,
     pub created_at: PrimitiveDateTime,
 }

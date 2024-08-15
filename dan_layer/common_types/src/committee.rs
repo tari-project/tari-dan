@@ -215,6 +215,7 @@ impl CommitteeInfo {
         self.shard_group.to_substate_address_range(self.num_shards)
     }
 
+    // TODO: change these to take in a SubstateId
     pub fn includes_substate_address(&self, substate_address: &SubstateAddress) -> bool {
         let s = substate_address.to_shard(self.num_shards);
         self.shard_group.contains(&s)
@@ -229,7 +230,7 @@ impl CommitteeInfo {
             .all(|substate_address| self.includes_substate_address(substate_address.borrow()))
     }
 
-    pub fn includes_any_shard<I: IntoIterator<Item = B>, B: Borrow<SubstateAddress>>(
+    pub fn includes_any_address<I: IntoIterator<Item = B>, B: Borrow<SubstateAddress>>(
         &self,
         substate_addresses: I,
     ) -> bool {
@@ -246,15 +247,6 @@ impl CommitteeInfo {
         items
             .into_iter()
             .filter(|substate_address| self.includes_substate_address(substate_address.borrow()))
-    }
-
-    /// Calculates the number of distinct shards for the given addresses
-    pub fn count_distinct_shards<B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(&self, addresses: I) -> usize {
-        addresses
-            .into_iter()
-            .map(|addr| addr.borrow().to_shard(self.num_shards))
-            .collect::<std::collections::HashSet<_>>()
-            .len()
     }
 
     /// Calculates the number of distinct shard groups for the given addresses

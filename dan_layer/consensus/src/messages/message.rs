@@ -6,7 +6,7 @@ use std::fmt::Display;
 use serde::Serialize;
 use tari_dan_common_types::Epoch;
 
-use super::{MissingTransactionsResponse, NewViewMessage, ProposalMessage, VoteMessage};
+use super::{ForeignProposalMessage, MissingTransactionsResponse, NewViewMessage, ProposalMessage, VoteMessage};
 use crate::messages::{MissingTransactionsRequest, SyncRequestMessage, SyncResponseMessage};
 
 // Serialize is implemented for the message logger
@@ -14,7 +14,7 @@ use crate::messages::{MissingTransactionsRequest, SyncRequestMessage, SyncRespon
 pub enum HotstuffMessage {
     NewView(NewViewMessage),
     Proposal(ProposalMessage),
-    ForeignProposal(ProposalMessage),
+    ForeignProposal(ForeignProposalMessage),
     Vote(VoteMessage),
     MissingTransactionsRequest(MissingTransactionsRequest),
     MissingTransactionsResponse(MissingTransactionsResponse),

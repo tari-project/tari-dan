@@ -2,10 +2,8 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_dan_common_types::{optional::IsNotFoundError, SubstateAddress};
-use tari_dan_storage::{consensus_models::SubstateLockFlag, StorageError};
+use tari_dan_storage::{consensus_models::SubstateLockType, StorageError};
 use tari_transaction::VersionedSubstateId;
-
-use crate::hotstuff::HotStuffError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubstateStoreError {
@@ -23,19 +21,19 @@ pub enum SubstateStoreError {
     )]
     LockConflict {
         substate_id: VersionedSubstateId,
-        existing_lock: SubstateLockFlag,
-        requested_lock: SubstateLockFlag,
+        existing_lock: SubstateLockType,
+        requested_lock: SubstateLockType,
     },
     #[error("Substate {substate_id} requires lock {required_lock} but is currently locked with {existing_lock}")]
     RequiresLock {
         substate_id: VersionedSubstateId,
-        existing_lock: SubstateLockFlag,
-        required_lock: SubstateLockFlag,
+        existing_lock: SubstateLockType,
+        required_lock: SubstateLockType,
     },
     #[error("Substate {substate_id} is not {required_lock} locked")]
     NotLocked {
         substate_id: VersionedSubstateId,
-        required_lock: SubstateLockFlag,
+        required_lock: SubstateLockType,
     },
 
     #[error(transparent)]
@@ -55,10 +53,10 @@ impl IsNotFoundError for SubstateStoreError {
 }
 
 impl SubstateStoreError {
-    pub fn ok_or_fatal_error(self) -> Result<Self, HotStuffError> {
+    pub fn or_fatal_error(self) -> Result<Self, Self> {
         match self {
-            SubstateStoreError::StoreError(err) => Err(err.into()),
-            SubstateStoreError::StateTreeError(err) => Err(err.into()),
+            err @ SubstateStoreError::StoreError(_) => Err(err),
+            err @ SubstateStoreError::StateTreeError(_) => Err(err),
             other => Ok(other),
         }
     }

@@ -7,9 +7,9 @@ use rand::{distributions::Alphanumeric, rngs::OsRng, Rng};
 use tari_common_types::types::PrivateKey;
 use tari_dan_storage::consensus_models::{
     BlockId,
+    BlockTransactionExecution,
     Decision,
     ExecutedTransaction,
-    TransactionExecution,
     TransactionRecord,
     VersionedSubstateIdLockIntent,
 };
@@ -28,11 +28,11 @@ pub fn build_transaction_from(
     decision: Decision,
     fee: u64,
     resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
-    resulting_outputs: Vec<VersionedSubstateId>,
+    resulting_outputs: Vec<VersionedSubstateIdLockIntent>,
 ) -> TransactionRecord {
     let mut tx = TransactionRecord::new(tx);
     if decision.is_abort() {
-        tx.set_current_decision_to_abort("Test aborted");
+        tx.set_abort_reason(RejectReason::ExecutionFailure("Test aborted".to_string()));
     }
 
     let execution = create_execution_result_for_transaction(
@@ -45,10 +45,9 @@ pub fn build_transaction_from(
         resulting_outputs.clone(),
     );
 
-    tx.execution_result = Some(execution.result);
-    tx.resulting_outputs = execution.resulting_outputs;
-    tx.execution_time = Some(execution.execution_time);
-    tx.resolved_inputs = Some(execution.resolved_inputs);
+    tx.execution_result = Some(execution.execution.result);
+    tx.resulting_outputs = Some(execution.execution.resulting_outputs);
+    tx.resolved_inputs = Some(execution.execution.resolved_inputs);
     tx
 }
 
@@ -58,32 +57,39 @@ pub fn create_execution_result_for_transaction(
     decision: Decision,
     fee: u64,
     resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
-    resulting_outputs: Vec<VersionedSubstateId>,
-) -> TransactionExecution {
+    resulting_outputs: Vec<VersionedSubstateIdLockIntent>,
+) -> BlockTransactionExecution {
     let result = if decision.is_commit() {
         let mut diff = SubstateDiff::new();
         for output in &resulting_outputs {
             let s = (0..100).map(|_| OsRng.sample(Alphanumeric) as char).collect::<String>();
             let random_state = tari_bor::to_value(&s).unwrap();
             diff.up(
-                output.substate_id.clone(),
-                Substate::new(output.version, ComponentHeader {
+                output.versioned_substate_id().substate_id.clone(),
+                Substate::new(output.versioned_substate_id().version, ComponentHeader {
                     template_address: Default::default(),
                     module_name: "Test".to_string(),
                     owner_key: Default::default(),
                     owner_rule: Default::default(),
                     access_rules: Default::default(),
-                    entity_id: output.substate_id.as_component_address().unwrap().entity_id(),
+                    entity_id: output
+                        .versioned_substate_id()
+                        .substate_id
+                        .as_component_address()
+                        .unwrap()
+                        .entity_id(),
                     body: ComponentBody { state: random_state },
                 }),
             )
         }
         TransactionResult::Accept(diff)
     } else {
-        TransactionResult::Reject(RejectReason::ExecutionFailure("Expected failure".to_string()))
+        TransactionResult::Reject(RejectReason::ExecutionFailure(
+            "Transaction was set to ABORT in test".to_string(),
+        ))
     };
 
-    TransactionExecution::new(
+    BlockTransactionExecution::new(
         block_id,
         tx_id,
         ExecuteResult {
@@ -92,37 +98,50 @@ pub fn create_execution_result_for_transaction(
                 total_fees_paid: fee.try_into().unwrap(),
                 cost_breakdown: vec![],
             }),
+            execution_time: Duration::from_secs(0),
         },
         resolved_inputs,
         resulting_outputs,
-        Duration::from_secs(0),
+        None,
     )
 }
 
-pub fn build_transaction(
-    decision: Decision,
-    fee: u64,
-    total_num_outputs: usize,
-    num_committees: u32,
-) -> TransactionRecord {
-    let k = PrivateKey::default();
-    let tx = Transaction::builder().sign(&k).build();
-
+pub fn build_random_outputs(total_num_outputs: usize, num_committees: u32) -> Vec<VersionedSubstateIdLockIntent> {
     // We create these outputs so that the test VNs dont have to have any UP substates
     // Equal potion of shards to each committee
-    let outputs = (0..num_committees)
+    (0..num_committees)
         .flat_map(|group_no| {
-            iter::repeat_with(move || {
-                random_substate_in_shard_group(
-                    committee_number_to_shard_group(TEST_NUM_PRESHARDS, group_no, num_committees),
-                    TEST_NUM_PRESHARDS,
-                )
-            })
-            .take(total_num_outputs.div_ceil(num_committees as usize))
+            random_substates_ids_for_committee_generator(group_no, num_committees).take(total_num_outputs)
         })
-        .collect::<Vec<_>>();
+        .map(VersionedSubstateIdLockIntent::output)
+        .collect::<Vec<_>>()
+}
 
-    build_transaction_from(tx, decision, fee, vec![], outputs)
+pub fn random_substates_ids_for_committee_generator(
+    committee_no: u32,
+    num_committees: u32,
+) -> impl Iterator<Item = VersionedSubstateId> {
+    iter::repeat_with(move || {
+        random_substate_in_shard_group(
+            committee_number_to_shard_group(TEST_NUM_PRESHARDS, committee_no, num_committees),
+            TEST_NUM_PRESHARDS,
+        )
+    })
+}
+
+pub fn build_transaction_with_inputs_and_outputs(
+    decision: Decision,
+    fee: u64,
+    inputs: Vec<VersionedSubstateIdLockIntent>,
+    outputs: Vec<VersionedSubstateIdLockIntent>,
+) -> TransactionRecord {
+    let k = PrivateKey::default();
+    let tx = Transaction::builder()
+        .with_inputs(inputs.iter().map(|i| i.versioned_substate_id().clone().into()))
+        .sign(&k)
+        .build();
+
+    build_transaction_from(tx, decision, fee, inputs, outputs)
 }
 
 pub fn change_decision(tx: ExecutedTransaction, new_decision: Decision) -> TransactionRecord {

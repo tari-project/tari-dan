@@ -26,7 +26,7 @@ create table blocks
     commands                text      not NULL,
     total_leader_fee        bigint    not NULL,
     is_committed            boolean   not NULL default '0',
-    is_processed            boolean   not NULL,
+    is_justified            boolean   not NULL,
     is_dummy                boolean   not NULL,
     foreign_indexes         text      not NULL,
     signature               text      NULL,
@@ -129,6 +129,22 @@ create unique index substates_uniq_substate_id_and_version on substates (substat
 create index substates_idx_created_by_transaction on substates (created_by_transaction);
 create index substates_idx_destroyed_by_transaction on substates (destroyed_by_transaction) where destroyed_by_transaction is not null;
 
+create table foreign_substate_pledges
+(
+    id             integer   NOT NULL primary key AUTOINCREMENT,
+    transaction_id text      NOT NULL,
+    substate_id    text      NOT NULL,
+    version        int       NOT NULL,
+    substate_value text      NULL,
+    shard_group    int       NOT NULL,
+    lock_type      text      NOT NULL,
+    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
+    CHECK (lock_type IN ('Write', 'Read', 'Output'))
+);
+
+create index foreign_substate_pledges_transaction_id_idx on foreign_substate_pledges (transaction_id);
+
 create table substate_locks
 (
     id             integer   NOT NULL primary key AUTOINCREMENT,
@@ -137,7 +153,7 @@ create table substate_locks
     substate_id    text      NOT NULL,
     version        int       NOT NULL,
     -- Write, Read or Output
-    lock           text      NOT NULL DEFAULT '0',
+    lock           text      NOT NULL,
     is_local_only  boolean   NOT NULL DEFAULT '0',
     created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
@@ -239,6 +255,7 @@ create table transaction_executions
     resulting_outputs text      NOT NULL,
     result            text      NOT NULL,
     execution_time_ms bigint    NOT NULL,
+    abort_reason      text      NULL,
     created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
@@ -260,6 +277,7 @@ create table transaction_pool
     stage               text      not null,
     pending_stage       text      null,
     is_ready            boolean   not null,
+    confirm_stage       text      null,
     updated_at          timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at          timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
@@ -419,6 +437,7 @@ CREATE TABLE transaction_pool_history
     local_decision      text      null,
     remote_decision     text      null,
     evidence            text      null,
+    new_evidence        text      null,
     transaction_fee     bigint    null,
     leader_fee          bigint    null,
     global_exhaust_burn bigint    null,
@@ -426,6 +445,8 @@ CREATE TABLE transaction_pool_history
     new_stage           text      not null,
     is_ready            boolean   not null,
     new_is_ready        boolean   not null,
+    confirm_stage       text      null,
+    new_confirm_stage   text      null,
     updated_at          timestamp NOT NULL,
     created_at          timestamp NOT NULL,
     change_time         DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))
@@ -442,6 +463,7 @@ BEGIN
                                           local_decision,
                                           remote_decision,
                                           evidence,
+                                          new_evidence,
                                           transaction_fee,
                                           leader_fee,
                                           global_exhaust_burn,
@@ -449,6 +471,8 @@ BEGIN
                                           new_stage,
                                           is_ready,
                                           new_is_ready,
+                                          confirm_stage,
+                                          new_confirm_stage,
                                           updated_at,
                                           created_at)
     VALUES (OLD.id,
@@ -457,6 +481,7 @@ BEGIN
             OLD.local_decision,
             OLD.remote_decision,
             OLD.evidence,
+            NEW.evidence,
             OLD.transaction_fee,
             OLD.leader_fee,
             OLD.global_exhaust_burn,
@@ -464,6 +489,8 @@ BEGIN
             NEW.stage,
             OLD.is_ready,
             NEW.is_ready,
+            OLD.confirm_stage,
+            NEW.confirm_stage,
             OLD.updated_at,
             OLD.created_at);
 END;

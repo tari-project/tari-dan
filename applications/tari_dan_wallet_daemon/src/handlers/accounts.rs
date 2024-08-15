@@ -947,11 +947,12 @@ pub async fn handle_transfer(
             .transaction_service()
             .submit_dry_run_transaction(transaction, required_inputs)
             .await?;
+        let finalize = execute_result.finalize;
         return Ok(AccountsTransferResponse {
             transaction_id,
-            fee: execute_result.fee_receipt.total_fees_paid,
-            fee_refunded: execute_result.fee_receipt.total_fee_payment - execute_result.fee_receipt.total_fees_paid,
-            result: execute_result,
+            fee: finalize.fee_receipt.total_fees_paid,
+            fee_refunded: finalize.fee_receipt.total_fee_payment - finalize.fee_receipt.total_fees_paid,
+            result: finalize,
         });
     }
 
@@ -1022,12 +1023,13 @@ pub async fn handle_confidential_transfer(
 
         if req.dry_run {
             let transaction_id = *transfer.transaction.id();
-            let finalize = transaction_service
+            let exec_result = transaction_service
                 .submit_dry_run_transaction(
                     transfer.transaction,
                     transfer.inputs.into_iter().map(Into::into).collect(),
                 )
                 .await?;
+            let finalize = exec_result.finalize;
             return Ok(ConfidentialTransferResponse {
                 transaction_id,
                 fee: finalize.fee_receipt.total_fees_paid,

@@ -39,4 +39,5 @@ rand = { workspace = true }
 futures = { workspace = true }
 fern = { workspace = true }
 humantime = { workspace = true }
+indexmap = { workspace = true }
 itertools = { workspace = true }

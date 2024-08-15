@@ -39,13 +39,15 @@ function AddAccount({ open, setOpen }: { open: boolean; setOpen: React.Dispatch<
   });
   const { mutateAsync: mutateAddAccount } = useAccountsCreate(accountFormState.accountName, null, null, false);
   const theme = useTheme();
+  const [isBusy, setIsBusy] = useState(false);
 
   const handleClose = () => {
     setOpen(false);
   };
 
-  const onSubmitAddAccount = () => {
-    mutateAddAccount(undefined, {
+  const onSubmitAddAccount = async () => {
+    setIsBusy(true);
+    await mutateAddAccount(undefined, {
       onSettled: () => {
         setAccountFormState({
           accountName: "",
@@ -54,6 +56,7 @@ function AddAccount({ open, setOpen }: { open: boolean; setOpen: React.Dispatch<
         queryClient.invalidateQueries(["accounts"]);
       },
     });
+    setIsBusy(false);
   };
 
   const onAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,7 +91,7 @@ function AddAccount({ open, setOpen }: { open: boolean; setOpen: React.Dispatch<
             <Button variant="outlined" onClick={handleClose}>
               Cancel
             </Button>
-            <Button variant="contained" type="submit">
+            <Button variant="contained" type="submit" disabled={isBusy}>
               Add Account
             </Button>
           </Box>

@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use log::*;
 use tari_bor::to_value;
@@ -100,6 +100,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
     }
 
     pub fn execute(self, transaction: Transaction) -> Result<ExecuteResult, TransactionError> {
+        let timer = Instant::now();
         let entity_id_provider = EntityIdProvider::new(transaction.hash(), 1000);
         let Self {
             template_provider,
@@ -156,7 +157,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     let mut finalize =
                         FinalizeResult::new_rejected(transaction_hash, RejectReason::ExecutionFailure(err.to_string()));
                     finalize.execution_results = execution_results;
-                    return Ok(ExecuteResult { finalize });
+                    return Ok(ExecuteResult {
+                        finalize,
+                        execution_time: timer.elapsed(),
+                    });
                 }
                 execution_results
             },
@@ -166,6 +170,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                         transaction_hash,
                         RejectReason::ExecutionFailure(err.to_string()),
                     ),
+                    execution_time: timer.elapsed(),
                 });
             },
         };
@@ -180,7 +185,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 } else {
                     finalize.execution_results = fee_exec_result;
                 }
-                Ok(ExecuteResult { finalize })
+                Ok(ExecuteResult {
+                    finalize,
+                    execution_time: timer.elapsed(),
+                })
             },
             // This can happen e.g if you have dangling buckets after running the instructions
             Err(err) => {
@@ -198,7 +206,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                         .expect("The fee transaction should be there"),
                     RejectReason::ExecutionFailure(err.to_string()),
                 );
-                Ok(ExecuteResult { finalize })
+                Ok(ExecuteResult {
+                    finalize,
+                    execution_time: timer.elapsed(),
+                })
             },
         }
     }

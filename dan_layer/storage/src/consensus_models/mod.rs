@@ -3,6 +3,7 @@
 
 mod block;
 mod block_diff;
+mod block_pledges;
 mod command;
 mod epoch_checkpoint;
 mod executed_transaction;
@@ -14,6 +15,7 @@ mod last_executed;
 mod last_proposed;
 mod last_sent_vote;
 mod last_voted;
+mod leader_fee;
 mod leaf_block;
 mod locked_block;
 mod quorum;
@@ -34,6 +36,7 @@ mod vote_signature;
 
 pub use block::*;
 pub use block_diff::*;
+pub use block_pledges::*;
 pub use command::*;
 pub use epoch_checkpoint::*;
 pub use executed_transaction::*;
@@ -45,6 +48,7 @@ pub use last_executed::*;
 pub use last_proposed::*;
 pub use last_sent_vote::*;
 pub use last_voted::*;
+pub use leader_fee::*;
 pub use leaf_block::*;
 pub use locked_block::*;
 pub use quorum::*;

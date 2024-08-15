@@ -65,7 +65,7 @@ import type {
 } from "@tari-project/typescript-bindings";
 
 
-const DEFAULT_ADDRESS = new URL("http://127.0.0.1:18200");
+const DEFAULT_ADDRESS = new URL(import.meta.env.VITE_JRPC_ADDRESS || import.meta.env.VITE_JSON_RPC_ADDRESS || "http://localhost:18200");
 
 export async function getClientAddress(): Promise<URL> {
   try {

@@ -8,6 +8,7 @@ use std::{
     fmt::Display,
     hash::Hash,
     iter,
+    iter::Peekable,
     ops::RangeInclusive,
     str::FromStr,
 };
@@ -19,7 +20,7 @@ use tari_engine_types::substate::{hash_substate, Substate, SubstateId, SubstateV
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 
 use crate::{
-    consensus_models::{BlockId, LockedSubstate, QcId, QuorumCertificate},
+    consensus_models::{BlockId, QcId, QuorumCertificate, SubstateLock},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -159,15 +160,19 @@ impl SubstateRecord {
 }
 
 impl SubstateRecord {
-    pub fn insert_all_locks<
-        TTx: StateStoreWriteTransaction,
-        I: IntoIterator<Item = (SubstateId, Vec<LockedSubstate>)>,
-    >(
+    pub fn lock_all<TTx: StateStoreWriteTransaction, I: IntoIterator<Item = (SubstateId, Vec<SubstateLock>)>>(
         tx: &mut TTx,
         block_id: BlockId,
         locks: I,
     ) -> Result<(), StorageError> {
         tx.substate_locks_insert_all(block_id, locks)
+    }
+
+    pub fn unlock_all<'a, TTx: StateStoreWriteTransaction, I: Iterator<Item = &'a TransactionId>>(
+        tx: &mut TTx,
+        transaction_ids: Peekable<I>,
+    ) -> Result<(), StorageError> {
+        tx.substate_locks_remove_many_for_transactions(transaction_ids)
     }
 
     pub fn create<TTx: StateStoreWriteTransaction>(self, tx: &mut TTx) -> Result<(), StorageError> {
@@ -202,9 +207,9 @@ impl SubstateRecord {
 
     pub fn get<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &TTx,
-        shard: &SubstateAddress,
+        address: &SubstateAddress,
     ) -> Result<SubstateRecord, StorageError> {
-        tx.substates_get(shard)
+        tx.substates_get(address)
     }
 
     pub fn substate_is_up<TTx: StateStoreReadTransaction + ?Sized>(
@@ -401,13 +406,13 @@ impl Display for SubstateUpdate {
     derive(ts_rs::TS),
     ts(export, export_to = "../../bindings/src/types/")
 )]
-pub enum SubstateLockFlag {
+pub enum SubstateLockType {
     Read,
     Write,
     Output,
 }
 
-impl SubstateLockFlag {
+impl SubstateLockType {
     pub fn is_write(&self) -> bool {
         matches!(self, Self::Write)
     }
@@ -421,7 +426,7 @@ impl SubstateLockFlag {
     }
 }
 
-impl fmt::Display for SubstateLockFlag {
+impl fmt::Display for SubstateLockType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Read => write!(f, "Read"),
@@ -431,7 +436,7 @@ impl fmt::Display for SubstateLockFlag {
     }
 }
 
-impl FromStr for SubstateLockFlag {
+impl FromStr for SubstateLockType {
     type Err = SubstateLockFlagParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

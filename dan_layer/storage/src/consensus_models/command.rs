@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
+    borrow::Borrow,
     cmp::Ordering,
     fmt::{Display, Formatter},
 };
@@ -9,13 +10,14 @@ use std::{
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::SubstateAddress;
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 
 use super::{
+    BlockId,
     ExecutedTransaction,
     ForeignProposal,
     LeaderFee,
-    SubstateLockFlag,
+    SubstateLockType,
     TransactionRecord,
     VersionedSubstateIdLockIntent,
 };
@@ -42,35 +44,35 @@ impl Evidence {
         }
     }
 
-    pub fn from_inputs_and_outputs(
-        resolved_inputs: &[VersionedSubstateIdLockIntent],
-        resulting_outputs: &[VersionedSubstateId],
+    pub fn from_inputs_and_outputs<
+        I: IntoIterator<Item = BI>,
+        BI: Borrow<VersionedSubstateIdLockIntent>,
+        O: IntoIterator<Item = BO>,
+        BO: Borrow<VersionedSubstateIdLockIntent>,
+    >(
+        resolved_inputs: I,
+        resulting_outputs: O,
     ) -> Self {
         resolved_inputs
-            .iter()
+            .into_iter()
             .map(|input| {
-                (input.to_substate_address(), ShardEvidence {
+                let i = input.borrow();
+                (i.to_substate_address(), ShardEvidence {
                     qc_ids: IndexSet::new(),
-                    lock: input.lock_flag(),
+                    lock: i.lock_type(),
                 })
             })
-            .chain(
-                resulting_outputs
-                .iter()
-                // Exclude transaction receipt from evidence since all involved shards will commit it
-                .filter(|output| !output.substate_id.is_transaction_receipt())
-                .map(|output| output.to_substate_address())
-                .map(|output| {
-                    (output, ShardEvidence {
-                        qc_ids: IndexSet::new(),
-                        lock: SubstateLockFlag::Write,
-                    })
-                }),
-            )
+            .chain(resulting_outputs.into_iter().map(|output| {
+                let o = output.borrow();
+                (o.to_substate_address(), ShardEvidence {
+                    qc_ids: IndexSet::new(),
+                    lock: o.lock_type(),
+                })
+            }))
             .collect()
     }
 
-    pub fn all_shards_justified(&self) -> bool {
+    pub fn all_addresses_justified(&self) -> bool {
         // TODO: we should check that remote has one QC and local has three
         self.evidence.values().all(|qc_ids| !qc_ids.is_empty())
     }
@@ -102,20 +104,49 @@ impl Evidence {
         self.evidence.iter_mut()
     }
 
+    /// Returns an iterator over the substate addresses in this Evidence object.
+    /// NOTE: not all substates involved in the final transaction are necessarily included in this Evidence object until
+    /// the transaction has reached AllAccepted state.
     pub fn substate_addresses_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
         self.evidence.keys()
+    }
+
+    pub fn contains(&self, substate_address: &SubstateAddress) -> bool {
+        self.evidence.contains_key(substate_address)
     }
 
     pub fn qc_ids_iter(&self) -> impl Iterator<Item = &QcId> + '_ {
         self.evidence.values().flat_map(|e| e.qc_ids.iter())
     }
 
+    /// Add or update substate addresses and locks into Evidence
+    pub fn update<I: IntoIterator<Item = (SubstateAddress, SubstateLockType)>>(&mut self, extend: I) -> &mut Self {
+        for (substate_address, lock_type) in extend {
+            self.evidence
+                .entry(substate_address)
+                .and_modify(|evidence| evidence.lock = lock_type)
+                .or_insert_with(|| ShardEvidence {
+                    qc_ids: IndexSet::new(),
+                    lock: lock_type,
+                });
+        }
+        self
+    }
+
+    /// Merges the other Evidence into this Evidence. If a substate address is present in both, the lock type is
+    /// updated to the lock type and the QCs are appended to this instance.
     pub fn merge(&mut self, other: Evidence) -> &mut Self {
         for (substate_address, shard_evidence) in other.evidence {
-            let entry = self.evidence.entry(substate_address).or_insert_with(|| ShardEvidence {
-                qc_ids: IndexSet::new(),
-                lock: shard_evidence.lock,
-            });
+            let entry = self
+                .evidence
+                .entry(substate_address)
+                .and_modify(|evidence| {
+                    evidence.lock = shard_evidence.lock;
+                })
+                .or_insert_with(|| ShardEvidence {
+                    qc_ids: IndexSet::new(),
+                    lock: shard_evidence.lock,
+                });
             entry.qc_ids.extend(shard_evidence.qc_ids);
         }
         self
@@ -130,6 +161,19 @@ impl FromIterator<(SubstateAddress, ShardEvidence)> for Evidence {
     }
 }
 
+impl Display for Evidence {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{")?;
+        for (i, (substate_address, shard_evidence)) in self.evidence.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}: {}", substate_address, shard_evidence)?;
+        }
+        write!(f, "}}")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "ts",
@@ -139,11 +183,11 @@ impl FromIterator<(SubstateAddress, ShardEvidence)> for Evidence {
 pub struct ShardEvidence {
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub qc_ids: IndexSet<QcId>,
-    pub lock: SubstateLockFlag,
+    pub lock: SubstateLockType,
 }
 
 impl ShardEvidence {
-    pub fn new(qc_ids: IndexSet<QcId>, lock: SubstateLockFlag) -> Self {
+    pub fn new(qc_ids: IndexSet<QcId>, lock: SubstateLockType) -> Self {
         Self { qc_ids, lock }
     }
 
@@ -157,6 +201,12 @@ impl ShardEvidence {
 
     pub fn insert(&mut self, qc_id: QcId) {
         self.qc_ids.insert(qc_id);
+    }
+}
+
+impl Display for ShardEvidence {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {} QC(s))", self.lock, self.qc_ids.len())
     }
 }
 
@@ -205,15 +255,14 @@ impl Display for TransactionAtom {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "TransactionAtom({}, {}, {}, {})",
-            self.id,
-            self.decision,
-            self.transaction_fee,
-            self.leader_fee
-                .as_ref()
-                .map(|f| f.to_string())
-                .unwrap_or_else(|| "--".to_string())
-        )
+            "TransactionAtom({}, {}, {}, ",
+            self.id, self.decision, self.transaction_fee,
+        )?;
+        match self.leader_fee {
+            Some(ref leader_fee) => write!(f, "{}", leader_fee)?,
+            None => write!(f, "--")?,
+        }
+        write!(f, ")")
     }
 }
 
@@ -224,19 +273,33 @@ impl Display for TransactionAtom {
     ts(export, export_to = "../../bindings/src/types/")
 )]
 pub enum Command {
-    /// Command to prepare a transaction.
-    Prepare(TransactionAtom),
-    LocalPrepared(TransactionAtom),
-    Accept(TransactionAtom),
-    ForeignProposal(ForeignProposal),
+    // Transaction Commands
+    /// Request validators to prepare a local-only transaction
     LocalOnly(TransactionAtom),
+    /// Request validators to prepare a transaction.
+    Prepare(TransactionAtom),
+    /// Request validators to agree that the transaction was prepared by all local validators.
+    LocalPrepare(TransactionAtom),
+    /// Request validators to agree that all involved shard groups prepared the transaction.
+    AllPrepare(TransactionAtom),
+    /// Request validators to agree that one or more involved shard groups did not prepare the transaction.
+    SomePrepare(TransactionAtom),
+    /// Request validators to accept (i.e. accept COMMIT/ABORT decision) a transaction. All foreign inputs are received
+    /// and the transaction is executed with the same decision.
+    LocalAccept(TransactionAtom),
+    /// Request validators to agree that all involved shard groups agreed to ACCEPT the transaction.
+    AllAccept(TransactionAtom),
+    /// Request validators to agree that one or more involved shard groups did not agreed to ACCEPT the transaction.
+    SomeAccept(TransactionAtom),
+    // Validator node commands
+    ForeignProposal(ForeignProposal),
     EndEpoch,
 }
 
-#[derive(PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub enum CommandId {
     TransactionId(TransactionId),
-    ForeignProposal(ForeignProposal),
+    ForeignProposal(BlockId),
     EndEpoch,
 }
 
@@ -244,7 +307,7 @@ impl Display for CommandId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             CommandId::TransactionId(id) => write!(f, "Transaction({})", id),
-            CommandId::ForeignProposal(fp) => write!(f, "ForeignProposal({})", fp.block_id),
+            CommandId::ForeignProposal(block_id) => write!(f, "ForeignProposal({})", block_id),
             CommandId::EndEpoch => write!(f, "EndEpoch"),
         }
     }
@@ -254,21 +317,29 @@ impl Command {
     pub fn transaction(&self) -> Option<&TransactionAtom> {
         match self {
             Command::Prepare(tx) => Some(tx),
-            Command::LocalPrepared(tx) => Some(tx),
-            Command::Accept(tx) => Some(tx),
+            Command::LocalPrepare(tx) => Some(tx),
+            Command::AllPrepare(tx) => Some(tx),
+            Command::SomePrepare(tx) => Some(tx),
+            Command::LocalAccept(tx) => Some(tx),
+            Command::AllAccept(tx) => Some(tx),
+            Command::SomeAccept(tx) => Some(tx),
             Command::LocalOnly(tx) => Some(tx),
             Command::ForeignProposal(_) => None,
             Command::EndEpoch => None,
         }
     }
 
-    pub fn id(&self) -> CommandId {
+    fn id(&self) -> CommandId {
         match self {
-            Command::Prepare(tx) => CommandId::TransactionId(tx.id),
-            Command::LocalPrepared(tx) => CommandId::TransactionId(tx.id),
-            Command::Accept(tx) => CommandId::TransactionId(tx.id),
+            Command::Prepare(tx) |
+            Command::LocalPrepare(tx) |
+            Command::AllPrepare(tx) |
+            Command::SomePrepare(tx) |
+            Command::LocalAccept(tx) |
+            Command::AllAccept(tx) |
+            Command::SomeAccept(tx) |
             Command::LocalOnly(tx) => CommandId::TransactionId(tx.id),
-            Command::ForeignProposal(foreign_proposal) => CommandId::ForeignProposal(foreign_proposal.clone()),
+            Command::ForeignProposal(foreign_proposal) => CommandId::ForeignProposal(foreign_proposal.block_id),
             Command::EndEpoch => CommandId::EndEpoch,
         }
     }
@@ -280,16 +351,23 @@ impl Command {
         }
     }
 
-    pub fn local_prepared(&self) -> Option<&TransactionAtom> {
+    pub fn local_prepare(&self) -> Option<&TransactionAtom> {
         match self {
-            Command::LocalPrepared(tx) => Some(tx),
+            Command::LocalPrepare(tx) => Some(tx),
             _ => None,
         }
     }
 
-    pub fn accept(&self) -> Option<&TransactionAtom> {
+    pub fn some_prepare(&self) -> Option<&TransactionAtom> {
         match self {
-            Command::Accept(tx) => Some(tx),
+            Command::SomePrepare(tx) => Some(tx),
+            _ => None,
+        }
+    }
+
+    pub fn local_accept(&self) -> Option<&TransactionAtom> {
+        match self {
+            Command::LocalAccept(tx) => Some(tx),
             _ => None,
         }
     }
@@ -308,39 +386,50 @@ impl Command {
         }
     }
 
-    pub fn committing(&self) -> Option<&TransactionAtom> {
-        let committing = match self {
-            Command::Accept(tx) => Some(tx),
-            Command::LocalOnly(tx) => Some(tx),
+    pub fn all_accept(&self) -> Option<&TransactionAtom> {
+        match self {
+            Command::AllAccept(tx) => Some(tx),
             _ => None,
-        };
+        }
+    }
 
-        committing.filter(|t| t.decision.is_commit())
+    pub fn some_accept(&self) -> Option<&TransactionAtom> {
+        match self {
+            Command::SomeAccept(tx) => Some(tx),
+            _ => None,
+        }
+    }
+
+    /// Returns Some if the command should result in finalising (COMMITing or ABORTing) the transaction, otherwise None.
+    pub fn finalising(&self) -> Option<&TransactionAtom> {
+        self.all_accept()
+            .or_else(|| self.some_accept())
+            .or_else(|| self.local_only())
+    }
+
+    /// Returns Some if the command should result in committing the transaction, otherwise None.
+    pub fn committing(&self) -> Option<&TransactionAtom> {
+        self.all_accept()
+            .or_else(|| self.local_only())
+            .filter(|t| t.decision.is_commit())
     }
 
     pub fn is_epoch_end(&self) -> bool {
         matches!(self, Command::EndEpoch)
     }
 
-    pub fn involved_shards(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
-        match self {
-            Command::Prepare(tx) => tx.evidence.substate_addresses_iter(),
-            Command::LocalPrepared(tx) => tx.evidence.substate_addresses_iter(),
-            Command::Accept(tx) => tx.evidence.substate_addresses_iter(),
-            Command::LocalOnly(tx) => tx.evidence.substate_addresses_iter(),
-            Command::ForeignProposal(_) => panic!("ForeignProposal does not have involved shards"),
-            Command::EndEpoch => panic!("EpochEvent does not have involved shards"),
-        }
-    }
-
     pub fn evidence(&self) -> &Evidence {
         match self {
-            Command::Prepare(tx) => &tx.evidence,
-            Command::LocalPrepared(tx) => &tx.evidence,
-            Command::Accept(tx) => &tx.evidence,
-            Command::LocalOnly(tx) => &tx.evidence,
-            Command::ForeignProposal(_) => panic!("ForeignProposal does not have evidence"),
-            Command::EndEpoch => panic!("EpochEvent does not have evidence"),
+            Command::Prepare(tx) |
+            Command::LocalPrepare(tx) |
+            Command::AllPrepare(tx) |
+            Command::SomePrepare(tx) |
+            Command::LocalAccept(tx) |
+            Command::LocalOnly(tx) |
+            Command::AllAccept(tx) |
+            Command::SomeAccept(tx) => &tx.evidence,
+            Command::ForeignProposal(_) => unreachable!("ForeignProposal does not have evidence"),
+            Command::EndEpoch => unreachable!("EpochEvent does not have evidence"),
         }
     }
 }
@@ -360,10 +449,14 @@ impl Ord for Command {
 impl Display for Command {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Command::Prepare(tx) => write!(f, "Prepare({}, {})", tx.id, tx.decision),
-            Command::LocalPrepared(tx) => write!(f, "LocalPrepared({}, {})", tx.id, tx.decision),
-            Command::Accept(tx) => write!(f, "Accept({}, {})", tx.id, tx.decision),
             Command::LocalOnly(tx) => write!(f, "LocalOnly({}, {})", tx.id, tx.decision),
+            Command::Prepare(tx) => write!(f, "Prepare({}, {})", tx.id, tx.decision),
+            Command::LocalPrepare(tx) => write!(f, "LocalPrepare({}, {})", tx.id, tx.decision),
+            Command::AllPrepare(tx) => write!(f, "AllPrepared({}, {})", tx.id, tx.decision),
+            Command::SomePrepare(tx) => write!(f, "SomePrepared({}, {})", tx.id, tx.decision),
+            Command::LocalAccept(tx) => write!(f, "LocalAccept({}, {})", tx.id, tx.decision),
+            Command::AllAccept(tx) => write!(f, "AllAccept({}, {})", tx.id, tx.decision),
+            Command::SomeAccept(tx) => write!(f, "SomeAccept({}, {})", tx.id, tx.decision),
             Command::ForeignProposal(fp) => write!(f, "ForeignProposal {}", fp.block_id),
             Command::EndEpoch => write!(f, "EndEpoch"),
         }
