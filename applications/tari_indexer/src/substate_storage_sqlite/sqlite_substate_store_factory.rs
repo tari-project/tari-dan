@@ -230,6 +230,7 @@ pub trait SubstateStoreReadTransaction {
         limit: u32,
     ) -> Result<Vec<Event>, StorageError>;
     fn event_exists(&mut self, event: NewEvent) -> Result<bool, StorageError>;
+    fn get_oldest_scanned_epoch(&mut self) -> Result<Option<Epoch>, StorageError>;
     fn get_last_scanned_block_id(
         &mut self,
         epoch: Epoch,
@@ -599,6 +600,25 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         let exists = count > 0;
 
         Ok(exists)
+    }
+
+    fn get_oldest_scanned_epoch(&mut self) -> Result<Option<Epoch>, StorageError> {
+        use crate::substate_storage_sqlite::schema::scanned_block_ids;
+
+        let res: Option<i64> = scanned_block_ids::table
+            .select(diesel::dsl::min(scanned_block_ids::epoch))
+            .first(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("get_oldest_scanned_epoch: {}", e),
+            })?;
+        
+        let oldest_epoch = res.map(|r| {
+            let epoch_as_u64 = r.try_into()
+                .map_err(|_| StorageError::InvalidIntegerCast)?;
+            Ok::<Epoch, StorageError>(Epoch(epoch_as_u64))
+        }).transpose()?;
+
+        Ok(oldest_epoch)
     }
 
     fn get_last_scanned_block_id(

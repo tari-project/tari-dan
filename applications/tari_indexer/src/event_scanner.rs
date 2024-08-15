@@ -127,8 +127,15 @@ impl EventScanner {
 
         let mut event_count = 0;
 
+        let oldest_scanned_epoch = self.get_oldest_scanned_epoch().await?;
+        info!(
+            target: LOG_TARGET,
+            "get_oldest_scanned_epoch: {:?}", oldest_scanned_epoch
+        );
+
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let current_committees = self.epoch_manager.get_committees(current_epoch).await?;
+
         for (shard_group, mut committee) in current_committees {
             info!(
                 target: LOG_TARGET,
@@ -414,6 +421,13 @@ impl EventScanner {
         // TODO: this should return the actual genesis for the shard group and epoch
         let start_block = Block::zero_block(self.network, num_preshards);
         *start_block.id()
+    }
+
+    async fn get_oldest_scanned_epoch(&self) -> Result<Option<Epoch>, anyhow::Error>{
+        self
+            .substate_store
+            .with_read_tx(|tx| tx.get_oldest_scanned_epoch())
+            .map_err(|e| e.into())
     }
 
     #[allow(unused_assignments)]
