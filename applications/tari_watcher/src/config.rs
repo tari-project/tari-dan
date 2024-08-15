@@ -156,13 +156,19 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
         })
         .unwrap_or_else(|| std::env::current_dir().unwrap());
 
+    let vn_registration_file = base_dir
+        .join("data")
+        .join("vn1")
+        .join("esmeralda")
+        .join("registration.json");
+
     Ok(Config {
         auto_register: true,
         base_node_grpc_address: "".to_string(),
         base_wallet_grpc_address: "".to_string(),
         base_dir: base_dir.clone(),
         sidechain_id: None,
-        vn_registration_file: base_dir.join("registration.json"),
+        vn_registration_file,
         instance_config: instances.to_vec(),
         executable_config: executables,
         channel_config: vec![

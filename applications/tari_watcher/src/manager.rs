@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use minotari_app_grpc::tari_rpc::{GetActiveValidatorNodesResponse, TipInfoResponse};
+use minotari_app_grpc::tari_rpc::{
+    self as grpc,
+    ConsensusConstants,
+    GetActiveValidatorNodesResponse,
+    RegisterValidatorNodeResponse,
+    TipInfoResponse,
+};
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::{mpsc, oneshot};
 
@@ -30,7 +36,11 @@ impl ProcessManager {
             forker: Forker::new(),
             shutdown_signal,
             rx_request,
-            chain: Minotari::new(config.base_node_grpc_address, config.base_wallet_grpc_address),
+            chain: Minotari::new(
+                config.base_node_grpc_address,
+                config.base_wallet_grpc_address,
+                config.vn_registration_file,
+            ),
         };
         (this, ManagerHandle::new(tx_request))
     }
@@ -53,8 +63,13 @@ impl ProcessManager {
                             let response = self.chain.get_active_validator_nodes().await?;
                             drop(reply.send(Ok(response)));
                         }
-                        ManagerRequest::RegisterValidatorNode => {
-                            unimplemented!();
+                        ManagerRequest::RegisterValidatorNode { reply } => {
+                            let response = self.chain.register_validator_node().await?;
+                            drop(reply.send(Ok(response)));
+                        },
+                        ManagerRequest::GetConsensusConstants { reply, block_height } => {
+                            let response = self.chain.get_consensus_constants(block_height).await?;
+                            drop(reply.send(Ok(response)));
                         }
                     }
                 }
@@ -79,9 +94,13 @@ pub enum ManagerRequest {
     GetActiveValidatorNodes {
         reply: Reply<Vec<GetActiveValidatorNodesResponse>>,
     },
-
-    #[allow(dead_code)]
-    RegisterValidatorNode, // TODO: populate types
+    GetConsensusConstants {
+        block_height: u64,
+        reply: Reply<grpc::ConsensusConstants>,
+    },
+    RegisterValidatorNode {
+        reply: Reply<RegisterValidatorNodeResponse>,
+    },
 }
 
 pub struct ManagerHandle {
@@ -97,6 +116,25 @@ impl ManagerHandle {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(ManagerRequest::GetActiveValidatorNodes { reply: tx })
+            .await?;
+        rx.await?
+    }
+
+    pub async fn get_consensus_constants(&mut self, block_height: u64) -> anyhow::Result<ConsensusConstants> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(ManagerRequest::GetConsensusConstants {
+                block_height,
+                reply: tx,
+            })
+            .await?;
+        rx.await?
+    }
+
+    pub async fn register_validator_node(&mut self) -> anyhow::Result<RegisterValidatorNodeResponse> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(ManagerRequest::RegisterValidatorNode { reply: tx })
             .await?;
         rx.await?
     }
