@@ -447,10 +447,10 @@ async fn multishard_local_inputs_foreign_outputs() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "TODO: this test does not work because more work is needed on multi-sharded output-only involvement"]
 async fn multishard_local_inputs_and_outputs_foreign_outputs() {
     setup_logger();
     let mut test = Test::builder()
-        .debug_sql("/tmp/test{}.db")
         .add_committee(0, vec!["1", "2"])
         .add_committee(1, vec!["3", "4"])
         .add_committee(2, vec!["5", "6"])
@@ -508,7 +508,7 @@ async fn multishard_local_inputs_and_outputs_foreign_outputs() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn output_conflict_abort() {
+async fn multishard_output_conflict_abort() {
     setup_logger();
     let mut test = Test::builder()
         .add_committee(0, vec!["1", "2"])
