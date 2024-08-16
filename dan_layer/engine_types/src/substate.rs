@@ -112,7 +112,10 @@ pub enum SubstateId {
     Component(#[serde(with = "serde_with::string")] ComponentAddress),
     Resource(#[serde(with = "serde_with::string")] ResourceAddress),
     Vault(#[serde(with = "serde_with::string")] VaultId),
-    UnclaimedConfidentialOutput(#[cfg_attr(feature = "ts", ts(type = "string"))] UnclaimedConfidentialOutputAddress),
+    UnclaimedConfidentialOutput(#[cfg_attr(
+        feature = "ts",
+        ts(type = "string")
+    )] UnclaimedConfidentialOutputAddress),
     NonFungible(#[serde(with = "serde_with::string")] NonFungibleAddress),
     NonFungibleIndex(NonFungibleIndexAddress),
     TransactionReceipt(TransactionReceiptAddress),
@@ -318,7 +321,7 @@ impl FromStr for SubstateId {
             Some(("component", addr)) => {
                 let addr = ComponentAddress::from_hex(addr).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
                 Ok(SubstateId::Component(addr))
-            },
+            }
             Some(("resource", addr)) => {
                 match addr.split_once(' ') {
                     Some((resource_str, addr)) => match addr.split_once('_') {
@@ -327,7 +330,7 @@ impl FromStr for SubstateId {
                             let nft_address =
                                 NonFungibleAddress::from_str(s).map_err(|e| InvalidSubstateIdFormat(e.to_string()))?;
                             Ok(SubstateId::NonFungible(nft_address))
-                        },
+                        }
                         // resource_xxxx index_
                         Some(("index", index_str)) => {
                             let resource_addr = ResourceAddress::from_hex(resource_str)
@@ -337,7 +340,7 @@ impl FromStr for SubstateId {
                                 resource_addr,
                                 index,
                             )))
-                        },
+                        }
                         _ => Err(InvalidSubstateIdFormat(s.to_string())),
                     },
                     // resource_xxxx
@@ -345,27 +348,27 @@ impl FromStr for SubstateId {
                         let addr =
                             ResourceAddress::from_hex(addr).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
                         Ok(SubstateId::Resource(addr))
-                    },
+                    }
                 }
-            },
+            }
             Some(("vault", addr)) => {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
                 Ok(SubstateId::Vault(id))
-            },
+            }
             Some(("commitment", addr)) => {
                 let commitment_address = UnclaimedConfidentialOutputAddress::from_hex(addr)
                     .map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
                 Ok(SubstateId::UnclaimedConfidentialOutput(commitment_address))
-            },
+            }
             Some(("txreceipt", addr)) => {
                 let tx_receipt_addr =
                     TransactionReceiptAddress::from_hex(addr).map_err(|_| InvalidSubstateIdFormat(addr.to_string()))?;
                 Ok(SubstateId::TransactionReceipt(tx_receipt_addr))
-            },
+            }
             Some(("feeclaim", addr)) => {
                 let addr = Hash::from_hex(addr).map_err(|_| InvalidSubstateIdFormat(addr.to_string()))?;
                 Ok(SubstateId::FeeClaim(addr.into()))
-            },
+            }
             Some(_) | None => Err(InvalidSubstateIdFormat(s.to_string())),
         }
     }
@@ -614,7 +617,7 @@ impl Display for SubstateValue {
         // TODO: improve output
         match self {
             SubstateValue::Component(component) => write!(f, "{:?}", component.state()),
-            SubstateValue::Resource(resource) => write!(f, "{:?}", resource,),
+            SubstateValue::Resource(resource) => write!(f, "{:?}", resource, ),
             SubstateValue::Vault(vault) => write!(f, "{:?}", vault),
             SubstateValue::NonFungible(nft) => write!(f, "{:?}", nft),
             SubstateValue::NonFungibleIndex(index) => write!(f, "{:?}", index),
@@ -648,15 +651,15 @@ impl SubstateDiff {
         self.down_substates.push((address, version));
     }
 
-    pub fn up_iter(&self) -> impl Iterator<Item = &(SubstateId, Substate)> + '_ {
+    pub fn up_iter(&self) -> impl Iterator<Item=&(SubstateId, Substate)> + '_ {
         self.up_substates.iter()
     }
 
-    pub fn into_up_iter(self) -> impl Iterator<Item = (SubstateId, Substate)> {
+    pub fn into_up_iter(self) -> impl Iterator<Item=(SubstateId, Substate)> {
         self.up_substates.into_iter()
     }
 
-    pub fn down_iter(&self) -> impl Iterator<Item = &(SubstateId, u32)> + '_ {
+    pub fn down_iter(&self) -> impl Iterator<Item=&(SubstateId, u32)> + '_ {
         self.down_substates.iter()
     }
 
@@ -686,32 +689,32 @@ mod tests {
 
         #[test]
         fn it_parses_valid_substate_addresses() {
-            SubstateId::from_str("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5")
+            SubstateId::from_str("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff")
                 .unwrap()
                 .as_component_address()
                 .unwrap();
-            SubstateId::from_str("vault_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5")
+            SubstateId::from_str("vault_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff")
                 .unwrap()
                 .as_vault_id()
                 .unwrap();
-            SubstateId::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5")
+            SubstateId::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff")
                 .unwrap()
                 .as_resource_address()
                 .unwrap();
             SubstateId::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5 nft_str:SpecialNft",
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff nft_str:SpecialNft",
             )
-            .unwrap()
-            .as_non_fungible_address()
-            .unwrap();
+                .unwrap()
+                .as_non_fungible_address()
+                .unwrap();
             SubstateId::from_str(
-                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907f \
+                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fffffffff \
                  nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
             )
-            .unwrap()
-            .as_non_fungible_address()
-            .unwrap();
-            SubstateId::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5 index_0")
+                .unwrap()
+                .as_non_fungible_address()
+                .unwrap();
+            SubstateId::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff index_0")
                 .unwrap()
                 .as_non_fungible_index_address()
                 .unwrap();
