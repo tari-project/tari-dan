@@ -511,9 +511,9 @@ impl EventScanner {
                     );
                     if let Some(block) = blocks.last() {
                         last_block_id = *block.id();
-                    }
-                    // Store the latest scanned block id in the database for future scans
-                    self.save_scanned_block_id(epoch, shard_group, last_block_id)?;
+                        // Store the latest scanned block id in the database for future scans
+                        self.save_scanned_block_id(epoch, shard_group, last_block_id)?;
+                    } 
                     return Ok(blocks);
                 },
                 Err(e) => {
