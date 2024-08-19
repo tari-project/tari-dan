@@ -34,16 +34,28 @@ import Loading from "../../Components/Loading";
 import { getBlock, getIdentity } from "../../utils/json_rpc";
 import Transactions from "./Transactions";
 import { primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../utils/helpers";
-import type { Block, TransactionAtom } from "@tari-project/typescript-bindings";
+import type { Block, Command, TransactionAtom } from "@tari-project/typescript-bindings";
 import type { VNGetIdentityResponse } from "@tari-project/typescript-bindings";
 
-// TODO: refactor this component
+const COMMANDS = [
+  "LocalOnly",
+  "Prepare",
+  "LocalPrepare",
+  "AllPrepare",
+  "SomePrepare",
+  "LocalAccept",
+  "AllAccept",
+  "SomeAccept",
+];
 export default function BlockDetails() {
   const { blockId } = useParams();
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<String>();
   const [block, setBlock] = useState<Block>();
+
+  const [blockData, setBlockData] = useState<{ [key: string]: TransactionAtom[] }>({});
+
   const [localOnly, setLocalOnly] = useState<TransactionAtom[]>([]);
   const [prepare, setPrepare] = useState<TransactionAtom[]>([]);
   const [localPrepared, setLocalPrepared] = useState<TransactionAtom[]>([]);
@@ -72,25 +84,35 @@ export default function BlockDetails() {
           setLocalPrepared([]);
           setAccept([]);
           setEpochEvents([]);
+          const data: { [key: string]: TransactionAtom[] } = {};
           for (let command of resp.block.commands) {
             if (typeof command === "object") {
-              if ("LocalOnly" in command) {
-                let newLocalOnly = command.LocalOnly;
-                setLocalOnly((localOnly: TransactionAtom[]) => [...localOnly, newLocalOnly]);
-              } else if ("Prepare" in command) {
-                let newPrepare = command.Prepare;
-                setPrepare((prepare: TransactionAtom[]) => [...prepare, newPrepare]);
-              } else if ("LocalPrepare" in command) {
-                let newLocalPrepared = command.LocalPrepare;
-                setLocalPrepared((localPrepared: TransactionAtom[]) => [...localPrepared, newLocalPrepared]);
-              } else if ("AllAccept" in command) {
-                let newAccept = command.AllAccept;
-                setAccept((accept: TransactionAtom[]) => [...accept, newAccept]);
-              }
+              let cmd = Object.keys(command)[0];
+              data[cmd] ||= [];
+              data[cmd].push(command[cmd as keyof Command]);
+
+              // if ("LocalOnly" in command) {
+              //   let newLocalOnly = command.LocalOnly;
+              //   data["LocalOnly"] ||= [];
+              //   data["LocalOnly"].push(newLocalOnly);
+              // } else if ("Prepare" in command) {
+              //   let newPrepare = command.Prepare;
+              //   data["Prepare"] ||= [];
+              //   data["Prepare"].push(newPrepare);
+              // } else if ("LocalPrepare" in command) {
+              //   let newLocalPrepared = command.LocalPrepare;
+              //   data["LocalPrepare"] ||= [];
+              //   data["LocalPrepare"].push(newLocalPrepared);
+              // } else if ("AllAccept" in command) {
+              //   let newAccept = command.AllAccept;
+              //   setAccept((accept: TransactionAtom[]) => [...accept, newAccept]);
+              // }
             } else {
               setEpochEvents((epochEvents: string[]) => [...epochEvents, command as string]);
             }
           }
+
+          setBlockData(data);
         })
         .catch((err) => {
           setError(err && err.message ? err.message : `Unknown error: ${JSON.stringify(err)}`);
@@ -112,7 +134,15 @@ export default function BlockDetails() {
   };
 
   const expandAll = () => {
-    setExpandedPanels(["panel1", "panel2", "panel3", "panel4", "panel5"]);
+    for (let cmd in COMMANDS) {
+      setExpandedPanels((prevExpandedPanels: string[]) => {
+        if (!prevExpandedPanels.includes(`panel${cmd}`)) {
+          return [...prevExpandedPanels, `panel${cmd}`];
+        } else {
+          return prevExpandedPanels;
+        }
+      });
+    }
   };
 
   const collapseAll = () => {
@@ -228,53 +258,33 @@ export default function BlockDetails() {
                     </div>
                   </>
                 )}
+                {COMMANDS.map((cmd, i) => {
+                  if (!blockData[cmd]) {
+                    return <> </>;
+                  }
+                  return (
+                    <Accordion
+                      key={i}
+                      expanded={expandedPanels.includes(`panel${cmd}`)}
+                      onChange={handleChange(`panel${cmd}`)}
+                    >
+                      <AccordionSummary aria-controls={`panel${cmd}bh-content`} id={`panel${cmd}bh-header`}>
+                        <Typography>{cmd}</Typography>
+                      </AccordionSummary>
+                      <AccordionDetails>
+                        <Transactions transactions={blockData[cmd]} />
+                      </AccordionDetails>
+                    </Accordion>
+                  );
+                })}
                 {epochEvents.length > 0 && (
-                  <Accordion expanded={expandedPanels.includes("panel1")} onChange={handleChange("panel1")}>
-                    <AccordionSummary aria-controls="panel1bh-content" id="panel1bh-header">
+                  <Accordion expanded={expandedPanels.includes("panelEpochEvents")}
+                             onChange={handleChange("panelEpochEvents")}>
+                    <AccordionSummary aria-controls="panelEpochEventsbh-content" id="panelEpochEventsbh-header">
                       <Typography>EpochEvent</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
                       <ul>{epochEvents.map((evt, i) => <li key={i}>{evt}</li>)}</ul>
-                    </AccordionDetails>
-                  </Accordion>
-                )}
-                {localOnly.length > 0 && (
-                  <Accordion expanded={expandedPanels.includes("panel2")} onChange={handleChange("panel2")}>
-                    <AccordionSummary aria-controls="panel2bh-content" id="panel2bh-header">
-                      <Typography>LocalOnly</Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Transactions transactions={localOnly} />
-                    </AccordionDetails>
-                  </Accordion>
-                )}
-                {prepare.length > 0 && (
-                  <Accordion expanded={expandedPanels.includes("panel3")} onChange={handleChange("panel3")}>
-                    <AccordionSummary aria-controls="panel3bh-content" id="panel3bh-header">
-                      <Typography>Prepare</Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Transactions transactions={prepare} />
-                    </AccordionDetails>
-                  </Accordion>
-                )}
-                {localPrepared.length > 0 && (
-                  <Accordion expanded={expandedPanels.includes("panel4")} onChange={handleChange("panel4")}>
-                    <AccordionSummary aria-controls="panel4bh-content" id="panel4bh-header">
-                      <Typography>Local prepared</Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Transactions transactions={localPrepared} />
-                    </AccordionDetails>
-                  </Accordion>
-                )}
-                {accept.length > 0 && (
-                  <Accordion expanded={expandedPanels.includes("panel5")} onChange={handleChange("panel5")}>
-                    <AccordionSummary aria-controls="panel5bh-content" id="panel5bh-header">
-                      <Typography>Accept</Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Transactions transactions={accept} />
                     </AccordionDetails>
                   </Accordion>
                 )}

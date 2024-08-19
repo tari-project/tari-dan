@@ -16,8 +16,7 @@ pub enum SubstateStoreError {
     #[error("Expected substate {id} to be DOWN but it was UP")]
     ExpectedSubstateDown { id: VersionedSubstateId },
     #[error(
-        "Failed to lock substate {substate_id} with flag {requested_lock} due to conflict with existing \
-         {existing_lock} lock"
+        "Failed to {requested_lock} lock substate {substate_id} due to conflict with existing {existing_lock} lock"
     )]
     LockConflict {
         substate_id: VersionedSubstateId,
