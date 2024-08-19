@@ -95,6 +95,13 @@ impl ProposedBlockChangeSet {
         self
     }
 
+    // TODO: this is a hack to allow the update to be modified after the fact. This should be removed.
+    pub fn next_update_mut(&mut self, transaction_id: &TransactionId) -> Option<&mut TransactionPoolStatusUpdate> {
+        self.transaction_changes
+            .get_mut(transaction_id)
+            .and_then(|change| change.next_update.as_mut())
+    }
+
     pub fn is_accept(&self) -> bool {
         matches!(self.quorum_decision, Some(QuorumDecision::Accept))
     }

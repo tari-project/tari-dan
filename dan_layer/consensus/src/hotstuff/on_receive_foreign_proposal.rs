@@ -338,6 +338,25 @@ where TConsensusSpec: ConsensusSpec
                         );
 
                         tx_rec.add_pending_status_update(tx, local_leaf, TransactionPoolStage::LocalPrepared, true)?;
+                        // TODO: there is a race condition between the local node receiving the foreign LocalPrepare and
+                        // the leader proposing AllPrepare. If the latter comes first, this node
+                        // will not vote on this block which leads inevitably to erroneous
+                        // leader failures. Currently we simply vote ACCEPT on the block, with is ready == false, so we
+                        // need to handle this here. When we confirm foreign proposals correctly, we can remove this.
+                    } else if tx_rec.current_stage().is_all_prepared() &&
+                        !tx_rec.is_ready() &&
+                        tx_rec.evidence().all_addresses_justified()
+                    {
+                        // If the transaction is AllPrepared, we're waiting for all foreign proposals. Propose
+                        // transaction once we have them.
+                        info!(
+                            target: LOG_TARGET,
+                            "🧩 FOREIGN PROPOSAL: (Initial sequence from LocalPrepare) Transaction is ready for AllPrepared({}, {}) Local Stage: {}",
+                            tx_rec.transaction_id(),
+                            tx_rec.current_decision(),
+                            tx_rec.current_stage()
+                        );
+                        tx_rec.add_pending_status_update(tx, local_leaf, TransactionPoolStage::AllPrepared, true)?;
                     } else {
                         info!(
                             target: LOG_TARGET,
@@ -401,13 +420,14 @@ where TConsensusSpec: ConsensusSpec
                         atom.evidence.clone(),
                     )?;
 
-                    tx_rec.evidence().iter().for_each(|(addr, ev)| {
-                        let includes_local = local_committee_info.includes_substate_address(addr);
-                        log::error!(
-                            target: LOG_TARGET,
-                            "🐞 LOCALACCEPT EVIDENCE (l={}, f={}) {}: {}", includes_local, !includes_local, addr, ev
-                        );
-                    });
+                    // Good debug info
+                    // tx_rec.evidence().iter().for_each(|(addr, ev)| {
+                    //     let includes_local = local_committee_info.includes_substate_address(addr);
+                    //     log::error!(
+                    //         target: LOG_TARGET,
+                    //         "🐞 LOCALACCEPT EVIDENCE (l={}, f={}) {}: {}", includes_local, !includes_local, addr, ev
+                    //     );
+                    // });
 
                     if tx_rec.current_stage().is_new() {
                         // If the transaction is New, we're waiting for all foreign pledges. Propose transaction once we

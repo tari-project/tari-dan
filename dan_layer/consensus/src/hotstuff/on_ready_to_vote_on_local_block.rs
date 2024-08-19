@@ -185,7 +185,19 @@ where TConsensusSpec: ConsensusSpec
                             atom.id(),
                             leaf,
                         );
-                        change_set.set_next_transaction_update(&pool_tx, TransactionPoolStage::LocalPrepared, true)?;
+                        // TODO: this is a hack to allow the update to be modified if the current block already has a
+                        // transaction update
+                        if let Some(update_mut) = change_set.next_update_mut(pool_tx.transaction_id()) {
+                            if update_mut.stage.is_local_prepared() {
+                                update_mut.is_ready = true;
+                            }
+                        } else {
+                            change_set.set_next_transaction_update(
+                                &pool_tx,
+                                TransactionPoolStage::LocalPrepared,
+                                true,
+                            )?;
+                        }
                     }
                 },
                 Command::LocalAccept(atom) => {
@@ -204,7 +216,19 @@ where TConsensusSpec: ConsensusSpec
                             atom.id(),
                             leaf,
                         );
-                        change_set.set_next_transaction_update(&pool_tx, TransactionPoolStage::LocalAccepted, true)?;
+                        // TODO: this is a hack to allow the update to be modified after the fact. This should be
+                        // removed.
+                        if let Some(update_mut) = change_set.next_update_mut(pool_tx.transaction_id()) {
+                            if update_mut.stage.is_local_accepted() {
+                                update_mut.is_ready = true;
+                            }
+                        } else {
+                            change_set.set_next_transaction_update(
+                                &pool_tx,
+                                TransactionPoolStage::LocalAccepted,
+                                true,
+                            )?;
+                        }
                     }
                 },
                 Command::Prepare(_) |
@@ -852,19 +876,23 @@ where TConsensusSpec: ConsensusSpec
 
         // TODO: there is a race condition between the local node receiving the foreign LocalPrepare and the leader
         // proposing AllPrepare. If the latter comes first, this node will not vote on this block which leads inevitably
-        // to erroneous leader failures.
-        if !tx_rec.evidence().all_addresses_justified() {
-            warn!(
-                target: LOG_TARGET,
-                "❌ AllPrepare disagreement for transaction {} in block {}. Leader proposed that all committees have justified, but local evidence is not all justified",
-                tx_rec.transaction_id(),
-                block,
-            );
-            return Ok(false);
-        }
+        // to erroneous leader failures. For this reason, this is commented out for now.
+        // if !tx_rec.evidence().all_addresses_justified() {
+        //     warn!(
+        //         target: LOG_TARGET,
+        //         "❌ AllPrepare disagreement for transaction {} in block {}. Leader proposed that all committees have
+        // justified, but local evidence is not all justified",         tx_rec.transaction_id(),
+        //         block,
+        //     );
+        //     return Ok(false);
+        // }
 
         tx_rec.add_qc_evidence(local_committee_info, *block.justify().id());
-        proposed_block_change_set.set_next_transaction_update(&tx_rec, TransactionPoolStage::AllPrepared, true)?;
+        proposed_block_change_set.set_next_transaction_update(
+            &tx_rec,
+            TransactionPoolStage::AllPrepared,
+            tx_rec.evidence().all_addresses_justified(),
+        )?;
 
         Ok(true)
     }
@@ -1079,13 +1107,14 @@ where TConsensusSpec: ConsensusSpec
 
         tx_rec.add_qc_evidence(local_committee_info, *block.justify().id());
 
-        tx_rec.evidence().iter().for_each(|(addr, ev)| {
-            let includes_local = local_committee_info.includes_substate_address(addr);
-            log::error!(
-                target: LOG_TARGET,
-                "🗾 VOTE ON LOCALACCEPT EVIDENCE (l={}, f={}) {}: {}", includes_local, !includes_local, addr, ev
-            );
-        });
+        // Good debug info
+        // tx_rec.evidence().iter().for_each(|(addr, ev)| {
+        //     let includes_local = local_committee_info.includes_substate_address(addr);
+        //     log::error!(
+        //         target: LOG_TARGET,
+        //         "🗾 VOTE ON LOCALACCEPT EVIDENCE (l={}, f={}) {}: {}", includes_local, !includes_local, addr, ev
+        //     );
+        // });
 
         proposed_block_change_set.set_next_transaction_update(
             &tx_rec,
