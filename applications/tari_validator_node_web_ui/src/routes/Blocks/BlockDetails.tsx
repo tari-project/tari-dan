@@ -33,8 +33,8 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Loading from "../../Components/Loading";
 import { getBlock, getIdentity } from "../../utils/json_rpc";
 import Transactions from "./Transactions";
-import { primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../utils/helpers";
-import type { Block, Command, TransactionAtom } from "@tari-project/typescript-bindings";
+import { decodeShardGroup, primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../utils/helpers";
+import type { Block, Command, ForeignProposal, TransactionAtom } from "@tari-project/typescript-bindings";
 import type { VNGetIdentityResponse } from "@tari-project/typescript-bindings";
 
 const COMMANDS = [
@@ -56,13 +56,10 @@ export default function BlockDetails() {
 
   const [blockData, setBlockData] = useState<{ [key: string]: TransactionAtom[] }>({});
 
-  const [localOnly, setLocalOnly] = useState<TransactionAtom[]>([]);
-  const [prepare, setPrepare] = useState<TransactionAtom[]>([]);
-  const [localPrepared, setLocalPrepared] = useState<TransactionAtom[]>([]);
-  const [accept, setAccept] = useState<TransactionAtom[]>([]);
   const [epochEvents, setEpochEvents] = useState<string[]>([]);
   const [identity, setIdentity] = useState<VNGetIdentityResponse>();
   const [blockTime, setBlockTime] = useState<number>(0);
+  const [foreignProposals, setForeignProposals] = useState<ForeignProposal[]>([]);
 
   useEffect(() => {
     if (blockId !== undefined) {
@@ -79,39 +76,26 @@ export default function BlockDetails() {
               }
             });
           }
-          setLocalOnly([]);
-          setPrepare([]);
-          setLocalPrepared([]);
-          setAccept([]);
           setEpochEvents([]);
+          const foreignProposals = [];
           const data: { [key: string]: TransactionAtom[] } = {};
           for (let command of resp.block.commands) {
             if (typeof command === "object") {
-              let cmd = Object.keys(command)[0];
-              data[cmd] ||= [];
-              data[cmd].push(command[cmd as keyof Command]);
 
-              // if ("LocalOnly" in command) {
-              //   let newLocalOnly = command.LocalOnly;
-              //   data["LocalOnly"] ||= [];
-              //   data["LocalOnly"].push(newLocalOnly);
-              // } else if ("Prepare" in command) {
-              //   let newPrepare = command.Prepare;
-              //   data["Prepare"] ||= [];
-              //   data["Prepare"].push(newPrepare);
-              // } else if ("LocalPrepare" in command) {
-              //   let newLocalPrepared = command.LocalPrepare;
-              //   data["LocalPrepare"] ||= [];
-              //   data["LocalPrepare"].push(newLocalPrepared);
-              // } else if ("AllAccept" in command) {
-              //   let newAccept = command.AllAccept;
-              //   setAccept((accept: TransactionAtom[]) => [...accept, newAccept]);
-              // }
+              const cmd = Object.keys(command)[0];
+
+              if ("ForeignProposal" in command) {
+                foreignProposals.push(command.ForeignProposal);
+              } else {
+                data[cmd] ||= [];
+                data[cmd].push(command[cmd as keyof Command]);
+              }
             } else {
               setEpochEvents((epochEvents: string[]) => [...epochEvents, command as string]);
             }
           }
 
+          setForeignProposals(foreignProposals);
           setBlockData(data);
         })
         .catch((err) => {
@@ -277,6 +261,22 @@ export default function BlockDetails() {
                     </Accordion>
                   );
                 })}
+                {foreignProposals.length > 0 && (
+                  <Accordion expanded={expandedPanels.includes("panelForeignProposals")}
+                             onChange={handleChange("panelForeignProposals")}>
+                    <AccordionSummary aria-controls="panelForeignProposalsbh-content"
+                                      id="panelForeignProposalsbh-header">
+                      <Typography>Foreign Proposals</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      {foreignProposals.map((proposal, i) => (
+                        <div key={i}>
+                          Foreign Proposal: {proposal.block_id} {JSON.stringify(decodeShardGroup(proposal.shard_group))}
+                        </div>
+                      ))}
+                    </AccordionDetails>
+                  </Accordion>
+                )}
                 {epochEvents.length > 0 && (
                   <Accordion expanded={expandedPanels.includes("panelEpochEvents")}
                              onChange={handleChange("panelEpochEvents")}>
