@@ -496,7 +496,7 @@ impl EventScanner {
                 epoch,
                 shard_group
             );
-            let resp = self.get_blocks_from_vn(member, start_block_id).await;
+            let resp = self.get_blocks_from_vn(member, start_block_id, Some(epoch)).await;
 
             match resp {
                 Ok(blocks) => {
@@ -509,7 +509,11 @@ impl EventScanner {
                         epoch,
                         shard_group,
                     );
-                    if let Some(block) = blocks.last() {
+
+                    // get the most recent block among all scanned blocks in the epoch
+                    let last_block = blocks.iter().max_by_key(|b| b.height());
+
+                    if let Some(block) = last_block {
                         last_block_id = *block.id();
                         // Store the latest scanned block id in the database for future scans
                         self.save_scanned_block_id(epoch, shard_group, last_block_id)?;
@@ -569,6 +573,7 @@ impl EventScanner {
         &self,
         vn_addr: &PeerAddress,
         start_block_id: BlockId,
+        up_to_epoch: Option<Epoch>,
     ) -> Result<Vec<Block>, anyhow::Error> {
         let mut blocks = vec![];
 
@@ -578,7 +583,7 @@ impl EventScanner {
         let mut stream = client
             .sync_blocks(SyncBlocksRequest {
                 start_block_id: start_block_id.as_bytes().to_vec(),
-                up_to_epoch: None,
+                up_to_epoch: up_to_epoch.map(|epoch| epoch.into()),
             })
             .await?;
         while let Some(resp) = stream.next().await {
