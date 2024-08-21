@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 
+use log::warn;
 use minotari_app_grpc::tari_rpc::{GetActiveValidatorNodesResponse, TipInfoResponse};
 use tari_common_types::types::PublicKey;
 use tari_core::transactions::transaction_components::ValidatorNodeSignature;
@@ -49,6 +50,10 @@ pub fn to_vn_public_keys(vns: Vec<GetActiveValidatorNodesResponse>) -> Vec<Publi
 }
 
 pub fn to_block_height(tip_info: TipInfoResponse) -> u64 {
+    if tip_info.metadata.is_none() {
+        warn!("Tip info metadata is none");
+        return 0;
+    }
     tip_info.metadata.unwrap().best_block_height
 }
 

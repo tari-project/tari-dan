@@ -68,7 +68,7 @@ pub fn init_logger() -> Result<(), log::SetLoggerError> {
                 log
             ))
         })
-        .filter(|record_metadata| record_metadata.target().eq("tari_watcher")) // skip tokio frame prints
+        .filter(|record_metadata| record_metadata.target().starts_with("tari_watcher")) // skip tokio frame prints
         .level(log::LevelFilter::Debug)
         .chain(std::io::stdout())
         // .chain(fern::log_file("output.log").unwrap())

@@ -1,14 +1,12 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+use log::*;
 use std::path::PathBuf;
 
 use anyhow::bail;
 use minotari_app_grpc::tari_rpc::{
-    self as grpc,
-    GetActiveValidatorNodesResponse,
-    RegisterValidatorNodeResponse,
-    TipInfoResponse,
+    self as grpc, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse, TipInfoResponse,
 };
 use minotari_node_grpc_client::BaseNodeGrpcClient;
 use minotari_wallet_grpc_client::WalletGrpcClient;
@@ -129,6 +127,8 @@ impl Minotari {
             bail!("Node client not connected");
         }
 
+        info!("Preparing to send a node registration request");
+
         let info = read_registration_file(self.node_registration_file.clone()).await?;
         let sig = info.signature.signature();
         let resp = self
@@ -151,6 +151,8 @@ impl Minotari {
         if !resp.is_success {
             bail!("Failed to register validator node: {}", resp.failure_message);
         }
+
+        info!("Node registration request sent successfully");
 
         Ok(resp)
     }

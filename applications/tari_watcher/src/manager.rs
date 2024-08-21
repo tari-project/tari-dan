@@ -3,11 +3,7 @@
 
 use log::*;
 use minotari_app_grpc::tari_rpc::{
-    self as grpc,
-    ConsensusConstants,
-    GetActiveValidatorNodesResponse,
-    RegisterValidatorNodeResponse,
-    TipInfoResponse,
+    self as grpc, ConsensusConstants, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse, TipInfoResponse,
 };
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::{mpsc, oneshot};
