@@ -50,19 +50,15 @@ impl MempoolGossip<PeerAddress> {
         }
 
         self.gossip
-            .subscribe_topic(format!(
-                "transactions-{}-{}",
-                committee_shard.shard_group().start(),
-                committee_shard.shard_group().end()
-            ))
+            .subscribe_topic(shard_group_to_topic(committee_shard.shard_group()))
             .await?;
         self.is_subscribed = Some(committee_shard.shard_group());
         Ok(())
     }
 
     pub async fn unsubscribe(&mut self) -> Result<(), MempoolError> {
-        if let Some(b) = self.is_subscribed {
-            self.gossip.unsubscribe_topic(format!("transactions-{}", b)).await?;
+        if let Some(sg) = self.is_subscribed {
+            self.gossip.unsubscribe_topic(shard_group_to_topic(sg)).await?;
             self.is_subscribed = None;
         }
         Ok(())
@@ -71,7 +67,7 @@ impl MempoolGossip<PeerAddress> {
     pub async fn forward_to_local_replicas(&mut self, epoch: Epoch, msg: DanMessage) -> Result<(), MempoolError> {
         let committee = self.epoch_manager.get_local_committee_info(epoch).await?;
 
-        let topic = format!("transactions-{}", committee.shard_group());
+        let topic = shard_group_to_topic(committee.shard_group());
         debug!(
             target: LOG_TARGET,
             "forward_to_local_replicas: topic: {}", topic,
@@ -93,15 +89,15 @@ impl MempoolGossip<PeerAddress> {
         let n = self.epoch_manager.get_num_committees(epoch).await?;
         let committee_shard = self.epoch_manager.get_local_committee_info(epoch).await?;
         let local_shard_group = committee_shard.shard_group();
-        let shards = substate_addresses
+        let shard_groups = substate_addresses
             .into_iter()
             .map(|s| s.to_shard_group(self.num_preshards, n))
             .filter(|sg| exclude_shard_group.as_ref() != Some(sg) && sg != &local_shard_group)
             .collect::<HashSet<_>>();
 
         let msg = proto::network::DanMessage::from(&msg.into());
-        for shard in shards {
-            let topic = format!("transactions-{}", shard);
+        for sg in shard_groups {
+            let topic = shard_group_to_topic(sg);
             debug!(
                 target: LOG_TARGET,
                 "forward_to_foreign_replicas: topic: {}", topic,
@@ -213,4 +209,8 @@ impl MempoolGossip<PeerAddress> {
 
         Ok(())
     }
+}
+
+fn shard_group_to_topic(shard_group: ShardGroup) -> String {
+    format!("transactions-{}-{}", shard_group.start(), shard_group.end())
 }

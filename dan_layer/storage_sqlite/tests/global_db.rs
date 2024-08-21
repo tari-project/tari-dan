@@ -3,7 +3,7 @@
 
 use diesel::{Connection, SqliteConnection};
 use rand::rngs::OsRng;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_crypto::keys::PublicKey as _;
 use tari_dan_common_types::{shard::Shard, Epoch, PeerAddress, ShardGroup, SubstateAddress};
 use tari_dan_storage::global::{GlobalDb, ValidatorNodeDb};
@@ -24,7 +24,8 @@ fn new_public_key() -> PublicKey {
 }
 
 fn derived_substate_address(public_key: &PublicKey) -> SubstateAddress {
-    SubstateAddress::from_bytes(public_key.as_bytes()).unwrap()
+    let hash = FixedHash::try_from(public_key.as_bytes()).unwrap();
+    SubstateAddress::from_hash_and_version(hash, 0)
 }
 
 fn insert_vns(
@@ -88,7 +89,7 @@ fn insert_and_get_within_epoch() {
 }
 
 #[test]
-fn change_committee_bucket() {
+fn change_committee_shard_group() {
     let db = create_db();
     let mut tx = db.create_transaction().unwrap();
     let mut validator_nodes = db.validator_nodes(&mut tx);

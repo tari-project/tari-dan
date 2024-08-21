@@ -132,9 +132,14 @@ impl BaseNodeClient for GrpcBaseNodeClient {
                         public_key: PublicKey::from_canonical_bytes(&val.public_key).map_err(|_| {
                             BaseNodeClientError::InvalidPeerMessage("public_key was not a valid public key".to_string())
                         })?,
-                        shard_key: SubstateAddress::from_bytes(&val.shard_key).map_err(|_| {
-                            BaseNodeClientError::InvalidPeerMessage("shard_key was not a valid fixed hash".to_string())
-                        })?,
+                        shard_key: {
+                            let hash = FixedHash::try_from(val.shard_key.as_slice()).map_err(|_| {
+                                BaseNodeClientError::InvalidPeerMessage(
+                                    "shard_key was not a valid fixed hash".to_string(),
+                                )
+                            })?;
+                            SubstateAddress::from_hash_and_version(hash, 0)
+                        },
                         sidechain_id: if val.sidechain_id.is_empty() {
                             None
                         } else {
@@ -180,7 +185,11 @@ impl BaseNodeClient for GrpcBaseNodeClient {
         if result.shard_key.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(SubstateAddress::from_bytes(result.shard_key.as_bytes())?))
+            // The SubstateAddress type has 4 extra bytes for the version, this is disregarded for validator node shard
+            // key.
+            // TODO: separate type for validator node shard key
+            let hash = FixedHash::try_from(result.shard_key.as_slice())?;
+            Ok(Some(SubstateAddress::from_hash_and_version(hash, 0)))
         }
     }
 

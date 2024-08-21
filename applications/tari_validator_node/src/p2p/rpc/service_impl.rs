@@ -236,7 +236,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             }));
         };
 
-        let abort_details = transaction.abort_details().cloned().unwrap_or_default();
+        let abort_details = transaction.abort_reason().map(|r| r.to_string()).unwrap_or_default();
 
         Ok(Response::new(GetTransactionResultResponse {
             status: PayloadResultStatus::Finalized.into(),

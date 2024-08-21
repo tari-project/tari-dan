@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{str::FromStr, time::Duration};
+use std::str::FromStr;
 
 use diesel::Queryable;
 use tari_dan_common_types::Epoch;
@@ -77,16 +77,10 @@ impl TryFrom<Transaction> for consensus_models::TransactionRecord {
                     value.final_decision.as_ref().unwrap()
                 ),
             })?;
-        let execution_time = value.execution_time_ms.map(|ms| Duration::from_millis(ms as u64));
         let result = value.result.as_deref().map(deserialize_json).transpose()?;
-        let resulting_outputs = value
-            .resulting_outputs
-            .as_deref()
-            .map(deserialize_json)
-            .transpose()?
-            .unwrap_or_default();
+        let resulting_outputs = value.resulting_outputs.as_deref().map(deserialize_json).transpose()?;
         let resolved_inputs = value.resolved_inputs.as_deref().map(deserialize_json).transpose()?;
-        let abort_details = value.abort_details.clone();
+        let abort_details = value.abort_details.as_deref().map(deserialize_json).transpose()?;
 
         let finalized_time = value
             .finalized_at
@@ -97,7 +91,6 @@ impl TryFrom<Transaction> for consensus_models::TransactionRecord {
             value.try_into()?,
             result,
             resolved_inputs,
-            execution_time,
             final_decision,
             finalized_time,
             resulting_outputs,

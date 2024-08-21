@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
+    borrow::Borrow,
     collections::{HashMap, HashSet},
     fmt,
     hash::Hash,
@@ -11,15 +12,19 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{optional::Optional, SubstateAddress};
-use tari_engine_types::commit_result::ExecuteResult;
+use tari_engine_types::{
+    commit_result::{ExecuteResult, RejectReason},
+    substate::SubstateId,
+};
 use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
 
 use crate::{
     consensus_models::{
         BlockId,
+        BlockTransactionExecution,
         Decision,
         Evidence,
-        SubstateLockFlag,
+        SubstateLockType,
         TransactionAtom,
         TransactionExecution,
         TransactionRecord,
@@ -38,14 +43,12 @@ use crate::{
 pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
-    resulting_outputs: Vec<VersionedSubstateId>,
+    resulting_outputs: Vec<VersionedSubstateIdLockIntent>,
     resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
-    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
-    execution_time: Duration,
     final_decision: Option<Decision>,
     #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number} | null"))]
     finalized_time: Option<Duration>,
-    abort_details: Option<String>,
+    abort_reason: Option<RejectReason>,
 }
 
 impl ExecutedTransaction {
@@ -53,18 +56,30 @@ impl ExecutedTransaction {
         transaction: Transaction,
         result: ExecuteResult,
         resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
-        resulting_outputs: Vec<VersionedSubstateId>,
-        execution_time: Duration,
     ) -> Self {
+        let outputs = result
+            .finalize
+            .result
+            .accept()
+            .map(|diff| {
+                diff.up_iter()
+                    .map(|(addr, substate)| {
+                        VersionedSubstateIdLockIntent::new(
+                            VersionedSubstateId::new(addr.clone(), substate.version()),
+                            SubstateLockType::Output,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         Self {
             transaction,
             resolved_inputs,
             result,
-            execution_time,
-            resulting_outputs,
+            resulting_outputs: outputs,
             final_decision: None,
             finalized_time: None,
-            abort_details: None,
+            abort_reason: None,
         }
     }
 
@@ -75,6 +90,10 @@ impl ExecutedTransaction {
     pub fn decision(&self) -> Decision {
         if let Some(decision) = self.final_decision {
             return decision;
+        }
+
+        if self.abort_reason.is_some() {
+            return Decision::Abort;
         }
 
         self.original_decision()
@@ -96,15 +115,10 @@ impl ExecutedTransaction {
         self.transaction
     }
 
-    pub fn into_execution_for_block(self, block_id: BlockId) -> TransactionExecution {
-        TransactionExecution::new(
-            block_id,
-            *self.transaction.id(),
-            self.result,
-            self.resolved_inputs,
-            self.resulting_outputs,
-            self.execution_time,
-        )
+    pub fn into_execution(self) -> TransactionExecution {
+        TransactionRecord::from(self)
+            .into_execution()
+            .expect("invariant: ExecutedTransaction is executed")
     }
 
     pub fn result(&self) -> &ExecuteResult {
@@ -126,20 +140,16 @@ impl ExecutedTransaction {
         self.transaction.num_unique_inputs() + self.resulting_outputs.len()
     }
 
-    pub fn into_final_result(self) -> Option<ExecuteResult> {
-        TransactionRecord::from(self).into_final_result()
-    }
-
     pub fn into_result(self) -> ExecuteResult {
         self.result
     }
 
     pub fn execution_time(&self) -> Duration {
-        self.execution_time
+        self.result.execution_time
     }
 
     /// Returns the outputs that resulted from execution.
-    pub fn resulting_outputs(&self) -> &[VersionedSubstateId] {
+    pub fn resulting_outputs(&self) -> &[VersionedSubstateIdLockIntent] {
         &self.resulting_outputs
     }
 
@@ -153,7 +163,7 @@ impl ExecutedTransaction {
         Transaction,
         ExecuteResult,
         Vec<VersionedSubstateIdLockIntent>,
-        Vec<VersionedSubstateId>,
+        Vec<VersionedSubstateIdLockIntent>,
     ) {
         (
             self.transaction,
@@ -173,7 +183,7 @@ impl ExecutedTransaction {
             .fee_receipt
             .total_fees_paid()
             .as_u64_checked()
-            .unwrap_or(0)
+            .expect("invariant: engine calculated negative fees")
     }
 
     pub fn is_finalized(&self) -> bool {
@@ -188,13 +198,12 @@ impl ExecutedTransaction {
         self.finalized_time
     }
 
-    pub fn abort_details(&self) -> Option<&String> {
-        self.abort_details.as_ref()
+    pub fn abort_reason(&self) -> Option<&RejectReason> {
+        self.abort_reason.as_ref()
     }
 
-    pub fn set_abort<T: Into<String>>(&mut self, details: T) -> &mut Self {
-        self.final_decision = Some(Decision::Abort);
-        self.abort_details = Some(details.into());
+    pub fn set_abort_reason(&mut self, reason: RejectReason) -> &mut Self {
+        self.abort_reason = Some(reason);
         self
     }
 
@@ -270,8 +279,8 @@ impl ExecutedTransaction {
         tx: &TTx,
         block_id: &BlockId,
         tx_id: &TransactionId,
-    ) -> Result<TransactionExecution, StorageError> {
-        if let Some(execution) = TransactionExecution::get_by_block(tx, tx_id, block_id).optional()? {
+    ) -> Result<BlockTransactionExecution, StorageError> {
+        if let Some(execution) = BlockTransactionExecution::get_by_block(tx, tx_id, block_id).optional()? {
             return Ok(execution);
         }
 
@@ -284,7 +293,7 @@ impl ExecutedTransaction {
             });
         }
 
-        Ok(exec.into_execution_for_block(*block_id))
+        Ok(exec.into_execution().for_block(*block_id))
     }
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
@@ -358,15 +367,21 @@ impl TryFrom<TransactionRecord> for ExecutedTransaction {
             details: format!("Executed transaction {} has no resolved inputs", value.transaction.id()),
         })?;
 
+        let resulting_outputs = value.resulting_outputs.ok_or_else(|| StorageError::DataInconsistency {
+            details: format!(
+                "Executed transaction {} has no resulting outputs",
+                value.transaction.id()
+            ),
+        })?;
+
         Ok(Self {
             transaction: value.transaction,
             result: value.execution_result.unwrap(),
-            execution_time: value.execution_time.unwrap_or_default(),
             resolved_inputs,
             final_decision: value.final_decision,
             finalized_time: value.finalized_time,
-            resulting_outputs: value.resulting_outputs,
-            abort_details: value.abort_details,
+            resulting_outputs,
+            abort_reason: value.abort_reason,
         })
     }
 }
@@ -385,7 +400,7 @@ impl Hash for ExecutedTransaction {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(
     feature = "ts",
     derive(ts_rs::TS),
@@ -393,27 +408,27 @@ impl Hash for ExecutedTransaction {
 )]
 pub struct VersionedSubstateIdLockIntent {
     versioned_substate_id: VersionedSubstateId,
-    lock_flag: SubstateLockFlag,
+    lock_type: SubstateLockType,
 }
 
 impl VersionedSubstateIdLockIntent {
-    pub fn new(versioned_substate_id: VersionedSubstateId, lock: SubstateLockFlag) -> Self {
+    pub fn new(versioned_substate_id: VersionedSubstateId, lock: SubstateLockType) -> Self {
         Self {
             versioned_substate_id,
-            lock_flag: lock,
+            lock_type: lock,
         }
     }
 
     pub fn read(versioned_substate_id: VersionedSubstateId) -> Self {
-        Self::new(versioned_substate_id, SubstateLockFlag::Read)
+        Self::new(versioned_substate_id, SubstateLockType::Read)
     }
 
     pub fn write(versioned_substate_id: VersionedSubstateId) -> Self {
-        Self::new(versioned_substate_id, SubstateLockFlag::Write)
+        Self::new(versioned_substate_id, SubstateLockType::Write)
     }
 
     pub fn output(versioned_substate_id: VersionedSubstateId) -> Self {
-        Self::new(versioned_substate_id, SubstateLockFlag::Output)
+        Self::new(versioned_substate_id, SubstateLockType::Output)
     }
 
     pub fn to_substate_address(&self) -> SubstateAddress {
@@ -424,13 +439,38 @@ impl VersionedSubstateIdLockIntent {
         &self.versioned_substate_id
     }
 
-    pub fn lock_flag(&self) -> SubstateLockFlag {
-        self.lock_flag
+    pub fn into_versioned_substate_id(self) -> VersionedSubstateId {
+        self.versioned_substate_id
+    }
+
+    pub fn substate_id(&self) -> &SubstateId {
+        self.versioned_substate_id.substate_id()
+    }
+
+    pub fn version(&self) -> u32 {
+        self.versioned_substate_id.version()
+    }
+
+    pub fn lock_type(&self) -> SubstateLockType {
+        self.lock_type
+    }
+}
+
+impl Borrow<SubstateId> for VersionedSubstateIdLockIntent {
+    fn borrow(&self) -> &SubstateId {
+        self.substate_id()
     }
 }
 
 impl fmt::Display for VersionedSubstateIdLockIntent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({})", self.versioned_substate_id, self.lock_flag)
+        write!(f, "{} ({})", self.versioned_substate_id, self.lock_type)
+    }
+}
+
+impl Hash for VersionedSubstateIdLockIntent {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // A VersionedSubstateIdLockIntent is uniquely identified by the VersionedSubstateId
+        self.versioned_substate_id.hash(state);
     }
 }

@@ -37,7 +37,7 @@ mod template {
         }
 
         pub fn invalid_engine_call() {
-            let resource_addr = ResourceAddress::new([123u8; 28].into());
+            let resource_addr = ResourceAddress::new([123u8; 32].into());
             // Cannot create a vault for a resource that doesnt exist
             let vault = Vault::new_empty(resource_addr);
         }

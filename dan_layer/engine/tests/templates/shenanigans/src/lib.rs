@@ -51,9 +51,9 @@ mod template {
                 vault: Some(stolen),
                 ..Default::default()
             })
-            .with_access_rules(AccessRules::allow_all())
-            .with_owner_rule(OwnerRule::ByAccessRule(AccessRule::AllowAll))
-            .create()
+                .with_access_rules(AccessRules::allow_all())
+                .with_owner_rule(OwnerRule::ByAccessRule(AccessRule::AllowAll))
+                .create()
         }
 
         pub fn attempt_to_steal_funds_using_cross_template_call(
@@ -96,7 +96,7 @@ mod template {
                 resource_address: Some(resx),
                 ..Default::default()
             })
-            .create();
+                .create();
 
             Self::default()
         }
@@ -107,7 +107,7 @@ mod template {
                 resource_address: Some(resx),
                 ..Default::default()
             })
-            .create();
+                .create();
 
             Self {
                 component_address: Some(*component.address()),
@@ -117,7 +117,7 @@ mod template {
 
         pub fn non_existent_id() -> Self {
             Self {
-                resource_address: Some(ResourceAddress::from([0xabu8; 28])),
+                resource_address: Some(ResourceAddress::from([0xabu8; 32])),
                 ..Default::default()
             }
         }

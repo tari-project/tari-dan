@@ -2,11 +2,12 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_dan_common_types::{optional::Optional, Epoch};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, Epoch};
 use tari_dan_storage::{
     consensus_models::{TransactionPool, TransactionRecord},
     StateStore,
 };
+use tari_engine_types::commit_result::RejectReason;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::mpsc;
 
@@ -47,11 +48,14 @@ where TConsensusSpec: ConsensusSpec
         current_epoch: Epoch,
         from: TConsensusSpec::Addr,
         msg: MissingTransactionsResponse,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
         info!(target: LOG_TARGET, "Receiving {} requested transactions for block {} from {:?}", msg.transactions.len(), msg.block_id, from, );
         self.store.with_write_tx(|tx| {
             for transaction in msg.transactions {
-                if let Some(rec) = self.validate_and_sequence_transaction(tx, current_epoch, transaction)? {
+                if let Some(rec) =
+                    self.validate_and_sequence_transaction(tx, current_epoch, transaction, local_committee_info)?
+                {
                     // TODO: Could this cause a race-condition? Transaction could be proposed as Prepare before the
                     // unparked block is processed (however, if there's a parked block it's probably not our turn to
                     // propose). Ideally we remove this channel because it's a work around
@@ -70,9 +74,11 @@ where TConsensusSpec: ConsensusSpec
         &mut self,
         current_epoch: Epoch,
         transaction: Transaction,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<Option<TransactionRecord>, HotStuffError> {
-        self.store
-            .with_write_tx(|tx| self.validate_and_sequence_transaction(tx, current_epoch, transaction))
+        self.store.with_write_tx(|tx| {
+            self.validate_and_sequence_transaction(tx, current_epoch, transaction, local_committee_info)
+        })
     }
 
     fn validate_and_sequence_transaction(
@@ -80,6 +86,7 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <<TConsensusSpec as ConsensusSpec>::StateStore as StateStore>::WriteTransaction<'_>,
         current_epoch: Epoch,
         transaction: Transaction,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<Option<TransactionRecord>, HotStuffError> {
         if self.transaction_pool.exists(&**tx, transaction.id())? {
             return Ok(None);
@@ -105,12 +112,18 @@ where TConsensusSpec: ConsensusSpec
                 target: LOG_TARGET,
                 "Transaction {} failed validation: {}", rec.id(), err
             );
-            rec.set_current_decision_to_abort(err.to_string()).insert(tx)?;
-            self.add_to_pool(tx, &rec)?;
+            rec.set_abort_reason(RejectReason::InvalidTransaction(err.to_string()))
+                .insert(tx)?;
+            self.add_to_pool(tx, &rec, true)?;
             return Ok(Some(rec));
         }
+
         rec.save(tx)?;
-        self.add_to_pool(tx, &rec)?;
+
+        let has_some_local_inputs_or_all_foreign_inputs = rec.has_any_local_inputs(local_committee_info) ||
+            rec.has_all_foreign_input_pledges(&**tx, local_committee_info)?;
+        self.add_to_pool(tx, &rec, has_some_local_inputs_or_all_foreign_inputs)?;
+
         Ok(Some(rec))
     }
 
@@ -118,9 +131,10 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         transaction: &TransactionRecord,
+        is_ready: bool,
     ) -> Result<(), HotStuffError> {
         self.transaction_pool
-            .insert_new(tx, *transaction.id(), transaction.current_decision())?;
+            .insert_new(tx, *transaction.id(), transaction.current_decision(), is_ready)?;
         Ok(())
     }
 }

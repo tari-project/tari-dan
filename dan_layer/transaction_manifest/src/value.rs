@@ -74,32 +74,34 @@ mod tests {
 
     #[test]
     fn it_parses_address_strings() {
-        let addr = "component_00000000000000000000000000000000000000000000000000000000"
+        let addr = "component_0000000000000000000000000000000000000000000000000000000000000000"
             .parse::<ManifestValue>()
             .unwrap();
         assert_eq!(
             *addr.as_address().unwrap(),
             SubstateId::Component(
-                ComponentAddress::from_hex("00000000000000000000000000000000000000000000000000000000").unwrap()
+                ComponentAddress::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
             )
         );
 
-        let addr = "resource_00000000000000000000000000000000000000000000000000000000"
+        let addr = "resource_0000000000000000000000000000000000000000000000000000000000000000"
             .parse::<ManifestValue>()
             .unwrap();
         assert_eq!(
             *addr.as_address().unwrap(),
             SubstateId::Resource(
-                ResourceAddress::from_hex("00000000000000000000000000000000000000000000000000000000").unwrap()
+                ResourceAddress::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
             )
         );
 
-        let addr = "vault_00000000000000000000000000000000000000000000000000000000"
+        let addr = "vault_0000000000000000000000000000000000000000000000000000000000000000"
             .parse::<ManifestValue>()
             .unwrap();
         assert_eq!(
             *addr.as_address().unwrap(),
-            SubstateId::Vault(VaultId::from_hex("00000000000000000000000000000000000000000000000000000000").unwrap())
+            SubstateId::Vault(
+                VaultId::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
+            )
         );
     }
 }

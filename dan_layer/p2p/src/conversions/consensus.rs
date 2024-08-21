@@ -26,6 +26,7 @@ use anyhow::anyhow;
 use tari_bor::{decode_exact, encode};
 use tari_common_types::types::PublicKey;
 use tari_consensus::messages::{
+    ForeignProposalMessage,
     FullBlock,
     HotstuffMessage,
     MissingTransactionsRequest,
@@ -51,11 +52,14 @@ use tari_dan_storage::consensus_models::{
     QuorumCertificate,
     QuorumDecision,
     SubstateDestroyed,
+    SubstateLockType,
+    SubstatePledge,
+    SubstatePledges,
     SubstateRecord,
     TransactionAtom,
 };
 use tari_engine_types::substate::{SubstateId, SubstateValue};
-use tari_transaction::TransactionId;
+use tari_transaction::{TransactionId, VersionedSubstateId};
 
 use crate::proto::{self};
 // -------------------------------- HotstuffMessage -------------------------------- //
@@ -160,6 +164,140 @@ impl TryFrom<proto::consensus::ProposalMessage> for ProposalMessage {
         Ok(ProposalMessage {
             block: value.block.ok_or_else(|| anyhow!("Block is missing"))?.try_into()?,
         })
+    }
+}
+
+// -------------------------------- ForeignProposalMessage -------------------------------- //
+
+impl From<&ForeignProposalMessage> for proto::consensus::ForeignProposalMessage {
+    fn from(value: &ForeignProposalMessage) -> Self {
+        Self {
+            block: Some(proto::consensus::Block::from(&value.block)),
+            justify_qc: Some(proto::consensus::QuorumCertificate::from(&value.justify_qc)),
+            block_pledge: value.block_pledge.iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::ForeignProposalMessage> for ForeignProposalMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::ForeignProposalMessage) -> Result<Self, Self::Error> {
+        Ok(ForeignProposalMessage {
+            block: value.block.ok_or_else(|| anyhow!("Block is missing"))?.try_into()?,
+            justify_qc: value
+                .justify_qc
+                .ok_or_else(|| anyhow!("Justify QC is missing"))?
+                .try_into()?,
+            block_pledge: value
+                .block_pledge
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+// -------------------------------- TransactionPledge -------------------------------- //
+
+impl From<(&TransactionId, &SubstatePledges)> for proto::consensus::TransactionPledge {
+    fn from((tx_id, pledges): (&TransactionId, &SubstatePledges)) -> Self {
+        Self {
+            transaction_id: tx_id.as_bytes().to_vec(),
+            pledges: pledges.iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::TransactionPledge> for (TransactionId, SubstatePledges) {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::TransactionPledge) -> Result<Self, Self::Error> {
+        Ok((
+            TransactionId::try_from(value.transaction_id)?,
+            value
+                .pledges
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
+        ))
+    }
+}
+
+// -------------------------------- SubstatePledge -------------------------------- //
+
+impl From<&SubstatePledge> for proto::consensus::SubstatePledge {
+    fn from(value: &SubstatePledge) -> Self {
+        match value {
+            SubstatePledge::Input {
+                substate_id,
+                is_write,
+                substate,
+            } => Self {
+                pledge: Some(proto::consensus::substate_pledge::Pledge::Input(
+                    proto::consensus::SubstatePledgeInput {
+                        substate_id: substate_id.substate_id().to_bytes(),
+                        version: substate_id.version(),
+                        substate_value: substate.to_bytes(),
+                        is_write: *is_write,
+                    },
+                )),
+            },
+            SubstatePledge::Output { substate_id } => Self {
+                pledge: Some(proto::consensus::substate_pledge::Pledge::Output(
+                    proto::consensus::SubstatePledgeOutput {
+                        substate_id: substate_id.substate_id().to_bytes(),
+                        version: substate_id.version(),
+                    },
+                )),
+            },
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::SubstatePledge> for SubstatePledge {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::SubstatePledge) -> Result<Self, Self::Error> {
+        let pledge = value
+            .pledge
+            .ok_or_else(|| anyhow!("TryFrom proto::consensus::SubstatePledge Pledge is missing"))?;
+        let pledge = match pledge {
+            proto::consensus::substate_pledge::Pledge::Input(input) => SubstatePledge::Input {
+                substate_id: VersionedSubstateId::new(SubstateId::from_bytes(&input.substate_id)?, input.version),
+                is_write: input.is_write,
+                substate: SubstateValue::from_bytes(&input.substate_value)?,
+            },
+            proto::consensus::substate_pledge::Pledge::Output(output) => SubstatePledge::Output {
+                substate_id: VersionedSubstateId::new(SubstateId::from_bytes(&output.substate_id)?, output.version),
+            },
+        };
+        Ok(pledge)
+    }
+}
+
+// -------------------------------- SubstateLockType -------------------------------- //
+
+impl From<SubstateLockType> for proto::consensus::SubstateLockType {
+    fn from(value: SubstateLockType) -> Self {
+        match value {
+            SubstateLockType::Read => proto::consensus::SubstateLockType::Read,
+            SubstateLockType::Write => proto::consensus::SubstateLockType::Write,
+            SubstateLockType::Output => proto::consensus::SubstateLockType::Output,
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::SubstateLockType> for SubstateLockType {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::SubstateLockType) -> Result<Self, Self::Error> {
+        match value {
+            proto::consensus::SubstateLockType::Read => Ok(SubstateLockType::Read),
+            proto::consensus::SubstateLockType::Write => Ok(SubstateLockType::Write),
+            proto::consensus::SubstateLockType::Output => Ok(SubstateLockType::Output),
+            _ => Err(anyhow!("Invalid SubstateLockType {:?}", value)),
+        }
     }
 }
 
@@ -342,8 +480,12 @@ impl From<&Command> for proto::consensus::Command {
         let command = match value {
             Command::LocalOnly(tx) => proto::consensus::command::Command::LocalOnly(tx.into()),
             Command::Prepare(tx) => proto::consensus::command::Command::Prepare(tx.into()),
-            Command::LocalPrepared(tx) => proto::consensus::command::Command::LocalPrepared(tx.into()),
-            Command::Accept(tx) => proto::consensus::command::Command::Accept(tx.into()),
+            Command::LocalPrepare(tx) => proto::consensus::command::Command::LocalPrepare(tx.into()),
+            Command::AllPrepare(tx) => proto::consensus::command::Command::AllPrepare(tx.into()),
+            Command::SomePrepare(tx) => proto::consensus::command::Command::SomePrepare(tx.into()),
+            Command::LocalAccept(tx) => proto::consensus::command::Command::LocalAccept(tx.into()),
+            Command::AllAccept(tx) => proto::consensus::command::Command::AllAccept(tx.into()),
+            Command::SomeAccept(tx) => proto::consensus::command::Command::SomeAccept(tx.into()),
             Command::ForeignProposal(foreign_proposal) => {
                 proto::consensus::command::Command::ForeignProposal(foreign_proposal.into())
             },
@@ -362,8 +504,12 @@ impl TryFrom<proto::consensus::Command> for Command {
         Ok(match command {
             proto::consensus::command::Command::LocalOnly(tx) => Command::LocalOnly(tx.try_into()?),
             proto::consensus::command::Command::Prepare(tx) => Command::Prepare(tx.try_into()?),
-            proto::consensus::command::Command::LocalPrepared(tx) => Command::LocalPrepared(tx.try_into()?),
-            proto::consensus::command::Command::Accept(tx) => Command::Accept(tx.try_into()?),
+            proto::consensus::command::Command::LocalPrepare(tx) => Command::LocalPrepare(tx.try_into()?),
+            proto::consensus::command::Command::AllPrepare(tx) => Command::AllPrepare(tx.try_into()?),
+            proto::consensus::command::Command::SomePrepare(tx) => Command::SomePrepare(tx.try_into()?),
+            proto::consensus::command::Command::LocalAccept(tx) => Command::LocalAccept(tx.try_into()?),
+            proto::consensus::command::Command::AllAccept(tx) => Command::AllAccept(tx.try_into()?),
+            proto::consensus::command::Command::SomeAccept(tx) => Command::SomeAccept(tx.try_into()?),
             proto::consensus::command::Command::ForeignProposal(foreign_proposal) => {
                 Command::ForeignProposal(foreign_proposal.try_into()?)
             },

@@ -52,16 +52,20 @@ impl Display for Decision {
 }
 
 impl FromStr for Decision {
-    type Err = ();
+    type Err = DecisionFromStrErr;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "Commit" => Ok(Decision::Commit),
             "Abort" => Ok(Decision::Abort),
-            _ => Err(()),
+            _ => Err(DecisionFromStrErr(s.to_string())),
         }
     }
 }
+
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("Invalid Decision string '{0}'")]
+pub struct DecisionFromStrErr(String);
 
 impl From<&TransactionResult> for Decision {
     fn from(result: &TransactionResult) -> Self {

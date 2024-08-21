@@ -190,28 +190,38 @@ impl QuorumCertificate {
         Ok(tx.quorum_certificates_get(&self.qc_id).optional()?.is_some())
     }
 
+    pub fn check_high_qc<TTx>(&self, tx: &mut TTx) -> Result<(bool, HighQc), StorageError>
+    where
+        TTx: StateStoreWriteTransaction + Deref + ?Sized,
+        TTx::Target: StateStoreReadTransaction,
+    {
+        let high_qc = HighQc::get(&**tx)?;
+        if high_qc.block_height() < self.block_height() {
+            return Ok((true, self.as_high_qc()));
+        }
+
+        Ok((false, high_qc))
+    }
+
     pub fn update_high_qc<TTx>(&self, tx: &mut TTx) -> Result<HighQc, StorageError>
     where
         TTx: StateStoreWriteTransaction + Deref + ?Sized,
         TTx::Target: StateStoreReadTransaction,
     {
-        let mut high_qc = HighQc::get(&**tx)?;
+        let (_, high_qc) = self.check_high_qc(tx)?;
 
-        if high_qc.block_height() < self.block_height() {
-            info!(
-                target: LOG_TARGET,
-                "🔥 UPDATE_HIGH_QC ({}, previous high QC: {} {})",
-                self,
-                high_qc.block_id(),
-                high_qc.block_height(),
-            );
+        info!(
+            target: LOG_TARGET,
+            "🔥 UPDATE_HIGH_QC ({}, previous high QC: {} {})",
+            self,
+            high_qc.block_id(),
+            high_qc.block_height(),
+        );
 
-            self.save(tx)?;
-            // This will fail if the block doesnt exist
-            self.as_leaf_block().set(tx)?;
-            high_qc = self.as_high_qc();
-            high_qc.set(tx)?;
-        }
+        self.save(tx)?;
+        // This will fail if the block doesnt exist
+        self.as_leaf_block().set(tx)?;
+        high_qc.set(tx)?;
 
         Ok(high_qc)
     }

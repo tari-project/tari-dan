@@ -113,7 +113,7 @@ mod tests {
 
         #[test]
         fn string_serialization_and_deserialization() {
-            let resx_str = "resource_00000000000000000000000000000000000000000000000000000000";
+            let resx_str = "resource_0000000000000000000000000000000000000000000000000000000000000000";
             let resource = ResourceAddress::from_str(resx_str).unwrap();
             let json = serde_json::to_string_pretty(&resource).unwrap();
             assert_eq!(json.trim_matches('"'), resx_str);

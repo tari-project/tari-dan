@@ -70,14 +70,13 @@ mod confirm_all_transitions {
         );
         block1.insert(&mut tx).unwrap();
 
-        tx.transaction_pool_insert_new(atom1.id, atom1.decision).unwrap();
-        tx.transaction_pool_insert_new(atom2.id, atom2.decision).unwrap();
-        tx.transaction_pool_insert_new(atom3.id, atom3.decision).unwrap();
+        tx.transaction_pool_insert_new(atom1.id, atom1.decision, true).unwrap();
+        tx.transaction_pool_insert_new(atom2.id, atom2.decision, true).unwrap();
+        tx.transaction_pool_insert_new(atom3.id, atom3.decision, true).unwrap();
         let block_id = *block1.id();
 
         tx.transaction_pool_add_pending_update(&TransactionPoolStatusUpdate {
             block_id,
-            block_height: NodeHeight(1),
             transaction_id: atom1.id,
             stage: TransactionPoolStage::LocalPrepared,
             evidence: Default::default(),
@@ -87,7 +86,6 @@ mod confirm_all_transitions {
         .unwrap();
         tx.transaction_pool_add_pending_update(&TransactionPoolStatusUpdate {
             block_id,
-            block_height: NodeHeight(1),
             transaction_id: atom2.id,
             stage: TransactionPoolStage::Prepared,
             evidence: Default::default(),
@@ -97,7 +95,6 @@ mod confirm_all_transitions {
         .unwrap();
         tx.transaction_pool_add_pending_update(&TransactionPoolStatusUpdate {
             block_id,
-            block_height: NodeHeight(1),
             transaction_id: atom3.id,
             stage: TransactionPoolStage::Prepared,
             evidence: Default::default(),
@@ -118,7 +115,7 @@ mod confirm_all_transitions {
         assert!(rec.committed_stage().is_new());
         assert!(rec.pending_stage().unwrap().is_prepared());
 
-        tx.transaction_pool_set_all_transitions(&zero_block.as_locked_block(), &block1.as_locked_block(), &[
+        tx.transaction_pool_confirm_all_transitions(&zero_block.as_locked_block(), &block1.as_locked_block(), &[
             atom1.id, atom3.id,
         ])
         .unwrap();

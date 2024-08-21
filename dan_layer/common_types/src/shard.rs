@@ -41,7 +41,10 @@ impl Shard {
         // Power of two integer division using bit shifts
         let shard_size = U256::MAX >> num_shards.trailing_zeros();
         if self.0 == 0 {
-            return RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::from_u256(shard_size - 1));
+            return RangeInclusive::new(
+                SubstateAddress::zero(),
+                SubstateAddress::from_u256_zero_version(shard_size - 1),
+            );
         }
 
         // Add one to each start to account for remainder
@@ -49,15 +52,15 @@ impl Shard {
 
         if self.0 == num_shards - 1 {
             return RangeInclusive::new(
-                SubstateAddress::from_u256(start + shard_u256 - 1),
+                SubstateAddress::from_u256_zero_version(start + shard_u256 - 1),
                 SubstateAddress::max(),
             );
         }
 
         let end = start + shard_size;
         RangeInclusive::new(
-            SubstateAddress::from_u256(start + shard_u256 - 1),
-            SubstateAddress::from_u256(end + shard_u256 - 1),
+            SubstateAddress::from_u256_zero_version(start + shard_u256 - 1),
+            SubstateAddress::from_u256_zero_version(end + shard_u256 - 1),
         )
 
         // let num_shards_next_pow2 = num_shards.next_power_of_two();

@@ -3,8 +3,8 @@
 
 use std::time::Duration;
 
-use tari_engine_types::commit_result::ExecuteResult;
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_engine_types::commit_result::{ExecuteResult, RejectReason};
+use tari_transaction::TransactionId;
 
 use crate::{
     consensus_models::{BlockId, Decision, Evidence, VersionedSubstateIdLockIntent},
@@ -15,31 +15,112 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct TransactionExecution {
-    pub block_id: BlockId,
     pub transaction_id: TransactionId,
     pub result: ExecuteResult,
+    pub abort_reason: Option<RejectReason>,
     pub resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
-    pub resulting_outputs: Vec<VersionedSubstateId>,
-    pub execution_time: Duration,
+    pub resulting_outputs: Vec<VersionedSubstateIdLockIntent>,
 }
 
 impl TransactionExecution {
+    pub fn new(
+        transaction_id: TransactionId,
+        result: ExecuteResult,
+        resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
+        resulting_outputs: Vec<VersionedSubstateIdLockIntent>,
+        abort_reason: Option<RejectReason>,
+    ) -> Self {
+        Self {
+            transaction_id,
+            result,
+            resolved_inputs,
+            resulting_outputs,
+            abort_reason,
+        }
+    }
+
+    pub fn result(&self) -> &ExecuteResult {
+        &self.result
+    }
+
+    pub fn decision(&self) -> Decision {
+        if self.abort_reason.is_some() {
+            return Decision::Abort;
+        }
+        Decision::from(&self.result.finalize.result)
+    }
+
+    pub fn transaction_fee(&self) -> u64 {
+        if self.decision().is_abort() {
+            return 0;
+        }
+
+        self.result
+            .finalize
+            .fee_receipt
+            .total_fees_paid()
+            .as_u64_checked()
+            .expect("invariant: engine calculated negative fee")
+    }
+
+    pub fn resolved_inputs(&self) -> &[VersionedSubstateIdLockIntent] {
+        &self.resolved_inputs
+    }
+
+    pub fn resulting_outputs(&self) -> &[VersionedSubstateIdLockIntent] {
+        &self.resulting_outputs
+    }
+
+    pub fn abort_reason(&self) -> Option<&RejectReason> {
+        self.abort_reason.as_ref()
+    }
+
+    pub fn set_abort_reason(&mut self, abort_reason: RejectReason) -> &mut Self {
+        self.abort_reason = Some(abort_reason);
+        self
+    }
+
+    pub fn for_block(self, block_id: BlockId) -> BlockTransactionExecution {
+        BlockTransactionExecution {
+            block_id,
+            execution: self,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BlockTransactionExecution {
+    pub block_id: BlockId,
+    pub execution: TransactionExecution,
+}
+
+impl BlockTransactionExecution {
     pub fn new(
         block_id: BlockId,
         transaction_id: TransactionId,
         result: ExecuteResult,
         resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
-        resulting_outputs: Vec<VersionedSubstateId>,
-        execution_time: Duration,
+        resulting_outputs: Vec<VersionedSubstateIdLockIntent>,
+        abort_reason: Option<RejectReason>,
     ) -> Self {
         Self {
             block_id,
-            transaction_id,
-            result,
-            resolved_inputs,
-            resulting_outputs,
-            execution_time,
+            execution: TransactionExecution::new(
+                transaction_id,
+                result,
+                resolved_inputs,
+                resulting_outputs,
+                abort_reason,
+            ),
         }
+    }
+
+    pub fn transaction_execution(&self) -> &TransactionExecution {
+        &self.execution
+    }
+
+    pub fn into_transaction_execution(self) -> TransactionExecution {
+        self.execution
     }
 
     pub fn block_id(&self) -> &BlockId {
@@ -47,45 +128,44 @@ impl TransactionExecution {
     }
 
     pub fn decision(&self) -> Decision {
-        Decision::from(&self.result.finalize.result)
+        self.execution.decision()
     }
 
     pub fn transaction_id(&self) -> &TransactionId {
-        &self.transaction_id
+        &self.execution.transaction_id
     }
 
     pub fn result(&self) -> &ExecuteResult {
-        &self.result
+        self.execution.result()
     }
 
     pub fn resolved_inputs(&self) -> &[VersionedSubstateIdLockIntent] {
-        &self.resolved_inputs
+        &self.execution.resolved_inputs
     }
 
-    pub fn resulting_outputs(&self) -> &Vec<VersionedSubstateId> {
-        &self.resulting_outputs
+    pub fn resulting_outputs(&self) -> &[VersionedSubstateIdLockIntent] {
+        &self.execution.resulting_outputs
     }
 
     pub fn execution_time(&self) -> Duration {
-        self.execution_time
+        self.execution.result.execution_time
+    }
+
+    pub fn abort_reason(&self) -> Option<&RejectReason> {
+        self.execution.abort_reason()
     }
 
     pub fn to_initial_evidence(&self) -> Evidence {
-        Evidence::from_inputs_and_outputs(&self.resolved_inputs, &self.resulting_outputs)
+        Evidence::from_inputs_and_outputs(&self.execution.resolved_inputs, &self.execution.resulting_outputs)
     }
 
     pub fn transaction_fee(&self) -> u64 {
-        self.result
-            .finalize
-            .fee_receipt
-            .total_fees_paid()
-            .as_u64_checked()
-            .unwrap()
+        self.execution.transaction_fee()
     }
 }
 
-impl TransactionExecution {
-    pub fn insert_if_required<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+impl BlockTransactionExecution {
+    pub fn insert_if_required<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
         tx.transaction_executions_insert_or_ignore(self)
     }
 

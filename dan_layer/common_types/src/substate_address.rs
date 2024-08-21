@@ -5,13 +5,16 @@ use std::{
     cmp::Ordering,
     fmt,
     fmt::{Display, Formatter},
-    mem,
+    mem::size_of,
     str::FromStr,
 };
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_crypto::tari_utilities::hex::{from_hex, Hex};
+use tari_crypto::tari_utilities::{
+    hex::{from_hex, Hex},
+    ByteArray,
+};
 use tari_engine_types::{
     hashing::{hasher32, EngineHashDomainLabel},
     serde_with,
@@ -31,10 +34,12 @@ use crate::{shard::Shard, uint::U256, NumPreshards, ShardGroup};
 pub struct SubstateAddress(
     #[serde(with = "serde_with::hex")]
     #[cfg_attr(feature = "ts", ts(type = "string"))]
-    [u8; 32],
+    [u8; SubstateAddress::LENGTH],
 );
 
 impl SubstateAddress {
+    pub const LENGTH: usize = ObjectKey::LENGTH + size_of::<u32>();
+
     /// Defines the mapping of SubstateId to SubstateAddress
     pub fn from_substate_id(id: &SubstateId, version: u32) -> Self {
         match id {
@@ -75,23 +80,22 @@ impl SubstateAddress {
 
     fn from_object_key(object_key: &ObjectKey, version: u32) -> Self {
         // concatenate (entity_id, component_key), and version
-        let mut buf = [0u8; 32];
+        let mut buf = [0u8; SubstateAddress::LENGTH];
         buf[..ObjectKey::LENGTH].copy_from_slice(object_key);
-        buf[ObjectKey::LENGTH..ObjectKey::LENGTH + mem::size_of::<u32>()].copy_from_slice(&version.to_le_bytes());
+        buf[ObjectKey::LENGTH..].copy_from_slice(&version.to_le_bytes());
 
         Self(buf)
     }
 
     fn from_hash(hash: &Hash, version: u32) -> Self {
-        let new_addr = hasher32(EngineHashDomainLabel::SubstateAddress)
-            .chain(hash)
-            .chain(&version)
-            .result();
-        Self(new_addr.into_array())
-    }
-
-    pub const fn new(id: [u8; 32]) -> Self {
-        Self(id)
+        // let new_addr = hasher32(EngineHashDomainLabel::SubstateAddress)
+        //     .chain(hash)
+        //     .chain(&version)
+        //     .result();
+        let mut buf = [0u8; SubstateAddress::LENGTH];
+        buf[..ObjectKey::LENGTH].copy_from_slice(hash);
+        buf[ObjectKey::LENGTH..].copy_from_slice(&version.to_le_bytes());
+        Self(buf)
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -99,36 +103,61 @@ impl SubstateAddress {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, FixedHashSizeError> {
-        let hash = FixedHash::try_from(bytes)?;
-        Ok(Self(hash.into_array()))
+        if bytes.len() != SubstateAddress::LENGTH {
+            return Err(FixedHashSizeError);
+        }
+        let hash = Hash::try_from(&bytes[..ObjectKey::LENGTH]).map_err(|_| FixedHashSizeError)?;
+        let mut v_buf = [0u8; size_of::<u32>()];
+        v_buf.copy_from_slice(&bytes[ObjectKey::LENGTH..]);
+        let version = u32::from_le_bytes(v_buf);
+        Ok(Self::from_hash(&hash, version))
     }
 
     pub fn is_zero(&self) -> bool {
         self.as_bytes().iter().all(|&b| b == 0)
     }
 
-    pub const fn into_array(self) -> [u8; 32] {
+    pub const fn into_array(self) -> [u8; SubstateAddress::LENGTH] {
         self.0
     }
 
-    pub const fn array(&self) -> &[u8; 32] {
+    pub const fn array(&self) -> &[u8; SubstateAddress::LENGTH] {
         &self.0
     }
 
     pub const fn zero() -> Self {
-        Self([0u8; 32])
+        Self([0u8; SubstateAddress::LENGTH])
     }
 
     pub const fn max() -> Self {
-        Self([0xffu8; 32])
+        Self([0xffu8; SubstateAddress::LENGTH])
     }
 
-    pub fn from_u256(shard: U256) -> Self {
-        Self(shard.to_be_bytes())
+    pub fn from_hash_and_version(hash: FixedHash, version: u32) -> Self {
+        // This will cause an error at compile-time if ObjectKey::LENGTH != FixedHash::byte_size()
+        // If ObjectKey should differ in length, then this function should likely be removed.
+        const _: () = [()][1 - (FixedHash::byte_size() == ObjectKey::LENGTH) as usize];
+        let mut buf = [0u8; SubstateAddress::LENGTH];
+        buf[..ObjectKey::LENGTH].copy_from_slice(hash.as_bytes());
+        buf[ObjectKey::LENGTH..].copy_from_slice(&version.to_le_bytes());
+        Self(buf)
+    }
+
+    pub fn from_u256_zero_version(address: U256) -> Self {
+        Self::from_u256(address, 0)
+    }
+
+    pub fn from_u256(address: U256, version: u32) -> Self {
+        let mut buf = [0u8; SubstateAddress::LENGTH];
+        buf[..ObjectKey::LENGTH].copy_from_slice(&address.to_be_bytes());
+        buf[ObjectKey::LENGTH..].copy_from_slice(&version.to_le_bytes());
+        Self(buf)
     }
 
     pub fn to_u256(&self) -> U256 {
-        U256::from_be_bytes(self.0)
+        let mut buf = [0u8; ObjectKey::LENGTH];
+        buf.copy_from_slice(&self.0[..ObjectKey::LENGTH]);
+        U256::from_be_bytes(buf)
     }
 
     /// Calculates and returns the shard number that this SubstateAddress belongs.
@@ -220,8 +249,8 @@ impl SubstateAddress {
     }
 }
 
-impl From<[u8; 32]> for SubstateAddress {
-    fn from(bytes: [u8; 32]) -> Self {
+impl From<[u8; SubstateAddress::LENGTH]> for SubstateAddress {
+    fn from(bytes: [u8; SubstateAddress::LENGTH]) -> Self {
         Self(bytes)
     }
 }
@@ -295,10 +324,10 @@ mod tests {
 
     #[test]
     fn substate_addresses_to_from_u256_endianness_matches() {
-        let mut buf = [0u8; 32];
-        OsRng.fill_bytes(&mut buf);
+        let mut buf = [0u8; SubstateAddress::LENGTH];
+        OsRng.fill_bytes(&mut buf[..ObjectKey::LENGTH]);
         let s = SubstateAddress(buf);
-        let result = SubstateAddress::from_u256(s.to_u256());
+        let result = SubstateAddress::from_u256_zero_version(s.to_u256());
         assert_eq!(result, s);
     }
 
@@ -444,7 +473,7 @@ mod tests {
             return SubstateAddress::max();
         }
         let size = U256::MAX / U256::from(of);
-        SubstateAddress::from_u256(U256::from(part) * size)
+        SubstateAddress::from_u256_zero_version(U256::from(part) * size)
     }
 
     /// Returns the start address of the shard with given num_shards
@@ -454,11 +483,11 @@ mod tests {
     }
 
     fn divide_floor(shard: SubstateAddress, by: u32) -> SubstateAddress {
-        SubstateAddress::from_u256(shard.to_u256() / U256::from(by))
+        SubstateAddress::from_u256_zero_version(shard.to_u256() / U256::from(by))
     }
 
     fn minus_one(shard: SubstateAddress) -> SubstateAddress {
-        SubstateAddress::from_u256(shard.to_u256() - U256::from(1u32))
+        SubstateAddress::from_u256_zero_version(shard.to_u256() - U256::from(1u32))
     }
 
     fn plus_one(address: SubstateAddress) -> SubstateAddress {
@@ -466,7 +495,7 @@ mod tests {
     }
 
     fn add(address: SubstateAddress, v: u32) -> SubstateAddress {
-        SubstateAddress::from_u256(address.to_u256().saturating_add(U256::from(v)))
+        SubstateAddress::from_u256_zero_version(address.to_u256().saturating_add(U256::from(v)))
     }
 
     fn assert_range<R: RangeBounds<SubstateAddress>>(range: RangeInclusive<SubstateAddress>, expected: R) {

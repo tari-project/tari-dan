@@ -8,7 +8,7 @@ use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::SubstateAddress;
 use tari_transaction::Transaction;
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone)]
 pub enum Message {
     Consensus(HotstuffMessage),
     Dan(DanMessage),

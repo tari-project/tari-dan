@@ -8,12 +8,7 @@ use log::*;
 use tari_dan_app_utilities::json_encoding;
 use tari_dan_common_types::{optional::Optional, Epoch};
 use tari_dan_wallet_sdk::apis::{jwt::JrpcPermission, key_manager};
-use tari_engine_types::{
-    commit_result::ExecuteResult,
-    indexed_value::IndexedValue,
-    instruction::Instruction,
-    substate::SubstateId,
-};
+use tari_engine_types::{indexed_value::IndexedValue, instruction::Instruction, substate::SubstateId};
 use tari_template_lib::{args, args::Arg, models::Amount};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
@@ -152,16 +147,16 @@ pub async fn handle_submit(
         transaction.hash()
     );
     if req.is_dry_run {
-        let finalize = context
+        let exec_result = context
             .transaction_service()
             .submit_dry_run_transaction(transaction, inputs.clone())
             .await?;
 
-        let json_result = json_encoding::encode_finalize_result_into_json(&finalize)?;
+        let json_result = json_encoding::encode_finalize_result_into_json(&exec_result.finalize)?;
 
         Ok(TransactionSubmitResponse {
-            transaction_id: finalize.transaction_hash.into_array().into(),
-            result: Some(ExecuteResult { finalize }),
+            transaction_id: exec_result.finalize.transaction_hash.into_array().into(),
+            result: Some(exec_result),
             json_result: Some(json_result),
             inputs,
         })

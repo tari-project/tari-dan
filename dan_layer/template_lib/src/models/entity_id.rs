@@ -118,7 +118,7 @@ impl Display for EntityId {
 pub struct ComponentKey([u8; Self::LENGTH]);
 
 impl ComponentKey {
-    pub const LENGTH: usize = 8;
+    pub const LENGTH: usize = 12;
 
     pub const fn new(bytes: [u8; Self::LENGTH]) -> Self {
         Self(bytes)

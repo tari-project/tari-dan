@@ -11,6 +11,7 @@ use tari_dan_wallet_sdk::{
     storage::WalletStore,
     DanWalletSdk,
 };
+use tari_engine_types::commit_result::ExecuteResult;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use tokio::{
@@ -130,11 +131,15 @@ where
                         // Unlock all proofs related to the transaction
                         transaction_api.release_all_outputs_for_transaction(transaction_id)?;
 
+                        let finalize = finalized_transaction.finalize.ok_or_else(|| {
+                            TransactionServiceError::DryRunTransactionFailed {
+                                details: "Transaction was not finalized".to_string(),
+                            }
+                        });
                         reply
-                            .send(finalized_transaction.finalize.ok_or_else(|| {
-                                TransactionServiceError::DryRunTransactionFailed {
-                                    details: "Transaction was not finalized".to_string(),
-                                }
+                            .send(finalize.map(|finalize| ExecuteResult {
+                                finalize,
+                                execution_time: finalized_transaction.execution_time.unwrap_or_default(),
                             }))
                             .map_err(|_| TransactionServiceError::ServiceShutdown)?;
                     },

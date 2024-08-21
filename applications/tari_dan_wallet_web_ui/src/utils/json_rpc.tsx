@@ -83,7 +83,12 @@ import { AccountGetDefaultRequest, TemplatesGetRequest, WalletDaemonClient } fro
 let clientInstance: WalletDaemonClient | null = null;
 let pendingClientInstance: Promise<WalletDaemonClient> | null = null;
 let outerAddress: URL | null = null;
-const DEFAULT_WALLET_ADDRESS = new URL(import.meta.env.VITE_DAEMON_JRPC_ADDRESS || "http://localhost:9000");
+const DEFAULT_WALLET_ADDRESS = new URL(
+  import.meta.env.VITE_DAEMON_JRPC_ADDRESS ||
+    import.meta.env.VITE_JSON_RPC_ADDRESS ||
+    import.meta.env.VITE_JRPC_ADDRESS ||
+    "http://localhost:9000",
+);
 
 export async function getClientAddress(): Promise<URL> {
   try {

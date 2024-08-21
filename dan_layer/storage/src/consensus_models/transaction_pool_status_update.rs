@@ -1,7 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::NodeHeight;
 use tari_transaction::TransactionId;
 
 use crate::{
@@ -12,7 +11,6 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct TransactionPoolStatusUpdate {
     pub block_id: BlockId,
-    pub block_height: NodeHeight,
     pub transaction_id: TransactionId,
     pub stage: TransactionPoolStage,
     pub evidence: Evidence,
@@ -23,10 +21,6 @@ pub struct TransactionPoolStatusUpdate {
 impl TransactionPoolStatusUpdate {
     pub fn block_id(&self) -> &BlockId {
         &self.block_id
-    }
-
-    pub fn block_height(&self) -> NodeHeight {
-        self.block_height
     }
 
     pub fn transaction_id(&self) -> &TransactionId {

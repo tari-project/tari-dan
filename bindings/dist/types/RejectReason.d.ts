@@ -1,11 +1,15 @@
 export type RejectReason = {
-    ShardsNotPledged: string;
+    InvalidTransaction: string;
 } | {
     ExecutionFailure: string;
-} | "PreviousQcRejection" | {
-    ShardPledgedToAnotherPayload: string;
 } | {
-    ShardRejected: string;
-} | "FeeTransactionFailed" | {
+    OneOrMoreInputsNotFound: string;
+} | "NoInputs" | {
+    FailedToLockInputs: string;
+} | {
+    FailedToLockOutputs: string;
+} | {
+    ForeignShardGroupDecidedToAbort: string;
+} | {
     FeesNotPaid: string;
-};
+} | "Unknown";

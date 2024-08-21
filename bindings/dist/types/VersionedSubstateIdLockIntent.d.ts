@@ -1,6 +1,6 @@
-import type { SubstateLockFlag } from "./SubstateLockFlag";
+import type { SubstateLockType } from "./SubstateLockType";
 import type { VersionedSubstateId } from "./VersionedSubstateId";
 export interface VersionedSubstateIdLockIntent {
     versioned_substate_id: VersionedSubstateId;
-    lock_flag: SubstateLockFlag;
+    lock_type: SubstateLockType;
 }

@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
+    clone::Clone,
     fmt::{Display, Formatter},
     marker::PhantomData,
     num::NonZeroU64,
@@ -9,21 +10,25 @@ use std::{
 };
 
 use log::*;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tari_dan_common_types::{
     committee::CommitteeInfo,
     optional::{IsNotFoundError, Optional},
+    ShardGroup,
 };
 use tari_transaction::TransactionId;
 
 use crate::{
     consensus_models::{
         BlockId,
+        BlockTransactionExecution,
         Decision,
         Evidence,
+        LeaderFee,
         LeafBlock,
         LockedBlock,
         QcId,
+        SubstatePledges,
         TransactionAtom,
         TransactionExecution,
         TransactionPoolStatusUpdate,
@@ -36,91 +41,6 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan::storage::transaction_pool";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(ts_rs::TS, Deserialize),
-    ts(export, export_to = "../../bindings/src/types/")
-)]
-pub enum TransactionPoolStage {
-    /// Transaction has just come in and has never been proposed
-    New,
-    /// Transaction is prepared in response to a Prepare command, but we do not yet have confirmation that the rest of
-    /// the local committee has prepared.
-    Prepared,
-    /// We have proof that all local committees have prepared the transaction
-    LocalPrepared,
-    /// All foreign shards have prepared and have an identical decision
-    AllPrepared,
-    /// All foreign shards have prepared but one or more has decided to ABORT
-    SomePrepared,
-    /// Only involves local shards
-    LocalOnly,
-}
-
-impl TransactionPoolStage {
-    pub fn is_new(&self) -> bool {
-        matches!(self, Self::New)
-    }
-
-    pub fn is_local_only(&self) -> bool {
-        matches!(self, Self::LocalOnly)
-    }
-
-    pub fn is_prepared(&self) -> bool {
-        matches!(self, Self::Prepared)
-    }
-
-    pub fn is_local_prepared(&self) -> bool {
-        matches!(self, Self::LocalPrepared)
-    }
-
-    pub fn is_some_prepared(&self) -> bool {
-        matches!(self, Self::SomePrepared)
-    }
-
-    pub fn is_all_prepared(&self) -> bool {
-        matches!(self, Self::AllPrepared)
-    }
-
-    pub fn is_accepted(&self) -> bool {
-        self.is_all_prepared() || self.is_some_prepared()
-    }
-
-    pub fn next_stage(&self) -> Option<Self> {
-        match self {
-            TransactionPoolStage::New => Some(TransactionPoolStage::Prepared),
-            TransactionPoolStage::Prepared => Some(TransactionPoolStage::LocalPrepared),
-            TransactionPoolStage::LocalPrepared => Some(TransactionPoolStage::AllPrepared),
-            TransactionPoolStage::LocalOnly |
-            TransactionPoolStage::AllPrepared |
-            TransactionPoolStage::SomePrepared => None,
-        }
-    }
-}
-
-impl Display for TransactionPoolStage {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(self, f)
-    }
-}
-
-impl FromStr for TransactionPoolStage {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "New" => Ok(TransactionPoolStage::New),
-            "Prepared" => Ok(TransactionPoolStage::Prepared),
-            "LocalPrepared" => Ok(TransactionPoolStage::LocalPrepared),
-            "SomePrepared" => Ok(TransactionPoolStage::SomePrepared),
-            "AllPrepared" => Ok(TransactionPoolStage::AllPrepared),
-            "LocalOnly" => Ok(TransactionPoolStage::LocalOnly),
-            _ => Err(()),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionPool<TStateStore> {
@@ -139,7 +59,6 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         id: &TransactionId,
     ) -> Result<TransactionPoolRecord, TransactionPoolError> {
         // We always want to fetch the state at the current leaf block until the leaf block
-        // let leaf = LeafBlock::get(tx)?;
         let locked = LockedBlock::get(tx)?;
         debug!(
             target: LOG_TARGET,
@@ -166,17 +85,9 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         tx: &mut TStateStore::WriteTransaction<'_>,
         tx_id: TransactionId,
         decision: Decision,
+        is_ready: bool,
     ) -> Result<(), TransactionPoolError> {
-        tx.transaction_pool_insert_new(tx_id, decision)?;
-        Ok(())
-    }
-
-    pub fn set_atom(
-        &self,
-        tx: &mut TStateStore::WriteTransaction<'_>,
-        transaction: TransactionAtom,
-    ) -> Result<(), TransactionPoolError> {
-        tx.transaction_pool_set_atom(transaction)?;
+        tx.transaction_pool_insert_new(tx_id, decision, is_ready)?;
         Ok(())
     }
 
@@ -205,7 +116,9 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         if count > 0 {
             return Ok(true);
         }
-        let count = tx.transaction_pool_count(Some(TransactionPoolStage::LocalPrepared), Some(true), None)?;
+        // Check if we have local prepared that has not yet been confirmed (locked). In this case we should propose
+        // until this stage is locked.
+        let count = tx.transaction_pool_count(Some(TransactionPoolStage::LocalPrepared), None, Some(None))?;
         if count > 0 {
             return Ok(true);
         }
@@ -217,10 +130,21 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         if count > 0 {
             return Ok(true);
         }
-
-        // Check if we have any localprepared, is_ready=false but have foreign localprepared. If so, propose so that the
-        // leaf block is processed.
-        let count = tx.transaction_pool_count(Some(TransactionPoolStage::LocalPrepared), None, Some(true))?;
+        // Check if we have local accepted that is still confirmed(locked) to be prepared. In this case we should
+        // propose until this stage is locked.
+        let count = tx.transaction_pool_count(
+            Some(TransactionPoolStage::LocalAccepted),
+            None,
+            Some(Some(TransactionPoolConfirmedStage::ConfirmedPrepared)),
+        )?;
+        if count > 0 {
+            return Ok(true);
+        }
+        let count = tx.transaction_pool_count(Some(TransactionPoolStage::AllAccepted), None, None)?;
+        if count > 0 {
+            return Ok(true);
+        }
+        let count = tx.transaction_pool_count(Some(TransactionPoolStage::SomeAccepted), None, None)?;
         if count > 0 {
             return Ok(true);
         }
@@ -240,7 +164,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         new_locked_block: &LockedBlock,
         tx_ids: I,
     ) -> Result<(), TransactionPoolError> {
-        tx.transaction_pool_set_all_transitions(locked_block, new_locked_block, tx_ids)?;
+        tx.transaction_pool_confirm_all_transitions(locked_block, new_locked_block, tx_ids)?;
         Ok(())
     }
 
@@ -248,24 +172,129 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         &self,
         tx: &mut TStateStore::WriteTransaction<'_>,
         tx_ids: I,
-    ) -> Result<Vec<TransactionAtom>, TransactionPoolError> {
+    ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
         TransactionPoolRecord::remove_all(tx, tx_ids)
     }
+}
 
-    pub fn remove(
-        &self,
-        tx: &mut TStateStore::WriteTransaction<'_>,
-        id: TransactionId,
-    ) -> Result<TransactionAtom, TransactionPoolError> {
-        let atom = TransactionPoolRecord::remove_all(tx, &[id])?.pop().ok_or_else(|| {
-            TransactionPoolError::StorageError(StorageError::NotFound {
-                item: "TransactionPoolRecord".to_string(),
-                key: id.to_string(),
-            })
-        })?;
-        Ok(atom)
+// Ord: ensure that the enum variants are ordered in the order of their progression
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
+pub enum TransactionPoolStage {
+    /// Transaction has just come in and has never been proposed
+    New,
+    /// Transaction is prepared in response to a Prepare command, but we do not yet have confirmation that the rest of
+    /// the local committee has prepared.
+    Prepared,
+    /// We have proof that all local committees have prepared the transaction
+    LocalPrepared,
+    /// All involved shard groups have prepared and all have pledged their local inputs
+    AllPrepared,
+    /// Some involved shard groups have prepared but one or more did not successfully pledge their local inputs
+    SomePrepared,
+    /// The local shard group has accepted the transaction
+    LocalAccepted,
+    /// All involved shard groups have accepted the transaction
+    AllAccepted,
+    /// Some involved shard groups have accepted the transaction, but one or more have decided to ABORT
+    SomeAccepted,
+    /// Only involves local shards. This transaction can be executed and accepted without cross-shard agreement.
+    LocalOnly,
+}
+
+impl TransactionPoolStage {
+    pub fn is_new(&self) -> bool {
+        matches!(self, Self::New)
+    }
+
+    pub fn is_local_only(&self) -> bool {
+        matches!(self, Self::LocalOnly)
+    }
+
+    pub fn is_prepared(&self) -> bool {
+        matches!(self, Self::Prepared)
+    }
+
+    pub fn is_local_prepared(&self) -> bool {
+        matches!(self, Self::LocalPrepared)
+    }
+
+    pub fn is_local_accepted(&self) -> bool {
+        matches!(self, Self::LocalAccepted)
+    }
+
+    pub fn is_some_prepared(&self) -> bool {
+        matches!(self, Self::SomePrepared)
+    }
+
+    pub fn is_all_prepared(&self) -> bool {
+        matches!(self, Self::AllPrepared)
     }
 }
+
+impl Display for TransactionPoolStage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
+
+impl FromStr for TransactionPoolStage {
+    type Err = TransactionPoolStageFromStrErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "New" => Ok(TransactionPoolStage::New),
+            "Prepared" => Ok(TransactionPoolStage::Prepared),
+            "LocalPrepared" => Ok(TransactionPoolStage::LocalPrepared),
+            "SomePrepared" => Ok(TransactionPoolStage::SomePrepared),
+            "AllPrepared" => Ok(TransactionPoolStage::AllPrepared),
+            "LocalAccepted" => Ok(TransactionPoolStage::LocalAccepted),
+            "AllAccepted" => Ok(TransactionPoolStage::AllAccepted),
+            "SomeAccepted" => Ok(TransactionPoolStage::SomeAccepted),
+            "LocalOnly" => Ok(TransactionPoolStage::LocalOnly),
+            s => Err(TransactionPoolStageFromStrErr(s.to_string())),
+        }
+    }
+}
+
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("Invalid TransactionPoolStage string '{0}'")]
+pub struct TransactionPoolStageFromStrErr(String);
+
+#[derive(Debug, Clone)]
+pub enum TransactionPoolConfirmedStage {
+    ConfirmedPrepared,
+    ConfirmedAccepted,
+}
+
+impl Display for TransactionPoolConfirmedStage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TransactionPoolConfirmedStage::ConfirmedPrepared => write!(f, "ConfirmedPrepared"),
+            TransactionPoolConfirmedStage::ConfirmedAccepted => write!(f, "ConfirmedAccepted"),
+        }
+    }
+}
+
+impl FromStr for TransactionPoolConfirmedStage {
+    type Err = TransactionPoolConfirmedStageFromStrErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ConfirmedPrepared" => Ok(TransactionPoolConfirmedStage::ConfirmedPrepared),
+            "ConfirmedAccepted" => Ok(TransactionPoolConfirmedStage::ConfirmedAccepted),
+            s => Err(TransactionPoolConfirmedStageFromStrErr(s.to_string())),
+        }
+    }
+}
+
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("Invalid TransactionPoolConfirmedStage string '{0}'")]
+pub struct TransactionPoolConfirmedStageFromStrErr(String);
 
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(
@@ -346,6 +375,10 @@ impl TransactionPoolRecord {
         &self.evidence
     }
 
+    fn evidence_mut(&mut self) -> &mut Evidence {
+        &mut self.evidence
+    }
+
     pub fn transaction_fee(&self) -> u64 {
         self.transaction_fee
     }
@@ -365,17 +398,21 @@ impl TransactionPoolRecord {
         self.pending_stage.unwrap_or(self.stage)
     }
 
+    pub fn leader_fee(&self) -> Option<&LeaderFee> {
+        self.leader_fee.as_ref()
+    }
+
     pub fn is_ready(&self) -> bool {
         self.is_ready
     }
 
-    pub fn get_final_transaction_atom(&self, leader_fee: LeaderFee) -> TransactionAtom {
+    pub fn get_current_transaction_atom(&self) -> TransactionAtom {
         TransactionAtom {
             id: self.transaction_id,
             decision: self.current_decision(),
             evidence: self.evidence.clone(),
             transaction_fee: self.transaction_fee,
-            leader_fee: Some(leader_fee),
+            leader_fee: self.leader_fee.clone(),
         }
     }
 
@@ -389,13 +426,13 @@ impl TransactionPoolRecord {
         }
     }
 
-    pub fn into_local_transaction_atom(self) -> TransactionAtom {
+    pub fn into_current_transaction_atom(self) -> TransactionAtom {
         TransactionAtom {
             id: self.transaction_id,
-            decision: self.current_local_decision(),
+            decision: self.current_decision(),
             evidence: self.evidence,
             transaction_fee: self.transaction_fee,
-            leader_fee: None,
+            leader_fee: self.leader_fee,
         }
     }
 
@@ -444,17 +481,38 @@ impl TransactionPoolRecord {
         self
     }
 
-    pub fn set_evidence(&mut self, evidence: Evidence) -> &mut Self {
-        self.evidence = evidence;
-        self
-    }
-
     pub fn set_transaction_fee(&mut self, transaction_fee: u64) -> &mut Self {
         self.transaction_fee = transaction_fee;
         self
     }
 
-    pub fn add_evidence(&mut self, committee_info: &CommitteeInfo, qc_id: QcId) -> &mut Self {
+    pub fn set_leader_fee(&mut self, leader_fee: LeaderFee) -> &mut Self {
+        self.leader_fee = Some(leader_fee);
+        self
+    }
+
+    pub fn update_from_execution(&mut self, execution: &TransactionExecution) -> &mut Self {
+        let involved_locks = execution
+            .resolved_inputs()
+            .iter()
+            .chain(execution.resulting_outputs())
+            .map(|id| (id.to_substate_address(), id.lock_type()));
+
+        self.evidence_mut().update(involved_locks);
+        // Only change the local decision if we haven't already decided to ABORT
+        if self.local_decision().map_or(true, |d| d.is_commit()) {
+            self.set_local_decision(execution.decision());
+        }
+        self.set_transaction_fee(execution.transaction_fee());
+        self
+    }
+
+    pub fn set_evidence(&mut self, evidence: Evidence) -> &mut Self {
+        self.evidence = evidence;
+        self
+    }
+
+    pub fn add_qc_evidence(&mut self, committee_info: &CommitteeInfo, qc_id: QcId) -> &mut Self {
         let evidence = &mut self.evidence;
         for (address, evidence_mut) in evidence.iter_mut() {
             if committee_info.includes_substate_address(address) {
@@ -463,6 +521,46 @@ impl TransactionPoolRecord {
         }
 
         self
+    }
+
+    pub fn check_pending_status_update(
+        &self,
+        pending_stage: TransactionPoolStage,
+        is_ready: bool,
+    ) -> Result<(), TransactionPoolError> {
+        // Check that only permitted stage transactions are performed
+        match ((self.current_stage(), pending_stage), is_ready) {
+            ((TransactionPoolStage::New, TransactionPoolStage::New), true) |
+            ((TransactionPoolStage::New, TransactionPoolStage::Prepared), true) |
+            ((TransactionPoolStage::New, TransactionPoolStage::LocalOnly), false) |
+            // Prepared
+            ((TransactionPoolStage::Prepared, TransactionPoolStage::LocalPrepared), _) |
+            // LocalPrepared
+            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), true) |
+            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), _) |
+            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::SomePrepared), _) |
+            // AllPrepared
+            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::AllPrepared), false) |
+            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::LocalAccepted), _) |
+            // SomePrepared
+            ((TransactionPoolStage::SomePrepared, TransactionPoolStage::SomePrepared), false) |
+            ((TransactionPoolStage::SomePrepared, TransactionPoolStage::LocalAccepted), _) |
+            // LocalAccepted
+            ((TransactionPoolStage::LocalAccepted, TransactionPoolStage::LocalAccepted), true) |
+            ((TransactionPoolStage::LocalAccepted, TransactionPoolStage::AllAccepted), _) |
+            ((TransactionPoolStage::LocalAccepted, TransactionPoolStage::SomeAccepted), false) |
+            // Accepted
+            ((TransactionPoolStage::AllAccepted, TransactionPoolStage::AllAccepted), false) => {}
+            _ => {
+                return Err(TransactionPoolError::InvalidTransactionTransition {
+                    from: self.current_stage(),
+                    to: pending_stage,
+                    is_ready,
+                });
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -474,36 +572,18 @@ impl TransactionPoolRecord {
         pending_stage: TransactionPoolStage,
         is_ready: bool,
     ) -> Result<(), TransactionPoolError> {
-        // Check that only permitted stage transactions are performed
-        match ((self.current_stage(), pending_stage), is_ready) {
-            ((TransactionPoolStage::New, TransactionPoolStage::Prepared), true) |
-            ((TransactionPoolStage::New, TransactionPoolStage::LocalOnly), false) |
-            ((TransactionPoolStage::Prepared, TransactionPoolStage::LocalPrepared), _) |
-            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), true) |
-            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), false) |
-            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::SomePrepared), false) |
-            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::SomePrepared), false) |
-            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::AllPrepared), false) => {},
-            _ => {
-                return Err(TransactionPoolError::InvalidTransactionTransition {
-                    from: self.current_stage(),
-                    to: pending_stage,
-                    is_ready,
-                });
-            },
-        }
+        self.check_pending_status_update(pending_stage, is_ready)?;
 
         let update = TransactionPoolStatusUpdate {
             block_id: block.block_id,
-            block_height: block.height,
             transaction_id: self.transaction_id,
             stage: pending_stage,
             evidence: self.evidence.clone(),
             is_ready,
-            local_decision: self.current_local_decision(),
+            local_decision: self.current_decision(),
         };
 
-        tx.transaction_pool_add_pending_update(&update)?;
+        update.insert(tx)?;
         self.pending_stage = Some(pending_stage);
 
         Ok(())
@@ -515,10 +595,23 @@ impl TransactionPoolRecord {
         decision: Decision,
         foreign_qc_id: QcId,
         foreign_committee_info: &CommitteeInfo,
+        remote_evidence: Evidence,
     ) -> Result<(), TransactionPoolError> {
-        self.add_evidence(foreign_committee_info, foreign_qc_id);
+        self.evidence.merge(remote_evidence);
+        self.add_qc_evidence(foreign_committee_info, foreign_qc_id);
         self.set_remote_decision(decision);
         tx.transaction_pool_update(&self.transaction_id, None, Some(decision), Some(&self.evidence))?;
+        Ok(())
+    }
+
+    #[allow(clippy::mutable_key_type)]
+    pub fn add_foreign_pledges<TTx: StateStoreWriteTransaction>(
+        &mut self,
+        tx: &mut TTx,
+        shard_group: ShardGroup,
+        foreign_pledges: SubstatePledges,
+    ) -> Result<(), TransactionPoolError> {
+        tx.foreign_substate_pledges_insert(self.transaction_id, shard_group, foreign_pledges)?;
         Ok(())
     }
 
@@ -554,13 +647,15 @@ impl TransactionPoolRecord {
     pub fn remove_all<'a, TTx, I>(
         tx: &mut TTx,
         transaction_ids: I,
-    ) -> Result<Vec<TransactionAtom>, TransactionPoolError>
+    ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError>
     where
         TTx: StateStoreWriteTransaction,
         I: IntoIterator<Item = &'a TransactionId>,
     {
-        let atoms = tx.transaction_pool_remove_all(transaction_ids)?;
-        Ok(atoms)
+        let recs = tx.transaction_pool_remove_all(transaction_ids)?;
+        // Clear any related foreign pledges
+        tx.foreign_substate_pledges_remove_many(recs.iter().map(|rec| rec.transaction_id()))?;
+        Ok(recs)
     }
 
     pub fn get_transaction<TTx: StateStoreReadTransaction>(
@@ -575,8 +670,8 @@ impl TransactionPoolRecord {
         &self,
         tx: &TTx,
         from_block_id: &BlockId,
-    ) -> Result<TransactionExecution, TransactionPoolError> {
-        let exec = TransactionExecution::get_pending_for_block(tx, self.transaction_id(), from_block_id)?;
+    ) -> Result<BlockTransactionExecution, TransactionPoolError> {
+        let exec = BlockTransactionExecution::get_pending_for_block(tx, self.transaction_id(), from_block_id)?;
         Ok(exec)
     }
 }
@@ -591,6 +686,16 @@ pub enum TransactionPoolError {
         to: TransactionPoolStage,
         is_ready: bool,
     },
+    #[error("Transaction already updated: {transaction_id} in block {block_id}")]
+    TransactionAlreadyUpdated {
+        transaction_id: TransactionId,
+        block_id: BlockId,
+    },
+    #[error("Transaction already executed: {transaction_id} in block {block_id}")]
+    TransactionAlreadyExecuted {
+        transaction_id: TransactionId,
+        block_id: BlockId,
+    },
 }
 
 impl IsNotFoundError for TransactionPoolError {
@@ -602,40 +707,28 @@ impl IsNotFoundError for TransactionPoolError {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(ts_rs::TS),
-    ts(export, export_to = "../../bindings/src/types/")
-)]
-pub struct LeaderFee {
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
-    pub fee: u64,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
-    pub global_exhaust_burn: u64,
-}
-
-impl LeaderFee {
-    pub fn fee(&self) -> u64 {
-        self.fee
-    }
-
-    pub fn global_exhaust_burn(&self) -> u64 {
-        self.global_exhaust_burn
-    }
-}
-
-impl Display for LeaderFee {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Leader fee: {}, Burnt: {}", self.fee, self.global_exhaust_burn)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use rand::{rngs::OsRng, Rng};
 
     use super::*;
+    use crate::consensus_models::LeaderFee;
+
+    mod ordering {
+        use super::*;
+
+        #[test]
+        fn it_is_ordered_correctly() {
+            assert!(TransactionPoolStage::New < TransactionPoolStage::Prepared);
+            assert!(TransactionPoolStage::Prepared < TransactionPoolStage::LocalPrepared);
+            assert!(TransactionPoolStage::LocalPrepared < TransactionPoolStage::AllPrepared);
+            assert!(TransactionPoolStage::LocalPrepared < TransactionPoolStage::SomePrepared);
+            assert!(TransactionPoolStage::AllPrepared < TransactionPoolStage::LocalAccepted);
+            assert!(TransactionPoolStage::SomePrepared < TransactionPoolStage::LocalAccepted);
+            assert!(TransactionPoolStage::LocalAccepted < TransactionPoolStage::AllAccepted);
+            assert!(TransactionPoolStage::LocalAccepted < TransactionPoolStage::SomeAccepted);
+        }
+    }
 
     mod calculate_leader_fee {
         use super::*;

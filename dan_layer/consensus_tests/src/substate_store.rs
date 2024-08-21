@@ -11,7 +11,7 @@ use tari_dan_storage::{
         BlockId,
         QcId,
         SubstateChange,
-        SubstateLockFlag,
+        SubstateLockType,
         SubstateRecord,
         VersionedSubstateIdLockIntent,
     },
@@ -129,14 +129,14 @@ fn it_disallows_more_than_one_write_lock_non_local_only() {
     store
         .try_lock(
             tx_id(1),
-            VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockFlag::Read),
+            &VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockType::Read),
             true,
         )
         .unwrap();
     store
         .try_lock(
             tx_id(2),
-            VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockFlag::Read),
+            &VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockType::Read),
             true,
         )
         .unwrap();
@@ -148,7 +148,7 @@ fn it_disallows_more_than_one_write_lock_non_local_only() {
     let err = store
         .try_lock(
             tx_id(3),
-            VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockFlag::Write),
+            &VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockType::Write),
             false,
         )
         .unwrap_err();
@@ -168,7 +168,7 @@ fn it_allows_locks_within_one_transaction() {
     store
         .try_lock(
             tx_id(1),
-            VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockFlag::Write),
+            &VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockType::Write),
             false,
         )
         .unwrap();
@@ -176,7 +176,7 @@ fn it_allows_locks_within_one_transaction() {
     let err = store
         .try_lock(
             tx_id(2),
-            VersionedSubstateIdLockIntent::new(id.to_next_version(), SubstateLockFlag::Output),
+            &VersionedSubstateIdLockIntent::new(id.to_next_version(), SubstateLockType::Output),
             false,
         )
         .unwrap_err();
@@ -186,7 +186,7 @@ fn it_allows_locks_within_one_transaction() {
     store
         .try_lock(
             tx_id(1),
-            VersionedSubstateIdLockIntent::new(id.to_next_version(), SubstateLockFlag::Output),
+            &VersionedSubstateIdLockIntent::new(id.to_next_version(), SubstateLockType::Output),
             false,
         )
         .unwrap();
