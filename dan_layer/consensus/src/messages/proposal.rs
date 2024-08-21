@@ -4,7 +4,7 @@
 use std::fmt::{Display, Formatter};
 
 use serde::Serialize;
-use tari_dan_storage::consensus_models::{Block, BlockPledge, QuorumCertificate};
+use tari_dan_storage::consensus_models::{Block, BlockPledge, ForeignParkedProposal, QuorumCertificate};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ProposalMessage {
@@ -22,6 +22,22 @@ pub struct ForeignProposalMessage {
     pub block: Block,
     pub justify_qc: QuorumCertificate,
     pub block_pledge: BlockPledge,
+}
+
+impl From<ForeignProposalMessage> for ForeignParkedProposal {
+    fn from(msg: ForeignProposalMessage) -> Self {
+        ForeignParkedProposal::new(msg.block, msg.justify_qc, msg.block_pledge)
+    }
+}
+
+impl From<ForeignParkedProposal> for ForeignProposalMessage {
+    fn from(block: ForeignParkedProposal) -> Self {
+        ForeignProposalMessage {
+            block: block.block,
+            justify_qc: block.justify_qc,
+            block_pledge: block.block_pledge,
+        }
+    }
 }
 
 impl Display for ForeignProposalMessage {

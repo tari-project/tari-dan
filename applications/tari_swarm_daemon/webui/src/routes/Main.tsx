@@ -37,16 +37,15 @@ async function jsonRpc2(address: string, method: string, params: any = null) {
   return json.result;
 }
 
-function ExtraInfoVN({ name, url, setRow, addTxToPool, autoRefresh, state, horizontal }: {
+function ExtraInfoVN({ name, url, addTxToPool, autoRefresh, state, horizontal }: {
   name: string,
   url: string,
-  setRow: any,
   addTxToPool: any,
   autoRefresh: boolean,
   state: any,
   horizontal: boolean
 }) {
-  const [bucket, setBucket] = useState(null);
+  const [committeeInfo, setCommitteeInfo] = useState<any>(null);
   const [epoch, setEpoch] = useState(null);
   const [height, setHeight] = useState(null);
   const [pool, setPool] = useState([]);
@@ -65,8 +64,8 @@ function ExtraInfoVN({ name, url, setRow, addTxToPool, autoRefresh, state, horiz
   }, [tick, autoRefresh]);
   useEffect(() => {
     jsonRpc2(url, "get_epoch_manager_stats").then((resp) => {
-      setRow(resp.committee_shard.shard + 1);
-      setBucket(resp.committee_shard.shard);
+      // setRow(resp.committee_info.shard + 1);
+      setCommitteeInfo(resp.committee_info);
       setHeight(resp.current_block_height);
       setEpoch(resp.current_epoch);
     }).catch((resp) => {
@@ -202,12 +201,12 @@ function ExtraInfoVN({ name, url, setRow, addTxToPool, autoRefresh, state, horiz
         gridTemplateColumns: "auto auto",
         gridTemplateRows: "auto auto auto auto auto",
       }}>
-        <div><b>Bucket</b></div>
+        <div><b>Shard Group</b></div>
         <div><b>Height</b></div>
         <div><b>Epoch</b></div>
         <div><b>Public key</b></div>
         <div><b>Peer id</b></div>
-        <div>{bucket}</div>
+        <div>{committeeInfo?.shard_group.start}-{committeeInfo?.shard_group.end_inclusive} ({committeeInfo?.num_shard_group_members} members)</div>
         <div>{height}</div>
         <div>{epoch}</div>
         <div>{publicKey}</div>
@@ -234,7 +233,6 @@ function ShowInfo(params: any) {
     horizontal,
     onReload,
   } = params;
-  const [row, setRow] = useState(1);
   // const [unprocessedTx, setUnprocessedTx] = useState([]);
   const nameInfo = name && (
     <div>
@@ -304,16 +302,15 @@ function ShowInfo(params: any) {
 
 
   return (
-    <div className="info" key={name} style={{ gridRow: row }}>
+    <div className="info" key={name}>
       {nameInfo}
       {httpInfo}
       {jrpcInfo}
       {grpcInfo}
       {showLogs && logInfo}
       {executable === Executable.ValidatorNode && node?.jrpc &&
-        <ExtraInfoVN name={name} url={node.jrpc} setRow={(new_row: any) => {
-          if (new_row != row) setRow(new_row);
-        }} addTxToPool={addTxToPool} autoRefresh={autoRefresh} state={state} horizontal={horizontal} />}
+        <ExtraInfoVN name={name} url={node.jrpc} addTxToPool={addTxToPool} autoRefresh={autoRefresh} state={state}
+                     horizontal={horizontal} />}
       {executable !== Executable.Templates &&
         <NodeControls
           isRunning={node?.is_running || false}
@@ -364,11 +361,23 @@ function ShowInfos(params: any) {
       setState((state) => ({ ...state, [partial_state.name]: partial_state.state }));
     }
   };
+
+  const sortedNodes = Object.keys(nodes).map((key) => [key, nodes[key]]);
+  sortedNodes.sort((a, b) => {
+    if (a[1].instance_id > b[1].instance_id) {
+      return 1;
+    }
+    if (a[1].instance_id < b[1].instance_id) {
+      return -1;
+    }
+    return 0;
+  });
+
   return (
     <div className="infos" style={{ display: "grid" }}>
-      {Object.keys(nodes).map((index) =>
-        <ShowInfo key={index} executable={executable} name={nodes[index].name} node={nodes[index]}
-                  logs={logs?.[`${name} ${index}`]} stdoutLogs={stdoutLogs?.[`${name} ${index}`]}
+      {sortedNodes.map(([key, node]) =>
+        <ShowInfo key={key} executable={executable} name={node.name} node={node}
+                  logs={logs?.[`${name} ${key}`]} stdoutLogs={stdoutLogs?.[`${name} ${key}`]}
                   showLogs={showLogs}
                   autoRefresh={autoRefresh} updateState={updateState} state={state} horizontal={horizontal}
                   onReload={onReload} />)}

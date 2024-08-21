@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHashSizeError;
 use tari_crypto::tari_utilities::hex::{from_hex, Hex};
 use tari_engine_types::{serde_with, transaction_receipt::TransactionReceiptAddress};
+use tari_template_lib::Hash;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize, Default)]
 #[serde(transparent)]
@@ -86,5 +87,11 @@ impl TryFrom<&[u8]> for TransactionId {
 impl From<[u8; 32]> for TransactionId {
     fn from(id: [u8; 32]) -> Self {
         Self::new(id)
+    }
+}
+
+impl From<TransactionId> for Hash {
+    fn from(id: TransactionId) -> Self {
+        Hash::from(id.id)
     }
 }

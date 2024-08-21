@@ -156,7 +156,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             let (block_decision, valid_block) = task::spawn_blocking(move || {
                 let decision = on_ready_to_vote_on_local_block.handle(
                     &valid_block,
-                    local_committee_info,
+                    &local_committee_info,
                     can_propose_epoch_end,
                 )?;
                 Ok::<_, HotStuffError>((decision, valid_block))
@@ -287,11 +287,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
     ) -> Result<(), HotStuffError> {
         for (block, justify_qc) in blocks {
             debug!(target:LOG_TARGET,"Broadcast new locked block: {block}");
-            let local_committee = self
-                .epoch_manager
-                .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
-                .await?;
-            let Some(our_addr) = self
+            let Some(our_vn) = self
                 .epoch_manager
                 .get_our_validator_node(block.epoch())
                 .await
@@ -299,24 +295,32 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             else {
                 info!(
                     target: LOG_TARGET,
-                    "❌ Our validator node is not registered for epoch {}. Not proposing {block} to foreign committee",
-                    block.epoch(),
+                    "❌ Our validator node is not registered for epoch {}. Not proposing {block} to foreign committee", block.epoch(),
                 );
                 continue;
             };
-            let leader_index = self.leader_strategy.calculate_leader(&local_committee, block.height());
+
+            let local_committee = self
+                .epoch_manager
+                .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
+                .await?;
+            let leader_index = self.leader_strategy.calculate_leader(&local_committee, block.height()) as usize;
             let my_index = local_committee
                 .addresses()
-                .position(|addr| *addr == our_addr.address)
+                .position(|addr| *addr == our_vn.address)
                 .ok_or_else(|| HotStuffError::InvariantError("Our address not found in local committee".to_string()))?;
-            // There are other ways to approach this. But for simplicty is better just to make sure at least one honest
-            // node will send it to the whole foreign committee. So we select the leader and f other nodes. It has to be
-            // deterministic so we select by index (leader, leader+1, ..., leader+f). FYI: The messages between
-            // committees and within committees are not different in terms of size, speed, etc.
-            let diff_from_leader = (my_index + local_committee.len() - leader_index as usize) % local_committee.len();
-            // f+1 nodes (always including the leader) send the proposal to the foreign committee
-            // if diff_from_leader <= (local_committee.len() - 1) / 3 + 1 {
-            if diff_from_leader <= local_committee.len() / 3 {
+            // There are other ways to approach this. But for simplicity, it is better just to make sure at least one
+            // honest node will send it to the whole foreign committee. So we select the leader and f other
+            // nodes. It has to be deterministic so we select by index (leader, leader+1, ..., leader+f).
+            // f+1 nodes (including the leader) send the proposal to the foreign committee
+
+            let should_broadcast = if my_index >= leader_index {
+                my_index - leader_index <= local_committee.len() / 3
+            } else {
+                my_index + local_committee.len() - leader_index <= local_committee.len() / 3
+            };
+
+            if should_broadcast {
                 self.broadcast_foreign_proposal_if_required(block, justify_qc).await?;
             }
         }
@@ -668,8 +672,9 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         }
         info!(
             target: LOG_TARGET,
-            "🌿 FOREIGN PROPOSE: Broadcasting locked block {} to {} foreign committees.",
+            "🌿 FOREIGN PROPOSE: Broadcasting locked block {} with {} pledge(s) to {} foreign committees.",
             block,
+            block_pledge.num_substates_pledged(),
             addresses.len(),
         );
         self.outbound_messaging

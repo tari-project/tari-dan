@@ -609,6 +609,12 @@ impl From<FeeClaim> for SubstateValue {
     }
 }
 
+impl From<TransactionReceipt> for SubstateValue {
+    fn from(tx_receipt: TransactionReceipt) -> Self {
+        Self::TransactionReceipt(tx_receipt)
+    }
+}
+
 impl Display for SubstateValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // TODO: improve output
@@ -644,8 +650,18 @@ impl SubstateDiff {
         self.up_substates.push((address, value));
     }
 
+    pub fn extend_up(&mut self, iter: impl Iterator<Item = (SubstateId, Substate)>) -> &mut Self {
+        self.up_substates.extend(iter);
+        self
+    }
+
     pub fn down(&mut self, address: SubstateId, version: u32) {
         self.down_substates.push((address, version));
+    }
+
+    pub fn extend_down(&mut self, iter: impl Iterator<Item = (SubstateId, u32)>) -> &mut Self {
+        self.down_substates.extend(iter);
+        self
     }
 
     pub fn up_iter(&self) -> impl Iterator<Item = &(SubstateId, Substate)> + '_ {

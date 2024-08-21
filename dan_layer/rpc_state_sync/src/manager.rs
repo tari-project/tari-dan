@@ -11,7 +11,15 @@ use tari_consensus::{
     hotstuff::substate_store::{ShardScopedTreeStoreReader, ShardScopedTreeStoreWriter},
     traits::{ConsensusSpec, SyncManager, SyncStatus},
 };
-use tari_dan_common_types::{committee::Committee, optional::Optional, shard::Shard, Epoch, NodeHeight, PeerAddress};
+use tari_dan_common_types::{
+    committee::Committee,
+    optional::Optional,
+    shard::Shard,
+    Epoch,
+    NodeHeight,
+    PeerAddress,
+    ShardGroup,
+};
 use tari_dan_p2p::proto::rpc::{GetCheckpointRequest, GetCheckpointResponse, SyncStateRequest};
 use tari_dan_storage::{
     consensus_models::{
@@ -320,7 +328,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
     async fn get_sync_committees(
         &self,
         current_epoch: Epoch,
-    ) -> Result<Vec<(Shard, Committee<PeerAddress>)>, CommsRpcConsensusSyncError> {
+    ) -> Result<Vec<(ShardGroup, Committee<PeerAddress>)>, CommsRpcConsensusSyncError> {
         // We are behind at least one epoch.
         // We get the current substate range, and we asks committees from previous epoch in this range to give us
         // data.
@@ -395,96 +403,98 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
         let mut last_error = None;
         // Sync data from each committee in range of the committee we're joining.
         // NOTE: we don't have to worry about substates in address range because shard boundaries are fixed.
-        for (shard, mut committee) in prev_epoch_committees {
-            info!(target: LOG_TARGET, "🛜Syncing state for {shard} and {}", current_epoch.saturating_sub(Epoch(1)));
-            let mut remaining_members = committee.len();
+        for (shard_group, mut committee) in prev_epoch_committees {
             committee.shuffle();
-            for (addr, public_key) in committee {
-                remaining_members = remaining_members.saturating_sub(1);
-                if our_vn.public_key == public_key {
-                    continue;
-                }
-                let mut client = match self.establish_rpc_session(&addr).await {
-                    Ok(c) => c,
-                    Err(err) => {
-                        warn!(
-                            target: LOG_TARGET,
-                            "Failed to establish RPC session with vn {addr}: {err}. Attempting another VN if available"
-                        );
-                        if remaining_members == 0 {
-                            return Err(err);
-                        }
-                        last_error = Some(err);
+            for shard in shard_group.shard_iter() {
+                let mut remaining_members = committee.len();
+                info!(target: LOG_TARGET, "🛜Syncing state for {shard} and {}", current_epoch.saturating_sub(Epoch(1)));
+                for (addr, public_key) in &committee {
+                    remaining_members = remaining_members.saturating_sub(1);
+                    if our_vn.public_key == *public_key {
                         continue;
-                    },
-                };
-
-                let checkpoint = match self.fetch_epoch_checkpoint(&mut client, current_epoch).await {
-                    Ok(Some(cp)) => cp,
-                    Ok(None) => {
-                        // EDGE-CASE: This may occur because the previous epoch had not started consensus, typically in
-                        // testing cases where transactions
-                        warn!(
-                            target: LOG_TARGET,
-                            "❓No checkpoint for epoch {current_epoch}. This may mean that this is the first epoch in the network"
-                        );
-                        return Ok(());
-                    },
-                    Err(err) => {
-                        warn!(
-                            target: LOG_TARGET,
-                            "⚠️Failed to fetch checkpoint from {addr}: {err}. Attempting another peer if available"
-                        );
-                        if remaining_members == 0 {
-                            return Err(err);
-                        }
-                        last_error = Some(err);
-                        continue;
-                    },
-                };
-                info!(target: LOG_TARGET, "🛜 Checkpoint: {checkpoint}");
-
-                self.validate_checkpoint(&checkpoint)?;
-
-                match self.start_state_sync(&mut client, shard, &checkpoint).await {
-                    Ok(current_version) => {
-                        let state_root = self.get_state_root_for_shard(shard, current_version)?;
-
-                        if state_root != checkpoint.get_shard_root(shard) {
-                            error!(
+                    }
+                    let mut client = match self.establish_rpc_session(addr).await {
+                        Ok(c) => c,
+                        Err(err) => {
+                            warn!(
                                 target: LOG_TARGET,
-                                "❌State root mismatch for {shard}. Expected {expected} but got {actual}",
-                                expected = checkpoint.get_shard_root(shard),
-                                actual = state_root,
+                                "Failed to establish RPC session with vn {addr}: {err}. Attempting another VN if available"
                             );
-                            last_error = Some(CommsRpcConsensusSyncError::StateRootMismatch {
-                                expected: *checkpoint.block().merkle_root(),
-                                actual: state_root,
-                            });
-                            // TODO: rollback state
                             if remaining_members == 0 {
-                                return Err(last_error.unwrap());
+                                return Err(err);
+                            }
+                            last_error = Some(err);
+                            continue;
+                        },
+                    };
+
+                    let checkpoint = match self.fetch_epoch_checkpoint(&mut client, current_epoch).await {
+                        Ok(Some(cp)) => cp,
+                        Ok(None) => {
+                            // EDGE-CASE: This may occur because the previous epoch had not started consensus, typically
+                            // in testing cases where transactions
+                            warn!(
+                                target: LOG_TARGET,
+                                "❓No checkpoint for epoch {current_epoch}. This may mean that this is the first epoch in the network"
+                            );
+                            return Ok(());
+                        },
+                        Err(err) => {
+                            warn!(
+                                target: LOG_TARGET,
+                                "⚠️Failed to fetch checkpoint from {addr}: {err}. Attempting another peer if available"
+                            );
+                            if remaining_members == 0 {
+                                return Err(err);
+                            }
+                            last_error = Some(err);
+                            continue;
+                        },
+                    };
+                    info!(target: LOG_TARGET, "🛜 Checkpoint: {checkpoint}");
+
+                    self.validate_checkpoint(&checkpoint)?;
+
+                    match self.start_state_sync(&mut client, shard, &checkpoint).await {
+                        Ok(current_version) => {
+                            let state_root = self.get_state_root_for_shard(shard, current_version)?;
+
+                            if state_root != checkpoint.get_shard_root(shard) {
+                                error!(
+                                    target: LOG_TARGET,
+                                    "❌State root mismatch for {shard}. Expected {expected} but got {actual}",
+                                    expected = checkpoint.get_shard_root(shard),
+                                    actual = state_root,
+                                );
+                                last_error = Some(CommsRpcConsensusSyncError::StateRootMismatch {
+                                    expected: *checkpoint.block().merkle_root(),
+                                    actual: state_root,
+                                });
+                                // TODO: rollback state
+                                if remaining_members == 0 {
+                                    return Err(last_error.unwrap());
+                                }
+
+                                continue;
                             }
 
+                            info!(target: LOG_TARGET, "🛜Synced state for {shard} to v{} with root {state_root}", current_version.unwrap_or(0));
+                        },
+                        Err(err) => {
+                            warn!(
+                                target: LOG_TARGET,
+                                "⚠️Failed to sync state from {addr}: {err}. Attempting another peer if available"
+                            );
+
+                            if remaining_members == 0 {
+                                return Err(err);
+                            }
+                            last_error = Some(err);
                             continue;
-                        }
-
-                        info!(target: LOG_TARGET, "🛜Synced state for {shard} to v{} with root {state_root}", current_version.unwrap_or(0));
-                    },
-                    Err(err) => {
-                        warn!(
-                            target: LOG_TARGET,
-                            "⚠️Failed to sync state from {addr}: {err}. Attempting another peer if available"
-                        );
-
-                        if remaining_members == 0 {
-                            return Err(err);
-                        }
-                        last_error = Some(err);
-                        continue;
-                    },
+                        },
+                    }
+                    break;
                 }
-                break;
             }
         }
 

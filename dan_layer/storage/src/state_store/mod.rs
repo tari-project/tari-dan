@@ -27,6 +27,7 @@ use crate::{
         Decision,
         EpochCheckpoint,
         Evidence,
+        ForeignParkedProposal,
         ForeignProposal,
         ForeignReceiveCounters,
         ForeignSendCounters,
@@ -382,7 +383,9 @@ pub trait StateStoreWriteTransaction {
     fn transaction_pool_update(
         &mut self,
         transaction_id: &TransactionId,
+        is_ready: Option<bool>,
         local_decision: Option<Decision>,
+        local_evidence: Option<&Evidence>,
         remote_decision: Option<Decision>,
         remote_evidence: Option<&Evidence>,
     ) -> Result<(), StorageError>;
@@ -397,6 +400,8 @@ pub trait StateStoreWriteTransaction {
         new_locked_block: &LockedBlock,
         tx_ids: I,
     ) -> Result<(), StorageError>;
+
+    // -------------------------------- Missing Transactions -------------------------------- //
 
     fn missing_transactions_insert<
         'a,
@@ -415,6 +420,19 @@ pub trait StateStoreWriteTransaction {
         transaction_id: &TransactionId,
     ) -> Result<Option<Block>, StorageError>;
 
+    fn foreign_parked_blocks_insert(&mut self, park_block: &ForeignParkedProposal) -> Result<(), StorageError>;
+
+    fn foreign_parked_blocks_insert_missing_transactions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+        &mut self,
+        park_block_id: &BlockId,
+        missing_transaction_ids: I,
+    ) -> Result<(), StorageError>;
+
+    fn foreign_parked_blocks_remove_all_by_transaction(
+        &mut self,
+        transaction_id: &TransactionId,
+    ) -> Result<Vec<ForeignParkedProposal>, StorageError>;
+
     // -------------------------------- Votes -------------------------------- //
     fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;
 
@@ -430,7 +448,7 @@ pub trait StateStoreWriteTransaction {
         transaction_ids: Peekable<I>,
     ) -> Result<(), StorageError>;
 
-    fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
+    fn substates_create(&mut self, substate: &SubstateRecord) -> Result<(), StorageError>;
     fn substates_down(
         &mut self,
         versioned_substate_id: VersionedSubstateId,
@@ -444,7 +462,7 @@ pub trait StateStoreWriteTransaction {
     // -------------------------------- Foreign pledges -------------------------------- //
 
     #[allow(clippy::mutable_key_type)]
-    fn foreign_substate_pledges_insert(
+    fn foreign_substate_pledges_save(
         &mut self,
         transaction_id: TransactionId,
         shard_group: ShardGroup,

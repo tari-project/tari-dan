@@ -10,7 +10,14 @@ use indexmap::IndexMap;
 use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeAddressable, NodeHeight, ShardGroup};
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeInfo},
+    shard::Shard,
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    ShardGroup,
+};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -25,6 +32,7 @@ use tari_dan_storage::{
     StateStoreWriteTransaction,
     StorageError,
 };
+use tari_engine_types::substate::SubstateDiff;
 use tari_state_tree::{Hash, JellyfishMerkleTree, StateTreeError};
 
 use crate::{
@@ -240,4 +248,20 @@ where
     checkpoint.save(tx)?;
 
     Ok(checkpoint)
+}
+
+pub(crate) fn filter_diff_for_committee(committee_info: &CommitteeInfo, diff: &SubstateDiff) -> SubstateDiff {
+    let mut filtered_diff = SubstateDiff::new();
+    filtered_diff
+        .extend_up(
+            diff.up_iter()
+                .filter(|(id, _)| committee_info.includes_substate_id(id))
+                .cloned(),
+        )
+        .extend_down(
+            diff.down_iter()
+                .filter(|(id, _)| committee_info.includes_substate_id(id))
+                .cloned(),
+        );
+    filtered_diff
 }

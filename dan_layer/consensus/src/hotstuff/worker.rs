@@ -346,7 +346,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
         match self
             .on_message_validate
-            .handle(current_height, from.clone(), msg)
+            .handle(current_height, local_committee_info, from.clone(), msg)
             .await?
         {
             MessageValidationResult::Ready { from, message: msg } => {
@@ -368,17 +368,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             } => {
                 let mut request_from_address = from;
                 if request_from_address == self.local_validator_addr {
-                    // let vn = self
-                    //     .epoch_manager
-                    //     .get_validator_node_by_public_key(epoch, &proposed_by)
-                    //     .await?;
-                    //
-                    // let mut request_from_address = vn.address;
-                    //
-                    // // (Yet another) Edge case: If we're catching up, we could be the proposer but we no longer have
-                    // the // transaction (we deleted our database) In this case, request from
-                    // another random VN // (TODO: not 100% reliable)
-                    // if request_from_address == self.local_validator_addr {
+                    // Edge case: If we're catching up, we could be the proposer but we no longer have
+                    // the transaction (we deleted our database likely during development testing).
+                    // In this case, request from another random VN.
+                    // (TODO: not 100% reliable since we're just asking a single random committee member)
                     let mut local_committee = self.epoch_manager.get_local_committee(epoch).await?;
 
                     local_committee.shuffle();
@@ -463,24 +456,56 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         tx_id: &TransactionId,
         local_committee_info: &CommitteeInfo,
     ) -> Result<bool, HotStuffError> {
-        match self
+        let mut is_any_block_unparked = false;
+        if let Some(msg) = self
             .on_message_validate
-            .update_parked_blocks(current_height, tx_id)
-            .await?
+            .update_local_parked_blocks(current_height, tx_id)?
         {
-            Some((from, msg)) => {
-                if let Err(e) = self
-                    .dispatch_hotstuff_message(current_epoch, from, msg, local_committee_info)
-                    .await
-                {
-                    self.on_failure("on_new_transaction -> dispatch_hotstuff_message", &e)
-                        .await;
-                    return Err(e);
-                }
-                Ok(true)
-            },
-            None => Ok(false),
+            let vn = self
+                .epoch_manager
+                .get_validator_node_by_public_key(msg.block.epoch(), msg.block.proposed_by())
+                .await?;
+
+            if let Err(e) = self
+                .dispatch_hotstuff_message(
+                    current_epoch,
+                    vn.address,
+                    HotstuffMessage::Proposal(msg),
+                    local_committee_info,
+                )
+                .await
+            {
+                self.on_failure("on_new_transaction -> dispatch_hotstuff_message", &e)
+                    .await;
+                return Err(e);
+            }
+            is_any_block_unparked = true;
         }
+
+        let unparked_foreign_blocks = self.on_message_validate.update_foreign_parked_blocks(tx_id)?;
+        is_any_block_unparked |= !unparked_foreign_blocks.is_empty();
+        for parked in unparked_foreign_blocks {
+            let vn = self
+                .epoch_manager
+                .get_validator_node_by_public_key(parked.block().epoch(), parked.block().proposed_by())
+                .await?;
+
+            if let Err(e) = self
+                .dispatch_hotstuff_message(
+                    current_epoch,
+                    vn.address,
+                    HotstuffMessage::ForeignProposal(parked.into()),
+                    local_committee_info,
+                )
+                .await
+            {
+                self.on_failure("on_new_transaction -> dispatch_hotstuff_message", &e)
+                    .await;
+                return Err(e);
+            }
+        }
+
+        Ok(is_any_block_unparked)
     }
 
     async fn on_epoch_manager_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {

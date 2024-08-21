@@ -11,6 +11,7 @@ use std::{
 
 use anyhow::{anyhow, Context};
 use log::info;
+use slug::slugify;
 use tari_common::configuration::Network;
 use tokio::{
     fs,
@@ -83,7 +84,7 @@ impl InstanceManager {
                 self.fork_new(
                     executable,
                     instance.instance_type,
-                    format!("{}-#{}", instance.name, i),
+                    format!("{}-#{:02}", instance.name, i),
                     instance.settings.clone(),
                 )
                 .await?;
@@ -131,10 +132,7 @@ impl InstanceManager {
 
         let mut allocated_ports = ports.unwrap_or_else(|| self.port_allocator.create());
 
-        let base_path = self
-            .base_path
-            .join("processes")
-            .join(format!("{instance_id}-{instance_type}"));
+        let base_path = self.base_path.join("processes").join(slugify(&instance_name));
         fs::create_dir_all(&base_path).await?;
 
         let context = ProcessContext::new(

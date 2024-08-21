@@ -1409,6 +1409,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         use crate::schema::transaction_pool;
 
         let ready_txs = transaction_pool::table
+            // Important: Order by transaction_id to ensure deterministic ordering
             .order_by(transaction_pool::transaction_id.asc())
             .get_results::<sql_models::TransactionPoolRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {

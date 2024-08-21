@@ -180,17 +180,7 @@ async fn node_requests_missing_transaction_from_local_leader() {
             .send_transaction_to(&TestAddress::new("2"), Decision::Commit, 1, 5)
             .await;
         // All VNs will decide the same thing
-        test.create_execution_at_destination(
-            TestVnDestination::All,
-            create_execution_result_for_transaction(
-                BlockId::zero(),
-                *transaction.id(),
-                transaction.current_decision(),
-                0,
-                transaction.resolved_inputs.clone().unwrap_or_default(),
-                transaction.resulting_outputs.clone().unwrap_or_default(),
-            ),
-        );
+        test.create_execution_at_destination_for_transaction(TestVnDestination::All, &transaction);
     }
     test.start_epoch(Epoch(1)).await;
     loop {
@@ -397,7 +387,6 @@ async fn foreign_shard_decides_to_abort() {
 async fn multishard_local_inputs_foreign_outputs() {
     setup_logger();
     let mut test = Test::builder()
-        .with_test_timeout(Duration::from_secs(60))
         .add_committee(0, vec!["1", "2"])
         .add_committee(1, vec!["3", "4"])
         .start()
@@ -448,10 +437,10 @@ async fn multishard_local_inputs_foreign_outputs() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "TODO: this test does not work because more work is needed on multi-sharded output-only involvement"]
 async fn multishard_local_inputs_and_outputs_foreign_outputs() {
     setup_logger();
     let mut test = Test::builder()
+        .debug_sql("/tmp/test{}.db")
         .add_committee(0, vec!["1", "2"])
         .add_committee(1, vec!["3", "4"])
         .add_committee(2, vec!["5", "6"])
@@ -477,8 +466,13 @@ async fn multishard_local_inputs_and_outputs_foreign_outputs() {
             .collect(),
         outputs_0.into_iter().chain(outputs_2).collect(),
     );
-    test.send_transaction_to_destination(TestVnDestination::All, tx1.clone())
+    test.send_transaction_to_destination(TestVnDestination::Committee(0), tx1.clone())
         .await;
+    test.send_transaction_to_destination(TestVnDestination::Committee(1), tx1.clone())
+        .await;
+    // Just add the result for executing the transaction to committee 2, the transaction itself will be requested by
+    // consensus.
+    test.create_execution_at_destination_for_transaction(TestVnDestination::Committee(2), &tx1);
 
     test.start_epoch(Epoch(1)).await;
 
@@ -518,7 +512,14 @@ async fn multishard_output_conflict_abort() {
         .await;
 
     let tx1 = test.build_transaction(Decision::Commit, 1, 5, 2);
-    let resulting_outputs = tx1.resulting_outputs().unwrap().to_vec();
+    let resulting_outputs = tx1
+        .resulting_outputs()
+        .unwrap()
+        .iter()
+        // Dont use the transaction receipt as an output in tx2
+        .filter(|s| !s.substate_id().is_transaction_receipt())
+        .cloned()
+        .collect();
     test.send_transaction_to_destination(TestVnDestination::All, tx1.clone())
         .await;
 
@@ -722,10 +723,9 @@ async fn single_shard_input_conflict() {
         .build();
     let tx2 = TransactionRecord::new(tx2);
 
-    test.create_execution_at_destination(
+    test.add_execution_at_destination(
         TestVnDestination::All,
         create_execution_result_for_transaction(
-            BlockId::zero(),
             *tx1.id(),
             Decision::Commit,
             0,
@@ -733,10 +733,9 @@ async fn single_shard_input_conflict() {
             vec![],
         ),
     )
-    .create_execution_at_destination(
+    .add_execution_at_destination(
         TestVnDestination::All,
         create_execution_result_for_transaction(
-            BlockId::zero(),
             *tx2.id(),
             Decision::Commit,
             0,
@@ -961,10 +960,9 @@ async fn single_shard_unversioned_inputs() {
 
     test.send_transaction_to_destination(TestVnDestination::All, tx.clone())
         .await;
-    test.create_execution_at_destination(
+    test.add_execution_at_destination(
         TestVnDestination::All,
         create_execution_result_for_transaction(
-            BlockId::zero(),
             *tx.id(),
             Decision::Commit,
             0,

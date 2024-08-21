@@ -77,9 +77,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> ReadableSubstateStore for PendingSu
         }
 
         let Some(substate) = SubstateRecord::get(self.read_transaction(), &id.to_substate_address()).optional()? else {
-            return Err(SubstateStoreError::SubstateNotFound {
-                address: id.to_substate_address(),
-            });
+            return Err(SubstateStoreError::SubstateNotFound { id: id.clone() });
         };
         Ok(substate.into_substate())
     }
@@ -206,6 +204,11 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         let has_local_only_rules = existing.is_local_only() && is_local_only;
         let same_transaction = existing.transaction_id() == transaction_id;
 
+        // Duplicate lock requests on the same transaction are idempotent
+        if same_transaction {
+            return Ok(());
+        }
+
         match existing.substate_lock() {
             // If a substate is already locked as READ:
             // - it MAY be locked as READ
@@ -214,10 +217,10 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             //   - it MAY be locked as requested.
             SubstateLockType::Read => {
                 // Cannot write to or create an output for a substate that is already read locked
-                if !same_transaction && !has_local_only_rules && !requested_lock_type.is_read() {
+                if !has_local_only_rules && !requested_lock_type.is_read() {
                     warn!(
                         target: LOG_TARGET,
-                        "⚠️ Lock conflict: [{}] Read lock(local={}) is present. Requested lock is {}(local={})",
+                        "⚠️ Lock conflict: [{}] Read lock(local_only={}) is present. Requested lock is {}(local_only={})",
                         requested_lock.versioned_substate_id(),
                         existing.is_local_only(),
                         requested_lock_type,
@@ -246,11 +249,11 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             // - if Same-Transaction OR Local-Only-Rules:
             //   - it MAY be locked as OUTPUT
             SubstateLockType::Write => {
-                // Cannot lock a non-local WRITE locked substate
-                if !has_local_only_rules && !same_transaction {
+                // Cannot lock a non-local_only WRITE locked substate
+                if !has_local_only_rules {
                     warn!(
                         target: LOG_TARGET,
-                        "⚠️ Lock conflict: [{}] Write lock(local={}) is present. Requested lock is {}(local={})",
+                        "⚠️ Lock conflict: [{}] Write lock(local_only={}) is present. Requested lock is {}(local_only={})",
                         requested_lock.versioned_substate_id(),
                         existing.is_local_only(),
                         requested_lock_type,
@@ -266,7 +269,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                 if !requested_lock_type.is_output() {
                     warn!(
                         target: LOG_TARGET,
-                        "⚠️ Lock conflict: [{}] Write lock(local={}) is present. Requested lock is {}(local={})",
+                        "⚠️ Lock conflict: [{}] Write lock(local_only={}) is present. Requested lock is {}(local_only={})",
                         requested_lock.versioned_substate_id(),
                         existing.is_local_only(),
                         requested_lock_type,
@@ -295,10 +298,11 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             //   - it MAY be locked as WRITE or READ
             //   - it MUST NOT be locked as OUTPUT
             SubstateLockType::Output => {
-                if !same_transaction && !has_local_only_rules {
+                if !has_local_only_rules {
                     warn!(
                         target: LOG_TARGET,
-                        "⚠️ Lock conflict: [{}] Output lock(local={}) is present. Requested lock is {}(local={})",
+                        "⚠️ Lock conflict: [{}, {}] Output lock(local_only={}) is present. Requested lock is {}(local_only={})",
+                        transaction_id,
                         requested_lock.versioned_substate_id(),
                         existing.is_local_only(),
                         requested_lock_type,
@@ -314,7 +318,8 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                 if requested_lock_type.is_output() {
                     warn!(
                         target: LOG_TARGET,
-                        "⚠️ Lock conflict: [{}] Output lock(local={}) is present. Requested lock is Output(local={})",
+                        "⚠️ Lock conflict: [{}, {}] Output lock(local_only={}) is present. Requested lock is Output(local_only={})",
+                        transaction_id,
                         requested_lock.versioned_substate_id(),
                         existing.is_local_only(),
                         is_local_only
@@ -389,9 +394,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         match SubstateRecord::substate_is_up(self.read_transaction(), &id.to_substate_address()).optional()? {
             Some(true) => Ok(()),
             Some(false) => Err(SubstateStoreError::SubstateIsDown { id: id.clone() }),
-            None => Err(SubstateStoreError::SubstateNotFound {
-                address: id.to_substate_address(),
-            }),
+            None => Err(SubstateStoreError::SubstateNotFound { id: id.clone() }),
         }
     }
 
@@ -406,7 +409,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         let address = id.to_substate_address();
         let Some(is_up) = SubstateRecord::substate_is_up(self.read_transaction(), &address).optional()? else {
             debug!(target: LOG_TARGET, "Expected substate {} to be DOWN but it does not exist", address);
-            return Err(SubstateStoreError::SubstateNotFound { address });
+            return Err(SubstateStoreError::SubstateNotFound { id: id.clone() });
         };
         if is_up {
             return Err(SubstateStoreError::ExpectedSubstateDown { id: id.clone() });

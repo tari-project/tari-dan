@@ -35,6 +35,10 @@ impl TransactionPoolStatusUpdate {
         &self.evidence
     }
 
+    pub fn evidence_mut(&mut self) -> &mut Evidence {
+        &mut self.evidence
+    }
+
     pub fn is_ready(&self) -> bool {
         self.is_ready
     }

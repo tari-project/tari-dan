@@ -177,8 +177,6 @@ pub async fn spawn_services(
     handles.push(join_handle);
 
     info!(target: LOG_TARGET, "Message logging initializing");
-    // Spawn messaging
-    let message_logger = SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
 
     info!(target: LOG_TARGET, "State store initializing");
     // Connect to shard db
@@ -230,6 +228,7 @@ pub async fn spawn_services(
     };
 
     // Messaging
+    let message_logger = SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
     let local_address = PeerAddress::from(keypair.public_key().clone());
     let (loopback_sender, loopback_receiver) = mpsc::unbounded_channel();
     let inbound_messaging = ConsensusInboundMessaging::new(

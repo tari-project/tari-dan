@@ -9,7 +9,6 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::transactions::{tari_amount::MicroMinotari, transaction_components::ValidatorNodeRegistration};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
-    shard::Shard,
     Epoch,
     NodeAddressable,
     ShardGroup,
@@ -408,7 +407,7 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         &self,
         epoch: Epoch,
         shard_group: ShardGroup,
-    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
+    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommitteesForShardGroup {

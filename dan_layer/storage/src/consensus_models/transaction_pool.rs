@@ -234,6 +234,18 @@ impl TransactionPoolStage {
     pub fn is_all_prepared(&self) -> bool {
         matches!(self, Self::AllPrepared)
     }
+
+    pub fn is_all_accepted(&self) -> bool {
+        matches!(self, Self::AllAccepted)
+    }
+
+    pub fn is_some_accepted(&self) -> bool {
+        matches!(self, Self::SomeAccepted)
+    }
+
+    pub fn is_finalising(&self) -> bool {
+        self.is_local_only() || self.is_all_accepted() || self.is_some_accepted()
+    }
 }
 
 impl Display for TransactionPoolStage {
@@ -306,6 +318,7 @@ pub struct TransactionPoolRecord {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     transaction_id: TransactionId,
     evidence: Evidence,
+    remote_evidence: Option<Evidence>,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     transaction_fee: u64,
     leader_fee: Option<LeaderFee>,
@@ -321,6 +334,7 @@ impl TransactionPoolRecord {
     pub fn load(
         id: TransactionId,
         evidence: Evidence,
+        remote_evidence: Option<Evidence>,
         transaction_fee: Option<u64>,
         leader_fee: Option<LeaderFee>,
         stage: TransactionPoolStage,
@@ -333,6 +347,7 @@ impl TransactionPoolRecord {
         Self {
             transaction_id: id,
             evidence,
+            remote_evidence,
             transaction_fee: transaction_fee.unwrap_or(0),
             leader_fee,
             stage,
@@ -513,13 +528,7 @@ impl TransactionPoolRecord {
     }
 
     pub fn add_qc_evidence(&mut self, committee_info: &CommitteeInfo, qc_id: QcId) -> &mut Self {
-        let evidence = &mut self.evidence;
-        for (address, evidence_mut) in evidence.iter_mut() {
-            if committee_info.includes_substate_address(address) {
-                evidence_mut.qc_ids.insert(qc_id);
-            }
-        }
-
+        self.evidence.add_qc_evidence(committee_info, qc_id);
         self
     }
 
@@ -536,7 +545,7 @@ impl TransactionPoolRecord {
             // Prepared
             ((TransactionPoolStage::Prepared, TransactionPoolStage::LocalPrepared), _) |
             // LocalPrepared
-            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), true) |
+            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), _) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), _) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::SomePrepared), _) |
             // AllPrepared
@@ -546,8 +555,8 @@ impl TransactionPoolRecord {
             ((TransactionPoolStage::SomePrepared, TransactionPoolStage::SomePrepared), false) |
             ((TransactionPoolStage::SomePrepared, TransactionPoolStage::LocalAccepted), _) |
             // LocalAccepted
-            ((TransactionPoolStage::LocalAccepted, TransactionPoolStage::LocalAccepted), true) |
-            ((TransactionPoolStage::LocalAccepted, TransactionPoolStage::AllAccepted), _) |
+            ((TransactionPoolStage::LocalAccepted, TransactionPoolStage::LocalAccepted), _) |
+            ((TransactionPoolStage::LocalAccepted, TransactionPoolStage::AllAccepted), false) |
             ((TransactionPoolStage::LocalAccepted, TransactionPoolStage::SomeAccepted), false) |
             // Accepted
             ((TransactionPoolStage::AllAccepted, TransactionPoolStage::AllAccepted), false) => {}
@@ -597,32 +606,61 @@ impl TransactionPoolRecord {
         foreign_committee_info: &CommitteeInfo,
         remote_evidence: Evidence,
     ) -> Result<(), TransactionPoolError> {
-        self.evidence.merge(remote_evidence);
+        match self.remote_evidence.as_mut() {
+            Some(evidence) => {
+                evidence.merge(remote_evidence);
+            },
+            None => {
+                self.remote_evidence = Some(remote_evidence);
+            },
+        }
+
+        tx.transaction_pool_update(
+            &self.transaction_id,
+            None,
+            None,
+            None,
+            Some(decision),
+            self.remote_evidence.as_ref(),
+        )?;
+        // TODO: we should not blindly use unknown foreign QCs
+        self.evidence
+            .merge(self.remote_evidence.as_ref().expect("set above").clone());
         self.add_qc_evidence(foreign_committee_info, foreign_qc_id);
         self.set_remote_decision(decision);
-        tx.transaction_pool_update(&self.transaction_id, None, Some(decision), Some(&self.evidence))?;
         Ok(())
     }
 
     #[allow(clippy::mutable_key_type)]
     pub fn add_foreign_pledges<TTx: StateStoreWriteTransaction>(
-        &mut self,
+        &self,
         tx: &mut TTx,
         shard_group: ShardGroup,
         foreign_pledges: SubstatePledges,
     ) -> Result<(), TransactionPoolError> {
-        tx.foreign_substate_pledges_insert(self.transaction_id, shard_group, foreign_pledges)?;
+        tx.foreign_substate_pledges_save(self.transaction_id, shard_group, foreign_pledges)?;
         Ok(())
     }
 
-    pub fn update_local_decision<TTx: StateStoreWriteTransaction>(
+    pub fn update_local_data<TTx: StateStoreWriteTransaction>(
         &mut self,
         tx: &mut TTx,
-        decision: Decision,
+        is_ready: bool,
     ) -> Result<(), TransactionPoolError> {
-        if self.local_decision.map(|d| d != decision).unwrap_or(true) {
-            self.set_local_decision(decision);
-            tx.transaction_pool_update(&self.transaction_id, Some(decision), None, None)?;
+        if self
+            .local_decision
+            .map(|d| d != self.current_decision())
+            .unwrap_or(true)
+        {
+            self.set_local_decision(self.current_decision());
+            tx.transaction_pool_update(
+                &self.transaction_id,
+                Some(is_ready),
+                Some(self.current_decision()),
+                Some(&self.evidence),
+                None,
+                None,
+            )?;
         }
         Ok(())
     }
@@ -738,6 +776,7 @@ mod tests {
                 transaction_id: TransactionId::new([0; 32]),
                 original_decision: Decision::Commit,
                 evidence: Default::default(),
+                remote_evidence: None,
                 transaction_fee: fee,
                 leader_fee: None,
                 stage: TransactionPoolStage::New,

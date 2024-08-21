@@ -588,7 +588,7 @@ impl JsonRpcHandlers {
                     ),
                 )
             })?;
-        let committee_shard = self
+        let committee_info = self
             .epoch_manager
             .get_local_committee_info(current_epoch)
             .await
@@ -611,8 +611,8 @@ impl JsonRpcHandlers {
             current_epoch,
             current_block_height,
             current_block_hash,
-            is_valid: committee_shard.is_some(),
-            committee_info: committee_shard,
+            is_valid: committee_info.is_some(),
+            committee_info,
         };
         Ok(JsonRpcResponse::success(answer_id, response))
     }

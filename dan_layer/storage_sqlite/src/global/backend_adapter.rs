@@ -33,6 +33,7 @@ use diesel::{
     sql_types::{BigInt, Bigint},
     ExpressionMethods,
     JoinOnDsl,
+    NullableExpressionMethods,
     OptionalExtension,
     QueryDsl,
     RunQueryDsl,
@@ -44,7 +45,6 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
     committee::Committee,
     hashing::ValidatorNodeBalancedMerkleTree,
-    shard::Shard,
     Epoch,
     NodeAddressable,
     ShardGroup,
@@ -70,6 +70,7 @@ use crate::{
     error::SqliteStorageError,
     global::{
         models::{
+            DbCommittee,
             MetadataModel,
             NewBaseLayerBlockInfo,
             NewEpoch,
@@ -630,57 +631,39 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
         shard_group: ShardGroup,
-    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error> {
+    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, Self::Error> {
         use crate::global::schema::{committees, validator_nodes};
-        // let mut shards = shard_group
-        //     .shard_iter()
-        //     .map(|b| (b, Committee::empty()))
-        //     .collect::<HashMap<_, _>>();
 
         let mut committees = HashMap::with_capacity(shard_group.len());
-        for shard in shard_group.shard_iter() {
-            let validators = validator_nodes::table
-                .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
-                .select(validator_nodes::all_columns)
-                .filter(committees::epoch.eq(epoch.as_u64() as i64))
-                .filter(committees::shard_start.le(shard.as_u32() as i32))
-                .filter(committees::shard_end.ge(shard.as_u32() as i32))
-                .get_results::<DbValidatorNode>(tx.connection())
-                .map_err(|source| SqliteStorageError::DieselError {
-                    source,
-                    operation: "validator_nodes_get_by_buckets".to_string(),
-                })?;
+        let validators = validator_nodes::table
+            .left_join(committees::table.on(committees::validator_node_id.eq(validator_nodes::id)))
+            .select((validator_nodes::all_columns, committees::all_columns.nullable()))
+            .filter(committees::epoch.eq(epoch.as_u64() as i64))
+            .filter(committees::shard_start.le(shard_group.start().as_u32() as i32))
+            .filter(committees::shard_end.ge(shard_group.end().as_u32() as i32))
+            .get_results::<(DbValidatorNode, Option<DbCommittee>)>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "validator_nodes_get_by_buckets".to_string(),
+            })?;
 
-            committees.insert(
-                shard,
-                validators
-                    .into_iter()
-                    .map(|validator| {
-                        Ok::<_, SqliteStorageError>((
-                            DbValidatorNode::try_parse_address(&validator.address)?,
-                            PublicKey::from_canonical_bytes(&validator.public_key).map_err(|_| {
-                                SqliteStorageError::MalformedDbData(format!(
-                                    "Invalid public key in validator node record id={}",
-                                    validator.id
-                                ))
-                            })?,
-                        ))
-                    })
-                    .collect::<Result<_, _>>()?,
-            );
+        for (vn, committee) in validators {
+            let committee = committee.unwrap();
+            let validators = committees
+                .entry(committee.as_shard_group())
+                .or_insert_with(|| Committee::empty());
 
-            // for validator in validators {
-            //     committee.members.push((
-            //         DbValidatorNode::try_parse_address(&validator.address)?,
-            //         PublicKey::from_canonical_bytes(&validator.public_key).map_err(|_| {
-            //             SqliteStorageError::MalformedDbData(format!(
-            //                 "Invalid public key in validator node record id={}",
-            //                 validator.id
-            //             ))
-            //         })?,
-            //     ));
-            // }
+            validators.members.push((
+                DbValidatorNode::try_parse_address(&vn.address)?,
+                PublicKey::from_canonical_bytes(&vn.public_key).map_err(|_| {
+                    SqliteStorageError::MalformedDbData(format!(
+                        "Invalid public key in validator node record id={}",
+                        vn.id
+                    ))
+                })?,
+            ));
         }
+
         Ok(committees)
     }
 

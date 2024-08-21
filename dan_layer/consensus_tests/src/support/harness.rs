@@ -13,11 +13,11 @@ use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeHeigh
 use tari_dan_storage::{
     consensus_models::{
         BlockId,
-        BlockTransactionExecution,
         Decision,
         QcId,
         SubstateLockType,
         SubstateRecord,
+        TransactionExecution,
         TransactionRecord,
         VersionedSubstateIdLockIntent,
     },
@@ -107,32 +107,39 @@ impl Test {
         num_outputs: usize,
     ) -> TransactionRecord {
         let transaction = self.build_transaction(decision, fee, num_inputs, num_outputs);
-
         self.send_transaction_to_destination(TestVnDestination::All, transaction.clone())
             .await;
         transaction
     }
 
     pub async fn send_transaction_to_destination(&self, dest: TestVnDestination, transaction: TransactionRecord) {
-        self.create_execution_at_destination(
-            dest.clone(),
+        self.create_execution_at_destination_for_transaction(dest.clone(), &transaction);
+        self.network.send_transaction(dest, transaction).await;
+    }
+
+    pub fn add_execution_at_destination(&self, dest: TestVnDestination, execution: TransactionExecution) -> &Self {
+        for vn in self.validators.values() {
+            if dest.is_for(&vn.address, vn.shard_group, vn.num_committees) {
+                vn.transaction_executions.insert(execution.clone());
+            }
+        }
+        self
+    }
+
+    pub fn create_execution_at_destination_for_transaction(
+        &self,
+        dest: TestVnDestination,
+        transaction: &TransactionRecord,
+    ) -> &Self {
+        let execution = transaction.clone().into_execution().unwrap_or_else(|| {
             create_execution_result_for_transaction(
-                BlockId::zero(),
                 *transaction.id(),
                 transaction.current_decision(),
                 0,
                 transaction.resolved_inputs.clone().unwrap_or_default(),
                 transaction.resulting_outputs.clone().unwrap_or_default(),
-            ),
-        );
-        self.network.send_transaction(dest, transaction).await;
-    }
-
-    pub fn create_execution_at_destination(
-        &self,
-        dest: TestVnDestination,
-        execution: BlockTransactionExecution,
-    ) -> &Self {
+            )
+        });
         for vn in self.validators.values() {
             if dest.is_for(&vn.address, vn.shard_group, vn.num_committees) {
                 vn.transaction_executions.insert(execution.clone());
@@ -220,7 +227,7 @@ impl Test {
                         if v.shard_group
                             .contains(&substate.to_substate_address().to_shard(TEST_NUM_PRESHARDS))
                         {
-                            substate.clone().create(tx).unwrap();
+                            substate.create(tx).unwrap();
                         }
                     }
                     Ok::<_, StorageError>(())

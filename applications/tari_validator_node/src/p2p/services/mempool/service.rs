@@ -161,9 +161,9 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
         if self.transaction_exists(transaction.id())? {
             return Ok(());
         }
-        debug!(
+        info!(
             target: LOG_TARGET,
-            "Received NEW transaction from local: {} {:?}",
+            "🎱 Received NEW transaction from local: {} {:?}",
             transaction.id(),
             transaction
         );
@@ -304,8 +304,6 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
                 .await
                 .map_err(|_| MempoolError::ConsensusChannelClosed)?;
 
-            // self.queue_transaction_for_execution(transaction.clone(), current_epoch, should_propagate, sender_shard);
-
             if should_propagate {
                 // This validator is involved, we to send the transaction to local replicas
                 if let Err(e) = self
@@ -368,7 +366,10 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
             if should_propagate {
                 // This validator is not involved, so we forward the transaction to f + 1 replicas per distinct shard
                 // per input shard ID because we may be the only validator that has received this transaction.
-                let substate_addresses = transaction.versioned_input_addresses_iter().collect();
+                let substate_addresses = transaction
+                    .all_inputs_iter()
+                    .map(|input| input.or_zero_version().to_substate_address())
+                    .collect();
                 if let Err(e) = self
                     .gossip
                     .gossip_to_foreign_replicas(current_epoch, substate_addresses, NewTransactionMessage {

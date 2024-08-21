@@ -43,8 +43,8 @@ impl PreparedTransaction {
         Self::MultiShard(MultiShardPreparedTransaction {
             transaction,
             local_inputs,
-            outputs,
             foreign_inputs,
+            outputs,
         })
     }
 
@@ -134,7 +134,9 @@ impl MultiShardPreparedTransaction {
                     .all_inputs_iter()
                     .map(|input| input.or_zero_version())
                     .map(|id| VersionedSubstateIdLockIntent::new(id, SubstateLockType::Read)),
-                &[],
+                self.outputs
+                    .iter()
+                    .map(|id| VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockType::Output)),
             );
         }
 

@@ -50,6 +50,7 @@ use crate::{
     hotstuff::{
         calculate_state_merkle_root,
         error::HotStuffError,
+        filter_diff_for_committee,
         substate_store::PendingSubstateStore,
         transaction_manager::{
             ConsensusTransactionManager,
@@ -171,12 +172,14 @@ where TConsensusSpec: ConsensusSpec
             )?;
 
             // Add executions for this block
-            debug!(
-                target: LOG_TARGET,
-                "Adding {} executed transaction(s) to block {}",
-                executed_transactions.len(),
-                next_block.id()
-            );
+            if !executed_transactions.is_empty() {
+                debug!(
+                    target: LOG_TARGET,
+                    "Saving {} executed transaction(s) for block {}",
+                    executed_transactions.len(),
+                    next_block.id()
+                );
+            }
             for executed in executed_transactions.into_values() {
                 executed.for_block(*next_block.id()).insert_if_required(tx)?;
             }
@@ -268,11 +271,7 @@ where TConsensusSpec: ConsensusSpec
                 self.get_current_transaction_atom(local_committee_info, &mut tx_rec)?,
             ))),
             TransactionPoolStage::LocalAccepted => {
-                if tx_rec.current_decision().is_commit() {
-                    Ok(Some(Command::AllAccept(tx_rec.get_current_transaction_atom())))
-                } else {
-                    Ok(Some(Command::SomeAccept(tx_rec.get_current_transaction_atom())))
-                }
+                self.accept_transaction(tx, parent_block, &mut tx_rec, local_committee_info, substate_store)
             },
             // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes
             // agreed with the Accept, more (possibly empty) blocks with QCs will be
@@ -433,7 +432,7 @@ where TConsensusSpec: ConsensusSpec
             )
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
-        let command = match prepared {
+        let command = match prepared.clone() {
             PreparedTransaction::LocalOnly(LocalPreparedTransaction::Accept(executed)) => {
                 let execution = executed.into_execution();
                 // Update the decision so that we can propose it
@@ -508,7 +507,7 @@ where TConsensusSpec: ConsensusSpec
                             // CASE: All local inputs were resolved. We need to continue with consensus to get the
                             // foreign inputs/outputs.
                             tx_rec.set_local_decision(Decision::Commit);
-                            // Set partial evidence for local inputs using what we know.
+                            // Set partial evidence using local inputs and known outputs.
                             tx_rec.set_evidence(multishard.to_initial_evidence());
                         }
                     },
@@ -548,10 +547,10 @@ where TConsensusSpec: ConsensusSpec
             self.execute_transaction(tx, &parent_block.block_id, parent_block.epoch, tx_rec.transaction_id())?;
 
         // Try to lock all local outputs
-        let local_outputs = execution
-            .resulting_outputs()
-            .iter()
-            .filter(|o| local_committee_info.includes_substate_address(&o.to_substate_address()));
+        let local_outputs = execution.resulting_outputs().iter().filter(|o| {
+            o.substate_id().is_transaction_receipt() ||
+                local_committee_info.includes_substate_address(&o.to_substate_address())
+        });
         match substate_store.try_lock_all(*tx_rec.transaction_id(), local_outputs, false) {
             Ok(()) => {},
             Err(err) => {
@@ -576,18 +575,42 @@ where TConsensusSpec: ConsensusSpec
         tx_rec.update_from_execution(&execution);
 
         let atom = self.get_current_transaction_atom(local_committee_info, tx_rec)?;
-        if atom.decision.is_commit() {
-            let diff = execution.result().finalize.accept().ok_or_else(|| {
-                HotStuffError::InvariantError(format!(
-                    "local_accept_transaction: Transaction {} has COMMIT decision but execution failed when proposing",
-                    tx_rec.transaction_id(),
-                ))
-            })?;
-            substate_store.put_diff(*tx_rec.transaction_id(), diff)?;
-        }
-
         executed_transactions.insert(*tx_rec.transaction_id(), execution);
         Ok(Some(Command::LocalAccept(atom)))
+    }
+
+    fn accept_transaction(
+        &self,
+        tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        parent_block: &LeafBlock,
+        tx_rec: &mut TransactionPoolRecord,
+        local_committee_info: &CommitteeInfo,
+        substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
+    ) -> Result<Option<Command>, HotStuffError> {
+        if tx_rec.current_decision().is_abort() {
+            return Ok(Some(Command::SomeAccept(tx_rec.get_current_transaction_atom())));
+        }
+
+        let execution =
+            BlockTransactionExecution::get_pending_for_block(tx, tx_rec.transaction_id(), &parent_block.block_id)
+                .optional()?
+                .ok_or_else(|| {
+                    HotStuffError::InvariantError(format!(
+                        "accept_transaction: Transaction {} has COMMIT decision but execution is missing",
+                        tx_rec.transaction_id(),
+                    ))
+                })?;
+        let diff = execution.result().finalize.accept().ok_or_else(|| {
+            HotStuffError::InvariantError(format!(
+                "local_accept_transaction: Transaction {} has COMMIT decision but execution failed when proposing",
+                tx_rec.transaction_id(),
+            ))
+        })?;
+        substate_store.put_diff(
+            *tx_rec.transaction_id(),
+            &filter_diff_for_committee(local_committee_info, diff),
+        )?;
+        Ok(Some(Command::AllAccept(tx_rec.get_current_transaction_atom())))
     }
 
     fn get_current_transaction_atom(
@@ -616,20 +639,26 @@ where TConsensusSpec: ConsensusSpec
         current_epoch: Epoch,
         transaction_id: &TransactionId,
     ) -> Result<TransactionExecution, HotStuffError> {
-        info!(
-            target: LOG_TARGET,
-            "👨‍🔧 PROPOSE: Executing transaction {}",
-            transaction_id,
-        );
         let transaction = TransactionRecord::get(tx, transaction_id)?;
         // Might have been executed already if all inputs are local
         if let Some(execution) =
             BlockTransactionExecution::get_pending_for_block(tx, transaction_id, parent_block_id).optional()?
         {
+            info!(
+                target: LOG_TARGET,
+                "👨‍🔧 PROPOSE: Using existing transaction execution {} ({})",
+                transaction_id, execution.execution.decision(),
+            );
             return Ok(execution.into_transaction_execution());
         }
 
         let pledged = PledgedTransaction::load_pledges(tx, transaction)?;
+
+        info!(
+            target: LOG_TARGET,
+            "👨‍🔧 PROPOSE: Executing transaction {} (pledges: {} local, {} foreign)",
+            transaction_id, pledged.local_pledges.len(), pledged.foreign_pledges.len(),
+        );
 
         let executed = self
             .transaction_manager
@@ -645,7 +674,7 @@ pub fn get_non_local_shards(diff: &[SubstateChange], local_committee_info: &Comm
         .map(|ch| {
             ch.versioned_substate_id()
                 .to_substate_address()
-                .to_shard(local_committee_info.num_shards())
+                .to_shard(local_committee_info.num_preshards())
         })
         .filter(|shard| local_committee_info.shard_group().contains(shard))
         .collect()

@@ -28,9 +28,9 @@ export async function jsonRpc(method: string, args: any = {}) {
 
   json_id += 1;
 
-  const address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || "";
+  const address = import.meta.env.VITE_JSON_RPC_ADDRESS || import.meta.env.VITE_JRPC_ADDRESS || "/json_rpc";
   const headers: { [key: string]: string } = { "Content-Type": "application/json" };
-  const response = await fetch(`${address}/json_rpc`, {
+  const response = await fetch(address, {
     method: "POST",
     body: JSON.stringify({
       method: method,

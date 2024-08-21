@@ -6,10 +6,10 @@ use std::{iter, time::Duration};
 use rand::{distributions::Alphanumeric, rngs::OsRng, Rng};
 use tari_common_types::types::PrivateKey;
 use tari_dan_storage::consensus_models::{
-    BlockId,
-    BlockTransactionExecution,
     Decision,
     ExecutedTransaction,
+    SubstateLockType,
+    TransactionExecution,
     TransactionRecord,
     VersionedSubstateIdLockIntent,
 };
@@ -17,7 +17,8 @@ use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     component::{ComponentBody, ComponentHeader},
     fees::FeeReceipt,
-    substate::{Substate, SubstateDiff},
+    substate::{Substate, SubstateDiff, SubstateId},
+    transaction_receipt::{TransactionReceipt, TransactionReceiptAddress},
 };
 use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
 
@@ -35,33 +36,34 @@ pub fn build_transaction_from(
         tx.set_abort_reason(RejectReason::ExecutionFailure("Test aborted".to_string()));
     }
 
-    let execution = create_execution_result_for_transaction(
-        // We're just building the execution here for DRY purposes, so genesis block id isn't used
-        BlockId::zero(),
-        *tx.id(),
-        decision,
-        fee,
-        resolved_inputs,
-        resulting_outputs.clone(),
-    );
+    let execution =
+        create_execution_result_for_transaction(*tx.id(), decision, fee, resolved_inputs, resulting_outputs.clone());
 
-    tx.execution_result = Some(execution.execution.result);
-    tx.resulting_outputs = Some(execution.execution.resulting_outputs);
-    tx.resolved_inputs = Some(execution.execution.resolved_inputs);
+    tx.execution_result = Some(execution.result);
+    tx.resulting_outputs = Some(execution.resulting_outputs);
+    tx.resolved_inputs = Some(execution.resolved_inputs);
     tx
 }
 
 pub fn create_execution_result_for_transaction(
-    block_id: BlockId,
     tx_id: TransactionId,
     decision: Decision,
     fee: u64,
     resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
-    resulting_outputs: Vec<VersionedSubstateIdLockIntent>,
-) -> BlockTransactionExecution {
+    mut resulting_outputs: Vec<VersionedSubstateIdLockIntent>,
+) -> TransactionExecution {
     let result = if decision.is_commit() {
         let mut diff = SubstateDiff::new();
         for output in &resulting_outputs {
+            if output.substate_id().is_transaction_receipt() {
+                continue;
+            }
+            assert!(
+                output.substate_id().is_component(),
+                "create_execution_result_for_transaction: Test harness only supports generating component outputs. \
+                 Got {output}"
+            );
+
             let s = (0..100).map(|_| OsRng.sample(Alphanumeric) as char).collect::<String>();
             let random_state = tari_bor::to_value(&s).unwrap();
             diff.up(
@@ -82,6 +84,20 @@ pub fn create_execution_result_for_transaction(
                 }),
             )
         }
+        // We MUST create the transaction receipt
+        diff.up(
+            SubstateId::TransactionReceipt(TransactionReceiptAddress::from(tx_id)),
+            Substate::new(0, TransactionReceipt {
+                transaction_hash: tx_id.into_array().into(),
+                events: vec![],
+                logs: vec![],
+                fee_receipt: FeeReceipt {
+                    total_fee_payment: fee.try_into().unwrap(),
+                    total_fees_paid: fee.try_into().unwrap(),
+                    cost_breakdown: vec![],
+                },
+            }),
+        );
         TransactionResult::Accept(diff)
     } else {
         TransactionResult::Reject(RejectReason::ExecutionFailure(
@@ -89,8 +105,15 @@ pub fn create_execution_result_for_transaction(
         ))
     };
 
-    BlockTransactionExecution::new(
-        block_id,
+    resulting_outputs.push(VersionedSubstateIdLockIntent::new(
+        VersionedSubstateId::new(
+            SubstateId::TransactionReceipt(TransactionReceiptAddress::from(tx_id)),
+            0,
+        ),
+        SubstateLockType::Output,
+    ));
+
+    TransactionExecution::new(
         tx_id,
         ExecuteResult {
             finalize: FinalizeResult::new(tx_id.into_array().into(), vec![], vec![], result, FeeReceipt {

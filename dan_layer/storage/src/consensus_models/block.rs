@@ -15,6 +15,7 @@ use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, FixedHashSizeError, PublicKey};
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_dan_common_types::{
+    committee::CommitteeInfo,
     hashing,
     optional::Optional,
     serde_with,
@@ -342,6 +343,21 @@ impl Block {
 
     pub fn all_transaction_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
         self.commands.iter().filter_map(|d| d.transaction().map(|t| t.id()))
+    }
+
+    pub fn all_transaction_ids_in_committee<'a>(
+        &'a self,
+        committee_info: &'a CommitteeInfo,
+    ) -> impl Iterator<Item = &TransactionId> + 'a {
+        self.commands
+            .iter()
+            .filter_map(|cmd| cmd.transaction())
+            .filter(|t| {
+                t.evidence
+                    .substate_addresses_iter()
+                    .any(|addr| committee_info.includes_substate_address(addr))
+            })
+            .map(|t| t.id())
     }
 
     pub fn all_committing_transactions_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
@@ -940,7 +956,11 @@ impl Block {
         tx: &TTx,
     ) -> Result<BlockPledge, StorageError> {
         let mut pledges = BlockPledge::new();
-        for atom in self.commands().iter().filter_map(|cmd| cmd.local_prepare()) {
+        for atom in self
+            .commands()
+            .iter()
+            .filter_map(|cmd| cmd.local_prepare().or_else(|| cmd.local_accept()))
+        {
             // No pledges for aborted transactions
             if atom.decision.is_abort() {
                 continue;

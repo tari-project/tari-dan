@@ -3,9 +3,13 @@
 
 use std::{collections::HashSet, ops::Deref, time::Duration};
 
+use log::*;
 use serde::Deserialize;
 use tari_dan_common_types::committee::CommitteeInfo;
-use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
+use tari_engine_types::{
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
+    transaction_receipt::TransactionReceiptAddress,
+};
 use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
@@ -25,6 +29,8 @@ use crate::{
     StateStoreWriteTransaction,
     StorageError,
 };
+
+const LOG_TARGET: &str = "tari::dan::storage::consensus_models::transaction";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TransactionRecord {
@@ -152,7 +158,11 @@ impl TransactionRecord {
     pub fn has_any_local_inputs(&self, local_committee_info: &CommitteeInfo) -> bool {
         self.transaction
             .all_inputs_iter()
-            .any(|i| local_committee_info.includes_substate_address(&i.to_substate_address_default_version(0)))
+            .any(|i| local_committee_info.includes_substate_id(i.substate_id()))
+    }
+
+    pub fn to_receipt_id(&self) -> TransactionReceiptAddress {
+        (*self.id()).into()
     }
 
     pub fn into_execution(mut self) -> Option<TransactionExecution> {
@@ -360,6 +370,12 @@ impl TransactionRecord {
         let pledges = tx.foreign_substate_pledges_get_all_by_transaction_id(self.id())?;
         for input in foreign_inputs {
             if !pledges.iter().any(|p| *p == input) {
+                debug!(
+                    target: LOG_TARGET,
+                    "Transaction {} is missing a pledge for input {}",
+                    self.id(),
+                    input.substate_id()
+                );
                 return Ok(false);
             }
         }

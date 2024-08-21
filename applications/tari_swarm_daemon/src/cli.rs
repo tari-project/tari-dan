@@ -69,6 +69,8 @@ pub struct Overrides {
     pub binaries_root: Option<PathBuf>,
     #[clap(long)]
     pub start_port: Option<u16>,
+    #[clap(short = 'k', long)]
+    pub skip_registration: bool,
 }
 
 impl Overrides {

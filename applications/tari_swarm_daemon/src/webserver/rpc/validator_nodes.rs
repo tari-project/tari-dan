@@ -18,6 +18,7 @@ pub struct ListValidatorNodesResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidatorNodeInfo {
+    pub instance_id: InstanceId,
     pub name: String,
     pub web: String,
     pub jrpc: String,
@@ -42,6 +43,7 @@ pub async fn list(
             let jrpc = format!("http://localhost:{json_rpc_port}");
 
             Ok(ValidatorNodeInfo {
+                instance_id: instance.id,
                 name: instance.name,
                 web,
                 jrpc,

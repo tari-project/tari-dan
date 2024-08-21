@@ -68,6 +68,39 @@ create table parked_blocks
 -- block_id must be unique. Optimise fetching by block_id
 create unique index parked_blocks_uniq_idx_id on parked_blocks (block_id);
 
+CREATE TABLE missing_transactions
+(
+    id                    integer   not NULL primary key AUTOINCREMENT,
+    block_id              text      not NULL,
+    block_height          bigint    not NULL,
+    transaction_id        text      not NULL,
+    is_awaiting_execution boolean   not NULL,
+    created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (block_id) REFERENCES parked_blocks (block_id)
+);
+
+create table foreign_parked_blocks
+(
+    id                      integer   not null primary key AUTOINCREMENT,
+    block_id                text      not NULL,
+    block                   text      not NULL,
+    block_pledges           text      not NULL,
+    justify_qc              text      not NULL,
+    created_at              timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- block_id must be unique. Optimise fetching by block_id
+create unique index foreign_parked_blocks_uniq_idx_id on parked_blocks (block_id);
+
+CREATE TABLE foreign_missing_transactions
+(
+    id                    integer   not NULL primary key AUTOINCREMENT,
+    parked_block_id       integer   not NULL,
+    transaction_id        text      not NULL,
+    created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (parked_block_id) REFERENCES foreign_parked_blocks (id)
+);
+
 create table leaf_blocks
 (
     id           integer   not null primary key AUTOINCREMENT,
@@ -144,6 +177,7 @@ create table foreign_substate_pledges
 );
 
 create index foreign_substate_pledges_transaction_id_idx on foreign_substate_pledges (transaction_id);
+create unique index foreign_substate_pledges_transaction_id_substate_id_uniq_idx on foreign_substate_pledges (transaction_id, substate_id);
 
 create table substate_locks
 (
@@ -313,18 +347,6 @@ create table votes
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-
-CREATE TABLE missing_transactions
-(
-    id                    integer   not NULL primary key AUTOINCREMENT,
-    block_id              text      not NULL,
-    block_height          bigint    not NULL,
-    transaction_id        text      not NULL,
-    is_awaiting_execution boolean   not NULL,
-    created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (block_id) REFERENCES parked_blocks (block_id)
-);
-
 CREATE TABLE foreign_proposals
 (
     id                      integer   not NULL primary key AUTOINCREMENT,
@@ -393,7 +415,6 @@ CREATE TABLE pending_state_tree_diffs
 );
 
 CREATE UNIQUE INDEX pending_state_tree_diffs_uniq_idx_block_id_shard on pending_state_tree_diffs (block_id, shard);
-
 
 CREATE TABLE epoch_checkpoints
 (

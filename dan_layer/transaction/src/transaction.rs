@@ -7,7 +7,7 @@ use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_crypto::ristretto::RistrettoSecretKey;
-use tari_dan_common_types::{Epoch, SubstateAddress};
+use tari_dan_common_types::Epoch;
 use tari_engine_types::{
     hashing::{hasher32, EngineHashDomainLabel},
     indexed_value::{IndexedValue, IndexedValueError},
@@ -118,13 +118,6 @@ impl Transaction {
         &self.transaction.inputs
     }
 
-    fn input_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
-        self.transaction
-            .inputs
-            .iter()
-            .filter_map(|i: &SubstateRequirement| i.to_substate_address())
-    }
-
     /// Returns (fee instructions, instructions)
     pub fn into_instructions(self) -> (Vec<Instruction>, Vec<Instruction>) {
         (self.transaction.fee_instructions, self.transaction.instructions)
@@ -162,16 +155,8 @@ impl Transaction {
         self.all_inputs_substate_ids_iter().count()
     }
 
-    pub fn versioned_input_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
-        self.input_addresses_iter().chain(self.filled_input_addresses_iter())
-    }
-
     pub fn filled_inputs(&self) -> &IndexSet<VersionedSubstateId> {
         &self.filled_inputs
-    }
-
-    fn filled_input_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
-        self.filled_inputs.iter().map(|i| i.to_substate_address())
     }
 
     pub fn filled_inputs_mut(&mut self) -> &mut IndexSet<VersionedSubstateId> {

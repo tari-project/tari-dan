@@ -212,5 +212,9 @@ impl MempoolGossip<PeerAddress> {
 }
 
 fn shard_group_to_topic(shard_group: ShardGroup) -> String {
-    format!("transactions-{}-{}", shard_group.start(), shard_group.end())
+    format!(
+        "transactions-{}-{}",
+        shard_group.start().as_u32(),
+        shard_group.end().as_u32()
+    )
 }

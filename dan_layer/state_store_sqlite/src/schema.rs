@@ -54,6 +54,26 @@ diesel::table! {
 }
 
 diesel::table! {
+    foreign_missing_transactions (id) {
+        id -> Integer,
+        parked_block_id -> Integer,
+        transaction_id -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    foreign_parked_blocks (id) {
+        id -> Integer,
+        block_id -> Text,
+        block -> Text,
+        block_pledges -> Text,
+        justify_qc -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     foreign_proposals (id) {
         id -> Integer,
         shard_group -> Integer,
@@ -408,10 +428,14 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(foreign_missing_transactions -> foreign_parked_blocks (parked_block_id));
+
 diesel::allow_tables_to_appear_in_same_query!(
     block_diffs,
     blocks,
     epoch_checkpoints,
+    foreign_missing_transactions,
+    foreign_parked_blocks,
     foreign_proposals,
     foreign_receive_counters,
     foreign_send_counters,

@@ -5,11 +5,7 @@ use std::{collections::HashSet, marker::PhantomData};
 
 use indexmap::IndexMap;
 use log::*;
-use tari_dan_common_types::{
-    committee::CommitteeInfo,
-    optional::{IsNotFoundError, Optional},
-    Epoch,
-};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::IsNotFoundError, Epoch};
 use tari_dan_storage::{
     consensus_models::{
         Decision,
@@ -23,6 +19,7 @@ use tari_dan_storage::{
 use tari_engine_types::{
     commit_result::RejectReason,
     substate::{Substate, SubstateId},
+    transaction_receipt::TransactionReceiptAddress,
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId, VersionedSubstateId};
 
@@ -60,28 +57,20 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
 
         let mut non_local_inputs = HashSet::new();
         for input in transaction.all_inputs_iter() {
+            if !local_committee_info.includes_substate_id(&input.substate_id) {
+                non_local_inputs.insert(input);
+                continue;
+            }
+
             match input.version() {
                 Some(version) => {
-                    if !local_committee_info.includes_substate_address(
-                        &input.to_substate_address().expect("succeeds because version is Some"),
-                    ) {
-                        non_local_inputs.insert(input);
-                        continue;
-                    }
-
                     let id = VersionedSubstateId::new(input.substate_id, version);
                     let substate = store.get(&id)?;
                     info!(target: LOG_TARGET, "Resolved LOCAL substate: {id}");
                     resolved_substates.insert(id.substate_id, substate);
                 },
                 None => {
-                    let substate = match store.get_latest(&input.substate_id).optional()? {
-                        Some(substate) => substate,
-                        None => {
-                            non_local_inputs.insert(input);
-                            continue;
-                        },
-                    };
+                    let substate = store.get_latest(&input.substate_id)?;
                     info!(target: LOG_TARGET, "Resolved LOCAL unversioned substate: {input}");
                     resolved_substates.insert(input.substate_id, substate);
                 },
@@ -128,6 +117,12 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         transaction_id: TransactionId,
     ) -> Result<PreparedTransaction, BlockTransactionExecutorError> {
         let mut transaction = TransactionRecord::get(store.read_transaction(), &transaction_id)?;
+        let mut outputs = HashSet::new();
+        outputs.insert(VersionedSubstateId::new(
+            TransactionReceiptAddress::from(transaction_id).into(),
+            0,
+        ));
+
         // Get the latest input substates
         let (local_inputs, non_local_inputs) = match self.resolve_local_substates(
             store,
@@ -160,7 +155,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                         transaction,
                         IndexMap::new(),
                         HashSet::new(),
-                        HashSet::new(),
+                        outputs,
                     ));
                 }
             },
@@ -216,7 +211,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             }
         } else {
             // CASE: Multishard transaction, not executed
-            PreparedTransaction::new_multishard(transaction, local_inputs, non_local_inputs, HashSet::new())
+            PreparedTransaction::new_multishard(transaction, local_inputs, non_local_inputs, outputs)
         };
 
         let lock_result = match &prepared {
@@ -233,21 +228,19 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                     // TODO: We do not know if the inputs locks required are Read/Write. Either we allow the user to
                     //       specify this or we can correct the locks after execution. Currently, this limitation
                     //       prevents concurrent multi-shard read locks.
-                    let requested_locks = multishard
-                        .local_inputs()
-                        .iter()
-                        .map(|(substate_id, substate)| {
-                            VersionedSubstateIdLockIntent::new(
-                                VersionedSubstateId::new(substate_id.clone(), substate.version()),
-                                SubstateLockType::Write,
-                            )
-                        })
+                    let requested_locks = multishard.local_inputs().iter().map(|(substate_id, substate)| {
+                        VersionedSubstateIdLockIntent::new(
+                            VersionedSubstateId::new(substate_id.clone(), substate.version()),
+                            SubstateLockType::Write,
+                        )
+                    })
                         // If outputs are known, lock all local outputs
                         .chain(
                             multishard
                                 .outputs()
                                 .iter()
-                                .filter(|o| local_committee_info.includes_substate_address(&o.to_substate_address()))
+                                .filter(|o| o.substate_id.is_transaction_receipt() ||
+                                    local_committee_info.includes_substate_address(&o.to_substate_address()))
                                 .map(|output| {
                                     VersionedSubstateIdLockIntent::new(output.clone(), SubstateLockType::Output)
                                 }),

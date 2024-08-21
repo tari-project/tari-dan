@@ -5,7 +5,7 @@ use diesel::{Connection, SqliteConnection};
 use rand::rngs::OsRng;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_crypto::keys::PublicKey as _;
-use tari_dan_common_types::{shard::Shard, Epoch, PeerAddress, ShardGroup, SubstateAddress};
+use tari_dan_common_types::{Epoch, PeerAddress, ShardGroup, SubstateAddress};
 use tari_dan_storage::global::{GlobalDb, ValidatorNodeDb};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_utilities::ByteArray;
@@ -103,5 +103,5 @@ fn change_committee_shard_group() {
     let vns = validator_nodes
         .get_committees_for_shard_group(Epoch(3), ShardGroup::new(4, 5))
         .unwrap();
-    assert_eq!(vns.get(&Shard::from(4)).unwrap().len(), 2);
+    assert_eq!(vns.get(&ShardGroup::new(4, 5)).unwrap().len(), 2);
 }

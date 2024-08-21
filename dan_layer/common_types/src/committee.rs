@@ -6,6 +6,7 @@ use std::{borrow::Borrow, cmp, ops::RangeInclusive};
 use rand::{rngs::OsRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
+use tari_engine_types::substate::SubstateId;
 
 use crate::{shard::Shard, Epoch, NumPreshards, ShardGroup, SubstateAddress};
 
@@ -203,7 +204,7 @@ impl CommitteeInfo {
         (len - 1) / 3
     }
 
-    pub fn num_shards(&self) -> NumPreshards {
+    pub fn num_preshards(&self) -> NumPreshards {
         self.num_shards
     }
 
@@ -219,6 +220,13 @@ impl CommitteeInfo {
     pub fn includes_substate_address(&self, substate_address: &SubstateAddress) -> bool {
         let s = substate_address.to_shard(self.num_shards);
         self.shard_group.contains(&s)
+    }
+
+    pub fn includes_substate_id(&self, substate_id: &SubstateId) -> bool {
+        // version doesnt affect shard
+        let addr = SubstateAddress::from_substate_id(substate_id, 0);
+        let shard = addr.to_shard(self.num_shards);
+        self.shard_group.contains(&shard)
     }
 
     pub fn includes_all_substate_addresses<I: IntoIterator<Item = B>, B: Borrow<SubstateAddress>>(

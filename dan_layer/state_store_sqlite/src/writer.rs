@@ -26,6 +26,7 @@ use tari_dan_storage::{
         Decision,
         EpochCheckpoint,
         Evidence,
+        ForeignParkedProposal,
         ForeignProposal,
         ForeignReceiveCounters,
         ForeignSendCounters,
@@ -919,7 +920,9 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     fn transaction_pool_update(
         &mut self,
         transaction_id: &TransactionId,
+        is_ready: Option<bool>,
         local_decision: Option<Decision>,
+        local_evidence: Option<&Evidence>,
         remote_decision: Option<Decision>,
         remote_evidence: Option<&Evidence>,
     ) -> Result<(), StorageError> {
@@ -930,6 +933,8 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         #[derive(AsChangeset)]
         #[diesel(table_name = transaction_pool)]
         struct Changes {
+            is_ready: Option<bool>,
+            evidence: Option<String>,
             remote_evidence: Option<String>,
             local_decision: Option<Option<String>>,
             remote_decision: Option<Option<String>>,
@@ -937,7 +942,9 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         }
 
         let change_set = Changes {
+            is_ready,
             remote_evidence: remote_evidence.map(serialize_json).transpose()?,
+            evidence: local_evidence.map(serialize_json).transpose()?,
             local_decision: local_decision.map(|d| d.to_string()).map(Some),
             remote_decision: remote_decision.map(|d| d.to_string()).map(Some),
             updated_at: now(),
@@ -1195,16 +1202,16 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 operation: "missing_transactions_remove",
                 source: e,
             })?;
-        let missing_transactions = missing_transactions::table
-            .select(missing_transactions::transaction_id)
+        let num_remaining = missing_transactions::table
             .filter(missing_transactions::block_id.eq(&block_id))
-            .get_results::<String>(self.connection())
+            .count()
+            .get_result::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "missing_transactions_remove",
                 source: e,
             })?;
 
-        if missing_transactions.is_empty() {
+        if num_remaining == 0 {
             // delete all entries that are for previous heights
             diesel::delete(missing_transactions::table)
                 .filter(missing_transactions::block_height.lt(current_height.as_u64() as i64))
@@ -1218,6 +1225,110 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         }
 
         Ok(None)
+    }
+
+    fn foreign_parked_blocks_insert(&mut self, park_block: &ForeignParkedProposal) -> Result<(), StorageError> {
+        use crate::schema::foreign_parked_blocks;
+
+        let values = (
+            foreign_parked_blocks::block_id.eq(serialize_hex(park_block.block().id())),
+            foreign_parked_blocks::block.eq(serialize_json(park_block.block())?),
+            foreign_parked_blocks::block_pledges.eq(serialize_json(park_block.block_pledge())?),
+            foreign_parked_blocks::justify_qc.eq(serialize_json(park_block.justify_qc())?),
+        );
+
+        diesel::insert_into(foreign_parked_blocks::table)
+            .values(values)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_parked_blocks_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn foreign_parked_blocks_insert_missing_transactions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+        &mut self,
+        park_block_id: &BlockId,
+        missing_transaction_ids: I,
+    ) -> Result<(), StorageError> {
+        use crate::schema::{foreign_missing_transactions, foreign_parked_blocks};
+
+        let parked_block_id = foreign_parked_blocks::table
+            .select(foreign_parked_blocks::id)
+            .filter(foreign_parked_blocks::block_id.eq(serialize_hex(park_block_id)))
+            .first::<i32>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_parked_blocks_insert_missing_transactions",
+                source: e,
+            })?;
+
+        let values = missing_transaction_ids
+            .into_iter()
+            .map(|tx_id| {
+                (
+                    foreign_missing_transactions::parked_block_id.eq(parked_block_id),
+                    foreign_missing_transactions::transaction_id.eq(serialize_hex(tx_id)),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        diesel::insert_into(foreign_missing_transactions::table)
+            .values(values)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_parked_blocks_insert_missing_transactions",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn foreign_parked_blocks_remove_all_by_transaction(
+        &mut self,
+        transaction_id: &TransactionId,
+    ) -> Result<Vec<ForeignParkedProposal>, StorageError> {
+        use crate::schema::{foreign_missing_transactions, foreign_parked_blocks};
+
+        let transaction_id = serialize_hex(transaction_id);
+
+        let removed_ids = diesel::delete(foreign_missing_transactions::table)
+            .filter(foreign_missing_transactions::transaction_id.eq(&transaction_id))
+            .returning(foreign_missing_transactions::parked_block_id)
+            .get_results::<i32>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_parked_blocks_remove_all_by_transaction",
+                source: e,
+            })?;
+
+        if removed_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let num_remaining = foreign_missing_transactions::table
+            .filter(foreign_missing_transactions::parked_block_id.eq_any(&removed_ids))
+            .count()
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_parked_blocks_remove_all_by_transaction",
+                source: e,
+            })?;
+
+        // If there are still missing transactions for the parked block, it is not yet unparked
+        if num_remaining > 0 {
+            return Ok(vec![]);
+        }
+
+        let blocks = diesel::delete(foreign_parked_blocks::table)
+            .filter(foreign_parked_blocks::id.eq_any(&removed_ids))
+            .get_results::<sql_models::ForeignParkedBlock>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_parked_blocks_remove_all_by_transaction",
+                source: e,
+            })?;
+
+        blocks.into_iter().map(TryInto::try_into).collect()
     }
 
     fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError> {
@@ -1315,7 +1426,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError> {
+    fn substates_create(&mut self, substate: &SubstateRecord) -> Result<(), StorageError> {
         use crate::schema::{state_transitions, substates};
 
         if substate.is_destroyed() {
@@ -1448,7 +1559,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn foreign_substate_pledges_insert(
+    fn foreign_substate_pledges_save(
         &mut self,
         transaction_id: TransactionId,
         shard_group: ShardGroup,
@@ -1457,46 +1568,47 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         use crate::schema::foreign_substate_pledges;
         let tx_id_hex = serialize_hex(transaction_id);
 
-        let values = pledges
-            .into_iter()
-            .map(|pledge| match pledge {
-                SubstatePledge::Input {
-                    substate_id,
-                    is_write,
-                    substate,
-                } => {
-                    let lock_type = if is_write {
-                        SubstateLockType::Write
-                    } else {
-                        SubstateLockType::Read
-                    };
-                    Ok::<_, StorageError>((
-                        foreign_substate_pledges::transaction_id.eq(&tx_id_hex),
-                        foreign_substate_pledges::substate_id.eq(substate_id.substate_id().to_string()),
-                        foreign_substate_pledges::version.eq(substate_id.version() as i32),
-                        foreign_substate_pledges::shard_group.eq(shard_group.encode_as_u32() as i32),
-                        foreign_substate_pledges::lock_type.eq(lock_type.to_string()),
-                        foreign_substate_pledges::substate_value.eq(Some(serialize_json(&substate)?)),
-                    ))
-                },
-                SubstatePledge::Output { substate_id } => Ok::<_, StorageError>((
+        let values = pledges.into_iter().map(|pledge| match pledge {
+            SubstatePledge::Input {
+                substate_id,
+                is_write,
+                substate,
+            } => {
+                let lock_type = if is_write {
+                    SubstateLockType::Write
+                } else {
+                    SubstateLockType::Read
+                };
+                Ok::<_, StorageError>((
                     foreign_substate_pledges::transaction_id.eq(&tx_id_hex),
                     foreign_substate_pledges::substate_id.eq(substate_id.substate_id().to_string()),
                     foreign_substate_pledges::version.eq(substate_id.version() as i32),
                     foreign_substate_pledges::shard_group.eq(shard_group.encode_as_u32() as i32),
-                    foreign_substate_pledges::lock_type.eq(SubstateLockType::Output.to_string()),
-                    foreign_substate_pledges::substate_value.eq(None),
-                )),
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+                    foreign_substate_pledges::lock_type.eq(lock_type.to_string()),
+                    foreign_substate_pledges::substate_value.eq(Some(serialize_json(&substate)?)),
+                ))
+            },
+            SubstatePledge::Output { substate_id } => Ok::<_, StorageError>((
+                foreign_substate_pledges::transaction_id.eq(&tx_id_hex),
+                foreign_substate_pledges::substate_id.eq(substate_id.substate_id().to_string()),
+                foreign_substate_pledges::version.eq(substate_id.version() as i32),
+                foreign_substate_pledges::shard_group.eq(shard_group.encode_as_u32() as i32),
+                foreign_substate_pledges::lock_type.eq(SubstateLockType::Output.to_string()),
+                foreign_substate_pledges::substate_value.eq(None),
+            )),
+        });
 
-        diesel::insert_into(foreign_substate_pledges::table)
-            .values(values)
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "foreign_substate_pledges_insert",
-                source: e,
-            })?;
+        for value in values {
+            diesel::insert_into(foreign_substate_pledges::table)
+                .values(value?)
+                // This is not supported for batch inserts, which is why we do multiple inserts
+                .on_conflict_do_nothing()
+                .execute(self.connection())
+                .map_err(|e| SqliteStorageError::DieselError {
+                    operation: "foreign_substate_pledges_insert",
+                    source: e,
+                })?;
+        }
 
         Ok(())
     }

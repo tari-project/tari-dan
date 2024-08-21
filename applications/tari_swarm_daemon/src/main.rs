@@ -172,9 +172,10 @@ fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
                 .ok()
                 .and_then(|p| p.parent().map(|p| p.to_path_buf()))
         })
-        .unwrap_or_else(|| std::env::current_dir().unwrap());
+        .unwrap_or_else(|| std::env::current_dir().unwrap().join("data").join("swarm"));
 
     Ok(Config {
+        skip_registration: false,
         network: cli.common.network.unwrap_or(Network::LocalNet),
         start_port: 12000,
         base_dir: base_dir
@@ -204,7 +205,7 @@ async fn start(cli: &Cli) -> anyhow::Result<()> {
 
     create_paths(&config).await?;
 
-    let shutdown = Shutdown::new();
+    let mut shutdown = Shutdown::new();
     let signal = shutdown.to_signal().select(exit_signal()?);
     let (task_handle, pm_handle) = process_manager::spawn(&config, shutdown.to_signal());
     let webserver = webserver::spawn(config, shutdown.to_signal(), pm_handle.clone());
@@ -212,6 +213,7 @@ async fn start(cli: &Cli) -> anyhow::Result<()> {
     tokio::select! {
         _ = signal => {
             log::info!("Terminating all instances...");
+            shutdown.trigger();
             let num_instances = pm_handle.stop_all().await?;
             log::info!("Terminated {num_instances} instances");
         },

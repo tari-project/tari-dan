@@ -29,7 +29,6 @@ use tari_core::{blocks::BlockHeader, transactions::transaction_components::Valid
 use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
     optional::Optional,
-    shard::Shard,
     DerivableFromPublicKey,
     Epoch,
     NodeAddressable,
@@ -613,7 +612,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         &self,
         epoch: Epoch,
         shard_group: ShardGroup,
-    ) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
+    ) -> Result<HashMap<ShardGroup, Committee<TAddr>>, EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
         let committees = validator_node_db.get_committees_for_shard_group(epoch, shard_group)?;
