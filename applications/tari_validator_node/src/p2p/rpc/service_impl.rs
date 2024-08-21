@@ -286,8 +286,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             .ok_or_else(|| RpcStatus::not_found("No locked block"))?;
         let epoch_is_after = start_block.epoch() > locked_block.epoch();
         let height_is_after =
-            (start_block.epoch() == locked_block.epoch) &&
-            (start_block.height() > locked_block.height());
+            (start_block.epoch() == locked_block.epoch) && (start_block.height() > locked_block.height());
 
         if epoch_is_after || height_is_after {
             return Err(RpcStatus::not_found(format!(

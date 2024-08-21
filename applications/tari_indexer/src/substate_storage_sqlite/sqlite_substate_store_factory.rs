@@ -611,12 +611,13 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             .map_err(|e| StorageError::QueryError {
                 reason: format!("get_oldest_scanned_epoch: {}", e),
             })?;
-        
-        let oldest_epoch = res.map(|r| {
-            let epoch_as_u64 = r.try_into()
-                .map_err(|_| StorageError::InvalidIntegerCast)?;
-            Ok::<Epoch, StorageError>(Epoch(epoch_as_u64))
-        }).transpose()?;
+
+        let oldest_epoch = res
+            .map(|r| {
+                let epoch_as_u64 = r.try_into().map_err(|_| StorageError::InvalidIntegerCast)?;
+                Ok::<Epoch, StorageError>(Epoch(epoch_as_u64))
+            })
+            .transpose()?;
 
         Ok(oldest_epoch)
     }

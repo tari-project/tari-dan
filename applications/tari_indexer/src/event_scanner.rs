@@ -129,7 +129,7 @@ impl EventScanner {
 
         let newest_epoch = self.epoch_manager.current_epoch().await?;
         let oldest_scanned_epoch = self.get_oldest_scanned_epoch().await?;
-        
+
         match oldest_scanned_epoch {
             Some(oldest_epoch) => {
                 // we could span multiple cuncurrent epoch scans
@@ -137,7 +137,7 @@ impl EventScanner {
                 for epoch_idx in oldest_epoch.0..=newest_epoch.0 {
                     let epoch = Epoch(epoch_idx);
                     event_count += self.scan_events_of_epoch(epoch).await?;
-                    
+
                     // at this point we can assume the previous epochs have been fully scanned
                     self.delete_scanned_epochs_older_than(epoch).await?;
                 }
@@ -209,8 +209,7 @@ impl EventScanner {
     }
 
     async fn delete_scanned_epochs_older_than(&self, epoch: Epoch) -> Result<(), anyhow::Error> {
-        self
-            .substate_store
+        self.substate_store
             .with_write_tx(|tx| tx.delete_scanned_epochs_older_than(epoch))
             .map_err(|e| e.into())
     }
@@ -454,9 +453,8 @@ impl EventScanner {
         *start_block.id()
     }
 
-    async fn get_oldest_scanned_epoch(&self) -> Result<Option<Epoch>, anyhow::Error>{
-        self
-            .substate_store
+    async fn get_oldest_scanned_epoch(&self) -> Result<Option<Epoch>, anyhow::Error> {
+        self.substate_store
             .with_read_tx(|tx| tx.get_oldest_scanned_epoch())
             .map_err(|e| e.into())
     }
@@ -511,17 +509,13 @@ impl EventScanner {
                     );
 
                     // get the most recent block among all scanned blocks in the epoch
-                    let last_block = blocks
-                        .iter()
-                        .max_by_key(|b|
-                            (b.epoch(), b.height())
-                        );
+                    let last_block = blocks.iter().max_by_key(|b| (b.epoch(), b.height()));
 
                     if let Some(block) = last_block {
                         last_block_id = *block.id();
                         // Store the latest scanned block id in the database for future scans
                         self.save_scanned_block_id(epoch, shard_group, last_block_id)?;
-                    } 
+                    }
                     return Ok(blocks);
                 },
                 Err(e) => {
