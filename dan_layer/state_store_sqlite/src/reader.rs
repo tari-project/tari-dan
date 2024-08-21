@@ -717,6 +717,36 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         block.try_convert(qc)
     }
 
+    fn blocks_get_first_in_epoch(&self, epoch: Epoch) -> Result<Option<Block>, StorageError> {
+        use crate::schema::{blocks, quorum_certificates};
+
+        let row = blocks::table
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .filter(blocks::epoch.eq(epoch.as_u64() as i64))
+            .filter(blocks::height.eq(0))
+            .first::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .optional()
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_get_first_in_epoch",
+                source: e,
+            })?;
+
+        if let Some((block, qc)) = row {
+            let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+                operation: "blocks_get_first_in_epoch",
+                details: format!(
+                    "block {} references non-existent quorum certificate {}",
+                    block.id, block.qc_id
+                ),
+            })?;
+            let res = block.try_convert(qc)?;
+            Ok(Some(res))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn blocks_get_last_n_in_epoch(&self, n: usize, epoch: Epoch) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 

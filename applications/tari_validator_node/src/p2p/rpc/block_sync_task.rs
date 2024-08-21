@@ -30,7 +30,7 @@ type BlockBuffer = Vec<BlockData>;
 pub struct BlockSyncTask<TStateStore: StateStore> {
     store: TStateStore,
     start_block: Block,
-    _up_to_epoch: Option<Epoch>,
+    up_to_epoch: Option<Epoch>,
     sender: mpsc::Sender<Result<SyncBlocksResponse, RpcStatus>>,
 }
 
@@ -44,7 +44,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         Self {
             store,
             start_block,
-            _up_to_epoch: up_to_epoch,
+            up_to_epoch,
             sender,
         }
     }
@@ -110,10 +110,31 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
             let mut current_block_id = *current_block_id;
             let mut last_block_id = current_block_id;
             loop {
-                let children = tx.blocks_get_all_by_parent(&current_block_id)?;
-                let Some(child) = children.into_iter().find(|b| b.is_committed()) else {
+                let current_block = tx.blocks_get(&current_block_id)?;
+
+                // Find the next block in the database
+                let child = if current_block.is_epoch_end() {
+                    // The current block is the last one in the epoch,
+                    // so we need to find the first block in the next expoch
+                    tx.blocks_get_first_in_epoch(current_block.epoch() + Epoch(1))?
+                } else {
+                    // The current block is NOT the last one in the epoch,
+                    // so we need to find a child block
+                    let children = tx.blocks_get_all_by_parent(&current_block_id)?;
+                    children.into_iter().find(|b| b.is_committed())
+                };
+
+                // If there is not a new block then we stop streaming
+                let Some(child) = child else {
                     break;
                 };
+
+                // If we hit the max allowed epoch then we stop streaming
+                if let Some(epoch) = self.up_to_epoch {
+                    if child.epoch() > epoch {
+                        break;
+                    }
+                }
 
                 current_block_id = *child.id();
                 if child.is_dummy() {

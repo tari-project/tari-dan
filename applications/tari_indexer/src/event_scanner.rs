@@ -511,7 +511,11 @@ impl EventScanner {
                     );
 
                     // get the most recent block among all scanned blocks in the epoch
-                    let last_block = blocks.iter().max_by_key(|b| b.height());
+                    let last_block = blocks
+                        .iter()
+                        .max_by_key(|b|
+                            (b.epoch(), b.height())
+                        );
 
                     if let Some(block) = last_block {
                         last_block_id = *block.id();
