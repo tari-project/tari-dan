@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 
 use log::*;
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{optional::Optional, Epoch};
 use tari_dan_p2p::proto::rpc::{sync_blocks_response::SyncData, QuorumCertificates, SyncBlocksResponse, Transactions};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, QuorumCertificate, SubstateUpdate, TransactionRecord},
@@ -116,7 +116,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                 let child = if current_block.is_epoch_end() {
                     // The current block is the last one in the epoch,
                     // so we need to find the first block in the next expoch
-                    tx.blocks_get_first_in_epoch(current_block.epoch() + Epoch(1))?
+                    tx.blocks_get_genesis_for_epoch(current_block.epoch() + Epoch(1)).optional()?
                 } else {
                     // The current block is NOT the last one in the epoch,
                     // so we need to find a child block
