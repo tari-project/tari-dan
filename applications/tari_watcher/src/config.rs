@@ -164,8 +164,9 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
 
     Ok(Config {
         auto_register: true,
-        base_node_grpc_address: "".to_string(),
-        base_wallet_grpc_address: "".to_string(),
+        // must contain protocol and port
+        base_node_grpc_address: "http://127.0.0.1:12001".to_string(),
+        base_wallet_grpc_address: "http://127.0.0.1:12003".to_string(),
         base_dir: base_dir.clone(),
         sidechain_id: None,
         vn_registration_file,

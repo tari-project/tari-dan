@@ -3,28 +3,33 @@
 
 use crate::{
     config::Config,
-    helpers::{contains_key, read_registration_file, to_block_height, to_vn_public_keys},
+    helpers::{contains_key, read_registration_file, to_vn_public_keys},
     manager::ManagerHandle,
 };
 use log::*;
+use tari_common_types::types::FixedHash;
 use tokio::time::{self, Duration};
 
+// TODO: make configurable
+// Amount of time to wait before the watcher runs a check again
+const REGISTRATION_LOOP_INTERVAL: Duration = Duration::from_secs(30);
+
+// `registration_loop` periodically checks that the local node is still registered on the network.
+// If it is no longer registered, it will attempt to re-register. It will do nothing if it is registered already.
+// Currently, it will not keep track of when the registration was sent or register just in time before it expires.
+// It is possible to add a threshold such as sending a registration request every (e.g.) 500 blocks to make sure it it always registered.
 pub async fn registration_loop(config: Config, mut manager_handle: ManagerHandle) -> anyhow::Result<ManagerHandle> {
-    let mut interval = time::interval(Duration::from_secs(30));
-    let constants = manager_handle.get_consensus_constants(0).await;
-    let validity_period = constants.as_ref().unwrap().validator_node_validity_period;
-    let epoch_length = constants.unwrap().epoch_length;
-    let total_blocks_duration = validity_period * epoch_length;
-    debug!(
+    let mut interval = time::interval(REGISTRATION_LOOP_INTERVAL);
+    let constants = manager_handle.get_consensus_constants(0).await?;
+    let total_blocks_duration = constants.validator_node_validity_period * constants.epoch_length;
+    info!(
         "Registrations are currently valid for {} blocks ({} epochs)",
-        total_blocks_duration, validity_period
+        total_blocks_duration, constants.validator_node_validity_period
     );
-    let mut registered_at_block = 0;
     let local_node = read_registration_file(config.vn_registration_file).await?;
     let local_key = local_node.public_key;
     debug!("Local public key: {}", local_key.clone());
-    let mut sent_registration = false;
-    let mut counter = 0;
+    let mut last_block_hash: Option<FixedHash> = None;
 
     loop {
         interval.tick().await;
@@ -34,8 +39,13 @@ pub async fn registration_loop(config: Config, mut manager_handle: ManagerHandle
             error!("Failed to get tip info: {}", e);
             continue;
         }
-        let curr_height = to_block_height(tip_info.unwrap());
-        debug!("Current block height: {}", curr_height);
+        let curr_height = tip_info.as_ref().unwrap().height();
+        if last_block_hash.is_none() || last_block_hash.unwrap() != tip_info.as_ref().unwrap().hash() {
+            last_block_hash = Some(tip_info.unwrap().hash());
+            debug!("New block hash at height {}: {}", curr_height, last_block_hash.unwrap());
+        } else {
+            debug!("Same block as previous tick");
+        }
 
         let vn_status = manager_handle.get_active_validator_nodes().await;
         if let Err(e) = vn_status {
@@ -48,38 +58,26 @@ pub async fn registration_loop(config: Config, mut manager_handle: ManagerHandle
             info!("{}", key);
         }
 
-        let reg_expiration_block = registered_at_block + total_blocks_duration;
         // if the node is already registered and still valid, skip registration
-        if contains_key(active_keys.clone(), local_key.clone()) && curr_height < reg_expiration_block {
+        if contains_key(active_keys.clone(), local_key.clone()) {
             info!("Node has an active registration, skip");
             continue;
         }
 
-        if sent_registration {
-            info!("Node is not registered but recently sent a registration request, waiting..");
-            counter += 1;
-
-            // waiting 20 minutes
-            if counter > 40 {
-                error!("Node registration request timed out, retrying..");
-                counter = 0;
-                sent_registration = false;
-            }
-
+        info!("Local node not active or about to expire, attempting to register..");
+        let tx = manager_handle.register_validator_node().await;
+        if let Err(e) = tx {
+            error!("Failed to register node: {}", e);
             continue;
         }
-
-        info!("Local node not active or about to expire, attempting to register..");
-        let tx = manager_handle.register_validator_node().await.unwrap();
+        let tx = tx.unwrap();
         if !tx.is_success {
             error!("Failed to register node: {}", tx.failure_message);
             continue;
         }
         info!(
-            "Registered node at height {} with transaction id: {}",
+            "Registered node at block {} with transaction id: {}",
             curr_height, tx.transaction_id
         );
-        registered_at_block = curr_height;
-        sent_registration = true;
     }
 }

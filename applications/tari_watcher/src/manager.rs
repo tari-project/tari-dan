@@ -3,7 +3,7 @@
 
 use log::*;
 use minotari_app_grpc::tari_rpc::{
-    self as grpc, ConsensusConstants, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse, TipInfoResponse,
+    self as grpc, ConsensusConstants, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse,
 };
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::{mpsc, oneshot};
@@ -11,7 +11,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::{
     config::{Config, ExecutableConfig},
     forker::Forker,
-    minotari::Minotari,
+    minotari::{Minotari, TipStatus},
 };
 
 pub struct ProcessManager {
@@ -46,6 +46,7 @@ impl ProcessManager {
 
         self.forker.start_validator(self.validator_config.clone()).await?;
         self.chain.bootstrap().await?;
+        info!("Watcher process bootstrapped and connected to base node and wallet");
 
         loop {
             tokio::select! {
@@ -85,7 +86,7 @@ type Reply<T> = oneshot::Sender<anyhow::Result<T>>;
 
 pub enum ManagerRequest {
     GetTipInfo {
-        reply: Reply<TipInfoResponse>,
+        reply: Reply<TipStatus>,
     },
     GetActiveValidatorNodes {
         reply: Reply<Vec<GetActiveValidatorNodesResponse>>,
@@ -135,7 +136,7 @@ impl ManagerHandle {
         rx.await?
     }
 
-    pub async fn get_tip_info(&mut self) -> anyhow::Result<TipInfoResponse> {
+    pub async fn get_tip_info(&mut self) -> anyhow::Result<TipStatus> {
         let (tx, rx) = oneshot::channel();
         self.tx_request.send(ManagerRequest::GetTipInfo { reply: tx }).await?;
         rx.await?
