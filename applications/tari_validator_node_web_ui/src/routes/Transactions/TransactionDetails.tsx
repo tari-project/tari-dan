@@ -97,7 +97,7 @@ export default function TransactionDetails() {
               Number(
                 ("TransactionReceipt" in cur?.substate_value &&
                   cur?.substate_value?.TransactionReceipt?.fee_receipt?.total_fees_paid) ||
-                  0,
+                0,
               ),
             0,
           ),
@@ -146,7 +146,7 @@ export default function TransactionDetails() {
   if (state === undefined) {
     return <></>;
   }
-  const { execution_time, result, transaction, finalized_time, final_decision } = state;
+  const { result, transaction, finalized_time, final_decision } = state;
   return (
     <>
       <Grid item xs={12} md={12} lg={12}>
@@ -191,7 +191,8 @@ export default function TransactionDetails() {
                             <DataTableCell>
                               {renderResult(result)}
                               <br />
-                              Executed in {execution_time ? displayDuration(execution_time) : "--"}, Finalized in{" "}
+                              Executed in {result.execution_time ? displayDuration(result.execution_time) : "--"},
+                              Finalized in{" "}
                               {finalized_time ? displayDuration(finalized_time) : "--"}
                             </DataTableCell>
                           </TableRow>

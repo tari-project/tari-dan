@@ -14,7 +14,7 @@ use tari_transaction::TransactionId;
 
 #[test]
 fn get_and_insert_substates() {
-    let example_addr = "component_1f019e4d434cbf2b99c0af89ee212f422af86de7280a169d2e392dfb"
+    let example_addr = "component_1f019e4d434cbf2b99c0af89ee212f422af86de7280a169d2e392dfbffffffff"
         .parse()
         .unwrap();
 
@@ -24,7 +24,8 @@ fn get_and_insert_substates() {
     let substate = tx.substates_get(&example_addr).optional().unwrap();
     assert!(substate.is_none());
     let hash = TransactionId::default();
-    let address = SubstateId::from_str("component_1f019e4d434cbf2b99c0af89ee212f422af86de7280a169d2e392dfb").unwrap();
+    let address =
+        SubstateId::from_str("component_1f019e4d434cbf2b99c0af89ee212f422af86de7280a169d2e392dfbffffffff").unwrap();
     tx.substates_upsert_root(
         hash,
         VersionedSubstateId {
@@ -37,7 +38,7 @@ fn get_and_insert_substates() {
     .unwrap();
 
     let child_address =
-        SubstateId::from_str("component_d9e4a7ce7dbaa73ce10aabf309dd702054756a813f454ef13564f298").unwrap();
+        SubstateId::from_str("component_d9e4a7ce7dbaa73ce10aabf309dd702054756a813f454ef13564f298ffffffff").unwrap();
     tx.substates_upsert_child(hash, address.clone(), VersionedSubstateId {
         substate_id: child_address.clone(),
         version: 0,

@@ -686,32 +686,32 @@ mod tests {
 
         #[test]
         fn it_parses_valid_substate_addresses() {
-            SubstateId::from_str("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5")
+            SubstateId::from_str("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff")
                 .unwrap()
                 .as_component_address()
                 .unwrap();
-            SubstateId::from_str("vault_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5")
+            SubstateId::from_str("vault_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff")
                 .unwrap()
                 .as_vault_id()
                 .unwrap();
-            SubstateId::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5")
+            SubstateId::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff")
                 .unwrap()
                 .as_resource_address()
                 .unwrap();
             SubstateId::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5 nft_str:SpecialNft",
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff nft_str:SpecialNft",
             )
             .unwrap()
             .as_non_fungible_address()
             .unwrap();
             SubstateId::from_str(
-                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907f \
+                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fffffffff \
                  nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
             )
             .unwrap()
             .as_non_fungible_address()
             .unwrap();
-            SubstateId::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5 index_0")
+            SubstateId::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff index_0")
                 .unwrap()
                 .as_non_fungible_index_address()
                 .unwrap();

@@ -4,11 +4,22 @@
 use std::{collections::HashSet, ops::Deref, time::Duration};
 
 use serde::Deserialize;
+use tari_dan_common_types::committee::CommitteeInfo;
 use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
-use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
+use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
-    consensus_models::{BlockId, Decision, ExecutedTransaction, TransactionAtom, VersionedSubstateIdLockIntent},
+    consensus_models::{
+        BlockId,
+        Decision,
+        ExecutedTransaction,
+        SubstateLockType,
+        SubstatePledge,
+        SubstatePledges,
+        TransactionExecution,
+        TransactionPoolRecord,
+        VersionedSubstateIdLockIntent,
+    },
     Ordering,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
@@ -19,12 +30,11 @@ use crate::{
 pub struct TransactionRecord {
     pub transaction: Transaction,
     pub execution_result: Option<ExecuteResult>,
-    pub execution_time: Option<Duration>,
-    pub resulting_outputs: Vec<VersionedSubstateId>,
+    pub resulting_outputs: Option<Vec<VersionedSubstateIdLockIntent>>,
     pub resolved_inputs: Option<Vec<VersionedSubstateIdLockIntent>>,
     pub final_decision: Option<Decision>,
     pub finalized_time: Option<Duration>,
-    pub abort_details: Option<String>,
+    pub abort_reason: Option<RejectReason>,
 }
 
 impl TransactionRecord {
@@ -33,11 +43,10 @@ impl TransactionRecord {
             transaction,
             execution_result: None,
             resolved_inputs: None,
-            execution_time: None,
             final_decision: None,
             finalized_time: None,
-            resulting_outputs: Vec::new(),
-            abort_details: None,
+            resulting_outputs: None,
+            abort_reason: None,
         }
     }
 
@@ -45,21 +54,19 @@ impl TransactionRecord {
         transaction: Transaction,
         result: Option<ExecuteResult>,
         resolved_inputs: Option<Vec<VersionedSubstateIdLockIntent>>,
-        execution_time: Option<Duration>,
         final_decision: Option<Decision>,
         finalized_time: Option<Duration>,
-        resulting_outputs: Vec<VersionedSubstateId>,
-        abort_details: Option<String>,
+        resulting_outputs: Option<Vec<VersionedSubstateIdLockIntent>>,
+        abort_reason: Option<RejectReason>,
     ) -> Self {
         Self {
             transaction,
             resolved_inputs,
             execution_result: result,
-            execution_time,
             final_decision,
             finalized_time,
             resulting_outputs,
-            abort_details,
+            abort_reason,
         }
     }
 
@@ -87,8 +94,8 @@ impl TransactionRecord {
         self.execution_result.is_some()
     }
 
-    pub fn resulting_outputs(&self) -> &[VersionedSubstateId] {
-        &self.resulting_outputs
+    pub fn resulting_outputs(&self) -> Option<&[VersionedSubstateIdLockIntent]> {
+        self.resulting_outputs.as_deref()
     }
 
     pub fn resolved_inputs(&self) -> Option<&[VersionedSubstateIdLockIntent]> {
@@ -99,9 +106,15 @@ impl TransactionRecord {
         self.execution_result().map(|r| Decision::from(&r.finalize.result))
     }
 
+    pub fn transaction_fee(&self) -> Option<u64> {
+        self.execution_result
+            .as_ref()
+            .map(|r| r.finalize.fee_receipt.total_fees_paid().as_u64_checked().unwrap())
+    }
+
     pub fn current_decision(&self) -> Decision {
         self.final_decision
-            .or_else(|| self.abort_details.as_ref().map(|_| Decision::Abort))
+            .or_else(|| self.abort_reason.as_ref().map(|_| Decision::Abort))
             .or_else(|| self.execution_decision())
             // We will choose to commit a transaction unless (1) we aborted it, (2) the execution has failed
             .unwrap_or(Decision::Commit)
@@ -112,7 +125,7 @@ impl TransactionRecord {
     }
 
     pub fn execution_time(&self) -> Option<Duration> {
-        self.execution_time
+        self.execution_result.as_ref().map(|r| r.execution_time)
     }
 
     pub fn finalized_time(&self) -> Option<Duration> {
@@ -127,19 +140,55 @@ impl TransactionRecord {
         self.execution_result.is_some()
     }
 
-    pub fn abort_details(&self) -> Option<&String> {
-        self.abort_details.as_ref()
+    pub fn abort_reason(&self) -> Option<&RejectReason> {
+        self.abort_reason.as_ref()
     }
 
-    pub fn set_abort<T: Into<String>>(&mut self, details: T) -> &mut Self {
-        self.final_decision = Some(Decision::Abort);
-        self.abort_details = Some(details.into());
+    pub fn set_abort_reason(&mut self, reason: RejectReason) -> &mut Self {
+        self.abort_reason = Some(reason);
         self
     }
 
-    pub fn set_current_decision_to_abort<T: Into<String>>(&mut self, details: T) -> &mut Self {
-        self.abort_details = Some(details.into());
-        self
+    pub fn has_any_local_inputs(&self, local_committee_info: &CommitteeInfo) -> bool {
+        self.transaction
+            .all_inputs_iter()
+            .any(|i| local_committee_info.includes_substate_address(&i.to_substate_address_default_version(0)))
+    }
+
+    pub fn into_execution(mut self) -> Option<TransactionExecution> {
+        // TODO: This is hacky. We're using this as a way to finalize the transaction which always expects some
+        // execution result.
+        let transaction_id = *self.transaction.id();
+        let resolved_inputs = self.resolved_inputs.take().unwrap_or_else(|| {
+            self.transaction
+                .all_inputs_iter()
+                .map(|i| VersionedSubstateIdLockIntent::new(i.or_zero_version(), SubstateLockType::Write))
+                .collect()
+        });
+        let resulting_outputs = self.resulting_outputs.take().unwrap_or_default();
+        let result = if let Some(ref reason) = self.abort_reason {
+            // Only use rejected results for the transaction. If execution ACCEPTed but the final decision is ABORT,
+            // then use abort_details (which should have been set in this case).
+            let exec_result = self.execution_result.as_ref().filter(|r| r.finalize.result.is_reject());
+            let execution_time = exec_result.as_ref().map(|r| r.execution_time).unwrap_or_default();
+            ExecuteResult {
+                finalize: exec_result.map(|r| r.finalize.clone()).unwrap_or_else(|| {
+                    FinalizeResult::new_rejected(self.transaction.id().into_array().into(), reason.clone())
+                }),
+                execution_time,
+            }
+        } else {
+            // If there's no abort reason or execution result, return None here
+            self.execution_result?
+        };
+
+        Some(TransactionExecution {
+            transaction_id,
+            result,
+            abort_reason: self.abort_reason,
+            resolved_inputs,
+            resulting_outputs,
+        })
     }
 
     pub fn into_final_result(self) -> Option<ExecuteResult> {
@@ -154,22 +203,17 @@ impl TransactionRecord {
             } else {
                 // Only use rejected results for the transaction. If execution ACCEPTed but the final decision is ABORT,
                 // then use abort_details (which should have been set in this case).
-                let finalize_result = self
-                    .execution_result
-                    .map(|r| r.finalize)
-                    .filter(|f| !f.result.is_accept());
+                let exec_result = self.execution_result.filter(|r| r.finalize.result.is_reject());
+                let execution_time = exec_result.as_ref().map(|r| r.execution_time).unwrap_or_default();
                 Some(ExecuteResult {
-                    finalize: finalize_result.unwrap_or_else(|| {
+                    finalize: exec_result.map(|r| r.finalize).unwrap_or_else(|| {
                         FinalizeResult::new_rejected(
                             self.transaction.id().into_array().into(),
-                            RejectReason::ShardRejected(format!(
-                                "Validators decided to abort: {}",
-                                self.abort_details
-                                    .as_deref()
-                                    .unwrap_or("<invalid state, no abort details>")
-                            )),
+                            // TODO: RejectReason::Unknown should never occur.
+                            self.abort_reason.unwrap_or(RejectReason::Unknown),
                         )
                     }),
+                    execution_time,
                 })
             }
         })
@@ -272,33 +316,72 @@ impl TransactionRecord {
         tx.transactions_get_paginated(limit, offset, ordering)
     }
 
+    pub fn get_local_pledges<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<SubstatePledges, StorageError> {
+        let locked_values = tx.substate_locks_get_locked_substates_for_transaction(self.id())?;
+        locked_values
+            .into_iter()
+            .filter(|lock| !lock.lock.is_output())
+            .map(|lock| {
+                let lock_intent = lock.to_substate_lock_intent();
+                SubstatePledge::try_create(lock_intent, lock.value).ok_or_else(|| StorageError::DataInconsistency {
+                    details: format!("Invalid substate lock: {} ({})", lock.substate_id, lock.lock),
+                })
+            })
+            .collect()
+    }
+
+    pub fn get_foreign_pledges<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &TTx,
+    ) -> Result<SubstatePledges, StorageError> {
+        tx.foreign_substate_pledges_get_all_by_transaction_id(self.id())
+    }
+
     pub fn finalize_all<'a, TTx, I>(tx: &mut TTx, block_id: BlockId, transactions: I) -> Result<(), StorageError>
     where
         TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
-        I: IntoIterator<Item = &'a TransactionAtom>,
+        I: IntoIterator<Item = &'a TransactionPoolRecord>,
     {
         tx.transactions_finalize_all(block_id, transactions)
+    }
+
+    pub fn has_all_foreign_input_pledges<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &TTx,
+        local_committee_info: &CommitteeInfo,
+    ) -> Result<bool, StorageError> {
+        let foreign_inputs = self
+            .transaction()
+            .all_inputs_iter()
+            .filter(|i| !local_committee_info.includes_substate_address(&i.to_substate_address_default_version(0)));
+        // TODO(perf): this could be a bespoke DB query
+        #[allow(clippy::mutable_key_type)]
+        let pledges = tx.foreign_substate_pledges_get_all_by_transaction_id(self.id())?;
+        for input in foreign_inputs {
+            if !pledges.iter().any(|p| *p == input) {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 }
 
 impl From<ExecutedTransaction> for TransactionRecord {
     fn from(tx: ExecutedTransaction) -> Self {
-        let execution_time = tx.execution_time();
         let final_decision = tx.final_decision();
         let finalized_time = tx.finalized_time();
-        let abort_details = tx.abort_details().cloned();
+        let abort_details = tx.abort_reason().cloned();
         let (transaction, result, resolved_inputs, resulting_outputs) = tx.dissolve();
 
         Self {
             transaction,
             execution_result: Some(result),
-            execution_time: Some(execution_time),
             resolved_inputs: Some(resolved_inputs),
             final_decision,
             finalized_time,
-            resulting_outputs,
-            abort_details,
+            resulting_outputs: Some(resulting_outputs),
+            abort_reason: abort_details,
         }
     }
 }

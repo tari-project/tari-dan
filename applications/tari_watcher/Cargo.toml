@@ -9,12 +9,31 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-#tari_common = { workspace = true }
 
+minotari_wallet_grpc_client = { workspace = true }
+minotari_node_grpc_client = { workspace = true }
+minotari_app_grpc = { workspace = true }
+tari_core = { workspace = true } # Used for VN registration signature
+tari_crypto = { workspace = true } # Used for `.to_vec()` in registration request
+tari_common = { workspace = true }
+tari_common_types = { workspace = true }
+tari_shutdown = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
 anyhow = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "process", "time", "fs", "io-util"] }
+tokio = { workspace = true, features = [
+    "rt-multi-thread",
+    "macros",
+    "signal",
+    "process",
+    "time",
+    "fs",
+    "io-util",
+] }
 log = { workspace = true }
+fern = { workspace = true, features = ["colored"] }
+tonic = { workspace = true }
+json5 = { workspace = true }
 
 toml = "0.8.12"
+humantime = "2.1.0"

@@ -1,15 +1,14 @@
 //    Copyright 2024 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use tari_consensus::{
-    hotstuff::substate_store::PendingSubstateStore,
-    traits::{BlockTransactionExecutor, BlockTransactionExecutorError},
-};
-use tari_dan_common_types::{optional::Optional, Epoch};
+use indexmap::IndexMap;
+use tari_consensus::traits::{BlockTransactionExecutor, BlockTransactionExecutorError};
+use tari_dan_common_types::Epoch;
 use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, TransactionRecord},
     StateStore,
 };
+use tari_engine_types::substate::{Substate, SubstateId};
 use tari_transaction::Transaction;
 
 use crate::support::executions_store::TestTransactionExecutionsStore;
@@ -35,36 +34,30 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
         Ok(())
     }
 
-    fn prepare(
-        &self,
-        transaction: Transaction,
-        store: &TStateStore,
-    ) -> Result<TransactionRecord, BlockTransactionExecutorError> {
-        let t = store.with_read_tx(|tx| TransactionRecord::get(tx, transaction.id()))?;
-        Ok(t)
-    }
-
     fn execute(
         &self,
         transaction: Transaction,
-        store: &PendingSubstateStore<TStateStore>,
         _current_epoch: Epoch,
+        _resolved_inputs: &IndexMap<SubstateId, Substate>,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
-        if let Some(execution) = self.store.get(transaction.id()) {
-            let mut rec = TransactionRecord::new(transaction);
-            rec.resolved_inputs = Some(execution.resolved_inputs().to_vec());
-            rec.execution_result = Some(execution.result().clone());
-            rec.resulting_outputs.clone_from(execution.resulting_outputs());
-            rec.execution_time = Some(execution.execution_time());
+        let execution = self.store.get(transaction.id()).unwrap_or_else(|| {
+            panic!(
+                "Missing execution for transaction {} to TestTransactionExecutionsStore",
+                transaction.id()
+            )
+        });
+        let mut rec = TransactionRecord::new(transaction);
+        rec.resolved_inputs = Some(execution.resolved_inputs().to_vec());
+        rec.execution_result = Some(execution.result().clone());
+        rec.resulting_outputs = Some(execution.resulting_outputs().to_vec());
 
-            return Ok(rec.try_into().unwrap());
-        }
-        let executed = ExecutedTransaction::get(store.read_transaction(), transaction.id())
-            .optional()?
-            .expect(
-                "ExecutedTransaction was not found by the test executor. Perhaps you need to explicitly add an \
-                 execution",
-            );
-        Ok(executed)
+        Ok(rec.try_into().unwrap())
+        // let executed = ExecutedTransaction::get(store.read_transaction(), transaction.id())
+        //     .optional()?
+        //     .expect(
+        //         "ExecutedTransaction was not found by the test executor. Perhaps you need to explicitly add an \
+        //          execution",
+        //     );
+        // Ok(executed)
     }
 }

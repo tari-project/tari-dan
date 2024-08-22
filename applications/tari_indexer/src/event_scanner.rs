@@ -439,7 +439,7 @@ impl EventScanner {
     fn extract_transactions_from_blocks(&self, blocks: Vec<Block>) -> Vec<TransactionMetadata> {
         blocks
             .iter()
-            .flat_map(|b| b.all_accepted_transactions_ids().map(|id| (id, b.timestamp())))
+            .flat_map(|b| b.all_committing_transactions_ids().map(|id| (id, b.timestamp())))
             .map(|(transaction_id, timestamp)| TransactionMetadata {
                 transaction_id: *transaction_id,
                 timestamp,

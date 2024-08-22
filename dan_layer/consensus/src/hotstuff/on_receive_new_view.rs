@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_common::configuration::Network;
-use tari_dan_common_types::{optional::Optional, NodeHeight};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, LeafBlock, LockedBlock, QuorumCertificate},
     StateStore,
@@ -72,7 +72,12 @@ where TConsensusSpec: ConsensusSpec
     }
 
     #[allow(clippy::too_many_lines)]
-    pub async fn handle(&mut self, from: TConsensusSpec::Addr, message: NewViewMessage) -> Result<(), HotStuffError> {
+    pub async fn handle(
+        &mut self,
+        from: TConsensusSpec::Addr,
+        message: NewViewMessage,
+        local_committee_info: &CommitteeInfo,
+    ) -> Result<(), HotStuffError> {
         let NewViewMessage {
             high_qc,
             new_height,
@@ -148,13 +153,21 @@ where TConsensusSpec: ConsensusSpec
                 target: LOG_TARGET,
                 "🔥 Receive VOTE with NEWVIEW for node {} from {}", vote.block_id, from,
             );
-            self.vote_receiver.handle(from.clone(), vote, false).await?;
+            self.vote_receiver
+                .handle(from.clone(), vote, false, local_committee_info)
+                .await?;
         }
 
         // Are nodes requesting to create more than the minimum number of dummy blocks?
-        if high_qc.block_height().saturating_sub(new_height).as_u64() > local_committee.len() as u64 {
+        let height_diff = high_qc.block_height().saturating_sub(new_height).as_u64();
+        if height_diff > local_committee.len() as u64 {
             return Err(HotStuffError::BadNewViewMessage {
-                details: format!("Validator {from} requested an invalid number of dummy blocks"),
+                details: format!(
+                    "Validator {from} sent NEWVIEW that attempts to create a larger than necessary number of dummy \
+                     blocks. Expected requested {} < local committee size {}",
+                    height_diff,
+                    local_committee.len()
+                ),
                 high_qc_height: high_qc.block_height(),
                 received_new_height: new_height,
             });

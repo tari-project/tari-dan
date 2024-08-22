@@ -55,8 +55,12 @@ where TConsensusSpec: ConsensusSpec
         from: TConsensusSpec::Addr,
         message: VoteMessage,
         check_leadership: bool,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
-        match self.handle_vote(from, message, check_leadership).await {
+        match self
+            .handle_vote(from, message, check_leadership, local_committee_info)
+            .await
+        {
             Ok(true) => {
                 // If we reached quorum, trigger a check to see if we should propose
                 self.pacemaker.beat();
@@ -72,11 +76,12 @@ where TConsensusSpec: ConsensusSpec
 
     /// Returns true if quorum is reached
     #[allow(clippy::too_many_lines)]
-    pub async fn handle_vote(
+    async fn handle_vote(
         &self,
         from: TConsensusSpec::Addr,
         message: VoteMessage,
         check_leadership: bool,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<bool, HotStuffError> {
         debug!(
             target: LOG_TARGET,
@@ -127,8 +132,6 @@ where TConsensusSpec: ConsensusSpec
             Ok::<_, HotStuffError>(count)
         })?;
 
-        let local_committee_shard = self.epoch_manager.get_local_committee_info(message.epoch).await?;
-
         // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
         // in the QC.
 
@@ -140,9 +143,9 @@ where TConsensusSpec: ConsensusSpec
             message.block_id,
             from,
             count,
-            local_committee_shard.quorum_threshold()
+            local_committee_info.quorum_threshold()
         );
-        if count < local_committee_shard.quorum_threshold() as usize {
+        if count < local_committee_info.quorum_threshold() as usize {
             return Ok(false);
         }
 
@@ -178,20 +181,20 @@ where TConsensusSpec: ConsensusSpec
                     message.block_id,
                     from,
                     count,
-                    local_committee_shard.quorum_threshold(),
+                    local_committee_info.quorum_threshold(),
                     existing_qc_for_block
                 );
                 return Ok(true);
             }
 
             let votes = block.get_votes(&tx)?;
-            let Some(quorum_decision) = Self::calculate_threshold_decision(&votes, &local_committee_shard) else {
+            let Some(quorum_decision) = Self::calculate_threshold_decision(&votes, local_committee_info) else {
                 warn!(
                     target: LOG_TARGET,
                     "🔥 Received conflicting votes from replicas for block {} ({} of {}). Waiting for more votes.",
                     message.block_id,
                     count,
-                    local_committee_shard.quorum_threshold()
+                    local_committee_info.quorum_threshold()
                 );
                 return Ok(false);
             };

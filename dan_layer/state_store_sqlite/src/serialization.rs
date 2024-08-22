@@ -1,6 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-use std::{any::type_name, str::FromStr};
+use std::{any::type_name, fmt, str::FromStr};
 
 use serde::Serialize;
 use tari_dan_storage::StorageError;
@@ -47,10 +47,13 @@ where
 }
 
 pub fn parse_from_string<T>(s: &str) -> Result<T, StorageError>
-where T: FromStr {
-    s.parse().map_err(|_| StorageError::DecodingError {
+where
+    T: FromStr,
+    T::Err: fmt::Display,
+{
+    s.parse().map_err(|e| StorageError::DecodingError {
         operation: "parse_from_string",
         item: type_name::<T>(),
-        details: format!("Cannot parse string '{s}'"),
+        details: format!("Cannot parse string '{s}: {e}'"),
     })
 }

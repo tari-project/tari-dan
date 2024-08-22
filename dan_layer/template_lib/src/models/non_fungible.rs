@@ -481,7 +481,7 @@ mod tests {
 
         #[test]
         fn string_serialization_and_deserialization() {
-            let resx_str = "resource_00000000000000000000000000000000000000000000000000000000";
+            let resx_str = "resource_0000000000000000000000000000000000000000000000000000000000000000";
             let resource = ResourceAddress::from_str(resx_str).unwrap();
             let v = NonFungibleAddress::new(resource, NonFungibleId::String("hello".to_string()));
             let json = serde_json::to_string_pretty(&v).unwrap();
@@ -510,11 +510,11 @@ mod tests {
         #[test]
         fn it_parses_valid_strings() {
             NonFungibleAddress::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5 nft_str:SpecialNft",
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff nft_str:SpecialNft",
             )
             .unwrap();
             NonFungibleAddress::from_str(
-                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907f \
+                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fffffffff \
                  nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
             )
             .unwrap();
@@ -523,16 +523,20 @@ mod tests {
         #[test]
         fn it_rejects_invalid_strings() {
             NonFungibleAddress::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5 nft_xxxxx:SpecialNft",
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff nft_xxxxx:SpecialNft",
             )
             .unwrap_err();
-            NonFungibleAddress::from_str("nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32")
-                .unwrap_err();
-            NonFungibleAddress::from_str("resource_x nft_str:SpecialNft").unwrap_err();
-            NonFungibleAddress::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5 nft_str:")
-                .unwrap_err();
             NonFungibleAddress::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5 nftx_str:SpecialNft",
+                "nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32ffffffff",
+            )
+            .unwrap_err();
+            NonFungibleAddress::from_str("resource_x nft_str:SpecialNft").unwrap_err();
+            NonFungibleAddress::from_str(
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff nft_str:",
+            )
+            .unwrap_err();
+            NonFungibleAddress::from_str(
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff nftx_str:SpecialNft",
             )
             .unwrap_err();
         }

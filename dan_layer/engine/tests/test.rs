@@ -155,10 +155,13 @@ fn test_buggy_template() {
         .unwrap()
         .load_template()
         .unwrap_err();
-    assert!(matches!(
-        err,
-        TemplateLoaderError::WasmModuleError(WasmExecutionError::AbiDecodeError { .. })
-    ));
+    match err {
+        // The ptr location is non-zero, and the pointer reads a large length that is out of range
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::MemoryPointerOutOfRange { .. }) => {},
+        // The ptr location is zero, so the decode fails
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::AbiDecodeError { .. }) => {},
+        _ => panic!("Unexpected error: {:?}", err),
+    }
 
     let err = compile_template("tests/templates/buggy", &["unexpected_export_function"])
         .unwrap()
@@ -238,7 +241,7 @@ fn test_engine_errors() {
     assert_eq!(
         reason,
         "Runtime error: Substate not found with address \
-         'resource_7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b'"
+         'resource_7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b'"
     );
 }
 
@@ -334,7 +337,6 @@ fn test_errors_on_infinite_loop() {
 }
 
 mod errors {
-
     use super::*;
 
     #[test]
@@ -392,7 +394,6 @@ mod errors {
 }
 
 mod consensus {
-
     use super::*;
 
     #[test]
@@ -909,7 +910,6 @@ mod basic_nft {
 }
 
 mod emoji_id {
-
     use serde::{Deserialize, Serialize};
 
     use super::*;
@@ -1102,7 +1102,6 @@ mod emoji_id {
 }
 
 mod tickets {
-
     use serde::{Deserialize, Serialize};
 
     use super::*;

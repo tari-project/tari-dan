@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { toHexString } from "../routes/VN/Components/helpers";
-import type { SubstateId } from "@tari-project/typescript-bindings";
+import type { ShardGroup, SubstateId } from "@tari-project/typescript-bindings";
 
 export const renderJson = (json: any) => {
   if (!json) {
@@ -129,4 +129,11 @@ export function displayDuration(duration: Duration) {
     return `${(duration.secs / 60).toFixed(0)}m${secs.toFixed(0)}s`;
   }
   return `${duration.secs}s`;
+}
+
+
+export function decodeShardGroup(sg: number): ShardGroup {
+  const start = sg >> 8;
+  const end_inclusive = sg & 0xff;
+  return { start, end_inclusive };
 }

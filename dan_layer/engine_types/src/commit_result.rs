@@ -20,7 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fmt::{self, Display, Formatter};
+use std::{
+    fmt::{self, Display, Formatter},
+    time::Duration,
+};
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tari_template_lib::Hash;
@@ -41,9 +44,18 @@ use crate::{
 pub struct ExecuteResult {
     /// The finalized result to commit. If the fee transaction succeeds but the transaction fails, this will be accept.
     pub finalize: FinalizeResult,
+    #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
+    pub execution_time: Duration,
 }
 
 impl ExecuteResult {
+    pub fn new_rejected(transaction_hash: Hash, reason: RejectReason) -> Self {
+        Self {
+            finalize: FinalizeResult::new_rejected(transaction_hash, reason),
+            execution_time: Duration::default(),
+        }
+    }
+
     pub fn expect_success(&self) -> &SubstateDiff {
         let diff = self.expect_finalization_success();
 
@@ -275,25 +287,31 @@ impl Display for TransactionResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum RejectReason {
-    ShardsNotPledged(String),
+    InvalidTransaction(String),
     ExecutionFailure(String),
-    PreviousQcRejection,
-    ShardPledgedToAnotherPayload(String),
-    ShardRejected(String),
-    FeeTransactionFailed,
+    OneOrMoreInputsNotFound(String),
+    NoInputs,
+    FailedToLockInputs(String),
+    FailedToLockOutputs(String),
+    ForeignShardGroupDecidedToAbort(String),
     FeesNotPaid(String),
+    Unknown,
 }
 
-impl std::fmt::Display for RejectReason {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl Display for RejectReason {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            RejectReason::ShardsNotPledged(msg) => write!(f, "Shards not pledged: {}", msg),
+            RejectReason::InvalidTransaction(msg) => write!(f, "Invalid transaction: {}", msg),
             RejectReason::ExecutionFailure(msg) => write!(f, "Execution failure: {}", msg),
-            RejectReason::PreviousQcRejection => write!(f, "Previous QC was a rejection"),
-            RejectReason::ShardPledgedToAnotherPayload(msg) => write!(f, "Shard pledged to another payload: {}", msg),
-            RejectReason::ShardRejected(msg) => write!(f, "Shard was rejected: {}", msg),
-            RejectReason::FeeTransactionFailed => write!(f, "Fee transaction failed"),
+            RejectReason::OneOrMoreInputsNotFound(msg) => write!(f, "One or more inputs not found: {}", msg),
+            RejectReason::NoInputs => write!(f, "No inputs"),
+            RejectReason::FailedToLockInputs(msg) => write!(f, "Failed to lock inputs: {}", msg),
+            RejectReason::FailedToLockOutputs(msg) => write!(f, "Failed to lock outputs: {}", msg),
+            RejectReason::ForeignShardGroupDecidedToAbort(msg) => {
+                write!(f, "Foreign shard group decided to abort: {}", msg)
+            },
             RejectReason::FeesNotPaid(msg) => write!(f, "Fee not paid: {}", msg),
+            RejectReason::Unknown => write!(f, "<unknown reject reason - this is not valid>"),
         }
     }
 }

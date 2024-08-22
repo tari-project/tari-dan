@@ -19,7 +19,7 @@ export interface Block {
   merkle_root: string;
   commands: Array<Command>;
   is_dummy: boolean;
-  is_processed: boolean;
+  is_justified: boolean;
   is_committed: boolean;
   foreign_indexes: Record<Shard, bigint>;
   stored_at: Array<number> | null;

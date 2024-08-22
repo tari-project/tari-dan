@@ -11,27 +11,42 @@ use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeHeight, NumPreshards, ShardGroup};
 use tari_dan_storage::{
-    consensus_models::{BlockId, Decision, QcId, SubstateRecord, TransactionExecution, TransactionRecord},
+    consensus_models::{
+        BlockId,
+        BlockTransactionExecution,
+        Decision,
+        QcId,
+        SubstateLockType,
+        SubstateRecord,
+        TransactionRecord,
+        VersionedSubstateIdLockIntent,
+    },
     StateStore,
     StateStoreReadTransaction,
     StorageError,
 };
 use tari_engine_types::{
     component::{ComponentBody, ComponentHeader},
-    substate::{SubstateId, SubstateValue},
+    substate::SubstateValue,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_shutdown::{Shutdown, ShutdownSignal};
-use tari_template_lib::models::ComponentAddress;
 use tari_transaction::{TransactionId, VersionedSubstateId};
 use tokio::{sync::broadcast, task, time::sleep};
 
-use super::{create_execution_result_for_transaction, helpers, MessageFilter, TEST_NUM_PRESHARDS};
+use super::{
+    build_random_outputs,
+    build_transaction_with_inputs_and_outputs,
+    create_execution_result_for_transaction,
+    helpers,
+    random_substates_ids_for_committee_generator,
+    MessageFilter,
+    TEST_NUM_PRESHARDS,
+};
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
-    network::{spawn_network, TestNetwork, TestNetworkDestination},
-    transaction::build_transaction,
+    network::{spawn_network, TestNetwork, TestVnDestination},
     validator::Validator,
     RoundRobinLeaderStrategy,
     ValidatorChannels,
@@ -42,6 +57,7 @@ pub struct Test {
     network: TestNetwork,
     _leader_strategy: RoundRobinLeaderStrategy,
     epoch_manager: TestEpochManager,
+    num_committees: u32,
     shutdown: Shutdown,
     timeout: Option<Duration>,
 }
@@ -56,23 +72,48 @@ impl Test {
         addr: &TestAddress,
         decision: Decision,
         fee: u64,
-        num_shards: usize,
+        num_inputs_per_committee: usize,
     ) -> TransactionRecord {
         let num_committees = self.epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
-        let transaction = build_transaction(decision, fee, num_shards, num_committees);
-        self.send_transaction_to_destination(TestNetworkDestination::Address(addr.clone()), transaction.clone())
+        let mut all_inputs = vec![];
+        // This creates and uses inputs on all committees. This may be unexpected for tests which do not want
+        // transactions to involve all shard groups
+        for committee_no in 0..num_committees {
+            let inputs =
+                self.create_substates_on_vns(TestVnDestination::Committee(committee_no), num_inputs_per_committee);
+            all_inputs.extend(inputs);
+        }
+
+        let transaction = build_transaction_with_inputs_and_outputs(
+            decision,
+            fee,
+            all_inputs
+                .into_iter()
+                .map(|i| VersionedSubstateIdLockIntent::new(i, SubstateLockType::Write))
+                .collect(),
+            vec![],
+        );
+
+        self.send_transaction_to_destination(TestVnDestination::Address(addr.clone()), transaction.clone())
             .await;
         transaction
     }
 
-    pub async fn send_transaction_to_all(&self, decision: Decision, fee: u64, num_shards: usize) {
-        let num_committees = self.epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
-        let transaction = build_transaction(decision, fee, num_shards, num_committees);
-        self.send_transaction_to_destination(TestNetworkDestination::All, transaction)
+    pub async fn send_transaction_to_all(
+        &self,
+        decision: Decision,
+        fee: u64,
+        num_inputs: usize,
+        num_outputs: usize,
+    ) -> TransactionRecord {
+        let transaction = self.build_transaction(decision, fee, num_inputs, num_outputs);
+
+        self.send_transaction_to_destination(TestVnDestination::All, transaction.clone())
             .await;
+        transaction
     }
 
-    pub async fn send_transaction_to_destination(&self, dest: TestNetworkDestination, transaction: TransactionRecord) {
+    pub async fn send_transaction_to_destination(&self, dest: TestVnDestination, transaction: TransactionRecord) {
         self.create_execution_at_destination(
             dest.clone(),
             create_execution_result_for_transaction(
@@ -81,7 +122,7 @@ impl Test {
                 transaction.current_decision(),
                 0,
                 transaction.resolved_inputs.clone().unwrap_or_default(),
-                transaction.resulting_outputs.clone(),
+                transaction.resulting_outputs.clone().unwrap_or_default(),
             ),
         );
         self.network.send_transaction(dest, transaction).await;
@@ -89,8 +130,8 @@ impl Test {
 
     pub fn create_execution_at_destination(
         &self,
-        dest: TestNetworkDestination,
-        execution: TransactionExecution,
+        dest: TestVnDestination,
+        execution: BlockTransactionExecution,
     ) -> &Self {
         for vn in self.validators.values() {
             if dest.is_for(&vn.address, vn.shard_group, vn.num_committees) {
@@ -100,29 +141,67 @@ impl Test {
         self
     }
 
-    pub fn create_substates_on_all_vns(&self, num: usize) -> Vec<VersionedSubstateId> {
+    pub fn build_transaction(
+        &self,
+        decision: Decision,
+        fee: u64,
+        num_inputs: usize,
+        num_outputs: usize,
+    ) -> TransactionRecord {
+        let all_inputs = self.create_substates_on_vns(TestVnDestination::All, num_inputs);
+
+        let outputs = build_random_outputs(num_outputs, self.num_committees);
+
+        build_transaction_with_inputs_and_outputs(
+            decision,
+            fee,
+            all_inputs
+                .into_iter()
+                .map(|i| VersionedSubstateIdLockIntent::new(i, SubstateLockType::Write))
+                .collect(),
+            outputs,
+        )
+    }
+
+    pub fn create_substates_on_vns(&self, dest: TestVnDestination, num: usize) -> Vec<VersionedSubstateId> {
         assert!(
             num <= u8::MAX as usize,
             "Creating more than 255 substates is not supported"
         );
 
-        let substates = (0..num)
-            .map(|i| {
-                let id = SubstateId::Component(ComponentAddress::from_array([i as u8; 28]));
+        let substate_ids = match dest {
+            TestVnDestination::All => (0..self.num_committees)
+                .flat_map(|committee_no| {
+                    random_substates_ids_for_committee_generator(committee_no, self.num_committees).take(num)
+                })
+                .collect::<Vec<_>>(),
+            TestVnDestination::Address(_) => unimplemented!(
+                "Creating substates for a specific validator is not supported as it isn't typically useful"
+            ),
+            TestVnDestination::Committee(committee_no) => {
+                random_substates_ids_for_committee_generator(committee_no, self.num_committees)
+                    .take(num)
+                    .collect::<Vec<_>>()
+            },
+        };
+
+        let substates = substate_ids
+            .iter()
+            .map(|id| {
                 let value = SubstateValue::Component(ComponentHeader {
                     template_address: Default::default(),
                     module_name: "Test".to_string(),
                     owner_key: None,
                     owner_rule: Default::default(),
                     access_rules: Default::default(),
-                    entity_id: id.as_component_address().unwrap().entity_id(),
+                    entity_id: id.substate_id().as_component_address().unwrap().entity_id(),
                     body: ComponentBody {
                         state: tari_bor::Value::Null,
                     },
                 });
                 SubstateRecord::new(
-                    id,
-                    0,
+                    id.substate_id.clone(),
+                    id.version,
                     value,
                     Shard::zero(),
                     Epoch(0),
@@ -134,23 +213,33 @@ impl Test {
             })
             .collect::<Vec<_>>();
 
-        let ids = substates
-            .iter()
-            .map(|s| VersionedSubstateId::new(s.substate_id().clone(), s.version()))
-            .collect::<Vec<_>>();
-
-        self.validators.values().for_each(|v| {
+        self.validators.values().filter(|vn| dest.is_for_vn(vn)).for_each(|v| {
             v.state_store
                 .with_write_tx(|tx| {
-                    for substate in substates.clone() {
-                        substate.create(tx).unwrap();
+                    for substate in &substates {
+                        if v.shard_group
+                            .contains(&substate.to_substate_address().to_shard(TEST_NUM_PRESHARDS))
+                        {
+                            substate.clone().create(tx).unwrap();
+                        }
                     }
                     Ok::<_, StorageError>(())
                 })
                 .unwrap();
         });
 
-        ids
+        substate_ids
+    }
+
+    pub fn build_outputs_for_committee(
+        &self,
+        committee_no: u32,
+        num_outputs: usize,
+    ) -> Vec<VersionedSubstateIdLockIntent> {
+        random_substates_ids_for_committee_generator(committee_no, self.num_committees)
+            .take(num_outputs)
+            .map(VersionedSubstateIdLockIntent::output)
+            .collect()
     }
 
     pub fn validators(&self) -> hash_map::Values<'_, TestAddress, Validator> {
@@ -352,7 +441,7 @@ impl Test {
                 let decisions = v
                     .state_store
                     .with_read_tx(|tx| TransactionRecord::get(tx, transaction_id))
-                    .unwrap()
+                    .unwrap_or_else(|err| panic!("{} Error getting transaction {}: {}", v.address, transaction_id, err))
                     .final_decision();
                 (v.address.clone(), decisions)
             });
@@ -496,6 +585,7 @@ impl TestBuilder {
         }
 
         let committees = build_committees(self.committees);
+        let num_committees = u32::try_from(committees.len()).expect("WAAAY too many committees");
 
         let leader_strategy = RoundRobinLeaderStrategy::new();
         let (tx_epoch_events, _) = broadcast::channel(10);
@@ -509,6 +599,7 @@ impl TestBuilder {
         Test {
             validators,
             network,
+            num_committees,
 
             _leader_strategy: leader_strategy,
             epoch_manager,

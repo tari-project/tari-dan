@@ -122,23 +122,11 @@ export default function TransactionDetails() {
       } else {
         reason = txResult.Reject;
       }
-      const getReasonString = (x: RejectReason): string => {
-        if (typeof x === "string") {
-          return x;
-        } else if ("ShardsNotPledged" in x) {
-          return `ShardsNotPledged: ${x["ShardsNotPledged"]}`;
-        } else if ("ExecutionFailure" in x) {
-          return `ExecutionFailure: ${x["ExecutionFailure"]}`;
-        } else if ("ShardPledgedToAnotherPayload" in x) {
-          return `ShardPledgedToAnotherPayload: ${x["ShardPledgedToAnotherPayload"]}`;
-        } else if ("ShardRejected" in x) {
-          return `ShardRejected: ${x["ShardRejected"]}`;
-        } else if ("FeesNotPaid" in x) {
-          return `FeesNotPaid: ${x["FeesNotPaid"]}`;
-        }
-        return "Unknown reason";
-      };
-      return getReasonString(reason);
+      if (typeof reason === "string") {
+        return reason;
+      } else {
+        return JSON.stringify(reason);
+      }
     };
 
     if (data.status === "Rejected" || data.status === "InvalidTransaction") {

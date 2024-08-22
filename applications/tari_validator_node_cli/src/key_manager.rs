@@ -134,8 +134,12 @@ pub struct KeyPair {
 }
 
 impl KeyPair {
+    pub fn to_ristretto_key_bytes(&self) -> RistrettoPublicKeyBytes {
+        RistrettoPublicKeyBytes::from_bytes(self.public_key.as_bytes()).unwrap()
+    }
+
     pub fn to_owner_token(&self) -> NonFungibleAddress {
-        NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(self.public_key.as_bytes()).unwrap())
+        NonFungibleAddress::from_public_key(self.to_ristretto_key_bytes())
     }
 }
 

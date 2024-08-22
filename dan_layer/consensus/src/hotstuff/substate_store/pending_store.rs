@@ -1,7 +1,10 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{borrow::Cow, collections::HashMap};
+use std::{
+    borrow::{Borrow, Cow},
+    collections::HashMap,
+};
 
 use indexmap::IndexMap;
 use log::*;
@@ -10,9 +13,9 @@ use tari_dan_storage::{
     consensus_models::{
         BlockDiff,
         BlockId,
-        LockedSubstate,
         SubstateChange,
-        SubstateLockFlag,
+        SubstateLock,
+        SubstateLockType,
         SubstateRecord,
         VersionedSubstateIdLockIntent,
     },
@@ -33,7 +36,7 @@ pub struct PendingSubstateStore<'a, 'tx, TStore: StateStore + 'a + 'tx> {
     pending: HashMap<SubstateAddress, usize>,
     /// Append only list of changes ordered oldest to newest
     diff: Vec<SubstateChange>,
-    new_locks: IndexMap<SubstateId, Vec<LockedSubstate>>,
+    new_locks: IndexMap<SubstateId, Vec<SubstateLock>>,
     parent_block: BlockId,
     num_preshards: NumPreshards,
 }
@@ -130,13 +133,15 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> WriteableSubstateStore for PendingS
 
 impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStore> {
     pub fn get_latest(&self, id: &SubstateId) -> Result<Substate, SubstateStoreError> {
-        if let Some(substate) = self
+        if let Some(ch) = self
             .diff
             .iter()
             .rev()
             .find(|change| change.versioned_substate_id().substate_id == *id)
-            .and_then(|ch| ch.up())
         {
+            let substate = ch.up().ok_or_else(|| SubstateStoreError::SubstateIsDown {
+                id: ch.versioned_substate_id().clone(),
+            })?;
             return Ok(substate.clone());
         }
 
@@ -151,14 +156,14 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         Ok(substate.into_substate())
     }
 
-    pub fn try_lock_all<I: IntoIterator<Item = VersionedSubstateIdLockIntent>>(
+    pub fn try_lock_all<I: IntoIterator<Item = B>, B: Borrow<VersionedSubstateIdLockIntent>>(
         &mut self,
         transaction_id: TransactionId,
         id_locks: I,
         is_local_only: bool,
     ) -> Result<(), SubstateStoreError> {
         for id_lock in id_locks {
-            self.try_lock(transaction_id, id_lock, is_local_only)?;
+            self.try_lock(transaction_id, id_lock.borrow(), is_local_only)?;
         }
         Ok(())
     }
@@ -167,10 +172,10 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
     pub fn try_lock(
         &mut self,
         transaction_id: TransactionId,
-        requested_lock: VersionedSubstateIdLockIntent,
+        requested_lock: &VersionedSubstateIdLockIntent,
         is_local_only: bool,
     ) -> Result<(), SubstateStoreError> {
-        let requested_lock_flag = requested_lock.lock_flag();
+        let requested_lock_type = requested_lock.lock_type();
         let requested_substate_id = requested_lock.versioned_substate_id().substate_id();
         info!(
             target: LOG_TARGET,
@@ -179,7 +184,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         );
 
         let Some(existing) = self.get_latest_lock_by_id(requested_substate_id)? else {
-            if requested_lock_flag.is_output() {
+            if requested_lock_type.is_output() {
                 self.assert_not_exist(requested_lock.versioned_substate_id())?;
             } else {
                 self.assert_is_up(requested_lock.versioned_substate_id())?;
@@ -187,10 +192,10 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
 
             self.add_new_lock(
                 requested_lock.versioned_substate_id().substate_id.clone(),
-                LockedSubstate::new(
+                SubstateLock::new(
                     transaction_id,
                     requested_lock.versioned_substate_id().version(),
-                    requested_lock_flag,
+                    requested_lock_type,
                     is_local_only,
                 ),
             );
@@ -207,28 +212,30 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             // - it MUST NOT be locked as WRITE or OUTPUT, unless
             // - if Same-Transaction OR Local-Only-Rules:
             //   - it MAY be locked as requested.
-            SubstateLockFlag::Read => {
+            SubstateLockType::Read => {
                 // Cannot write to or create an output for a substate that is already read locked
-                if !same_transaction && !has_local_only_rules && !requested_lock_flag.is_read() {
+                if !same_transaction && !has_local_only_rules && !requested_lock_type.is_read() {
                     warn!(
                         target: LOG_TARGET,
-                        "⚠️ Lock conflict: [{}] Read lock is present. Requested lock is {}",
+                        "⚠️ Lock conflict: [{}] Read lock(local={}) is present. Requested lock is {}(local={})",
                         requested_lock.versioned_substate_id(),
-                        requested_lock_flag
+                        existing.is_local_only(),
+                        requested_lock_type,
+                        is_local_only
                     );
                     return Err(SubstateStoreError::LockConflict {
                         substate_id: requested_lock.versioned_substate_id().clone(),
                         existing_lock: existing.substate_lock(),
-                        requested_lock: requested_lock_flag,
+                        requested_lock: requested_lock_type,
                     });
                 }
 
                 self.add_new_lock(
                     requested_lock.versioned_substate_id().substate_id.clone(),
-                    LockedSubstate::new(
+                    SubstateLock::new(
                         transaction_id,
                         requested_lock.versioned_substate_id().version(),
-                        requested_lock_flag,
+                        requested_lock_type,
                         is_local_only,
                     ),
                 );
@@ -238,42 +245,46 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             // - it MUST NOT be locked as READ, WRITE or OUTPUT, unless
             // - if Same-Transaction OR Local-Only-Rules:
             //   - it MAY be locked as OUTPUT
-            SubstateLockFlag::Write => {
+            SubstateLockType::Write => {
                 // Cannot lock a non-local WRITE locked substate
                 if !has_local_only_rules && !same_transaction {
                     warn!(
                         target: LOG_TARGET,
-                        "⚠️ Lock conflict: [{}] Write lock is present. Requested lock is {}",
+                        "⚠️ Lock conflict: [{}] Write lock(local={}) is present. Requested lock is {}(local={})",
                         requested_lock.versioned_substate_id(),
-                        requested_lock_flag
+                        existing.is_local_only(),
+                        requested_lock_type,
+                        is_local_only
                     );
                     return Err(SubstateStoreError::LockConflict {
                         substate_id: requested_lock.versioned_substate_id().clone(),
                         existing_lock: existing.substate_lock(),
-                        requested_lock: requested_lock_flag,
+                        requested_lock: requested_lock_type,
                     });
                 }
 
-                if !requested_lock_flag.is_output() {
+                if !requested_lock_type.is_output() {
                     warn!(
                         target: LOG_TARGET,
-                        "⚠️ Lock conflict: [{}] Write lock is present. Requested lock is {}",
+                        "⚠️ Lock conflict: [{}] Write lock(local={}) is present. Requested lock is {}(local={})",
                         requested_lock.versioned_substate_id(),
-                        requested_lock_flag
+                        existing.is_local_only(),
+                        requested_lock_type,
+                        is_local_only
                     );
                     return Err(SubstateStoreError::LockConflict {
                         substate_id: requested_lock.versioned_substate_id().clone(),
                         existing_lock: existing.substate_lock(),
-                        requested_lock: requested_lock_flag,
+                        requested_lock: requested_lock_type,
                     });
                 }
 
                 self.add_new_lock(
                     requested_lock.versioned_substate_id().substate_id.clone(),
-                    LockedSubstate::new(
+                    SubstateLock::new(
                         transaction_id,
                         requested_lock.versioned_substate_id().version(),
-                        SubstateLockFlag::Output,
+                        SubstateLockType::Output,
                         is_local_only,
                     ),
                 );
@@ -283,41 +294,45 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             // - if Same-Transaction OR Local-Only-Rules:
             //   - it MAY be locked as WRITE or READ
             //   - it MUST NOT be locked as OUTPUT
-            SubstateLockFlag::Output => {
+            SubstateLockType::Output => {
                 if !same_transaction && !has_local_only_rules {
                     warn!(
                         target: LOG_TARGET,
-                        "⚠️ Lock conflict: [{}] Output lock is present. Requested lock is {}",
+                        "⚠️ Lock conflict: [{}] Output lock(local={}) is present. Requested lock is {}(local={})",
                         requested_lock.versioned_substate_id(),
-                        requested_lock_flag
+                        existing.is_local_only(),
+                        requested_lock_type,
+                        is_local_only
                     );
                     return Err(SubstateStoreError::LockConflict {
                         substate_id: requested_lock.versioned_substate_id().clone(),
                         existing_lock: existing.substate_lock(),
-                        requested_lock: requested_lock_flag,
+                        requested_lock: requested_lock_type,
                     });
                 }
 
-                if requested_lock_flag.is_output() {
+                if requested_lock_type.is_output() {
                     warn!(
                         target: LOG_TARGET,
-                        "⚠️ Lock conflict: [{}] Output lock is present. Requested lock is output",
-                        requested_lock.versioned_substate_id()
+                        "⚠️ Lock conflict: [{}] Output lock(local={}) is present. Requested lock is Output(local={})",
+                        requested_lock.versioned_substate_id(),
+                        existing.is_local_only(),
+                        is_local_only
                     );
                     return Err(SubstateStoreError::LockConflict {
                         substate_id: requested_lock.versioned_substate_id().clone(),
                         existing_lock: existing.substate_lock(),
-                        requested_lock: requested_lock_flag,
+                        requested_lock: requested_lock_type,
                     });
                 }
 
                 self.add_new_lock(
                     requested_lock.versioned_substate_id().substate_id.clone(),
-                    LockedSubstate::new(
+                    SubstateLock::new(
                         transaction_id,
                         requested_lock.versioned_substate_id().version(),
                         // WRITE or READ
-                        requested_lock_flag,
+                        requested_lock_type,
                         is_local_only,
                     ),
                 );
@@ -338,7 +353,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         self.diff.push(change)
     }
 
-    fn get_latest_lock_by_id(&self, id: &SubstateId) -> Result<Option<Cow<'_, LockedSubstate>>, SubstateStoreError> {
+    fn get_latest_lock_by_id(&self, id: &SubstateId) -> Result<Option<Cow<'_, SubstateLock>>, SubstateStoreError> {
         if let Some(lock) = self.new_locks.get(id).and_then(|locks| locks.last()) {
             return Ok(Some(Cow::Borrowed(lock)));
         }
@@ -350,7 +365,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         Ok(maybe_lock.map(Cow::Owned))
     }
 
-    fn add_new_lock(&mut self, substate_id: SubstateId, lock: LockedSubstate) {
+    fn add_new_lock(&mut self, substate_id: SubstateId, lock: SubstateLock) {
         self.new_locks.entry(substate_id).or_default().push(lock);
     }
 
@@ -415,7 +430,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         Ok(())
     }
 
-    pub fn new_locks(&self) -> &IndexMap<SubstateId, Vec<LockedSubstate>> {
+    pub fn new_locks(&self) -> &IndexMap<SubstateId, Vec<SubstateLock>> {
         &self.new_locks
     }
 
@@ -423,7 +438,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         &self.diff
     }
 
-    pub fn into_parts(self) -> (Vec<SubstateChange>, IndexMap<SubstateId, Vec<LockedSubstate>>) {
+    pub fn into_parts(self) -> (Vec<SubstateChange>, IndexMap<SubstateId, Vec<SubstateLock>>) {
         (self.diff, self.new_locks)
     }
 }

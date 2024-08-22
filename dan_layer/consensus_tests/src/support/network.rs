@@ -23,7 +23,13 @@ use tokio::{
     task,
 };
 
-use crate::support::{address::TestAddress, committee_number_to_shard_group, ValidatorChannels, TEST_NUM_PRESHARDS};
+use crate::support::{
+    address::TestAddress,
+    committee_number_to_shard_group,
+    Validator,
+    ValidatorChannels,
+    TEST_NUM_PRESHARDS,
+};
 
 pub type MessageFilter = Box<dyn Fn(&TestAddress, &TestAddress, &HotstuffMessage) -> bool + Sync + Send + 'static>;
 
@@ -104,9 +110,9 @@ impl NetworkStatus {
 
 pub struct TestNetwork {
     network_task_handle: task::JoinHandle<()>,
-    tx_new_transaction: mpsc::Sender<(TestNetworkDestination, TransactionRecord)>,
+    tx_new_transaction: mpsc::Sender<(TestVnDestination, TransactionRecord)>,
     network_status: watch::Sender<NetworkStatus>,
-    offline_destinations: Arc<RwLock<Vec<TestNetworkDestination>>>,
+    offline_destinations: Arc<RwLock<Vec<TestVnDestination>>>,
     num_sent_messages: Arc<AtomicUsize>,
     num_filtered_messages: Arc<AtomicUsize>,
     _on_message: watch::Receiver<Option<HotstuffMessage>>,
@@ -121,7 +127,7 @@ impl TestNetwork {
         &self.network_task_handle
     }
 
-    pub async fn go_offline(&self, destination: TestNetworkDestination) -> &Self {
+    pub async fn go_offline(&self, destination: TestVnDestination) -> &Self {
         if destination.is_shard() {
             unimplemented!("Sorry :/ taking a bucket offline is not yet supported in the test harness");
         }
@@ -140,7 +146,7 @@ impl TestNetwork {
         self.network_status.send(NetworkStatus::Paused).unwrap();
     }
 
-    pub async fn send_transaction(&self, destination: TestNetworkDestination, tx: TransactionRecord) {
+    pub async fn send_transaction(&self, destination: TestVnDestination, tx: TransactionRecord) {
         self.tx_new_transaction.send((destination, tx)).await.unwrap();
     }
 
@@ -154,31 +160,35 @@ impl TestNetwork {
 }
 
 #[derive(Debug, Clone)]
-pub enum TestNetworkDestination {
+pub enum TestVnDestination {
     All,
     Address(TestAddress),
     #[allow(dead_code)]
     Committee(u32),
 }
 
-impl TestNetworkDestination {
+impl TestVnDestination {
     pub fn is_for(&self, addr: &TestAddress, shard_group: ShardGroup, num_committees: u32) -> bool {
         match self {
-            TestNetworkDestination::All => true,
-            TestNetworkDestination::Address(a) => a == addr,
-            TestNetworkDestination::Committee(b) => {
+            TestVnDestination::All => true,
+            TestVnDestination::Address(a) => a == addr,
+            TestVnDestination::Committee(b) => {
                 committee_number_to_shard_group(TEST_NUM_PRESHARDS, *b, num_committees) == shard_group
             },
         }
     }
 
+    pub fn is_for_vn(&self, vn: &Validator) -> bool {
+        self.is_for(&vn.address, vn.shard_group, vn.num_committees)
+    }
+
     pub fn is_shard(&self) -> bool {
-        matches!(self, TestNetworkDestination::Committee(_))
+        matches!(self, TestVnDestination::Committee(_))
     }
 }
 
 pub struct TestNetworkWorker {
-    rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, TransactionRecord)>>,
+    rx_new_transaction: Option<mpsc::Receiver<(TestVnDestination, TransactionRecord)>>,
     #[allow(clippy::type_complexity)]
     tx_new_transactions: HashMap<
         TestAddress,
@@ -200,7 +210,7 @@ pub struct TestNetworkWorker {
     num_filtered_messages: Arc<AtomicUsize>,
     transaction_store: Arc<RwLock<HashMap<TransactionId, TransactionRecord>>>,
 
-    offline_destinations: Arc<RwLock<Vec<TestNetworkDestination>>>,
+    offline_destinations: Arc<RwLock<Vec<TestVnDestination>>>,
     shutdown_signal: ShutdownSignal,
     message_filter: Option<MessageFilter>,
 }

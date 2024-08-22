@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_dan_wallet_sdk::models::NewAccountInfo;
-use tari_engine_types::commit_result::FinalizeResult;
+use tari_engine_types::commit_result::ExecuteResult;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use tokio::sync::{mpsc, oneshot};
 
@@ -21,7 +21,7 @@ pub(super) enum TransactionServiceRequest {
     SubmitDryRunTransaction {
         transaction: Transaction,
         required_substates: Vec<SubstateRequirement>,
-        reply: Reply<Result<FinalizeResult, TransactionServiceError>>,
+        reply: Reply<Result<ExecuteResult, TransactionServiceError>>,
     },
 }
 
@@ -60,7 +60,7 @@ impl TransactionServiceHandle {
         &self,
         transaction: Transaction,
         required_substates: Vec<SubstateRequirement>,
-    ) -> Result<FinalizeResult, TransactionServiceError> {
+    ) -> Result<ExecuteResult, TransactionServiceError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.sender
             .send(TransactionServiceRequest::SubmitDryRunTransaction {

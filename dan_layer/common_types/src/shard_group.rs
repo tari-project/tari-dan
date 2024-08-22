@@ -107,12 +107,12 @@ impl ShardGroup {
             shard_size * U256::from(self.start.as_u32()) + U256::from(self.start.as_u32() - 1)
         };
         if self.end_inclusive == num_shards.as_u32() - 1 {
-            return SubstateAddress::from_u256(start)..=SubstateAddress::max();
+            return SubstateAddress::from_u256_zero_version(start)..=SubstateAddress::max();
         }
 
         let end =
             shard_size * U256::from(self.end_inclusive.as_u32()) + shard_size + U256::from(self.end_inclusive.as_u32());
-        SubstateAddress::from_u256(start)..=SubstateAddress::from_u256(end - 1)
+        SubstateAddress::from_u256_zero_version(start)..=SubstateAddress::from_u256_zero_version(end - 1)
     }
 }
 

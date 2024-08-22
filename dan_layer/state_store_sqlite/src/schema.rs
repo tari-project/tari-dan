@@ -30,7 +30,7 @@ diesel::table! {
         commands -> Text,
         total_leader_fee -> BigInt,
         is_committed -> Bool,
-        is_processed -> Bool,
+        is_justified -> Bool,
         is_dummy -> Bool,
         foreign_indexes -> Text,
         signature -> Nullable<Text>,
@@ -79,6 +79,19 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         counters -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    foreign_substate_pledges (id) {
+        id -> Integer,
+        transaction_id -> Text,
+        substate_id -> Text,
+        version -> Integer,
+        substate_value -> Nullable<Text>,
+        shard_group -> Integer,
+        lock_type -> Text,
         created_at -> Timestamp,
     }
 }
@@ -295,6 +308,7 @@ diesel::table! {
         resulting_outputs -> Text,
         result -> Text,
         execution_time_ms -> BigInt,
+        abort_reason -> Nullable<Text>,
         created_at -> Timestamp,
     }
 }
@@ -314,6 +328,7 @@ diesel::table! {
         stage -> Text,
         pending_stage -> Nullable<Text>,
         is_ready -> Bool,
+        confirm_stage -> Nullable<Text>,
         updated_at -> Timestamp,
         created_at -> Timestamp,
     }
@@ -328,6 +343,7 @@ diesel::table! {
         local_decision -> Nullable<Text>,
         remote_decision -> Nullable<Text>,
         evidence -> Nullable<Text>,
+        new_evidence -> Nullable<Text>,
         transaction_fee -> Nullable<BigInt>,
         leader_fee -> Nullable<BigInt>,
         global_exhaust_burn -> Nullable<BigInt>,
@@ -335,6 +351,8 @@ diesel::table! {
         new_stage -> Text,
         is_ready -> Bool,
         new_is_ready -> Bool,
+        confirm_stage -> Nullable<Text>,
+        new_confirm_stage -> Nullable<Text>,
         updated_at -> Timestamp,
         created_at -> Timestamp,
         change_time -> Nullable<Timestamp>,
@@ -397,6 +415,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     foreign_proposals,
     foreign_receive_counters,
     foreign_send_counters,
+    foreign_substate_pledges,
     high_qcs,
     last_executed,
     last_proposed,

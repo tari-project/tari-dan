@@ -736,7 +736,7 @@ impl From<Block> for ValidatorFee {
             total_transaction_fee: value
                 .commands()
                 .iter()
-                .filter_map(|c| c.accept())
+                .filter_map(|c| c.committing())
                 .map(|t| t.transaction_fee)
                 .sum(),
         }

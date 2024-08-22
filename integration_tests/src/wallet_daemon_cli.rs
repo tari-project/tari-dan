@@ -594,7 +594,7 @@ pub async fn create_component(
     world: &mut TariWorld,
     outputs_name: String,
     template_name: String,
-    _account_name: String,
+    account_name: String,
     wallet_daemon_name: String,
     function_call: String,
     args: Vec<String>,
@@ -602,24 +602,30 @@ pub async fn create_component(
     max_epoch: Option<Epoch>,
 ) {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
-
     let template_address = world
         .templates
         .get(&template_name)
         .unwrap_or_else(|| panic!("Template not found with name {}", template_name))
         .address;
     let args = args.iter().map(|a| CliArg::from_str(a).unwrap().into_arg()).collect();
-    let instruction = Instruction::CallFunction {
-        template_address,
-        function: function_call,
-        args,
-    };
+    let AccountGetResponse { account, .. } = client
+        .accounts_get(ComponentAddressOrName::Name(account_name.clone()))
+        .await
+        .unwrap();
 
     let transaction_submit_req = TransactionSubmitRequest {
         transaction: None,
-        signing_key_index: None,
-        instructions: vec![instruction],
-        fee_instructions: vec![],
+        signing_key_index: Some(account.key_index),
+        instructions: vec![Instruction::CallFunction {
+            template_address,
+            function: function_call,
+            args,
+        }],
+        fee_instructions: vec![Instruction::CallMethod {
+            component_address: account.address.as_component_address().unwrap(),
+            method: "pay_fee".to_string(),
+            args: args![Amount(100)],
+        }],
         override_inputs: false,
         is_dry_run: false,
         proof_ids: vec![],

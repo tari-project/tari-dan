@@ -26,6 +26,7 @@ use log::*;
 use tari_dan_common_types::{optional::Optional, NumPreshards, PeerAddress, ShardGroup, SubstateAddress};
 use tari_dan_p2p::{DanMessage, NewTransactionMessage};
 use tari_dan_storage::{consensus_models::TransactionRecord, StateStore};
+use tari_engine_types::commit_result::RejectReason;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerEvent, EpochManagerReader};
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
@@ -252,7 +253,9 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
             let transaction_id = *transaction.id();
             self.state_store.with_write_tx(|tx| {
                 TransactionRecord::new(transaction)
-                    .set_abort(format!("Mempool validation failed: {e}"))
+                    .set_abort_reason(RejectReason::InvalidTransaction(format!(
+                        "Mempool validation failed: {e}"
+                    )))
                     .insert(tx)
             })?;
 
@@ -281,8 +284,8 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
 
         let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
         let transaction_inputs = transaction.all_inputs_iter().filter_map(|i| i.to_substate_address());
-        let is_input_shard = local_committee_shard.includes_any_shard(transaction_inputs);
-        let is_output_shard = local_committee_shard.includes_any_shard(
+        let is_input_shard = local_committee_shard.includes_any_address(transaction_inputs);
+        let is_output_shard = local_committee_shard.includes_any_address(
             // Known output shards
             // This is to allow for the txreceipt output
             iter::once(&tx_substate_address)
