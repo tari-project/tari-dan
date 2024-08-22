@@ -116,7 +116,8 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                 let child = if current_block.is_epoch_end() {
                     // The current block is the last one in the epoch,
                     // so we need to find the first block in the next expoch
-                    tx.blocks_get_genesis_for_epoch(current_block.epoch() + Epoch(1)).optional()?
+                    tx.blocks_get_genesis_for_epoch(current_block.epoch() + Epoch(1))
+                        .optional()?
                 } else {
                     // The current block is NOT the last one in the epoch,
                     // so we need to find a child block

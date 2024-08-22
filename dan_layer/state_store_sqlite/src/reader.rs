@@ -741,7 +741,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                 block.id, block.qc_id
             ),
         })?;
-        
+
         block.try_convert(qc)
     }
 
