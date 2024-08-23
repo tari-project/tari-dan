@@ -45,7 +45,7 @@ use tari_dan_storage::consensus_models::{
     Decision,
     Evidence,
     ForeignProposal,
-    ForeignProposalState,
+    ForeignProposalAtom,
     HighQc,
     LeaderFee,
     QcId,
@@ -153,6 +153,7 @@ impl From<&ProposalMessage> for proto::consensus::ProposalMessage {
     fn from(value: &ProposalMessage) -> Self {
         Self {
             block: Some((&value.block).into()),
+            foreign_proposals: value.foreign_proposals.iter().map(Into::into).collect(),
         }
     }
 }
@@ -163,6 +164,11 @@ impl TryFrom<proto::consensus::ProposalMessage> for ProposalMessage {
     fn try_from(value: proto::consensus::ProposalMessage) -> Result<Self, Self::Error> {
         Ok(ProposalMessage {
             block: value.block.ok_or_else(|| anyhow!("Block is missing"))?.try_into()?,
+            foreign_proposals: value
+                .foreign_proposals
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
         })
     }
 }
@@ -172,9 +178,7 @@ impl TryFrom<proto::consensus::ProposalMessage> for ProposalMessage {
 impl From<&ForeignProposalMessage> for proto::consensus::ForeignProposalMessage {
     fn from(value: &ForeignProposalMessage) -> Self {
         Self {
-            block: Some(proto::consensus::Block::from(&value.block)),
-            justify_qc: Some(proto::consensus::QuorumCertificate::from(&value.justify_qc)),
-            block_pledge: value.block_pledge.iter().map(Into::into).collect(),
+            proposal: Some(proto::consensus::ForeignProposal::from(value)),
         }
     }
 }
@@ -183,18 +187,58 @@ impl TryFrom<proto::consensus::ForeignProposalMessage> for ForeignProposalMessag
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::ForeignProposalMessage) -> Result<Self, Self::Error> {
+        let proposal = value.proposal.ok_or_else(|| anyhow!("Proposal is missing"))?;
         Ok(ForeignProposalMessage {
-            block: value.block.ok_or_else(|| anyhow!("Block is missing"))?.try_into()?,
-            justify_qc: value
+            block: proposal.block.ok_or_else(|| anyhow!("Block is missing"))?.try_into()?,
+            justify_qc: proposal
                 .justify_qc
                 .ok_or_else(|| anyhow!("Justify QC is missing"))?
                 .try_into()?,
-            block_pledge: value
+            block_pledge: proposal
                 .block_pledge
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?,
         })
+    }
+}
+
+impl From<&ForeignProposalMessage> for proto::consensus::ForeignProposal {
+    fn from(value: &ForeignProposalMessage) -> Self {
+        Self {
+            block: Some(proto::consensus::Block::from(&value.block)),
+            justify_qc: Some(proto::consensus::QuorumCertificate::from(&value.justify_qc)),
+            block_pledge: value.block_pledge.iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<&ForeignProposal> for proto::consensus::ForeignProposal {
+    fn from(value: &ForeignProposal) -> Self {
+        Self {
+            block: Some(proto::consensus::Block::from(&value.block)),
+            justify_qc: Some(proto::consensus::QuorumCertificate::from(&value.justify_qc)),
+            block_pledge: value.block_pledge.iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::ForeignProposal) -> Result<Self, Self::Error> {
+        Ok(Self::new(
+            value.block.ok_or_else(|| anyhow!("Block is missing"))?.try_into()?,
+            value
+                .block_pledge
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
+            value
+                .justify_qc
+                .ok_or_else(|| anyhow!("Justify QC is missing"))?
+                .try_into()?,
+        ))
     }
 }
 
@@ -572,68 +616,26 @@ impl TryFrom<proto::consensus::LeaderFee> for LeaderFee {
     }
 }
 
-// ForeignProposalState
-// -------------------------------- Decision -------------------------------- //
+// -------------------------------- ForeignProposalAtom -------------------------------- //
 
-impl From<ForeignProposalState> for proto::consensus::ForeignProposalState {
-    fn from(value: ForeignProposalState) -> Self {
-        match value {
-            ForeignProposalState::New => proto::consensus::ForeignProposalState::New,
-            ForeignProposalState::Proposed => proto::consensus::ForeignProposalState::Mined,
-            ForeignProposalState::Deleted => proto::consensus::ForeignProposalState::Deleted,
-        }
-    }
-}
-
-impl TryFrom<proto::consensus::ForeignProposalState> for ForeignProposalState {
-    type Error = anyhow::Error;
-
-    fn try_from(value: proto::consensus::ForeignProposalState) -> Result<Self, Self::Error> {
-        match value {
-            proto::consensus::ForeignProposalState::New => Ok(ForeignProposalState::New),
-            proto::consensus::ForeignProposalState::Mined => Ok(ForeignProposalState::Proposed),
-            proto::consensus::ForeignProposalState::Deleted => Ok(ForeignProposalState::Deleted),
-            proto::consensus::ForeignProposalState::UnknownState => Err(anyhow!("Foreign proposal state not provided")),
-        }
-    }
-}
-
-// ForeignProposal
-
-impl From<&ForeignProposal> for proto::consensus::ForeignProposal {
-    fn from(value: &ForeignProposal) -> Self {
+impl From<&ForeignProposalAtom> for proto::consensus::ForeignProposalAtom {
+    fn from(value: &ForeignProposalAtom) -> Self {
         Self {
-            shard_group: value.shard_group.encode_as_u32(),
             block_id: value.block_id.as_bytes().to_vec(),
-            state: proto::consensus::ForeignProposalState::from(value.state).into(),
-            mined_at: value.proposed_height.map(|a| a.0).unwrap_or(0),
-            transactions: value.transactions.iter().map(|tx| tx.as_bytes().to_vec()).collect(),
+            shard_group: value.shard_group.encode_as_u32(),
             base_layer_block_height: value.base_layer_block_height,
         }
     }
 }
 
-impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
+impl TryFrom<proto::consensus::ForeignProposalAtom> for ForeignProposalAtom {
     type Error = anyhow::Error;
 
-    fn try_from(value: proto::consensus::ForeignProposal) -> Result<Self, Self::Error> {
-        Ok(ForeignProposal {
+    fn try_from(value: proto::consensus::ForeignProposalAtom) -> Result<Self, Self::Error> {
+        Ok(ForeignProposalAtom {
+            block_id: BlockId::try_from(value.block_id)?,
             shard_group: ShardGroup::decode_from_u32(value.shard_group)
                 .ok_or_else(|| anyhow!("Block shard_group ({}) is not a valid", value.shard_group))?,
-            block_id: BlockId::try_from(value.block_id)?,
-            state: proto::consensus::ForeignProposalState::try_from(value.state)
-                .map_err(|_| anyhow!("Invalid foreign proposal state value {}", value.state))?
-                .try_into()?,
-            proposed_height: if value.mined_at == 0 {
-                None
-            } else {
-                Some(NodeHeight(value.mined_at))
-            },
-            transactions: value
-                .transactions
-                .into_iter()
-                .map(|tx| tx.try_into())
-                .collect::<Result<_, _>>()?,
             base_layer_block_height: value.base_layer_block_height,
         })
     }

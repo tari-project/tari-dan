@@ -25,6 +25,7 @@ use diesel::{
     SqliteConnection,
     TextExpressionMethods,
 };
+use indexmap::IndexMap;
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
@@ -38,7 +39,7 @@ use tari_dan_storage::{
         Command,
         EpochCheckpoint,
         ForeignProposal,
-        ForeignProposalState,
+        ForeignProposalAtom,
         ForeignReceiveCounters,
         ForeignSendCounters,
         HighQc,
@@ -77,7 +78,7 @@ use tari_utilities::ByteArray;
 
 use crate::{
     error::SqliteStorageError,
-    serialization::{deserialize_hex_try_from, deserialize_json, parse_from_string, serialize_hex, serialize_json},
+    serialization::{deserialize_hex_try_from, deserialize_json, parse_from_string, serialize_hex},
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };
@@ -116,15 +117,15 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
         from_block_id: &BlockId,
         to_block_id: &BlockId,
         transaction_ids: ITx,
-    ) -> Result<HashMap<String, sql_models::TransactionPoolStateUpdate>, SqliteStorageError>
+    ) -> Result<IndexMap<String, sql_models::TransactionPoolStateUpdate>, SqliteStorageError>
     where
         ITx: Iterator<Item = &'i str> + ExactSizeIterator,
     {
         if transaction_ids.len() == 0 {
-            return Ok(HashMap::new());
+            return Ok(IndexMap::new());
         }
 
-        let applicable_block_ids = self.get_block_ids_that_change_state_between(from_block_id, to_block_id)?;
+        let applicable_block_ids = self.get_block_ids_with_commands_between(from_block_id, to_block_id)?;
 
         debug!(
             target: LOG_TARGET,
@@ -134,7 +135,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
             applicable_block_ids.len());
 
         if applicable_block_ids.is_empty() {
-            return Ok(HashMap::new());
+            return Ok(IndexMap::new());
         }
 
         self.create_transaction_atom_updates_query(transaction_ids, applicable_block_ids.iter().map(|s| s.as_str()))
@@ -253,7 +254,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
             .collect()
     }
 
-    pub(crate) fn get_block_ids_that_change_state_between(
+    pub(crate) fn get_block_ids_with_commands_between(
         &self,
         start_block: &BlockId,
         end_block: &BlockId,
@@ -465,47 +466,102 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         high_qc.try_into()
     }
 
-    fn foreign_proposal_exists(&self, foreign_proposal: &ForeignProposal) -> Result<bool, StorageError> {
+    fn foreign_proposals_get_any<'a, I: IntoIterator<Item = &'a BlockId>>(
+        &self,
+        block_ids: I,
+    ) -> Result<Vec<ForeignProposal>, StorageError> {
+        use crate::schema::{foreign_proposals, quorum_certificates};
+
+        let foreign_proposals = foreign_proposals::table
+            .left_join(quorum_certificates::table.on(foreign_proposals::justify_qc_id.eq(quorum_certificates::qc_id)))
+            .filter(foreign_proposals::block_id.eq_any(block_ids.into_iter().map(serialize_hex)))
+            .get_results::<(sql_models::ForeignProposal, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposals_get_any",
+                source: e,
+            })?;
+
+        foreign_proposals
+            .into_iter()
+            .map(|(proposal, qc)| {
+                let justify_qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+                    operation: "foreign_proposals_get_any",
+                    details: format!(
+                        "foreign proposal {} references non-existent quorum certificate {}",
+                        proposal.block_id, proposal.justify_qc_id
+                    ),
+                })?;
+                proposal.try_convert(justify_qc)
+            })
+            .collect()
+    }
+
+    fn foreign_proposals_exists(&self, block_id: &BlockId) -> Result<bool, StorageError> {
         use crate::schema::foreign_proposals;
 
         let foreign_proposals = foreign_proposals::table
-            .filter(foreign_proposals::shard_group.eq(foreign_proposal.shard_group.encode_as_u32() as i32))
-            .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
-            .filter(foreign_proposals::transactions.eq(serialize_json(&foreign_proposal.transactions)?))
-            .filter(foreign_proposals::base_layer_block_height.eq(foreign_proposal.base_layer_block_height as i64))
+            .filter(foreign_proposals::block_id.eq(serialize_hex(block_id)))
             .count()
             .limit(1)
             .get_result::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "foreign_proposal_exists",
+                operation: "foreign_proposals_exists",
                 source: e,
             })?;
 
         Ok(foreign_proposals > 0)
     }
 
-    fn foreign_proposal_get_all_new(&self) -> Result<Vec<ForeignProposal>, StorageError> {
-        use crate::schema::foreign_proposals;
+    fn foreign_proposals_get_all_new(
+        &self,
+        max_base_layer_block_height: u64,
+        block_id: &BlockId,
+        limit: usize,
+    ) -> Result<Vec<ForeignProposal>, StorageError> {
+        use crate::schema::{foreign_proposals, quorum_certificates};
+
+        let locked = self.locked_block_get()?;
+        let pending_block_ids = self.get_block_ids_with_commands_between(&locked.block_id, block_id)?;
 
         let foreign_proposals = foreign_proposals::table
-            .filter(foreign_proposals::state.eq(ForeignProposalState::New.to_string()))
-            .load::<sql_models::ForeignProposal>(self.connection())
+            .left_join(quorum_certificates::table.on(foreign_proposals::justify_qc_id.eq(quorum_certificates::qc_id)))
+            // Only propose the Foreign proposal if we have reached the base layer block height specified in the block
+            .filter(foreign_proposals::base_layer_block_height.le(max_base_layer_block_height as i64))
+            .filter(
+                foreign_proposals::proposed_in_block.is_null()
+                    .or(foreign_proposals::proposed_in_block.ne_all(pending_block_ids)
+                        .and(foreign_proposals::proposed_in_block_height.gt(locked.height.as_u64() as i64))),
+            )
+            .limit(i64::try_from(limit).unwrap_or(i64::MAX))
+            .get_results::<(sql_models::ForeignProposal, Option<sql_models::QuorumCertificate>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "foreign_proposal_get_all",
+                operation: "foreign_proposals_get_all_new",
                 source: e,
             })?;
 
-        foreign_proposals.into_iter().map(|p| p.try_into()).collect()
+        foreign_proposals
+            .into_iter()
+            .map(|(proposal, qc)| {
+                let justify_qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+                    operation: "foreign_proposals_get_all_new",
+                    details: format!(
+                        "foreign proposal {} references non-existent quorum certificate {}",
+                        proposal.block_id, proposal.justify_qc_id
+                    ),
+                })?;
+                proposal.try_convert(justify_qc)
+            })
+            .collect()
     }
 
     fn foreign_proposal_get_all_pending(
         &self,
         from_block_id: &BlockId,
         to_block_id: &BlockId,
-    ) -> Result<Vec<ForeignProposal>, StorageError> {
+    ) -> Result<Vec<ForeignProposalAtom>, StorageError> {
         use crate::schema::blocks;
 
-        let blocks = self.get_block_ids_that_change_state_between(from_block_id, to_block_id)?;
+        let blocks = self.get_block_ids_with_commands_between(from_block_id, to_block_id)?;
 
         let all_commands: Vec<String> = blocks::table
             .select(blocks::commands)
@@ -524,22 +580,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         Ok(all_commands
             .into_iter()
             .filter_map(|command| command.foreign_proposal().cloned())
-            .collect::<Vec<ForeignProposal>>())
-    }
-
-    fn foreign_proposal_get_all_proposed(&self, to_height: NodeHeight) -> Result<Vec<ForeignProposal>, StorageError> {
-        use crate::schema::foreign_proposals;
-
-        let foreign_proposals = foreign_proposals::table
-            .filter(foreign_proposals::state.eq(ForeignProposalState::Proposed.to_string()))
-            .filter(foreign_proposals::proposed_height.le(to_height.0 as i64))
-            .load::<sql_models::ForeignProposal>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "foreign_proposal_get_all",
-                source: e,
-            })?;
-
-        foreign_proposals.into_iter().map(|p| p.try_into()).collect()
+            .collect::<Vec<ForeignProposalAtom>>())
     }
 
     fn foreign_send_counters_get(&self, block_id: &BlockId) -> Result<ForeignSendCounters, StorageError> {
@@ -781,13 +822,13 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         &self,
         epoch: Epoch,
         shard_group: ShardGroup,
-        start_block_id_exclusive: &BlockId,
-        end_block_id_inclusive: &BlockId,
+        start_block_id: &BlockId,
+        end_block_id: &BlockId,
         include_dummy_blocks: bool,
     ) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
-        let block_ids = self.get_block_ids_between(start_block_id_exclusive, end_block_id_inclusive)?;
+        let block_ids = self.get_block_ids_between(start_block_id, end_block_id)?;
         if block_ids.is_empty() {
             return Ok(vec![]);
         }
@@ -1246,7 +1287,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
     ) -> Result<SubstateChange, StorageError> {
         use crate::schema::block_diffs;
         let commit_block = self.get_commit_block_id()?;
-        let block_ids = self.get_block_ids_that_change_state_between(&commit_block, block_id)?;
+        let block_ids = self.get_block_ids_with_commands_between(&commit_block, block_id)?;
 
         let diff = block_diffs::table
             .filter(block_diffs::block_id.eq_any(block_ids))
@@ -1259,24 +1300,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             })?;
 
         sql_models::BlockDiff::try_convert_change(diff)
-    }
-
-    fn parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError> {
-        use crate::schema::parked_blocks;
-
-        let block_id = serialize_hex(block_id);
-
-        let count = parked_blocks::table
-            .filter(parked_blocks::block_id.eq(&block_id))
-            .count()
-            .limit(1)
-            .get_result::<i64>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "blocks_exists_or_parked",
-                source: e,
-            })?;
-
-        Ok(count > 0)
     }
 
     fn quorum_certificates_get(&self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError> {
@@ -1375,7 +1398,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                 source: e,
             })?;
 
-        rec.try_convert(updates.remove(&transaction_id))
+        rec.try_convert(updates.swap_remove(&transaction_id))
     }
 
     fn transaction_pool_exists(&self, transaction_id: &TransactionId) -> Result<bool, StorageError> {
@@ -1443,7 +1466,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         ready_txs
             .into_iter()
             .map(|rec| {
-                let maybe_update = updates.remove(&rec.transaction_id);
+                let maybe_update = updates.swap_remove(&rec.transaction_id);
                 rec.try_convert(maybe_update)
             })
             // Filter only Ok where is_ready == true (after update) or Err
@@ -1976,7 +1999,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         // Get the last committed block
         let committed_block_id = self.get_commit_block_id()?;
 
-        let block_ids = self.get_block_ids_that_change_state_between(&committed_block_id, block_id)?;
+        let block_ids = self.get_block_ids_with_commands_between(&committed_block_id, block_id)?;
 
         if block_ids.is_empty() {
             return Ok(HashMap::new());

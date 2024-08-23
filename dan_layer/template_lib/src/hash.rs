@@ -42,7 +42,7 @@ impl Hash {
         Self(bytes)
     }
 
-    pub fn into_array(self) -> [u8; Self::LENGTH] {
+    pub const fn into_array(self) -> [u8; Self::LENGTH] {
         self.0
     }
 

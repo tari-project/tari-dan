@@ -1,4 +1,4 @@
-import type { ForeignProposal } from "./ForeignProposal";
+import type { ForeignProposalAtom } from "./ForeignProposalAtom";
 import type { TransactionAtom } from "./TransactionAtom";
 export type Command = {
     LocalOnly: TransactionAtom;
@@ -17,5 +17,5 @@ export type Command = {
 } | {
     SomeAccept: TransactionAtom;
 } | {
-    ForeignProposal: ForeignProposal;
+    ForeignProposal: ForeignProposalAtom;
 } | "EndEpoch";

@@ -124,14 +124,29 @@ impl Evidence {
     /// Add or update substate addresses and locks into Evidence
     pub fn update<I: IntoIterator<Item = (SubstateAddress, SubstateLockType)>>(&mut self, extend: I) -> &mut Self {
         for (substate_address, lock_type) in extend {
-            self.evidence
-                .entry(substate_address)
-                .and_modify(|evidence| evidence.lock = lock_type)
-                .or_insert_with(|| ShardEvidence {
-                    qc_ids: IndexSet::new(),
-                    lock: lock_type,
+            let maybe_pos = self
+                .evidence
+                .iter()
+                // If the update contains an object (as in ObjectKey) that is already in the evidence, update it without duplicating the object key (inputs and outputs may have the same object key)
+                .position(|(address, e)| {
+                    (lock_type.is_output() == e.lock.is_output()) &&
+                        address.object_key_bytes() == substate_address.object_key_bytes()
                 });
+            match maybe_pos {
+                Some(pos) => {
+                    let (_, mut evidence) = self.evidence.swap_remove_index(pos).expect("position is valid");
+                    evidence.lock = lock_type;
+                    self.evidence.insert(substate_address, evidence);
+                },
+                None => {
+                    self.evidence.insert(substate_address, ShardEvidence {
+                        qc_ids: IndexSet::new(),
+                        lock: lock_type,
+                    });
+                },
+            }
         }
+        self.evidence.sort_keys();
         self
     }
 
@@ -139,18 +154,29 @@ impl Evidence {
     /// updated to the lock type and the QCs are appended to this instance.
     pub fn merge(&mut self, other: Evidence) -> &mut Self {
         for (substate_address, shard_evidence) in other.evidence {
-            let entry = self
+            let maybe_pos = self
                 .evidence
-                .entry(substate_address)
-                .and_modify(|evidence| {
-                    evidence.lock = shard_evidence.lock;
-                })
-                .or_insert_with(|| ShardEvidence {
-                    qc_ids: IndexSet::new(),
-                    lock: shard_evidence.lock,
+                .iter()
+                // If the update contains an object (as in ObjectKey) that is already in the evidence, update it without duplicating the object key (inputs and outputs may have the same object key with a different substate address version)
+                // WHY: because we may not know the exact version yet when we include foreign input evidence. We have to include input evidence to allow foreign shard to sequence the transaction.
+                // TODO: maybe we can improve this so that evidence never contains invalid versioning i.e. evidence == what we've pledged at all times
+                .position(|(address, e)| {
+                    (shard_evidence.lock.is_output() == e.lock.is_output()) &&
+                        address.object_key_bytes() == substate_address.object_key_bytes()
                 });
-            entry.qc_ids.extend(shard_evidence.qc_ids);
+            match maybe_pos {
+                Some(pos) => {
+                    let (_, mut evidence) = self.evidence.swap_remove_index(pos).expect("position is valid");
+                    evidence.lock = shard_evidence.lock;
+                    evidence.qc_ids.extend(shard_evidence.qc_ids);
+                    self.evidence.insert(substate_address, evidence);
+                },
+                None => {
+                    self.evidence.insert(substate_address, shard_evidence);
+                },
+            }
         }
+        self.evidence.sort_keys();
         self
     }
 }
@@ -189,10 +215,6 @@ pub struct ShardEvidence {
 }
 
 impl ShardEvidence {
-    pub fn new(qc_ids: IndexSet<QcId>, lock: SubstateLockType) -> Self {
-        Self { qc_ids, lock }
-    }
-
     pub fn is_empty(&self) -> bool {
         self.qc_ids.is_empty()
     }

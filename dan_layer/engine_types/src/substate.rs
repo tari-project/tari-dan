@@ -33,6 +33,7 @@ use tari_template_lib::{
         ComponentAddress,
         NonFungibleAddress,
         NonFungibleIndexAddress,
+        ObjectKey,
         ResourceAddress,
         UnclaimedConfidentialOutputAddress,
         VaultId,
@@ -47,7 +48,7 @@ use crate::{
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
     fee_claim::{FeeClaim, FeeClaimAddress},
-    hashing::substate_value_hasher32,
+    hashing::{hasher32, substate_value_hasher32, EngineHashDomainLabel},
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
     resource::Resource,
@@ -168,6 +169,36 @@ impl SubstateId {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, BorError> {
         decode_exact(bytes)
+    }
+
+    pub fn to_object_key(&self) -> ObjectKey {
+        match self {
+            SubstateId::Component(addr) => *addr.as_object_key(),
+            SubstateId::Resource(addr) => *addr.as_object_key(),
+            SubstateId::Vault(addr) => *addr.as_object_key(),
+            SubstateId::NonFungible(addr) => {
+                let key = hasher32(EngineHashDomainLabel::NonFungibleId)
+                    .chain(addr.resource_address())
+                    .chain(addr.id())
+                    .result()
+                    .trailing_bytes()
+                    .into();
+
+                ObjectKey::new(addr.resource_address().as_entity_id(), key)
+            },
+            SubstateId::NonFungibleIndex(addr) => {
+                let key = hasher32(EngineHashDomainLabel::NonFungibleIndex)
+                    .chain(addr.resource_address())
+                    .chain(&addr.index())
+                    .result()
+                    .trailing_bytes()
+                    .into();
+                ObjectKey::new(addr.resource_address().as_entity_id(), key)
+            },
+            SubstateId::UnclaimedConfidentialOutput(addr) => *addr.as_object_key(),
+            SubstateId::TransactionReceipt(addr) => *addr.as_object_key(),
+            SubstateId::FeeClaim(addr) => *addr.as_object_key(),
+        }
     }
 
     // TODO: look at using BECH32 standard

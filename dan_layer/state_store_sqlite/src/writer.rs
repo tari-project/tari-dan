@@ -89,10 +89,10 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
         self.transaction.as_mut().unwrap().connection()
     }
 
-    fn parked_blocks_remove(&mut self, block_id: &str) -> Result<Block, StorageError> {
+    fn parked_blocks_remove(&mut self, block_id: &str) -> Result<(Block, Vec<ForeignProposal>), StorageError> {
         use crate::schema::parked_blocks;
 
-        let block = parked_blocks::table
+        let parked_block = parked_blocks::table
             .filter(parked_blocks::block_id.eq(&block_id))
             .first::<sql_models::ParkedBlock>(self.connection())
             .optional()
@@ -113,10 +113,14 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
                 source: e,
             })?;
 
-        block.try_into()
+        parked_block.try_into()
     }
 
-    fn parked_blocks_insert(&mut self, block: &Block) -> Result<(), StorageError> {
+    fn parked_blocks_insert(
+        &mut self,
+        block: &Block,
+        foreign_proposals: &[ForeignProposal],
+    ) -> Result<(), StorageError> {
         use crate::schema::{blocks, parked_blocks};
 
         // check if block exists in blocks table using count query
@@ -167,11 +171,11 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
             parked_blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             parked_blocks::justify.eq(serialize_json(block.justify())?),
             parked_blocks::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
-            parked_blocks::block_time.eq(block.block_time().map(|v| v as i64)),
             parked_blocks::signature.eq(block.signature().map(serialize_json).transpose()?),
             parked_blocks::timestamp.eq(block.timestamp() as i64),
             parked_blocks::base_layer_block_height.eq(block.base_layer_block_height() as i64),
             parked_blocks::base_layer_block_hash.eq(serialize_hex(block.base_layer_block_hash())),
+            parked_blocks::foreign_proposals.eq(serialize_json(foreign_proposals)?),
         );
 
         diesel::insert_into(parked_blocks::table)
@@ -526,40 +530,85 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn foreign_proposal_upsert(&mut self, foreign_proposal: &ForeignProposal) -> Result<(), StorageError> {
+    fn foreign_proposals_upsert(
+        &mut self,
+        foreign_proposal: &ForeignProposal,
+        proposed_in_block: Option<BlockId>,
+    ) -> Result<(), StorageError> {
         use crate::schema::foreign_proposals;
+        let block = foreign_proposal.block();
 
         let values = (
-            foreign_proposals::shard_group.eq(foreign_proposal.shard_group.encode_as_u32() as i32),
-            foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)),
-            foreign_proposals::state.eq(foreign_proposal.state.to_string()),
-            foreign_proposals::proposed_height.eq(foreign_proposal.proposed_height.map(|h| h.as_u64() as i64)),
-            foreign_proposals::transactions.eq(serialize_json(&foreign_proposal.transactions)?),
-            foreign_proposals::base_layer_block_height.eq(foreign_proposal.base_layer_block_height as i64),
+            foreign_proposals::block_id.eq(serialize_hex(block.id())),
+            foreign_proposals::parent_block_id.eq(serialize_hex(block.parent())),
+            foreign_proposals::merkle_root.eq(block.merkle_root().to_string()),
+            foreign_proposals::network.eq(block.network().to_string()),
+            foreign_proposals::height.eq(block.height().as_u64() as i64),
+            foreign_proposals::epoch.eq(block.epoch().as_u64() as i64),
+            foreign_proposals::shard_group.eq(block.shard_group().encode_as_u32() as i32),
+            foreign_proposals::proposed_by.eq(serialize_hex(block.proposed_by().as_bytes())),
+            foreign_proposals::command_count.eq(block.commands().len() as i64),
+            foreign_proposals::commands.eq(serialize_json(block.commands())?),
+            foreign_proposals::total_leader_fee.eq(block.total_leader_fee() as i64),
+            foreign_proposals::qc.eq(serialize_json(block.justify())?),
+            foreign_proposals::foreign_indexes.eq(serialize_json(block.foreign_indexes())?),
+            foreign_proposals::timestamp.eq(block.timestamp() as i64),
+            foreign_proposals::base_layer_block_height.eq(block.base_layer_block_height() as i64),
+            foreign_proposals::base_layer_block_hash.eq(serialize_hex(block.base_layer_block_hash())),
+            // Extra
+            foreign_proposals::justify_qc_id.eq(serialize_hex(foreign_proposal.justify_qc().id())),
+            foreign_proposals::block_pledge.eq(serialize_json(foreign_proposal.block_pledge())?),
         );
 
         diesel::insert_into(foreign_proposals::table)
-            .values(values.clone())
-            .on_conflict((foreign_proposals::shard_group, foreign_proposals::block_id))
-            .do_update()
-            .set(values)
+            .values(&values)
+            .on_conflict_do_nothing()
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "foreign_proposal_set",
+                operation: "foreign_proposals_upsert",
                 source: e,
             })?;
+
+        if let Some(proposed_in_block) = proposed_in_block {
+            self.foreign_proposals_set_proposed_in(block.id(), &proposed_in_block)?;
+        }
+
         Ok(())
     }
 
-    fn foreign_proposal_delete(&mut self, foreign_proposal: &ForeignProposal) -> Result<(), StorageError> {
+    fn foreign_proposals_delete(&mut self, block_id: &BlockId) -> Result<(), StorageError> {
         use crate::schema::foreign_proposals;
 
         diesel::delete(foreign_proposals::table)
-            .filter(foreign_proposals::shard_group.eq(foreign_proposal.shard_group.encode_as_u32() as i32))
-            .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
+            .filter(foreign_proposals::block_id.eq(serialize_hex(block_id)))
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "foreign_proposal_delete",
+                operation: "foreign_proposals_delete",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn foreign_proposals_set_proposed_in(
+        &mut self,
+        block_id: &BlockId,
+        proposed_in_block: &BlockId,
+    ) -> Result<(), StorageError> {
+        use crate::schema::{blocks, foreign_proposals};
+
+        diesel::update(foreign_proposals::table)
+            .filter(foreign_proposals::block_id.eq(serialize_hex(block_id)))
+            .set((
+                foreign_proposals::proposed_in_block.eq(serialize_hex(proposed_in_block)),
+                foreign_proposals::proposed_in_block_height.eq(blocks::table
+                    .select(blocks::height)
+                    .filter(blocks::block_id.eq(serialize_hex(proposed_in_block)))
+                    .single_value()),
+            ))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposals_set_proposed_in",
                 source: e,
             })?;
 
@@ -855,6 +904,18 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
 
         let transaction_id = serialize_hex(update.transaction_id());
         let block_id = serialize_hex(update.block_id());
+
+        // Check if update exists for block and transaction
+        let count = transaction_pool_state_updates::table
+            .count()
+            .filter(transaction_pool_state_updates::block_id.eq(&block_id))
+            .filter(transaction_pool_state_updates::transaction_id.eq(&transaction_id))
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_add_pending_update",
+                source: e,
+            })?;
+
         let values = (
             transaction_pool_state_updates::block_id.eq(&block_id),
             transaction_pool_state_updates::block_height.eq(blocks::table
@@ -868,17 +929,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             transaction_pool_state_updates::local_decision.eq(update.local_decision().to_string()),
             transaction_pool_state_updates::is_ready.eq(update.is_ready()),
         );
-
-        // Check if update exists for block and transaction
-        let count = transaction_pool_state_updates::table
-            .count()
-            .filter(transaction_pool_state_updates::block_id.eq(&block_id))
-            .filter(transaction_pool_state_updates::transaction_id.eq(&transaction_id))
-            .first::<i64>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transaction_pool_add_pending_update",
-                source: e,
-            })?;
 
         if count == 0 {
             diesel::insert_into(transaction_pool_state_updates::table)
@@ -1125,23 +1175,18 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn missing_transactions_insert<
-        'a,
-        IMissing: IntoIterator<Item = &'a TransactionId>,
-        IAwaiting: IntoIterator<Item = &'a TransactionId>,
-    >(
+    fn missing_transactions_insert<'a, IMissing: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         block: &Block,
+        foreign_proposals: &[ForeignProposal],
         missing_transaction_ids: IMissing,
-        awaiting_transaction_ids: IAwaiting,
     ) -> Result<(), StorageError> {
         use crate::schema::missing_transactions;
 
         let missing_transaction_ids = missing_transaction_ids.into_iter().map(serialize_hex);
-        let awaiting_transaction_ids = awaiting_transaction_ids.into_iter().map(serialize_hex);
         let block_id_hex = serialize_hex(block.id());
 
-        self.parked_blocks_insert(block)?;
+        self.parked_blocks_insert(block, foreign_proposals)?;
 
         let values = missing_transaction_ids
             .map(|tx_id| {
@@ -1152,14 +1197,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                     missing_transactions::is_awaiting_execution.eq(false),
                 )
             })
-            .chain(awaiting_transaction_ids.map(|tx_id| {
-                (
-                    missing_transactions::block_id.eq(&block_id_hex),
-                    missing_transactions::block_height.eq(block.height().as_u64() as i64),
-                    missing_transactions::transaction_id.eq(tx_id),
-                    missing_transactions::is_awaiting_execution.eq(true),
-                )
-            }))
             .collect::<Vec<_>>();
 
         diesel::insert_into(missing_transactions::table)
@@ -1177,7 +1214,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         &mut self,
         current_height: NodeHeight,
         transaction_id: &TransactionId,
-    ) -> Result<Option<Block>, StorageError> {
+    ) -> Result<Option<(Block, Vec<ForeignProposal>)>, StorageError> {
         use crate::schema::missing_transactions;
 
         let transaction_id = serialize_hex(transaction_id);

@@ -9,7 +9,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tari_transaction::TransactionId;
 
-use super::{BlockId, ExecutedTransaction, ForeignProposal, LeaderFee, TransactionRecord};
+use super::{BlockId, ExecutedTransaction, ForeignProposalAtom, LeaderFee, TransactionRecord};
 use crate::{
     consensus_models::{evidence::Evidence, Decision},
     StateStoreReadTransaction,
@@ -98,7 +98,7 @@ pub enum Command {
     /// Request validators to agree that one or more involved shard groups did not agreed to ACCEPT the transaction.
     SomeAccept(TransactionAtom),
     // Validator node commands
-    ForeignProposal(ForeignProposal),
+    ForeignProposal(ForeignProposalAtom),
     EndEpoch,
 }
 
@@ -185,7 +185,7 @@ impl Command {
         }
     }
 
-    pub fn foreign_proposal(&self) -> Option<&ForeignProposal> {
+    pub fn foreign_proposal(&self) -> Option<&ForeignProposalAtom> {
         match self {
             Command::ForeignProposal(tx) => Some(tx),
             _ => None,

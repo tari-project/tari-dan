@@ -15,13 +15,8 @@ use tari_crypto::tari_utilities::{
     hex::{from_hex, Hex},
     ByteArray,
 };
-use tari_engine_types::{
-    hashing::{hasher32, EngineHashDomainLabel},
-    serde_with,
-    substate::SubstateId,
-    transaction_receipt::TransactionReceiptAddress,
-};
-use tari_template_lib::{models::ObjectKey, Hash};
+use tari_engine_types::{serde_with, substate::SubstateId, transaction_receipt::TransactionReceiptAddress};
+use tari_template_lib::models::ObjectKey;
 
 use crate::{shard::Shard, uint::U256, NumPreshards, ShardGroup};
 
@@ -40,61 +35,21 @@ pub struct SubstateAddress(
 impl SubstateAddress {
     pub const LENGTH: usize = ObjectKey::LENGTH + size_of::<u32>();
 
-    /// Defines the mapping of SubstateId to SubstateAddress
+    /// Defines the mapping of SubstateId,version to SubstateAddress
     pub fn from_substate_id(id: &SubstateId, version: u32) -> Self {
-        match id {
-            SubstateId::Component(id) => Self::from_object_key(id.as_object_key(), version),
-            SubstateId::Resource(id) => Self::from_object_key(id.as_object_key(), version),
-            SubstateId::Vault(id) => Self::from_object_key(id.as_object_key(), version),
-            SubstateId::NonFungible(id) => {
-                let key = hasher32(EngineHashDomainLabel::NonFungibleId)
-                    .chain(id.resource_address())
-                    .chain(id.id())
-                    .result()
-                    .trailing_bytes()
-                    .into();
-
-                Self::from_object_key(&ObjectKey::new(id.resource_address().as_entity_id(), key), version)
-            },
-            SubstateId::NonFungibleIndex(id) => {
-                let key = hasher32(EngineHashDomainLabel::NonFungibleIndex)
-                    .chain(id.resource_address().as_object_key())
-                    .chain(&id.index())
-                    .result()
-                    .trailing_bytes()
-                    .into();
-                Self::from_object_key(&ObjectKey::new(id.resource_address().as_entity_id(), key), version)
-            },
-
-            // These should only have a version of 0, however the address should account for the version argument passed
-            // in. For example, if querying one of these substates with a version > 0 then the substate will not exist.
-            SubstateId::UnclaimedConfidentialOutput(id) => Self::from_hash(id.hash(), version),
-            SubstateId::TransactionReceipt(id) => Self::from_hash(id.hash(), version),
-            SubstateId::FeeClaim(id) => Self::from_hash(id.hash(), version),
-        }
+        Self::from_object_key(&id.to_object_key(), version)
     }
 
     pub fn for_transaction_receipt(tx_receipt: TransactionReceiptAddress) -> Self {
         Self::from_substate_id(&tx_receipt.into(), 0)
     }
 
-    fn from_object_key(object_key: &ObjectKey, version: u32) -> Self {
+    pub fn from_object_key(object_key: &ObjectKey, version: u32) -> Self {
         // concatenate (entity_id, component_key), and version
         let mut buf = [0u8; SubstateAddress::LENGTH];
         buf[..ObjectKey::LENGTH].copy_from_slice(object_key);
-        buf[ObjectKey::LENGTH..].copy_from_slice(&version.to_le_bytes());
+        buf[ObjectKey::LENGTH..].copy_from_slice(&version.to_be_bytes());
 
-        Self(buf)
-    }
-
-    fn from_hash(hash: &Hash, version: u32) -> Self {
-        // let new_addr = hasher32(EngineHashDomainLabel::SubstateAddress)
-        //     .chain(hash)
-        //     .chain(&version)
-        //     .result();
-        let mut buf = [0u8; SubstateAddress::LENGTH];
-        buf[..ObjectKey::LENGTH].copy_from_slice(hash);
-        buf[ObjectKey::LENGTH..].copy_from_slice(&version.to_le_bytes());
         Self(buf)
     }
 
@@ -106,11 +61,11 @@ impl SubstateAddress {
         if bytes.len() != SubstateAddress::LENGTH {
             return Err(FixedHashSizeError);
         }
-        let hash = Hash::try_from(&bytes[..ObjectKey::LENGTH]).map_err(|_| FixedHashSizeError)?;
+        let key = ObjectKey::try_from(&bytes[..ObjectKey::LENGTH]).map_err(|_| FixedHashSizeError)?;
         let mut v_buf = [0u8; size_of::<u32>()];
         v_buf.copy_from_slice(&bytes[ObjectKey::LENGTH..]);
-        let version = u32::from_le_bytes(v_buf);
-        Ok(Self::from_hash(&hash, version))
+        let version = u32::from_be_bytes(v_buf);
+        Ok(Self::from_object_key(&key, version))
     }
 
     pub fn is_zero(&self) -> bool {
@@ -139,7 +94,7 @@ impl SubstateAddress {
         const _: () = [()][1 - (FixedHash::byte_size() == ObjectKey::LENGTH) as usize];
         let mut buf = [0u8; SubstateAddress::LENGTH];
         buf[..ObjectKey::LENGTH].copy_from_slice(hash.as_bytes());
-        buf[ObjectKey::LENGTH..].copy_from_slice(&version.to_le_bytes());
+        buf[ObjectKey::LENGTH..].copy_from_slice(&version.to_be_bytes());
         Self(buf)
     }
 
@@ -150,8 +105,18 @@ impl SubstateAddress {
     pub fn from_u256(address: U256, version: u32) -> Self {
         let mut buf = [0u8; SubstateAddress::LENGTH];
         buf[..ObjectKey::LENGTH].copy_from_slice(&address.to_be_bytes());
-        buf[ObjectKey::LENGTH..].copy_from_slice(&version.to_le_bytes());
+        buf[ObjectKey::LENGTH..].copy_from_slice(&version.to_be_bytes());
         Self(buf)
+    }
+
+    pub fn object_key_bytes(&self) -> &[u8] {
+        &self.0[..ObjectKey::LENGTH]
+    }
+
+    pub fn to_version(&self) -> u32 {
+        let mut buf = [0u8; size_of::<u32>()];
+        buf.copy_from_slice(&self.0[ObjectKey::LENGTH..]);
+        u32::from_be_bytes(buf)
     }
 
     pub fn to_u256(&self) -> U256 {

@@ -216,7 +216,6 @@ impl CommitteeInfo {
         self.shard_group.to_substate_address_range(self.num_shards)
     }
 
-    // TODO: change these to take in a SubstateId
     pub fn includes_substate_address(&self, substate_address: &SubstateAddress) -> bool {
         let s = substate_address.to_shard(self.num_shards);
         self.shard_group.contains(&s)

@@ -26,9 +26,7 @@ impl TryFrom<ForeignParkedBlock> for consensus_models::ForeignParkedProposal {
         let justify_qc = deserialize_json(&value.justify_qc)?;
 
         Ok(consensus_models::ForeignParkedProposal::new(
-            block,
-            justify_qc,
-            block_pledge,
+            consensus_models::ForeignProposal::new(block, block_pledge, justify_qc),
         ))
     }
 }

@@ -670,9 +670,19 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     .await,
             ),
             HotstuffMessage::Proposal(msg) => {
+                // First process attached foreign proposals
+                for foreign_proposal in msg.foreign_proposals {
+                    log_err(
+                        "on_receive_foreign_proposal",
+                        self.on_receive_foreign_proposal
+                            .handle(from.clone(), foreign_proposal.into(), local_committee_info)
+                            .await,
+                    )?;
+                }
+
                 match log_err(
                     "on_receive_local_proposal",
-                    self.on_receive_local_proposal.handle(current_epoch, msg).await,
+                    self.on_receive_local_proposal.handle(current_epoch, msg.block).await,
                 ) {
                     Ok(_) => Ok(()),
                     Err(

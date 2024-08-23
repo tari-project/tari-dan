@@ -113,7 +113,7 @@ where
                         },
                         SubstateValue::Resource(_) => {},
                         SubstateValue::TransactionReceipt(tx_receipt) => {
-                            let tx_receipt_addr = SubstateId::TransactionReceipt(TransactionReceiptAddress::new(
+                            let tx_receipt_addr = SubstateId::TransactionReceipt(TransactionReceiptAddress::from_hash(
                                 tx_receipt.transaction_hash,
                             ));
                             if substate_addresses.contains_key(&tx_receipt_addr) {

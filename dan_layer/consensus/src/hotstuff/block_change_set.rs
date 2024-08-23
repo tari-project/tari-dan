@@ -10,7 +10,9 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockDiff,
+        BlockId,
         BlockTransactionExecution,
+        ForeignProposal,
         LeafBlock,
         PendingShardStateTreeDiff,
         QuorumCertificate,
@@ -52,6 +54,7 @@ pub struct ProposedBlockChangeSet {
     state_tree_diffs: IndexMap<Shard, VersionedStateHashTreeDiff>,
     substate_locks: IndexMap<SubstateId, Vec<SubstateLock>>,
     transaction_changes: IndexMap<TransactionId, TransactionChangeSet>,
+    proposed_foreign_proposals: Vec<BlockId>,
 }
 
 impl ProposedBlockChangeSet {
@@ -63,6 +66,7 @@ impl ProposedBlockChangeSet {
             substate_locks: IndexMap::new(),
             transaction_changes: IndexMap::new(),
             state_tree_diffs: IndexMap::new(),
+            proposed_foreign_proposals: Vec::new(),
         }
     }
 
@@ -72,6 +76,7 @@ impl ProposedBlockChangeSet {
         self.transaction_changes = IndexMap::new();
         self.state_tree_diffs = IndexMap::new();
         self.substate_locks = IndexMap::new();
+        self.proposed_foreign_proposals = Vec::new();
         self
     }
 
@@ -92,6 +97,11 @@ impl ProposedBlockChangeSet {
 
     pub fn set_substate_locks(&mut self, locks: IndexMap<SubstateId, Vec<SubstateLock>>) -> &mut Self {
         self.substate_locks = locks;
+        self
+    }
+
+    pub fn set_foreign_proposal_proposed_in(&mut self, foreign_proposal_block_id: BlockId) -> &mut Self {
+        self.proposed_foreign_proposals.push(foreign_proposal_block_id);
         self
     }
 
@@ -211,6 +221,10 @@ impl ProposedBlockChangeSet {
             if let Some(ref update) = change.next_update {
                 update.insert(tx)?;
             }
+        }
+
+        for block_id in self.proposed_foreign_proposals {
+            ForeignProposal::set_proposed_in(tx, &block_id, &self.block.block_id)?;
         }
 
         Ok(())

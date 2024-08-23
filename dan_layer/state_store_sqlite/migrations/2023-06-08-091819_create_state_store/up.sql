@@ -58,10 +58,10 @@ create table parked_blocks
     total_leader_fee        bigint    not NULL,
     foreign_indexes         text      not NULL,
     signature               text      NULL,
-    block_time              bigint    NULL,
     timestamp               bigint    not NULL,
     base_layer_block_height bigint    not NULL,
     base_layer_block_hash   text      not NULL,
+    foreign_proposals       text      not NULL,
     created_at              timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -349,15 +349,30 @@ create table votes
 
 CREATE TABLE foreign_proposals
 (
-    id                      integer   not NULL primary key AUTOINCREMENT,
-    shard_group             integer   not NULL,
+    id                      integer   not null primary key AUTOINCREMENT,
     block_id                text      not NULL,
-    state                   text      not NULL,
-    proposed_height         bigint    NULL,
-    transactions            text      not NULL,
+    parent_block_id         text      not NULL,
+    merkle_root             text      not NULL,
+    network                 text      not NULL,
+    height                  bigint    not NULL,
+    epoch                   bigint    not NULL,
+    shard_group             integer   not NULL,
+    proposed_by             text      not NULL,
+    qc                      text      not NULL,
+    command_count           bigint    not NULL,
+    commands                text      not NULL,
+    total_leader_fee        bigint    not NULL,
+    foreign_indexes         text      not NULL,
+    signature               text      NULL,
+    timestamp               bigint    not NULL,
     base_layer_block_height bigint    not NULL,
-    created_at              timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (shard_group, block_id)
+    base_layer_block_hash   text      not NULL,
+    justify_qc_id           text      not NULL REFERENCES quorum_certificates (qc_id),
+    block_pledge            text      not NULL,
+    proposed_in_block       text      NULL REFERENCES blocks (block_id),
+    proposed_in_block_height bigint   NULL,
+    created_at              timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (block_id)
 );
 
 CREATE TABLE foreign_send_counters

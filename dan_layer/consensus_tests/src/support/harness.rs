@@ -8,6 +8,7 @@ use std::{
 };
 
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
+use itertools::Itertools;
 use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeHeight, NumPreshards, ShardGroup};
 use tari_dan_storage::{
@@ -269,9 +270,13 @@ impl Test {
     pub async fn on_block_committed(&mut self) -> (TestAddress, BlockId, Epoch, NodeHeight) {
         loop {
             let (address, event) = if let Some(timeout) = self.timeout {
-                tokio::time::timeout(timeout, self.on_hotstuff_event())
-                    .await
-                    .unwrap_or_else(|_| panic!("Timeout waiting for Hotstuff event"))
+                match tokio::time::timeout(timeout, self.on_hotstuff_event()).await {
+                    Ok(v) => v,
+                    Err(_) => {
+                        self.dump_pool_info();
+                        panic!("Timeout waiting for Hotstuff event");
+                    },
+                }
             } else {
                 self.on_hotstuff_event().await
             };
@@ -286,6 +291,24 @@ impl Test {
                     log::info!("[{}] Ignoring event: {:?}", address, other);
                     continue;
                 },
+            }
+        }
+    }
+
+    pub fn dump_pool_info(&self) {
+        for v in self.validators.values().sorted_unstable_by_key(|a| &a.address) {
+            let pool = v.state_store.with_read_tx(|tx| tx.transaction_pool_get_all()).unwrap();
+            for tx in pool {
+                eprintln!(
+                    "{}: {}->{:?} {}[{}, ready={}, {}]",
+                    v.address,
+                    tx.current_stage(),
+                    tx.pending_stage(),
+                    tx.transaction_id(),
+                    tx.current_decision(),
+                    tx.is_ready(),
+                    tx.evidence()
+                );
             }
         }
     }

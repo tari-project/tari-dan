@@ -102,14 +102,14 @@ pub struct ParkedBlock {
     pub total_leader_fee: i64,
     pub foreign_indexes: String,
     pub signature: Option<String>,
-    pub block_time: Option<i64>,
     pub timestamp: i64,
     pub base_layer_block_height: i64,
     pub base_layer_block_hash: String,
+    pub foreign_proposals: String,
     pub created_at: PrimitiveDateTime,
 }
 
-impl TryFrom<ParkedBlock> for consensus_models::Block {
+impl TryFrom<ParkedBlock> for (consensus_models::Block, Vec<consensus_models::ForeignProposal>) {
     type Error = StorageError;
 
     fn try_from(value: ParkedBlock) -> Result<Self, Self::Error> {
@@ -118,7 +118,7 @@ impl TryFrom<ParkedBlock> for consensus_models::Block {
             item: "block",
             details: format!("Block #{} network byte is not a valid Network", value.id),
         })?;
-        Ok(consensus_models::Block::load(
+        let block = consensus_models::Block::load(
             deserialize_hex_try_from(&value.block_id)?,
             network,
             deserialize_hex_try_from(&value.parent_block_id)?,
@@ -147,10 +147,12 @@ impl TryFrom<ParkedBlock> for consensus_models::Block {
             deserialize_json(&value.foreign_indexes)?,
             value.signature.map(|val| deserialize_json(&val)).transpose()?,
             value.created_at,
-            value.block_time.map(|v| v as u64),
+            None,
             value.timestamp as u64,
             value.base_layer_block_height as u64,
             deserialize_hex_try_from(&value.base_layer_block_hash)?,
-        ))
+        );
+        let foreign_proposals = deserialize_json(&value.foreign_proposals)?;
+        Ok((block, foreign_proposals))
     }
 }

@@ -4,11 +4,18 @@
 use std::fmt::{Display, Formatter};
 
 use serde::Serialize;
-use tari_dan_storage::consensus_models::{Block, BlockPledge, ForeignParkedProposal, QuorumCertificate};
+use tari_dan_storage::consensus_models::{
+    Block,
+    BlockPledge,
+    ForeignParkedProposal,
+    ForeignProposal,
+    QuorumCertificate,
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ProposalMessage {
     pub block: Block,
+    pub foreign_proposals: Vec<ForeignProposal>,
 }
 
 impl Display for ProposalMessage {
@@ -26,16 +33,33 @@ pub struct ForeignProposalMessage {
 
 impl From<ForeignProposalMessage> for ForeignParkedProposal {
     fn from(msg: ForeignProposalMessage) -> Self {
-        ForeignParkedProposal::new(msg.block, msg.justify_qc, msg.block_pledge)
+        ForeignParkedProposal::new(msg.into())
+    }
+}
+
+impl From<ForeignProposalMessage> for ForeignProposal {
+    fn from(msg: ForeignProposalMessage) -> Self {
+        ForeignProposal::new(msg.block, msg.block_pledge, msg.justify_qc)
+    }
+}
+
+impl From<ForeignProposal> for ForeignProposalMessage {
+    fn from(proposal: ForeignProposal) -> Self {
+        ForeignProposalMessage {
+            block: proposal.block,
+            justify_qc: proposal.justify_qc,
+            block_pledge: proposal.block_pledge,
+        }
     }
 }
 
 impl From<ForeignParkedProposal> for ForeignProposalMessage {
-    fn from(block: ForeignParkedProposal) -> Self {
+    fn from(proposal: ForeignParkedProposal) -> Self {
+        let proposal = proposal.into_proposal();
         ForeignProposalMessage {
-            block: block.block,
-            justify_qc: block.justify_qc,
-            block_pledge: block.block_pledge,
+            block: proposal.block,
+            justify_qc: proposal.justify_qc,
+            block_pledge: proposal.block_pledge,
         }
     }
 }

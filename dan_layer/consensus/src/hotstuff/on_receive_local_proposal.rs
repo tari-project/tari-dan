@@ -29,7 +29,7 @@ use crate::{
         HotstuffEvent,
         ProposalValidationError,
     },
-    messages::{ForeignProposalMessage, HotstuffMessage, ProposalMessage, VoteMessage},
+    messages::{ForeignProposalMessage, HotstuffMessage, VoteMessage},
     traits::{
         hooks::ConsensusHooks,
         ConsensusSpec,
@@ -93,9 +93,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         }
     }
 
-    pub async fn handle(&mut self, current_epoch: Epoch, message: ProposalMessage) -> Result<(), HotStuffError> {
-        let ProposalMessage { block } = message;
-
+    pub async fn handle(&mut self, current_epoch: Epoch, block: Block) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
             "🔥 LOCAL PROPOSAL: block {} from {}",
@@ -650,7 +648,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         let block_pledge = self
             .store
-            .with_read_tx(|tx| block.get_local_prepared_block_pledge(tx))
+            .with_read_tx(|tx| block.get_block_pledge(tx))
             .optional()?
             .ok_or_else(|| HotStuffError::InvariantError(format!("Pledges not found for block {}", block)))?;
 
@@ -682,8 +680,8 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 &addresses,
                 HotstuffMessage::ForeignProposal(ForeignProposalMessage {
                     block,
-                    justify_qc,
                     block_pledge,
+                    justify_qc,
                 }),
             )
             .await?;

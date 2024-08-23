@@ -126,35 +126,33 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         from: TConsensusSpec::Addr,
         proposal: ProposalMessage,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
-        let ProposalMessage { block } = proposal;
-
         info!(
             target: LOG_TARGET,
             "📜 new unvalidated PROPOSAL message {} from {} (current height = {})",
-            block,
-            block.proposed_by(),
+            proposal.block,
+            proposal.block.proposed_by(),
             current_height,
         );
 
-        if block.height() < current_height {
+        if proposal.block.height() < current_height {
             info!(
                 target: LOG_TARGET,
                 "🔥 Block {} is lower than current height {}. Ignoring.",
-                block,
+                proposal.block,
                 current_height
             );
             return Ok(MessageValidationResult::Discard);
         }
 
-        if let Err(err) = self.check_proposal(&block).await {
+        if let Err(err) = self.check_proposal(&proposal.block).await {
             return Ok(MessageValidationResult::Invalid {
                 from,
-                message: HotstuffMessage::Proposal(ProposalMessage { block }),
+                message: HotstuffMessage::Proposal(proposal),
                 err,
             });
         }
 
-        self.handle_missing_transactions_local_block(from, block).await
+        self.handle_missing_transactions_local_block(from, proposal).await
     }
 
     pub fn update_local_parked_blocks(
@@ -166,7 +164,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             .store
             .with_write_tx(|tx| tx.missing_transactions_remove(current_height, transaction_id))?;
 
-        let Some(unparked_block) = maybe_unparked_block else {
+        let Some((unparked_block, foreign_proposals)) = maybe_unparked_block else {
             return Ok(None);
         };
 
@@ -176,7 +174,10 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             block: unparked_block.as_leaf_block(),
         });
 
-        Ok(Some(ProposalMessage { block: unparked_block }))
+        Ok(Some(ProposalMessage {
+            block: unparked_block,
+            foreign_proposals,
+        }))
     }
 
     pub fn update_foreign_parked_blocks(
@@ -211,30 +212,30 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
     async fn handle_missing_transactions_local_block(
         &mut self,
         from: TConsensusSpec::Addr,
-        block: Block,
+        proposal: ProposalMessage,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
         let missing_tx_ids = self
             .store
-            .with_write_tx(|tx| self.check_for_missing_transactions(tx, &block))?;
+            .with_write_tx(|tx| self.check_for_missing_transactions(tx, &proposal))?;
 
         if missing_tx_ids.is_empty() {
             return Ok(MessageValidationResult::Ready {
                 from,
-                message: HotstuffMessage::Proposal(ProposalMessage { block }),
+                message: HotstuffMessage::Proposal(proposal),
             });
         }
 
         let _ignore = self.tx_events.send(HotstuffEvent::ProposedBlockParked {
-            block: block.as_leaf_block(),
+            block: proposal.block.as_leaf_block(),
             num_missing_txs: missing_tx_ids.len(),
             // TODO: remove
             num_awaiting_txs: 0,
         });
 
         Ok(MessageValidationResult::ParkedProposal {
-            block_id: *block.id(),
-            epoch: block.epoch(),
-            proposed_by: block.proposed_by().clone(),
+            block_id: *proposal.block.id(),
+            epoch: proposal.block.epoch(),
+            proposed_by: proposal.block.proposed_by().clone(),
             missing_txs: missing_tx_ids,
         })
     }
@@ -242,31 +243,31 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
     fn check_for_missing_transactions(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block,
+        proposal: &ProposalMessage,
     ) -> Result<HashSet<TransactionId>, HotStuffError> {
-        if block.commands().is_empty() {
+        if proposal.block.commands().is_empty() {
             debug!(
                 target: LOG_TARGET,
-                "✅ Block {} is empty (no missing transactions)", block
+                "✅ Block {} is empty (no missing transactions)", proposal.block
             );
             return Ok(HashSet::new());
         }
-        let missing_tx_ids = TransactionRecord::get_missing(&**tx, block.all_transaction_ids())?;
+        let missing_tx_ids = TransactionRecord::get_missing(&**tx, proposal.block.all_transaction_ids())?;
 
         if missing_tx_ids.is_empty() {
             debug!(
                 target: LOG_TARGET,
-                "✅ Block {} has no missing transactions", block
+                "✅ Block {} has no missing transactions", proposal.block
             );
             return Ok(HashSet::new());
         }
 
         info!(
             target: LOG_TARGET,
-            "⏳ Block {} has {} missing transactions", block, missing_tx_ids.len(),
+            "⏳ Block {} has {} missing transactions", proposal.block, missing_tx_ids.len(),
         );
 
-        tx.missing_transactions_insert(block, &missing_tx_ids, &[])?;
+        tx.missing_transactions_insert(&proposal.block, &proposal.foreign_proposals, &missing_tx_ids)?;
 
         Ok(missing_tx_ids)
     }
@@ -353,9 +354,9 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             parked_block.add_missing_transactions(tx, &missing_tx_ids)?;
 
             Ok(MessageValidationResult::ParkedProposal {
-                block_id: *parked_block.block.id(),
-                epoch: parked_block.block.epoch(),
-                proposed_by: parked_block.block.proposed_by().clone(),
+                block_id: *parked_block.block().id(),
+                epoch: parked_block.block().epoch(),
+                proposed_by: parked_block.block().proposed_by().clone(),
                 missing_txs: missing_tx_ids,
             })
         })

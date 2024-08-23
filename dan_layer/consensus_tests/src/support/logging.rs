@@ -2,10 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 pub fn setup_logger() {
-    if option_env!("CI").is_some() {
-        return;
-    }
-
     let _ignore = fern::Dispatch::new()
         // Perform allocation-free log formatting
         .format(|out, message, record| {

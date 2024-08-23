@@ -29,7 +29,6 @@ use tari_dan_storage::{
         HighQc,
         LastProposed,
         LeafBlock,
-        LockedBlock,
         PendingShardStateTreeDiff,
         QuorumCertificate,
         SubstateChange,
@@ -66,6 +65,12 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_local_propose";
+
+type NextBlock = (
+    Block,
+    Vec<ForeignProposal>,
+    HashMap<TransactionId, TransactionExecution>,
+);
 
 pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     config: HotstuffConfig,
@@ -118,21 +123,25 @@ where TConsensusSpec: ConsensusSpec
                 // is_newview_propose means that a NEWVIEW has reached quorum and nodes are expecting us to propose.
                 // Re-broadcast the previous proposal
                 if is_newview_propose {
-                    if let Some(next_block) = self.store.with_read_tx(|tx| last_proposed.get_block(tx)).optional()? {
-                        info!(
-                            target: LOG_TARGET,
-                            "🌿 RE-BROADCASTING local block {}({}) to {} validators. {} command(s), justify: {} ({}), parent: {}",
-                            next_block.id(),
-                            next_block.height(),
-                            local_committee.len(),
-                            next_block.commands().len(),
-                            next_block.justify().block_id(),
-                            next_block.justify().block_height(),
-                            next_block.parent(),
-                        );
-                        self.broadcast_local_proposal(next_block, local_committee).await?;
-                        return Ok(());
-                    }
+                    warn!(
+                        target: LOG_TARGET,
+                        "⚠️ Newview propose {leaf_block} but we already proposed block {last_proposed}.",
+                    );
+                    // if let Some(next_block) = self.store.with_read_tx(|tx| last_proposed.get_block(tx)).optional()? {
+                    //     info!(
+                    //         target: LOG_TARGET,
+                    //         "🌿 RE-BROADCASTING local block {}({}) to {} validators. {} command(s), justify: {} ({}),
+                    // parent: {}",         next_block.id(),
+                    //         next_block.height(),
+                    //         local_committee.len(),
+                    //         next_block.commands().len(),
+                    //         next_block.justify().block_id(),
+                    //         next_block.justify().block_height(),
+                    //         next_block.parent(),
+                    //     );
+                    //     self.broadcast_local_proposal(next_block, local_committee).await?;
+                    //     return Ok(());
+                    // }
                 }
 
                 info!(
@@ -153,10 +162,10 @@ where TConsensusSpec: ConsensusSpec
         let base_layer_block_hash = current_base_layer_block_hash;
         let base_layer_block_height = current_base_layer_block_height;
 
-        let next_block = self.store.with_write_tx(|tx| {
+        let (next_block, foreign_proposals) = self.store.with_write_tx(|tx| {
             let high_qc = HighQc::get(&**tx)?;
             let high_qc_cert = high_qc.get_quorum_certificate(&**tx)?;
-            let (next_block, executed_transactions) = self.build_next_block(
+            let (next_block, foreign_proposals, executed_transactions) = self.build_next_block(
                 tx,
                 epoch,
                 &leaf_block,
@@ -185,7 +194,7 @@ where TConsensusSpec: ConsensusSpec
             }
 
             next_block.as_last_proposed().set(tx)?;
-            Ok::<_, HotStuffError>(next_block)
+            Ok::<_, HotStuffError>((next_block, foreign_proposals))
         })?;
 
         info!(
@@ -199,7 +208,8 @@ where TConsensusSpec: ConsensusSpec
             next_block.parent()
         );
 
-        self.broadcast_local_proposal(next_block, local_committee).await?;
+        self.broadcast_local_proposal(next_block, foreign_proposals, local_committee)
+            .await?;
 
         Ok(())
     }
@@ -207,6 +217,7 @@ where TConsensusSpec: ConsensusSpec
     pub async fn broadcast_local_proposal(
         &mut self,
         next_block: Block,
+        foreign_proposals: Vec<ForeignProposal>,
         local_committee: &Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         info!(
@@ -221,7 +232,8 @@ where TConsensusSpec: ConsensusSpec
             .multicast(
                 local_committee.iter().map(|(addr, _)| addr),
                 HotstuffMessage::Proposal(ProposalMessage {
-                    block: next_block.clone(),
+                    block: next_block,
+                    foreign_proposals,
                 }),
             )
             .await?;
@@ -300,38 +312,50 @@ where TConsensusSpec: ConsensusSpec
         base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
         propose_epoch_end: bool,
-    ) -> Result<(Block, HashMap<TransactionId, TransactionExecution>), HotStuffError> {
+    ) -> Result<NextBlock, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 500;
-        let batch = if dont_propose_transactions || propose_epoch_end {
-            vec![]
-        } else {
-            self.transaction_pool.get_batch_for_next_block(tx, TARGET_BLOCK_SIZE)?
-        };
+
         let next_height = parent_block.height() + NodeHeight(1);
 
         let mut total_leader_fee = 0;
-        let locked_block = LockedBlock::get(tx)?;
-        let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
+
+        let foreign_proposals = if propose_epoch_end {
+            vec![]
+        } else {
+            ForeignProposal::get_all_new(
+                tx,
+                base_layer_block_height,
+                parent_block.block_id(),
+                TARGET_BLOCK_SIZE / 4,
+            )?
+        };
+
+        debug!(
+            target: LOG_TARGET,
+            "🌿 Found {} foreign proposals for next block",
+            foreign_proposals.len()
+        );
+
+        let batch = if dont_propose_transactions || propose_epoch_end {
+            vec![]
+        } else {
+            TARGET_BLOCK_SIZE
+                // Each foreign proposal is "heavier" than a transaction command
+                .checked_sub(foreign_proposals.len() * 4)
+                .map(|size| self.transaction_pool.get_batch_for_next_block(tx, size))
+                .transpose()?
+                .unwrap_or_default()
+        };
+
         let mut commands = if propose_epoch_end {
             BTreeSet::from_iter([Command::EndEpoch])
         } else {
-            ForeignProposal::get_all_new(tx)?
-                .into_iter()
-                .filter(|foreign_proposal| {
-                    // If the proposal base layer height is too high, ignore for now.
-                    foreign_proposal.base_layer_block_height <= base_layer_block_height &&
-                        // If the foreign proposal is already pending, don't propose it again
-                        !pending_proposals.iter().any(|pending_proposal| {
-                            pending_proposal.shard_group == foreign_proposal.shard_group &&
-                                pending_proposal.block_id == foreign_proposal.block_id
-                        })
-                })
-                .map(|mut foreign_proposal| {
-                    foreign_proposal.set_proposed_height(parent_block.height().saturating_add(NodeHeight(1)));
-                    Command::ForeignProposal(foreign_proposal)
-                })
-                .collect()
+            BTreeSet::from_iter(
+                foreign_proposals
+                    .iter()
+                    .map(|fp| Command::ForeignProposal(fp.to_atom())),
+            )
         };
 
         // batch is empty for is_empty, is_epoch_end and is_epoch_start blocks
@@ -405,7 +429,7 @@ where TConsensusSpec: ConsensusSpec
         let signature = self.signing_service.sign(next_block.id());
         next_block.set_signature(signature);
 
-        Ok((next_block, executed_transactions))
+        Ok((next_block, foreign_proposals, executed_transactions))
     }
 
     fn prepare_transaction(

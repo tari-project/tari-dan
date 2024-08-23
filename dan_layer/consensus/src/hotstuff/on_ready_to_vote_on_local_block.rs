@@ -15,6 +15,7 @@ use tari_dan_storage::{
         BlockTransactionExecution,
         Command,
         Decision,
+        ForeignProposalAtom,
         LastExecuted,
         LastVoted,
         LockedBlock,
@@ -173,6 +174,16 @@ where TConsensusSpec: ConsensusSpec
                 continue;
             };
 
+            // CASE: This code checks if the new leaf block causes the transaction to be ready.
+            // For example, suppose a transaction is LocalPrepared in the currently proposed block, however it
+            // is not yet the leaf block (because it has not been justified). If we then
+            // receive the foreign LocalPrepared for this transaction, we evaluate the
+            // foreign LocalPrepare using the transaction state as it "was" without
+            // considering data from the as yet unjustified block. This means that we do not
+            // recognise that the transaction is ready for AllPrepared, and we never propose
+            // it. This code reevaluates the new leaf blocks and sets any transactions to
+            // ready that have the required evidence.
+
             if let Some(update_mut) = change_set.next_update_mut(atom.id()) {
                 // The leaf block already approved finalising this transaction (i.e. the justify block proposed
                 // LocalAccept, the leaf proposed (some|all)Accept therefore we already have all evidence). This
@@ -231,15 +242,6 @@ where TConsensusSpec: ConsensusSpec
                 if pool_tx.is_ready() {
                     change_set.set_next_transaction_update(&pool_tx, pool_tx.current_stage(), true)?;
                 } else {
-                    // CASE: This code checks if the new leaf block causes the transaction to be ready.
-                    // For example, suppose a transaction is LocalPrepared in the currently proposed block, however it
-                    // is not yet the leaf block (because it has not been justified). If we then
-                    // receive the foreign LocalPrepared for this transaction, we evaluate the
-                    // foreign LocalPrepare using the transaction state as it "was" without
-                    // considering data from the as yet unjustified block. This means that we do not
-                    // recognise that the transaction is ready for AllPrepared, and we never propose
-                    // it. This code reevaluates the new leaf blocks and sets any transactions to
-                    // ready that have the required evidence.
                     let local_prepare_is_justified = cmd
                         .local_prepare()
                         .map(|_| pool_tx.evidence().all_input_addresses_justified())
@@ -402,15 +404,11 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(proposed_block_change_set.no_vote());
                     }
                 },
-                Command::ForeignProposal(foreign_proposal) => {
-                    if !foreign_proposal.exists(tx)? {
-                        warn!(
-                            target: LOG_TARGET,
-                            "❌ Foreign proposal for block {block_id} from {shard_group} does not exist in the store",
-                            block_id = foreign_proposal.block_id,shard_group = foreign_proposal.shard_group
-                        );
+                Command::ForeignProposal(fp_atom) => {
+                    if !self.evaluate_foreign_proposal_command(tx, fp_atom, &mut proposed_block_change_set)? {
                         return Ok(proposed_block_change_set.no_vote());
                     }
+
                     continue;
                 },
                 Command::EndEpoch => {
@@ -1284,6 +1282,26 @@ where TConsensusSpec: ConsensusSpec
         Ok(true)
     }
 
+    fn evaluate_foreign_proposal_command(
+        &self,
+        tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        fp_atom: &ForeignProposalAtom,
+        proposed_block_change_set: &mut ProposedBlockChangeSet,
+    ) -> Result<bool, HotStuffError> {
+        if !fp_atom.exists(tx)? {
+            warn!(
+                target: LOG_TARGET,
+                "❌ NO VOTE: Foreign proposal for block {block_id} has not been received.",
+                block_id = fp_atom.block_id,
+            );
+            return Ok(false);
+        }
+
+        proposed_block_change_set.set_foreign_proposal_proposed_in(fp_atom.block_id);
+
+        Ok(true)
+    }
+
     fn execute_transaction(
         &self,
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
@@ -1348,10 +1366,6 @@ where TConsensusSpec: ConsensusSpec
             "🔒️ LOCKED BLOCK: {}",
             block,
         );
-
-        for foreign_proposal in block.all_foreign_proposals() {
-            foreign_proposal.upsert(tx)?;
-        }
 
         // Release all locks for SomePrepare transactions since these can never be committed
         SubstateRecord::unlock_all(tx, block.all_some_prepare().map(|t| &t.id).peekable())?;

@@ -543,16 +543,17 @@ impl TransactionPoolRecord {
             ((TransactionPoolStage::New, TransactionPoolStage::Prepared), true) |
             ((TransactionPoolStage::New, TransactionPoolStage::LocalOnly), false) |
             // Prepared
+            ((TransactionPoolStage::Prepared, TransactionPoolStage::Prepared), _) |
             ((TransactionPoolStage::Prepared, TransactionPoolStage::LocalPrepared), _) |
             // LocalPrepared
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), _) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), _) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::SomePrepared), _) |
             // AllPrepared
-            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::AllPrepared), false) |
+            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::AllPrepared), _) |
             ((TransactionPoolStage::AllPrepared, TransactionPoolStage::LocalAccepted), _) |
             // SomePrepared
-            ((TransactionPoolStage::SomePrepared, TransactionPoolStage::SomePrepared), false) |
+            ((TransactionPoolStage::SomePrepared, TransactionPoolStage::SomePrepared), _) |
             ((TransactionPoolStage::SomePrepared, TransactionPoolStage::LocalAccepted), _) |
             // LocalAccepted
             ((TransactionPoolStage::LocalAccepted, TransactionPoolStage::LocalAccepted), _) |
@@ -583,6 +584,17 @@ impl TransactionPoolRecord {
     ) -> Result<(), TransactionPoolError> {
         self.check_pending_status_update(pending_stage, is_ready)?;
 
+        debug!(
+            target: LOG_TARGET,
+            "add_pending_status_update: tx: {}, blk: {}, transition: {}->{}, ready {}->{}",
+            self.transaction_id,
+            block.block_id,
+            self.stage,
+            pending_stage,
+            self.is_ready,
+            is_ready,
+        );
+
         let update = TransactionPoolStatusUpdate {
             block_id: block.block_id,
             transaction_id: self.transaction_id,
@@ -608,12 +620,16 @@ impl TransactionPoolRecord {
     ) -> Result<(), TransactionPoolError> {
         match self.remote_evidence.as_mut() {
             Some(evidence) => {
-                evidence.merge(remote_evidence);
+                evidence.update(remote_evidence.iter().map(|(addr, e)| (*addr, e.lock)));
             },
             None => {
                 self.remote_evidence = Some(remote_evidence);
             },
         }
+        self.remote_evidence
+            .as_mut()
+            .expect("set above")
+            .add_qc_evidence(foreign_committee_info, foreign_qc_id);
 
         tx.transaction_pool_update(
             &self.transaction_id,
@@ -623,10 +639,10 @@ impl TransactionPoolRecord {
             Some(decision),
             self.remote_evidence.as_ref(),
         )?;
-        // TODO: we should not blindly use unknown foreign QCs
+        // Update the local evidence so that we can check if we have enough evidence to proceed
         self.evidence
             .merge(self.remote_evidence.as_ref().expect("set above").clone());
-        self.add_qc_evidence(foreign_committee_info, foreign_qc_id);
+        // self.add_qc_evidence(foreign_committee_info, foreign_qc_id);
         self.set_remote_decision(decision);
         Ok(())
     }

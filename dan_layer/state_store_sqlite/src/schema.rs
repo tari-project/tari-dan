@@ -76,12 +76,27 @@ diesel::table! {
 diesel::table! {
     foreign_proposals (id) {
         id -> Integer,
-        shard_group -> Integer,
         block_id -> Text,
-        state -> Text,
-        proposed_height -> Nullable<BigInt>,
-        transactions -> Text,
+        parent_block_id -> Text,
+        merkle_root -> Text,
+        network -> Text,
+        height -> BigInt,
+        epoch -> BigInt,
+        shard_group -> Integer,
+        proposed_by -> Text,
+        qc -> Text,
+        command_count -> BigInt,
+        commands -> Text,
+        total_leader_fee -> BigInt,
+        foreign_indexes -> Text,
+        signature -> Nullable<Text>,
+        timestamp -> BigInt,
         base_layer_block_height -> BigInt,
+        base_layer_block_hash -> Text,
+        justify_qc_id -> Text,
+        block_pledge -> Text,
+        proposed_in_block -> Nullable<Text>,
+        proposed_in_block_height -> Nullable<BigInt>,
         created_at -> Timestamp,
     }
 }
@@ -217,10 +232,10 @@ diesel::table! {
         total_leader_fee -> BigInt,
         foreign_indexes -> Text,
         signature -> Nullable<Text>,
-        block_time -> Nullable<BigInt>,
         timestamp -> BigInt,
         base_layer_block_height -> BigInt,
         base_layer_block_hash -> Text,
+        foreign_proposals -> Text,
         created_at -> Timestamp,
     }
 }

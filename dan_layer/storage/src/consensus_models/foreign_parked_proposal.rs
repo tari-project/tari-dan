@@ -6,37 +6,35 @@ use std::fmt::Display;
 use tari_transaction::TransactionId;
 
 use crate::{
-    consensus_models::{Block, BlockPledge, QuorumCertificate},
+    consensus_models::{Block, BlockPledge, ForeignProposal, QuorumCertificate},
     StateStoreWriteTransaction,
     StorageError,
 };
 
 #[derive(Debug, Clone)]
 pub struct ForeignParkedProposal {
-    pub block: Block,
-    pub block_pledge: BlockPledge,
-    pub justify_qc: QuorumCertificate,
+    proposal: ForeignProposal,
 }
 
 impl ForeignParkedProposal {
-    pub fn new(block: Block, justify_qc: QuorumCertificate, block_pledge: BlockPledge) -> Self {
-        Self {
-            block,
-            block_pledge,
-            justify_qc,
-        }
+    pub fn new(proposal: ForeignProposal) -> Self {
+        Self { proposal }
+    }
+
+    pub fn into_proposal(self) -> ForeignProposal {
+        self.proposal
     }
 
     pub fn block(&self) -> &Block {
-        &self.block
+        &self.proposal.block
     }
 
     pub fn block_pledge(&self) -> &BlockPledge {
-        &self.block_pledge
+        &self.proposal.block_pledge
     }
 
     pub fn justify_qc(&self) -> &QuorumCertificate {
-        &self.justify_qc
+        &self.proposal.justify_qc
     }
 }
 
@@ -50,7 +48,7 @@ impl ForeignParkedProposal {
         tx: &mut TTx,
         transaction_ids: I,
     ) -> Result<(), StorageError> {
-        tx.foreign_parked_blocks_insert_missing_transactions(self.block.id(), transaction_ids)
+        tx.foreign_parked_blocks_insert_missing_transactions(self.block().id(), transaction_ids)
     }
 
     pub fn remove_by_transaction_id<TTx: StateStoreWriteTransaction>(
@@ -63,7 +61,7 @@ impl ForeignParkedProposal {
 
 impl Display for ForeignParkedProposal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ForeignParkedBlock: block={}, qcs=", self.block)?;
+        write!(f, "ForeignParkedBlock: block={}, qcs=", self.block())?;
         for (_tx_id, pledges) in self.block_pledge().iter() {
             write!(f, "{_tx_id}:[")?;
             for pledge in pledges {
@@ -71,7 +69,7 @@ impl Display for ForeignParkedProposal {
             }
             write!(f, "],")?;
         }
-        write!(f, "justify_qc={}", self.justify_qc)?;
+        write!(f, "justify_qc={}", self.justify_qc())?;
         Ok(())
     }
 }
