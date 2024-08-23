@@ -1,14 +1,15 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+use log::*;
+use tari_common_types::types::FixedHash;
+use tokio::time::{self, Duration};
+
 use crate::{
     config::Config,
     helpers::{contains_key, read_registration_file, to_vn_public_keys},
     manager::ManagerHandle,
 };
-use log::*;
-use tari_common_types::types::FixedHash;
-use tokio::time::{self, Duration};
 
 // TODO: make configurable
 // Amount of time to wait before the watcher runs a check again
@@ -17,7 +18,8 @@ const REGISTRATION_LOOP_INTERVAL: Duration = Duration::from_secs(30);
 // `registration_loop` periodically checks that the local node is still registered on the network.
 // If it is no longer registered, it will attempt to re-register. It will do nothing if it is registered already.
 // Currently, it will not keep track of when the registration was sent or register just in time before it expires.
-// It is possible to add a threshold such as sending a registration request every (e.g.) 500 blocks to make sure it it always registered.
+// It is possible to add a threshold such as sending a registration request every (e.g.) 500 blocks to make sure it it
+// always registered.
 pub async fn registration_loop(config: Config, mut manager_handle: ManagerHandle) -> anyhow::Result<ManagerHandle> {
     let mut interval = time::interval(REGISTRATION_LOOP_INTERVAL);
     let constants = manager_handle.get_consensus_constants(0).await?;
@@ -65,7 +67,7 @@ pub async fn registration_loop(config: Config, mut manager_handle: ManagerHandle
         }
 
         info!("Local node not active or about to expire, attempting to register..");
-        let tx = manager_handle.register_validator_node().await;
+        let tx = manager_handle.register_validator_node(curr_height).await;
         if let Err(e) = tx {
             error!("Failed to register node: {}", e);
             continue;

@@ -1,7 +1,6 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use crate::logger::init_logger;
 use anyhow::{anyhow, bail, Context};
 use registration::registration_loop;
 use tari_shutdown::{Shutdown, ShutdownSignal};
@@ -11,17 +10,20 @@ use crate::{
     cli::{Cli, Commands},
     config::{get_base_config, Config},
     helpers::read_config_file,
+    logger::init_logger,
     manager::{ManagerHandle, ProcessManager},
     shutdown::exit_signal,
 };
 
 mod cli;
 mod config;
-mod forker;
+mod constants;
 mod helpers;
 mod logger;
 mod manager;
 mod minotari;
+mod monitoring;
+mod process;
 mod registration;
 mod shutdown;
 
@@ -82,7 +84,7 @@ async fn start(config: Config) -> anyhow::Result<()> {
             log::info!("Process manager exited");
         },
         _ = async {
-            let _ = registration_loop(config, manager_handle).await;
+            drop(registration_loop(config, manager_handle).await);
         } => {},
     }
 

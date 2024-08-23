@@ -1,23 +1,31 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+use std::path::PathBuf;
+
 use log::*;
 use minotari_app_grpc::tari_rpc::{
-    self as grpc, ConsensusConstants, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse,
+    self as grpc,
+    ConsensusConstants,
+    GetActiveValidatorNodesResponse,
+    RegisterValidatorNodeResponse,
 };
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     config::{Config, ExecutableConfig},
-    forker::Forker,
+    constants::DEFAULT_VALIDATOR_NODE_BINARY_PATH,
     minotari::{Minotari, TipStatus},
+    monitoring::{read_status, ProcessStatus, Transaction},
+    process::Process,
 };
 
 pub struct ProcessManager {
+    pub base_dir: PathBuf,
     pub validator_config: ExecutableConfig,
     pub wallet_config: ExecutableConfig,
-    pub forker: Forker,
+    pub process: Process,
     pub shutdown_signal: ShutdownSignal,
     pub rx_request: mpsc::Receiver<ManagerRequest>,
     pub chain: Minotari,
@@ -27,9 +35,10 @@ impl ProcessManager {
     pub fn new(config: Config, shutdown_signal: ShutdownSignal) -> (Self, ManagerHandle) {
         let (tx_request, rx_request) = mpsc::channel(1);
         let this = Self {
+            base_dir: config.base_dir.clone(),
             validator_config: config.executable_config[0].clone(),
             wallet_config: config.executable_config[1].clone(),
-            forker: Forker::new(),
+            process: Process::new(),
             shutdown_signal,
             rx_request,
             chain: Minotari::new(
@@ -44,28 +53,56 @@ impl ProcessManager {
     pub async fn start(mut self) -> anyhow::Result<()> {
         info!("Starting validator node process");
 
-        self.forker.start_validator(self.validator_config.clone()).await?;
-        self.chain.bootstrap().await?;
-        info!("Watcher process bootstrapped and connected to base node and wallet");
+        // clean_stale_pid_file(self.base_dir.clone().join(DEFAULT_VALIDATOR_PID_PATH)).await?;
 
+        let cc = self
+            .process
+            .start_validator(
+                self.validator_config
+                    .clone()
+                    .executable_path
+                    .unwrap_or(PathBuf::from(DEFAULT_VALIDATOR_NODE_BINARY_PATH)),
+                self.base_dir,
+            )
+            .await;
+        if cc.is_none() {
+            todo!("Create new validator node process event listener for fetched existing PID from OS");
+        }
+        let cc = cc.unwrap();
+        tokio::spawn(async move {
+            read_status(cc.rx).await;
+        });
+
+        self.chain.bootstrap().await?;
+
+        info!("Setup completed: connected to base node and wallet, ready to receive requests");
         loop {
             tokio::select! {
                 Some(req) = self.rx_request.recv() => {
                     match req {
                         ManagerRequest::GetTipInfo { reply } => {
                             let response = self.chain.get_tip_status().await?;
+                            // send latest block height to monitoring, to potentially warn of upcoming node expiration
+                            if let Err(e) = cc.tx.send(ProcessStatus::WarnExpiration(response.height())).await {
+                                error!("Failed to send tip status update to monitoring: {}", e);
+                            }
                             drop(reply.send(Ok(response)));
                         }
                         ManagerRequest::GetActiveValidatorNodes { reply } => {
                             let response = self.chain.get_active_validator_nodes().await?;
                             drop(reply.send(Ok(response)));
                         }
-                        ManagerRequest::RegisterValidatorNode { reply } => {
+                        ManagerRequest::RegisterValidatorNode { block, reply } => {
                             let response = self.chain.register_validator_node().await?;
+                            // send response to monitoring
+                            if let Err(e) = cc.tx.send(ProcessStatus::Submitted(Transaction::new(response.clone(), block))).await {
+                                error!("Failed to send node registration update to monitoring: {}", e);
+                            }
+                            // send response to backend
                             drop(reply.send(Ok(response)));
                         },
-                        ManagerRequest::GetConsensusConstants { reply, block_height } => {
-                            let response = self.chain.get_consensus_constants(block_height).await?;
+                        ManagerRequest::GetConsensusConstants { block, reply } => {
+                            let response = self.chain.get_consensus_constants(block).await?;
                             drop(reply.send(Ok(response)));
                         }
                     }
@@ -92,10 +129,11 @@ pub enum ManagerRequest {
         reply: Reply<Vec<GetActiveValidatorNodesResponse>>,
     },
     GetConsensusConstants {
-        block_height: u64,
+        block: u64,
         reply: Reply<grpc::ConsensusConstants>,
     },
     RegisterValidatorNode {
+        block: u64,
         reply: Reply<RegisterValidatorNodeResponse>,
     },
 }
@@ -117,21 +155,18 @@ impl ManagerHandle {
         rx.await?
     }
 
-    pub async fn get_consensus_constants(&mut self, block_height: u64) -> anyhow::Result<ConsensusConstants> {
+    pub async fn get_consensus_constants(&mut self, block: u64) -> anyhow::Result<ConsensusConstants> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(ManagerRequest::GetConsensusConstants {
-                block_height,
-                reply: tx,
-            })
+            .send(ManagerRequest::GetConsensusConstants { block, reply: tx })
             .await?;
         rx.await?
     }
 
-    pub async fn register_validator_node(&mut self) -> anyhow::Result<RegisterValidatorNodeResponse> {
+    pub async fn register_validator_node(&mut self, block: u64) -> anyhow::Result<RegisterValidatorNodeResponse> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(ManagerRequest::RegisterValidatorNode { reply: tx })
+            .send(ManagerRequest::RegisterValidatorNode { block, reply: tx })
             .await?;
         rx.await?
     }

@@ -10,7 +10,7 @@ pub fn init_logger() -> Result<(), log::SetLoggerError> {
             return true;
         }
 
-        return false;
+        false
     }
 
     let colors = fern::colors::ColoredLevelConfig::new()

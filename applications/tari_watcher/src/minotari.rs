@@ -1,13 +1,13 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use anyhow::anyhow;
-use anyhow::bail;
+use std::path::PathBuf;
+
+use anyhow::{anyhow, bail};
 use log::*;
 use minotari_app_grpc::tari_rpc::{self as grpc, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse};
 use minotari_node_grpc_client::BaseNodeGrpcClient;
 use minotari_wallet_grpc_client::WalletGrpcClient;
-use std::path::PathBuf;
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::ByteArray;
