@@ -127,28 +127,64 @@ impl EventScanner {
 
         let mut event_count = 0;
 
-        let current_epoch = self.epoch_manager.current_epoch().await?;
-        let current_committees = self.epoch_manager.get_committees(current_epoch).await?;
-        for (shard_group, mut committee) in current_committees {
+        let newest_epoch = self.epoch_manager.current_epoch().await?;
+        let oldest_scanned_epoch = self.get_oldest_scanned_epoch().await?;
+
+        match oldest_scanned_epoch {
+            Some(oldest_epoch) => {
+                // we could span multiple cuncurrent epoch scans
+                // but we want to avoid gaps of the latest scanned value if any of the intermediate epoch scans fail
+                for epoch_idx in oldest_epoch.0..=newest_epoch.0 {
+                    let epoch = Epoch(epoch_idx);
+                    event_count += self.scan_events_of_epoch(epoch).await?;
+
+                    // at this point we can assume the previous epochs have been fully scanned
+                    self.delete_scanned_epochs_older_than(epoch).await?;
+                }
+            },
+            None => {
+                // by default we start scanning since the current epoch
+                // TODO: it would be nice a new parameter in the indexer to spcify a custom starting epoch
+                event_count += self.scan_events_of_epoch(newest_epoch).await?;
+            },
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "Scanned {} events",
+            event_count
+        );
+
+        Ok(event_count)
+    }
+
+    async fn scan_events_of_epoch(&self, epoch: Epoch) -> Result<usize, anyhow::Error> {
+        let committees = self.epoch_manager.get_committees(epoch).await?;
+
+        let mut event_count = 0;
+
+        for (shard_group, mut committee) in committees {
             info!(
                 target: LOG_TARGET,
                 "Scanning committee epoch={}, sg={}",
-                current_epoch,
+                epoch,
                 shard_group
             );
             let new_blocks = self
-                .get_new_blocks_from_committee(shard_group, &mut committee, current_epoch)
+                .get_new_blocks_from_committee(shard_group, &mut committee, epoch)
                 .await?;
             info!(
                 target: LOG_TARGET,
-                "Scanned {} blocks",
-                new_blocks.len()
+                "Scanned {} blocks in epoch={}",
+                new_blocks.len(),
+                epoch,
             );
             let transactions = self.extract_transactions_from_blocks(new_blocks);
             info!(
                 target: LOG_TARGET,
-                "Scanned {} transactions",
-                transactions.len()
+                "Scanned {} transactions in epoch={}",
+                transactions.len(),
+                epoch,
             );
 
             for transaction in transactions {
@@ -161,20 +197,21 @@ impl EventScanner {
                     events.into_iter().filter(|ev| self.should_persist_event(ev)).collect();
                 info!(
                     target: LOG_TARGET,
-                    "Filtered events: {}",
+                    "Filtered events in epoch {}: {}",
+                    epoch,
                     filtered_events.len()
                 );
                 self.store_events_in_db(&filtered_events, transaction).await?;
             }
         }
 
-        info!(
-            target: LOG_TARGET,
-            "Scanned {} events",
-            event_count
-        );
-
         Ok(event_count)
+    }
+
+    async fn delete_scanned_epochs_older_than(&self, epoch: Epoch) -> Result<(), anyhow::Error> {
+        self.substate_store
+            .with_write_tx(|tx| tx.delete_scanned_epochs_older_than(epoch))
+            .map_err(|e| e.into())
     }
 
     fn should_persist_event(&self, event_data: &EventData) -> bool {
@@ -416,6 +453,12 @@ impl EventScanner {
         *start_block.id()
     }
 
+    async fn get_oldest_scanned_epoch(&self) -> Result<Option<Epoch>, anyhow::Error> {
+        self.substate_store
+            .with_read_tx(|tx| tx.get_oldest_scanned_epoch())
+            .map_err(|e| e.into())
+    }
+
     #[allow(unused_assignments)]
     async fn get_new_blocks_from_committee(
         &self,
@@ -451,7 +494,7 @@ impl EventScanner {
                 epoch,
                 shard_group
             );
-            let resp = self.get_blocks_from_vn(member, start_block_id).await;
+            let resp = self.get_blocks_from_vn(member, start_block_id, Some(epoch)).await;
 
             match resp {
                 Ok(blocks) => {
@@ -464,11 +507,15 @@ impl EventScanner {
                         epoch,
                         shard_group,
                     );
-                    if let Some(block) = blocks.last() {
+
+                    // get the most recent block among all scanned blocks in the epoch
+                    let last_block = blocks.iter().max_by_key(|b| (b.epoch(), b.height()));
+
+                    if let Some(block) = last_block {
                         last_block_id = *block.id();
+                        // Store the latest scanned block id in the database for future scans
+                        self.save_scanned_block_id(epoch, shard_group, last_block_id)?;
                     }
-                    // Store the latest scanned block id in the database for future scans
-                    self.save_scanned_block_id(epoch, shard_group, last_block_id)?;
                     return Ok(blocks);
                 },
                 Err(e) => {
@@ -524,6 +571,7 @@ impl EventScanner {
         &self,
         vn_addr: &PeerAddress,
         start_block_id: BlockId,
+        up_to_epoch: Option<Epoch>,
     ) -> Result<Vec<Block>, anyhow::Error> {
         let mut blocks = vec![];
 
@@ -533,7 +581,7 @@ impl EventScanner {
         let mut stream = client
             .sync_blocks(SyncBlocksRequest {
                 start_block_id: start_block_id.as_bytes().to_vec(),
-                up_to_epoch: None,
+                up_to_epoch: up_to_epoch.map(|epoch| epoch.into()),
             })
             .await?;
         while let Some(resp) = stream.next().await {
