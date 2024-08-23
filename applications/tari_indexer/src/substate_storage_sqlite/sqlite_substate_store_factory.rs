@@ -230,6 +230,7 @@ pub trait SubstateStoreReadTransaction {
         limit: u32,
     ) -> Result<Vec<Event>, StorageError>;
     fn event_exists(&mut self, event: NewEvent) -> Result<bool, StorageError>;
+    fn get_oldest_scanned_epoch(&mut self) -> Result<Option<Epoch>, StorageError>;
     fn get_last_scanned_block_id(
         &mut self,
         epoch: Epoch,
@@ -601,6 +602,26 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         Ok(exists)
     }
 
+    fn get_oldest_scanned_epoch(&mut self) -> Result<Option<Epoch>, StorageError> {
+        use crate::substate_storage_sqlite::schema::scanned_block_ids;
+
+        let res: Option<i64> = scanned_block_ids::table
+            .select(diesel::dsl::min(scanned_block_ids::epoch))
+            .first(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("get_oldest_scanned_epoch: {}", e),
+            })?;
+
+        let oldest_epoch = res
+            .map(|r| {
+                let epoch_as_u64 = r.try_into().map_err(|_| StorageError::InvalidIntegerCast)?;
+                Ok::<Epoch, StorageError>(Epoch(epoch_as_u64))
+            })
+            .transpose()?;
+
+        Ok(oldest_epoch)
+    }
+
     fn get_last_scanned_block_id(
         &mut self,
         epoch: Epoch,
@@ -656,6 +677,7 @@ pub trait SubstateStoreWriteTransaction {
     fn add_non_fungible_index(&mut self, new_nft_index: NewNonFungibleIndex) -> Result<(), StorageError>;
     fn save_event(&mut self, new_event: NewEvent) -> Result<(), StorageError>;
     fn save_scanned_block_id(&mut self, new_scanned_block_id: NewScannedBlockId) -> Result<(), StorageError>;
+    fn delete_scanned_epochs_older_than(&mut self, epoch: Epoch) -> Result<(), StorageError>;
 }
 
 impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
@@ -815,6 +837,19 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
             target: LOG_TARGET,
             "Added new scanned block id {} for epoch {} and shard {:?}", to_hex(&new.last_block_id), new.epoch, new.shard_group
         );
+
+        Ok(())
+    }
+
+    fn delete_scanned_epochs_older_than(&mut self, epoch: Epoch) -> Result<(), StorageError> {
+        use crate::substate_storage_sqlite::schema::scanned_block_ids;
+
+        diesel::delete(scanned_block_ids::table)
+            .filter(scanned_block_ids::epoch.lt(epoch.0 as i64))
+            .execute(&mut *self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("delete_scanned_epochs_older_than: {}", e),
+            })?;
 
         Ok(())
     }

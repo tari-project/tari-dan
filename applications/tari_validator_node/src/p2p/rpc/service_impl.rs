@@ -279,12 +279,16 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
             .ok_or_else(|| RpcStatus::not_found(format!("start_block_id {start_block_id} not found")))?;
 
-        // Check that the start block
+        // Check that the start block is not after the locked block
         let locked_block = store
             .with_read_tx(|tx| LockedBlock::get(tx).optional())
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
             .ok_or_else(|| RpcStatus::not_found("No locked block"))?;
-        if start_block.height() > locked_block.height() {
+        let epoch_is_after = start_block.epoch() > locked_block.epoch();
+        let height_is_after =
+            (start_block.epoch() == locked_block.epoch) && (start_block.height() > locked_block.height());
+
+        if epoch_is_after || height_is_after {
             return Err(RpcStatus::not_found(format!(
                 "start_block_id {} is after locked block {}",
                 start_block_id, locked_block

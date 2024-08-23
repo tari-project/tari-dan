@@ -140,6 +140,7 @@ pub trait StateStoreReadTransaction: Sized {
         from_block_id: &BlockId,
     ) -> Result<BlockTransactionExecution, StorageError>;
     fn blocks_get(&self, block_id: &BlockId) -> Result<Block, StorageError>;
+    fn blocks_get_genesis_for_epoch(&self, epoch: Epoch) -> Result<Block, StorageError>;
     fn blocks_get_last_n_in_epoch(&self, n: usize, epoch: Epoch) -> Result<Vec<Block>, StorageError>;
     /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
     fn blocks_get_all_between(
