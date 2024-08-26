@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use minotari_app_grpc::tari_rpc::{GetActiveValidatorNodesResponse, TipInfoResponse};
+use minotari_app_grpc::tari_rpc::GetActiveValidatorNodesResponse;
 use tari_common_types::types::PublicKey;
 use tari_core::transactions::transaction_components::ValidatorNodeSignature;
 use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
@@ -46,10 +46,6 @@ pub fn to_vn_public_keys(vns: Vec<GetActiveValidatorNodesResponse>) -> Vec<Publi
     vns.into_iter()
         .map(|vn| PublicKey::from_vec(&vn.public_key).expect("Invalid public key, should not happen"))
         .collect()
-}
-
-pub fn to_block_height(tip_info: TipInfoResponse) -> u64 {
-    tip_info.metadata.unwrap().best_block_height
 }
 
 pub fn contains_key(vns: Vec<RistrettoPublicKey>, needle: PublicKey) -> bool {

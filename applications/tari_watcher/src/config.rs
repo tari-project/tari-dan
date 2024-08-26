@@ -9,7 +9,15 @@ use std::{
 
 use tokio::io::{self, AsyncWriteExt};
 
-use crate::Cli;
+use crate::{
+    constants::{
+        DEFAULT_BASE_NODE_GRPC_ADDRESS,
+        DEFAULT_BASE_WALLET_GRPC_ADDRESS,
+        DEFAULT_MINOTARI_MINER_BINARY_PATH,
+        DEFAULT_VALIDATOR_NODE_BINARY_PATH,
+    },
+    Cli,
+};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Config {
@@ -126,12 +134,12 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
     let executables = vec![
         ExecutableConfig {
             instance_type: InstanceType::TariValidatorNode,
-            executable_path: Some("target/release/tari_validator_node".into()),
+            executable_path: Some(DEFAULT_VALIDATOR_NODE_BINARY_PATH.into()),
             env: vec![],
         },
         ExecutableConfig {
             instance_type: InstanceType::MinoTariConsoleWallet,
-            executable_path: Some("target/release/minotari_wallet".into()),
+            executable_path: Some(DEFAULT_MINOTARI_MINER_BINARY_PATH.into()),
             env: vec![],
         },
     ];
@@ -144,18 +152,7 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
             .with_num_instances(1),
     ];
 
-    let base_dir = cli
-        .common
-        .base_dir
-        .clone()
-        .or_else(|| {
-            cli.get_config_path()
-                .canonicalize()
-                .ok()
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        })
-        .unwrap_or_else(|| std::env::current_dir().unwrap());
-
+    let base_dir = cli.common.base_dir.clone();
     let vn_registration_file = base_dir
         .join("data")
         .join("vn1")
@@ -164,8 +161,9 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
 
     Ok(Config {
         auto_register: true,
-        base_node_grpc_address: "".to_string(),
-        base_wallet_grpc_address: "".to_string(),
+        // must contain protocol and port
+        base_node_grpc_address: DEFAULT_BASE_NODE_GRPC_ADDRESS.to_string(),
+        base_wallet_grpc_address: DEFAULT_BASE_WALLET_GRPC_ADDRESS.to_string(),
         base_dir: base_dir.clone(),
         sidechain_id: None,
         vn_registration_file,

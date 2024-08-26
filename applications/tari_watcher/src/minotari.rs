@@ -3,20 +3,17 @@
 
 use std::path::PathBuf;
 
-use anyhow::bail;
-use minotari_app_grpc::tari_rpc::{
-    self as grpc,
-    GetActiveValidatorNodesResponse,
-    RegisterValidatorNodeResponse,
-    TipInfoResponse,
-};
+use anyhow::{anyhow, bail};
+use log::*;
+use minotari_app_grpc::tari_rpc::{self as grpc, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse};
 use minotari_node_grpc_client::BaseNodeGrpcClient;
 use minotari_wallet_grpc_client::WalletGrpcClient;
 use tari_common::exit_codes::{ExitCode, ExitError};
+use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::ByteArray;
 use tonic::transport::Channel;
 
-use crate::helpers::{read_registration_file, to_block_height};
+use crate::helpers::read_registration_file;
 
 #[derive(Clone)]
 pub struct Minotari {
@@ -24,8 +21,25 @@ pub struct Minotari {
     node_grpc_address: String,
     wallet_grpc_address: String,
     node_registration_file: PathBuf,
+    current_height: u64,
     node: Option<BaseNodeGrpcClient<Channel>>,
     wallet: Option<WalletGrpcClient<Channel>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TipStatus {
+    block_height: u64,
+    block_hash: FixedHash,
+}
+
+impl TipStatus {
+    pub fn hash(&self) -> FixedHash {
+        self.block_hash
+    }
+
+    pub fn height(&self) -> u64 {
+        self.block_height
+    }
 }
 
 impl Minotari {
@@ -35,6 +49,7 @@ impl Minotari {
             node_grpc_address,
             wallet_grpc_address,
             node_registration_file,
+            current_height: 0,
             node: None,
             wallet: None,
         }
@@ -70,18 +85,31 @@ impl Minotari {
         Ok(())
     }
 
-    pub async fn get_tip_status(&self) -> anyhow::Result<TipInfoResponse> {
+    pub async fn get_tip_status(&mut self) -> anyhow::Result<TipStatus> {
         if !self.bootstrapped {
             bail!("Node client not connected");
         }
 
-        Ok(self
+        log::debug!("Requesting tip status from base node");
+
+        let inner = self
             .node
             .clone()
             .unwrap()
             .get_tip_info(grpc::Empty {})
             .await?
-            .into_inner())
+            .into_inner();
+
+        let metadata = inner
+            .metadata
+            .ok_or_else(|| anyhow!("Base node returned no metadata".to_string()))?;
+
+        self.current_height = metadata.best_block_height;
+
+        Ok(TipStatus {
+            block_height: metadata.best_block_height,
+            block_hash: metadata.best_block_hash.try_into().map_err(|_| anyhow!("error"))?,
+        })
     }
 
     pub async fn get_active_validator_nodes(&self) -> anyhow::Result<Vec<GetActiveValidatorNodesResponse>> {
@@ -89,8 +117,7 @@ impl Minotari {
             bail!("Node client not connected");
         }
 
-        let tip_info = self.get_tip_status().await?;
-        let height = to_block_height(tip_info);
+        let height = self.current_height;
         let mut stream = self
             .node
             .clone()
@@ -129,6 +156,8 @@ impl Minotari {
             bail!("Node client not connected");
         }
 
+        info!("Preparing to send a node registration request");
+
         let info = read_registration_file(self.node_registration_file.clone()).await?;
         let sig = info.signature.signature();
         let resp = self
@@ -151,6 +180,8 @@ impl Minotari {
         if !resp.is_success {
             bail!("Failed to register validator node: {}", resp.failure_message);
         }
+
+        info!("Node registration request sent successfully");
 
         Ok(resp)
     }
