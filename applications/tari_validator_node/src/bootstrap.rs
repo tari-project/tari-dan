@@ -287,7 +287,6 @@ pub async fn spawn_services(
 
     // Base Node scanner
     let join_handle = base_layer_scanner::spawn(
-        config.network,
         global_db.clone(),
         base_node_client.clone(),
         epoch_manager.clone(),

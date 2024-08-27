@@ -36,6 +36,7 @@ use tari_dan_storage::{
         BlockDiff,
         BlockId,
         BlockTransactionExecution,
+        BurntUtxo,
         Command,
         EpochCheckpoint,
         ForeignProposal,
@@ -2170,6 +2171,65 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         }
 
         Ok(pledges)
+    }
+
+    fn burnt_utxos_get(&self, substate_id: &SubstateId) -> Result<BurntUtxo, StorageError> {
+        use crate::schema::burnt_utxos;
+
+        let burnt_utxo = burnt_utxos::table
+            .filter(burnt_utxos::substate_id.eq(substate_id.to_string()))
+            .first::<sql_models::BurntUtxo>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "burnt_utxos_get",
+                source: e,
+            })?;
+
+        burnt_utxo.try_into()
+    }
+
+    fn burnt_utxos_get_all_unproposed(
+        &self,
+        leaf_block: &BlockId,
+        limit: usize,
+    ) -> Result<Vec<BurntUtxo>, StorageError> {
+        use crate::schema::burnt_utxos;
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let locked_block = self.locked_block_get()?;
+        let exclude_block_ids = self.get_block_ids_with_commands_between(&locked_block.block_id, leaf_block)?;
+
+        let burnt_utxos = burnt_utxos::table
+            .filter(
+                burnt_utxos::proposed_in_block
+                    .is_null()
+                    .or(burnt_utxos::proposed_in_block
+                        .ne_all(exclude_block_ids)
+                        .and(burnt_utxos::proposed_in_block_height.gt(locked_block.height.as_u64() as i64))),
+            )
+            .limit(limit as i64)
+            .get_results::<sql_models::BurntUtxo>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "burnt_utxos_get_all_unproposed",
+                source: e,
+            })?;
+
+        burnt_utxos.into_iter().map(TryInto::try_into).collect()
+    }
+
+    fn burnt_utxos_count(&self) -> Result<u64, StorageError> {
+        use crate::schema::burnt_utxos;
+
+        let count = burnt_utxos::table
+            .count()
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "burnt_utxos_count",
+                source: e,
+            })?;
+
+        Ok(count as u64)
     }
 }
 

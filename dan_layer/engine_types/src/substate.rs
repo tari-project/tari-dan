@@ -113,11 +113,11 @@ pub enum SubstateId {
     Component(#[serde(with = "serde_with::string")] ComponentAddress),
     Resource(#[serde(with = "serde_with::string")] ResourceAddress),
     Vault(#[serde(with = "serde_with::string")] VaultId),
-    UnclaimedConfidentialOutput(#[cfg_attr(feature = "ts", ts(type = "string"))] UnclaimedConfidentialOutputAddress),
+    UnclaimedConfidentialOutput(#[serde(with = "serde_with::string")] UnclaimedConfidentialOutputAddress),
     NonFungible(#[serde(with = "serde_with::string")] NonFungibleAddress),
-    NonFungibleIndex(NonFungibleIndexAddress),
-    TransactionReceipt(TransactionReceiptAddress),
-    FeeClaim(FeeClaimAddress),
+    NonFungibleIndex(#[serde(with = "serde_with::string")] NonFungibleIndexAddress),
+    TransactionReceipt(#[serde(with = "serde_with::string")] TransactionReceiptAddress),
+    FeeClaim(#[serde(with = "serde_with::string")] FeeClaimAddress),
 }
 
 impl SubstateId {

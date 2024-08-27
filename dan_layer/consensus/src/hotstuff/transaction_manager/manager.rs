@@ -256,6 +256,8 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         match lock_result {
             Ok(()) => Ok(prepared),
             Err(err) => {
+                // TODO: In propose, we should only fail the transaction if versions are specified. Otherwise, we should
+                // wait to propose the transaction until the inputs are available.
                 let err = err.or_fatal_error()?;
                 prepared.set_abort_reason(RejectReason::FailedToLockInputs(err.to_string()));
                 Ok(prepared)

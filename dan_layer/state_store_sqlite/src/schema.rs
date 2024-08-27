@@ -43,6 +43,18 @@ diesel::table! {
 }
 
 diesel::table! {
+    burnt_utxos (id) {
+        id -> Integer,
+        substate_id -> Text,
+        substate -> Text,
+        base_layer_block_height -> BigInt,
+        proposed_in_block -> Nullable<Text>,
+        proposed_in_block_height -> Nullable<BigInt>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     epoch_checkpoints (id) {
         id -> Integer,
         epoch -> BigInt,
@@ -448,6 +460,7 @@ diesel::joinable!(foreign_missing_transactions -> foreign_parked_blocks (parked_
 diesel::allow_tables_to_appear_in_same_query!(
     block_diffs,
     blocks,
+    burnt_utxos,
     epoch_checkpoints,
     foreign_missing_transactions,
     foreign_parked_blocks,

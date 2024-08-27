@@ -23,6 +23,7 @@ use tari_dan_storage::{
         BlockDiff,
         BlockId,
         BlockTransactionExecution,
+        BurntUtxo,
         Decision,
         EpochCheckpoint,
         Evidence,
@@ -1827,6 +1828,80 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 operation: "epoch_checkpoint_save",
                 source: e,
             })?;
+
+        Ok(())
+    }
+
+    fn burnt_utxos_insert(&mut self, burnt_utxo: &BurntUtxo) -> Result<(), StorageError> {
+        use crate::schema::burnt_utxos;
+
+        let values = (
+            burnt_utxos::substate_id.eq(burnt_utxo.substate_id.to_string()),
+            burnt_utxos::substate.eq(serialize_json(&burnt_utxo.substate_value)?),
+            burnt_utxos::base_layer_block_height.eq(burnt_utxo.base_layer_block_height as i64),
+        );
+
+        diesel::insert_into(burnt_utxos::table)
+            .values(values)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "burnt_utxos_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn burnt_utxos_set_proposed_block(
+        &mut self,
+        substate_id: &SubstateId,
+        proposed_in_block: &BlockId,
+    ) -> Result<(), StorageError> {
+        use crate::schema::{blocks, burnt_utxos};
+
+        let proposed_in_block_hex = serialize_hex(proposed_in_block);
+        let num_affected = diesel::update(burnt_utxos::table)
+            .filter(burnt_utxos::substate_id.eq(substate_id.to_string()))
+            .set((
+                burnt_utxos::proposed_in_block.eq(&proposed_in_block_hex),
+                burnt_utxos::proposed_in_block_height.eq(blocks::table
+                    .select(blocks::height)
+                    .filter(blocks::block_id.eq(&proposed_in_block_hex))
+                    .single_value()),
+            ))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "burnt_utxos_set_proposed_block",
+                source: e,
+            })?;
+
+        if num_affected == 0 {
+            return Err(StorageError::NotFound {
+                item: "burnt_utxo".to_string(),
+                key: substate_id.to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
+    fn burnt_utxos_delete(&mut self, substate_id: &SubstateId) -> Result<(), StorageError> {
+        use crate::schema::burnt_utxos;
+
+        let num_affected = diesel::delete(burnt_utxos::table)
+            .filter(burnt_utxos::substate_id.eq(substate_id.to_string()))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "burnt_utxos_delete",
+                source: e,
+            })?;
+
+        if num_affected == 0 {
+            return Err(StorageError::NotFound {
+                item: "burnt_utxo".to_string(),
+                key: substate_id.to_string(),
+            });
+        }
 
         Ok(())
     }

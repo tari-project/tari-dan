@@ -73,6 +73,8 @@ Feature: Claim Burn
     When miner MINER mines 13 new blocks
     Then VN has scanned to height 30
 
+    # TODO: remove sleep - this is needed to allow validators enough time to propose the UTXO
+    When I wait 10 seconds
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS
 

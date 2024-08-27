@@ -4,14 +4,14 @@
 use std::{
     fmt,
     fmt::{Display, Formatter},
+    str::FromStr,
 };
 
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_lib::{
-    models::{BinaryTag, ObjectKey},
+    models::{BinaryTag, KeyParseError, ObjectKey},
     Hash,
-    HashParseError,
 };
 #[cfg(feature = "ts")]
 use ts_rs::TS;
@@ -34,9 +34,8 @@ impl TransactionReceiptAddress {
         self.0.inner()
     }
 
-    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
-        let hash = Hash::from_hex(hex)?;
-        Ok(Self::from_hash(hash))
+    pub fn from_hex(hex: &str) -> Result<Self, KeyParseError> {
+        Ok(Self(BorTag::new(ObjectKey::from_hex(hex)?)))
     }
 }
 
@@ -49,6 +48,15 @@ impl<T: Into<Hash>> From<T> for TransactionReceiptAddress {
 impl Display for TransactionReceiptAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "txreceipt_{}", self.as_object_key())
+    }
+}
+
+impl FromStr for TransactionReceiptAddress {
+    type Err = KeyParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.strip_prefix("txreceipt_").unwrap_or(s);
+        Self::from_hex(s)
     }
 }
 

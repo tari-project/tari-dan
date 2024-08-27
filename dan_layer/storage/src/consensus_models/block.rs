@@ -38,6 +38,7 @@ use super::{
     ForeignProposal,
     ForeignProposalAtom,
     ForeignSendCounters,
+    MintConfidentialOutputAtom,
     QuorumCertificate,
     SubstateChange,
     SubstateDestroyedProof,
@@ -372,6 +373,10 @@ impl Block {
 
     pub fn all_foreign_proposals(&self) -> impl Iterator<Item = &ForeignProposalAtom> + '_ {
         self.commands.iter().filter_map(|c| c.foreign_proposal())
+    }
+
+    pub fn all_confidential_output_mints(&self) -> impl Iterator<Item = &MintConfidentialOutputAtom> + '_ {
+        self.commands.iter().filter_map(|c| c.mint_confidential_output())
     }
 
     pub fn all_some_prepare(&self) -> impl Iterator<Item = &TransactionAtom> + '_ {

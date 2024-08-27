@@ -67,8 +67,11 @@ impl ForeignProposal {
         tx.foreign_proposals_upsert(self, proposed_in_block)
     }
 
-    pub fn delete<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        tx.foreign_proposals_delete(self.block.id())
+    pub fn delete<TTx: StateStoreWriteTransaction + ?Sized>(
+        tx: &mut TTx,
+        block_id: &BlockId,
+    ) -> Result<(), StorageError> {
+        tx.foreign_proposals_delete(block_id)
     }
 
     pub fn get_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a BlockId>>(
@@ -118,6 +121,10 @@ pub struct ForeignProposalAtom {
 impl ForeignProposalAtom {
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
         tx.foreign_proposals_exists(&self.block_id)
+    }
+
+    pub fn delete<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        ForeignProposal::delete(tx, &self.block_id)
     }
 }
 

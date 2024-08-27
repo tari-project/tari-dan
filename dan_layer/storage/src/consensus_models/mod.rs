@@ -4,6 +4,7 @@
 mod block;
 mod block_diff;
 mod block_pledges;
+mod burnt_utxo;
 mod command;
 mod epoch_checkpoint;
 mod evidence;
@@ -39,6 +40,7 @@ mod vote_signature;
 pub use block::*;
 pub use block_diff::*;
 pub use block_pledges::*;
+pub use burnt_utxo::*;
 pub use command::*;
 pub use epoch_checkpoint::*;
 pub use evidence::*;

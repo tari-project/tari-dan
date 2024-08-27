@@ -138,7 +138,6 @@ pub async fn spawn_services(
 
     // Base Node scanner
     base_layer_scanner::spawn(
-        config.network,
         global_db,
         base_node_client.clone(),
         epoch_manager.clone(),

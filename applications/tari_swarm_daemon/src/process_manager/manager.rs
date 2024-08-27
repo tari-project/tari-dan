@@ -1,7 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, fs::File, path::PathBuf, time::Duration};
 
 use anyhow::{anyhow, Context};
 use log::info;
@@ -103,6 +103,7 @@ impl ProcessManager {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle_request(&mut self, req: ProcessManagerRequest) -> anyhow::Result<()> {
         use ProcessManagerRequest::*;
         match req {
@@ -198,9 +199,58 @@ impl ProcessManager {
                     log::warn!("Request cancelled before response could be sent")
                 }
             },
+            BurnFunds {
+                amount,
+                wallet_instance_id,
+                account_name,
+                out_path,
+                reply,
+            } => {
+                let result = self
+                    .burn_funds_to_wallet_account(amount, wallet_instance_id, account_name, out_path)
+                    .await;
+                if reply.send(result).is_err() {
+                    log::warn!("Request cancelled before response could be sent")
+                }
+            },
         }
 
         Ok(())
+    }
+
+    async fn burn_funds_to_wallet_account(
+        &mut self,
+        amount: u64,
+        wallet_instance_id: InstanceId,
+        account_name: String,
+        out_path: PathBuf,
+    ) -> anyhow::Result<PathBuf> {
+        let wallet = self
+            .instance_manager
+            .get_wallet_daemon_mut(wallet_instance_id)
+            .ok_or_else(|| {
+                anyhow!(
+                    "No DanTariConsoleWallet instances {wallet_instance_id} found. Please start a wallet before \
+                     burning funds"
+                )
+            })?;
+        let claim_public_key = wallet.get_account_public_key(account_name.clone()).await?;
+        let wallet = self
+            .instance_manager
+            .minotari_wallets()
+            .next()
+            .ok_or_else(|| anyhow!("No MinoTariConsoleWallet instances found"))?;
+
+        let proof = wallet.burn_funds(amount, &claim_public_key).await?;
+
+        let file_name = PathBuf::from(format!("burn_proof-{}.json", proof.tx_id));
+        let path = out_path.join(&file_name);
+        let mut file = File::create(path)?;
+        serde_json::to_writer_pretty(&mut file, &proof)?;
+
+        info!("🔥 Burned {amount} Tari to account {account_name}");
+        self.mine(10).await?;
+        Ok(file_name)
     }
 
     async fn register_all_validator_nodes(&mut self) -> anyhow::Result<()> {

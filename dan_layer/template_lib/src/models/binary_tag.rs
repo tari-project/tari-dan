@@ -33,6 +33,7 @@ pub enum BinaryTag {
     TransactionReceipt = 134,
     FeeClaim = 135,
     ProofId = 136,
+    UnclaimedConfidentialOutputAddress = 137,
 }
 
 impl BinaryTag {

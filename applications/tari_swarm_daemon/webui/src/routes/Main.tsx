@@ -4,6 +4,8 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import { jsonRpc } from "../utils/json_rpc";
 import { ExecutedTransaction } from "../Types.ts";
+import MinotariWallet from "../components/MinotariWallet";
+import NodeControls from "../components/NodeControls.tsx";
 
 enum Executable {
   BaseNode = 1,
@@ -323,20 +325,6 @@ function ShowInfo(params: any) {
   );
 }
 
-interface NodeControlsProps {
-  isRunning: boolean,
-  onStart: () => void;
-  onStop: () => void;
-  onDeleteData: () => void;
-}
-
-function NodeControls({ isRunning, onStart, onStop, onDeleteData }: NodeControlsProps) {
-  return <>
-    <button onClick={onStart} disabled={isRunning}>Start</button>
-    <button onClick={onStop} disabled={!isRunning}>Stop</button>
-    <button onClick={onDeleteData}>Delete data</button>
-  </>;
-}
 
 function ShowInfos(params: any) {
   const { nodes, logs, stdoutLogs, name, showLogs, autoRefresh, horizontal, onReload } = params;
@@ -390,7 +378,6 @@ export default function Main() {
   const [danWallet, setDanWallets] = useState({});
   const [indexers, setIndexers] = useState({});
   const [node, setNode] = useState<{ grpc: any }>();
-  const [wallet, _setWallet] = useState();
   const [logs, setLogs] = useState<any | null>({});
   const [stdoutLogs, setStdoutLogs] = useState<any | null>({});
   const [connectorSample, setConnectorSample] = useState(null);
@@ -517,8 +504,7 @@ export default function Main() {
       <div className="infos">
         <ShowInfo executable={Executable.BaseNode} name="node" node={node} logs={logs?.node}
                   stdoutLogs={stdoutLogs?.node} showLogs={showLogs} horizontal={horizontal} onReload={getInfo} />
-        <ShowInfo executable={Executable.Wallet} name="wallet" node={wallet} logs={logs?.wallet}
-                  stdoutLogs={stdoutLogs?.wallet} showLogs={showLogs} horizontal={horizontal} />
+        <MinotariWallet showLogs={showLogs} />
         <ShowInfo executable={Executable.Miner} name="miner" logs={logs?.miner}
                   stdoutLogs={stdoutLogs?.miner} showLogs={showLogs} horizontal={horizontal}>
           <button onClick={() => jsonRpc("mine", { num_blocks: 1 })}>Mine</button>

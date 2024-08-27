@@ -266,6 +266,10 @@ impl InstanceManager {
     //     self.wallet_daemons.values()
     // }
 
+    pub fn get_wallet_daemon_mut(&mut self, id: InstanceId) -> Option<&mut WalletDaemonProcess> {
+        self.wallet_daemons.get_mut(&id)
+    }
+
     pub fn get_instance_mut(&mut self, id: InstanceId) -> Option<&mut Instance> {
         self.instances_mut().find(|i| i.id() == id)
     }
