@@ -157,7 +157,7 @@ fn it_disallows_more_than_one_write_lock_non_local_only() {
 }
 
 #[test]
-fn it_allows_locks_within_one_transaction() {
+fn it_allows_requesting_the_same_lock_within_one_transaction() {
     let store = create_store();
 
     let id = add_substate(&store, 0, 0);
@@ -192,7 +192,7 @@ fn it_allows_locks_within_one_transaction() {
         .unwrap();
 
     let n = store.new_locks().get(id.substate_id()).unwrap().len();
-    assert_eq!(n, 2);
+    assert_eq!(n, 1);
 }
 
 fn add_substate(store: &TestStore, seed: u8, version: u32) -> VersionedSubstateId {

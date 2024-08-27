@@ -85,33 +85,6 @@ where
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
         let id = *transaction.id();
 
-        // if let Some(abort_reason) = transaction.abort_reason() {
-        //     // TODO: Hacky - if a transaction uses DOWNed/non-existent inputs we error here. This changes the hard
-        //     // error to a propose REJECT. So that we have involved shards, we use the inputs as resolved inputs and
-        //     // assume v0 if version is not provided.
-        //     let inputs = transaction
-        //         .transaction()
-        //         .all_inputs_iter()
-        //         .map(|input| VersionedSubstateId::new(input.substate_id, input.version.unwrap_or(0)))
-        //         .map(|id| VersionedSubstateIdLockIntent::new(id, SubstateLockFlag::Write))
-        //         .collect();
-        //     return Ok(ExecutedTransaction::new(
-        //         transaction.into_transaction(),
-        //         ExecuteResult {
-        //             finalize: FinalizeResult {
-        //                 transaction_hash: id.into_array().into(),
-        //                 events: vec![],
-        //                 logs: vec![],
-        //                 execution_results: vec![],
-        //                 result: TransactionResult::Reject(abort_reason.clone()),
-        //                 fee_receipt: Default::default(),
-        //             },
-        //         },
-        //         inputs,
-        //         vec![],
-        //         Duration::from_secs(0),
-        //     ));
-        // }
         info!(target: LOG_TARGET, "Transaction {} executing. Inputs: {:?}", id, resolved_inputs);
 
         // Create a memory db with all the input substates, needed for the transaction execution

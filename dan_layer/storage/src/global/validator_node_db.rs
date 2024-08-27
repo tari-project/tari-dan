@@ -23,7 +23,7 @@
 use std::collections::HashMap;
 
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, ShardGroup, SubstateAddress};
+use tari_dan_common_types::{committee::Committee, Epoch, ShardGroup, SubstateAddress};
 
 use crate::global::{models::ValidatorNode, GlobalDbAdapter};
 
@@ -116,7 +116,7 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         &mut self,
         epoch: Epoch,
         shard_group: ShardGroup,
-    ) -> Result<HashMap<Shard, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
+    ) -> Result<HashMap<ShardGroup, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
         self.backend
             .validator_nodes_get_for_shard_group(self.tx, epoch, shard_group)
             .map_err(TGlobalDbAdapter::Error::into)

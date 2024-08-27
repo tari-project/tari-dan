@@ -120,7 +120,9 @@ where TConsensusSpec: ConsensusSpec
 
         rec.save(tx)?;
 
-        let has_some_local_inputs_or_all_foreign_inputs = rec.has_any_local_inputs(local_committee_info) ||
+        let has_some_local_inputs_or_all_foreign_inputs = local_committee_info
+            .includes_substate_id(&rec.to_receipt_id().into()) ||
+            rec.has_any_local_inputs(local_committee_info) ||
             rec.has_all_foreign_input_pledges(&**tx, local_committee_info)?;
         self.add_to_pool(tx, &rec, has_some_local_inputs_or_all_foreign_inputs)?;
 

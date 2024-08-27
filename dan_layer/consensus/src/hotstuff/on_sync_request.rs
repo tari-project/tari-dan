@@ -97,8 +97,23 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     block,
                     from
                 );
+                // TODO(perf): O(n) queries
+                let foreign_proposals = match store.with_read_tx(|tx| block.get_foreign_proposals(tx)) {
+                    Ok(foreign_proposals) => foreign_proposals,
+                    Err(err) => {
+                        warn!(target: LOG_TARGET, "Failed to fetch foreign proposals for block {}: {}", block, err);
+                        return;
+                    },
+                };
+
                 if let Err(err) = outbound_messaging
-                    .send(from.clone(), HotstuffMessage::Proposal(ProposalMessage { block }))
+                    .send(
+                        from.clone(),
+                        HotstuffMessage::Proposal(ProposalMessage {
+                            block,
+                            foreign_proposals,
+                        }),
+                    )
                     .await
                 {
                     warn!(target: LOG_TARGET, "Error sending SyncResponse: {err}");

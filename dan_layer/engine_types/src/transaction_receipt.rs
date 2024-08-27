@@ -8,7 +8,11 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
-use tari_template_lib::{models::BinaryTag, Hash, HashParseError};
+use tari_template_lib::{
+    models::{BinaryTag, ObjectKey},
+    Hash,
+    HashParseError,
+};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -18,32 +22,33 @@ const TAG: u64 = BinaryTag::TransactionReceipt.as_u64();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
-pub struct TransactionReceiptAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<Hash, TAG>);
+pub struct TransactionReceiptAddress(#[cfg_attr(feature = "ts", ts(type = "string"))] BorTag<ObjectKey, TAG>);
 
 impl TransactionReceiptAddress {
-    pub const fn new(address: Hash) -> Self {
-        Self(BorTag::new(address))
+    pub const fn from_hash(hash: Hash) -> Self {
+        let key = ObjectKey::from_array(hash.into_array());
+        Self(BorTag::new(key))
     }
 
-    pub fn hash(&self) -> &Hash {
+    pub fn as_object_key(&self) -> &ObjectKey {
         self.0.inner()
     }
 
     pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
         let hash = Hash::from_hex(hex)?;
-        Ok(Self::new(hash))
+        Ok(Self::from_hash(hash))
     }
 }
 
 impl<T: Into<Hash>> From<T> for TransactionReceiptAddress {
     fn from(address: T) -> Self {
-        Self::new(address.into())
+        Self::from_hash(address.into())
     }
 }
 
 impl Display for TransactionReceiptAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "txreceipt_{}", self.hash())
+        write!(f, "txreceipt_{}", self.as_object_key())
     }
 }
 

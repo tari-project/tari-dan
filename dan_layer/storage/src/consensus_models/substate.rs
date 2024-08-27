@@ -175,7 +175,7 @@ impl SubstateRecord {
         tx.substate_locks_remove_many_for_transactions(transaction_ids)
     }
 
-    pub fn create<TTx: StateStoreWriteTransaction>(self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn create<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.substates_create(self)?;
         Ok(())
     }

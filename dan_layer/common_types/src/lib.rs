@@ -27,7 +27,7 @@ pub use node_addressable::*;
 pub mod services;
 
 mod substate_address;
-pub use substate_address::SubstateAddress;
+pub use substate_address::*;
 
 pub mod substate_type;
 

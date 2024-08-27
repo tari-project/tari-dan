@@ -16,7 +16,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
 };
 
-use crate::cli::Cli;
+use crate::cli::{Cli, Commands};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Config {
@@ -26,6 +26,8 @@ pub struct Config {
     pub webserver: WebserverConfig,
     #[serde(flatten)]
     pub processes: ProcessesConfig,
+    #[serde(default)]
+    pub skip_registration: bool,
 }
 
 impl Config {
@@ -54,6 +56,9 @@ impl Config {
     }
 
     fn overrides_from_cli(&mut self, cli: &Cli) {
+        if let Commands::Start(ref overrides) = cli.command {
+            self.skip_registration = overrides.skip_registration;
+        }
         if let Some(ref base_dir) = cli.common.base_dir {
             self.base_dir.clone_from(base_dir);
         }

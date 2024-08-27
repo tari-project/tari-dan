@@ -176,6 +176,7 @@ where TCodec: Codec + Send + Clone + 'static
 
         let fut = async move {
             loop {
+                // TODO: read timeout
                 match codec.decode_from(&mut stream).await {
                     Ok(msg) => {
                         events

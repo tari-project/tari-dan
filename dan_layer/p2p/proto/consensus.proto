@@ -30,9 +30,14 @@ message NewViewMessage {
 
 message ProposalMessage {
   Block block = 1;
+  repeated ForeignProposal foreign_proposals = 2;
 }
 
 message ForeignProposalMessage {
+  ForeignProposal proposal = 1;
+}
+
+message ForeignProposal {
   Block block = 1;
   QuorumCertificate justify_qc = 2;
   repeated TransactionPledge block_pledge = 3;
@@ -112,25 +117,15 @@ message Command {
     TransactionAtom all_accept = 7;
     TransactionAtom some_accept = 8;
 
-    ForeignProposal foreign_proposal = 9;
+    ForeignProposalAtom foreign_proposal = 9;
     bool end_epoch = 10;
   }
 }
 
-enum ForeignProposalState {
-  UNKNOWN_STATE = 0;
-  NEW = 1;
-  MINED = 2;
-  DELETED = 3;
-}
-
-message ForeignProposal {
-  uint32 shard_group = 1;
-  bytes block_id = 2;
-  ForeignProposalState state = 3;
-  uint64 mined_at = 4;
-  repeated bytes transactions = 5;
-  uint64 base_layer_block_height = 6;
+message ForeignProposalAtom {
+  bytes block_id = 1;
+  uint32 shard_group = 2;
+  uint64 base_layer_block_height = 3;
 }
 
 message TransactionAtom {

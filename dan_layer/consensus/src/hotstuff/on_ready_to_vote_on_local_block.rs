@@ -15,6 +15,7 @@ use tari_dan_storage::{
         BlockTransactionExecution,
         Command,
         Decision,
+        ForeignProposalAtom,
         LastExecuted,
         LastVoted,
         LockedBlock,
@@ -40,6 +41,7 @@ use crate::{
         calculate_state_merkle_root,
         error::HotStuffError,
         event::HotstuffEvent,
+        filter_diff_for_committee,
         substate_store::{PendingSubstateStore, ShardedStateTree},
         transaction_manager::{
             ConsensusTransactionManager,
@@ -93,7 +95,7 @@ where TConsensusSpec: ConsensusSpec
     pub fn handle(
         &mut self,
         valid_block: &ValidBlock,
-        local_committee_info: CommitteeInfo,
+        local_committee_info: &CommitteeInfo,
         can_propose_epoch_end: bool,
     ) -> Result<BlockDecision, HotStuffError> {
         debug!(
@@ -104,7 +106,7 @@ where TConsensusSpec: ConsensusSpec
 
         self.store.with_write_tx(|tx| {
             let mut change_set =
-                self.decide_on_block(&**tx, &local_committee_info, valid_block, can_propose_epoch_end)?;
+                self.decide_on_block(&**tx, local_committee_info, valid_block, can_propose_epoch_end)?;
 
             let mut locked_blocks = Vec::new();
             let mut finalized_transactions = Vec::new();
@@ -121,7 +123,7 @@ where TConsensusSpec: ConsensusSpec
                         self.on_lock_block(tx, locked, block)
                     },
                     |tx, last_exec, commit_block| {
-                        let committed = self.on_commit(tx, last_exec, commit_block, &local_committee_info)?;
+                        let committed = self.on_commit(tx, last_exec, commit_block, local_committee_info)?;
                         if commit_block.is_epoch_end() {
                             end_of_epoch = Some(commit_block.epoch());
                         }
@@ -133,7 +135,7 @@ where TConsensusSpec: ConsensusSpec
                 )?;
 
                 if !leaf_block.is_justified() {
-                    self.process_newly_justified_block(tx, leaf_block, &mut change_set)?;
+                    self.process_newly_justified_block(tx, leaf_block, local_committee_info, &mut change_set)?;
                 }
 
                 valid_block.block().as_last_voted().set(tx)?;
@@ -155,92 +157,121 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         mut new_leaf_block: Block,
+        local_committee_info: &CommitteeInfo,
         change_set: &mut ProposedBlockChangeSet,
     ) -> Result<(), HotStuffError> {
+        info!(
+            target: LOG_TARGET,
+            "✅ New leaf block {} is justified. Updating evidence for transactions",
+            new_leaf_block,
+        );
         new_leaf_block.set_as_justified(tx)?;
 
         let leaf = new_leaf_block.as_leaf_block();
-        for cmd in new_leaf_block.into_commands() {
-            // CASE: This code checks if the new leaf block causes the transaction to be ready.
-            // For example, suppose a transaction is LocalPrepared in the currently proposed block, however it is not
-            // yet the leaf block (because it has not been justified). If we then receive the foreign LocalPrepared for
-            // this transaction, we evaluate the foreign LocalPrepare using the transaction state as it "was" without
-            // considering data from the as yet unjustified block. This means that we do not recognise that
-            // the transaction is ready for AllPrepared, and we never propose it. This code reevaluates the new leaf
-            // blocks and sets any transactions to ready that have the required evidence.
-            match cmd {
-                Command::LocalPrepare(atom) => {
-                    let Some(pool_tx) = self.transaction_pool.get(tx, leaf, atom.id()).optional()? else {
-                        return Err(HotStuffError::InvariantError(format!(
-                            "Transaction {} in newly justified block {} not found in the pool",
-                            atom.id(),
-                            leaf,
-                        )));
-                    };
+        let justify_id = *new_leaf_block.justify().id();
+        for cmd in new_leaf_block.commands() {
+            let Some(atom) = cmd.progressing() else {
+                continue;
+            };
 
-                    if !pool_tx.is_ready() && pool_tx.evidence().all_addresses_justified() {
+            // CASE: This code checks if the new leaf block causes the transaction to be ready.
+            // For example, suppose a transaction is LocalPrepared in the currently proposed block, however it
+            // is not yet the leaf block (because it has not been justified). If we then
+            // receive the foreign LocalPrepared for this transaction, we evaluate the
+            // foreign LocalPrepare using the transaction state as it "was" without
+            // considering data from the as yet unjustified block. This means that we do not
+            // recognise that the transaction is ready for AllPrepared, and we never propose
+            // it. This code reevaluates the new leaf blocks and sets any transactions to
+            // ready that have the required evidence.
+
+            if let Some(update_mut) = change_set.next_update_mut(atom.id()) {
+                // The leaf block already approved finalising this transaction (i.e. the justify block proposed
+                // LocalAccept, the leaf proposed (some|all)Accept therefore we already have all evidence). This
+                // transaction will not be proposed again and will be finalised.
+                if update_mut.stage.is_finalising() {
+                    continue;
+                }
+
+                update_mut
+                    .evidence_mut()
+                    .add_qc_evidence(local_committee_info, justify_id);
+
+                if !update_mut.is_ready {
+                    let local_prepare_is_justified =
+                        update_mut.stage.is_local_prepared() && update_mut.evidence().all_input_addresses_justified();
+                    let local_accept_is_justified =
+                        update_mut.stage.is_local_accepted() && update_mut.evidence().all_addresses_justified();
+                    if local_prepare_is_justified {
                         info!(
                             target: LOG_TARGET,
                             "✅ All inputs justified for transaction {} in block {} is now ready for AllPrepared",
                             atom.id(),
                             leaf,
                         );
-                        // TODO: this is a hack to allow the update to be modified if the current block already has a
-                        // transaction update
-                        if let Some(update_mut) = change_set.next_update_mut(pool_tx.transaction_id()) {
-                            if update_mut.stage.is_local_prepared() {
-                                update_mut.is_ready = true;
-                            }
-                        } else {
-                            change_set.set_next_transaction_update(
-                                &pool_tx,
-                                TransactionPoolStage::LocalPrepared,
-                                true,
-                            )?;
-                        }
-                    }
-                },
-                Command::LocalAccept(atom) => {
-                    let Some(pool_tx) = self.transaction_pool.get(tx, leaf, atom.id()).optional()? else {
-                        return Err(HotStuffError::InvariantError(format!(
-                            "Transaction {} in newly justified block {} not found in the pool",
-                            atom.id(),
-                            leaf,
-                        )));
-                    };
-
-                    if !pool_tx.is_ready() && pool_tx.evidence().all_addresses_justified() {
+                        update_mut.is_ready = true;
+                    } else if local_accept_is_justified {
                         info!(
                             target: LOG_TARGET,
                             "✅ All inputs justified for transaction {} in block {} is now ready for AllAccepted",
                             atom.id(),
                             leaf,
                         );
-                        // TODO: this is a hack to allow the update to be modified after the fact. This should be
-                        // removed.
-                        if let Some(update_mut) = change_set.next_update_mut(pool_tx.transaction_id()) {
-                            if update_mut.stage.is_local_accepted() {
-                                update_mut.is_ready = true;
-                            }
-                        } else {
-                            change_set.set_next_transaction_update(
-                                &pool_tx,
-                                TransactionPoolStage::LocalAccepted,
-                                true,
-                            )?;
-                        }
+                        update_mut.is_ready = true;
+                    } else {
+                        // Nothing - we've updated the evidence and is_ready remains false
+                        debug!(
+                            target: LOG_TARGET,
+                            "Transaction {} stage: {} still not ready",
+                            atom.id(),
+                            update_mut.stage
+                        );
                     }
-                },
-                Command::Prepare(_) |
-                Command::AllPrepare(_) |
-                Command::SomePrepare(_) |
-                Command::AllAccept(_) |
-                Command::SomeAccept(_) |
-                Command::ForeignProposal(_) |
-                Command::EndEpoch |
-                Command::LocalOnly(_) => {
-                    // Nothing to do
-                },
+                }
+            } else {
+                // No update from current leaf, so the current pool data is the latest
+                let Some(mut pool_tx) = self.transaction_pool.get(tx, leaf, atom.id()).optional()? else {
+                    return Err(HotStuffError::InvariantError(format!(
+                        "Transaction {} in newly justified block {} not found in the pool",
+                        atom.id(),
+                        leaf,
+                    )));
+                };
+
+                pool_tx.add_qc_evidence(local_committee_info, justify_id);
+
+                if pool_tx.is_ready() {
+                    change_set.set_next_transaction_update(&pool_tx, pool_tx.current_stage(), true)?;
+                } else {
+                    let local_prepare_is_justified = cmd
+                        .local_prepare()
+                        .map(|_| pool_tx.evidence().all_input_addresses_justified())
+                        .unwrap_or(false);
+                    let local_accept_is_justified = cmd
+                        .local_accept()
+                        .map(|_| pool_tx.evidence().all_addresses_justified())
+                        .unwrap_or(false);
+                    let is_ready = local_prepare_is_justified || local_accept_is_justified;
+
+                    // Some logs
+                    if local_prepare_is_justified {
+                        info!(
+                            target: LOG_TARGET,
+                            "✅ All inputs justified for transaction {} in block {} is now ready for AllPrepared",
+                            atom.id(),
+                            leaf,
+                        );
+                    } else if local_accept_is_justified {
+                        info!(
+                            target: LOG_TARGET,
+                            "✅ All inputs justified for transaction {} in block {} is now ready for AllAccepted",
+                            atom.id(),
+                            leaf,
+                        );
+                    } else {
+                        // Nothing - we'll still update the evidence with is_ready = false
+                    }
+                    change_set.set_next_transaction_update(&pool_tx, pool_tx.current_stage(), is_ready)?;
+                }
             }
         }
 
@@ -330,35 +361,17 @@ where TConsensusSpec: ConsensusSpec
                     }
                 },
                 Command::LocalPrepare(atom) => {
-                    if !self.evaluate_local_prepare_command(
-                        tx,
-                        block,
-                        atom,
-                        local_committee_info,
-                        &mut proposed_block_change_set,
-                    )? {
+                    if !self.evaluate_local_prepare_command(tx, block, atom, &mut proposed_block_change_set)? {
                         return Ok(proposed_block_change_set.no_vote());
                     }
                 },
                 Command::AllPrepare(atom) => {
-                    if !self.evaluate_all_prepare_command(
-                        tx,
-                        block,
-                        atom,
-                        local_committee_info,
-                        &mut proposed_block_change_set,
-                    )? {
+                    if !self.evaluate_all_prepare_command(tx, block, atom, &mut proposed_block_change_set)? {
                         return Ok(proposed_block_change_set.no_vote());
                     }
                 },
                 Command::SomePrepare(atom) => {
-                    if !self.evaluate_some_prepare_command(
-                        tx,
-                        block,
-                        atom,
-                        local_committee_info,
-                        &mut proposed_block_change_set,
-                    )? {
+                    if !self.evaluate_some_prepare_command(tx, block, atom, &mut proposed_block_change_set)? {
                         return Ok(proposed_block_change_set.no_vote());
                     }
                 },
@@ -380,31 +393,22 @@ where TConsensusSpec: ConsensusSpec
                         block,
                         atom,
                         local_committee_info,
+                        &mut substate_store,
                         &mut proposed_block_change_set,
                     )? {
                         return Ok(proposed_block_change_set.no_vote());
                     }
                 },
                 Command::SomeAccept(atom) => {
-                    if !self.evaluate_some_accept_command(
-                        tx,
-                        block,
-                        atom,
-                        local_committee_info,
-                        &mut proposed_block_change_set,
-                    )? {
+                    if !self.evaluate_some_accept_command(tx, block, atom, &mut proposed_block_change_set)? {
                         return Ok(proposed_block_change_set.no_vote());
                     }
                 },
-                Command::ForeignProposal(foreign_proposal) => {
-                    if !foreign_proposal.exists(tx)? {
-                        warn!(
-                            target: LOG_TARGET,
-                            "❌ Foreign proposal for block {block_id} from {shard_group} does not exist in the store",
-                            block_id = foreign_proposal.block_id,shard_group = foreign_proposal.shard_group
-                        );
+                Command::ForeignProposal(fp_atom) => {
+                    if !self.evaluate_foreign_proposal_command(tx, fp_atom, &mut proposed_block_change_set)? {
                         return Ok(proposed_block_change_set.no_vote());
                     }
+
                     continue;
                 },
                 Command::EndEpoch => {
@@ -731,9 +735,6 @@ where TConsensusSpec: ConsensusSpec
             },
         }
 
-        // TODO: This QC is not necessarily evidence for this transaction, but typically for the parent block. We
-        //       could add transaction evidence once this block is justified.
-        tx_rec.add_qc_evidence(local_committee_info, *block.justify().id());
         proposed_block_change_set.set_next_transaction_update(&tx_rec, TransactionPoolStage::Prepared, true)?;
 
         Ok(true)
@@ -744,10 +745,9 @@ where TConsensusSpec: ConsensusSpec
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         block: &Block,
         atom: &TransactionAtom,
-        local_committee_info: &CommitteeInfo,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<bool, HotStuffError> {
-        let Some(mut tx_rec) = self
+        let Some(tx_rec) = self
             .transaction_pool
             .get(tx, block.as_leaf_block(), atom.id())
             .optional()?
@@ -799,11 +799,10 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        tx_rec.add_qc_evidence(local_committee_info, *block.justify().id());
         proposed_block_change_set.set_next_transaction_update(
             &tx_rec,
             TransactionPoolStage::LocalPrepared,
-            tx_rec.evidence().all_addresses_justified(),
+            tx_rec.evidence().all_input_addresses_justified(),
         )?;
 
         Ok(true)
@@ -814,7 +813,6 @@ where TConsensusSpec: ConsensusSpec
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         block: &Block,
         atom: &TransactionAtom,
-        local_committee_info: &CommitteeInfo,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<bool, HotStuffError> {
         if atom.decision.is_abort() {
@@ -826,7 +824,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        let Some(mut tx_rec) = self
+        let Some(tx_rec) = self
             .transaction_pool
             .get(tx, block.as_leaf_block(), atom.id())
             .optional()?
@@ -873,26 +871,22 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(false);
         }
-
         // TODO: there is a race condition between the local node receiving the foreign LocalPrepare and the leader
-        // proposing AllPrepare. If the latter comes first, this node will not vote on this block which leads inevitably
-        // to erroneous leader failures. For this reason, this is commented out for now.
-        // if !tx_rec.evidence().all_addresses_justified() {
+        // proposing AllPrepare. If the latter comes first (because the leader received the foreign LocalPrepare),
+        // this node will not vote on this block which leads inevitably to erroneous leader failures. For this reason,
+        // this is commented out for now.
+
+        // if !tx_rec.evidence().all_input_addresses_justified() {
         //     warn!(
         //         target: LOG_TARGET,
-        //         "❌ AllPrepare disagreement for transaction {} in block {}. Leader proposed that all committees have
-        // justified, but local evidence is not all justified",         tx_rec.transaction_id(),
+        //         "❌ LocalPrepare disagreement for transaction {} in block {}. Leader proposed that all committees
+        // have justified, but local evidence is not all justified",         tx_rec.transaction_id(),
         //         block,
         //     );
         //     return Ok(false);
         // }
-
-        tx_rec.add_qc_evidence(local_committee_info, *block.justify().id());
-        proposed_block_change_set.set_next_transaction_update(
-            &tx_rec,
-            TransactionPoolStage::AllPrepared,
-            tx_rec.evidence().all_addresses_justified(),
-        )?;
+        //
+        proposed_block_change_set.set_next_transaction_update(&tx_rec, TransactionPoolStage::AllPrepared, true)?;
 
         Ok(true)
     }
@@ -902,7 +896,6 @@ where TConsensusSpec: ConsensusSpec
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         block: &Block,
         atom: &TransactionAtom,
-        local_committee_info: &CommitteeInfo,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<bool, HotStuffError> {
         if atom.decision.is_commit() {
@@ -914,7 +907,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        let Some(mut tx_rec) = self
+        let Some(tx_rec) = self
             .transaction_pool
             .get(tx, block.as_leaf_block(), atom.id())
             .optional()?
@@ -962,7 +955,6 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        tx_rec.add_qc_evidence(local_committee_info, *block.justify().id());
         proposed_block_change_set.set_next_transaction_update(&tx_rec, TransactionPoolStage::SomePrepared, true)?;
 
         Ok(true)
@@ -1014,10 +1006,10 @@ where TConsensusSpec: ConsensusSpec
             tx_rec.update_from_execution(&execution);
 
             // Lock all local outputs
-            let local_outputs = execution
-                .resulting_outputs()
-                .iter()
-                .filter(|o| local_committee_info.includes_substate_address(&o.to_substate_address()));
+            let local_outputs = execution.resulting_outputs().iter().filter(|o| {
+                o.substate_id().is_transaction_receipt() ||
+                    local_committee_info.includes_substate_address(&o.to_substate_address())
+            });
             match substate_store.try_lock_all(*tx_rec.transaction_id(), local_outputs, false) {
                 Ok(()) => {},
                 Err(err) => {
@@ -1043,7 +1035,6 @@ where TConsensusSpec: ConsensusSpec
                         err
                     );
 
-                    tx_rec.add_qc_evidence(local_committee_info, *block.justify().id());
                     tx_rec.set_local_decision(Decision::Abort);
                     proposed_block_change_set
                         .set_next_transaction_update(
@@ -1091,30 +1082,8 @@ where TConsensusSpec: ConsensusSpec
 
         // maybe_execution is only None if the transaction is not committed
         if let Some(execution) = maybe_execution {
-            if tx_rec.current_decision().is_commit() {
-                let diff = execution.result().finalize.accept().ok_or_else(|| {
-                    HotStuffError::InvariantError(format!(
-                        "evaluate_local_accept_command: Transaction {} has COMMIT decision but execution failed when \
-                         proposing",
-                        tx_rec.transaction_id(),
-                    ))
-                })?;
-
-                substate_store.put_diff(*tx_rec.transaction_id(), diff)?;
-            }
             proposed_block_change_set.add_transaction_execution(execution)?;
         }
-
-        tx_rec.add_qc_evidence(local_committee_info, *block.justify().id());
-
-        // Good debug info
-        // tx_rec.evidence().iter().for_each(|(addr, ev)| {
-        //     let includes_local = local_committee_info.includes_substate_address(addr);
-        //     log::error!(
-        //         target: LOG_TARGET,
-        //         "🗾 VOTE ON LOCALACCEPT EVIDENCE (l={}, f={}) {}: {}", includes_local, !includes_local, addr, ev
-        //     );
-        // });
 
         proposed_block_change_set.set_next_transaction_update(
             &tx_rec,
@@ -1131,6 +1100,7 @@ where TConsensusSpec: ConsensusSpec
         block: &Block,
         atom: &TransactionAtom,
         local_committee_info: &CommitteeInfo,
+        substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<bool, HotStuffError> {
         if atom.decision.is_abort() {
@@ -1142,7 +1112,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        let Some(mut tx_rec) = self
+        let Some(tx_rec) = self
             .transaction_pool
             .get(tx, block.as_leaf_block(), atom.id())
             .optional()?
@@ -1190,9 +1160,27 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        // TODO: This isn't the QC that justifies this, typically the block after this would (same applies to all other
-        // occurrences of this code)
-        tx_rec.add_qc_evidence(local_committee_info, *block.justify().id());
+        let execution = BlockTransactionExecution::get_pending_for_block(tx, tx_rec.transaction_id(), block.parent())
+            .optional()?
+            .ok_or_else(|| {
+                HotStuffError::InvariantError(format!(
+                    "evaluate_all_accept_command: Transaction {} has COMMIT decision but execution is missing",
+                    tx_rec.transaction_id()
+                ))
+            })?;
+
+        let diff = execution.result().finalize.accept().ok_or_else(|| {
+            HotStuffError::InvariantError(format!(
+                "evaluate_local_accept_command: Transaction {} has COMMIT decision but execution failed when proposing",
+                tx_rec.transaction_id(),
+            ))
+        })?;
+
+        substate_store.put_diff(
+            *tx_rec.transaction_id(),
+            &filter_diff_for_committee(local_committee_info, diff),
+        )?;
+
         proposed_block_change_set.set_next_transaction_update(&tx_rec, TransactionPoolStage::AllAccepted, false)?;
 
         Ok(true)
@@ -1203,7 +1191,6 @@ where TConsensusSpec: ConsensusSpec
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         block: &Block,
         atom: &TransactionAtom,
-        local_committee_info: &CommitteeInfo,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<bool, HotStuffError> {
         if atom.decision.is_commit() {
@@ -1215,7 +1202,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        let Some(mut tx_rec) = self
+        let Some(tx_rec) = self
             .transaction_pool
             .get(tx, block.as_leaf_block(), atom.id())
             .optional()?
@@ -1290,8 +1277,27 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
-        tx_rec.add_qc_evidence(local_committee_info, *block.justify().id());
         proposed_block_change_set.set_next_transaction_update(&tx_rec, TransactionPoolStage::SomeAccepted, false)?;
+
+        Ok(true)
+    }
+
+    fn evaluate_foreign_proposal_command(
+        &self,
+        tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        fp_atom: &ForeignProposalAtom,
+        proposed_block_change_set: &mut ProposedBlockChangeSet,
+    ) -> Result<bool, HotStuffError> {
+        if !fp_atom.exists(tx)? {
+            warn!(
+                target: LOG_TARGET,
+                "❌ NO VOTE: Foreign proposal for block {block_id} has not been received.",
+                block_id = fp_atom.block_id,
+            );
+            return Ok(false);
+        }
+
+        proposed_block_change_set.set_foreign_proposal_proposed_in(fp_atom.block_id);
 
         Ok(true)
     }
@@ -1360,10 +1366,6 @@ where TConsensusSpec: ConsensusSpec
             "🔒️ LOCKED BLOCK: {}",
             block,
         );
-
-        for foreign_proposal in block.all_foreign_proposals() {
-            foreign_proposal.upsert(tx)?;
-        }
 
         // Release all locks for SomePrepare transactions since these can never be committed
         SubstateRecord::unlock_all(tx, block.all_some_prepare().map(|t| &t.id).peekable())?;

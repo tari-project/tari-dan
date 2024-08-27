@@ -6,19 +6,20 @@ use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, ShardG
 use tari_dan_storage::{
     consensus_models::{
         Block,
+        BlockId,
         BlockPledge,
         Command,
         ForeignProposal,
         ForeignReceiveCounters,
         LeafBlock,
-        QuorumCertificate,
+        TransactionAtom,
         TransactionPool,
+        TransactionPoolRecord,
         TransactionPoolStage,
     },
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::TransactionId;
 
 use crate::{
     hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle, ProposalValidationError},
@@ -52,32 +53,31 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     pub async fn handle(
         &mut self,
         from: TConsensusSpec::Addr,
         message: ForeignProposalMessage,
         local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
-        let ForeignProposalMessage {
-            block,
-            justify_qc,
-            block_pledge,
-        } = message;
+        let proposal = ForeignProposal::from(message);
 
         // TODO: validate justify_qc
         let mut foreign_receive_counter = self
             .store
             .with_read_tx(|tx| ForeignReceiveCounters::get_or_default(tx))?;
 
-        let vn = self.epoch_manager.get_validator_node(block.epoch(), &from).await?;
+        let vn = self
+            .epoch_manager
+            .get_validator_node_by_public_key(proposal.block().epoch(), proposal.block().proposed_by())
+            .await?;
         let foreign_committee_info = self
             .epoch_manager
-            .get_committee_info_for_substate(block.epoch(), vn.shard_key)
+            .get_committee_info_for_substate(proposal.block().epoch(), vn.shard_key)
             .await?;
 
         if let Err(err) = self.validate_proposed_block(
-            &from,
-            &block,
+            proposal.block(),
             foreign_committee_info.shard_group(),
             local_committee_info.shard_group(),
             &foreign_receive_counter,
@@ -94,37 +94,23 @@ where TConsensusSpec: ConsensusSpec
 
         foreign_receive_counter.increment_group(foreign_committee_info.shard_group());
 
-        let tx_ids = block
-            .commands()
-            .iter()
-            .filter_map(|command| {
-                if let Some(tx) = command.local_prepare() {
-                    if !foreign_committee_info.includes_any_address(command.evidence().substate_addresses_iter()) {
-                        return None;
-                    }
-                    // We are interested in the commands that are for us, they will be in local prepared and one of the
-                    // evidence shards will be ours
-                    Some(tx.id)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<TransactionId>>();
+        // Justify QC must justify the block
+        if proposal.justify_qc().block_id() != proposal.block().id() {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ FOREIGN PROPOSAL: Justify QC block id does not match the block id. Justify QC block id: {}, block id: {}",
+                proposal.justify_qc().block_id(),
+                proposal.block().id(),
+            );
+            return Ok(());
+        }
 
-        // The block height was validated earlier, so we can use the height only and not store the hash anymore
-        let foreign_proposal = ForeignProposal::new(
-            foreign_committee_info.shard_group(),
-            *block.id(),
-            tx_ids,
-            block.base_layer_block_height(),
-        );
-
-        if self.store.with_read_tx(|tx| foreign_proposal.exists(tx))? {
+        if self.store.with_read_tx(|tx| proposal.exists(tx))? {
             // This is expected behaviour, we may receive the same foreign proposal multiple times
             debug!(
                 target: LOG_TARGET,
                 "FOREIGN PROPOSAL: Already received proposal for block {}",
-                block.id(),
+                proposal.block().id(),
             );
             return Ok(());
         }
@@ -132,26 +118,33 @@ where TConsensusSpec: ConsensusSpec
         info!(
             target: LOG_TARGET,
             "🧩 Receive FOREIGN PROPOSAL for block {}, justify_qc: {} from {}",
-            block,
-            justify_qc,
+            proposal.block(),
+            proposal.justify_qc(),
             from,
         );
 
-        self.store.with_write_tx(|tx| {
+        let block_id = *proposal.block().id();
+        let result = self.store.with_write_tx(|tx| {
             foreign_receive_counter.save(tx)?;
-            foreign_proposal.upsert(tx)?;
-            self.on_receive_foreign_block(
-                tx,
-                &block,
-                &justify_qc,
-                &foreign_committee_info,
-                local_committee_info,
-                block_pledge,
-            )
-        })?;
+            proposal.upsert(tx, None)?;
+            self.on_receive_foreign_block(tx, proposal, &foreign_committee_info, local_committee_info)
+        });
 
-        // We could have ready transactions at this point, so if we're the leader for the next block we can propose
-        self.pacemaker.beat();
+        match result {
+            Ok(_) => {
+                // We could have ready transactions at this point, so if we're the leader for the next block we can
+                // propose
+                self.pacemaker.beat();
+            },
+            Err(err) => {
+                error!(
+                    target: LOG_TARGET,
+                    "⚠️ FOREIGN PROPOSAL: Failed to process foreign proposal for block {}: {}",
+                    block_id,
+                    err
+                );
+            },
+        }
 
         Ok(())
     }
@@ -160,12 +153,16 @@ where TConsensusSpec: ConsensusSpec
     fn on_receive_foreign_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block,
-        justify_qc: &QuorumCertificate,
+        foreign_proposal: ForeignProposal,
         foreign_committee_info: &CommitteeInfo,
         local_committee_info: &CommitteeInfo,
-        mut block_pledge: BlockPledge,
     ) -> Result<(), HotStuffError> {
+        let ForeignProposal {
+            block,
+            justify_qc,
+            mut block_pledge,
+            ..
+        } = foreign_proposal;
         let local_leaf = LeafBlock::get(&**tx)?;
         // We only want to save the QC once if applicable
         let mut is_qc_saved = false;
@@ -178,22 +175,31 @@ where TConsensusSpec: ConsensusSpec
                         continue;
                     }
 
+                    debug!(
+                        target: LOG_TARGET,
+                        "🧩 FOREIGN PROPOSAL: Command: LocalPrepare({}, {}), block: {}",
+                        atom.id,atom.decision, block.id(),
+                    );
+
                     let Some(mut tx_rec) = self.transaction_pool.get(tx, local_leaf, &atom.id).optional()? else {
-                        // TODO: request and sequence the transaction (elsewhere)
+                        // If this happens, it could be a bug in the foreign missing transaction handling
                         warn!(
                             target: LOG_TARGET,
-                            "⚠️ Foreign proposal received for transaction {} but this transaction is not in the pool.",
+                            "⚠️ NEVER HAPPEN: Foreign proposal received for transaction {} but this transaction is not in the pool.",
                             atom.id
                         );
                         continue;
                     };
 
                     if tx_rec.current_stage() > TransactionPoolStage::LocalPrepared {
+                        // TODO: This can happen if the foreign shard group is only responsible for outputs (the input
+                        // SGs have already progressed to LocalAccept) in which case it is safe to ignore this command.
+                        // However we should not send the proposal in the first place (assuming it does not involve any
+                        // other shard-applicable transactions).
                         warn!(
                             target: LOG_TARGET,
-                            "⚠️ Foreign LocalPrepare proposal (shard_group={}, block={}) received for transaction {} but current transaction stage is {}. Ignoring.",
-                            foreign_committee_info.shard_group(),
-                            block.id(),
+                            "⚠️ Foreign LocalPrepare proposal ({}) received LOCAL_PREPARE for transaction {} but current transaction stage is {}. Ignoring.",
+                            block,
                             tx_rec.transaction_id(), tx_rec.current_stage()
                         );
                         continue;
@@ -206,7 +212,7 @@ where TConsensusSpec: ConsensusSpec
                     if remote_decision.is_abort() && local_decision.is_commit() {
                         info!(
                             target: LOG_TARGET,
-                            "⚠️ Foreign shard ABORT {}. Update overall decision to ABORT. Local stage: {}, Leaf: {}",
+                            "⚠️ Foreign committee ABORT transaction {}. Update overall decision to ABORT. Local stage: {}, Leaf: {}",
                             tx_rec.transaction_id(), tx_rec.current_stage(), local_leaf
                         );
                     }
@@ -218,60 +224,10 @@ where TConsensusSpec: ConsensusSpec
                         is_qc_saved = true;
                     }
 
-                    #[allow(clippy::mutable_key_type)]
-                    let maybe_pledges = if remote_decision.is_commit() {
-                        let pledges = block_pledge.remove_transaction_pledges(&atom.id).ok_or_else(|| {
-                            HotStuffError::ForeignNodeOmittedTransactionPledges {
-                                foreign_block_id: *block.id(),
-                                transaction_id: atom.id,
-                            }
-                        })?;
-
-                        // Validate that provided evidence is correct
-                        // TODO: there are a lot of validations to be done on evidence and the foreign block in general,
-                        // this is here as a sanity check and should change to not be a fatal error in consensus
-                        for pledge in &pledges {
-                            let address = pledge.versioned_substate_id().to_substate_address();
-                            let evidence = atom.evidence.get(&address).ok_or_else(|| {
-                                ProposalValidationError::ForeignInvalidPledge {
-                                    block_id: *block.id(),
-                                    transaction_id: atom.id,
-                                    details: format!("Pledge {pledge} for address {address} not found in evidence"),
-                                }
-                            })?;
-                            if evidence.lock.is_output() && pledge.is_input() {
-                                return Err(ProposalValidationError::ForeignInvalidPledge {
-                                    block_id: *block.id(),
-                                    transaction_id: atom.id,
-                                    details: format!(
-                                        "Pledge {pledge} is an input but evidence is an output for address {address}"
-                                    ),
-                                }
-                                .into());
-                            }
-                            if !evidence.lock.is_output() && pledge.is_output() {
-                                return Err(ProposalValidationError::ForeignInvalidPledge {
-                                    block_id: *block.id(),
-                                    transaction_id: atom.id,
-                                    details: format!(
-                                        "Pledge {pledge} is an output but evidence is an input for address {address}"
-                                    ),
-                                }
-                                .into());
-                            }
-                        }
-                        Some(pledges)
-                    } else {
-                        if block_pledge.remove_transaction_pledges(&atom.id).is_some() {
-                            return Err(ProposalValidationError::ForeignInvalidPledge {
-                                block_id: *block.id(),
-                                transaction_id: atom.id,
-                                details: "Remote decided ABORT but provided pledges".to_string(),
-                            }
-                            .into());
-                        }
-                        None
-                    };
+                    // We need to add the justify QC to the evidence because the all prepare block could not include it
+                    // yet
+                    let mut foreign_evidence = atom.evidence.clone();
+                    foreign_evidence.add_qc_evidence(foreign_committee_info, *justify_qc.id());
 
                     // Update the transaction record with any new information provided by this foreign block
                     tx_rec.update_remote_data(
@@ -279,14 +235,17 @@ where TConsensusSpec: ConsensusSpec
                         remote_decision,
                         *justify_qc.id(),
                         foreign_committee_info,
-                        atom.evidence.clone(),
+                        foreign_evidence,
                     )?;
 
-                    if let Some(pledges) = maybe_pledges {
-                        // If the foreign shard has committed the transaction, we can add the pledges to the transaction
-                        // record
-                        tx_rec.add_foreign_pledges(tx, foreign_committee_info.shard_group(), pledges)?;
-                    }
+                    self.validate_and_add_pledges(
+                        tx,
+                        &tx_rec,
+                        block.id(),
+                        atom,
+                        &mut block_pledge,
+                        foreign_committee_info,
+                    )?;
 
                     if tx_rec.current_stage().is_new() {
                         info!(
@@ -302,7 +261,8 @@ where TConsensusSpec: ConsensusSpec
                         // CASE: One foreign SG is involved in all inputs and executed the transaction, local SG is
                         // involved in the outputs
                         let transaction = tx_rec.get_transaction(&**tx)?;
-                        let is_ready = transaction.has_any_local_inputs(local_committee_info) ||
+                        let is_ready = local_committee_info.includes_substate_id(&transaction.to_receipt_id().into()) ||
+                            transaction.has_any_local_inputs(local_committee_info) ||
                             transaction.has_all_foreign_input_pledges(&**tx, local_committee_info)?;
 
                         if is_ready {
@@ -323,7 +283,8 @@ where TConsensusSpec: ConsensusSpec
                                 tx_rec.current_stage()
                             );
                         }
-                    } else if tx_rec.current_stage().is_local_prepared() && tx_rec.evidence().all_addresses_justified()
+                    } else if tx_rec.current_stage().is_local_prepared() &&
+                        tx_rec.evidence().all_input_addresses_justified()
                     {
                         // If all shards are complete, and we've already received our LocalPrepared, we can set out
                         // LocalPrepared transaction as ready to propose ACCEPT. If we have not received
@@ -343,20 +304,6 @@ where TConsensusSpec: ConsensusSpec
                         // will not vote on this block which leads inevitably to erroneous
                         // leader failures. Currently we simply vote ACCEPT on the block, with is ready == false, so we
                         // need to handle this here. When we confirm foreign proposals correctly, we can remove this.
-                    } else if tx_rec.current_stage().is_all_prepared() &&
-                        !tx_rec.is_ready() &&
-                        tx_rec.evidence().all_addresses_justified()
-                    {
-                        // If the transaction is AllPrepared, we're waiting for all foreign proposals. Propose
-                        // transaction once we have them.
-                        info!(
-                            target: LOG_TARGET,
-                            "🧩 FOREIGN PROPOSAL: (Initial sequence from LocalPrepare) Transaction is ready for AllPrepared({}, {}) Local Stage: {}",
-                            tx_rec.transaction_id(),
-                            tx_rec.current_decision(),
-                            tx_rec.current_stage()
-                        );
-                        tx_rec.add_pending_status_update(tx, local_leaf, TransactionPoolStage::AllPrepared, true)?;
                     } else {
                         info!(
                             target: LOG_TARGET,
@@ -364,20 +311,26 @@ where TConsensusSpec: ConsensusSpec
                             tx_rec.transaction_id(),
                             tx_rec.current_decision(),
                             tx_rec.current_stage(),
-                             tx_rec.evidence().all_addresses_justified()
+                             tx_rec.evidence().all_input_addresses_justified()
                         );
+                        tx_rec.add_pending_status_update(tx, local_leaf, tx_rec.current_stage(), false)?;
                     }
                 },
                 Command::LocalAccept(atom) => {
                     if !local_committee_info.includes_any_address(atom.evidence.substate_addresses_iter()) {
                         continue;
                     }
+
+                    debug!(
+                        target: LOG_TARGET,
+                        "🧩 FOREIGN PROPOSAL: Command: LocalAccept({}, {}), block: {}",
+                        atom.id, atom.decision, block.id(),
+                    );
+
                     let Some(mut tx_rec) = self.transaction_pool.get(tx, local_leaf, &atom.id).optional()? else {
-                        // TODO: request and sequence the transaction (elsewhere)
-                        // This case will typically happen this shard group is only involved in outputs
                         warn!(
                             target: LOG_TARGET,
-                            "⚠️ Foreign proposal received for transaction {} but this transaction is not in the pool.",
+                            "⚠️ NEVER HAPPEN: Foreign proposal received for transaction {} but this transaction is not in the pool.",
                             atom.id
                         );
                         continue;
@@ -386,8 +339,10 @@ where TConsensusSpec: ConsensusSpec
                     if tx_rec.current_stage() > TransactionPoolStage::LocalAccepted {
                         warn!(
                             target: LOG_TARGET,
-                            "⚠️ Foreign proposal received for transaction {} but current transaction stage is {}. Ignoring.",
-                            tx_rec.transaction_id(), tx_rec.current_stage()
+                            "⚠️ Foreign proposal {} received LOCAL_ACCEPT for transaction {} but current transaction stage is {}. Ignoring.",
+                            block,
+                            tx_rec.transaction_id(),
+                            tx_rec.current_stage(),
                         );
                         continue;
                     }
@@ -411,13 +366,27 @@ where TConsensusSpec: ConsensusSpec
                         is_qc_saved = true;
                     }
 
+                    // We need to add the justify QC to the evidence because the all prepare block could not include it
+                    // yet
+                    let mut foreign_evidence = atom.evidence.clone();
+                    foreign_evidence.add_qc_evidence(foreign_committee_info, *justify_qc.id());
+
                     // Update the transaction record with any new information provided by this foreign block
                     tx_rec.update_remote_data(
                         tx,
                         remote_decision,
                         *justify_qc.id(),
                         foreign_committee_info,
-                        atom.evidence.clone(),
+                        foreign_evidence,
+                    )?;
+
+                    self.validate_and_add_pledges(
+                        tx,
+                        &tx_rec,
+                        block.id(),
+                        atom,
+                        &mut block_pledge,
+                        foreign_committee_info,
                     )?;
 
                     // Good debug info
@@ -435,7 +404,8 @@ where TConsensusSpec: ConsensusSpec
                         // CASE: Foreign SGs have pledged all inputs and executed the transaction, local SG is involved
                         // in the outputs
                         let transaction = tx_rec.get_transaction(&**tx)?;
-                        let is_ready = transaction.has_any_local_inputs(local_committee_info) ||
+                        let is_ready = local_committee_info.includes_substate_id(&transaction.to_receipt_id().into()) ||
+                            transaction.has_any_local_inputs(local_committee_info) ||
                             transaction.has_all_foreign_input_pledges(&**tx, local_committee_info)?;
                         if is_ready {
                             info!(
@@ -475,6 +445,7 @@ where TConsensusSpec: ConsensusSpec
                             tx_rec.current_stage(),
                             tx_rec.evidence().all_addresses_justified()
                         );
+                        tx_rec.add_pending_status_update(tx, local_leaf, tx_rec.current_stage(), false)?;
                     }
                 },
                 // Should never receive this
@@ -517,9 +488,78 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
+    fn validate_and_add_pledges(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        tx_rec: &TransactionPoolRecord,
+        block_id: &BlockId,
+        atom: &TransactionAtom,
+        block_pledge: &mut BlockPledge,
+        foreign_committee_info: &CommitteeInfo,
+    ) -> Result<(), HotStuffError> {
+        #[allow(clippy::mutable_key_type)]
+        let maybe_pledges = if atom.decision.is_commit() {
+            let pledges = block_pledge.remove_transaction_pledges(&atom.id).ok_or_else(|| {
+                HotStuffError::ForeignNodeOmittedTransactionPledges {
+                    foreign_block_id: *block_id,
+                    transaction_id: atom.id,
+                }
+            })?;
+
+            // Validate that provided evidence is correct
+            // TODO: there are a lot of validations to be done on evidence and the foreign block in general,
+            // this is here as a sanity check and should change to not be a fatal error in consensus
+            for pledge in &pledges {
+                let address = pledge.versioned_substate_id().to_substate_address();
+                let evidence =
+                    atom.evidence
+                        .get(&address)
+                        .ok_or_else(|| ProposalValidationError::ForeignInvalidPledge {
+                            block_id: *block_id,
+                            transaction_id: atom.id,
+                            details: format!("Pledge {pledge} for address {address} not found in evidence"),
+                        })?;
+                if evidence.lock.is_output() && pledge.is_input() {
+                    return Err(ProposalValidationError::ForeignInvalidPledge {
+                        block_id: *block_id,
+                        transaction_id: atom.id,
+                        details: format!("Pledge {pledge} is an input but evidence is an output for address {address}"),
+                    }
+                    .into());
+                }
+                if !evidence.lock.is_output() && pledge.is_output() {
+                    return Err(ProposalValidationError::ForeignInvalidPledge {
+                        block_id: *block_id,
+                        transaction_id: atom.id,
+                        details: format!("Pledge {pledge} is an output but evidence is an input for address {address}"),
+                    }
+                    .into());
+                }
+            }
+            Some(pledges)
+        } else {
+            if block_pledge.remove_transaction_pledges(&atom.id).is_some() {
+                return Err(ProposalValidationError::ForeignInvalidPledge {
+                    block_id: *block_id,
+                    transaction_id: atom.id,
+                    details: "Remote decided ABORT but provided pledges".to_string(),
+                }
+                .into());
+            }
+            None
+        };
+
+        if let Some(pledges) = maybe_pledges {
+            // If the foreign shard has committed the transaction, we can add the pledges to the transaction
+            // record
+            tx_rec.add_foreign_pledges(tx, foreign_committee_info.shard_group(), pledges)?;
+        }
+
+        Ok(())
+    }
+
     fn validate_proposed_block(
         &self,
-        from: &TConsensusSpec::Addr,
         candidate_block: &Block,
         _foreign_shard: ShardGroup,
         _local_shard: ShardGroup,
@@ -548,7 +588,7 @@ where TConsensusSpec: ConsensusSpec
         // }
         if candidate_block.is_genesis() {
             return Err(ProposalValidationError::ProposingGenesisBlock {
-                proposed_by: from.to_string(),
+                proposed_by: candidate_block.proposed_by().to_string(),
                 hash: *candidate_block.id(),
             });
         }
@@ -556,7 +596,7 @@ where TConsensusSpec: ConsensusSpec
         let calculated_hash = candidate_block.calculate_hash().into();
         if calculated_hash != *candidate_block.id() {
             return Err(ProposalValidationError::NodeHashMismatch {
-                proposed_by: from.to_string(),
+                proposed_by: candidate_block.proposed_by().to_string(),
                 hash: *candidate_block.id(),
                 calculated_hash,
             });

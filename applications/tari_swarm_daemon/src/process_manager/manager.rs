@@ -27,12 +27,14 @@ pub struct ProcessManager {
     instance_manager: InstanceManager,
     rx_request: mpsc::Receiver<ProcessManagerRequest>,
     shutdown_signal: ShutdownSignal,
+    skip_registration: bool,
 }
 
 impl ProcessManager {
     pub fn new(config: &Config, shutdown_signal: ShutdownSignal) -> (Self, ProcessManagerHandle) {
         let (tx_request, rx_request) = mpsc::channel(1);
         let this = Self {
+            skip_registration: config.skip_registration,
             executable_manager: ExecutableManager::new(
                 config.processes.executables.clone(),
                 config.processes.force_compile,
@@ -49,21 +51,39 @@ impl ProcessManager {
         (this, ProcessManagerHandle::new(tx_request))
     }
 
-    pub async fn start(mut self) -> anyhow::Result<()> {
+    async fn setup(&mut self) -> anyhow::Result<()> {
         info!("Starting process manager");
         let executables = self.executable_manager.prepare_all().await?;
         self.instance_manager.fork_all(executables).await?;
 
-        let num_vns = self.instance_manager.num_validator_nodes();
-        // Mine some initial funds, guessing 10 blocks to allow for coinbase maturity
-        self.mine(num_vns + 10).await.context("mining failed")?;
-        self.wait_for_wallet_funds(num_vns)
-            .await
-            .context("waiting for wallet funds")?;
+        if !self.skip_registration {
+            let num_vns = self.instance_manager.num_validator_nodes();
+            // Mine some initial funds, guessing 10 blocks to allow for coinbase maturity
+            self.mine(num_vns + 10).await.context("mining failed")?;
+            self.wait_for_wallet_funds(num_vns)
+                .await
+                .context("waiting for wallet funds")?;
 
-        self.register_all_validator_nodes()
-            .await
-            .context("registering validator node via GRPC")?;
+            self.register_all_validator_nodes()
+                .await
+                .context("registering validator node via GRPC")?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn start(mut self) -> anyhow::Result<()> {
+        let mut shutdown_signal = self.shutdown_signal.clone();
+
+        tokio::select! {
+            result = self.setup() => {
+                 result?;
+            },
+            _ = shutdown_signal.wait() => {
+                info!("Shutting down process manager");
+                return Ok(());
+            }
+        }
 
         loop {
             tokio::select! {
@@ -228,7 +248,7 @@ impl ProcessManager {
             // inputs for a transaction.
             sleep(Duration::from_secs(2)).await;
         }
-        self.mine(10).await?;
+        self.mine(20).await?;
         Ok(())
     }
 

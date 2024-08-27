@@ -124,7 +124,7 @@ impl<TMsgLogger: MessageLogger + Send> tari_consensus::traits::OutboundMessaging
 
         for to in &theirs {
             self.msg_logger
-                .log_outbound_message("broadcast", &to.to_string(), message.as_type_str(), "", &message);
+                .log_outbound_message("multicast", &to.to_string(), message.as_type_str(), "", &message);
         }
 
         self.networking

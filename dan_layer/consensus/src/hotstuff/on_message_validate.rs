@@ -5,21 +5,20 @@ use std::collections::HashSet;
 
 use log::*;
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, NodeHeight};
+use tari_dan_common_types::{committee::CommitteeInfo, Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, TransactionRecord},
+    consensus_models::{Block, BlockId, ForeignParkedProposal, TransactionRecord},
     StateStore,
     StateStoreWriteTransaction,
 };
-use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::TransactionId;
 use tokio::sync::broadcast;
 
 use super::config::HotstuffConfig;
 use crate::{
     block_validations,
-    hotstuff::{error::HotStuffError, HotstuffEvent},
-    messages::{HotstuffMessage, MissingTransactionsRequest, ProposalMessage},
+    hotstuff::{error::HotStuffError, HotstuffEvent, ProposalValidationError},
+    messages::{ForeignProposalMessage, HotstuffMessage, MissingTransactionsRequest, ProposalMessage},
     traits::{ConsensusSpec, OutboundMessaging},
 };
 
@@ -64,23 +63,15 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
     pub async fn handle(
         &mut self,
         current_height: NodeHeight,
+        local_committee_info: &CommitteeInfo,
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
         match msg {
             HotstuffMessage::Proposal(msg) => self.process_local_proposal(current_height, from, msg).await,
             HotstuffMessage::ForeignProposal(proposal) => {
-                if let Err(err) = self.check_proposal(&proposal.block).await {
-                    return Ok(MessageValidationResult::Invalid {
-                        from,
-                        message: HotstuffMessage::ForeignProposal(proposal),
-                        err,
-                    });
-                }
-                Ok(MessageValidationResult::Ready {
-                    from,
-                    message: HotstuffMessage::ForeignProposal(proposal),
-                })
+                self.process_foreign_proposal(local_committee_info, from, proposal)
+                    .await
             },
             HotstuffMessage::MissingTransactionsResponse(msg) => {
                 if !self.active_missing_transaction_requests.remove_element(&msg.request_id) {
@@ -135,65 +126,75 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         from: TConsensusSpec::Addr,
         proposal: ProposalMessage,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
-        let ProposalMessage { block } = proposal;
-
         info!(
             target: LOG_TARGET,
             "📜 new unvalidated PROPOSAL message {} from {} (current height = {})",
-            block,
-            block.proposed_by(),
+            proposal.block,
+            proposal.block.proposed_by(),
             current_height,
         );
 
-        if block.height() < current_height {
+        if proposal.block.height() < current_height {
             info!(
                 target: LOG_TARGET,
                 "🔥 Block {} is lower than current height {}. Ignoring.",
-                block,
+                proposal.block,
                 current_height
             );
             return Ok(MessageValidationResult::Discard);
         }
 
-        if let Err(err) = self.check_proposal(&block).await {
+        if let Err(err) = self.check_proposal(&proposal.block).await {
             return Ok(MessageValidationResult::Invalid {
                 from,
-                message: HotstuffMessage::Proposal(ProposalMessage { block }),
+                message: HotstuffMessage::Proposal(proposal),
                 err,
             });
         }
 
-        self.handle_missing_transactions(from, block).await
+        self.handle_missing_transactions_local_block(from, proposal).await
     }
 
-    pub async fn update_parked_blocks(
+    pub fn update_local_parked_blocks(
         &self,
         current_height: NodeHeight,
         transaction_id: &TransactionId,
-    ) -> Result<Option<(TConsensusSpec::Addr, HotstuffMessage)>, HotStuffError> {
+    ) -> Result<Option<ProposalMessage>, HotStuffError> {
         let maybe_unparked_block = self
             .store
             .with_write_tx(|tx| tx.missing_transactions_remove(current_height, transaction_id))?;
 
-        let Some(unparked_block) = maybe_unparked_block else {
+        let Some((unparked_block, foreign_proposals)) = maybe_unparked_block else {
             return Ok(None);
         };
 
         info!(target: LOG_TARGET, "♻️ all transactions for block {unparked_block} are ready for consensus");
 
-        let vn = self
-            .epoch_manager
-            .get_validator_node_by_public_key(unparked_block.epoch(), unparked_block.proposed_by())
-            .await?;
-
         let _ignore = self.tx_events.send(HotstuffEvent::ParkedBlockReady {
             block: unparked_block.as_leaf_block(),
         });
 
-        Ok(Some((
-            vn.address,
-            HotstuffMessage::Proposal(ProposalMessage { block: unparked_block }),
-        )))
+        Ok(Some(ProposalMessage {
+            block: unparked_block,
+            foreign_proposals,
+        }))
+    }
+
+    pub fn update_foreign_parked_blocks(
+        &self,
+        transaction_id: &TransactionId,
+    ) -> Result<Vec<ForeignParkedProposal>, HotStuffError> {
+        let unparked_foreign_blocks = self
+            .store
+            .with_write_tx(|tx| ForeignParkedProposal::remove_by_transaction_id(tx, transaction_id))?;
+
+        if unparked_foreign_blocks.is_empty() {
+            return Ok(vec![]);
+        };
+
+        info!(target: LOG_TARGET, "♻️ all transactions for {} foreign block(s) are ready for consensus", unparked_foreign_blocks.len());
+
+        Ok(unparked_foreign_blocks)
     }
 
     async fn check_proposal(&self, block: &Block) -> Result<(), HotStuffError> {
@@ -208,33 +209,33 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         Ok(())
     }
 
-    async fn handle_missing_transactions(
+    async fn handle_missing_transactions_local_block(
         &mut self,
         from: TConsensusSpec::Addr,
-        block: Block,
+        proposal: ProposalMessage,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
         let missing_tx_ids = self
             .store
-            .with_write_tx(|tx| self.check_for_missing_transactions(tx, &block))?;
+            .with_write_tx(|tx| self.check_for_missing_transactions(tx, &proposal))?;
 
         if missing_tx_ids.is_empty() {
             return Ok(MessageValidationResult::Ready {
                 from,
-                message: HotstuffMessage::Proposal(ProposalMessage { block }),
+                message: HotstuffMessage::Proposal(proposal),
             });
         }
 
         let _ignore = self.tx_events.send(HotstuffEvent::ProposedBlockParked {
-            block: block.as_leaf_block(),
+            block: proposal.block.as_leaf_block(),
             num_missing_txs: missing_tx_ids.len(),
             // TODO: remove
             num_awaiting_txs: 0,
         });
 
         Ok(MessageValidationResult::ParkedProposal {
-            block_id: *block.id(),
-            epoch: block.epoch(),
-            proposed_by: block.proposed_by().clone(),
+            block_id: *proposal.block.id(),
+            epoch: proposal.block.epoch(),
+            proposed_by: proposal.block.proposed_by().clone(),
             missing_txs: missing_tx_ids,
         })
     }
@@ -242,33 +243,123 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
     fn check_for_missing_transactions(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block,
+        proposal: &ProposalMessage,
     ) -> Result<HashSet<TransactionId>, HotStuffError> {
-        if block.commands().is_empty() {
+        if proposal.block.commands().is_empty() {
             debug!(
                 target: LOG_TARGET,
-                "✅ Block {} is empty (no missing transactions)", block
+                "✅ Block {} is empty (no missing transactions)", proposal.block
             );
             return Ok(HashSet::new());
         }
-        let missing_tx_ids = TransactionRecord::get_missing(&**tx, block.all_transaction_ids())?;
+        let missing_tx_ids = TransactionRecord::get_missing(&**tx, proposal.block.all_transaction_ids())?;
 
         if missing_tx_ids.is_empty() {
             debug!(
                 target: LOG_TARGET,
-                "✅ Block {} has no missing transactions", block
+                "✅ Block {} has no missing transactions", proposal.block
             );
             return Ok(HashSet::new());
         }
 
         info!(
             target: LOG_TARGET,
-            "⏳ Block {} has {} missing transactions", block, missing_tx_ids.len(),
+            "⏳ Block {} has {} missing transactions", proposal.block, missing_tx_ids.len(),
         );
 
-        tx.missing_transactions_insert(block, &missing_tx_ids, &[])?;
+        tx.missing_transactions_insert(&proposal.block, &proposal.foreign_proposals, &missing_tx_ids)?;
 
         Ok(missing_tx_ids)
+    }
+
+    async fn process_foreign_proposal(
+        &mut self,
+        local_committee_info: &CommitteeInfo,
+        from: TConsensusSpec::Addr,
+        msg: ForeignProposalMessage,
+    ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
+        info!(
+            target: LOG_TARGET,
+            "🧩 new unvalidated FOREIGN PROPOSAL message {} from {}",
+            msg,
+            from
+        );
+
+        if msg.block.commands().is_empty() {
+            warn!(
+                target: LOG_TARGET,
+                "❌ Foreign proposal block {} is empty therefore it cannot involve the local shard group", msg.block
+            );
+            let block_id = *msg.block.id();
+            return Ok(MessageValidationResult::Invalid {
+                from,
+                message: HotstuffMessage::ForeignProposal(msg),
+                err: HotStuffError::ProposalValidationError(ProposalValidationError::NoTransactionsInCommittee {
+                    block_id,
+                }),
+            });
+        }
+
+        if let Err(err) = self.check_proposal(&msg.block).await {
+            return Ok(MessageValidationResult::Invalid {
+                from,
+                message: HotstuffMessage::ForeignProposal(msg),
+                err,
+            });
+        }
+
+        self.store.with_write_tx(|tx| {
+            let mut all_involved_transactions = msg
+                .block
+                .all_transaction_ids_in_committee(local_committee_info)
+                .peekable();
+            // CASE: all foreign proposals must include evidence
+            if all_involved_transactions.peek().is_none() {
+                warn!(
+                    target: LOG_TARGET,
+                    "❌ Foreign Block {} has no transactions involving our committee", msg.block
+                );
+                // drop the borrow of msg.block
+                drop(all_involved_transactions);
+                let block_id = *msg.block.id();
+                return Ok(MessageValidationResult::Invalid {
+                    from,
+                    message: HotstuffMessage::ForeignProposal(msg),
+                    err: HotStuffError::ProposalValidationError(ProposalValidationError::NoTransactionsInCommittee {
+                        block_id,
+                    }),
+                });
+            }
+
+            let missing_tx_ids = TransactionRecord::get_missing(&**tx, all_involved_transactions)?;
+
+            if missing_tx_ids.is_empty() {
+                debug!(
+                    target: LOG_TARGET,
+                    "✅ Foreign Block {} has no missing transactions", msg.block
+                );
+                return Ok(MessageValidationResult::Ready {
+                    from,
+                    message: HotstuffMessage::ForeignProposal(msg),
+                });
+            }
+
+            info!(
+                target: LOG_TARGET,
+                "⏳ Foreign Block {} has {} missing transactions", msg.block, missing_tx_ids.len(),
+            );
+
+            let parked_block = ForeignParkedProposal::from(msg);
+            parked_block.insert(tx)?;
+            parked_block.add_missing_transactions(tx, &missing_tx_ids)?;
+
+            Ok(MessageValidationResult::ParkedProposal {
+                block_id: *parked_block.block().id(),
+                epoch: parked_block.block().epoch(),
+                proposed_by: parked_block.block().proposed_by().clone(),
+                missing_txs: missing_tx_ids,
+            })
+        })
     }
 }
 

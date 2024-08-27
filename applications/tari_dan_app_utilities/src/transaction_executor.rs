@@ -130,16 +130,6 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             self.network,
         );
         let result = processor.execute(transaction.clone())?;
-        //     Ok(result) => result,
-        //     // TODO: This may occur due to an internal error (e.g. OOM, etc).
-        //     Err(err) => ExecuteResult {
-        //         finalize: FinalizeResult::new_rejected(
-        //             tx_id,
-        //             RejectReason::ExecutionFailure(format!("BUG: {err}")),
-        //         ),
-        //         execution_time: Duration::default(),
-        //     },
-        // };
 
         Ok(ExecutionOutput { transaction, result })
     }

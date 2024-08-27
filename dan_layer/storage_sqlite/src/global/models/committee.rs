@@ -20,15 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, SubstateAddress};
-use tari_dan_storage::global::models::ValidatorNode;
-use tari_utilities::ByteArray;
+use tari_dan_common_types::ShardGroup;
 
-use crate::{
-    error::SqliteStorageError,
-    global::{schema::*, serialization::deserialize_json},
-};
+use crate::global::schema::*;
 
 #[derive(Queryable, Identifiable)]
 #[diesel(table_name = committees)]
@@ -36,6 +30,12 @@ pub struct DbCommittee {
     pub id: i32,
     pub validator_node_id: i32,
     pub epoch: i64,
-    pub bucket: i64,
+    pub shard_start: i32,
+    pub shard_end: i32,
 }
 
+impl DbCommittee {
+    pub fn as_shard_group(&self) -> ShardGroup {
+        ShardGroup::new(self.shard_start as u32, self.shard_end as u32)
+    }
+}

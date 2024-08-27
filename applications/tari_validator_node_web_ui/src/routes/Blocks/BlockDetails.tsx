@@ -34,7 +34,7 @@ import Loading from "../../Components/Loading";
 import { getBlock, getIdentity } from "../../utils/json_rpc";
 import Transactions from "./Transactions";
 import { decodeShardGroup, primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../utils/helpers";
-import type { Block, Command, ForeignProposal, TransactionAtom } from "@tari-project/typescript-bindings";
+import type { Block, Command, ForeignProposalAtom, TransactionAtom } from "@tari-project/typescript-bindings";
 import type { VNGetIdentityResponse } from "@tari-project/typescript-bindings";
 
 const COMMANDS = [
@@ -59,7 +59,7 @@ export default function BlockDetails() {
   const [epochEvents, setEpochEvents] = useState<string[]>([]);
   const [identity, setIdentity] = useState<VNGetIdentityResponse>();
   const [blockTime, setBlockTime] = useState<number>(0);
-  const [foreignProposals, setForeignProposals] = useState<ForeignProposal[]>([]);
+  const [foreignProposals, setForeignProposals] = useState<ForeignProposalAtom[]>([]);
 
   useEffect(() => {
     if (blockId !== undefined) {

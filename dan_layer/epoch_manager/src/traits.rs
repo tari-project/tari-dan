@@ -26,7 +26,6 @@ use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
-    shard::Shard,
     Epoch,
     NodeAddressable,
     ShardGroup,
@@ -118,7 +117,7 @@ pub trait EpochManagerReader: Send + Sync {
         &self,
         epoch: Epoch,
         shards: ShardGroup,
-    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError>;
+    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, EpochManagerError>;
 
     async fn get_local_committee(&self, epoch: Epoch) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let validator = self.get_our_validator_node(epoch).await?;

@@ -33,6 +33,7 @@ use tari_template_lib::{
         ComponentAddress,
         NonFungibleAddress,
         NonFungibleIndexAddress,
+        ObjectKey,
         ResourceAddress,
         UnclaimedConfidentialOutputAddress,
         VaultId,
@@ -47,7 +48,7 @@ use crate::{
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
     fee_claim::{FeeClaim, FeeClaimAddress},
-    hashing::substate_value_hasher32,
+    hashing::{hasher32, substate_value_hasher32, EngineHashDomainLabel},
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
     resource::Resource,
@@ -168,6 +169,36 @@ impl SubstateId {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, BorError> {
         decode_exact(bytes)
+    }
+
+    pub fn to_object_key(&self) -> ObjectKey {
+        match self {
+            SubstateId::Component(addr) => *addr.as_object_key(),
+            SubstateId::Resource(addr) => *addr.as_object_key(),
+            SubstateId::Vault(addr) => *addr.as_object_key(),
+            SubstateId::NonFungible(addr) => {
+                let key = hasher32(EngineHashDomainLabel::NonFungibleId)
+                    .chain(addr.resource_address())
+                    .chain(addr.id())
+                    .result()
+                    .trailing_bytes()
+                    .into();
+
+                ObjectKey::new(addr.resource_address().as_entity_id(), key)
+            },
+            SubstateId::NonFungibleIndex(addr) => {
+                let key = hasher32(EngineHashDomainLabel::NonFungibleIndex)
+                    .chain(addr.resource_address())
+                    .chain(&addr.index())
+                    .result()
+                    .trailing_bytes()
+                    .into();
+                ObjectKey::new(addr.resource_address().as_entity_id(), key)
+            },
+            SubstateId::UnclaimedConfidentialOutput(addr) => *addr.as_object_key(),
+            SubstateId::TransactionReceipt(addr) => *addr.as_object_key(),
+            SubstateId::FeeClaim(addr) => *addr.as_object_key(),
+        }
     }
 
     // TODO: look at using BECH32 standard
@@ -609,6 +640,12 @@ impl From<FeeClaim> for SubstateValue {
     }
 }
 
+impl From<TransactionReceipt> for SubstateValue {
+    fn from(tx_receipt: TransactionReceipt) -> Self {
+        Self::TransactionReceipt(tx_receipt)
+    }
+}
+
 impl Display for SubstateValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // TODO: improve output
@@ -644,8 +681,18 @@ impl SubstateDiff {
         self.up_substates.push((address, value));
     }
 
+    pub fn extend_up(&mut self, iter: impl Iterator<Item = (SubstateId, Substate)>) -> &mut Self {
+        self.up_substates.extend(iter);
+        self
+    }
+
     pub fn down(&mut self, address: SubstateId, version: u32) {
         self.down_substates.push((address, version));
+    }
+
+    pub fn extend_down(&mut self, iter: impl Iterator<Item = (SubstateId, u32)>) -> &mut Self {
+        self.down_substates.extend(iter);
+        self
     }
 
     pub fn up_iter(&self) -> impl Iterator<Item = &(SubstateId, Substate)> + '_ {

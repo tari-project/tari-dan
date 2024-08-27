@@ -49,14 +49,19 @@ impl TransactionPoolRecord {
         let mut local_decision = self.local_decision;
         let mut is_ready = self.is_ready;
         if let Some(update) = update {
-            evidence.merge(deserialize_json::<Evidence>(&update.evidence)?);
+            evidence.merge(deserialize_json(&update.evidence)?);
             is_ready = update.is_ready;
             pending_stage = Some(parse_from_string(&update.stage)?);
             local_decision = update.local_decision;
         }
 
-        if let Some(ref remote_evidence) = self.remote_evidence {
-            evidence.merge(deserialize_json::<Evidence>(remote_evidence)?);
+        let remote_evidence = self
+            .remote_evidence
+            .as_deref()
+            .map(deserialize_json::<Evidence>)
+            .transpose()?;
+        if let Some(ref remote_evidence) = remote_evidence {
+            evidence.merge(remote_evidence.clone());
         }
 
         let leader_fee = self
@@ -81,6 +86,7 @@ impl TransactionPoolRecord {
         Ok(consensus_models::TransactionPoolRecord::load(
             deserialize_hex_try_from(&self.transaction_id)?,
             evidence,
+            remote_evidence,
             self.transaction_fee.map(|f| f as u64),
             leader_fee,
             parse_from_string(&self.stage)?,

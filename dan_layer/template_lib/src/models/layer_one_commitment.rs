@@ -5,28 +5,24 @@ use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{hash::HashParseError, Hash};
+use crate::models::{KeyParseError, ObjectKey};
 
 /// The unique identification of a unclaimed confidential output in the Tari network.
 /// Used when a user wants to claim burned funds from the Minotari network into the Tari network
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct UnclaimedConfidentialOutputAddress(Hash);
+pub struct UnclaimedConfidentialOutputAddress(ObjectKey);
 
 impl UnclaimedConfidentialOutputAddress {
-    pub const fn new(hash: Hash) -> Self {
-        Self(hash)
+    pub fn from_hex(hex: &str) -> Result<Self, KeyParseError> {
+        Ok(Self(ObjectKey::from_hex(hex)?))
     }
 
-    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
-        Ok(Self(Hash::from_hex(hex)?))
+    pub fn try_from_commitment(commitment_bytes: &[u8]) -> Result<Self, KeyParseError> {
+        Ok(Self(ObjectKey::try_from(commitment_bytes)?))
     }
 
-    pub fn try_from_commitment(commitment_bytes: &[u8]) -> Result<Self, HashParseError> {
-        Ok(Self(Hash::try_from(commitment_bytes)?))
-    }
-
-    pub fn hash(&self) -> &Hash {
+    pub fn as_object_key(&self) -> &ObjectKey {
         &self.0
     }
 
@@ -36,10 +32,10 @@ impl UnclaimedConfidentialOutputAddress {
 }
 
 impl TryFrom<&[u8]> for UnclaimedConfidentialOutputAddress {
-    type Error = HashParseError;
+    type Error = KeyParseError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        Hash::try_from(value).map(Self)
+        ObjectKey::try_from(value).map(Self)
     }
 }
 

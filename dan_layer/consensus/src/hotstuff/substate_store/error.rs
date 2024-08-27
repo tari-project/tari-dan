@@ -1,14 +1,14 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::{optional::IsNotFoundError, SubstateAddress};
+use tari_dan_common_types::optional::IsNotFoundError;
 use tari_dan_storage::{consensus_models::SubstateLockType, StorageError};
 use tari_transaction::VersionedSubstateId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubstateStoreError {
-    #[error("Substate {address} not found")]
-    SubstateNotFound { address: SubstateAddress },
+    #[error("Substate {id} not found")]
+    SubstateNotFound { id: VersionedSubstateId },
     #[error("Substate {id} is DOWN")]
     SubstateIsDown { id: VersionedSubstateId },
     #[error("Expected substate {id} to not exist but it was found")]

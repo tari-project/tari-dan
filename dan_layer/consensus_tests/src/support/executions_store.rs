@@ -6,10 +6,10 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use tari_dan_storage::consensus_models::BlockTransactionExecution;
+use tari_dan_storage::consensus_models::TransactionExecution;
 use tari_transaction::TransactionId;
 
-type TestExecutionStore = HashMap<TransactionId, BlockTransactionExecution>;
+type TestExecutionStore = HashMap<TransactionId, TransactionExecution>;
 
 #[derive(Debug, Clone, Default)]
 pub struct TestTransactionExecutionsStore {
@@ -23,15 +23,15 @@ impl TestTransactionExecutionsStore {
         }
     }
 
-    pub fn insert(&self, execution: BlockTransactionExecution) -> &Self {
+    pub fn insert(&self, execution: TransactionExecution) -> &Self {
         self.transactions
             .write()
             .unwrap()
-            .insert(*execution.transaction_id(), execution);
+            .insert(execution.transaction_id, execution);
         self
     }
 
-    pub fn get(&self, transaction_id: &TransactionId) -> Option<BlockTransactionExecution> {
+    pub fn get(&self, transaction_id: &TransactionId) -> Option<TransactionExecution> {
         self.transactions.read().unwrap().get(transaction_id).cloned()
     }
 }

@@ -15,6 +15,7 @@ use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, FixedHashSizeError, PublicKey};
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_dan_common_types::{
+    committee::CommitteeInfo,
     hashing,
     optional::Optional,
     serde_with,
@@ -35,6 +36,7 @@ use super::{
     BlockDiff,
     BlockPledge,
     ForeignProposal,
+    ForeignProposalAtom,
     ForeignSendCounters,
     QuorumCertificate,
     SubstateChange,
@@ -312,7 +314,8 @@ impl Block {
 
         let inner_hash = hashing::block_hasher()
             .chain(&self.network)
-            .chain(&self.justify)
+            // This allows us to exclude the justify and still validate the block
+            .chain(self.justify.id())
             .chain(&self.height)
             .chain(&self.total_leader_fee)
             .chain(&self.epoch)
@@ -344,6 +347,21 @@ impl Block {
         self.commands.iter().filter_map(|d| d.transaction().map(|t| t.id()))
     }
 
+    pub fn all_transaction_ids_in_committee<'a>(
+        &'a self,
+        committee_info: &'a CommitteeInfo,
+    ) -> impl Iterator<Item = &TransactionId> + 'a {
+        self.commands
+            .iter()
+            .filter_map(|cmd| cmd.transaction())
+            .filter(|t| {
+                t.evidence
+                    .substate_addresses_iter()
+                    .any(|addr| committee_info.includes_substate_address(addr))
+            })
+            .map(|t| t.id())
+    }
+
     pub fn all_committing_transactions_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
         self.commands.iter().filter_map(|d| d.committing()).map(|t| t.id())
     }
@@ -352,7 +370,7 @@ impl Block {
         self.commands.iter().filter_map(|d| d.finalising()).map(|t| t.id())
     }
 
-    pub fn all_foreign_proposals(&self) -> impl Iterator<Item = &ForeignProposal> + '_ {
+    pub fn all_foreign_proposals(&self) -> impl Iterator<Item = &ForeignProposalAtom> + '_ {
         self.commands.iter().filter_map(|c| c.foreign_proposal())
     }
 
@@ -527,17 +545,11 @@ impl Block {
         tx: &TTx,
         epoch: Epoch,
         shard_group: ShardGroup,
-        start_block_id_exclusive: &BlockId,
-        end_block_id_inclusive: &BlockId,
+        start_block_id: &BlockId,
+        end_block_id: &BlockId,
         include_dummy_blocks: bool,
     ) -> Result<Vec<Self>, StorageError> {
-        tx.blocks_get_all_between(
-            epoch,
-            shard_group,
-            start_block_id_exclusive,
-            end_block_id_inclusive,
-            include_dummy_blocks,
-        )
+        tx.blocks_get_all_between(epoch, shard_group, start_block_id, end_block_id, include_dummy_blocks)
     }
 
     pub fn get_last_n_in_epoch<TTx: StateStoreReadTransaction + ?Sized>(
@@ -935,12 +947,13 @@ impl Block {
         Ok(())
     }
 
-    pub fn get_local_prepared_block_pledge<TTx: StateStoreReadTransaction>(
-        &self,
-        tx: &TTx,
-    ) -> Result<BlockPledge, StorageError> {
+    pub fn get_block_pledge<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<BlockPledge, StorageError> {
         let mut pledges = BlockPledge::new();
-        for atom in self.commands().iter().filter_map(|cmd| cmd.local_prepare()) {
+        for atom in self
+            .commands()
+            .iter()
+            .filter_map(|cmd| cmd.local_prepare().or_else(|| cmd.local_accept()))
+        {
             // No pledges for aborted transactions
             if atom.decision.is_abort() {
                 continue;
@@ -948,10 +961,10 @@ impl Block {
             // TODO(perf): O(n) queries
             let locked_values = tx.substate_locks_get_locked_substates_for_transaction(&atom.id)?;
 
-            // CASE: We're retrieving pledges for the LocalPrepared stage. If all other pledges were provided already,
-            // we may have progressed to AllPrepared, executed the transaction and locked local outputs.
-            // However, these are not provided in the original LocalPrepare evidence for this atom, so we need to
-            // exclude them.
+            // CASE: We're retrieving pledges for the LocalPrepared and LocalAccept commands. If all other pledges were
+            // provided already, we may have progressed to AllPrepared, executed the transaction and locked
+            // local outputs. However, these are not provided in the original LocalPrepare evidence for this
+            // atom, so we need to exclude them.
             let locks = locked_values
                 .into_iter()
                 .filter(|lock| atom.evidence.contains(&lock.to_substate_address()));
@@ -968,6 +981,13 @@ impl Block {
             }
         }
         Ok(pledges)
+    }
+
+    pub fn get_foreign_proposals<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &TTx,
+    ) -> Result<Vec<ForeignProposal>, StorageError> {
+        ForeignProposal::get_any(tx, self.all_foreign_proposals().map(|p| &p.block_id))
     }
 }
 

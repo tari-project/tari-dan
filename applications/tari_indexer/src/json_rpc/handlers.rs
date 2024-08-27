@@ -29,7 +29,7 @@ use axum_jrpc::{
     JsonRpcResponse,
 };
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
-use log::warn;
+use log::{info, warn};
 use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_crypto::tari_utilities::hex::to_hex;
@@ -534,6 +534,8 @@ impl JsonRpcHandlers {
                 ),
                 e => Self::internal_error(answer_id, e),
             })?;
+
+        info!(target: LOG_TARGET, "✅ Transaction submitted: {}", transaction_id);
 
         Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
             result: IndexerTransactionFinalizedResult::Pending,

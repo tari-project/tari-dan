@@ -36,5 +36,9 @@ pub use base_layer_block_info::*;
 mod validator_node;
 pub use validator_node::*;
 
+mod committee;
+pub use committee::*;
+
 mod bmt;
+
 pub use bmt::*;

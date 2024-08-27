@@ -27,7 +27,6 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
     committee::Committee,
     hashing::ValidatorNodeBalancedMerkleTree,
-    shard::Shard,
     Epoch,
     NodeAddressable,
     ShardGroup,
@@ -147,7 +146,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
         shard_group: ShardGroup,
-    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error>;
+    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, Self::Error>;
 
     fn validator_nodes_get_committees_for_epoch(
         &self,

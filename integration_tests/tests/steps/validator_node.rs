@@ -168,8 +168,13 @@ pub async fn send_vn_registration_with_claim_wallet(world: &mut TariWorld, vn_na
             message: "Register".to_string(),
         })
         .await
-        .unwrap();
-    assert!(response.into_inner().transaction_id != 0);
+        .unwrap()
+        .into_inner();
+    assert!(
+        response.is_success,
+        "Failed to register validator node {}",
+        response.failure_message
+    );
     world.mark_point_in_logs("after register_validator_node");
 }
 

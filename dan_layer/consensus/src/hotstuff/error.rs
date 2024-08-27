@@ -230,4 +230,9 @@ pub enum ProposalValidationError {
         transaction_id: TransactionId,
         details: String,
     },
+    #[error(
+        "Foreign node submitted an foreign proposal {block_id} that did not contain any transaction evidence for this \
+         node"
+    )]
+    NoTransactionsInCommittee { block_id: BlockId },
 }

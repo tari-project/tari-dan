@@ -27,7 +27,9 @@ use crate::{
         Decision,
         EpochCheckpoint,
         Evidence,
+        ForeignParkedProposal,
         ForeignProposal,
+        ForeignProposalAtom,
         ForeignReceiveCounters,
         ForeignSendCounters,
         HighQc,
@@ -104,14 +106,23 @@ pub trait StateStoreReadTransaction: Sized {
     fn locked_block_get(&self) -> Result<LockedBlock, StorageError>;
     fn leaf_block_get(&self) -> Result<LeafBlock, StorageError>;
     fn high_qc_get(&self) -> Result<HighQc, StorageError>;
-    fn foreign_proposal_exists(&self, foreign_proposal: &ForeignProposal) -> Result<bool, StorageError>;
-    fn foreign_proposal_get_all_new(&self) -> Result<Vec<ForeignProposal>, StorageError>;
+    fn foreign_proposals_get_any<'a, I: IntoIterator<Item = &'a BlockId>>(
+        &self,
+        block_ids: I,
+    ) -> Result<Vec<ForeignProposal>, StorageError>;
+    fn foreign_proposals_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
+    fn foreign_proposals_get_all_new(
+        &self,
+        max_base_layer_block_height: u64,
+        block_id: &BlockId,
+        limit: usize,
+    ) -> Result<Vec<ForeignProposal>, StorageError>;
     fn foreign_proposal_get_all_pending(
         &self,
         from_block_id: &BlockId,
         to_block_id: &BlockId,
-    ) -> Result<Vec<ForeignProposal>, StorageError>;
-    fn foreign_proposal_get_all_proposed(&self, to_height: NodeHeight) -> Result<Vec<ForeignProposal>, StorageError>;
+    ) -> Result<Vec<ForeignProposalAtom>, StorageError>;
+
     fn foreign_send_counters_get(&self, block_id: &BlockId) -> Result<ForeignSendCounters, StorageError>;
     fn foreign_receive_counters_get(&self) -> Result<ForeignReceiveCounters, StorageError>;
     fn transactions_get(&self, tx_id: &TransactionId) -> Result<TransactionRecord, StorageError>;
@@ -147,8 +158,8 @@ pub trait StateStoreReadTransaction: Sized {
         &self,
         epoch: Epoch,
         shard_group: ShardGroup,
-        start_block_id_exclusive: &BlockId,
-        end_block_id_inclusive: &BlockId,
+        start_block_id: &BlockId,
+        end_block_id: &BlockId,
         include_dummy_blocks: bool,
     ) -> Result<Vec<Block>, StorageError>;
     fn blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
@@ -190,8 +201,6 @@ pub trait StateStoreReadTransaction: Sized {
         block_id: &BlockId,
         substate_id: &SubstateId,
     ) -> Result<SubstateChange, StorageError>;
-
-    fn parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
 
     // -------------------------------- QuorumCertificate -------------------------------- //
     fn quorum_certificates_get(&self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError>;
@@ -336,8 +345,18 @@ pub trait StateStoreWriteTransaction {
     fn leaf_block_set(&mut self, leaf_node: &LeafBlock) -> Result<(), StorageError>;
     fn locked_block_set(&mut self, locked_block: &LockedBlock) -> Result<(), StorageError>;
     fn high_qc_set(&mut self, high_qc: &HighQc) -> Result<(), StorageError>;
-    fn foreign_proposal_upsert(&mut self, foreign_proposal: &ForeignProposal) -> Result<(), StorageError>;
-    fn foreign_proposal_delete(&mut self, foreign_proposal: &ForeignProposal) -> Result<(), StorageError>;
+    fn foreign_proposals_upsert(
+        &mut self,
+        foreign_proposal: &ForeignProposal,
+        proposed_in_block: Option<BlockId>,
+    ) -> Result<(), StorageError>;
+    fn foreign_proposals_delete(&mut self, block_id: &BlockId) -> Result<(), StorageError>;
+
+    fn foreign_proposals_set_proposed_in(
+        &mut self,
+        block_id: &BlockId,
+        proposed_in_block: &BlockId,
+    ) -> Result<(), StorageError>;
     fn foreign_send_counters_set(
         &mut self,
         foreign_send_counter: &ForeignSendCounters,
@@ -382,7 +401,9 @@ pub trait StateStoreWriteTransaction {
     fn transaction_pool_update(
         &mut self,
         transaction_id: &TransactionId,
+        is_ready: Option<bool>,
         local_decision: Option<Decision>,
+        local_evidence: Option<&Evidence>,
         remote_decision: Option<Decision>,
         remote_evidence: Option<&Evidence>,
     ) -> Result<(), StorageError>;
@@ -398,22 +419,33 @@ pub trait StateStoreWriteTransaction {
         tx_ids: I,
     ) -> Result<(), StorageError>;
 
-    fn missing_transactions_insert<
-        'a,
-        IMissing: IntoIterator<Item = &'a TransactionId>,
-        IAwaiting: IntoIterator<Item = &'a TransactionId>,
-    >(
+    // -------------------------------- Missing Transactions -------------------------------- //
+
+    fn missing_transactions_insert<'a, IMissing: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         park_block: &Block,
+        foreign_proposals: &[ForeignProposal],
         missing_transaction_ids: IMissing,
-        awaiting_transaction_ids: IAwaiting,
     ) -> Result<(), StorageError>;
 
     fn missing_transactions_remove(
         &mut self,
         current_height: NodeHeight,
         transaction_id: &TransactionId,
-    ) -> Result<Option<Block>, StorageError>;
+    ) -> Result<Option<(Block, Vec<ForeignProposal>)>, StorageError>;
+
+    fn foreign_parked_blocks_insert(&mut self, park_block: &ForeignParkedProposal) -> Result<(), StorageError>;
+
+    fn foreign_parked_blocks_insert_missing_transactions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+        &mut self,
+        park_block_id: &BlockId,
+        missing_transaction_ids: I,
+    ) -> Result<(), StorageError>;
+
+    fn foreign_parked_blocks_remove_all_by_transaction(
+        &mut self,
+        transaction_id: &TransactionId,
+    ) -> Result<Vec<ForeignParkedProposal>, StorageError>;
 
     // -------------------------------- Votes -------------------------------- //
     fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;
@@ -430,7 +462,7 @@ pub trait StateStoreWriteTransaction {
         transaction_ids: Peekable<I>,
     ) -> Result<(), StorageError>;
 
-    fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
+    fn substates_create(&mut self, substate: &SubstateRecord) -> Result<(), StorageError>;
     fn substates_down(
         &mut self,
         versioned_substate_id: VersionedSubstateId,
@@ -444,7 +476,7 @@ pub trait StateStoreWriteTransaction {
     // -------------------------------- Foreign pledges -------------------------------- //
 
     #[allow(clippy::mutable_key_type)]
-    fn foreign_substate_pledges_insert(
+    fn foreign_substate_pledges_save(
         &mut self,
         transaction_id: TransactionId,
         shard_group: ShardGroup,

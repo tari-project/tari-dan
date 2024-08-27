@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
-    shard::Shard,
     Epoch,
     ShardGroup,
     SubstateAddress,
@@ -249,14 +248,13 @@ impl EpochManagerReader for TestEpochManager {
         &self,
         _epoch: Epoch,
         shard_group: ShardGroup,
-    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
+    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, EpochManagerError> {
         let state = self.state_lock().await;
-        Ok(state
-            .committees
-            .get(&shard_group)
-            .into_iter()
-            .flat_map(|committee| shard_group.shard_iter().map(|s| (s, committee.clone())))
-            .collect())
+        let Some(committee) = state.committees.get(&shard_group) else {
+            panic!("Committee not found for shard group {}", shard_group);
+        };
+
+        Ok(Some((shard_group, committee.clone())).into_iter().collect())
     }
 
     async fn get_committee_info_for_substate(

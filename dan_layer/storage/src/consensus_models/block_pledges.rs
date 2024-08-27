@@ -7,14 +7,14 @@ use std::{
     hash::Hash,
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tari_engine_types::substate::{SubstateId, SubstateValue};
 use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
 
 use crate::consensus_models::{SubstateLockType, VersionedSubstateIdLockIntent};
 #[allow(clippy::mutable_key_type)]
 pub type SubstatePledges = HashSet<SubstatePledge>;
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BlockPledge {
     pledges: HashMap<TransactionId, SubstatePledges>,
 }
@@ -59,7 +59,7 @@ impl FromIterator<(TransactionId, SubstatePledges)> for BlockPledge {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SubstatePledge {
     Input {
         substate_id: VersionedSubstateId,
@@ -149,9 +149,9 @@ impl Display for SubstatePledge {
                 substate_id, is_write, ..
             } => {
                 if *is_write {
-                    write!(f, "Write input: {}", substate_id)
+                    write!(f, "Write: {}", substate_id)
                 } else {
-                    write!(f, "Read input: {}", substate_id)
+                    write!(f, "Read: {}", substate_id)
                 }
             },
             SubstatePledge::Output { substate_id } => write!(f, "Output: {}", substate_id),

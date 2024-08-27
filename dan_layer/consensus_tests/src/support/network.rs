@@ -310,7 +310,7 @@ impl TestNetworkWorker {
     }
 
     pub async fn handle_broadcast(&mut self, from: TestAddress, to: Vec<TestAddress>, msg: HotstuffMessage) {
-        log::debug!("🌎️ Broadcast {} from {} to {}", msg, from, to.iter().join(", "));
+        log::debug!("✉️ Broadcast {} from {} to {}", msg, from, to.iter().join(", "));
         for vn in to {
             if let Some(message_filter) = &self.message_filter {
                 if !message_filter(&from, &vn, &msg) {
