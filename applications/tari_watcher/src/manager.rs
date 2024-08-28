@@ -5,7 +5,10 @@ use std::path::PathBuf;
 
 use log::*;
 use minotari_app_grpc::tari_rpc::{
-    self as grpc, ConsensusConstants, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse,
+    self as grpc,
+    ConsensusConstants,
+    GetActiveValidatorNodesResponse,
+    RegisterValidatorNodeResponse,
 };
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::{mpsc, oneshot};
@@ -20,6 +23,7 @@ use crate::{
 
 pub struct ProcessManager {
     pub base_dir: PathBuf,
+    pub validator_base_dir: PathBuf,
     pub validator_config: ExecutableConfig,
     pub wallet_config: ExecutableConfig,
     pub process: Process,
@@ -34,6 +38,7 @@ impl ProcessManager {
         let (tx_request, rx_request) = mpsc::channel(1);
         let this = Self {
             base_dir: config.base_dir.clone(),
+            validator_base_dir: config.vn_base_dir,
             validator_config: config.executable_config[0].clone(),
             wallet_config: config.executable_config[1].clone(),
             process: Process::new(),
@@ -54,16 +59,18 @@ impl ProcessManager {
 
         // clean_stale_pid_file(self.base_dir.clone().join(DEFAULT_VALIDATOR_PID_PATH)).await?;
 
-        let vn_path = self
+        let vn_binary_path = self
             .validator_config
             .clone()
             .executable_path
             .unwrap_or(PathBuf::from(DEFAULT_VALIDATOR_NODE_BINARY_PATH));
 
+        let vn_base_dir = self.base_dir.join(self.validator_base_dir);
+
         // get child channel to communicate with the validator node process
         let cc = self
             .process
-            .start_validator(vn_path, self.base_dir, self.alerting_config)
+            .start_validator(vn_binary_path, vn_base_dir, self.base_dir, self.alerting_config)
             .await;
         if cc.is_none() {
             todo!("Create new validator node process event listener for fetched existing PID from OS");

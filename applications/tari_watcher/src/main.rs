@@ -41,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
             let parent = config_path.parent().unwrap();
             fs::create_dir_all(parent).await?;
 
-            let mut config = get_base_config()?;
+            let mut config = get_base_config(&cli)?;
             // optionally disables auto register
             args.apply(&mut config);
 

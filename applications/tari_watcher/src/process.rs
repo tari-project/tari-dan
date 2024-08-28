@@ -68,18 +68,19 @@ pub struct ChildChannel {
 
 pub async fn spawn_validator_node_os(
     validator_node_path: PathBuf,
+    validator_config_path: PathBuf,
     base_dir: PathBuf,
     cfg_alert: Channels,
 ) -> anyhow::Result<ChildChannel> {
-    let node_binary_path = base_dir.join(validator_node_path.clone());
-    let mut tmp_vn_cfg_path = base_dir.join("data").join("vn1");
-    let vn_cfg_str = tmp_vn_cfg_path.as_mut_os_str().to_str();
+    let node_binary_path = base_dir.join(validator_node_path);
+    let mut vn_cfg_path = base_dir.join(validator_config_path);
+    let vn_cfg_str = vn_cfg_path.as_mut_os_str().to_str();
     debug!("Using VN binary at: {}", node_binary_path.display());
     debug!("Using VN config in directory: {}", vn_cfg_str.unwrap_or_default());
 
     let child = TokioCommand::new(node_binary_path.clone().into_os_string())
         .arg("-b")
-        .arg(tmp_vn_cfg_path)
+        .arg(vn_cfg_path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -160,6 +161,7 @@ impl Process {
     pub async fn start_validator(
         &mut self,
         validator_path: PathBuf,
+        validator_config_path: PathBuf,
         base_dir: PathBuf,
         alerting_config: Channels,
     ) -> Option<ChildChannel> {
@@ -174,7 +176,7 @@ impl Process {
             debug!("No existing validator node process found, spawn new one");
         }
 
-        let cc = spawn_validator_node_os(validator_path, base_dir, alerting_config)
+        let cc = spawn_validator_node_os(validator_path, validator_config_path, base_dir, alerting_config)
             .await
             .ok()?;
         self.pid = Some(cc.pid);

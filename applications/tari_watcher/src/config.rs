@@ -4,14 +4,19 @@
 use std::{
     collections::HashMap,
     fmt::{self, Display},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use tokio::io::{self, AsyncWriteExt};
 
-use crate::constants::{
-    DEFAULT_BASE_NODE_GRPC_ADDRESS, DEFAULT_BASE_WALLET_GRPC_ADDRESS, DEFAULT_MAIN_PROJECT_PATH,
-    DEFAULT_MINOTARI_MINER_BINARY_PATH, DEFAULT_VALIDATOR_NODE_BINARY_PATH,
+use crate::{
+    cli::Cli,
+    constants::{
+        DEFAULT_BASE_NODE_GRPC_ADDRESS,
+        DEFAULT_BASE_WALLET_GRPC_ADDRESS,
+        DEFAULT_MINOTARI_MINER_BINARY_PATH,
+        DEFAULT_VALIDATOR_NODE_BINARY_PATH,
+    },
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -32,6 +37,9 @@ pub struct Config {
     /// The path of the validator node registration file, containing signed information required to
     /// submit a registration transaction on behalf of the node
     pub vn_registration_file: PathBuf,
+
+    // The path of the validator node base directory, obtained when initializing a new VN on L2
+    pub vn_base_dir: PathBuf,
 
     /// The sidechain ID to use. If not provided, the default Tari sidechain ID will be used.
     pub sidechain_id: Option<String>,
@@ -126,7 +134,7 @@ impl InstanceConfig {
     }
 }
 
-pub fn get_base_config() -> anyhow::Result<Config> {
+pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
     let executables = vec![
         ExecutableConfig {
             instance_type: InstanceType::TariValidatorNode,
@@ -144,21 +152,18 @@ pub fn get_base_config() -> anyhow::Result<Config> {
         InstanceConfig::new(InstanceType::MinoTariConsoleWallet).with_name("minotari_wallet"),
     ];
 
-    let base_dir = Path::new(DEFAULT_MAIN_PROJECT_PATH);
-    let vn_registration_file = base_dir
-        .join("data")
-        .join("vn1")
-        .join("esmeralda")
-        .join("registration.json");
+    let base_dir = cli.common.base_dir.clone();
+    let vn_registration_file = base_dir.join(cli.common.key_path.clone());
+    let vn_base_dir = base_dir.join(cli.common.validator_dir.clone());
 
     Ok(Config {
         auto_register: true,
-        // must contain protocol and port
         base_node_grpc_address: DEFAULT_BASE_NODE_GRPC_ADDRESS.to_string(),
         base_wallet_grpc_address: DEFAULT_BASE_WALLET_GRPC_ADDRESS.to_string(),
         base_dir: base_dir.to_path_buf(),
         sidechain_id: None,
         vn_registration_file,
+        vn_base_dir,
         instance_config: instances.to_vec(),
         executable_config: executables,
         channel_config: Channels {

@@ -9,7 +9,8 @@ use crate::{
     alerting::{Alerting, MatterMostNotifier},
     config::Channels,
     constants::{
-        CONSENSUS_CONSTANT_REGISTRATION_DURATION, DEFAULT_PROCESS_MONITORING_INTERVAL,
+        CONSENSUS_CONSTANT_REGISTRATION_DURATION,
+        DEFAULT_PROCESS_MONITORING_INTERVAL,
         DEFAULT_THRESHOLD_WARN_EXPIRATION,
     },
 };
@@ -97,9 +98,9 @@ pub async fn monitor_child(
 }
 
 pub fn is_registration_near_expiration(curr_block: u64, last_registered_block: u64) -> bool {
-    last_registered_block != 0
-        && curr_block + DEFAULT_THRESHOLD_WARN_EXPIRATION
-            >= last_registered_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION
+    last_registered_block != 0 &&
+        curr_block + DEFAULT_THRESHOLD_WARN_EXPIRATION >=
+            last_registered_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION
 }
 
 pub async fn process_status_log(mut rx: mpsc::Receiver<ProcessStatus>) {
@@ -140,17 +141,14 @@ pub async fn process_status_log(mut rx: mpsc::Receiver<ProcessStatus>) {
 }
 
 pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Channels) {
-    let mut mattermost: Option<MatterMostNotifier> = match cfg.mattermost.enabled {
-        true => {
-            let cfg = cfg.mattermost.clone();
-            info!("MatterMost alerting enabled");
-            Some(MatterMostNotifier::new(cfg.server_url, cfg.channel_id, cfg.credentials))
-        },
-        false => {
-            info!("MatterMost alerting disabled");
-            None
-        },
-    };
+    let mut mattermost: Option<MatterMostNotifier> = None;
+    if cfg.mattermost.enabled {
+        let cfg = cfg.mattermost.clone();
+        info!("MatterMost alerting enabled");
+        mattermost = Some(MatterMostNotifier::new(cfg.server_url, cfg.channel_id, cfg.credentials));
+    } else {
+        info!("MatterMost alerting disabled");
+    }
 
     while let Some(status) = rx.recv().await {
         match status {

@@ -71,7 +71,8 @@ impl Alerting for MatterMostNotifier {
         const PING_ENDPOINT: &str = "/api/v4/users/me";
         if self.server_url.is_empty() {
             bail!("Server URL is empty");
-        } else if self.credentials.is_empty() {
+        }
+        if self.credentials.is_empty() {
             bail!("Credentials are empty");
         }
 
@@ -87,10 +88,10 @@ impl Alerting for MatterMostNotifier {
             bail!("Failed to ping, got response: {}", resp.status());
         }
 
-        return Ok(());
+        Ok(())
     }
 
     fn stats(&self) -> Result<u64> {
-        return Ok(self.alerts_sent);
+        Ok(self.alerts_sent)
     }
 }
