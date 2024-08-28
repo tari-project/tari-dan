@@ -237,6 +237,9 @@ async fn create_paths(config: &Config) -> anyhow::Result<()> {
     fs::create_dir_all(&config.base_dir.join("templates"))
         .await
         .context("Failed to create templates directory")?;
+    fs::create_dir_all(&config.base_dir.join("misc"))
+        .await
+        .context("Failed to create misc directory")?;
     Ok(())
 }
 

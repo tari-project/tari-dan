@@ -24,6 +24,7 @@ use crate::{
         BlockDiff,
         BlockId,
         BlockTransactionExecution,
+        BurntUtxo,
         Decision,
         EpochCheckpoint,
         Evidence,
@@ -311,6 +312,16 @@ pub trait StateStoreReadTransaction: Sized {
         &self,
         transaction_id: &TransactionId,
     ) -> Result<SubstatePledges, StorageError>;
+
+    // -------------------------------- BurntUtxos -------------------------------- //
+    fn burnt_utxos_get(&self, substate_id: &SubstateId) -> Result<BurntUtxo, StorageError>;
+    fn burnt_utxos_get_all_unproposed(
+        &self,
+        leaf_block: &BlockId,
+        limit: usize,
+    ) -> Result<Vec<BurntUtxo>, StorageError>;
+
+    fn burnt_utxos_count(&self) -> Result<u64, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -512,6 +523,15 @@ pub trait StateStoreWriteTransaction {
 
     // -------------------------------- Epoch checkpoint -------------------------------- //
     fn epoch_checkpoint_save(&mut self, checkpoint: &EpochCheckpoint) -> Result<(), StorageError>;
+
+    // -------------------------------- BurntUtxo -------------------------------- //
+    fn burnt_utxos_insert(&mut self, burnt_utxo: &BurntUtxo) -> Result<(), StorageError>;
+    fn burnt_utxos_set_proposed_block(
+        &mut self,
+        substate_id: &SubstateId,
+        proposed_in_block: &BlockId,
+    ) -> Result<(), StorageError>;
+    fn burnt_utxos_delete(&mut self, substate_id: &SubstateId) -> Result<(), StorageError>;
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

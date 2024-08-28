@@ -22,6 +22,7 @@ use tari_dan_storage::{
         Block,
         BlockId,
         BlockTransactionExecution,
+        BurntUtxo,
         Command,
         Decision,
         ForeignProposal,
@@ -41,9 +42,9 @@ use tari_dan_storage::{
     },
     StateStore,
 };
-use tari_engine_types::commit_result::RejectReason;
+use tari_engine_types::{commit_result::RejectReason, substate::Substate};
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::TransactionId;
+use tari_transaction::{TransactionId, VersionedSubstateId};
 
 use crate::{
     hotstuff::{
@@ -337,12 +338,30 @@ where TConsensusSpec: ConsensusSpec
             foreign_proposals.len()
         );
 
+        let burnt_utxos = if dont_propose_transactions || propose_epoch_end {
+            vec![]
+        } else {
+            TARGET_BLOCK_SIZE
+                .checked_sub(foreign_proposals.len() * 4)
+                .filter(|n| *n > 0)
+                .map(|size| BurntUtxo::get_all_unproposed(tx, parent_block.block_id(), size))
+                .transpose()?
+                .unwrap_or_default()
+        };
+
+        debug!(
+            target: LOG_TARGET,
+           "🌿 Found {} burnt utxos for next block",
+            burnt_utxos.len()
+        );
+
         let batch = if dont_propose_transactions || propose_epoch_end {
             vec![]
         } else {
             TARGET_BLOCK_SIZE
                 // Each foreign proposal is "heavier" than a transaction command
-                .checked_sub(foreign_proposals.len() * 4)
+                .checked_sub(foreign_proposals.len() * 4 + burnt_utxos.len())
+                .filter(|n| *n > 0)
                 .map(|size| self.transaction_pool.get_batch_for_next_block(tx, size))
                 .transpose()?
                 .unwrap_or_default()
@@ -354,7 +373,12 @@ where TConsensusSpec: ConsensusSpec
             BTreeSet::from_iter(
                 foreign_proposals
                     .iter()
-                    .map(|fp| Command::ForeignProposal(fp.to_atom())),
+                    .map(|fp| Command::ForeignProposal(fp.to_atom()))
+                    .chain(
+                        burnt_utxos
+                            .iter()
+                            .map(|bu| Command::MintConfidentialOutput(bu.to_atom())),
+                    ),
             )
         };
 
@@ -379,6 +403,30 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
+        // This relies on the UTXO commands being ordered last
+        for utxo in burnt_utxos {
+            let id = VersionedSubstateId::new(utxo.substate_id.clone(), 0);
+            let shard = id.to_substate_address().to_shard(local_committee_info.num_preshards());
+            let change = SubstateChange::Up {
+                id,
+                shard,
+                // N/A
+                transaction_id: Default::default(),
+                substate: Substate::new(0, utxo.substate_value),
+            };
+
+            if let Err(err) = substate_store.put(change) {
+                let err = err.or_fatal_error()?;
+                warn!(
+                    target: LOG_TARGET,
+                    "❌ NO VOTE: Failed to store mint confidential output for {}. Error: {}",
+                    utxo.substate_id,
+                    err
+                );
+                return Err(err.into());
+            }
+        }
+
         debug!(
             target: LOG_TARGET,
             "command(s) for next block: [{}]",
@@ -391,10 +439,7 @@ where TConsensusSpec: ConsensusSpec
             tx,
             local_committee_info.shard_group(),
             pending_tree_diffs,
-            substate_store
-                .diff()
-                .iter()
-                .filter(|ch| local_committee_info.shard_group().contains(&ch.shard())),
+            substate_store.diff(),
         )?;
 
         let non_local_shards = get_non_local_shards(substate_store.diff(), local_committee_info);

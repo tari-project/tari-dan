@@ -39,10 +39,13 @@ pub async fn run(context: HandlerContext) -> anyhow::Result<()> {
     let serve_templates =
         ServeDir::new(context.config().base_dir.join("templates")).not_found_service(not_found.into_service());
 
+    let serve_misc = ServeDir::new(context.config().base_dir.join("misc")).not_found_service(not_found.into_service());
+
     let router = Router::new()
         .route("/upload_template", post(templates::upload))
         .route("/json_rpc", post(json_rpc_handler))
         .nest_service("/templates", serve_templates)
+        .nest_service("/misc", serve_misc)
         .fallback(handler)
         .layer(Extension(Arc::new(context)))
         .layer(CorsLayer::permissive());
@@ -111,6 +114,7 @@ async fn json_rpc_handler(Extension(context): Extension<Arc<HandlerContext>>, va
         "stop" => call_handler(context, value, rpc::instances::stop).await,
         "list_instances" => call_handler(context, value, rpc::instances::list).await,
         "delete_data" => call_handler(context, value, rpc::instances::delete_data).await,
+        "burn_funds" => call_handler(context, value, rpc::minotari_wallets::burn_funds).await,
         _ => Ok(value.method_not_found(&value.method)),
     }
 }

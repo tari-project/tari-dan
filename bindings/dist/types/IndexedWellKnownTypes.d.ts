@@ -5,6 +5,7 @@ import type { NonFungibleAddress } from "./NonFungibleAddress";
 import type { ProofId } from "./ProofId";
 import type { ResourceAddress } from "./ResourceAddress";
 import type { TransactionReceiptAddress } from "./TransactionReceiptAddress";
+import type { UnclaimedConfidentialOutputAddress } from "./UnclaimedConfidentialOutputAddress";
 import type { VaultId } from "./VaultId";
 export interface IndexedWellKnownTypes {
     bucket_ids: Array<BucketId>;
@@ -15,4 +16,5 @@ export interface IndexedWellKnownTypes {
     non_fungible_addresses: Array<NonFungibleAddress>;
     vault_ids: Array<VaultId>;
     metadata: Array<Metadata>;
+    unclaimed_confidential_output_address: Array<UnclaimedConfidentialOutputAddress>;
 }

@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::{error::Error, str::FromStr};
+
 use serde::{Deserialize, Serialize};
 use tari_template_abi::rust::{fmt, fmt::Display};
 #[cfg(feature = "ts")]
@@ -56,5 +58,29 @@ impl NonFungibleIndexAddress {
 impl Display for NonFungibleIndexAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} index_{}", self.resource_address, self.index)
+    }
+}
+
+impl FromStr for NonFungibleIndexAddress {
+    type Err = NonFungibleIndexAddressParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (resource, index) = s.split_once(" index_").ok_or(NonFungibleIndexAddressParseError)?;
+
+        let resource_address = resource.parse().map_err(|_| NonFungibleIndexAddressParseError)?;
+        let index = index.parse().map_err(|_| NonFungibleIndexAddressParseError)?;
+
+        Ok(Self::new(resource_address, index))
+    }
+}
+
+#[derive(Debug)]
+pub struct NonFungibleIndexAddressParseError;
+
+impl Error for NonFungibleIndexAddressParseError {}
+
+impl Display for NonFungibleIndexAddressParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Invalid non-fungible index address string")
     }
 }

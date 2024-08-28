@@ -12,6 +12,7 @@ use tari_dan_storage::{
         BlockDiff,
         BlockId,
         BlockTransactionExecution,
+        BurntUtxo,
         ForeignProposal,
         LeafBlock,
         PendingShardStateTreeDiff,
@@ -55,6 +56,7 @@ pub struct ProposedBlockChangeSet {
     substate_locks: IndexMap<SubstateId, Vec<SubstateLock>>,
     transaction_changes: IndexMap<TransactionId, TransactionChangeSet>,
     proposed_foreign_proposals: Vec<BlockId>,
+    proposed_utxo_mints: Vec<SubstateId>,
 }
 
 impl ProposedBlockChangeSet {
@@ -67,6 +69,7 @@ impl ProposedBlockChangeSet {
             transaction_changes: IndexMap::new(),
             state_tree_diffs: IndexMap::new(),
             proposed_foreign_proposals: Vec::new(),
+            proposed_utxo_mints: Vec::new(),
         }
     }
 
@@ -77,6 +80,7 @@ impl ProposedBlockChangeSet {
         self.state_tree_diffs = IndexMap::new();
         self.substate_locks = IndexMap::new();
         self.proposed_foreign_proposals = Vec::new();
+        self.proposed_utxo_mints = Vec::new();
         self
     }
 
@@ -102,6 +106,11 @@ impl ProposedBlockChangeSet {
 
     pub fn set_foreign_proposal_proposed_in(&mut self, foreign_proposal_block_id: BlockId) -> &mut Self {
         self.proposed_foreign_proposals.push(foreign_proposal_block_id);
+        self
+    }
+
+    pub fn set_utxo_mint_proposed_in(&mut self, mint: SubstateId) -> &mut Self {
+        self.proposed_utxo_mints.push(mint);
         self
     }
 
@@ -225,6 +234,10 @@ impl ProposedBlockChangeSet {
 
         for block_id in self.proposed_foreign_proposals {
             ForeignProposal::set_proposed_in(tx, &block_id, &self.block.block_id)?;
+        }
+
+        for mint in self.proposed_utxo_mints {
+            BurntUtxo::set_proposed_in_block(tx, &mint, &self.block.block_id)?
         }
 
         Ok(())

@@ -351,11 +351,10 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             .shard_state_store
             .with_read_tx(|tx| EpochCheckpoint::get(tx, prev_epoch))
             .optional()
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
-            .ok_or_else(|| RpcStatus::not_found("Epoch checkpoint not found"))?;
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
         Ok(Response::new(GetCheckpointResponse {
-            checkpoint: Some(checkpoint.into()),
+            checkpoint: checkpoint.map(Into::into),
         }))
     }
 
