@@ -5,7 +5,7 @@ use tokio::time::Duration;
 
 pub const CONSENSUS_CONSTANT_REGISTRATION_DURATION: u64 = 1000; // in blocks: 100 epochs * 10 blocks/epoch
 
-pub const DEFAULT_PROJECT_ROOT: &str = env!("CARGO_MANIFEST_DIR");
+pub const DEFAULT_MAIN_PROJECT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
 pub const DEFAULT_WATCHER_CONFIG_PATH: &str = "data/watcher/config.toml";
 pub const DEFAULT_VALIDATOR_PID_PATH: &str = "data/watcher/validator.pid";
 pub const DEFAULT_VALIDATOR_NODE_BINARY_PATH: &str = "target/release/tari_validator_node";

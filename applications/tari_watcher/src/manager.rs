@@ -5,19 +5,16 @@ use std::path::PathBuf;
 
 use log::*;
 use minotari_app_grpc::tari_rpc::{
-    self as grpc,
-    ConsensusConstants,
-    GetActiveValidatorNodesResponse,
-    RegisterValidatorNodeResponse,
+    self as grpc, ConsensusConstants, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse,
 };
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    config::{Config, ExecutableConfig},
+    config::{Channels, Config, ExecutableConfig},
     constants::DEFAULT_VALIDATOR_NODE_BINARY_PATH,
     minotari::{Minotari, TipStatus},
-    monitoring::{read_status, ProcessStatus, Transaction},
+    monitoring::{process_status_alert, process_status_log, ProcessStatus, Transaction},
     process::Process,
 };
 
@@ -29,6 +26,7 @@ pub struct ProcessManager {
     pub shutdown_signal: ShutdownSignal,
     pub rx_request: mpsc::Receiver<ManagerRequest>,
     pub chain: Minotari,
+    pub alerting_config: Channels,
 }
 
 impl ProcessManager {
@@ -46,6 +44,7 @@ impl ProcessManager {
                 config.base_wallet_grpc_address,
                 config.vn_registration_file,
             ),
+            alerting_config: config.channel_config,
         };
         (this, ManagerHandle::new(tx_request))
     }
@@ -55,26 +54,33 @@ impl ProcessManager {
 
         // clean_stale_pid_file(self.base_dir.clone().join(DEFAULT_VALIDATOR_PID_PATH)).await?;
 
+        let vn_path = self
+            .validator_config
+            .clone()
+            .executable_path
+            .unwrap_or(PathBuf::from(DEFAULT_VALIDATOR_NODE_BINARY_PATH));
+
+        // get child channel to communicate with the validator node process
         let cc = self
             .process
-            .start_validator(
-                self.validator_config
-                    .clone()
-                    .executable_path
-                    .unwrap_or(PathBuf::from(DEFAULT_VALIDATOR_NODE_BINARY_PATH)),
-                self.base_dir,
-            )
+            .start_validator(vn_path, self.base_dir, self.alerting_config)
             .await;
         if cc.is_none() {
             todo!("Create new validator node process event listener for fetched existing PID from OS");
         }
         let cc = cc.unwrap();
+
+        // spawn logging and alerting tasks to process status updates
         tokio::spawn(async move {
-            read_status(cc.rx).await;
+            process_status_log(cc.rx_log).await;
+        });
+        tokio::spawn(async move {
+            process_status_alert(cc.rx_alert, cc.cfg_alert).await;
         });
 
         self.chain.bootstrap().await?;
 
+        let mut last_registered_at_block = 0;
         info!("Setup completed: connected to base node and wallet, ready to receive requests");
         loop {
             tokio::select! {
@@ -82,10 +88,16 @@ impl ProcessManager {
                     match req {
                         ManagerRequest::GetTipInfo { reply } => {
                             let response = self.chain.get_tip_status().await?;
-                            // send latest block height to monitoring, to potentially warn of upcoming node expiration
-                            if let Err(e) = cc.tx.send(ProcessStatus::WarnExpiration(response.height())).await {
+
+                            // send latest block height to logging
+                            if let Err(e) = cc.tx_log.send(ProcessStatus::WarnExpiration(response.height(), last_registered_at_block)).await {
                                 error!("Failed to send tip status update to monitoring: {}", e);
                             }
+                            // send latest block height to alerting
+                            if let Err(e) = cc.tx_alert.send(ProcessStatus::WarnExpiration(response.height(), last_registered_at_block)).await {
+                                error!("Failed to send tip status update to alerting: {}", e);
+                            }
+
                             drop(reply.send(Ok(response)));
                         }
                         ManagerRequest::GetActiveValidatorNodes { reply } => {
@@ -94,11 +106,17 @@ impl ProcessManager {
                         }
                         ManagerRequest::RegisterValidatorNode { block, reply } => {
                             let response = self.chain.register_validator_node().await?;
-                            // send response to monitoring
-                            if let Err(e) = cc.tx.send(ProcessStatus::Submitted(Transaction::new(response.clone(), block))).await {
+                            last_registered_at_block = block;
+
+                            // send registration response to logger
+                            if let Err(e) = cc.tx_log.send(ProcessStatus::Submitted(Transaction::new(response.clone(), block))).await {
                                 error!("Failed to send node registration update to monitoring: {}", e);
                             }
-                            // send response to backend
+                            // send registration response to alerting
+                            if let Err(e) = cc.tx_alert.send(ProcessStatus::Submitted(Transaction::new(response.clone(), block))).await {
+                                error!("Failed to send node registration update to alerting: {}", e);
+                            }
+
                             drop(reply.send(Ok(response)));
                         },
                         ManagerRequest::GetConsensusConstants { block, reply } => {

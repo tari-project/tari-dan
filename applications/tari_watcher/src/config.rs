@@ -4,19 +4,14 @@
 use std::{
     collections::HashMap,
     fmt::{self, Display},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use tokio::io::{self, AsyncWriteExt};
 
-use crate::{
-    constants::{
-        DEFAULT_BASE_NODE_GRPC_ADDRESS,
-        DEFAULT_BASE_WALLET_GRPC_ADDRESS,
-        DEFAULT_MINOTARI_MINER_BINARY_PATH,
-        DEFAULT_VALIDATOR_NODE_BINARY_PATH,
-    },
-    Cli,
+use crate::constants::{
+    DEFAULT_BASE_NODE_GRPC_ADDRESS, DEFAULT_BASE_WALLET_GRPC_ADDRESS, DEFAULT_MAIN_PROJECT_PATH,
+    DEFAULT_MINOTARI_MINER_BINARY_PATH, DEFAULT_VALIDATOR_NODE_BINARY_PATH,
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -47,8 +42,8 @@ pub struct Config {
     /// The process specific configuration for the executables
     pub executable_config: Vec<ExecutableConfig>,
 
-    /// The channel configuration for alerting and monitoring
-    pub channel_config: Vec<ChannelConfig>,
+    /// The channel configurations for alerting and monitoring
+    pub channel_config: Channels,
 }
 
 impl Config {
@@ -90,7 +85,15 @@ impl Display for InstanceType {
 pub struct ChannelConfig {
     pub name: String,
     pub enabled: bool,
+    pub server_url: String,
+    pub channel_id: String,
     pub credentials: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Channels {
+    pub mattermost: ChannelConfig,
+    pub telegram: ChannelConfig,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -104,7 +107,6 @@ pub struct ExecutableConfig {
 pub struct InstanceConfig {
     pub name: String,
     pub instance_type: InstanceType,
-    pub num_instances: u32,
     #[serde(alias = "extra_args")]
     pub settings: HashMap<String, String>,
 }
@@ -114,7 +116,6 @@ impl InstanceConfig {
         Self {
             name: instance_type.to_string(),
             instance_type,
-            num_instances: 1,
             settings: HashMap::new(),
         }
     }
@@ -123,14 +124,9 @@ impl InstanceConfig {
         self.name = name.into();
         self
     }
-
-    pub fn with_num_instances(mut self, num_instances: u32) -> Self {
-        self.num_instances = num_instances;
-        self
-    }
 }
 
-pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
+pub fn get_base_config() -> anyhow::Result<Config> {
     let executables = vec![
         ExecutableConfig {
             instance_type: InstanceType::TariValidatorNode,
@@ -144,15 +140,11 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
         },
     ];
     let instances = [
-        InstanceConfig::new(InstanceType::TariValidatorNode)
-            .with_name("tari_validator_node")
-            .with_num_instances(1),
-        InstanceConfig::new(InstanceType::MinoTariConsoleWallet)
-            .with_name("minotari_wallet")
-            .with_num_instances(1),
+        InstanceConfig::new(InstanceType::TariValidatorNode).with_name("tari_validator_node"),
+        InstanceConfig::new(InstanceType::MinoTariConsoleWallet).with_name("minotari_wallet"),
     ];
 
-    let base_dir = cli.common.base_dir.clone();
+    let base_dir = Path::new(DEFAULT_MAIN_PROJECT_PATH);
     let vn_registration_file = base_dir
         .join("data")
         .join("vn1")
@@ -164,22 +156,26 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
         // must contain protocol and port
         base_node_grpc_address: DEFAULT_BASE_NODE_GRPC_ADDRESS.to_string(),
         base_wallet_grpc_address: DEFAULT_BASE_WALLET_GRPC_ADDRESS.to_string(),
-        base_dir: base_dir.clone(),
+        base_dir: base_dir.to_path_buf(),
         sidechain_id: None,
         vn_registration_file,
         instance_config: instances.to_vec(),
         executable_config: executables,
-        channel_config: vec![
-            ChannelConfig {
+        channel_config: Channels {
+            mattermost: ChannelConfig {
                 name: "mattermost".to_string(),
-                enabled: true,
+                enabled: false,
+                server_url: "https://some.corporation.com".to_string(),
+                channel_id: "".to_string(),
                 credentials: "".to_string(),
             },
-            ChannelConfig {
+            telegram: ChannelConfig {
                 name: "telegram".to_string(),
-                enabled: true,
+                enabled: false,
+                server_url: "".to_string(),
+                channel_id: "".to_string(),
                 credentials: "".to_string(),
             },
-        ],
+        },
     })
 }

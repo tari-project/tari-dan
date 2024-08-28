@@ -15,6 +15,7 @@ use crate::{
     shutdown::exit_signal,
 };
 
+mod alerting;
 mod cli;
 mod config;
 mod constants;
@@ -40,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
             let parent = config_path.parent().unwrap();
             fs::create_dir_all(parent).await?;
 
-            let mut config = get_base_config(&cli)?;
+            let mut config = get_base_config()?;
             // optionally disables auto register
             args.apply(&mut config);
 
