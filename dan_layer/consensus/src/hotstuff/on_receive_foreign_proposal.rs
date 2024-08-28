@@ -462,9 +462,10 @@ where TConsensusSpec: ConsensusSpec
                 Command::SomeAccept(_) |
                 Command::AllPrepare(_) |
                 Command::SomePrepare(_) |
-                Command::ForeignProposal(_) |
                 Command::Prepare(_) |
-                Command::LocalOnly(_) => {
+                Command::LocalOnly(_) |
+                Command::ForeignProposal(_) |
+                Command::MintConfidentialOutput(_) => {
                     // Disregard
                     continue;
                 },

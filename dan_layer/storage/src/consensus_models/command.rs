@@ -7,9 +7,17 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use tari_engine_types::substate::SubstateId;
 use tari_transaction::TransactionId;
 
-use super::{BlockId, ExecutedTransaction, ForeignProposalAtom, LeaderFee, TransactionRecord};
+use super::{
+    BlockId,
+    ExecutedTransaction,
+    ForeignProposalAtom,
+    LeaderFee,
+    MintConfidentialOutputAtom,
+    TransactionRecord,
+};
 use crate::{
     consensus_models::{evidence::Evidence, Decision},
     StateStoreReadTransaction,
@@ -99,43 +107,20 @@ pub enum Command {
     SomeAccept(TransactionAtom),
     // Validator node commands
     ForeignProposal(ForeignProposalAtom),
+    MintConfidentialOutput(MintConfidentialOutputAtom),
     EndEpoch,
 }
 
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd)]
-pub enum CommandId {
-    TransactionId(TransactionId),
-    ForeignProposal(BlockId),
+enum CommandOrdering<'a> {
+    TransactionId(&'a TransactionId),
+    MintConfidentialOutput(&'a SubstateId),
+    ForeignProposal(&'a BlockId),
     EndEpoch,
-}
-
-impl Display for CommandId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CommandId::TransactionId(id) => write!(f, "Transaction({})", id),
-            CommandId::ForeignProposal(block_id) => write!(f, "ForeignProposal({})", block_id),
-            CommandId::EndEpoch => write!(f, "EndEpoch"),
-        }
-    }
 }
 
 impl Command {
     pub fn transaction(&self) -> Option<&TransactionAtom> {
-        match self {
-            Command::Prepare(tx) => Some(tx),
-            Command::LocalPrepare(tx) => Some(tx),
-            Command::AllPrepare(tx) => Some(tx),
-            Command::SomePrepare(tx) => Some(tx),
-            Command::LocalAccept(tx) => Some(tx),
-            Command::AllAccept(tx) => Some(tx),
-            Command::SomeAccept(tx) => Some(tx),
-            Command::LocalOnly(tx) => Some(tx),
-            Command::ForeignProposal(_) => None,
-            Command::EndEpoch => None,
-        }
-    }
-
-    fn id(&self) -> CommandId {
         match self {
             Command::Prepare(tx) |
             Command::LocalPrepare(tx) |
@@ -144,9 +129,24 @@ impl Command {
             Command::LocalAccept(tx) |
             Command::AllAccept(tx) |
             Command::SomeAccept(tx) |
-            Command::LocalOnly(tx) => CommandId::TransactionId(tx.id),
-            Command::ForeignProposal(foreign_proposal) => CommandId::ForeignProposal(foreign_proposal.block_id),
-            Command::EndEpoch => CommandId::EndEpoch,
+            Command::LocalOnly(tx) => Some(tx),
+            Command::ForeignProposal(_) | Command::MintConfidentialOutput(_) | Command::EndEpoch => None,
+        }
+    }
+
+    fn as_ordering(&self) -> CommandOrdering<'_> {
+        match self {
+            Command::Prepare(tx) |
+            Command::LocalPrepare(tx) |
+            Command::AllPrepare(tx) |
+            Command::SomePrepare(tx) |
+            Command::LocalAccept(tx) |
+            Command::AllAccept(tx) |
+            Command::SomeAccept(tx) |
+            Command::LocalOnly(tx) => CommandOrdering::TransactionId(&tx.id),
+            Command::ForeignProposal(foreign_proposal) => CommandOrdering::ForeignProposal(&foreign_proposal.block_id),
+            Command::MintConfidentialOutput(mint) => CommandOrdering::MintConfidentialOutput(&mint.substate_id),
+            Command::EndEpoch => CommandOrdering::EndEpoch,
         }
     }
 
@@ -192,6 +192,13 @@ impl Command {
         }
     }
 
+    pub fn mint_confidential_output(&self) -> Option<&MintConfidentialOutputAtom> {
+        match self {
+            Command::MintConfidentialOutput(mint) => Some(mint),
+            _ => None,
+        }
+    }
+
     pub fn all_accept(&self) -> Option<&TransactionAtom> {
         match self {
             Command::AllAccept(tx) => Some(tx),
@@ -218,6 +225,7 @@ impl Command {
             Command::AllAccept(_) |
             Command::SomeAccept(_) |
             Command::EndEpoch |
+            Command::MintConfidentialOutput(_) |
             Command::ForeignProposal(_) => None,
         }
     }
@@ -240,27 +248,16 @@ impl Command {
         matches!(self, Command::EndEpoch)
     }
 
+    pub fn is_mint_confidential_output(&self) -> bool {
+        matches!(self, Command::MintConfidentialOutput(_))
+    }
+
     pub fn is_local_prepare(&self) -> bool {
         matches!(self, Command::LocalPrepare(_))
     }
 
     pub fn is_local_accept(&self) -> bool {
         matches!(self, Command::LocalAccept(_))
-    }
-
-    pub fn evidence(&self) -> &Evidence {
-        match self {
-            Command::Prepare(tx) |
-            Command::LocalPrepare(tx) |
-            Command::AllPrepare(tx) |
-            Command::SomePrepare(tx) |
-            Command::LocalAccept(tx) |
-            Command::LocalOnly(tx) |
-            Command::AllAccept(tx) |
-            Command::SomeAccept(tx) => &tx.evidence,
-            Command::ForeignProposal(_) => unreachable!("ForeignProposal does not have evidence"),
-            Command::EndEpoch => unreachable!("EpochEvent does not have evidence"),
-        }
     }
 }
 
@@ -272,7 +269,7 @@ impl PartialOrd for Command {
 
 impl Ord for Command {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.id().cmp(&other.id())
+        self.as_ordering().cmp(&other.as_ordering())
     }
 }
 
@@ -288,6 +285,7 @@ impl Display for Command {
             Command::AllAccept(tx) => write!(f, "AllAccept({}, {})", tx.id, tx.decision),
             Command::SomeAccept(tx) => write!(f, "SomeAccept({}, {})", tx.id, tx.decision),
             Command::ForeignProposal(fp) => write!(f, "ForeignProposal {}", fp.block_id),
+            Command::MintConfidentialOutput(mint) => write!(f, "MintConfidentialOutput({})", mint.substate_id),
             Command::EndEpoch => write!(f, "EndEpoch"),
         }
     }

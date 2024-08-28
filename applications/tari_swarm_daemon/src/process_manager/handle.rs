@@ -1,7 +1,10 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use tari_common_types::types::FixedHash;
 use tokio::sync::{mpsc, oneshot};
@@ -48,6 +51,13 @@ pub enum ProcessManagerRequest {
     RegisterValidatorNode {
         instance_id: InstanceId,
         reply: Reply<()>,
+    },
+    BurnFunds {
+        amount: u64,
+        wallet_instance_id: InstanceId,
+        account_name: String,
+        out_path: PathBuf,
+        reply: Reply<PathBuf>,
     },
 }
 
@@ -221,6 +231,27 @@ impl ProcessManagerHandle {
         self.tx_request
             .send(ProcessManagerRequest::RegisterValidatorNode {
                 instance_id,
+                reply: tx_reply,
+            })
+            .await?;
+
+        rx_reply.await?
+    }
+
+    pub async fn burn_funds<P: AsRef<Path>>(
+        &self,
+        amount: u64,
+        wallet_instance_id: InstanceId,
+        account_name: String,
+        out_path: P,
+    ) -> anyhow::Result<PathBuf> {
+        let (tx_reply, rx_reply) = oneshot::channel();
+        self.tx_request
+            .send(ProcessManagerRequest::BurnFunds {
+                amount,
+                wallet_instance_id,
+                account_name,
+                out_path: out_path.as_ref().to_path_buf(),
                 reply: tx_reply,
             })
             .await?;

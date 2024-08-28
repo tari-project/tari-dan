@@ -29,7 +29,6 @@ use tari_base_node_client::{
     BaseNodeClient,
     BaseNodeClientError,
 };
-use tari_common::configuration::Network;
 use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError, PublicKey};
 use tari_core::transactions::{
     tari_amount::MicroMinotari,
@@ -44,9 +43,9 @@ use tari_crypto::{
     ristretto::RistrettoPublicKey,
     tari_utilities::{hex::Hex, ByteArray},
 };
-use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeAddressable, NodeHeight, ShardGroup};
+use tari_dan_common_types::{optional::Optional, NodeAddressable};
 use tari_dan_storage::{
-    consensus_models::{Block, SubstateRecord},
+    consensus_models::{BurntUtxo, SubstateRecord},
     global::{GlobalDb, MetadataKey},
     StateStore,
     StorageError,
@@ -56,10 +55,11 @@ use tari_engine_types::{
     confidential::UnclaimedConfidentialOutput,
     substate::{SubstateId, SubstateValue},
 };
-use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError};
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, EpochManagerReader};
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::models::{EncryptedData, TemplateAddress, UnclaimedConfidentialOutputAddress};
+use tari_transaction::VersionedSubstateId;
 use tokio::{task, task::JoinHandle, time};
 
 use crate::{
@@ -70,7 +70,6 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::base_layer_scanner";
 
 pub fn spawn<TAddr: NodeAddressable + 'static>(
-    network: Network,
     global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
     base_node_client: GrpcBaseNodeClient,
     epoch_manager: EpochManagerHandle<TAddr>,
@@ -86,7 +85,6 @@ pub fn spawn<TAddr: NodeAddressable + 'static>(
 ) -> JoinHandle<anyhow::Result<()>> {
     task::spawn(async move {
         let base_layer_scanner = BaseLayerScanner::new(
-            network,
             global_db,
             base_node_client,
             epoch_manager,
@@ -107,7 +105,6 @@ pub fn spawn<TAddr: NodeAddressable + 'static>(
 }
 
 pub struct BaseLayerScanner<TAddr> {
-    network: Network,
     global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
     last_scanned_height: u64,
     last_scanned_tip: Option<FixedHash>,
@@ -129,7 +126,6 @@ pub struct BaseLayerScanner<TAddr> {
 
 impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
     pub fn new(
-        network: Network,
         global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
         base_node_client: GrpcBaseNodeClient,
         epoch_manager: EpochManagerHandle<TAddr>,
@@ -144,7 +140,6 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         burnt_utxo_sidechain_id: Option<PublicKey>,
     ) -> Self {
         Self {
-            network,
             global_db,
             last_scanned_tip: None,
             last_scanned_height: 0,
@@ -397,11 +392,11 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
                         }
                         info!(
                             target: LOG_TARGET,
-                            "Found burned output: {} with commitment {}",
+                            "⛓️ Found burned output: {} with commitment {}",
                             output_hash,
                             output.commitment.as_public_key()
                         );
-                        self.register_burnt_utxo(&output).await?;
+                        self.register_burnt_utxo(&output, &block_info).await?;
                     },
                 }
             }
@@ -438,12 +433,34 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
         Ok(())
     }
 
-    async fn register_burnt_utxo(&mut self, output: &TransactionOutput) -> Result<(), BaseLayerScannerError> {
+    async fn register_burnt_utxo(
+        &mut self,
+        output: &TransactionOutput,
+        block_info: &BlockInfo,
+    ) -> Result<(), BaseLayerScannerError> {
         let substate_id = SubstateId::UnclaimedConfidentialOutput(
             UnclaimedConfidentialOutputAddress::try_from_commitment(output.commitment.as_bytes()).map_err(|e|
                 // Technically impossible, but anyway
                 BaseLayerScannerError::InvalidSideChainUtxoResponse(format!("Invalid commitment: {}", e)))?,
         );
+        let consensus_constants = self.epoch_manager.get_base_layer_consensus_constants().await?;
+        let epoch = consensus_constants.height_to_epoch(block_info.height);
+        let Some(local_committee_info) = self.epoch_manager.get_local_committee_info(epoch).await.optional()? else {
+            debug!(
+                target: LOG_TARGET,
+                "Validator node is not registered for the current epoch {epoch}. Ignoring burnt UTXO.",
+            );
+            return Ok(());
+        };
+
+        if !local_committee_info.includes_substate_id(&substate_id) {
+            debug!(
+                target: LOG_TARGET,
+                "Validator node is not part of the committee for the burnt UTXO {substate_id}. Ignoring."
+            );
+            return Ok(());
+        }
+
         let encrypted_data_bytes = output.encrypted_data.as_bytes();
         if encrypted_data_bytes.len() < EncryptedData::size() {
             return Err(BaseLayerScannerError::InvalidSideChainUtxoResponse(
@@ -457,34 +474,30 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
                 BaseLayerScannerError::InvalidSideChainUtxoResponse("Encrypted data has too few bytes".to_string())
             })?,
         });
+
+        info!(
+            target: LOG_TARGET,
+            "⛓️ Burnt UTXO {substate_id} registered at height {}",
+            block_info.height,
+        );
+
         self.state_store
             .with_write_tx(|tx| {
-                let genesis = Block::genesis(
-                    self.network,
-                    Epoch(0),
-                    ShardGroup::all_shards(self.consensus_constants.num_preshards),
-                );
-
-                // TODO: This should be proposed in a block...
-                SubstateRecord {
-                    substate_id,
-                    version: 0,
-                    substate_value: substate,
-                    state_hash: Default::default(),
-                    created_by_transaction: Default::default(),
-                    created_justify: *genesis.justify().id(),
-                    created_block: *genesis.id(),
-                    created_height: NodeHeight::zero(),
-                    created_by_shard: Shard::zero(),
-                    created_at_epoch: Epoch(0),
-                    destroyed: None,
+                if SubstateRecord::exists(&**tx, &VersionedSubstateId::new(substate_id.clone(), 0))? {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Burnt UTXO {substate_id} already exists. Ignoring.",
+                    );
+                    return Ok(());
                 }
-                .create(tx)
+
+                BurntUtxo::new(substate_id, substate, block_info.height).insert(tx)
             })
             .map_err(|source| BaseLayerScannerError::CouldNotRegisterBurntUtxo {
                 commitment: Box::new(output.commitment.clone()),
                 source,
             })?;
+
         Ok(())
     }
 

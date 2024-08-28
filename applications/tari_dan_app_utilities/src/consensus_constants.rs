@@ -32,7 +32,7 @@ pub struct ConsensusConstants {
     pub max_base_layer_blocks_ahead: u64,
     pub max_base_layer_blocks_behind: u64,
     pub num_preshards: NumPreshards,
-    pub pacemaker_max_base_time: std::time::Duration,
+    pub pacemaker_max_base_time: Duration,
 }
 
 impl ConsensusConstants {

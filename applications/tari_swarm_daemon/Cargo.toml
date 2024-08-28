@@ -18,12 +18,14 @@ tari_engine_types = { workspace = true }
 minotari_node_grpc_client = { workspace = true }
 minotari_wallet_grpc_client = { workspace = true }
 tari_validator_node_client = { workspace = true }
+tari_wallet_daemon_client = { workspace = true }
 tari_dan_engine = { workspace = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["multipart"] }
 axum-jrpc = { workspace = true }
+base64 = "0.22.1"
 clap = { workspace = true, features = ["derive"] }
 fern = { workspace = true, features = ["colored"] }
 futures = { workspace = true }

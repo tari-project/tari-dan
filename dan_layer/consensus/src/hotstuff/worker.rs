@@ -6,7 +6,7 @@ use std::fmt::{Debug, Formatter};
 use log::*;
 use tari_dan_common_types::{committee::CommitteeInfo, Epoch, NodeHeight, ShardGroup};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockDiff, HighQc, LeafBlock, TransactionPool},
+    consensus_models::{Block, BlockDiff, BurntUtxo, HighQc, LeafBlock, TransactionPool},
     StateStore,
 };
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
@@ -583,10 +583,12 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
     async fn on_beat(&mut self, epoch: Epoch, local_committee_info: &CommitteeInfo) -> Result<(), HotStuffError> {
         self.hooks.on_beat();
-        if !self
-            .state_store
-            .with_read_tx(|tx| self.transaction_pool.has_uncommitted_transactions(tx))?
-        {
+        if !self.state_store.with_read_tx(|tx| {
+            // Propose quickly if there are UTXOs to mint or transactions to propose
+            Ok::<_, HotStuffError>(
+                BurntUtxo::has_unproposed(tx)? || self.transaction_pool.has_uncommitted_transactions(tx)?,
+            )
+        })? {
             let current_epoch = self.epoch_manager.current_epoch().await?;
             // Propose quickly if we should end the epoch (i.e base layer epoch > pacemaker epoch)
             if current_epoch == epoch {

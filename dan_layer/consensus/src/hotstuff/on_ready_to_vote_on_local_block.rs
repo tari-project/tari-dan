@@ -19,8 +19,10 @@ use tari_dan_storage::{
         LastExecuted,
         LastVoted,
         LockedBlock,
+        MintConfidentialOutputAtom,
         PendingShardStateTreeDiff,
         QuorumDecision,
+        SubstateChange,
         SubstateRecord,
         TransactionAtom,
         TransactionPool,
@@ -31,8 +33,8 @@ use tari_dan_storage::{
     },
     StateStore,
 };
-use tari_engine_types::commit_result::RejectReason;
-use tari_transaction::TransactionId;
+use tari_engine_types::{commit_result::RejectReason, substate::Substate};
+use tari_transaction::{TransactionId, VersionedSubstateId};
 use tokio::sync::broadcast;
 
 use crate::{
@@ -410,6 +412,17 @@ where TConsensusSpec: ConsensusSpec
                     }
 
                     continue;
+                },
+                Command::MintConfidentialOutput(atom) => {
+                    if !self.evaluate_mint_confidential_output_command(
+                        tx,
+                        atom,
+                        local_committee_info,
+                        &mut substate_store,
+                        &mut proposed_block_change_set,
+                    )? {
+                        return Ok(proposed_block_change_set.no_vote());
+                    }
                 },
                 Command::EndEpoch => {
                     if !can_propose_epoch_end {
@@ -1302,6 +1315,48 @@ where TConsensusSpec: ConsensusSpec
         Ok(true)
     }
 
+    fn evaluate_mint_confidential_output_command(
+        &self,
+        tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        atom: &MintConfidentialOutputAtom,
+        local_committee_info: &CommitteeInfo,
+        substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
+        proposed_block_change_set: &mut ProposedBlockChangeSet,
+    ) -> Result<bool, HotStuffError> {
+        let Some(utxo) = atom.get(tx).optional()? else {
+            warn!(
+                target: LOG_TARGET,
+                "❌ NO VOTE: MintConfidentialOutputAtom for {} is not known.",
+                atom.substate_id
+            );
+            return Ok(false);
+        };
+        let id = VersionedSubstateId::new(utxo.substate_id.clone(), 0);
+        let shard = id.to_substate_address().to_shard(local_committee_info.num_preshards());
+        let change = SubstateChange::Up {
+            id,
+            shard,
+            // N/A
+            transaction_id: Default::default(),
+            substate: Substate::new(0, utxo.substate_value),
+        };
+
+        if let Err(err) = substate_store.put(change) {
+            let err = err.or_fatal_error()?;
+            warn!(
+                target: LOG_TARGET,
+                "❌ NO VOTE: Failed to store mint confidential output for {}. Error: {}",
+                atom.substate_id,
+                err
+            );
+            return Ok(false);
+        }
+
+        proposed_block_change_set.set_utxo_mint_proposed_in(utxo.substate_id);
+
+        Ok(true)
+    }
+
     fn execute_transaction(
         &self,
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
@@ -1402,6 +1457,14 @@ where TConsensusSpec: ConsensusSpec
             target: LOG_TARGET,
             "🌳 Committing block {} with {} substate change(s)", block, diff.len()
         );
+
+        for atom in block.all_foreign_proposals() {
+            atom.delete(tx)?;
+        }
+
+        for atom in block.all_confidential_output_mints() {
+            atom.delete(tx)?;
+        }
 
         // NOTE: this must happen before we commit the substate diff because the state transitions use this version
         let pending = PendingShardStateTreeDiff::remove_by_block(tx, block.id())?;

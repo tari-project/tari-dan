@@ -1,13 +1,13 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use std::{fmt, fmt::Display};
+use std::{fmt, fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_common_types::types::PublicKey;
 use tari_template_lib::{
-    models::{BinaryTag, ObjectKey},
+    models::{BinaryTag, KeyParseError, ObjectKey},
     prelude::Amount,
     Hash,
 };
@@ -39,6 +39,10 @@ impl FeeClaimAddress {
     pub fn as_object_key(&self) -> &ObjectKey {
         self.0.inner()
     }
+
+    pub fn from_hex(hex: &str) -> Result<Self, KeyParseError> {
+        Ok(Self(BorTag::new(ObjectKey::from_hex(hex)?)))
+    }
 }
 
 impl<T: Into<Hash>> From<T> for FeeClaimAddress {
@@ -50,6 +54,15 @@ impl<T: Into<Hash>> From<T> for FeeClaimAddress {
 impl Display for FeeClaimAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "feeclaim_{}", self.as_object_key())
+    }
+}
+
+impl FromStr for FeeClaimAddress {
+    type Err = KeyParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.strip_prefix("feeclaim_").unwrap_or(s);
+        Self::from_hex(s)
     }
 }
 

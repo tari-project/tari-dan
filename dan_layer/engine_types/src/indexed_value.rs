@@ -6,7 +6,16 @@ use std::{collections::BTreeMap, ops::ControlFlow};
 use serde::{Deserialize, Serialize};
 use tari_bor::{decode, BorError, FromTagAndValue, ValueVisitor};
 use tari_template_lib::{
-    models::{BinaryTag, BucketId, NonFungibleAddressContents, ObjectKey, ProofId, ResourceAddress, VaultId},
+    models::{
+        BinaryTag,
+        BucketId,
+        NonFungibleAddressContents,
+        ObjectKey,
+        ProofId,
+        ResourceAddress,
+        UnclaimedConfidentialOutputAddress,
+        VaultId,
+    },
     prelude::{ComponentAddress, Metadata, NonFungibleAddress},
     Hash,
 };
@@ -133,6 +142,7 @@ pub struct IndexedWellKnownTypes {
     #[serde(with = "serde_with::hex::vec")]
     vault_ids: Vec<VaultId>,
     metadata: Vec<Metadata>,
+    unclaimed_confidential_output_address: Vec<UnclaimedConfidentialOutputAddress>,
 }
 
 impl IndexedWellKnownTypes {
@@ -146,6 +156,7 @@ impl IndexedWellKnownTypes {
             non_fungible_addresses: vec![],
             vault_ids: vec![],
             metadata: vec![],
+            unclaimed_confidential_output_address: vec![],
         }
     }
 
@@ -166,6 +177,7 @@ impl IndexedWellKnownTypes {
             non_fungible_addresses: visitor.non_fungible_addresses,
             vault_ids: visitor.vault_ids,
             metadata: visitor.metadata,
+            unclaimed_confidential_output_address: visitor.unclaimed_confidential_output_addresses,
         })
     }
 
@@ -194,6 +206,9 @@ impl IndexedWellKnownTypes {
                     WellKnownTariValue::FeeClaim(addr) => {
                         found = *address == addr;
                     },
+                    WellKnownTariValue::UnclaimedConfidentialOutputAddress(addr) => {
+                        found = *address == addr;
+                    },
                     WellKnownTariValue::BucketId(_) |
                     WellKnownTariValue::Metadata(_) |
                     WellKnownTariValue::ProofId(_) => {},
@@ -217,6 +232,7 @@ impl IndexedWellKnownTypes {
             .chain(self.resource_addresses.iter().map(|a| (*a).into()))
             .chain(self.non_fungible_addresses.iter().map(|a| a.clone().into()))
             .chain(self.vault_ids.iter().map(|a| (*a).into()))
+            .chain(self.unclaimed_confidential_output_address.iter().map(|a| (*a).into()))
     }
 
     pub fn bucket_ids(&self) -> &[BucketId] {
@@ -260,6 +276,10 @@ impl IndexedWellKnownTypes {
             non_fungible_addresses: diff_vec(&self.non_fungible_addresses, &other.non_fungible_addresses),
             vault_ids: diff_vec(&self.vault_ids, &other.vault_ids),
             metadata: diff_vec(&self.metadata, &other.metadata),
+            unclaimed_confidential_output_address: diff_vec(
+                &self.unclaimed_confidential_output_address,
+                &other.unclaimed_confidential_output_address,
+            ),
         }
     }
 }
@@ -282,6 +302,9 @@ impl FromIterator<IndexedWellKnownTypes> for IndexedWellKnownTypes {
             indexed.non_fungible_addresses.extend(value.non_fungible_addresses);
             indexed.vault_ids.extend(value.vault_ids);
             indexed.metadata.extend(value.metadata);
+            indexed
+                .unclaimed_confidential_output_address
+                .extend(value.unclaimed_confidential_output_address);
         }
         indexed
     }
@@ -297,6 +320,7 @@ pub enum WellKnownTariValue {
     VaultId(VaultId),
     FeeClaim(FeeClaimAddress),
     ProofId(ProofId),
+    UnclaimedConfidentialOutputAddress(UnclaimedConfidentialOutputAddress),
 }
 
 impl FromTagAndValue for WellKnownTariValue {
@@ -342,6 +366,10 @@ impl FromTagAndValue for WellKnownTariValue {
                 let value: u32 = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::ProofId(value.into()))
             },
+            BinaryTag::UnclaimedConfidentialOutputAddress => {
+                let value: ObjectKey = value.deserialized().map_err(BorError::from)?;
+                Ok(Self::UnclaimedConfidentialOutputAddress(value.into()))
+            },
         }
     }
 }
@@ -356,6 +384,7 @@ pub struct IndexedValueVisitor {
     non_fungible_addresses: Vec<NonFungibleAddress>,
     vault_ids: Vec<VaultId>,
     metadata: Vec<Metadata>,
+    unclaimed_confidential_output_addresses: Vec<UnclaimedConfidentialOutputAddress>,
 }
 
 impl IndexedValueVisitor {
@@ -369,6 +398,7 @@ impl IndexedValueVisitor {
             non_fungible_addresses: vec![],
             vault_ids: vec![],
             metadata: vec![],
+            unclaimed_confidential_output_addresses: vec![],
         }
     }
 }
@@ -399,11 +429,14 @@ impl ValueVisitor<WellKnownTariValue> for IndexedValueVisitor {
             WellKnownTariValue::Metadata(metadata) => {
                 self.metadata.push(metadata);
             },
-            WellKnownTariValue::FeeClaim(_) => {
-                // Do nothing
-            },
             WellKnownTariValue::ProofId(proof_id) => {
                 self.proofs.push(proof_id);
+            },
+            WellKnownTariValue::UnclaimedConfidentialOutputAddress(address) => {
+                self.unclaimed_confidential_output_addresses.push(address);
+            },
+            WellKnownTariValue::FeeClaim(_) => {
+                // Do nothing
             },
         }
         Ok(ControlFlow::Continue(()))

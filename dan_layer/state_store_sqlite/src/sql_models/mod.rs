@@ -4,6 +4,7 @@
 mod block;
 mod block_diff;
 mod bookkeeping;
+mod burnt_utxo;
 mod epoch_checkpoint;
 mod foreign_parked_block;
 mod foreign_proposal;
@@ -22,6 +23,7 @@ mod vote;
 pub use block::*;
 pub use block_diff::*;
 pub use bookkeeping::*;
+pub use burnt_utxo::*;
 pub use epoch_checkpoint::*;
 pub use foreign_parked_block::*;
 pub use foreign_proposal::*;

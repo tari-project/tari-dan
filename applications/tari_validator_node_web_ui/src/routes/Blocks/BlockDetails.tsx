@@ -34,8 +34,14 @@ import Loading from "../../Components/Loading";
 import { getBlock, getIdentity } from "../../utils/json_rpc";
 import Transactions from "./Transactions";
 import { decodeShardGroup, primitiveDateTimeToDate, primitiveDateTimeToSecs } from "../../utils/helpers";
-import type { Block, Command, ForeignProposalAtom, TransactionAtom } from "@tari-project/typescript-bindings";
-import type { VNGetIdentityResponse } from "@tari-project/typescript-bindings";
+import type {
+  Block,
+  Command,
+  ForeignProposalAtom,
+  TransactionAtom,
+  VNGetIdentityResponse,
+  MintConfidentialOutputAtom,
+} from "@tari-project/typescript-bindings";
 
 const COMMANDS = [
   "LocalOnly",
@@ -60,6 +66,7 @@ export default function BlockDetails() {
   const [identity, setIdentity] = useState<VNGetIdentityResponse>();
   const [blockTime, setBlockTime] = useState<number>(0);
   const [foreignProposals, setForeignProposals] = useState<ForeignProposalAtom[]>([]);
+  const [mintedUtxos, setMintedUtxos] = useState<MintConfidentialOutputAtom[]>([]);
 
   useEffect(() => {
     if (blockId !== undefined) {
@@ -78,6 +85,7 @@ export default function BlockDetails() {
           }
           setEpochEvents([]);
           const foreignProposals = [];
+          const mintedUtxos = [];
           const data: { [key: string]: TransactionAtom[] } = {};
           for (let command of resp.block.commands) {
             if (typeof command === "object") {
@@ -86,6 +94,8 @@ export default function BlockDetails() {
 
               if ("ForeignProposal" in command) {
                 foreignProposals.push(command.ForeignProposal);
+              } else if ("MintConfidentialOutput" in command) {
+                mintedUtxos.push(command.MintConfidentialOutput);
               } else {
                 data[cmd] ||= [];
                 data[cmd].push(command[cmd as keyof Command]);
@@ -96,6 +106,7 @@ export default function BlockDetails() {
           }
 
           setForeignProposals(foreignProposals);
+          setMintedUtxos(mintedUtxos);
           setBlockData(data);
         })
         .catch((err) => {
@@ -272,6 +283,21 @@ export default function BlockDetails() {
                       {foreignProposals.map((proposal, i) => (
                         <div key={i}>
                           Foreign Proposal: {proposal.block_id} {JSON.stringify(decodeShardGroup(proposal.shard_group))}
+                        </div>
+                      ))}
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+                {mintedUtxos.length > 0 && (
+                  <Accordion expanded={expandedPanels.includes("panelMintedUtxos")}
+                             onChange={handleChange("panelMintedUtxos")}>
+                    <AccordionSummary aria-controls="panelMintedUtxosbh-content" id="panelMintedUtxosbh-header">
+                      <Typography>Mint Confidential Output</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      {mintedUtxos.map((utxo, i) => (
+                        <div key={i}>
+                          Unclaimed UTXO: {JSON.stringify(utxo.substate_id)}
                         </div>
                       ))}
                     </AccordionDetails>

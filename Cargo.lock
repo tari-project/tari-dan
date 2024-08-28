@@ -9868,6 +9868,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-jrpc",
+ "base64 0.22.1",
  "clap 3.2.25",
  "fern",
  "futures 0.3.30",
@@ -9892,6 +9893,7 @@ dependencies = [
  "tari_engine_types",
  "tari_shutdown",
  "tari_validator_node_client",
+ "tari_wallet_daemon_client",
  "thiserror",
  "tokio",
  "toml 0.8.15",
@@ -10396,9 +10398,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.39.1"
+version = "1.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d040ac2b29ab03b09d4129c2f5bbd012a3ac2f79d38ff506a4bf8dd34b0eac8a"
+checksum = "9babc99b9923bfa4804bd74722ff02c0381021eafa4db9949217e3be8e84fff5"
 dependencies = [
  "backtrace",
  "bytes 1.6.1",

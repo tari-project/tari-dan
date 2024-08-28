@@ -124,7 +124,7 @@ create table block_diffs
     -- NULL for Down
     state          text      NULL,
     created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
+--    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 create index block_diffs_idx_block_id_substate_id on block_diffs (block_id, substate_id);
@@ -388,6 +388,18 @@ CREATE TABLE foreign_receive_counters
     id         integer   not NULL primary key AUTOINCREMENT,
     counters   text      not NULL,
     created_at timestamp not NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE burnt_utxos
+(
+    id                      integer   not null primary key AUTOINCREMENT,
+    substate_id              text     not NULL,
+    substate                 text     not NULL,
+    base_layer_block_height  bigint   not NULL,
+    proposed_in_block        text     NULL REFERENCES blocks (block_id),
+    proposed_in_block_height bigint   NULL,
+    created_at               timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (substate_id)
 );
 
 CREATE TABLE state_tree
