@@ -14,6 +14,7 @@ use log::*;
 use serde::Serialize;
 use tari_bor::json_encoding::CborValueJsonSerializeWrapper;
 use tari_common_types::types::{Commitment, PublicKey};
+use tari_dan_common_types::SubstateRequirement;
 use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_dan_wallet_sdk::{
     models::{
@@ -31,7 +32,7 @@ use tari_dan_wallet_sdk::{
 };
 use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateId, TemplateAddress};
 use tari_template_lib::models::{Amount, EncryptedData};
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId};
 use tari_utilities::hex::Hex;
 
 use crate::{

@@ -67,8 +67,8 @@ impl HighQc {
 }
 
 impl HighQc {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx) -> Result<Self, StorageError> {
-        tx.high_qc_get()
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx, epoch: Epoch) -> Result<Self, StorageError> {
+        tx.high_qc_get(epoch)
     }
 
     pub fn get_quorum_certificate<TTx: StateStoreReadTransaction + ?Sized>(

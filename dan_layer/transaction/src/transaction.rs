@@ -7,7 +7,7 @@ use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_crypto::ristretto::RistrettoSecretKey;
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{Epoch, SubstateRequirement, VersionedSubstateId};
 use tari_engine_types::{
     hashing::{hasher32, EngineHashDomainLabel},
     indexed_value::{IndexedValue, IndexedValueError},
@@ -16,14 +16,7 @@ use tari_engine_types::{
 };
 use tari_template_lib::{models::ComponentAddress, Hash};
 
-use crate::{
-    builder::TransactionBuilder,
-    transaction_id::TransactionId,
-    SubstateRequirement,
-    TransactionSignature,
-    UnsignedTransaction,
-    VersionedSubstateId,
-};
+use crate::{builder::TransactionBuilder, transaction_id::TransactionId, TransactionSignature, UnsignedTransaction};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(

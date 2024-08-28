@@ -5,27 +5,28 @@ use std::{collections::HashSet, marker::PhantomData};
 
 use indexmap::IndexMap;
 use log::*;
-use tari_dan_common_types::{committee::CommitteeInfo, optional::IsNotFoundError, Epoch};
+use tari_dan_common_types::{
+    committee::CommitteeInfo,
+    optional::IsNotFoundError,
+    Epoch,
+    SubstateRequirement,
+    ToSubstateAddress,
+    VersionedSubstateId,
+};
 use tari_dan_storage::{
-    consensus_models::{
-        Decision,
-        ExecutedTransaction,
-        SubstateLockType,
-        TransactionRecord,
-        VersionedSubstateIdLockIntent,
-    },
+    consensus_models::{Decision, ExecutedTransaction, SubstateRequirementLockIntent, TransactionRecord},
     StateStore,
 };
 use tari_engine_types::{
     commit_result::RejectReason,
-    substate::{Substate, SubstateId},
+    substate::Substate,
     transaction_receipt::TransactionReceiptAddress,
 };
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId, VersionedSubstateId};
+use tari_transaction::{Transaction, TransactionId};
 
 use super::{LocalPreparedTransaction, PledgedTransaction, PreparedTransaction};
 use crate::{
-    hotstuff::substate_store::PendingSubstateStore,
+    hotstuff::substate_store::{LockStatus, PendingSubstateStore},
     traits::{BlockTransactionExecutor, BlockTransactionExecutorError, ReadableSubstateStore},
 };
 
@@ -52,7 +53,8 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         store: &PendingSubstateStore<TStateStore>,
         local_committee_info: &CommitteeInfo,
         transaction: &Transaction,
-    ) -> Result<(IndexMap<SubstateId, Substate>, HashSet<SubstateRequirement>), BlockTransactionExecutorError> {
+    ) -> Result<(IndexMap<SubstateRequirement, Substate>, HashSet<SubstateRequirement>), BlockTransactionExecutorError>
+    {
         let mut resolved_substates = IndexMap::with_capacity(transaction.num_unique_inputs());
 
         let mut non_local_inputs = HashSet::new();
@@ -67,12 +69,12 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                     let id = VersionedSubstateId::new(input.substate_id, version);
                     let substate = store.get(&id)?;
                     info!(target: LOG_TARGET, "Resolved LOCAL substate: {id}");
-                    resolved_substates.insert(id.substate_id, substate);
+                    resolved_substates.insert(id.into(), substate);
                 },
                 None => {
                     let substate = store.get_latest(&input.substate_id)?;
                     info!(target: LOG_TARGET, "Resolved LOCAL unversioned substate: {input}");
-                    resolved_substates.insert(input.substate_id, substate);
+                    resolved_substates.insert(input, substate);
                 },
             }
         }
@@ -94,7 +96,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                 {
                     let version = id.version();
                     (
-                        id.substate_id,
+                        id.into(),
                         Substate::new(version, substate),
                     )
                 })
@@ -115,7 +117,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         local_committee_info: &CommitteeInfo,
         current_epoch: Epoch,
         transaction_id: TransactionId,
-    ) -> Result<PreparedTransaction, BlockTransactionExecutorError> {
+    ) -> Result<(PreparedTransaction, LockStatus), BlockTransactionExecutorError> {
         let mut transaction = TransactionRecord::get(store.read_transaction(), &transaction_id)?;
         let mut outputs = HashSet::new();
         outputs.insert(VersionedSubstateId::new(
@@ -148,14 +150,15 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                 transaction.set_abort_reason(RejectReason::OneOrMoreInputsNotFound(err.to_string()));
                 if is_local_only {
                     warn!(target: LOG_TARGET, "⚠️ PREPARE: transaction {} only contains local inputs. Will abort locally", transaction_id);
-                    return Ok(PreparedTransaction::new_local_early_abort(transaction));
+                    return Ok((
+                        PreparedTransaction::new_local_early_abort(transaction),
+                        LockStatus::new(),
+                    ));
                 } else {
                     warn!(target: LOG_TARGET, "⚠️ PREPARE: transaction {} has foreign inputs. Will prepare ABORT", transaction_id);
-                    return Ok(PreparedTransaction::new_multishard(
-                        transaction,
-                        IndexMap::new(),
-                        HashSet::new(),
-                        outputs,
+                    return Ok((
+                        PreparedTransaction::new_multishard(transaction, IndexMap::new(), HashSet::new(), outputs),
+                        LockStatus::new(),
                     ));
                 }
             },
@@ -165,7 +168,10 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             // CASE: Invalid transaction, no inputs
             warn!(target: LOG_TARGET, "⚠️ PREPARE: transaction {transaction_id} has no inputs. Aborting...");
             transaction.set_abort_reason(RejectReason::NoInputs);
-            return Ok(PreparedTransaction::new_local_early_abort(transaction));
+            return Ok((
+                PreparedTransaction::new_local_early_abort(transaction),
+                LockStatus::new(),
+            ));
         }
 
         let mut prepared = if non_local_inputs.is_empty() {
@@ -214,14 +220,14 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             PreparedTransaction::new_multishard(transaction, local_inputs, non_local_inputs, outputs)
         };
 
-        let lock_result = match &prepared {
+        let lock_summary = match &prepared {
             PreparedTransaction::LocalOnly(LocalPreparedTransaction::Accept(executed)) => {
                 let requested_locks = executed.resolved_inputs().iter().chain(executed.resulting_outputs());
-                store.try_lock_all(transaction_id, requested_locks, true)
+                store.try_lock_all(transaction_id, requested_locks, true)?
             },
             PreparedTransaction::LocalOnly(LocalPreparedTransaction::EarlyAbort { .. }) => {
                 // ABORT - No locks
-                Ok(())
+                LockStatus::new()
             },
             PreparedTransaction::MultiShard(multishard) => {
                 if multishard.transaction().current_decision().is_commit() {
@@ -229,39 +235,19 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                     //       specify this or we can correct the locks after execution. Currently, this limitation
                     //       prevents concurrent multi-shard read locks.
                     let requested_locks = multishard.local_inputs().iter().map(|(substate_id, substate)| {
-                        VersionedSubstateIdLockIntent::new(
-                            VersionedSubstateId::new(substate_id.clone(), substate.version()),
-                            SubstateLockType::Write,
-                        )
-                    })
-                        // If outputs are known, lock all local outputs
-                        .chain(
-                            multishard
-                                .outputs()
-                                .iter()
-                                .filter(|o| o.substate_id.is_transaction_receipt() ||
-                                    local_committee_info.includes_substate_address(&o.to_substate_address()))
-                                .map(|output| {
-                                    VersionedSubstateIdLockIntent::new(output.clone(), SubstateLockType::Output)
-                                }),
-                        );
-                    store.try_lock_all(transaction_id, requested_locks, false)
+                        SubstateRequirementLockIntent::write(substate_id.clone(), substate.version())
+                    });
+                    store.try_lock_all(transaction_id, requested_locks, false)?
                 } else {
                     // ABORT - no locks
-                    Ok(())
+                    LockStatus::new()
                 }
             },
         };
 
-        match lock_result {
-            Ok(()) => Ok(prepared),
-            Err(err) => {
-                // TODO: In propose, we should only fail the transaction if versions are specified. Otherwise, we should
-                // wait to propose the transaction until the inputs are available.
-                let err = err.or_fatal_error()?;
-                prepared.set_abort_reason(RejectReason::FailedToLockInputs(err.to_string()));
-                Ok(prepared)
-            },
+        if let Some(err) = lock_summary.hard_conflict() {
+            prepared.set_abort_reason(RejectReason::FailedToLockInputs(err.to_string()));
         }
+        Ok((prepared, lock_summary))
     }
 }

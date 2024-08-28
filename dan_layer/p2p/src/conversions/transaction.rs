@@ -26,7 +26,7 @@ use anyhow::anyhow;
 use tari_bor::decode_exact;
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{Epoch, SubstateRequirement, VersionedSubstateId};
 use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateId};
 use tari_template_lib::{
     args::Arg,
@@ -41,7 +41,7 @@ use tari_template_lib::{
         ViewableBalanceProof,
     },
 };
-use tari_transaction::{SubstateRequirement, Transaction, UnsignedTransaction, VersionedSubstateId};
+use tari_transaction::{Transaction, UnsignedTransaction};
 
 use crate::{
     proto::{

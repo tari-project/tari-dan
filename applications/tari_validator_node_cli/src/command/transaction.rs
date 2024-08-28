@@ -29,7 +29,7 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use tari_dan_common_types::{optional::Optional, SubstateAddress};
+use tari_dan_common_types::{optional::Optional, SubstateAddress, SubstateRequirement};
 use tari_dan_engine::abi::Type;
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
@@ -45,7 +45,7 @@ use tari_template_lib::{
     models::{Amount, BucketId, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId};
 use tari_transaction_manifest::parse_manifest;
 use tari_validator_node_client::{
     types::{

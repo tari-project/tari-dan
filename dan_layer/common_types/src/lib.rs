@@ -38,3 +38,10 @@ pub use num_preshards::*;
 pub mod uint;
 
 pub use tari_engine_types::serde_with;
+
+mod versioned_substate_id;
+
+pub use versioned_substate_id::*;
+
+mod lock_intent;
+pub use lock_intent::*;

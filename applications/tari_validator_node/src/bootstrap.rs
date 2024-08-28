@@ -49,7 +49,16 @@ use tari_dan_app_utilities::{
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
 };
-use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, NumPreshards, PeerAddress, ShardGroup};
+use tari_dan_common_types::{
+    shard::Shard,
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    NumPreshards,
+    PeerAddress,
+    ShardGroup,
+    VersionedSubstateId,
+};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
@@ -86,7 +95,7 @@ use tari_template_lib::{
     prelude::{ComponentAccessRules, OwnerRule, ResourceType},
     resource::TOKEN_SYMBOL,
 };
-use tari_transaction::{Transaction, VersionedSubstateId};
+use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{sync::mpsc, task::JoinHandle};
 

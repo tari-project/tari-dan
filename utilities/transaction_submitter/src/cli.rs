@@ -31,7 +31,7 @@ pub struct StressTestArgs {
     #[clap(long, alias = "skip", short = 'k')]
     pub skip_transactions: Option<u64>,
     #[clap(long, short = 'a')]
-    pub jrpc_address: Vec<SocketAddr>,
+    pub jrpc_addresses: Vec<SocketAddr>,
     #[clap(long, short = 'f')]
     pub transaction_file: PathBuf,
     #[clap(long, short = 'y')]

@@ -81,9 +81,9 @@ where TConsensusSpec: ConsensusSpec
         let NewViewMessage {
             high_qc,
             new_height,
-            epoch,
             last_vote,
         } = message;
+        let epoch = high_qc.epoch();
         debug!(
             target: LOG_TARGET,
             "🌟 Received NEWVIEW for qc {} new height {} from {}",

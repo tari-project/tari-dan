@@ -6,7 +6,13 @@ use std::num::NonZeroU64;
 
 use log::*;
 use tari_crypto::ristretto::RistrettoPublicKey;
-use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, Epoch};
+use tari_dan_common_types::{
+    committee::CommitteeInfo,
+    optional::Optional,
+    Epoch,
+    ToSubstateAddress,
+    VersionedSubstateId,
+};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -34,7 +40,7 @@ use tari_dan_storage::{
     StateStore,
 };
 use tari_engine_types::{commit_result::RejectReason, substate::Substate};
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 use tokio::sync::broadcast;
 
 use crate::{
@@ -527,7 +533,7 @@ where TConsensusSpec: ConsensusSpec
         }
 
         // TODO(perf): proposer shouldn't have to do this twice, esp. executing the transaction and locking
-        let prepared = self
+        let (prepared, _lock_status) = self
             .transaction_manager
             .prepare(substate_store, local_committee_info, block.epoch(), *atom.id())
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
@@ -580,7 +586,7 @@ where TConsensusSpec: ConsensusSpec
                                 tx_rec.transaction_id(),
                                 err
                             );
-                            let _err = err.or_fatal_error()?;
+                            let _err = err.ok_lock_failed()?;
                             return Ok(false);
                         }
                     }
@@ -695,7 +701,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        let prepared = self
+        let (prepared, _lock_status) = self
             .transaction_manager
             .prepare(substate_store, local_committee_info, block.epoch(), *atom.id())
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
@@ -1011,11 +1017,11 @@ where TConsensusSpec: ConsensusSpec
 
         let maybe_execution = if tx_rec.current_decision().is_commit() {
             let execution = self.execute_transaction(tx, block.id(), block.epoch(), tx_rec.transaction_id())?;
-            let execution = execution.into_transaction_execution();
+            let mut execution = execution.into_transaction_execution();
 
             // TODO: can we modify the locks at this point? For multi-shard input transactions, we locked all inputs as
-            // Write due to lack of information. We now know what locks are necessary, however this changes pledges
-            // already sent.
+            // Write due to lack of information. We now know what locks are necessary, and this block has the correct
+            // evidence (TODO: verify the atom) so this should be fine.
             tx_rec.update_from_execution(&execution);
 
             // Lock all local outputs
@@ -1023,42 +1029,39 @@ where TConsensusSpec: ConsensusSpec
                 o.substate_id().is_transaction_receipt() ||
                     local_committee_info.includes_substate_address(&o.to_substate_address())
             });
-            match substate_store.try_lock_all(*tx_rec.transaction_id(), local_outputs, false) {
-                Ok(()) => {},
-                Err(err) => {
-                    let err = err.or_fatal_error()?;
-
-                    if atom.decision.is_commit() {
-                        // If we disagree with any local decision we abstain from voting
-                        warn!(
-                            target: LOG_TARGET,
-                            "❌ NO VOTE LocalAccept: Lock failure: {} but leader decided COMMIT for tx {} in block {}. Leader proposed COMMIT, we decided ABORT",
-                            err,
-                            tx_rec.transaction_id(),
-                            block,
-                        );
-                        return Ok(false);
-                    }
-
-                    info!(
+            let lock_status = substate_store.try_lock_all(*tx_rec.transaction_id(), local_outputs, false)?;
+            if let Some(err) = lock_status.failures().first() {
+                if atom.decision.is_commit() {
+                    // If we disagree with any local decision we abstain from voting
+                    warn!(
                         target: LOG_TARGET,
-                        "⚠️ Failed to lock outputs for transaction {} in block {}. Error: {}",
-                        block,
+                        "❌ NO VOTE LocalAccept: Lock failure: {} but leader decided COMMIT for tx {} in block {}. Leader proposed COMMIT, we decided ABORT",
+                        err,
                         tx_rec.transaction_id(),
-                        err
+                        block,
                     );
+                    return Ok(false);
+                }
 
-                    tx_rec.set_local_decision(Decision::Abort);
-                    proposed_block_change_set
-                        .set_next_transaction_update(
-                            &tx_rec,
-                            TransactionPoolStage::LocalAccepted,
-                            tx_rec.evidence().all_addresses_justified(),
-                        )?
-                        .add_transaction_execution(execution)?;
+                info!(
+                    target: LOG_TARGET,
+                    "⚠️ Failed to lock outputs for transaction {} in block {}. Error: {}",
+                    block,
+                    tx_rec.transaction_id(),
+                    err
+                );
 
-                    return Ok(true);
-                },
+                tx_rec.set_local_decision(Decision::Abort);
+                execution.set_abort_reason(RejectReason::FailedToLockOutputs(err.to_string()));
+                proposed_block_change_set
+                    .set_next_transaction_update(
+                        &tx_rec,
+                        TransactionPoolStage::LocalAccepted,
+                        tx_rec.evidence().all_addresses_justified(),
+                    )?
+                    .add_transaction_execution(execution)?;
+
+                return Ok(true);
             }
             Some(execution)
         } else {
@@ -1342,7 +1345,7 @@ where TConsensusSpec: ConsensusSpec
         };
 
         if let Err(err) = substate_store.put(change) {
-            let err = err.or_fatal_error()?;
+            let err = err.ok_lock_failed()?;
             warn!(
                 target: LOG_TARGET,
                 "❌ NO VOTE: Failed to store mint confidential output for {}. Error: {}",

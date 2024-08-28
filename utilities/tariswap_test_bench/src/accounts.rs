@@ -4,6 +4,7 @@
 use std::ops::RangeInclusive;
 
 use tari_crypto::{keys::PublicKey as _, ristretto::RistrettoPublicKey};
+use tari_dan_common_types::SubstateRequirement;
 use tari_dan_wallet_sdk::{apis::key_manager::TRANSACTION_BRANCH, models::Account};
 use tari_engine_types::component::new_component_address_from_public_key;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
@@ -13,7 +14,7 @@ use tari_template_lib::{
     models::Amount,
     resource::ResourceType,
 };
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::Transaction;
 
 use crate::{faucet::Faucet, runner::Runner};
 

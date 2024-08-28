@@ -16,6 +16,8 @@ use tari_dan_common_types::{
     shard::Shard,
     Epoch,
     NodeHeight,
+    ToSubstateAddress,
+    VersionedSubstateId,
 };
 use tari_dan_storage::{
     consensus_models::{
@@ -33,6 +35,7 @@ use tari_dan_storage::{
         PendingShardStateTreeDiff,
         QuorumCertificate,
         SubstateChange,
+        SubstateRequirementLockIntent,
         TransactionAtom,
         TransactionExecution,
         TransactionPool,
@@ -44,7 +47,7 @@ use tari_dan_storage::{
 };
 use tari_engine_types::{commit_result::RejectReason, substate::Substate};
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 
 use crate::{
     hotstuff::{
@@ -164,7 +167,7 @@ where TConsensusSpec: ConsensusSpec
         let base_layer_block_height = current_base_layer_block_height;
 
         let (next_block, foreign_proposals) = self.store.with_write_tx(|tx| {
-            let high_qc = HighQc::get(&**tx)?;
+            let high_qc = HighQc::get(&**tx, epoch)?;
             let high_qc_cert = high_qc.get_quorum_certificate(&**tx)?;
             let (next_block, foreign_proposals, executed_transactions) = self.build_next_block(
                 tx,
@@ -415,16 +418,7 @@ where TConsensusSpec: ConsensusSpec
                 substate: Substate::new(0, utxo.substate_value),
             };
 
-            if let Err(err) = substate_store.put(change) {
-                let err = err.or_fatal_error()?;
-                warn!(
-                    target: LOG_TARGET,
-                    "❌ NO VOTE: Failed to store mint confidential output for {}. Error: {}",
-                    utxo.substate_id,
-                    err
-                );
-                return Err(err.into());
-            }
+            substate_store.put(change)?;
         }
 
         debug!(
@@ -477,6 +471,7 @@ where TConsensusSpec: ConsensusSpec
         Ok((next_block, foreign_proposals, executed_transactions))
     }
 
+    #[allow(clippy::too_many_lines)]
     fn prepare_transaction(
         &self,
         parent_block: &LeafBlock,
@@ -491,7 +486,7 @@ where TConsensusSpec: ConsensusSpec
             tx_rec.transaction_id(),
         );
 
-        let prepared = self
+        let (prepared, lock_status) = self
             .transaction_manager
             .prepare(
                 substate_store,
@@ -500,6 +495,16 @@ where TConsensusSpec: ConsensusSpec
                 *tx_rec.transaction_id(),
             )
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
+
+        if lock_status.is_any_failed() && !lock_status.is_hard_conflict() {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ Transaction {} has lock conflicts, but no hard conflicts. Skipping proposing this transaction...",
+                tx_rec.transaction_id(),
+            );
+
+            return Ok(None);
+        }
 
         let command = match prepared.clone() {
             PreparedTransaction::LocalOnly(LocalPreparedTransaction::Accept(executed)) => {
@@ -532,7 +537,7 @@ where TConsensusSpec: ConsensusSpec
                             err,
                         );
                         // Only error if it is not related to lock errors
-                        let _err = err.or_fatal_error()?;
+                        let _err = err.ok_lock_failed()?;
                         return Ok(None);
                     }
                 }
@@ -616,29 +621,29 @@ where TConsensusSpec: ConsensusSpec
             self.execute_transaction(tx, &parent_block.block_id, parent_block.epoch, tx_rec.transaction_id())?;
 
         // Try to lock all local outputs
-        let local_outputs = execution.resulting_outputs().iter().filter(|o| {
-            o.substate_id().is_transaction_receipt() ||
-                local_committee_info.includes_substate_address(&o.to_substate_address())
-        });
-        match substate_store.try_lock_all(*tx_rec.transaction_id(), local_outputs, false) {
-            Ok(()) => {},
-            Err(err) => {
-                warn!(
-                    target: LOG_TARGET,
-                    "⚠️ Failed to lock outputs for transaction {}: {}",
-                    tx_rec.transaction_id(),
-                    err,
-                );
-                // Only error if it is not related to lock errors
-                let err = err.or_fatal_error()?;
-                execution.set_abort_reason(RejectReason::FailedToLockOutputs(err.to_string()));
-                tx_rec.update_from_execution(&execution);
-                executed_transactions.insert(*tx_rec.transaction_id(), execution);
-                // If the transaction does not lock, we propose to abort it
-                return Ok(Some(Command::LocalAccept(
-                    self.get_current_transaction_atom(local_committee_info, tx_rec)?,
-                )));
-            },
+        let local_outputs = execution
+            .resulting_outputs()
+            .iter()
+            .filter(|o| {
+                o.substate_id().is_transaction_receipt() ||
+                    local_committee_info.includes_substate_address(&o.to_substate_address())
+            })
+            .map(|output| SubstateRequirementLockIntent::from(output.clone()));
+        let lock_status = substate_store.try_lock_all(*tx_rec.transaction_id(), local_outputs, false)?;
+        if let Some(err) = lock_status.failures().first() {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ Failed to lock outputs for transaction {}: {}",
+                tx_rec.transaction_id(),
+                err,
+            );
+            execution.set_abort_reason(RejectReason::FailedToLockOutputs(err.to_string()));
+            tx_rec.update_from_execution(&execution);
+            executed_transactions.insert(*tx_rec.transaction_id(), execution);
+            // If the transaction does not lock, we propose to abort it
+            return Ok(Some(Command::LocalAccept(
+                self.get_current_transaction_atom(local_committee_info, tx_rec)?,
+            )));
         }
 
         tx_rec.update_from_execution(&execution);

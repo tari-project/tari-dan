@@ -33,7 +33,7 @@ impl<TConsensusSpec: ConsensusSpec> OnCatchUpSync<TConsensusSpec> {
     }
 
     pub async fn request_sync(&mut self, epoch: Epoch, from: &TConsensusSpec::Addr) -> Result<(), HotStuffError> {
-        let high_qc = self.store.with_read_tx(|tx| HighQc::get(tx))?;
+        let high_qc = self.store.with_read_tx(|tx| HighQc::get(tx, epoch))?;
         info!(
             target: LOG_TARGET,
             "⏰ Catch up required from block {} from {} (current view: {})",

@@ -7,6 +7,7 @@ use anyhow::anyhow;
 use log::info;
 use tari_common_types::types::PublicKey;
 use tari_crypto::{keys::PublicKey as PK, ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
+use tari_dan_common_types::SubstateRequirement;
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager},
     models::Account,
@@ -18,7 +19,7 @@ use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
     prelude::{Amount, ComponentAddress, Metadata, NonFungibleAddress, NonFungibleId, ResourceAddress},
 };
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId};
 use tari_wallet_daemon_client::types::{
     GetAccountNftRequest,
     GetAccountNftResponse,

@@ -3,11 +3,11 @@
 
 use std::fmt;
 
-use tari_dan_common_types::SubstateAddress;
+use tari_dan_common_types::{SubstateAddress, SubstateLockType, VersionedSubstateId};
 use tari_engine_types::substate::{SubstateId, SubstateValue};
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 
-use crate::consensus_models::{BlockId, SubstateLockType, VersionedSubstateIdLockIntent};
+use crate::consensus_models::{BlockId, VersionedSubstateIdLockIntent};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SubstateLock {

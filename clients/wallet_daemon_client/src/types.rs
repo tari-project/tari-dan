@@ -29,7 +29,7 @@ use std::{collections::HashMap, time::Duration};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{substate_type::SubstateType, Epoch, SubstateAddress};
+use tari_dan_common_types::{substate_type::SubstateType, Epoch, SubstateAddress, SubstateRequirement};
 use tari_dan_wallet_sdk::{
     apis::{confidential_transfer::ConfidentialTransferInputSelection, jwt::Claims, key_manager},
     models::{Account, ConfidentialProofId, NonFungibleToken, TransactionStatus},
@@ -49,7 +49,7 @@ use tari_template_lib::{
     models::{Amount, ConfidentialOutputStatement, NonFungibleId, ResourceAddress, VaultId},
     prelude::{ComponentAddress, ConfidentialWithdrawProof, ResourceType},
 };
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId, UnsignedTransaction};
+use tari_transaction::{Transaction, TransactionId, UnsignedTransaction};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
