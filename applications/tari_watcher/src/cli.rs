@@ -7,7 +7,12 @@ use clap::Parser;
 
 use crate::{
     config::{Config, InstanceType},
-    constants::{DEFAULT_PROJECT_ROOT, DEFAULT_WATCHER_CONFIG_PATH},
+    constants::{
+        DEFAULT_MAIN_PROJECT_PATH,
+        DEFAULT_VALIDATOR_DIR,
+        DEFAULT_VALIDATOR_KEY_PATH,
+        DEFAULT_WATCHER_CONFIG_PATH,
+    },
 };
 
 #[derive(Clone, Debug, Parser)]
@@ -30,10 +35,14 @@ impl Cli {
 
 #[derive(Debug, Clone, clap::Args)]
 pub struct CommonCli {
-    #[clap(short = 'b', long, parse(from_os_str), default_value = DEFAULT_PROJECT_ROOT)]
+    #[clap(short = 'b', long, parse(from_os_str), default_value = DEFAULT_MAIN_PROJECT_PATH)]
     pub base_dir: PathBuf,
     #[clap(short = 'c', long, parse(from_os_str), default_value = DEFAULT_WATCHER_CONFIG_PATH)]
     pub config_path: PathBuf,
+    #[clap(short = 'k', long, parse(from_os_str), default_value = DEFAULT_VALIDATOR_KEY_PATH)]
+    pub key_path: PathBuf,
+    #[clap(short = 'v', long, parse(from_os_str), default_value = DEFAULT_VALIDATOR_DIR)]
+    pub validator_dir: PathBuf,
 }
 
 #[derive(Clone, Debug, clap::Subcommand)]

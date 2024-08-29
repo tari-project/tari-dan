@@ -32,10 +32,7 @@ pub struct ValidatorNodeRegistration {
 }
 
 pub async fn read_registration_file(vn_registration_file: PathBuf) -> anyhow::Result<ValidatorNodeRegistration> {
-    log::debug!(
-        "Using VN registration file at: {}",
-        vn_registration_file.clone().into_os_string().into_string().unwrap()
-    );
+    log::debug!("Using VN registration file at: {}", vn_registration_file.display());
 
     let info = fs::read_to_string(vn_registration_file).await?;
     let reg = json5::from_str(&info)?;
