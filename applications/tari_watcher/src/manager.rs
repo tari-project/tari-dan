@@ -7,7 +7,7 @@ use log::*;
 use minotari_app_grpc::tari_rpc::{
     self as grpc, ConsensusConstants, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse,
 };
-use tari_shutdown::ShutdownSignal;
+use tari_shutdown::{Shutdown, ShutdownSignal};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
@@ -23,14 +23,16 @@ pub struct ProcessManager {
     pub validator_base_dir: PathBuf,
     pub validator_config: ExecutableConfig,
     pub wallet_config: ExecutableConfig,
-    pub shutdown_signal: ShutdownSignal,
+    pub shutdown_signal: ShutdownSignal, // listen for keyboard exit signal
+    pub trigger_signal: Shutdown,        // triggered when validator auto-restart is disabled
     pub rx_request: mpsc::Receiver<ManagerRequest>,
     pub chain: Minotari,
     pub alerting_config: Channels,
+    pub auto_restart: bool,
 }
 
 impl ProcessManager {
-    pub fn new(config: Config, shutdown_signal: ShutdownSignal) -> (Self, ManagerHandle) {
+    pub fn new(config: Config, shutdown_signal: ShutdownSignal, trigger_signal: Shutdown) -> (Self, ManagerHandle) {
         let (tx_request, rx_request) = mpsc::channel(1);
         let this = Self {
             base_dir: config.base_dir.clone(),
@@ -38,6 +40,7 @@ impl ProcessManager {
             validator_config: config.executable_config[0].clone(),
             wallet_config: config.executable_config[1].clone(),
             shutdown_signal,
+            trigger_signal,
             rx_request,
             chain: Minotari::new(
                 config.base_node_grpc_address,
@@ -45,6 +48,7 @@ impl ProcessManager {
                 config.vn_registration_file,
             ),
             alerting_config: config.channel_config,
+            auto_restart: config.auto_restart,
         };
         (this, ManagerHandle::new(tx_request))
     }
@@ -63,7 +67,15 @@ impl ProcessManager {
         let vn_base_dir = self.base_dir.join(self.validator_base_dir);
 
         // get child channel to communicate with the validator node process
-        let cc = start_validator(vn_binary_path, vn_base_dir, self.base_dir, self.alerting_config).await;
+        let cc = start_validator(
+            vn_binary_path,
+            vn_base_dir,
+            self.base_dir,
+            self.alerting_config,
+            self.auto_restart,
+            self.trigger_signal.clone(),
+        )
+        .await;
         if cc.is_none() {
             todo!("Create new validator node process event listener for fetched existing PID from OS");
         }

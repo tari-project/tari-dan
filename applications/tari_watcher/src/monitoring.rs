@@ -3,7 +3,6 @@
 
 use log::*;
 use minotari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
-use tokio::time::Duration;
 use tokio::{process::Child, sync::mpsc, time::sleep};
 
 use crate::{
@@ -61,7 +60,7 @@ pub async fn monitor_child(
                 .send(ProcessStatus::InternalError(err_msg))
                 .await
                 .expect("Failed to send internal error status to alerting");
-            tx_restart.send({}).await.expect("Failed to send restart node signal");
+            tx_restart.send(()).await.expect("Failed to send restart node signal");
             break;
         }
         // process has finished, intentional or not, if it has some status
@@ -75,7 +74,7 @@ pub async fn monitor_child(
                     .send(ProcessStatus::Crashed)
                     .await
                     .expect("Failed to send status to alerting");
-                tx_restart.send({}).await.expect("Failed to send restart node signal");
+                tx_restart.send(()).await.expect("Failed to send restart node signal");
                 break;
             }
             tx_logging
@@ -86,7 +85,7 @@ pub async fn monitor_child(
                 .send(ProcessStatus::Exited(status.code().unwrap_or(0)))
                 .await
                 .expect("Failed to send process exit status to alerting");
-            tx_restart.send({}).await.expect("Failed to send restart node signal");
+            tx_restart.send(()).await.expect("Failed to send restart node signal");
             break;
         }
         // process is still running
@@ -143,15 +142,10 @@ pub async fn process_status_log(mut rx: mpsc::Receiver<ProcessStatus>) {
                 },
             }
         }
-
-        if rx.recv().await.is_none() {
-            warn!("Currently not receiving any more status message for logging, restart detected, wait 5 seconds...");
-            sleep(Duration::from_secs(5)).await;
-        }
     }
 }
 
-pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Channels) {
+fn setup_alerting_channels(cfg: Channels) -> (Option<MatterMostNotifier>, Option<TelegramNotifier>) {
     let mut mattermost: Option<MatterMostNotifier> = None;
     if cfg.mattermost.enabled {
         let cfg = cfg.mattermost.clone();
@@ -180,6 +174,12 @@ pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Ch
     } else {
         info!("Telegram alerting disabled");
     }
+
+    (mattermost, telegram)
+}
+
+pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Channels) {
+    let (mut mattermost, mut telegram) = setup_alerting_channels(cfg);
 
     loop {
         while let Some(status) = rx.recv().await {

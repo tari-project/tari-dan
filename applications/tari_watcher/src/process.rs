@@ -2,16 +2,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use std::{path::PathBuf, process::Stdio};
-use tokio::process::Child;
-use tokio::time::{sleep, Duration};
 
 use anyhow::bail;
 use log::*;
+use tari_shutdown::Shutdown;
 use tokio::{
     fs::{self, OpenOptions},
     io::AsyncWriteExt,
-    process::Command as TokioCommand,
+    process::{Child, Command as TokioCommand},
     sync::mpsc::{self},
+    time::{sleep, Duration},
 };
 
 use crate::{
@@ -112,6 +112,8 @@ pub async fn spawn_validator_node_os(
     validator_config_path: PathBuf,
     base_dir: PathBuf,
     cfg_alert: Channels,
+    auto_restart: bool,
+    mut trigger_signal: Shutdown,
 ) -> anyhow::Result<ChildChannel> {
     let (tx_log, rx_log) = mpsc::channel(16);
     let (tx_alert, rx_alert) = mpsc::channel(16);
@@ -154,7 +156,13 @@ pub async fn spawn_validator_node_os(
             // block channel until we receive a restart signal
             match rx_restart.recv().await {
                 Some(_) => {
-                    info!("Received signal, restarting validator node");
+                    if !auto_restart {
+                        info!("Received restart signal, but auto restart is disabled, exiting");
+                        trigger_signal.trigger();
+                        break;
+                    }
+
+                    info!("Received signal, preparing to restart validator node");
                     restarted = true;
                 },
                 None => {
@@ -203,6 +211,8 @@ pub async fn start_validator(
     validator_config_path: PathBuf,
     base_dir: PathBuf,
     alerting_config: Channels,
+    auto_restart: bool,
+    trigger_signal: Shutdown,
 ) -> Option<ChildChannel> {
     let opt = check_existing_node_os(base_dir.clone()).await;
     if let Some(pid) = opt {
@@ -213,9 +223,16 @@ pub async fn start_validator(
         debug!("No existing validator node process found, spawn new one");
     }
 
-    let cc = spawn_validator_node_os(validator_path, validator_config_path, base_dir, alerting_config)
-        .await
-        .ok()?;
+    let cc = spawn_validator_node_os(
+        validator_path,
+        validator_config_path,
+        base_dir,
+        alerting_config,
+        auto_restart,
+        trigger_signal,
+    )
+    .await
+    .ok()?;
 
     Some(cc)
 }

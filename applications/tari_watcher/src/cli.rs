@@ -56,11 +56,16 @@ pub struct InitArgs {
     #[clap(long)]
     /// Disable initial and auto registration of the validator node
     pub no_auto_register: bool,
+
+    #[clap(long)]
+    /// Disable auto restart of the validator node
+    pub no_auto_restart: bool,
 }
 
 impl InitArgs {
     pub fn apply(&self, config: &mut Config) {
         config.auto_register = !self.no_auto_register;
+        config.auto_restart = !self.no_auto_restart;
     }
 }
 

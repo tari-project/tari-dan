@@ -74,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
 async fn start(config: Config) -> anyhow::Result<()> {
     let shutdown = Shutdown::new();
     let signal = shutdown.to_signal().select(exit_signal()?);
-    let (task_handle, manager_handle) = spawn(config.clone(), shutdown.to_signal()).await;
+    let (task_handle, manager_handle) = spawn(config.clone(), shutdown.to_signal(), shutdown).await;
 
     tokio::select! {
         _ = signal => {
@@ -92,8 +92,12 @@ async fn start(config: Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn spawn(config: Config, shutdown: ShutdownSignal) -> (task::JoinHandle<anyhow::Result<()>>, ManagerHandle) {
-    let (manager, manager_handle) = ProcessManager::new(config, shutdown);
+async fn spawn(
+    config: Config,
+    shutdown: ShutdownSignal,
+    trigger: Shutdown,
+) -> (task::JoinHandle<anyhow::Result<()>>, ManagerHandle) {
+    let (manager, manager_handle) = ProcessManager::new(config, shutdown, trigger);
     let task_handle = tokio::spawn(manager.start());
     (task_handle, manager_handle)
 }
