@@ -5,10 +5,7 @@ use std::path::PathBuf;
 
 use log::*;
 use minotari_app_grpc::tari_rpc::{
-    self as grpc,
-    ConsensusConstants,
-    GetActiveValidatorNodesResponse,
-    RegisterValidatorNodeResponse,
+    self as grpc, ConsensusConstants, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse,
 };
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::{mpsc, oneshot};
@@ -18,7 +15,7 @@ use crate::{
     constants::DEFAULT_VALIDATOR_NODE_BINARY_PATH,
     minotari::{Minotari, TipStatus},
     monitoring::{process_status_alert, process_status_log, ProcessStatus, Transaction},
-    process::Process,
+    process::start_validator,
 };
 
 pub struct ProcessManager {
@@ -26,7 +23,6 @@ pub struct ProcessManager {
     pub validator_base_dir: PathBuf,
     pub validator_config: ExecutableConfig,
     pub wallet_config: ExecutableConfig,
-    pub process: Process,
     pub shutdown_signal: ShutdownSignal,
     pub rx_request: mpsc::Receiver<ManagerRequest>,
     pub chain: Minotari,
@@ -41,7 +37,6 @@ impl ProcessManager {
             validator_base_dir: config.vn_base_dir,
             validator_config: config.executable_config[0].clone(),
             wallet_config: config.executable_config[1].clone(),
-            process: Process::new(),
             shutdown_signal,
             rx_request,
             chain: Minotari::new(
@@ -68,10 +63,7 @@ impl ProcessManager {
         let vn_base_dir = self.base_dir.join(self.validator_base_dir);
 
         // get child channel to communicate with the validator node process
-        let cc = self
-            .process
-            .start_validator(vn_binary_path, vn_base_dir, self.base_dir, self.alerting_config)
-            .await;
+        let cc = start_validator(vn_binary_path, vn_base_dir, self.base_dir, self.alerting_config).await;
         if cc.is_none() {
             todo!("Create new validator node process event listener for fetched existing PID from OS");
         }
@@ -80,9 +72,11 @@ impl ProcessManager {
         // spawn logging and alerting tasks to process status updates
         tokio::spawn(async move {
             process_status_log(cc.rx_log).await;
+            warn!("Logging task has exited");
         });
         tokio::spawn(async move {
             process_status_alert(cc.rx_alert, cc.cfg_alert).await;
+            warn!("Alerting task has exited");
         });
 
         self.chain.bootstrap().await?;
