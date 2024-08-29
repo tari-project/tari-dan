@@ -8,7 +8,7 @@
 
 ### Quickstart
 
-Initialize the project with `tari_watcher init` and start it with `tari_watcher run`. Edit the newly generated `config.toml` to enable notifications on channels such as Mattermost and Telegram.Make sure to have started up `tari_validator_node` once previously to have a node directory set up, default is `tari_validator_node -- -b data/vn1`.
+Initialize the project with `tari_watcher init` and start it with `tari_watcher run`. Edit the newly generated `config.toml` to enable notifications on Mattermost and Telegram. Make sure to have started up `tari_validator_node` once previously to have a node directory set up, default is `tari_validator_node -- -b data/vn1`.
 
 ### Setup
 
@@ -29,7 +29,7 @@ The default values used (see `constants.rs`) when running the project without an
 ```
 ├── alerting.rs     # channel notifier implementations
 ├── cli.rs          # cli and flags passed during bootup
-├── config.rs       # main config file creation 
+├── config.rs       # main config file creation
 ├── constants.rs    # various constants used as default values
 ├── helpers.rs      # common helper functions
 ├── logger.rs

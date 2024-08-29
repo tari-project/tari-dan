@@ -12,9 +12,7 @@ use tokio::io::{self, AsyncWriteExt};
 use crate::{
     cli::Cli,
     constants::{
-        DEFAULT_BASE_NODE_GRPC_ADDRESS,
-        DEFAULT_BASE_WALLET_GRPC_ADDRESS,
-        DEFAULT_MINOTARI_MINER_BINARY_PATH,
+        DEFAULT_BASE_NODE_GRPC_ADDRESS, DEFAULT_BASE_WALLET_GRPC_ADDRESS, DEFAULT_MINOTARI_MINER_BINARY_PATH,
         DEFAULT_VALIDATOR_NODE_BINARY_PATH,
     },
 };
@@ -177,7 +175,7 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
             telegram: ChannelConfig {
                 name: "telegram".to_string(),
                 enabled: false,
-                server_url: "".to_string(),
+                server_url: "https://api.telegram.org".to_string(),
                 channel_id: "".to_string(),
                 credentials: "".to_string(),
             },

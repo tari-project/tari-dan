@@ -6,11 +6,10 @@ use minotari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
 use tokio::{process::Child, sync::mpsc, time::sleep};
 
 use crate::{
-    alerting::{Alerting, MatterMostNotifier},
+    alerting::{Alerting, MatterMostNotifier, TelegramNotifier},
     config::Channels,
     constants::{
-        CONSENSUS_CONSTANT_REGISTRATION_DURATION,
-        DEFAULT_PROCESS_MONITORING_INTERVAL,
+        CONSENSUS_CONSTANT_REGISTRATION_DURATION, DEFAULT_PROCESS_MONITORING_INTERVAL,
         DEFAULT_THRESHOLD_WARN_EXPIRATION,
     },
 };
@@ -98,9 +97,9 @@ pub async fn monitor_child(
 }
 
 pub fn is_registration_near_expiration(curr_block: u64, last_registered_block: u64) -> bool {
-    last_registered_block != 0 &&
-        curr_block + DEFAULT_THRESHOLD_WARN_EXPIRATION >=
-            last_registered_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION
+    last_registered_block != 0
+        && curr_block + DEFAULT_THRESHOLD_WARN_EXPIRATION
+            >= last_registered_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION
 }
 
 pub async fn process_status_log(mut rx: mpsc::Receiver<ProcessStatus>) {
@@ -145,9 +144,29 @@ pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Ch
     if cfg.mattermost.enabled {
         let cfg = cfg.mattermost.clone();
         info!("MatterMost alerting enabled");
-        mattermost = Some(MatterMostNotifier::new(cfg.server_url, cfg.channel_id, cfg.credentials));
+        mattermost = Some(MatterMostNotifier {
+            server_url: cfg.server_url,
+            channel_id: cfg.channel_id,
+            credentials: cfg.credentials,
+            alerts_sent: 0,
+            client: reqwest::Client::new(),
+        });
     } else {
         info!("MatterMost alerting disabled");
+    }
+
+    let mut telegram: Option<TelegramNotifier> = None;
+    if cfg.telegram.enabled {
+        let cfg = cfg.telegram.clone();
+        info!("Telegram alerting enabled");
+        telegram = Some(TelegramNotifier {
+            bot_token: cfg.credentials,
+            chat_id: cfg.channel_id,
+            alerts_sent: 0,
+            client: reqwest::Client::new(),
+        });
+    } else {
+        info!("Telegram alerting disabled");
     }
 
     while let Some(status) = rx.recv().await {
@@ -158,12 +177,22 @@ pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Ch
                         .await
                         .expect("Failed to send alert to MatterMost");
                 }
+                if let Some(tg) = &mut telegram {
+                    tg.alert(&format!("Validator node process exited with code {}", code))
+                        .await
+                        .expect("Failed to send alert to Telegram");
+                }
             },
             ProcessStatus::InternalError(err) => {
                 if let Some(mm) = &mut mattermost {
                     mm.alert(&format!("Validator node process internal error: {}", err))
                         .await
                         .expect("Failed to send alert to MatterMost");
+                }
+                if let Some(tg) = &mut telegram {
+                    tg.alert(&format!("Validator node process internal error: {}", err))
+                        .await
+                        .expect("Failed to send alert to Telegram");
                 }
             },
             ProcessStatus::Crashed => {
@@ -172,12 +201,22 @@ pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Ch
                         .await
                         .expect("Failed to send alert to MatterMost");
                 }
+                if let Some(tg) = &mut telegram {
+                    tg.alert("Validator node process crashed")
+                        .await
+                        .expect("Failed to send alert to Telegram");
+                }
             },
             ProcessStatus::Running => {
                 // all good, process is still running, send heartbeat to channel(s)
                 if let Some(mm) = &mut mattermost {
                     if mm.ping().await.is_err() {
                         warn!("Failed to send heartbeat to MatterMost");
+                    }
+                }
+                if let Some(tg) = &mut telegram {
+                    if tg.ping().await.is_err() {
+                        warn!("Failed to send heartbeat to Telegram");
                     }
                 }
             },
@@ -190,17 +229,33 @@ pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Ch
                     .await
                     .expect("Failed to send alert to MatterMost");
                 }
+                if let Some(tg) = &mut telegram {
+                    tg.alert(&format!(
+                        "Validator node registration submitted (tx: {}, block: {})",
+                        tx.id, tx.block
+                    ))
+                    .await
+                    .expect("Failed to send alert to Telegram");
+                }
             },
             ProcessStatus::WarnExpiration(block, last_reg_block) => {
                 if is_registration_near_expiration(block, last_reg_block) {
+                    let expiration_block = last_reg_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION;
                     if let Some(mm) = &mut mattermost {
-                        let expiration_block = last_reg_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION;
                         mm.alert(&format!(
                             "Validator node registration expires at block {}, current block: {}",
                             expiration_block, block,
                         ))
                         .await
                         .expect("Failed to send alert to MatterMost");
+                    }
+                    if let Some(tg) = &mut telegram {
+                        tg.alert(&format!(
+                            "Validator node registration expires at block {}, current block: {}",
+                            expiration_block, block,
+                        ))
+                        .await
+                        .expect("Failed to send alert to Telegram");
                     }
                 }
             },
