@@ -34,6 +34,8 @@ log = { workspace = true }
 fern = { workspace = true, features = ["colored"] }
 tonic = { workspace = true }
 json5 = { workspace = true }
+reqwest = { workspace = true, features = ["json", "blocking", "rustls-tls"] }
+serde_json = { workspace = true }
 
 toml = "0.8.12"
 humantime = "2.1.0"

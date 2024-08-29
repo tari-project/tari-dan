@@ -15,6 +15,7 @@ use crate::{
     shutdown::exit_signal,
 };
 
+mod alerting;
 mod cli;
 mod config;
 mod constants;
