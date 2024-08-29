@@ -3,13 +3,18 @@
 
 use log::*;
 use minotari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
-use tokio::{process::Child, sync::mpsc, time::sleep};
+use tokio::{
+    process::Child,
+    sync::mpsc,
+    time::{sleep, Duration},
+};
 
 use crate::{
     alerting::{Alerting, MatterMostNotifier, TelegramNotifier},
     config::Channels,
     constants::{
-        CONSENSUS_CONSTANT_REGISTRATION_DURATION, DEFAULT_PROCESS_MONITORING_INTERVAL,
+        CONSENSUS_CONSTANT_REGISTRATION_DURATION,
+        DEFAULT_PROCESS_MONITORING_INTERVAL,
         DEFAULT_THRESHOLD_WARN_EXPIRATION,
     },
 };
@@ -101,9 +106,9 @@ pub async fn monitor_child(
 }
 
 pub fn is_registration_near_expiration(curr_block: u64, last_registered_block: u64) -> bool {
-    last_registered_block != 0
-        && curr_block + DEFAULT_THRESHOLD_WARN_EXPIRATION
-            >= last_registered_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION
+    last_registered_block != 0 &&
+        curr_block + DEFAULT_THRESHOLD_WARN_EXPIRATION >=
+            last_registered_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION
 }
 
 pub async fn process_status_log(mut rx: mpsc::Receiver<ProcessStatus>) {
@@ -112,15 +117,18 @@ pub async fn process_status_log(mut rx: mpsc::Receiver<ProcessStatus>) {
             match status {
                 ProcessStatus::Exited(code) => {
                     error!("Validator node process exited with code {}", code);
-                    break;
+                    info!("Pauses process logging for 5 seconds to allow the validator node to restart");
+                    sleep(Duration::from_secs(5)).await;
                 },
                 ProcessStatus::InternalError(err) => {
                     error!("Validator node process exited with error: {}", err);
-                    break;
+                    info!("Pausing process logging 5 seconds to allow the validator node to restart");
+                    sleep(Duration::from_secs(5)).await;
                 },
                 ProcessStatus::Crashed => {
                     error!("Validator node process crashed");
-                    break;
+                    info!("Pausing process logging for 5 seconds to allow the validator node to restart");
+                    sleep(Duration::from_secs(5)).await;
                 },
                 ProcessStatus::Running => {
                     // all good, process is still running
@@ -145,7 +153,7 @@ pub async fn process_status_log(mut rx: mpsc::Receiver<ProcessStatus>) {
     }
 }
 
-fn setup_alerting_channels(cfg: Channels) -> (Option<MatterMostNotifier>, Option<TelegramNotifier>) {
+fn setup_alerting_clients(cfg: Channels) -> (Option<MatterMostNotifier>, Option<TelegramNotifier>) {
     let mut mattermost: Option<MatterMostNotifier> = None;
     if cfg.mattermost.enabled {
         let cfg = cfg.mattermost.clone();
@@ -179,7 +187,7 @@ fn setup_alerting_channels(cfg: Channels) -> (Option<MatterMostNotifier>, Option
 }
 
 pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Channels) {
-    let (mut mattermost, mut telegram) = setup_alerting_channels(cfg);
+    let (mut mattermost, mut telegram) = setup_alerting_clients(cfg);
 
     loop {
         while let Some(status) = rx.recv().await {

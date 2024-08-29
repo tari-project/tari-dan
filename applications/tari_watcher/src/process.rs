@@ -11,7 +11,6 @@ use tokio::{
     io::AsyncWriteExt,
     process::{Child, Command as TokioCommand},
     sync::mpsc::{self},
-    time::{sleep, Duration},
 };
 
 use crate::{
@@ -123,8 +122,6 @@ pub async fn spawn_validator_node_os(
     let tx_alert_clone_main = tx_alert.clone();
     let tx_restart_clone_main = tx_restart.clone();
     tokio::spawn(async move {
-        let mut restarted = false;
-
         loop {
             let child_res = spawn_child(
                 validator_node_path.clone(),
@@ -132,11 +129,6 @@ pub async fn spawn_validator_node_os(
                 base_dir.clone(),
             )
             .await;
-
-            if restarted {
-                // give it some time to clean up
-                sleep(Duration::from_secs(10)).await;
-            }
 
             match child_res {
                 Ok(child) => {
@@ -163,7 +155,6 @@ pub async fn spawn_validator_node_os(
                     }
 
                     info!("Received signal, preparing to restart validator node");
-                    restarted = true;
                 },
                 None => {
                     error!("Failed to receive restart signal, exiting");

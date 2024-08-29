@@ -5,7 +5,10 @@ use std::path::PathBuf;
 
 use log::*;
 use minotari_app_grpc::tari_rpc::{
-    self as grpc, ConsensusConstants, GetActiveValidatorNodesResponse, RegisterValidatorNodeResponse,
+    self as grpc,
+    ConsensusConstants,
+    GetActiveValidatorNodesResponse,
+    RegisterValidatorNodeResponse,
 };
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tokio::sync::{mpsc, oneshot};
