@@ -107,6 +107,13 @@ pub struct TelegramNotifier {
 
 impl Alerting for TelegramNotifier {
     async fn alert(&mut self, message: &str) -> Result<()> {
+        if self.bot_token.is_empty() {
+            bail!("Bot token is empty");
+        }
+        if self.chat_id.is_empty() {
+            bail!("Chat ID is empty");
+        }
+
         let post_endpoint: &str = &format!("/bot{}/sendMessage", self.bot_token);
         let url = format!("https://api.telegram.org{}", post_endpoint);
         let req = json!({
@@ -125,11 +132,11 @@ impl Alerting for TelegramNotifier {
     }
 
     async fn ping(&self) -> Result<()> {
-        let ping_endpoint: &str = &format!("/bot{}/getMe", self.bot_token);
         if self.bot_token.is_empty() {
             bail!("Bot token is empty");
         }
 
+        let ping_endpoint: &str = &format!("/bot{}/getMe", self.bot_token);
         let url = format!("https://api.telegram.org{}", ping_endpoint);
         let resp = self.client.get(url.clone()).send().await?;
 
