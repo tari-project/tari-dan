@@ -8,9 +8,9 @@
 
 ### Quickstart
 
-Initialize the project with `tari_watcher init` and start it with `tari_watcher run`. Edit the newly generated `config.toml` to enable notifications on Mattermost and Telegram. Make sure to have started up `tari_validator_node` once previously to have a node directory set up, default is `tari_validator_node -- -b data/vn1`.
+Initialize the project with `tari_watcher init` and start it with `tari_watcher start`. Edit the newly generated `config.toml` to enable notifications on Mattermost and Telegram. Make sure to have started up `tari_validator_node` once previously to have a node directory set up, default is `tari_validator_node -- -b data/vn1`.
 
-### Setup
+### Config and Setup
 
 The default values used (see `constants.rs`) when running the project without any flags:
 ```
@@ -22,6 +22,13 @@ The default values used (see `constants.rs`) when running the project without an
 - DEFAULT_MINOTARI_MINER_BINARY_PATH: relative to the base directory, default is Rust build directory `target/release`
 - DEFAULT_BASE_NODE_GRPC_ADDRESS: default is Tari swarm localhost and port
 - DEFAULT_BASE_WALLET_GRPC_ADDRESS: default is Tari swarm localhost and port
+```
+
+The two main configuration settings for the watcher (default `true`):
+```
+- auto_register: automatically re-register the node
+- auto_restart: automatically restart the node if it goes down
+- epochs_before: amount of epochs before the registration expires to register again
 ```
 
 ### Project

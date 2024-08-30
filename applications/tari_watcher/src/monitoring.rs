@@ -157,7 +157,7 @@ fn setup_alerting_clients(cfg: Channels) -> (Option<MatterMostNotifier>, Option<
     let mut mattermost: Option<MatterMostNotifier> = None;
     if cfg.mattermost.enabled {
         let cfg = cfg.mattermost.clone();
-        info!("MatterMost alerting enabled");
+        info!("Mattermost alerting enabled");
         mattermost = Some(MatterMostNotifier {
             server_url: cfg.server_url,
             channel_id: cfg.channel_id,
@@ -166,7 +166,7 @@ fn setup_alerting_clients(cfg: Channels) -> (Option<MatterMostNotifier>, Option<
             client: reqwest::Client::new(),
         });
     } else {
-        info!("MatterMost alerting disabled");
+        info!("Mattermost alerting disabled");
     }
 
     let mut telegram: Option<TelegramNotifier> = None;
