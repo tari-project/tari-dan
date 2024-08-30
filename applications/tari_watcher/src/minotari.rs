@@ -90,8 +90,6 @@ impl Minotari {
             bail!("Node client not connected");
         }
 
-        log::debug!("Requesting tip status from base node");
-
         let inner = self
             .node
             .clone()
