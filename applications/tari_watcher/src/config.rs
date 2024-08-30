@@ -25,6 +25,9 @@ pub struct Config {
     /// the current registration expires
     pub auto_register: bool,
 
+    /// Allow watcher to restart the validator node if it crashes and stops running
+    pub auto_restart: bool,
+
     /// The Minotari node gRPC address
     pub base_node_grpc_address: String,
 
@@ -158,6 +161,7 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
 
     Ok(Config {
         auto_register: true,
+        auto_restart: true,
         base_node_grpc_address: DEFAULT_BASE_NODE_GRPC_ADDRESS.to_string(),
         base_wallet_grpc_address: DEFAULT_BASE_WALLET_GRPC_ADDRESS.to_string(),
         base_dir: base_dir.to_path_buf(),
@@ -177,7 +181,7 @@ pub fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
             telegram: ChannelConfig {
                 name: "telegram".to_string(),
                 enabled: false,
-                server_url: "".to_string(),
+                server_url: "https://api.telegram.org".to_string(),
                 channel_id: "".to_string(),
                 credentials: "".to_string(),
             },

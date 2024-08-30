@@ -3,10 +3,14 @@
 
 use log::*;
 use minotari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
-use tokio::{process::Child, sync::mpsc, time::sleep};
+use tokio::{
+    process::Child,
+    sync::mpsc,
+    time::{sleep, Duration},
+};
 
 use crate::{
-    alerting::{Alerting, MatterMostNotifier},
+    alerting::{Alerting, MatterMostNotifier, TelegramNotifier},
     config::Channels,
     constants::{
         CONSENSUS_CONSTANT_REGISTRATION_DURATION,
@@ -15,7 +19,7 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Transaction {
     id: u64,
     block: u64,
@@ -30,7 +34,7 @@ impl Transaction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ProcessStatus {
     Running,
     Exited(i32), // status code
@@ -44,6 +48,7 @@ pub async fn monitor_child(
     mut child: Child,
     tx_logging: mpsc::Sender<ProcessStatus>,
     tx_alerting: mpsc::Sender<ProcessStatus>,
+    tx_restart: mpsc::Sender<()>,
 ) {
     loop {
         sleep(DEFAULT_PROCESS_MONITORING_INTERVAL).await;
@@ -60,6 +65,7 @@ pub async fn monitor_child(
                 .send(ProcessStatus::InternalError(err_msg))
                 .await
                 .expect("Failed to send internal error status to alerting");
+            tx_restart.send(()).await.expect("Failed to send restart node signal");
             break;
         }
         // process has finished, intentional or not, if it has some status
@@ -73,6 +79,7 @@ pub async fn monitor_child(
                     .send(ProcessStatus::Crashed)
                     .await
                     .expect("Failed to send status to alerting");
+                tx_restart.send(()).await.expect("Failed to send restart node signal");
                 break;
             }
             tx_logging
@@ -83,6 +90,7 @@ pub async fn monitor_child(
                 .send(ProcessStatus::Exited(status.code().unwrap_or(0)))
                 .await
                 .expect("Failed to send process exit status to alerting");
+            tx_restart.send(()).await.expect("Failed to send restart node signal");
             break;
         }
         // process is still running
@@ -104,106 +112,175 @@ pub fn is_registration_near_expiration(curr_block: u64, last_registered_block: u
 }
 
 pub async fn process_status_log(mut rx: mpsc::Receiver<ProcessStatus>) {
-    while let Some(status) = rx.recv().await {
-        match status {
-            ProcessStatus::Exited(code) => {
-                error!("Validator node process exited with code {}", code);
-                break;
-            },
-            ProcessStatus::InternalError(err) => {
-                error!("Validator node process exited with error: {}", err);
-                break;
-            },
-            ProcessStatus::Crashed => {
-                error!("Validator node process crashed");
-                break;
-            },
-            ProcessStatus::Running => {
-                // all good, process is still running
-            },
-            ProcessStatus::Submitted(tx) => {
-                info!(
-                    "Validator node registration submitted (tx: {}, block: {})",
-                    tx.id, tx.block
-                );
-            },
-            ProcessStatus::WarnExpiration(block, last_reg_block) => {
-                if is_registration_near_expiration(block, last_reg_block) {
-                    let expiration_block = last_reg_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION;
-                    warn!(
-                        "Validator node registration expires at block {}, current block: {}",
-                        expiration_block, block
+    loop {
+        if let Some(status) = rx.recv().await {
+            match status {
+                ProcessStatus::Exited(code) => {
+                    error!("Validator node process exited with code {}", code);
+                    info!("Pauses process logging for 5 seconds to allow the validator node to restart");
+                    sleep(Duration::from_secs(5)).await;
+                },
+                ProcessStatus::InternalError(err) => {
+                    error!("Validator node process exited with error: {}", err);
+                    info!("Pausing process logging 5 seconds to allow the validator node to restart");
+                    sleep(Duration::from_secs(5)).await;
+                },
+                ProcessStatus::Crashed => {
+                    error!("Validator node process crashed");
+                    info!("Pausing process logging for 5 seconds to allow the validator node to restart");
+                    sleep(Duration::from_secs(5)).await;
+                },
+                ProcessStatus::Running => {
+                    // all good, process is still running
+                },
+                ProcessStatus::Submitted(tx) => {
+                    info!(
+                        "Validator node registration submitted (tx: {}, block: {})",
+                        tx.id, tx.block
                     );
-                }
-            },
+                },
+                ProcessStatus::WarnExpiration(block, last_reg_block) => {
+                    if is_registration_near_expiration(block, last_reg_block) {
+                        let expiration_block = last_reg_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION;
+                        warn!(
+                            "Validator node registration expires at block {}, current block: {}",
+                            expiration_block, block
+                        );
+                    }
+                },
+            }
         }
     }
 }
 
-pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Channels) {
+fn setup_alerting_clients(cfg: Channels) -> (Option<MatterMostNotifier>, Option<TelegramNotifier>) {
     let mut mattermost: Option<MatterMostNotifier> = None;
     if cfg.mattermost.enabled {
         let cfg = cfg.mattermost.clone();
         info!("MatterMost alerting enabled");
-        mattermost = Some(MatterMostNotifier::new(cfg.server_url, cfg.channel_id, cfg.credentials));
+        mattermost = Some(MatterMostNotifier {
+            server_url: cfg.server_url,
+            channel_id: cfg.channel_id,
+            credentials: cfg.credentials,
+            alerts_sent: 0,
+            client: reqwest::Client::new(),
+        });
     } else {
         info!("MatterMost alerting disabled");
     }
 
-    while let Some(status) = rx.recv().await {
-        match status {
-            ProcessStatus::Exited(code) => {
-                if let Some(mm) = &mut mattermost {
-                    mm.alert(&format!("Validator node process exited with code {}", code))
-                        .await
-                        .expect("Failed to send alert to MatterMost");
-                }
-            },
-            ProcessStatus::InternalError(err) => {
-                if let Some(mm) = &mut mattermost {
-                    mm.alert(&format!("Validator node process internal error: {}", err))
-                        .await
-                        .expect("Failed to send alert to MatterMost");
-                }
-            },
-            ProcessStatus::Crashed => {
-                if let Some(mm) = &mut mattermost {
-                    mm.alert("Validator node process crashed")
-                        .await
-                        .expect("Failed to send alert to MatterMost");
-                }
-            },
-            ProcessStatus::Running => {
-                // all good, process is still running, send heartbeat to channel(s)
-                if let Some(mm) = &mut mattermost {
-                    if mm.ping().await.is_err() {
-                        warn!("Failed to send heartbeat to MatterMost");
-                    }
-                }
-            },
-            ProcessStatus::Submitted(tx) => {
-                if let Some(mm) = &mut mattermost {
-                    mm.alert(&format!(
-                        "Validator node registration submitted (tx: {}, block: {})",
-                        tx.id, tx.block
-                    ))
-                    .await
-                    .expect("Failed to send alert to MatterMost");
-                }
-            },
-            ProcessStatus::WarnExpiration(block, last_reg_block) => {
-                if is_registration_near_expiration(block, last_reg_block) {
+    let mut telegram: Option<TelegramNotifier> = None;
+    if cfg.telegram.enabled {
+        let cfg = cfg.telegram.clone();
+        info!("Telegram alerting enabled");
+        telegram = Some(TelegramNotifier {
+            bot_token: cfg.credentials,
+            chat_id: cfg.channel_id,
+            alerts_sent: 0,
+            client: reqwest::Client::new(),
+        });
+    } else {
+        info!("Telegram alerting disabled");
+    }
+
+    (mattermost, telegram)
+}
+
+pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Channels) {
+    let (mut mattermost, mut telegram) = setup_alerting_clients(cfg);
+
+    loop {
+        while let Some(status) = rx.recv().await {
+            match status {
+                ProcessStatus::Exited(code) => {
                     if let Some(mm) = &mut mattermost {
-                        let expiration_block = last_reg_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION;
+                        mm.alert(&format!("Validator node process exited with code {}", code))
+                            .await
+                            .expect("Failed to send alert to MatterMost");
+                    }
+                    if let Some(tg) = &mut telegram {
+                        tg.alert(&format!("Validator node process exited with code {}", code))
+                            .await
+                            .expect("Failed to send alert to Telegram");
+                    }
+                },
+                ProcessStatus::InternalError(err) => {
+                    if let Some(mm) = &mut mattermost {
+                        mm.alert(&format!("Validator node process internal error: {}", err))
+                            .await
+                            .expect("Failed to send alert to MatterMost");
+                    }
+                    if let Some(tg) = &mut telegram {
+                        tg.alert(&format!("Validator node process internal error: {}", err))
+                            .await
+                            .expect("Failed to send alert to Telegram");
+                    }
+                },
+                ProcessStatus::Crashed => {
+                    if let Some(mm) = &mut mattermost {
+                        mm.alert("Validator node process crashed")
+                            .await
+                            .expect("Failed to send alert to MatterMost");
+                    }
+                    if let Some(tg) = &mut telegram {
+                        tg.alert("Validator node process crashed")
+                            .await
+                            .expect("Failed to send alert to Telegram");
+                    }
+                },
+                ProcessStatus::Running => {
+                    // all good, process is still running, send heartbeat to channel(s)
+                    if let Some(mm) = &mut mattermost {
+                        if mm.ping().await.is_err() {
+                            warn!("Failed to send heartbeat to MatterMost");
+                        }
+                    }
+                    if let Some(tg) = &mut telegram {
+                        if tg.ping().await.is_err() {
+                            warn!("Failed to send heartbeat to Telegram");
+                        }
+                    }
+                },
+                ProcessStatus::Submitted(tx) => {
+                    if let Some(mm) = &mut mattermost {
                         mm.alert(&format!(
-                            "Validator node registration expires at block {}, current block: {}",
-                            expiration_block, block,
+                            "Validator node registration submitted (tx: {}, block: {})",
+                            tx.id, tx.block
                         ))
                         .await
                         .expect("Failed to send alert to MatterMost");
                     }
-                }
-            },
+                    if let Some(tg) = &mut telegram {
+                        tg.alert(&format!(
+                            "Validator node registration submitted (tx: {}, block: {})",
+                            tx.id, tx.block
+                        ))
+                        .await
+                        .expect("Failed to send alert to Telegram");
+                    }
+                },
+                ProcessStatus::WarnExpiration(block, last_reg_block) => {
+                    if is_registration_near_expiration(block, last_reg_block) {
+                        let expiration_block = last_reg_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION;
+                        if let Some(mm) = &mut mattermost {
+                            mm.alert(&format!(
+                                "Validator node registration expires at block {}, current block: {}",
+                                expiration_block, block,
+                            ))
+                            .await
+                            .expect("Failed to send alert to MatterMost");
+                        }
+                        if let Some(tg) = &mut telegram {
+                            tg.alert(&format!(
+                                "Validator node registration expires at block {}, current block: {}",
+                                expiration_block, block,
+                            ))
+                            .await
+                            .expect("Failed to send alert to Telegram");
+                        }
+                    }
+                },
+            }
         }
     }
 }
