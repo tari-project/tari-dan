@@ -28,7 +28,6 @@ The two main configuration settings for the watcher (default `true`):
 ```
 - auto_register: automatically re-register the node
 - auto_restart: automatically restart the node if it goes down
-- epochs_before: amount of epochs before the registration expires to register again
 ```
 
 ### Project
