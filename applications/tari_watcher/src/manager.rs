@@ -229,9 +229,8 @@ pub enum ManagerRequest {
     },
 }
 
-#[derive(Clone)]
 pub struct ManagerHandle {
-    pub tx_request: mpsc::Sender<ManagerRequest>,
+    tx_request: mpsc::Sender<ManagerRequest>,
 }
 
 impl ManagerHandle {

@@ -23,7 +23,7 @@ use crate::{
 pub async fn clean_stale_pid_file(pid_file_path: PathBuf) -> anyhow::Result<()> {
     log::info!("Checking for stale PID file at {}", pid_file_path.display());
     if !pid_file_path.exists() {
-        info!("PID file for validator does not exist, create new one");
+        info!("PID file for VN does not exist, create new one");
         return Ok(());
     }
 
@@ -154,7 +154,7 @@ pub async fn spawn_validator_node_os(
                         break;
                     }
 
-                    info!("Received signal, preparing to restart validator node");
+                    info!("Received signal, preparing to restart VN process");
                 },
                 None => {
                     error!("Failed to receive restart signal, exiting");
@@ -176,7 +176,7 @@ pub async fn spawn_validator_node_os(
 async fn check_existing_node_os(base_dir: PathBuf) -> Option<u32> {
     let process_dir = base_dir.join("processes");
     if !process_dir.exists() {
-        debug!("Validator node process directory does not exist");
+        debug!("VN process directory does not exist");
         return None;
     }
 
@@ -207,11 +207,11 @@ pub async fn start_validator(
 ) -> Option<ChildChannel> {
     let opt = check_existing_node_os(base_dir.clone()).await;
     if let Some(pid) = opt {
-        info!("Picking up existing validator node process with id: {}", pid);
+        info!("Picking up existing VN process with id: {}", pid);
         // todo: create new process status channel for picked up process
         return None;
     } else {
-        debug!("No existing validator node process found, spawn new one");
+        debug!("No existing VN process found, spawn new one");
     }
 
     let cc = spawn_validator_node_os(
