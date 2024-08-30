@@ -25,6 +25,7 @@ pub async fn registration_loop(config: Config, mut handle: ManagerHandle) -> any
     debug!("Local public key: {}", local_key.clone());
     let mut last_block_hash: Option<FixedHash> = None;
     let mut last_registered: Option<u64> = None;
+    let mut recently_registered = false;
 
     loop {
         interval.tick().await;
@@ -65,10 +66,12 @@ pub async fn registration_loop(config: Config, mut handle: ManagerHandle) -> any
         }
 
         // if the node is already registered and not close to expiring in the next epoch, skip registration
-        if contains_key(active_keys.clone(), local_key.clone())
-            && !is_close_to_expiry(constants.unwrap(), current_block, last_registered)
+        if contains_key(active_keys.clone(), local_key.clone()) &&
+            !is_close_to_expiry(constants.unwrap(), current_block, last_registered) ||
+            recently_registered
         {
             info!("VN has an active registration and will not expire in the next epoch, skip");
+            recently_registered = false;
             continue;
         }
 
@@ -89,6 +92,9 @@ pub async fn registration_loop(config: Config, mut handle: ManagerHandle) -> any
             "Registered VN at block {} with transaction id: {}",
             current_block, tx.transaction_id
         );
+
         last_registered = Some(current_block);
+        // give the network another tick to process the registration
+        recently_registered = true;
     }
 }
