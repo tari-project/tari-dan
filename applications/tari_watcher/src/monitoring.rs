@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use minotari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
+use minotari_app_grpc::tari_rpc::{ConsensusConstants, RegisterValidatorNodeResponse};
 use tokio::{
     process::Child,
     sync::mpsc,
@@ -12,11 +12,8 @@ use tokio::{
 use crate::{
     alerting::{Alerting, MatterMostNotifier, TelegramNotifier},
     config::Channels,
-    constants::{
-        CONSENSUS_CONSTANT_REGISTRATION_DURATION,
-        DEFAULT_PROCESS_MONITORING_INTERVAL,
-        DEFAULT_THRESHOLD_WARN_EXPIRATION,
-    },
+    constants::DEFAULT_PROCESS_MONITORING_INTERVAL,
+    helpers::is_warning_close_to_expiry,
 };
 
 #[derive(Copy, Clone, Debug)]
@@ -105,13 +102,7 @@ pub async fn monitor_child(
     }
 }
 
-pub fn is_registration_near_expiration(curr_block: u64, last_registered_block: u64) -> bool {
-    last_registered_block != 0 &&
-        curr_block + DEFAULT_THRESHOLD_WARN_EXPIRATION >=
-            last_registered_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION
-}
-
-pub async fn process_status_log(mut rx: mpsc::Receiver<ProcessStatus>) {
+pub async fn process_status_log(mut rx: mpsc::Receiver<ProcessStatus>, constants: ConsensusConstants) {
     loop {
         if let Some(status) = rx.recv().await {
             match status {
@@ -140,8 +131,9 @@ pub async fn process_status_log(mut rx: mpsc::Receiver<ProcessStatus>) {
                     );
                 },
                 ProcessStatus::WarnExpiration(block, last_reg_block) => {
-                    if is_registration_near_expiration(block, last_reg_block) {
-                        let expiration_block = last_reg_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION;
+                    if is_warning_close_to_expiry(constants.clone(), block, last_reg_block) {
+                        let expiration_block =
+                            last_reg_block + constants.validator_node_validity_period * constants.epoch_length;
                         warn!(
                             "Validator node registration expires at block {}, current block: {}",
                             expiration_block, block
@@ -186,7 +178,7 @@ fn setup_alerting_clients(cfg: Channels) -> (Option<MatterMostNotifier>, Option<
     (mattermost, telegram)
 }
 
-pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Channels) {
+pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Channels, constants: ConsensusConstants) {
     let (mut mattermost, mut telegram) = setup_alerting_clients(cfg);
 
     loop {
@@ -260,8 +252,9 @@ pub async fn process_status_alert(mut rx: mpsc::Receiver<ProcessStatus>, cfg: Ch
                     }
                 },
                 ProcessStatus::WarnExpiration(block, last_reg_block) => {
-                    if is_registration_near_expiration(block, last_reg_block) {
-                        let expiration_block = last_reg_block + CONSENSUS_CONSTANT_REGISTRATION_DURATION;
+                    if is_warning_close_to_expiry(constants.clone(), block, last_reg_block) {
+                        let expiration_block =
+                            last_reg_block + constants.validator_node_validity_period * constants.epoch_length;
                         if let Some(mm) = &mut mattermost {
                             mm.alert(&format!(
                                 "Validator node registration expires at block {}, current block: {}",

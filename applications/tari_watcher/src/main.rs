@@ -4,14 +4,14 @@
 use anyhow::{anyhow, bail, Context};
 use registration::registration_loop;
 use tari_shutdown::{Shutdown, ShutdownSignal};
-use tokio::{fs, task};
+use tokio::{fs, task::JoinHandle};
 
 use crate::{
     cli::{Cli, Commands},
     config::{get_base_config, Config},
     helpers::read_config_file,
     logger::init_logger,
-    manager::{ManagerHandle, ProcessManager},
+    manager::{start_receivers, ManagerHandle, ProcessManager},
     shutdown::exit_signal,
 };
 
@@ -74,14 +74,16 @@ async fn main() -> anyhow::Result<()> {
 async fn start(config: Config) -> anyhow::Result<()> {
     let shutdown = Shutdown::new();
     let signal = shutdown.to_signal().select(exit_signal()?);
-    let (task_handle, manager_handle) = spawn(config.clone(), shutdown.to_signal(), shutdown).await;
+    let handlers = spawn_manager(config.clone(), shutdown.to_signal(), shutdown).await?;
+    let manager_handle = handlers.manager;
+    let task_handle = handlers.task;
 
     tokio::select! {
         _ = signal => {
             log::info!("Shutting down");
         },
         result = task_handle => {
-            result??;
+            result?;
             log::info!("Process manager exited");
         },
         _ = async {
@@ -92,12 +94,19 @@ async fn start(config: Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn spawn(
-    config: Config,
-    shutdown: ShutdownSignal,
-    trigger: Shutdown,
-) -> (task::JoinHandle<anyhow::Result<()>>, ManagerHandle) {
-    let (manager, manager_handle) = ProcessManager::new(config, shutdown, trigger);
-    let task_handle = tokio::spawn(manager.start());
-    (task_handle, manager_handle)
+struct Handlers {
+    manager: ManagerHandle,
+    task: JoinHandle<()>,
+}
+
+async fn spawn_manager(config: Config, shutdown: ShutdownSignal, trigger: Shutdown) -> anyhow::Result<Handlers> {
+    let (manager, mut manager_handle) = ProcessManager::new(config, shutdown, trigger);
+    let cr = manager.start_request_handler().await?;
+    let constants = manager_handle.get_consensus_constants(0).await?;
+    start_receivers(cr.rx_log, cr.rx_alert, cr.cfg_alert, constants).await;
+
+    Ok(Handlers {
+        manager: manager_handle,
+        task: cr.task,
+    })
 }
