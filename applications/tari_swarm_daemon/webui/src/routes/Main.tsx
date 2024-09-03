@@ -378,7 +378,6 @@ export default function Main() {
   const [vns, setVns] = useState({});
   const [danWallet, setDanWallets] = useState({});
   const [indexers, setIndexers] = useState({});
-  const [node, setNode] = useState<{ grpc: any }>();
   const [logs, setLogs] = useState<any | null>({});
   const [stdoutLogs, setStdoutLogs] = useState<any | null>({});
   const [connectorSample, setConnectorSample] = useState(null);
@@ -471,7 +470,6 @@ export default function Main() {
     jsonRpc("get_stdout", "miner").then((resp) => {
       setStdoutLogs((state: any) => ({ ...state, miner: resp }));
     });
-    jsonRpc("grpc_node").then((resp) => setNode({ grpc: resp }));
     jsonRpc("list_instances", { by_type: null }).then(({ instances }) => setInstances(instances));
   };
 

@@ -160,7 +160,7 @@ where
     async fn try_with_committee<'a, F, T, E, TFut, IShard>(
         &self,
         substate_addresses: IShard,
-        mut min_members: usize,
+        mut num_to_query: usize,
         mut callback: F,
     ) -> Result<T, TransactionManagerError>
     where
@@ -187,14 +187,18 @@ where
             return Err(TransactionManagerError::NoCommitteeMembers);
         }
 
+        let mut num_succeeded = 0;
         let mut last_error = None;
+        let mut last_return = None;
         for validator in all_members {
             let client = self.client_provider.create_client(&validator);
             match callback(client).await {
                 Ok(ret) => {
-                    min_members = min_members.saturating_sub(1);
-                    if min_members == 0 {
-                        return Ok(ret);
+                    num_to_query = num_to_query.saturating_sub(1);
+                    num_succeeded += 1;
+                    last_return = Some(ret);
+                    if num_to_query == 0 {
+                        break;
                     }
                 },
                 Err(err) => {
@@ -207,9 +211,13 @@ where
             }
         }
 
-        Err(TransactionManagerError::AllValidatorsFailed {
-            committee_size,
-            last_error,
-        })
+        if num_succeeded == 0 {
+            return Err(TransactionManagerError::AllValidatorsFailed {
+                committee_size,
+                last_error,
+            });
+        }
+
+        Ok(last_return.expect("last_return must be Some if num_succeeded > 0"))
     }
 }
