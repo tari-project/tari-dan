@@ -6,6 +6,7 @@ import { jsonRpc } from "../utils/json_rpc";
 import { ExecutedTransaction } from "../Types.ts";
 import MinotariWallet from "../components/MinotariWallet";
 import NodeControls from "../components/NodeControls.tsx";
+import MinotariNodes from "../components/MinotariNodes.tsx";
 
 enum Executable {
   BaseNode = 1,
@@ -502,8 +503,7 @@ export default function Main() {
       <button onClick={() => setHorizontal(!horizontal)}>Swap rows/columns</button>
       <div className="label">Base layer</div>
       <div className="infos">
-        <ShowInfo executable={Executable.BaseNode} name="node" node={node} logs={logs?.node}
-                  stdoutLogs={stdoutLogs?.node} showLogs={showLogs} horizontal={horizontal} onReload={getInfo} />
+        <MinotariNodes showLogs={showLogs} />
         <MinotariWallet showLogs={showLogs} />
         <ShowInfo executable={Executable.Miner} name="miner" logs={logs?.miner}
                   stdoutLogs={stdoutLogs?.miner} showLogs={showLogs} horizontal={horizontal}>

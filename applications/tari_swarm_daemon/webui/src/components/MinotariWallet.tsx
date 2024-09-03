@@ -48,6 +48,8 @@ function Wallet(props: any) {
     jsonRpc("delete_instance_data", { instance_id: props.id });
   };
 
+  const wallet = props.danWallets[0];
+
   return (
     <div className="info">
       <div>
@@ -60,7 +62,8 @@ function Wallet(props: any) {
         {props.ports.grpc}
       </div>
       <NodeControls isRunning={props.is_running} onStart={onStart} onStop={onStop} onDeleteData={onDeleteData} />
-      <BurnFunds instanceId={props.id} danWallet={props.danWallets[0]} />
+      {(wallet) ?
+        <BurnFunds instanceId={props.id} danWallet={wallet} /> : <></>}
       {props.showLogs && <div>TODO</div>}
     </div>
   );
