@@ -1,23 +1,20 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    borrow::Borrow,
-    collections::HashSet,
-    fmt,
-    fmt::Display,
-    hash::Hash,
-    iter,
-    iter::Peekable,
-    ops::RangeInclusive,
-    str::FromStr,
-};
+use std::{borrow::Borrow, collections::HashSet, fmt, fmt::Display, iter, iter::Peekable, ops::RangeInclusive};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight, SubstateAddress};
+use tari_dan_common_types::{
+    shard::Shard,
+    Epoch,
+    NodeHeight,
+    SubstateAddress,
+    SubstateRequirement,
+    VersionedSubstateId,
+};
 use tari_engine_types::substate::{hash_substate, Substate, SubstateId, SubstateValue};
-use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 
 use crate::{
     consensus_models::{BlockId, QcId, QuorumCertificate, SubstateLock},
@@ -398,60 +395,6 @@ impl Display for SubstateUpdate {
         }
     }
 }
-
-/// Substate lock flags
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(ts_rs::TS),
-    ts(export, export_to = "../../bindings/src/types/")
-)]
-pub enum SubstateLockType {
-    Read,
-    Write,
-    Output,
-}
-
-impl SubstateLockType {
-    pub fn is_write(&self) -> bool {
-        matches!(self, Self::Write)
-    }
-
-    pub fn is_read(&self) -> bool {
-        matches!(self, Self::Read)
-    }
-
-    pub fn is_output(&self) -> bool {
-        matches!(self, Self::Output)
-    }
-}
-
-impl fmt::Display for SubstateLockType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Read => write!(f, "Read"),
-            Self::Write => write!(f, "Write"),
-            Self::Output => write!(f, "Output"),
-        }
-    }
-}
-
-impl FromStr for SubstateLockType {
-    type Err = SubstateLockFlagParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Read" => Ok(Self::Read),
-            "Write" => Ok(Self::Write),
-            "Output" => Ok(Self::Output),
-            _ => Err(SubstateLockFlagParseError),
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("Failed to parse SubstateLockFlag")]
-pub struct SubstateLockFlagParseError;
 
 #[derive(Debug, Clone, Copy)]
 pub enum SubstateLockState {

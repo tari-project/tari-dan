@@ -7,11 +7,11 @@ use indexmap::IndexMap;
 use log::info;
 use tari_consensus::traits::{BlockTransactionExecutor, BlockTransactionExecutorError};
 use tari_dan_app_utilities::transaction_executor::TransactionExecutor;
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{Epoch, SubstateRequirement};
 use tari_dan_engine::state_store::{memory::MemoryStateStore, new_memory_store, AtomicDb, StateWriter};
 use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
 use tari_engine_types::{
-    substate::{Substate, SubstateId},
+    substate::Substate,
     virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates},
 };
 use tari_transaction::Transaction;
@@ -38,7 +38,7 @@ where TExecutor: TransactionExecutor
 
     fn add_substates_to_memory_db(
         &self,
-        inputs: &IndexMap<SubstateId, Substate>,
+        inputs: &IndexMap<SubstateRequirement, Substate>,
         out: &MemoryStateStore,
     ) -> Result<(), BlockTransactionExecutorError> {
         // TODO: pass the impl SubstateStore directly into the engine
@@ -47,7 +47,7 @@ where TExecutor: TransactionExecutor
             .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
         for (id, substate) in inputs {
             access
-                .set_state(id, substate)
+                .set_state(id.substate_id(), substate)
                 .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
         }
         access
@@ -81,7 +81,7 @@ where
         &self,
         transaction: Transaction,
         current_epoch: Epoch,
-        resolved_inputs: &IndexMap<SubstateId, Substate>,
+        resolved_inputs: &IndexMap<SubstateRequirement, Substate>,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
         let id = *transaction.id();
 

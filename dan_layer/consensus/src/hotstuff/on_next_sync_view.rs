@@ -51,7 +51,7 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
         }
 
         let (high_qc, last_sent_vote) = self.store.with_read_tx(|tx| {
-            let high_qc = HighQc::get(tx)?.get_quorum_certificate(tx)?;
+            let high_qc = HighQc::get(tx, epoch)?.get_quorum_certificate(tx)?;
             let last_sent_vote = LastSentVote::get(tx)
                 .optional()?
                 .filter(|vote| high_qc.block_height() < vote.block_height);
@@ -67,7 +67,6 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
         let message = NewViewMessage {
             high_qc,
             new_height,
-            epoch,
             last_vote: last_sent_vote.map(VoteMessage::from),
         };
 

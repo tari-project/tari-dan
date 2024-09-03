@@ -4,20 +4,16 @@
 use std::collections::HashSet;
 
 use indexmap::IndexMap;
+use tari_dan_common_types::{SubstateLockType, SubstateRequirement, VersionedSubstateId};
 use tari_dan_storage::consensus_models::{
     Decision,
     Evidence,
     ExecutedTransaction,
-    SubstateLockType,
     TransactionExecution,
     TransactionRecord,
     VersionedSubstateIdLockIntent,
 };
-use tari_engine_types::{
-    commit_result::RejectReason,
-    substate::{Substate, SubstateId},
-};
-use tari_transaction::{SubstateRequirement, VersionedSubstateId};
+use tari_engine_types::{commit_result::RejectReason, substate::Substate};
 
 #[derive(Debug, Clone)]
 pub enum PreparedTransaction {
@@ -36,7 +32,7 @@ impl PreparedTransaction {
 
     pub fn new_multishard(
         transaction: TransactionRecord,
-        local_inputs: IndexMap<SubstateId, Substate>,
+        local_inputs: IndexMap<SubstateRequirement, Substate>,
         foreign_inputs: HashSet<SubstateRequirement>,
         outputs: HashSet<VersionedSubstateId>,
     ) -> Self {
@@ -82,7 +78,7 @@ impl LocalPreparedTransaction {
 #[derive(Debug, Clone)]
 pub struct MultiShardPreparedTransaction {
     transaction: TransactionRecord,
-    local_inputs: IndexMap<SubstateId, Substate>,
+    local_inputs: IndexMap<SubstateRequirement, Substate>,
     outputs: HashSet<VersionedSubstateId>,
     foreign_inputs: HashSet<SubstateRequirement>,
 }
@@ -100,7 +96,7 @@ impl MultiShardPreparedTransaction {
         &self.foreign_inputs
     }
 
-    pub fn local_inputs(&self) -> &IndexMap<SubstateId, Substate> {
+    pub fn local_inputs(&self) -> &IndexMap<SubstateRequirement, Substate> {
         &self.local_inputs
     }
 
@@ -146,7 +142,7 @@ impl MultiShardPreparedTransaction {
         let inputs = self
             .local_inputs()
             .iter()
-            .map(|(substate_id, substate)| VersionedSubstateId::new(substate_id.clone(), substate.version()))
+            .map(|(requirement, substate)| VersionedSubstateId::new(requirement.substate_id.clone(), substate.version()))
             // TODO(correctness): to_zero_version is error prone when used in evidence and the correctness depends how it is used.
             // e.g. using it to determining which shard is involved is fine, but loading substate by the address is incorrect (v0 may or may not be the actual pledged substate)
             .chain(self.foreign_inputs().iter().map(|r| r.clone().or_zero_version()))

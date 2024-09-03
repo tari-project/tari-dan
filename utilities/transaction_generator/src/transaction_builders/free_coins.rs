@@ -3,6 +3,7 @@
 
 use rand::rngs::OsRng;
 use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
+use tari_dan_common_types::SubstateRequirement;
 use tari_engine_types::{component::new_component_address_from_public_key, instruction::Instruction};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
@@ -10,7 +11,7 @@ use tari_template_lib::{
     constants::{XTR_FAUCET_COMPONENT_ADDRESS, XTR_FAUCET_VAULT_ADDRESS},
     models::Amount,
 };
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::Transaction;
 
 pub fn builder(_: u64) -> Transaction {
     let (signer_secret_key, signer_public_key) = RistrettoPublicKey::random_keypair(&mut OsRng);

@@ -10,6 +10,7 @@ use tari_dan_common_types::{
     Epoch,
     ShardGroup,
     SubstateAddress,
+    ToSubstateAddress,
 };
 use tari_dan_storage::global::models::ValidatorNode;
 use tari_epoch_manager::{EpochManagerError, EpochManagerEvent, EpochManagerReader};

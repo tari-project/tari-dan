@@ -6,7 +6,7 @@ use std::{convert::Infallible, time::Duration};
 use async_trait::async_trait;
 use tari_common_types::types::Commitment;
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
-use tari_dan_common_types::optional::Optional;
+use tari_dan_common_types::{optional::Optional, SubstateRequirement};
 use tari_dan_wallet_sdk::{
     models::{ConfidentialOutputModel, ConfidentialProofId, OutputStatus},
     network::{SubstateQueryResult, TransactionQueryResult, WalletNetworkInterface},
@@ -22,7 +22,7 @@ use tari_template_lib::{
     models::{Amount, EncryptedData, TemplateAddress},
     resource::ResourceType,
 };
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId};
 
 #[test]
 fn outputs_locked_and_released() {

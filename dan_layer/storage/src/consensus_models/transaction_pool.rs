@@ -15,6 +15,7 @@ use tari_dan_common_types::{
     committee::CommitteeInfo,
     optional::{IsNotFoundError, Optional},
     ShardGroup,
+    ToSubstateAddress,
 };
 use tari_transaction::TransactionId;
 
@@ -605,6 +606,7 @@ impl TransactionPoolRecord {
         };
 
         update.insert(tx)?;
+        self.is_ready = is_ready;
         self.pending_stage = Some(pending_stage);
 
         Ok(())

@@ -1,0 +1,224 @@
+//   Copyright 2024 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
+
+use std::{borrow::Borrow, fmt, hash::Hash};
+
+use serde::{Deserialize, Serialize};
+use tari_dan_common_types::{LockIntent, SubstateAddress, SubstateLockType, SubstateRequirement, VersionedSubstateId};
+use tari_engine_types::substate::SubstateId;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
+pub struct VersionedSubstateIdLockIntent {
+    versioned_substate_id: VersionedSubstateId,
+    lock_type: SubstateLockType,
+}
+
+impl VersionedSubstateIdLockIntent {
+    pub fn new(versioned_substate_id: VersionedSubstateId, lock: SubstateLockType) -> Self {
+        Self {
+            versioned_substate_id,
+            lock_type: lock,
+        }
+    }
+
+    pub fn read(versioned_substate_id: VersionedSubstateId) -> Self {
+        Self::new(versioned_substate_id, SubstateLockType::Read)
+    }
+
+    pub fn write(versioned_substate_id: VersionedSubstateId) -> Self {
+        Self::new(versioned_substate_id, SubstateLockType::Write)
+    }
+
+    pub fn output(versioned_substate_id: VersionedSubstateId) -> Self {
+        Self::new(versioned_substate_id, SubstateLockType::Output)
+    }
+
+    pub fn versioned_substate_id(&self) -> &VersionedSubstateId {
+        &self.versioned_substate_id
+    }
+
+    pub fn into_versioned_substate_id(self) -> VersionedSubstateId {
+        self.versioned_substate_id
+    }
+
+    pub fn substate_id(&self) -> &SubstateId {
+        self.versioned_substate_id.substate_id()
+    }
+
+    pub fn version(&self) -> u32 {
+        self.versioned_substate_id.version()
+    }
+
+    pub fn lock_type(&self) -> SubstateLockType {
+        self.lock_type
+    }
+}
+
+impl Borrow<SubstateId> for VersionedSubstateIdLockIntent {
+    fn borrow(&self) -> &SubstateId {
+        self.substate_id()
+    }
+}
+
+impl fmt::Display for VersionedSubstateIdLockIntent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({})", self.versioned_substate_id, self.lock_type)
+    }
+}
+
+impl Hash for VersionedSubstateIdLockIntent {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // A VersionedSubstateIdLockIntent is uniquely identified by the VersionedSubstateId
+        self.versioned_substate_id.hash(state);
+    }
+}
+
+impl<'a> LockIntent for &'a VersionedSubstateIdLockIntent {
+    fn substate_id(&self) -> &SubstateId {
+        self.versioned_substate_id.substate_id()
+    }
+
+    fn lock_type(&self) -> SubstateLockType {
+        self.lock_type
+    }
+
+    fn version_to_lock(&self) -> u32 {
+        self.versioned_substate_id.version()
+    }
+
+    fn requested_version(&self) -> Option<u32> {
+        Some(self.versioned_substate_id.version())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
+pub struct SubstateRequirementLockIntent {
+    substate_requirement: SubstateRequirement,
+    version_to_lock: u32,
+    lock_type: SubstateLockType,
+}
+
+impl SubstateRequirementLockIntent {
+    pub fn new<T: Into<SubstateRequirement>>(substate_id: T, version_to_lock: u32, lock: SubstateLockType) -> Self {
+        Self {
+            substate_requirement: substate_id.into(),
+            version_to_lock,
+            lock_type: lock,
+        }
+    }
+
+    pub fn read(substate_id: SubstateRequirement, version_to_lock: u32) -> Self {
+        Self::new(substate_id, version_to_lock, SubstateLockType::Read)
+    }
+
+    pub fn write(substate_id: SubstateRequirement, version_to_lock: u32) -> Self {
+        Self::new(substate_id, version_to_lock, SubstateLockType::Write)
+    }
+
+    pub fn output(substate_id: SubstateRequirement, version_to_lock: u32) -> Self {
+        Self::new(substate_id, version_to_lock, SubstateLockType::Output)
+    }
+
+    pub fn to_substate_address(&self) -> Option<SubstateAddress> {
+        self.substate_requirement.to_substate_address()
+    }
+
+    pub fn substate_requirement(&self) -> &SubstateRequirement {
+        &self.substate_requirement
+    }
+
+    pub fn into_substate_requirement(self) -> SubstateRequirement {
+        self.substate_requirement
+    }
+
+    pub fn substate_id(&self) -> &SubstateId {
+        self.substate_requirement.substate_id()
+    }
+
+    pub fn version_to_lock(&self) -> u32 {
+        self.version_to_lock
+    }
+
+    pub fn lock_type(&self) -> SubstateLockType {
+        self.lock_type
+    }
+
+    pub fn to_versioned_lock_intent(&self) -> VersionedSubstateIdLockIntent {
+        VersionedSubstateIdLockIntent::new(
+            VersionedSubstateId::new(self.substate_id().clone(), self.version_to_lock),
+            self.lock_type,
+        )
+    }
+}
+
+impl<'a> LockIntent for &'a SubstateRequirementLockIntent {
+    fn substate_id(&self) -> &SubstateId {
+        self.substate_requirement.substate_id()
+    }
+
+    fn lock_type(&self) -> SubstateLockType {
+        self.lock_type
+    }
+
+    fn version_to_lock(&self) -> u32 {
+        self.version_to_lock
+    }
+
+    fn requested_version(&self) -> Option<u32> {
+        self.substate_requirement.version()
+    }
+}
+
+impl LockIntent for SubstateRequirementLockIntent {
+    fn substate_id(&self) -> &SubstateId {
+        self.substate_requirement.substate_id()
+    }
+
+    fn lock_type(&self) -> SubstateLockType {
+        self.lock_type
+    }
+
+    fn version_to_lock(&self) -> u32 {
+        self.version_to_lock
+    }
+
+    fn requested_version(&self) -> Option<u32> {
+        self.substate_requirement.version()
+    }
+}
+
+impl From<VersionedSubstateIdLockIntent> for SubstateRequirementLockIntent {
+    fn from(intent: VersionedSubstateIdLockIntent) -> Self {
+        let version = intent.versioned_substate_id.version();
+        Self::new(intent.versioned_substate_id, version, intent.lock_type)
+    }
+}
+
+impl Borrow<SubstateId> for SubstateRequirementLockIntent {
+    fn borrow(&self) -> &SubstateId {
+        self.substate_id()
+    }
+}
+
+impl fmt::Display for SubstateRequirementLockIntent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({})", self.substate_requirement, self.lock_type)
+    }
+}
+
+impl Hash for SubstateRequirementLockIntent {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // A SubstateRequirementLockIntent is uniquely identified by the SubstateRequirement
+        self.substate_requirement.hash(state);
+    }
+}

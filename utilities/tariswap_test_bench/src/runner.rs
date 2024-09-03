@@ -4,11 +4,12 @@
 use std::{path::Path, time::Duration};
 
 use log::info;
+use tari_dan_common_types::SubstateRequirement;
 use tari_dan_wallet_daemon::indexer_jrpc_impl::IndexerJsonRpcNetworkInterface;
 use tari_dan_wallet_sdk::{DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::commit_result::FinalizeResult;
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_client::types::TemplateMetadata;
 use tokio::time;
 use url::Url;
