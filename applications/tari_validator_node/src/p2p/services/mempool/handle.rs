@@ -28,8 +28,6 @@ use crate::p2p::services::mempool::MempoolError;
 pub enum MempoolRequest {
     SubmitTransaction {
         transaction: Box<Transaction>,
-        /// If true, the transaction will be propagated to peers
-        should_propagate: bool,
         reply: oneshot::Sender<Result<(), MempoolError>>,
     },
     RemoveTransactions {
@@ -64,7 +62,6 @@ impl MempoolHandle {
         self.tx_mempool_request
             .send(MempoolRequest::SubmitTransaction {
                 transaction: Box::new(transaction),
-                should_propagate: true,
                 reply,
             })
             .await?;

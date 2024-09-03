@@ -96,12 +96,7 @@ impl<'a> LockIntent for &'a VersionedSubstateIdLockIntent {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[cfg_attr(
-    feature = "ts",
-    derive(ts_rs::TS),
-    ts(export, export_to = "../../bindings/src/types/")
-)]
+#[derive(Debug, Clone)]
 pub struct SubstateRequirementLockIntent {
     substate_requirement: SubstateRequirement,
     version_to_lock: u32,

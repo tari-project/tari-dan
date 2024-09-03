@@ -88,7 +88,7 @@ where
         let transaction_substate_address = SubstateAddress::for_transaction_receipt(tx_hash.into_array().into());
 
         if transaction.all_inputs_iter().next().is_none() {
-            self.try_with_committee(iter::once(transaction_substate_address), |mut client| {
+            self.try_with_committee(iter::once(transaction_substate_address), 2, |mut client| {
                 let transaction = transaction.clone();
                 async move { client.submit_transaction(transaction).await }
             })
@@ -98,7 +98,7 @@ where
                 .all_inputs_iter()
                 // If there is no version specified, submit to the validator node with version 0
                 .map(|i| i.or_zero_version().to_substate_address());
-            self.try_with_committee(involved, |mut client| {
+            self.try_with_committee(involved, 2, |mut client| {
                 let transaction = transaction.clone();
                 async move { client.submit_transaction(transaction).await }
             })
@@ -123,7 +123,7 @@ where
         transaction_id: TransactionId,
     ) -> Result<TransactionResultStatus, TransactionManagerError> {
         let transaction_substate_address = SubstateAddress::for_transaction_receipt(transaction_id.into_array().into());
-        self.try_with_committee(iter::once(transaction_substate_address), |mut client| async move {
+        self.try_with_committee(iter::once(transaction_substate_address), 1, |mut client| async move {
             client.get_finalized_transaction_result(transaction_id).await.optional()
         })
         .await?
@@ -140,7 +140,7 @@ where
     ) -> Result<SubstateResult, TransactionManagerError> {
         let shard = SubstateAddress::from_substate_id(&substate_address, version);
 
-        self.try_with_committee(iter::once(shard), |mut client| {
+        self.try_with_committee(iter::once(shard), 1, |mut client| {
             // This double clone looks strange, but it's needed because this function is called in a loop
             // and each iteration needs its own copy of the address (because of the move).
             let substate_address = substate_address.clone();
@@ -160,6 +160,7 @@ where
     async fn try_with_committee<'a, F, T, E, TFut, IShard>(
         &self,
         substate_addresses: IShard,
+        mut min_members: usize,
         mut callback: F,
     ) -> Result<T, TransactionManagerError>
     where
@@ -191,7 +192,10 @@ where
             let client = self.client_provider.create_client(&validator);
             match callback(client).await {
                 Ok(ret) => {
-                    return Ok(ret);
+                    min_members = min_members.saturating_sub(1);
+                    if min_members == 0 {
+                        return Ok(ret);
+                    }
                 },
                 Err(err) => {
                     warn!(
@@ -199,7 +203,6 @@ where
                         "Request failed for validator '{}': {}", validator, err
                     );
                     last_error = Some(err.to_string());
-                    continue;
                 },
             }
         }

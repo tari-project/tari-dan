@@ -363,12 +363,12 @@ impl TransactionRecord {
         let foreign_inputs = self
             .transaction()
             .all_inputs_iter()
-            .filter(|i| !local_committee_info.includes_substate_address(&i.to_substate_address_default_version(0)));
+            .filter(|i| !local_committee_info.includes_substate_id(i.substate_id()));
         // TODO(perf): this could be a bespoke DB query
         #[allow(clippy::mutable_key_type)]
         let pledges = tx.foreign_substate_pledges_get_all_by_transaction_id(self.id())?;
         for input in foreign_inputs {
-            if !pledges.iter().any(|p| *p == input) {
+            if pledges.iter().all(|p| !p.satisfies_requirement(&input)) {
                 debug!(
                     target: LOG_TARGET,
                     "Transaction {} is missing a pledge for input {}",
