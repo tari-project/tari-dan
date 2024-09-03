@@ -1,15 +1,15 @@
 export type RejectReason = {
-    InvalidTransaction: string;
+    "InvalidTransaction": string;
 } | {
-    ExecutionFailure: string;
+    "ExecutionFailure": string;
 } | {
-    OneOrMoreInputsNotFound: string;
+    "OneOrMoreInputsNotFound": string;
 } | "NoInputs" | {
-    FailedToLockInputs: string;
+    "FailedToLockInputs": string;
 } | {
-    FailedToLockOutputs: string;
+    "FailedToLockOutputs": string;
 } | {
-    ForeignShardGroupDecidedToAbort: string;
+    "ForeignShardGroupDecidedToAbort": string;
 } | {
-    FeesNotPaid: string;
+    "FeesNotPaid": string;
 } | "Unknown";

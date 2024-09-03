@@ -1,8 +1,8 @@
 import type { RequireRule } from "./RequireRule";
 export type RestrictedAccessRule = {
-    Require: RequireRule;
+    "Require": RequireRule;
 } | {
-    AnyOf: Array<RestrictedAccessRule>;
+    "AnyOf": Array<RestrictedAccessRule>;
 } | {
-    AllOf: Array<RestrictedAccessRule>;
+    "AllOf": Array<RestrictedAccessRule>;
 };

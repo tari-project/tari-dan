@@ -2,11 +2,11 @@ import type { ComponentAddress } from "./ComponentAddress";
 import type { NonFungibleAddress } from "./NonFungibleAddress";
 import type { ResourceAddress } from "./ResourceAddress";
 export type RuleRequirement = {
-    Resource: ResourceAddress;
+    "Resource": ResourceAddress;
 } | {
-    NonFungibleAddress: NonFungibleAddress;
+    "NonFungibleAddress": NonFungibleAddress;
 } | {
-    ScopedToComponent: ComponentAddress;
+    "ScopedToComponent": ComponentAddress;
 } | {
-    ScopedToTemplate: Uint8Array;
+    "ScopedToTemplate": Uint8Array;
 };

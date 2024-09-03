@@ -1,5 +1,5 @@
 export type Arg = {
-    Workspace: Array<number>;
+    "Workspace": Array<number>;
 } | {
-    Literal: Array<number>;
+    "Literal": Array<number>;
 };

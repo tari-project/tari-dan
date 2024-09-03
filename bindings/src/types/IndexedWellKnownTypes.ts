@@ -9,14 +9,4 @@ import type { TransactionReceiptAddress } from "./TransactionReceiptAddress";
 import type { UnclaimedConfidentialOutputAddress } from "./UnclaimedConfidentialOutputAddress";
 import type { VaultId } from "./VaultId";
 
-export interface IndexedWellKnownTypes {
-  bucket_ids: Array<BucketId>;
-  proof_ids: Array<ProofId>;
-  component_addresses: Array<ComponentAddress>;
-  resource_addresses: Array<ResourceAddress>;
-  transaction_receipt_addresses: Array<TransactionReceiptAddress>;
-  non_fungible_addresses: Array<NonFungibleAddress>;
-  vault_ids: Array<VaultId>;
-  metadata: Array<Metadata>;
-  unclaimed_confidential_output_address: Array<UnclaimedConfidentialOutputAddress>;
-}
+export interface IndexedWellKnownTypes { bucket_ids: Array<BucketId>, proof_ids: Array<ProofId>, component_addresses: Array<ComponentAddress>, resource_addresses: Array<ResourceAddress>, transaction_receipt_addresses: Array<TransactionReceiptAddress>, non_fungible_addresses: Array<NonFungibleAddress>, vault_ids: Array<VaultId>, metadata: Array<Metadata>, unclaimed_confidential_output_address: Array<UnclaimedConfidentialOutputAddress>, }

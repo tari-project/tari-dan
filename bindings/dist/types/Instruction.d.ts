@@ -5,42 +5,42 @@ import type { ConfidentialClaim } from "./ConfidentialClaim";
 import type { LogLevel } from "./LogLevel";
 import type { ResourceAddress } from "./ResourceAddress";
 export type Instruction = {
-    CreateAccount: {
+    "CreateAccount": {
         owner_public_key: string;
         workspace_bucket: string | null;
     };
 } | {
-    CallFunction: {
+    "CallFunction": {
         template_address: Uint8Array;
         function: string;
         args: Array<Arg>;
     };
 } | {
-    CallMethod: {
+    "CallMethod": {
         component_address: ComponentAddress;
         method: string;
         args: Array<string>;
     };
 } | {
-    PutLastInstructionOutputOnWorkspace: {
+    "PutLastInstructionOutputOnWorkspace": {
         key: Array<number>;
     };
 } | {
-    EmitLog: {
+    "EmitLog": {
         level: LogLevel;
         message: string;
     };
 } | {
-    ClaimBurn: {
+    "ClaimBurn": {
         claim: ConfidentialClaim;
     };
 } | {
-    ClaimValidatorFees: {
+    "ClaimValidatorFees": {
         epoch: number;
         validator_public_key: string;
     };
 } | "DropAllProofsInWorkspace" | {
-    AssertBucketContains: {
+    "AssertBucketContains": {
         key: Array<number>;
         resource_address: ResourceAddress;
         min_amount: Amount;

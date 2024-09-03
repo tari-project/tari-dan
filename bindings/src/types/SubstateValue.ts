@@ -8,12 +8,4 @@ import type { TransactionReceipt } from "./TransactionReceipt";
 import type { UnclaimedConfidentialOutput } from "./UnclaimedConfidentialOutput";
 import type { Vault } from "./Vault";
 
-export type SubstateValue =
-  | { Component: ComponentHeader }
-  | { Resource: Resource }
-  | { Vault: Vault }
-  | { NonFungible: NonFungibleContainer }
-  | { NonFungibleIndex: NonFungibleIndex }
-  | { UnclaimedConfidentialOutput: UnclaimedConfidentialOutput }
-  | { TransactionReceipt: TransactionReceipt }
-  | { FeeClaim: FeeClaim };
+export type SubstateValue = { "Component": ComponentHeader } | { "Resource": Resource } | { "Vault": Vault } | { "NonFungible": NonFungibleContainer } | { "NonFungibleIndex": NonFungibleIndex } | { "UnclaimedConfidentialOutput": UnclaimedConfidentialOutput } | { "TransactionReceipt": TransactionReceipt } | { "FeeClaim": FeeClaim };
