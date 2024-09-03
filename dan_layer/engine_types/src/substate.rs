@@ -395,7 +395,7 @@ impl FromStr for SubstateId {
                 }
 
                 let nft_addr = NonFungibleAddress::new(resource_addr, id);
-                return Ok(SubstateId::NonFungible(nft_addr));
+                Ok(SubstateId::NonFungible(nft_addr))
             },
             Some(("vault", addr)) => {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;

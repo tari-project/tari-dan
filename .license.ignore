@@ -1,5 +1,12 @@
 ./applications/tari_indexer/src/substate_storage_sqlite/schema.rs
-./networking/sqlite_message_logger/src/schema.rs
+./dan_layer/bindings/src/types/Account.ts
+./dan_layer/bindings/src/types/Claims.ts
+./dan_layer/bindings/src/types/ConfidentialTransferInputSelection.ts
+./dan_layer/bindings/src/types/JrpcPermission.ts
+./dan_layer/bindings/src/types/JrpcPermissions.ts
+./dan_layer/bindings/src/types/NonFungibleToken.ts
+./dan_layer/bindings/src/types/TransactionStatus.ts
 ./dan_layer/storage_sqlite/src/global/schema.rs
 ./dan_layer/state_store_sqlite/src/schema.rs
 ./dan_layer/wallet/storage_sqlite/src/schema.rs
+./networking/sqlite_message_logger/src/schema.rs
