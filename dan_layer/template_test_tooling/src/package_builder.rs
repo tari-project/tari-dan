@@ -60,7 +60,6 @@ impl PackageBuilder {
     }
 
     pub fn add_template_with_features<P: AsRef<Path>>(&mut self, path: P, features: &[&str]) -> &mut Self {
-        println!("[DEBUG] template path: {:?}", path.as_ref());
         let wasm = compile_template(path, features).unwrap();
         let template_addr = template_hasher32().chain(wasm.code()).result();
         let wasm = wasm.load_template().unwrap();
