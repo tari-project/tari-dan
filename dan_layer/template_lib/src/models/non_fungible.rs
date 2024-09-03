@@ -281,7 +281,7 @@ impl FromStr for NonFungibleAddress {
     type Err = ParseNonFungibleAddressError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // the expected format is nft_{resource_hex}_{type}_{"
+        // the expected format is nft_{resource_hex}_{type}_{id}
         let mut splitted = s.split('_');
 
         if let Some(token) = splitted.next() {
@@ -347,22 +347,28 @@ impl NonFungible {
     /// Returns a copy of the immutable data of the token.
     /// This data is set up during the token minting process and cannot be updated
     pub fn get_data<T: DeserializeOwned>(&self) -> T {
-        let resp: InvokeResult = call_engine(EngineOp::NonFungibleInvoke, &NonFungibleInvokeArg {
-            address: self.address.clone(),
-            action: NonFungibleAction::GetData,
-            args: vec![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::NonFungibleInvoke,
+            &NonFungibleInvokeArg {
+                address: self.address.clone(),
+                action: NonFungibleAction::GetData,
+                args: vec![],
+            },
+        );
 
         resp.decode().expect("[get_data] Failed to decode NonFungible data")
     }
 
     /// Returns a copy of the mutable data of the token
     pub fn get_mutable_data<T: DeserializeOwned>(&self) -> T {
-        let resp: InvokeResult = call_engine(EngineOp::NonFungibleInvoke, &NonFungibleInvokeArg {
-            address: self.address.clone(),
-            action: NonFungibleAction::GetMutableData,
-            args: vec![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::NonFungibleInvoke,
+            &NonFungibleInvokeArg {
+                address: self.address.clone(),
+                action: NonFungibleAction::GetMutableData,
+                args: vec![],
+            },
+        );
 
         resp.decode()
             .expect("[get_mutable_data] Failed to decode raw NonFungible mutable data")
