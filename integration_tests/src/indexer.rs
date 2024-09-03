@@ -192,7 +192,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         config.indexer.data_dir = base_dir.to_path_buf();
         config.indexer.identity_file = base_dir.join("indexer_id.json");
         config.indexer.tor_identity_file = base_dir.join("indexer_tor_id.json");
-        config.indexer.base_node_grpc_address = Some(format!("127.0.0.1:{}", base_node_grpc_port));
+        config.indexer.base_node_grpc_url = Some(format!("http://127.0.0.1:{}", base_node_grpc_port).parse().unwrap());
         config.indexer.dan_layer_scanning_internal = Duration::from_secs(5);
         config.indexer.p2p.listener_port = port;
 

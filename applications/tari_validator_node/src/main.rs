@@ -83,9 +83,15 @@ async fn main_inner() -> Result<(), ExitError> {
     info!(target: LOG_TARGET, "Starting validator node on network {}", config.network);
     match run_validator_node(&config, shutdown.to_signal()).await {
         Ok(_) => info!(target: LOG_TARGET, "Validator node shutdown successfully"),
-        Err(e) => {
-            error!(target: LOG_TARGET, "Validator node shutdown with an error: {:?}", e);
-            return Err(ExitError::new(ExitCode::UnknownError, e));
+        Err(e) => match e.downcast() {
+            Ok(exit_error) => {
+                error!(target: LOG_TARGET, "Validator node shutdown with an error: {:?}", exit_error);
+                return Err(exit_error);
+            },
+            Err(e) => {
+                error!(target: LOG_TARGET, "Validator node shutdown with an error: {:?}", e);
+                return Err(ExitError::new(ExitCode::UnknownError, e));
+            },
         },
     }
 

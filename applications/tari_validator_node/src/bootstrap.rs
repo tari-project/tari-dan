@@ -369,7 +369,8 @@ async fn create_registration_file(
     let fee_claim_public_key = config.validator_node.fee_claim_public_key.clone();
     epoch_manager
         .set_fee_claim_public_key(fee_claim_public_key.clone())
-        .await?;
+        .await
+        .context("set_fee_claim_public_key failed when creating registration file")?;
 
     let signature = ValidatorNodeSignature::sign(keypair.secret_key(), &fee_claim_public_key, b"");
 
@@ -382,7 +383,7 @@ async fn create_registration_file(
         config.common.base_path.join("registration.json"),
         serde_json::to_string(&registration)?,
     )
-    .map_err(|e| ExitError::new(ExitCode::UnknownError, e))?;
+    .context("failed to write registration file")?;
     Ok(())
 }
 

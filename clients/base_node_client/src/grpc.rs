@@ -32,6 +32,7 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::CodeTemplateRegistration};
 use tari_dan_common_types::SubstateAddress;
 use tari_utilities::ByteArray;
+use url::Url;
 
 use crate::{
     types::{BaseLayerConsensusConstants, BaseLayerMetadata, BaseLayerValidatorNode, BlockInfo, SideChainUtxos},
@@ -45,16 +46,16 @@ type Client = BaseNodeGrpcClient<tonic::transport::Channel>;
 
 #[derive(Clone)]
 pub struct GrpcBaseNodeClient {
-    endpoint: String,
+    endpoint: Url,
     client: Option<Client>,
 }
 
 impl GrpcBaseNodeClient {
-    pub fn new(endpoint: String) -> Self {
+    pub fn new(endpoint: Url) -> Self {
         Self { endpoint, client: None }
     }
 
-    pub async fn connect(endpoint: String) -> Result<Self, BaseNodeClientError> {
+    pub async fn connect(endpoint: Url) -> Result<Self, BaseNodeClientError> {
         let mut client = Self { endpoint, client: None };
         client.test_connection().await?;
         Ok(client)
@@ -62,7 +63,7 @@ impl GrpcBaseNodeClient {
 
     async fn connection(&mut self) -> Result<&mut Client, BaseNodeClientError> {
         if self.client.is_none() {
-            let inner = Client::connect(format!("http://{}", self.endpoint)).await?;
+            let inner = Client::connect(self.endpoint.to_string()).await?;
             self.client = Some(inner);
         }
         self.client.as_mut().ok_or(BaseNodeClientError::ConnectionError)
