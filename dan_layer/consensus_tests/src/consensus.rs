@@ -12,20 +12,13 @@ use std::time::Duration;
 
 use tari_common_types::types::PrivateKey;
 use tari_consensus::hotstuff::HotStuffError;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, SubstateLockType, SubstateRequirement};
 use tari_dan_storage::{
-    consensus_models::{
-        BlockId,
-        Command,
-        Decision,
-        SubstateLockType,
-        TransactionRecord,
-        VersionedSubstateIdLockIntent,
-    },
+    consensus_models::{BlockId, Command, Decision, TransactionRecord, VersionedSubstateIdLockIntent},
     StateStore,
     StateStoreReadTransaction,
 };
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::Transaction;
 
 use crate::support::{
     build_transaction_from,

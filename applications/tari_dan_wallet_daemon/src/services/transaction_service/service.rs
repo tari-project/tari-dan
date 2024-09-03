@@ -4,7 +4,7 @@
 use std::{sync::Arc, time::Duration};
 
 use log::*;
-use tari_dan_common_types::optional::IsNotFoundError;
+use tari_dan_common_types::{optional::IsNotFoundError, SubstateRequirement};
 use tari_dan_wallet_sdk::{
     models::{NewAccountInfo, TransactionStatus},
     network::WalletNetworkInterface,
@@ -13,7 +13,7 @@ use tari_dan_wallet_sdk::{
 };
 use tari_engine_types::commit_result::ExecuteResult;
 use tari_shutdown::ShutdownSignal;
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId};
 use tokio::{
     sync::{mpsc, watch, Semaphore},
     time,

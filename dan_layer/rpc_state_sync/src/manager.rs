@@ -19,6 +19,7 @@ use tari_dan_common_types::{
     NodeHeight,
     PeerAddress,
     ShardGroup,
+    VersionedSubstateId,
 };
 use tari_dan_p2p::proto::rpc::{GetCheckpointRequest, GetCheckpointResponse, SyncStateRequest};
 use tari_dan_storage::{
@@ -50,7 +51,6 @@ use tari_state_tree::{
     Version,
     SPARSE_MERKLE_PLACEHOLDER_HASH,
 };
-use tari_transaction::VersionedSubstateId;
 use tari_validator_node_rpc::{
     client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory},
     rpc_service::ValidatorNodeRpcClient,

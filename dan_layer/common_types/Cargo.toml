@@ -30,6 +30,7 @@ prost = { workspace = true }
 prost-types = { workspace = true }
 serde = { workspace = true, default-features = true }
 ts-rs = { workspace = true, optional = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 indexmap = { workspace = true }

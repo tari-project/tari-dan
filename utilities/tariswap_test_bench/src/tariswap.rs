@@ -2,13 +2,14 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::info;
+use tari_dan_common_types::SubstateRequirement;
 use tari_dan_wallet_sdk::{apis::key_manager::TRANSACTION_BRANCH, models::Account};
 use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress},
     prelude::XTR,
 };
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::Transaction;
 
 use crate::{faucet::Faucet, runner::Runner};
 

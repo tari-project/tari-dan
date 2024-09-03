@@ -5,13 +5,13 @@ use std::{collections::HashMap, sync::Arc};
 
 use futures::{stream::FuturesOrdered, StreamExt};
 use log::*;
-use tari_dan_common_types::NodeAddressable;
+use tari_dan_common_types::{NodeAddressable, SubstateRequirement, VersionedSubstateId};
 use tari_engine_types::{
     indexed_value::IndexedValueError,
     substate::{Substate, SubstateId},
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::{SubstateRequirement, Transaction, VersionedSubstateId};
+use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory};
 use tokio::task::JoinError;
 

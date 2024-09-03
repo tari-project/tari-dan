@@ -46,7 +46,7 @@ use tari_crypto::{
     keys::{PublicKey as _, SecretKey},
     ristretto::{RistrettoComSig, RistrettoSecretKey},
 };
-use tari_transaction::SubstateRequirement;
+use tari_dan_common_types::SubstateRequirement;
 use template::RegisteredTemplate;
 use validator_node::ValidatorNodeProcess;
 use wallet::WalletProcess;

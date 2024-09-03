@@ -5,8 +5,8 @@ use std::{fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
+use tari_dan_common_types::SubstateRequirement;
 use tari_engine_types::{serde_with, substate::SubstateId, TemplateAddress};
-use tari_transaction::SubstateRequirement;
 
 #[derive(Debug, Clone)]
 pub struct SubstateModel {

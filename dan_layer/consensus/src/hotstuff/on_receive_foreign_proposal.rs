@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, ShardGroup};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, ShardGroup, ToSubstateAddress};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -313,7 +313,7 @@ where TConsensusSpec: ConsensusSpec
                             tx_rec.current_stage(),
                              tx_rec.evidence().all_input_addresses_justified()
                         );
-                        tx_rec.add_pending_status_update(tx, local_leaf, tx_rec.current_stage(), false)?;
+                        tx_rec.add_pending_status_update(tx, local_leaf, tx_rec.current_stage(), tx_rec.is_ready())?;
                     }
                 },
                 Command::LocalAccept(atom) => {
@@ -445,7 +445,8 @@ where TConsensusSpec: ConsensusSpec
                             tx_rec.current_stage(),
                             tx_rec.evidence().all_addresses_justified()
                         );
-                        tx_rec.add_pending_status_update(tx, local_leaf, tx_rec.current_stage(), false)?;
+                        // Still need to update the evidence
+                        tx_rec.add_pending_status_update(tx, local_leaf, tx_rec.current_stage(), tx_rec.is_ready())?;
                     }
                 },
                 // Should never receive this

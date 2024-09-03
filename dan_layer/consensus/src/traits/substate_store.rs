@@ -1,12 +1,13 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use tari_dan_common_types::{ToSubstateAddress, VersionedSubstateId};
 use tari_dan_storage::{
     consensus_models::{SubstateChange, SubstateRecord},
     StateStoreReadTransaction,
 };
 use tari_engine_types::substate::{Substate, SubstateDiff};
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 
 use crate::hotstuff::substate_store::SubstateStoreError;
 

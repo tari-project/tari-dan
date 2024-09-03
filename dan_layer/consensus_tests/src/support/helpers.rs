@@ -11,10 +11,10 @@ use tari_dan_common_types::{
     NumPreshards,
     ShardGroup,
     SubstateAddress,
+    VersionedSubstateId,
 };
 use tari_engine_types::substate::SubstateId;
 use tari_template_lib::models::{ComponentAddress, ComponentKey, EntityId, ObjectKey};
-use tari_transaction::VersionedSubstateId;
 
 use crate::support::TestAddress;
 

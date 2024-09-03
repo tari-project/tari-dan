@@ -13,7 +13,7 @@ use tari_crypto::{
     ristretto::{RistrettoComSig, RistrettoPublicKey},
     tari_utilities::ByteArray,
 };
-use tari_dan_common_types::optional::Optional;
+use tari_dan_common_types::{optional::Optional, SubstateRequirement};
 use tari_dan_wallet_crypto::ConfidentialProofStatement;
 use tari_dan_wallet_sdk::{
     apis::{confidential_transfer::TransferParams, jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
@@ -36,7 +36,7 @@ use tari_template_lib::{
     models::{Amount, UnclaimedConfidentialOutputAddress},
     prelude::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
 };
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::Transaction;
 use tari_wallet_daemon_client::{
     types::{
         AccountGetDefaultRequest,

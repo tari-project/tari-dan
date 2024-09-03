@@ -29,7 +29,17 @@ use indexmap::IndexMap;
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, ShardGroup, SubstateAddress};
+use tari_dan_common_types::{
+    shard::Shard,
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    ShardGroup,
+    SubstateAddress,
+    SubstateRequirement,
+    ToSubstateAddress,
+    VersionedSubstateId,
+};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -74,7 +84,7 @@ use tari_dan_storage::{
 };
 use tari_engine_types::substate::SubstateId;
 use tari_state_tree::{Node, NodeKey, TreeNode, Version};
-use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 use tari_utilities::ByteArray;
 
 use crate::{
@@ -453,10 +463,11 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         leaf_block.try_into()
     }
 
-    fn high_qc_get(&self) -> Result<HighQc, StorageError> {
+    fn high_qc_get(&self, epoch: Epoch) -> Result<HighQc, StorageError> {
         use crate::schema::high_qcs;
 
         let high_qc = high_qcs::table
+            .filter(high_qcs::epoch.eq(epoch.as_u64() as i64))
             .order_by(high_qcs::id.desc())
             .first::<sql_models::HighQc>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {

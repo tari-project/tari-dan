@@ -10,13 +10,21 @@ use std::{
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
 use tari_consensus::hotstuff::HotstuffEvent;
-use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeHeight, NumPreshards, ShardGroup};
+use tari_dan_common_types::{
+    committee::Committee,
+    shard::Shard,
+    Epoch,
+    NodeHeight,
+    NumPreshards,
+    ShardGroup,
+    SubstateLockType,
+    VersionedSubstateId,
+};
 use tari_dan_storage::{
     consensus_models::{
         BlockId,
         Decision,
         QcId,
-        SubstateLockType,
         SubstateRecord,
         TransactionExecution,
         TransactionRecord,
@@ -32,7 +40,7 @@ use tari_engine_types::{
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_shutdown::{Shutdown, ShutdownSignal};
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 use tokio::{sync::broadcast, task, time::sleep};
 
 use super::{

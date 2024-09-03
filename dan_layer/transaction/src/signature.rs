@@ -9,7 +9,7 @@ use tari_crypto::{
     keys::PublicKey as PublicKeyT,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{Epoch, SubstateRequirement};
 use tari_engine_types::{
     hashing::{hasher64, EngineHashDomainLabel},
     instruction::Instruction,
@@ -17,7 +17,7 @@ use tari_engine_types::{
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use crate::{unsigned_transaction::UnsignedTransaction, SubstateRequirement};
+use crate::unsigned_transaction::UnsignedTransaction;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]

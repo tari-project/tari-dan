@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common_types::types::{PrivateKey, PublicKey};
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{Epoch, SubstateRequirement};
 use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, TemplateAddress};
 use tari_template_lib::{
     args,
@@ -10,7 +10,7 @@ use tari_template_lib::{
     models::{Amount, ComponentAddress, ConfidentialWithdrawProof, ResourceAddress},
 };
 
-use crate::{unsigned_transaction::UnsignedTransaction, SubstateRequirement, Transaction, TransactionSignature};
+use crate::{unsigned_transaction::UnsignedTransaction, Transaction, TransactionSignature};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {

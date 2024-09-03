@@ -22,14 +22,12 @@
 
 mod builder;
 mod signature;
-mod substate;
 mod transaction;
 mod transaction_id;
 mod unsigned_transaction;
 
 pub use builder::TransactionBuilder;
 pub use signature::TransactionSignature;
-pub use substate::*;
 pub use tari_engine_types::instruction::Instruction;
 pub use transaction::*;
 pub use transaction_id::*;

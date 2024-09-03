@@ -4,13 +4,16 @@
 use std::collections::HashMap;
 
 use log::*;
-use tari_dan_common_types::optional::{IsNotFoundError, Optional};
+use tari_dan_common_types::{
+    optional::{IsNotFoundError, Optional},
+    SubstateRequirement,
+};
 use tari_engine_types::{
     indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     substate::SubstateDiff,
 };
 use tari_template_lib::prelude::ComponentAddress;
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
     models::{NewAccountInfo, TransactionStatus, VersionedSubstateId, WalletTransaction},

@@ -7,6 +7,7 @@ use log::*;
 use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
     substate_type::SubstateType,
+    SubstateRequirement,
 };
 use tari_engine_types::{
     indexed_value::{IndexedValueError, IndexedWellKnownTypes},
@@ -14,7 +15,7 @@ use tari_engine_types::{
     transaction_receipt::TransactionReceiptAddress,
     TemplateAddress,
 };
-use tari_transaction::{SubstateRequirement, TransactionId};
+use tari_transaction::TransactionId;
 
 use crate::{
     models::{SubstateModel, VersionedSubstateId},

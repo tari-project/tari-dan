@@ -7,7 +7,8 @@ use bytes::{BufMut, Bytes, BytesMut};
 use indexmap::IndexSet;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use tari_transaction::{Transaction, TransactionSignature, UnsignedTransaction, VersionedSubstateId};
+use tari_dan_common_types::VersionedSubstateId;
+use tari_transaction::{Transaction, TransactionSignature, UnsignedTransaction};
 
 use crate::BoxedTransactionBuilder;
 

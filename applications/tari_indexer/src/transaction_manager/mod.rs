@@ -29,6 +29,8 @@ use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
     NodeAddressable,
     SubstateAddress,
+    SubstateRequirement,
+    ToSubstateAddress,
 };
 use tari_engine_types::substate::SubstateId;
 use tari_epoch_manager::EpochManagerReader;
@@ -37,7 +39,7 @@ use tari_indexer_lib::{
     substate_scanner::SubstateScanner,
     transaction_autofiller::TransactionAutofiller,
 };
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::client::{
     SubstateResult,
     TransactionResultStatus,

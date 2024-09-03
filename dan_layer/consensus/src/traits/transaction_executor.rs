@@ -2,9 +2,9 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use indexmap::IndexMap;
-use tari_dan_common_types::{optional::IsNotFoundError, Epoch};
+use tari_dan_common_types::{optional::IsNotFoundError, Epoch, SubstateRequirement};
 use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore, StorageError};
-use tari_engine_types::substate::{Substate, SubstateId};
+use tari_engine_types::substate::Substate;
 use tari_transaction::Transaction;
 
 use crate::hotstuff::substate_store::SubstateStoreError;
@@ -47,6 +47,6 @@ pub trait BlockTransactionExecutor<TStateStore: StateStore> {
         &self,
         transaction: Transaction,
         current_epoch: Epoch,
-        resolved_inputs: &IndexMap<SubstateId, Substate>,
+        resolved_inputs: &IndexMap<SubstateRequirement, Substate>,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError>;
 }

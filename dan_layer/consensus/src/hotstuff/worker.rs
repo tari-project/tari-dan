@@ -207,7 +207,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 .filter(|h| !h.is_zero())
                 .unwrap_or_else(NodeHeight::zero);
 
-            Ok::<_, HotStuffError>((current_epoch, current_height, HighQc::get(tx)?))
+            let high_qc = HighQc::get(tx, leaf.epoch())?;
+            Ok::<_, HotStuffError>((current_epoch, current_height, high_qc))
         })?;
 
         info!(

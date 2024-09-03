@@ -8,9 +8,9 @@ use std::{
 
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{committee::CommitteeInfo, SubstateAddress};
+use tari_dan_common_types::{committee::CommitteeInfo, SubstateAddress, SubstateLockType, ToSubstateAddress};
 
-use crate::consensus_models::{QcId, SubstateLockType, VersionedSubstateIdLockIntent};
+use crate::consensus_models::{QcId, VersionedSubstateIdLockIntent};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[cfg_attr(

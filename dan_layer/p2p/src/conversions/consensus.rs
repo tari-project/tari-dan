@@ -38,7 +38,15 @@ use tari_consensus::messages::{
     VoteMessage,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight, ShardGroup, ValidatorMetadata};
+use tari_dan_common_types::{
+    shard::Shard,
+    Epoch,
+    NodeHeight,
+    ShardGroup,
+    SubstateLockType,
+    ValidatorMetadata,
+    VersionedSubstateId,
+};
 use tari_dan_storage::consensus_models::{
     BlockId,
     Command,
@@ -53,14 +61,13 @@ use tari_dan_storage::consensus_models::{
     QuorumCertificate,
     QuorumDecision,
     SubstateDestroyed,
-    SubstateLockType,
     SubstatePledge,
     SubstatePledges,
     SubstateRecord,
     TransactionAtom,
 };
 use tari_engine_types::substate::{SubstateId, SubstateValue};
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 
 use crate::proto::{self};
 // -------------------------------- HotstuffMessage -------------------------------- //
@@ -126,7 +133,6 @@ impl From<&NewViewMessage> for proto::consensus::NewViewMessage {
         Self {
             high_qc: Some((&value.high_qc).into()),
             new_height: value.new_height.0,
-            epoch: value.epoch.as_u64(),
             last_vote: value.last_vote.as_ref().map(|a| a.into()),
         }
     }
@@ -139,7 +145,6 @@ impl TryFrom<proto::consensus::NewViewMessage> for NewViewMessage {
         Ok(NewViewMessage {
             high_qc: value.high_qc.ok_or_else(|| anyhow!("High QC is missing"))?.try_into()?,
             new_height: value.new_height.into(),
-            epoch: Epoch(value.epoch),
             last_vote: value
                 .last_vote
                 .map(|a: proto::consensus::VoteMessage| a.try_into())

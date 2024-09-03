@@ -20,6 +20,10 @@ use tari_template_lib::models::ObjectKey;
 
 use crate::{shard::Shard, uint::U256, NumPreshards, ShardGroup};
 
+pub trait ToSubstateAddress {
+    fn to_substate_address(&self) -> SubstateAddress;
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "ts",
