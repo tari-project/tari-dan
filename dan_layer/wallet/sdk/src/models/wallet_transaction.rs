@@ -6,10 +6,11 @@ use std::{fmt::Display, str::FromStr, time::Duration};
 use anyhow::anyhow;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use tari_dan_common_types::SubstateRequirement;
 use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::models::Amount;
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::Transaction;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 

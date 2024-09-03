@@ -5,10 +5,10 @@ use std::{iter, time::Duration};
 
 use rand::{distributions::Alphanumeric, rngs::OsRng, Rng};
 use tari_common_types::types::PrivateKey;
+use tari_dan_common_types::{SubstateLockType, VersionedSubstateId};
 use tari_dan_storage::consensus_models::{
     Decision,
     ExecutedTransaction,
-    SubstateLockType,
     TransactionExecution,
     TransactionRecord,
     VersionedSubstateIdLockIntent,
@@ -20,7 +20,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateDiff, SubstateId},
     transaction_receipt::{TransactionReceipt, TransactionReceiptAddress},
 };
-use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
+use tari_transaction::{Transaction, TransactionId};
 
 use crate::support::{committee_number_to_shard_group, helpers::random_substate_in_shard_group, TEST_NUM_PRESHARDS};
 

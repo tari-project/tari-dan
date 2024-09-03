@@ -5,12 +5,12 @@ use std::collections::HashSet;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{Epoch, SubstateRequirement};
 use tari_engine_types::{
     substate::{Substate, SubstateId},
     virtual_substate::VirtualSubstates,
 };
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::Transaction;
 
 pub struct ResolvedSubstates {
     pub local: IndexMap<SubstateId, Substate>,

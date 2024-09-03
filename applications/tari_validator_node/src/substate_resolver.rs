@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use indexmap::IndexMap;
 use log::*;
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, SubstateAddress};
+use tari_dan_common_types::{Epoch, SubstateAddress, SubstateRequirement};
 use tari_dan_engine::state_store::StateStoreError;
 use tari_dan_storage::{consensus_models::SubstateRecord, StateStore, StorageError};
 use tari_engine_types::{
@@ -17,7 +17,7 @@ use tari_engine_types::{
 };
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
 use tari_indexer_lib::{error::IndexerError, substate_cache::SubstateCache, substate_scanner::SubstateScanner};
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory};
 
 use crate::{
@@ -115,7 +115,7 @@ where
                                 "🐞 BUG: Requested substate {} was not missing but was also not found",
                                 requested_input.substate_id()
                             );
-                            SubstateResolverError::InputSubstateDoesNotExist { substate_requirement: requested_input.clone()}
+                            SubstateResolverError::InputSubstateDoesNotExist { substate_requirement: requested_input.clone() }
                         })?;
 
                     if substate.is_destroyed() {

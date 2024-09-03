@@ -39,7 +39,7 @@ impl HotstuffMessage {
 
     pub fn epoch(&self) -> Epoch {
         match self {
-            Self::NewView(msg) => msg.epoch,
+            Self::NewView(msg) => msg.high_qc.epoch(),
             Self::Proposal(msg) => msg.block.epoch(),
             Self::ForeignProposal(msg) => msg.block.epoch(),
             Self::Vote(msg) => msg.epoch,

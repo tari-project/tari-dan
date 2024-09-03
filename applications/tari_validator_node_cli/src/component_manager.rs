@@ -25,11 +25,11 @@ use std::{fs, io, path::Path};
 use anyhow::anyhow;
 use jfs::Config;
 use serde::{Deserialize, Serialize};
+use tari_dan_common_types::SubstateRequirement;
 use tari_engine_types::{
     serde_with,
     substate::{SubstateDiff, SubstateId},
 };
-use tari_transaction::SubstateRequirement;
 
 pub struct ComponentManager {
     store: jfs::Store,

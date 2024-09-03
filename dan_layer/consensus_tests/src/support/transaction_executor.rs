@@ -3,12 +3,12 @@
 
 use indexmap::IndexMap;
 use tari_consensus::traits::{BlockTransactionExecutor, BlockTransactionExecutorError};
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{Epoch, SubstateRequirement};
 use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, TransactionRecord},
     StateStore,
 };
-use tari_engine_types::substate::{Substate, SubstateId};
+use tari_engine_types::substate::Substate;
 use tari_transaction::Transaction;
 
 use crate::support::executions_store::TestTransactionExecutionsStore;
@@ -38,7 +38,7 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
         &self,
         transaction: Transaction,
         _current_epoch: Epoch,
-        _resolved_inputs: &IndexMap<SubstateId, Substate>,
+        _resolved_inputs: &IndexMap<SubstateRequirement, Substate>,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
         let execution = self.store.get(transaction.id()).unwrap_or_else(|| {
             panic!(

@@ -11,10 +11,19 @@ use std::{
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, ShardGroup, SubstateAddress};
+use tari_dan_common_types::{
+    shard::Shard,
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    ShardGroup,
+    SubstateAddress,
+    SubstateRequirement,
+    VersionedSubstateId,
+};
 use tari_engine_types::substate::SubstateId;
 use tari_state_tree::{Node, NodeKey, StaleTreeNode, Version};
-use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -106,7 +115,7 @@ pub trait StateStoreReadTransaction: Sized {
     fn last_proposed_get(&self) -> Result<LastProposed, StorageError>;
     fn locked_block_get(&self) -> Result<LockedBlock, StorageError>;
     fn leaf_block_get(&self) -> Result<LeafBlock, StorageError>;
-    fn high_qc_get(&self) -> Result<HighQc, StorageError>;
+    fn high_qc_get(&self, epoch: Epoch) -> Result<HighQc, StorageError>;
     fn foreign_proposals_get_any<'a, I: IntoIterator<Item = &'a BlockId>>(
         &self,
         block_ids: I,

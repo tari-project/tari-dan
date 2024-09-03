@@ -55,6 +55,10 @@ impl ValidatorNodeClient {
         })
     }
 
+    pub fn endpoint(&self) -> &Url {
+        &self.endpoint
+    }
+
     pub async fn get_identity(&mut self) -> Result<GetIdentityResponse, ValidatorNodeClientError> {
         self.send_request("get_identity", json!({})).await
     }

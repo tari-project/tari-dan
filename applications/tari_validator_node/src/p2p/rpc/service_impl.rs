@@ -309,10 +309,15 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
     }
 
     async fn get_high_qc(&self, _request: Request<GetHighQcRequest>) -> Result<Response<GetHighQcResponse>, RpcStatus> {
+        let current_epoch = self
+            .epoch_manager
+            .current_epoch()
+            .await
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
         let high_qc = self
             .shard_state_store
             .with_read_tx(|tx| {
-                HighQc::get(tx)
+                HighQc::get(tx, current_epoch)
                     .optional()?
                     .map(|hqc| hqc.get_quorum_certificate(tx))
                     .transpose()

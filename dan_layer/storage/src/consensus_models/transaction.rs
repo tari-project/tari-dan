@@ -5,7 +5,7 @@ use std::{collections::HashSet, ops::Deref, time::Duration};
 
 use log::*;
 use serde::Deserialize;
-use tari_dan_common_types::committee::CommitteeInfo;
+use tari_dan_common_types::{committee::CommitteeInfo, SubstateLockType};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
     transaction_receipt::TransactionReceiptAddress,
@@ -17,7 +17,6 @@ use crate::{
         BlockId,
         Decision,
         ExecutedTransaction,
-        SubstateLockType,
         SubstatePledge,
         SubstatePledges,
         TransactionExecution,

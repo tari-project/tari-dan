@@ -3,6 +3,7 @@
 
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
+use tari_dan_common_types::SubstateRequirement;
 use tari_engine_types::{
     commit_result::RejectReason,
     instruction::Instruction,
@@ -10,7 +11,6 @@ use tari_engine_types::{
 };
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::args;
-use tari_transaction::SubstateRequirement;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{
     command::transaction::{handle_submit, submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},

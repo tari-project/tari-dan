@@ -23,7 +23,14 @@
 use std::{collections::HashSet, fmt::Display, iter};
 
 use log::*;
-use tari_dan_common_types::{optional::Optional, NumPreshards, PeerAddress, ShardGroup, SubstateAddress};
+use tari_dan_common_types::{
+    optional::Optional,
+    NumPreshards,
+    PeerAddress,
+    ShardGroup,
+    SubstateAddress,
+    ToSubstateAddress,
+};
 use tari_dan_p2p::{DanMessage, NewTransactionMessage};
 use tari_dan_storage::{consensus_models::TransactionRecord, StateStore};
 use tari_engine_types::commit_result::RejectReason;

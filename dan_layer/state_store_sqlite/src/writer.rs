@@ -16,7 +16,17 @@ use diesel::{
 };
 use indexmap::IndexMap;
 use log::*;
-use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, NodeAddressable, NodeHeight, ShardGroup};
+use tari_dan_common_types::{
+    optional::Optional,
+    shard::Shard,
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    ShardGroup,
+    SubstateLockType,
+    ToSubstateAddress,
+    VersionedSubstateId,
+};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -42,7 +52,6 @@ use tari_dan_storage::{
         QcId,
         QuorumCertificate,
         SubstateLock,
-        SubstateLockType,
         SubstatePledge,
         SubstatePledges,
         SubstateRecord,
@@ -60,7 +69,7 @@ use tari_dan_storage::{
 };
 use tari_engine_types::substate::SubstateId;
 use tari_state_tree::{Node, NodeKey, StaleTreeNode, TreeNode, Version};
-use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 use tari_utilities::ByteArray;
 use time::{OffsetDateTime, PrimitiveDateTime};
 
