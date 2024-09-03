@@ -11,14 +11,20 @@ use minotari_app_grpc::tari_rpc::{
     RegisterValidatorNodeResponse,
 };
 use tari_shutdown::{Shutdown, ShutdownSignal};
-use tokio::sync::{mpsc, oneshot};
+use tokio::{
+    sync::{
+        mpsc::{self, Receiver},
+        oneshot,
+    },
+    task::JoinHandle,
+};
 
 use crate::{
     config::{Channels, Config, ExecutableConfig},
     constants::DEFAULT_VALIDATOR_NODE_BINARY_PATH,
     minotari::{Minotari, TipStatus},
     monitoring::{process_status_alert, process_status_log, ProcessStatus, Transaction},
-    process::start_validator,
+    process::{start_validator, ChildChannel},
 };
 
 pub struct ProcessManager {
@@ -32,6 +38,13 @@ pub struct ProcessManager {
     pub chain: Minotari,
     pub alerting_config: Channels,
     pub auto_restart: bool,
+}
+
+pub struct ChannelReceivers {
+    pub rx_log: Receiver<ProcessStatus>,
+    pub rx_alert: Receiver<ProcessStatus>,
+    pub cfg_alert: Channels,
+    pub task: JoinHandle<()>,
 }
 
 impl ProcessManager {
@@ -56,25 +69,117 @@ impl ProcessManager {
         (this, ManagerHandle::new(tx_request))
     }
 
-    pub async fn start(mut self) -> anyhow::Result<()> {
+    pub async fn start_request_handler(mut self) -> anyhow::Result<ChannelReceivers> {
         info!("Starting validator node process");
 
         // clean_stale_pid_file(self.base_dir.clone().join(DEFAULT_VALIDATOR_PID_PATH)).await?;
 
+        self.chain.bootstrap().await?;
+
+        let cc = self.start_child_process().await;
+
+        let mut last_registered_at_block = 0;
+        info!("Setup completed: connected to base node and wallet, ready to receive requests");
+        let task_handle = tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    Some(req) = self.rx_request.recv() => {
+                        match req {
+                            ManagerRequest::GetTipInfo { reply } => {
+                                let response = match self.chain.get_tip_status().await {
+                                    Ok(resp) => resp,
+                                    Err(e) => {
+                                        error!("Failed to get tip status: {}", e);
+                                        continue;
+                                    }
+                                };
+
+                                // send latest block height to logging
+                                if let Err(e) = cc.tx_log.send(ProcessStatus::WarnExpiration(response.height(), last_registered_at_block)).await {
+                                    error!("Failed to send tip status update to monitoring: {}", e);
+                                }
+                                // send latest block height to alerting
+                                if let Err(e) = cc.tx_alert.send(ProcessStatus::WarnExpiration(response.height(), last_registered_at_block)).await {
+                                    error!("Failed to send tip status update to alerting: {}", e);
+                                }
+
+                                drop(reply.send(Ok(response)));
+                            }
+                            ManagerRequest::GetActiveValidatorNodes { reply } => {
+                                let response = match self.chain.get_active_validator_nodes().await {
+                                    Ok(resp) => resp,
+                                    Err(e) => {
+                                        error!("Failed to get active validator nodes: {}", e);
+                                        continue;
+                                    }
+                                };
+                                drop(reply.send(Ok(response)));
+                            }
+                            ManagerRequest::RegisterValidatorNode { block, reply } => {
+                                let response = match self.chain.register_validator_node().await {
+                                    Ok(resp) => resp,
+                                    Err(e) => {
+                                        error!("Failed to register validator node: {}", e);
+                                        continue;
+                                    }
+                                };
+                                last_registered_at_block = block;
+
+                                // send registration response to logger
+                                if let Err(e) = cc.tx_log.send(ProcessStatus::Submitted(Transaction::new(response.clone(), block))).await {
+                                    error!("Failed to send node registration update to monitoring: {}", e);
+                                }
+                                // send registration response to alerting
+                                if let Err(e) = cc.tx_alert.send(ProcessStatus::Submitted(Transaction::new(response.clone(), block))).await {
+                                    error!("Failed to send node registration update to alerting: {}", e);
+                                }
+
+                                drop(reply.send(Ok(response)));
+                            },
+                            ManagerRequest::GetConsensusConstants { block, reply } => {
+                                let response = match self.chain.get_consensus_constants(block).await {
+                                    Ok(resp) => resp,
+                                    Err(e) => {
+                                        error!("Failed to get consensus constants: {}", e);
+                                        continue;
+                                    }
+                                };
+                                drop(reply.send(Ok(response)));
+                            }
+                        }
+                    }
+
+                    _ = self.shutdown_signal.wait() => {
+                        info!("Shutting down process manager");
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(ChannelReceivers {
+            rx_log: cc.rx_log,
+            rx_alert: cc.rx_alert,
+            cfg_alert: cc.cfg_alert,
+            task: task_handle,
+        })
+    }
+
+    async fn start_child_process(&self) -> ChildChannel {
         let vn_binary_path = self
             .validator_config
             .clone()
             .executable_path
             .unwrap_or(PathBuf::from(DEFAULT_VALIDATOR_NODE_BINARY_PATH));
 
-        let vn_base_dir = self.base_dir.join(self.validator_base_dir);
+        let vn_base_dir = self.base_dir.join(self.validator_base_dir.clone());
 
         // get child channel to communicate with the validator node process
         let cc = start_validator(
             vn_binary_path,
             vn_base_dir,
-            self.base_dir,
-            self.alerting_config,
+            self.base_dir.clone(),
+            self.alerting_config.clone(),
             self.auto_restart,
             self.trigger_signal.clone(),
         )
@@ -82,75 +187,27 @@ impl ProcessManager {
         if cc.is_none() {
             todo!("Create new validator node process event listener for fetched existing PID from OS");
         }
-        let cc = cc.unwrap();
 
-        // spawn logging and alerting tasks to process status updates
-        tokio::spawn(async move {
-            process_status_log(cc.rx_log).await;
-            warn!("Logging task has exited");
-        });
-        tokio::spawn(async move {
-            process_status_alert(cc.rx_alert, cc.cfg_alert).await;
-            warn!("Alerting task has exited");
-        });
-
-        self.chain.bootstrap().await?;
-
-        let mut last_registered_at_block = 0;
-        info!("Setup completed: connected to base node and wallet, ready to receive requests");
-        loop {
-            tokio::select! {
-                Some(req) = self.rx_request.recv() => {
-                    match req {
-                        ManagerRequest::GetTipInfo { reply } => {
-                            let response = self.chain.get_tip_status().await?;
-
-                            // send latest block height to logging
-                            if let Err(e) = cc.tx_log.send(ProcessStatus::WarnExpiration(response.height(), last_registered_at_block)).await {
-                                error!("Failed to send tip status update to monitoring: {}", e);
-                            }
-                            // send latest block height to alerting
-                            if let Err(e) = cc.tx_alert.send(ProcessStatus::WarnExpiration(response.height(), last_registered_at_block)).await {
-                                error!("Failed to send tip status update to alerting: {}", e);
-                            }
-
-                            drop(reply.send(Ok(response)));
-                        }
-                        ManagerRequest::GetActiveValidatorNodes { reply } => {
-                            let response = self.chain.get_active_validator_nodes().await?;
-                            drop(reply.send(Ok(response)));
-                        }
-                        ManagerRequest::RegisterValidatorNode { block, reply } => {
-                            let response = self.chain.register_validator_node().await?;
-                            last_registered_at_block = block;
-
-                            // send registration response to logger
-                            if let Err(e) = cc.tx_log.send(ProcessStatus::Submitted(Transaction::new(response.clone(), block))).await {
-                                error!("Failed to send node registration update to monitoring: {}", e);
-                            }
-                            // send registration response to alerting
-                            if let Err(e) = cc.tx_alert.send(ProcessStatus::Submitted(Transaction::new(response.clone(), block))).await {
-                                error!("Failed to send node registration update to alerting: {}", e);
-                            }
-
-                            drop(reply.send(Ok(response)));
-                        },
-                        ManagerRequest::GetConsensusConstants { block, reply } => {
-                            let response = self.chain.get_consensus_constants(block).await?;
-                            drop(reply.send(Ok(response)));
-                        }
-                    }
-                }
-
-                _ = self.shutdown_signal.wait() => {
-                    info!("Shutting down process manager");
-                    break;
-                }
-            }
-        }
-
-        Ok(())
+        cc.unwrap()
     }
+}
+
+pub async fn start_receivers(
+    rx_log: mpsc::Receiver<ProcessStatus>,
+    rx_alert: mpsc::Receiver<ProcessStatus>,
+    cfg_alert: Channels,
+    constants: ConsensusConstants,
+) {
+    let const_copy = constants.clone();
+    // spawn logging and alerting tasks to process status updates
+    tokio::spawn(async move {
+        process_status_log(rx_log, const_copy).await;
+        warn!("Logging task has exited");
+    });
+    tokio::spawn(async move {
+        process_status_alert(rx_alert, cfg_alert, constants).await;
+        warn!("Alerting task has exited");
+    });
 }
 
 type Reply<T> = oneshot::Sender<anyhow::Result<T>>;

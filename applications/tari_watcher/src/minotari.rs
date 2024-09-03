@@ -90,8 +90,6 @@ impl Minotari {
             bail!("Node client not connected");
         }
 
-        log::debug!("Requesting tip status from base node");
-
         let inner = self
             .node
             .clone()
@@ -139,13 +137,13 @@ impl Minotari {
                     break;
                 },
                 Err(e) => {
-                    bail!("Error getting active validator nodes: {}", e);
+                    bail!("Error getting active VN: {}", e);
                 },
             }
         }
 
         if vns.is_empty() {
-            log::debug!("No active validator nodes found at height: {}", height);
+            log::debug!("No active VNs found at height: {}", height);
         }
 
         Ok(vns)
@@ -156,7 +154,7 @@ impl Minotari {
             bail!("Node client not connected");
         }
 
-        info!("Preparing to send a node registration request");
+        info!("Preparing to send a VN registration request");
 
         let info = read_registration_file(self.node_registration_file.clone()).await?;
         let sig = info.signature.signature();
@@ -172,16 +170,16 @@ impl Minotari {
                 }),
                 validator_node_claim_public_key: info.claim_fees_public_key.to_vec(),
                 fee_per_gram: 10,
-                message: format!("Validator node registration: {}", info.public_key),
+                message: format!("VN registration: {}", info.public_key),
                 sidechain_deployment_key: vec![],
             })
             .await?
             .into_inner();
         if !resp.is_success {
-            bail!("Failed to register validator node: {}", resp.failure_message);
+            bail!("Failed to register VN: {}", resp.failure_message);
         }
 
-        info!("Node registration request sent successfully");
+        info!("VN registration request sent successfully");
 
         Ok(resp)
     }
