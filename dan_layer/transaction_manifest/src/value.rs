@@ -50,10 +50,6 @@ impl FromStr for ManifestValue {
             .ok()
             .map(ManifestValue::SubstateId)
             .or_else(|| {
-                let id = NonFungibleId::try_from_canonical_string(s).ok()?;
-                Some(ManifestValue::NonFungibleId(id))
-            })
-            .or_else(|| {
                 let tokens = s.parse().ok()?;
                 let lit = parse2(tokens).ok()?;
                 Some(ManifestValue::Literal(lit))

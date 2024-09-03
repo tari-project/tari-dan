@@ -66,10 +66,10 @@ impl NonFungibleId {
     }
 
     /// A string in one of the following formats
-    /// - uuid:736bab0c3af393a0423c578ddcf7e19b81086f6ecbbc148713e95da75ef8171d
-    /// - str:my_special_nft_name
-    /// - u32:1234
-    /// - u64:1234
+    /// - uuid_736bab0c3af393a0423c578ddcf7e19b81086f6ecbbc148713e95da75ef8171d
+    /// - str_my_special_nft_name
+    /// - u32_1234
+    /// - u64_1234
     pub fn to_canonical_string(&self) -> String {
         let type_name = self.type_name();
         let mut s = String::with_capacity(type_name.len() + 1 + self.str_repr_len());
@@ -133,7 +133,25 @@ impl NonFungibleId {
     }
 
     pub fn try_from_canonical_string(s: &str) -> Result<Self, ParseNonFungibleIdError> {
-        let (id_type, id) = s.split_once(':').ok_or(ParseNonFungibleIdError::InvalidFormat)?;
+        let mut splitted = s.split('_');
+
+        // ideally wanted this method to receive `id_type` and `id` but since it is used elsewhere,
+        // this will keep it compatible with the rest of the code, so potentially doing the same token parsing
+        // again is easier
+        let id_type: &str;
+        if let Some(token) = splitted.next() {
+            id_type = token;
+        } else {
+            return Err(ParseNonFungibleIdError::InvalidFormat);
+        }
+
+        let id: &str;
+        if let Some(token) = splitted.next() {
+            id = token;
+        } else {
+            return Err(ParseNonFungibleIdError::InvalidFormat);
+        }
+
         match id_type {
             "uuid" => Ok(NonFungibleId::U256(
                 Hash::from_hex(id)
@@ -263,20 +281,39 @@ impl FromStr for NonFungibleAddress {
     type Err = ParseNonFungibleAddressError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // the expected format is "resource_xxxx_nft_xxxxx"
+        // the expected format is nft_{resource_hex}_{type}_{"
+        let mut splitted = s.split('_');
 
-        let parts: Vec<&str> = s.split('_').collect();
-        if parts.len() != 4 {
+        if let Some(token) = splitted.next() {
+            if token != "nft" {
+                return Err(ParseNonFungibleAddressError::InvalidFormat);
+            }
+        } else {
             return Err(ParseNonFungibleAddressError::InvalidFormat);
         }
 
-        let (resource_str, resource_id, nft_string, nft_id) = (parts[0], parts[1], parts[2], parts[3]);
-        if resource_str != "resource" || nft_string != "nft" {
+        let resource_addr: ResourceAddress;
+        if let Some(token) = splitted.next() {
+            resource_addr = ResourceAddress::from_str(token)
+                .map_err(|e| ParseNonFungibleAddressError::InvalidResource(e.to_string()))?;
+        } else {
             return Err(ParseNonFungibleAddressError::InvalidFormat);
         }
-        let resource_addr = ResourceAddress::from_str(resource_id)
-            .map_err(|e| ParseNonFungibleAddressError::InvalidResource(e.to_string()))?;
-        let id = NonFungibleId::try_from_canonical_string(nft_id).map_err(ParseNonFungibleAddressError::InvalidId)?;
+
+        let id_type: &str;
+        if let Some(token) = splitted.next() {
+            id_type = token;
+        } else {
+            return Err(ParseNonFungibleAddressError::InvalidFormat);
+        }
+
+        let id: NonFungibleId;
+        if let Some(token) = splitted.next() {
+            id = NonFungibleId::try_from_canonical_string(&format!("{id_type}_{token}"))
+                .map_err(ParseNonFungibleAddressError::InvalidId)?;
+        } else {
+            return Err(ParseNonFungibleAddressError::InvalidFormat);
+        }
 
         Ok(NonFungibleAddress::new(resource_addr, id))
     }
@@ -512,12 +549,11 @@ mod tests {
         #[test]
         fn it_parses_valid_strings() {
             NonFungibleAddress::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_nft_str:SpecialNft",
+                "nft_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_str_SpecialNft",
             )
             .unwrap();
             NonFungibleAddress::from_str(
-                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fffffffff_nft_uuid:\
-                 7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
+                "nft_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fffffffff_uuid_7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
             )
             .unwrap();
         }
@@ -525,20 +561,20 @@ mod tests {
         #[test]
         fn it_rejects_invalid_strings() {
             NonFungibleAddress::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff nft_xxxxx:SpecialNft",
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_nft_xxxxx_SpecialNft",
             )
             .unwrap_err();
             NonFungibleAddress::from_str(
-                "nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32ffffffff",
+                "nft_uuid_7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32ffffffff",
             )
             .unwrap_err();
             NonFungibleAddress::from_str("resource_x nft_str:SpecialNft").unwrap_err();
             NonFungibleAddress::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff nft_str:",
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_nft_str_",
             )
             .unwrap_err();
             NonFungibleAddress::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff nftx_str:SpecialNft",
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_nftx_str_SpecialNft",
             )
             .unwrap_err();
         }
