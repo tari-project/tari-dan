@@ -20,6 +20,7 @@ pub struct ForeignProposal {
     pub block_pledge: BlockPledge,
     pub justify_qc: QuorumCertificate,
     pub proposed_by_block: Option<BlockId>,
+    pub status: ForeignProposalStatus,
 }
 
 impl ForeignProposal {
@@ -29,6 +30,7 @@ impl ForeignProposal {
             block_pledge,
             justify_qc,
             proposed_by_block: None,
+            status: ForeignProposalStatus::New,
         }
     }
 
@@ -54,6 +56,10 @@ impl ForeignProposal {
 
     pub fn proposed_by_block(&self) -> Option<&BlockId> {
         self.proposed_by_block.as_ref()
+    }
+
+    pub fn status(&self) -> ForeignProposalStatus {
+        self.status
     }
 }
 
@@ -101,6 +107,13 @@ impl ForeignProposal {
     ) -> Result<(), StorageError> {
         tx.foreign_proposals_set_proposed_in(block_id, proposed_in_block)
     }
+
+    pub fn has_unconfirmed<TTx: StateStoreReadTransaction + ?Sized>(
+        tx: &TTx,
+        max_base_layer_block_height: u64,
+    ) -> Result<bool, StorageError> {
+        tx.foreign_proposals_has_unconfirmed(max_base_layer_block_height)
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
@@ -123,16 +136,40 @@ impl ForeignProposalAtom {
         tx.foreign_proposals_exists(&self.block_id)
     }
 
+    pub fn get_proposal<TTx: StateStoreReadTransaction + ?Sized>(
+        &self,
+        tx: &TTx,
+    ) -> Result<ForeignProposal, StorageError> {
+        let mut found = tx.foreign_proposals_get_any(Some(&self.block_id))?;
+        let found = found.pop().ok_or_else(|| StorageError::NotFound {
+            item: "ForeignProposal".to_string(),
+            key: self.block_id.to_string(),
+        })?;
+        Ok(found)
+    }
+
     pub fn delete<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         ForeignProposal::delete(tx, &self.block_id)
     }
+
+    pub fn set_status<TTx: StateStoreWriteTransaction + ?Sized>(
+        &self,
+        tx: &mut TTx,
+        status: ForeignProposalStatus,
+    ) -> Result<(), StorageError> {
+        tx.foreign_proposals_set_status(&self.block_id, status)
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub enum ForeignProposalStatus {
+    /// New foreign proposal that has not yet been proposed
+    #[default]
     New,
+    /// Foreign proposal has been proposed, but not yet locked.
     Proposed,
-    Deleted,
+    /// Foreign proposal has been confirmed i.e. the block containing it has been locked.
+    Confirmed,
 }
 
 impl Display for ForeignProposalStatus {
@@ -140,20 +177,24 @@ impl Display for ForeignProposalStatus {
         match self {
             ForeignProposalStatus::New => write!(f, "New"),
             ForeignProposalStatus::Proposed => write!(f, "Proposed"),
-            ForeignProposalStatus::Deleted => write!(f, "Deleted"),
+            ForeignProposalStatus::Confirmed => write!(f, "Confirmed"),
         }
     }
 }
 
 impl FromStr for ForeignProposalStatus {
-    type Err = anyhow::Error;
+    type Err = StorageError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "New" => Ok(ForeignProposalStatus::New),
             "Proposed" => Ok(ForeignProposalStatus::Proposed),
-            "Deleted" => Ok(ForeignProposalStatus::Deleted),
-            _ => Err(anyhow::anyhow!("Invalid foreign proposal state {}", s)),
+            "Confirmed" => Ok(ForeignProposalStatus::Confirmed),
+            _ => Err(StorageError::DecodingError {
+                operation: "ForeignProposalStatus::from_str",
+                item: "foreign proposal",
+                details: format!("Invalid foreign proposal state {}", s),
+            }),
         }
     }
 }

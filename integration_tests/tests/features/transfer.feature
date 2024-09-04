@@ -48,7 +48,7 @@ Feature: Account transfers
     Then indexer IDX has scanned to height 45
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
-    Then validator node VN has state at COMM_ADDRESS
+    Then validator node VN has state at COMM_ADDRESS within 20 seconds
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACCOUNT via the wallet daemon WALLET_D
 
     # Wait for the wallet daemon account monitor to update the sender account information
@@ -129,7 +129,7 @@ Feature: Account transfers
     Then indexer IDX has scanned to height 45
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
-    Then validator node VN has state at COMM_ADDRESS
+    Then validator node VN has state at COMM_ADDRESS within 20 seconds
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACCOUNT_1 via the wallet daemon WALLET_D
 
     # Wait for the wallet daemon account monitor to update the sender account information

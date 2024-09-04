@@ -135,7 +135,7 @@ impl From<[u8; Self::LENGTH]> for ComponentKey {
     }
 }
 
-/// Representation of a 32-byte hash value
+/// Representation of a 32-byte object key
 #[serde_as]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]

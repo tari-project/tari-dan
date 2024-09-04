@@ -6,6 +6,7 @@ import { jsonRpc } from "../utils/json_rpc";
 import { ExecutedTransaction } from "../Types.ts";
 import MinotariWallet from "../components/MinotariWallet";
 import NodeControls from "../components/NodeControls.tsx";
+import MinotariNodes from "../components/MinotariNodes.tsx";
 
 enum Executable {
   BaseNode = 1,
@@ -377,7 +378,6 @@ export default function Main() {
   const [vns, setVns] = useState({});
   const [danWallet, setDanWallets] = useState({});
   const [indexers, setIndexers] = useState({});
-  const [node, setNode] = useState<{ grpc: any }>();
   const [logs, setLogs] = useState<any | null>({});
   const [stdoutLogs, setStdoutLogs] = useState<any | null>({});
   const [connectorSample, setConnectorSample] = useState(null);
@@ -470,7 +470,6 @@ export default function Main() {
     jsonRpc("get_stdout", "miner").then((resp) => {
       setStdoutLogs((state: any) => ({ ...state, miner: resp }));
     });
-    jsonRpc("grpc_node").then((resp) => setNode({ grpc: resp }));
     jsonRpc("list_instances", { by_type: null }).then(({ instances }) => setInstances(instances));
   };
 
@@ -502,8 +501,7 @@ export default function Main() {
       <button onClick={() => setHorizontal(!horizontal)}>Swap rows/columns</button>
       <div className="label">Base layer</div>
       <div className="infos">
-        <ShowInfo executable={Executable.BaseNode} name="node" node={node} logs={logs?.node}
-                  stdoutLogs={stdoutLogs?.node} showLogs={showLogs} horizontal={horizontal} onReload={getInfo} />
+        <MinotariNodes showLogs={showLogs} />
         <MinotariWallet showLogs={showLogs} />
         <ShowInfo executable={Executable.Miner} name="miner" logs={logs?.miner}
                   stdoutLogs={stdoutLogs?.miner} showLogs={showLogs} horizontal={horizontal}>

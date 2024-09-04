@@ -75,33 +75,35 @@ mod confirm_all_transitions {
         tx.transaction_pool_insert_new(atom3.id, atom3.decision, true).unwrap();
         let block_id = *block1.id();
 
-        tx.transaction_pool_add_pending_update(&TransactionPoolStatusUpdate {
-            block_id,
-            transaction_id: atom1.id,
-            stage: TransactionPoolStage::LocalPrepared,
-            evidence: Default::default(),
-            is_ready: false,
-            local_decision: Decision::Commit,
-        })
-        .unwrap();
-        tx.transaction_pool_add_pending_update(&TransactionPoolStatusUpdate {
-            block_id,
-            transaction_id: atom2.id,
-            stage: TransactionPoolStage::Prepared,
-            evidence: Default::default(),
-            is_ready: false,
-            local_decision: Decision::Commit,
-        })
-        .unwrap();
-        tx.transaction_pool_add_pending_update(&TransactionPoolStatusUpdate {
-            block_id,
-            transaction_id: atom3.id,
-            stage: TransactionPoolStage::Prepared,
-            evidence: Default::default(),
-            is_ready: false,
-            local_decision: Decision::Commit,
-        })
-        .unwrap();
+        let transactions = tx.transaction_pool_get_all().unwrap();
+        let mut tx_1 = transactions
+            .iter()
+            .find(|tx| *tx.transaction_id() == atom1.id)
+            .unwrap()
+            .clone();
+        let mut tx_2 = transactions
+            .iter()
+            .find(|tx| *tx.transaction_id() == atom2.id)
+            .unwrap()
+            .clone();
+        let mut tx_3 = transactions
+            .iter()
+            .find(|tx| *tx.transaction_id() == atom3.id)
+            .unwrap()
+            .clone();
+
+        tx_1.set_next_stage(TransactionPoolStage::Prepared, true).unwrap();
+        tx_1.set_next_stage(TransactionPoolStage::LocalPrepared, false).unwrap();
+
+        tx_2.set_next_stage(TransactionPoolStage::Prepared, true).unwrap();
+        tx_3.set_next_stage(TransactionPoolStage::Prepared, true).unwrap();
+
+        tx.transaction_pool_add_pending_update(&block_id, &TransactionPoolStatusUpdate { transaction: tx_1 })
+            .unwrap();
+        tx.transaction_pool_add_pending_update(&block_id, &TransactionPoolStatusUpdate { transaction: tx_2 })
+            .unwrap();
+        tx.transaction_pool_add_pending_update(&block_id, &TransactionPoolStatusUpdate { transaction: tx_3 })
+            .unwrap();
 
         let rec = tx
             .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom1.id)
@@ -115,10 +117,8 @@ mod confirm_all_transitions {
         assert!(rec.committed_stage().is_new());
         assert!(rec.pending_stage().unwrap().is_prepared());
 
-        tx.transaction_pool_confirm_all_transitions(&zero_block.as_locked_block(), &block1.as_locked_block(), &[
-            atom1.id, atom3.id,
-        ])
-        .unwrap();
+        tx.transaction_pool_confirm_all_transitions(&block1.as_locked_block())
+            .unwrap();
 
         let rec = tx
             .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom1.id)
@@ -129,14 +129,14 @@ mod confirm_all_transitions {
         let rec = tx
             .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom2.id)
             .unwrap();
-        assert!(rec.committed_stage().is_new());
-        assert!(rec.pending_stage().unwrap().is_prepared());
+        assert_eq!(rec.committed_stage(), TransactionPoolStage::Prepared);
+        assert_eq!(rec.pending_stage(), None);
 
         let rec = tx
             .transaction_pool_get_for_blocks(zero_block.id(), &block_id, &atom3.id)
             .unwrap();
-        assert!(rec.committed_stage().is_prepared());
-        assert!(rec.pending_stage().is_none());
+        assert_eq!(rec.committed_stage(), TransactionPoolStage::Prepared);
+        assert_eq!(rec.pending_stage(), None);
 
         tx.rollback().unwrap();
     }

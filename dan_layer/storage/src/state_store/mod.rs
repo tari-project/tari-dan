@@ -19,6 +19,7 @@ use tari_dan_common_types::{
     ShardGroup,
     SubstateAddress,
     SubstateRequirement,
+    ToSubstateAddress,
     VersionedSubstateId,
 };
 use tari_engine_types::substate::SubstateId;
@@ -36,10 +37,10 @@ use crate::{
         BurntUtxo,
         Decision,
         EpochCheckpoint,
-        Evidence,
         ForeignParkedProposal,
         ForeignProposal,
         ForeignProposalAtom,
+        ForeignProposalStatus,
         ForeignReceiveCounters,
         ForeignSendCounters,
         HighQc,
@@ -121,6 +122,7 @@ pub trait StateStoreReadTransaction: Sized {
         block_ids: I,
     ) -> Result<Vec<ForeignProposal>, StorageError>;
     fn foreign_proposals_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
+    fn foreign_proposals_has_unconfirmed(&self, max_base_layer_block_height: u64) -> Result<bool, StorageError>;
     fn foreign_proposals_get_all_new(
         &self,
         max_base_layer_block_height: u64,
@@ -317,6 +319,11 @@ pub trait StateStoreReadTransaction: Sized {
     fn epoch_checkpoint_get(&self, epoch: Epoch) -> Result<EpochCheckpoint, StorageError>;
 
     // -------------------------------- Foreign Substate Pledges -------------------------------- //
+    fn foreign_substate_pledges_exists_for_address<T: ToSubstateAddress>(
+        &self,
+        transaction_id: &TransactionId,
+        address: T,
+    ) -> Result<bool, StorageError>;
     fn foreign_substate_pledges_get_all_by_transaction_id(
         &self,
         transaction_id: &TransactionId,
@@ -371,6 +378,11 @@ pub trait StateStoreWriteTransaction {
         proposed_in_block: Option<BlockId>,
     ) -> Result<(), StorageError>;
     fn foreign_proposals_delete(&mut self, block_id: &BlockId) -> Result<(), StorageError>;
+    fn foreign_proposals_set_status(
+        &mut self,
+        block_id: &BlockId,
+        status: ForeignProposalStatus,
+    ) -> Result<(), StorageError>;
 
     fn foreign_proposals_set_proposed_in(
         &mut self,
@@ -415,29 +427,16 @@ pub trait StateStoreWriteTransaction {
     ) -> Result<(), StorageError>;
     fn transaction_pool_add_pending_update(
         &mut self,
+        block_id: &BlockId,
         pool_update: &TransactionPoolStatusUpdate,
     ) -> Result<(), StorageError>;
 
-    fn transaction_pool_update(
-        &mut self,
-        transaction_id: &TransactionId,
-        is_ready: Option<bool>,
-        local_decision: Option<Decision>,
-        local_evidence: Option<&Evidence>,
-        remote_decision: Option<Decision>,
-        remote_evidence: Option<&Evidence>,
-    ) -> Result<(), StorageError>;
     fn transaction_pool_remove(&mut self, transaction_id: &TransactionId) -> Result<(), StorageError>;
     fn transaction_pool_remove_all<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         transaction_ids: I,
     ) -> Result<Vec<TransactionPoolRecord>, StorageError>;
-    fn transaction_pool_confirm_all_transitions<'a, I: IntoIterator<Item = &'a TransactionId>>(
-        &mut self,
-        locked_block: &LockedBlock,
-        new_locked_block: &LockedBlock,
-        tx_ids: I,
-    ) -> Result<(), StorageError>;
+    fn transaction_pool_confirm_all_transitions(&mut self, new_locked_block: &LockedBlock) -> Result<(), StorageError>;
 
     // -------------------------------- Missing Transactions -------------------------------- //
 

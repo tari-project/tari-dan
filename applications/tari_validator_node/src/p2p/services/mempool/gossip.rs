@@ -106,63 +106,6 @@ impl MempoolGossip<PeerAddress> {
             self.gossip.publish_message(topic, msg.clone()).await?;
         }
 
-        // let committees = self.epoch_manager.get_committees_by_shards(epoch, shards).await?;
-        // let local_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
-        // let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
-        //
-        // if local_committee.is_empty() {
-        //     error!(target: LOG_TARGET, "BUG: forward_to_foreign_replicas: get_local_committee returned empty
-        // committee");     return Ok(());
-        // }
-        //
-        // let Some(our_index) = local_committee
-        //     .members()
-        //     .position(|addr| addr == &self.validator_address)
-        // else {
-        //     error!(target: LOG_TARGET, "BUG: forward_to_foreign_replicas: get_local_committee returned committee that
-        // this node is not part of");     return Ok(());
-        // };
-        //
-        // let mut selected_members = vec![];
-        // for (bucket, committee) in committees {
-        //     // Dont forward locally
-        //     if bucket == local_shard.bucket() {
-        //         continue;
-        //     }
-        //     if exclude_bucket.map(|b| b == bucket).unwrap_or(false) {
-        //         continue;
-        //     }
-        //     if committee.is_empty() {
-        //         error!(
-        //             target: LOG_TARGET,
-        //             "BUG: forward_to_foreign_replicas: get_committees_by_shards returned empty committee"
-        //         );
-        //         continue;
-        //     }
-        //     let n = if local_committee.len() > committee.len() {
-        //         // Our local committee is bigger, so we send to a single node
-        //         1
-        //     } else {
-        //         // Our local committee is smaller, so we send to a portion of their nodes
-        //         committee.len() / local_committee.len()
-        //     };
-        //
-        //     selected_members.extend(committee.select_n_starting_from(n, our_index).cloned());
-        // }
-        //
-        // debug!(
-        //     target: LOG_TARGET,
-        //     "forward_to_foreign_replicas: {} member(s) selected",
-        //     selected_members.len(),
-        // );
-        //
-        // if selected_members.is_empty() {
-        //     return Ok(());
-        // }
-        //
-        // // TODO: change this to use goissipsub
-        // self.outbound.broadcast(selected_members.iter(), msg).await?;
-
         Ok(())
     }
 
@@ -172,41 +115,7 @@ impl MempoolGossip<PeerAddress> {
         addresses: HashSet<SubstateAddress>,
         msg: T,
     ) -> Result<(), MempoolError> {
-        // let committees = self.epoch_manager.get_committees_by_shards(epoch, shards).await?;
-        // let local_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
-        //
-        // let mut selected_members = vec![];
-        // for (bucket, committee) in committees {
-        //     // Dont forward locally
-        //     if bucket == local_shard.bucket() {
-        //         continue;
-        //     }
-        //     if committee.is_empty() {
-        //         error!(
-        //             target: LOG_TARGET,
-        //             "BUG: gossip_to_foreign_replicas: get_committees_by_shards returned empty committee"
-        //         );
-        //         continue;
-        //     }
-        //     let f = committee.max_failures();
-        //
-        //     selected_members.extend(committee.select_n_random(f + 1).cloned());
-        // }
-        //
-        // debug!(
-        //     target: LOG_TARGET,
-        //     "gossip_to_foreign_replicas: {} member(s) selected",
-        //     selected_members.len(),
-        // );
-        //
-        // if selected_members.is_empty() {
-        //     return Ok(());
-        // }
-        //
-        // self.outbound.broadcast(selected_members.iter(), msg).await?;
-
         self.forward_to_foreign_replicas(epoch, addresses, msg, None).await?;
-
         Ok(())
     }
 }
