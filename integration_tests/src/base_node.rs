@@ -162,5 +162,5 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
 }
 
 pub fn get_base_node_client(port: u16) -> GrpcBaseNodeClient {
-    GrpcBaseNodeClient::new(format!("127.0.0.1:{}", port))
+    GrpcBaseNodeClient::new(format!("http://127.0.0.1:{}", port).parse().unwrap())
 }

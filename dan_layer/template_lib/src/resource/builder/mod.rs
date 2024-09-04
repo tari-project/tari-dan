@@ -33,6 +33,7 @@ use crate::resource::builder::{
 /// Metadata key used as convention to represent the symbol (a.k.a. ticker) of a token. Meant as a shorthand,
 /// user-friendly identification of the underlying token
 pub const TOKEN_SYMBOL: &str = "SYMBOL";
+pub const IMAGE_URL: &str = "IMAGE_URL";
 
 /// Utility for building resources inside templates
 pub struct ResourceBuilder;

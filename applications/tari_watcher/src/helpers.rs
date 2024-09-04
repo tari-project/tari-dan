@@ -1,7 +1,10 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use std::path::PathBuf;
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 
 use minotari_app_grpc::tari_rpc::{ConsensusConstants, GetActiveValidatorNodesResponse};
 use tari_common_types::types::PublicKey;
@@ -31,12 +34,24 @@ pub struct ValidatorNodeRegistration {
     pub claim_fees_public_key: PublicKey,
 }
 
-pub async fn read_registration_file(vn_registration_file: PathBuf) -> anyhow::Result<ValidatorNodeRegistration> {
-    log::debug!("Using VN registration file at: {}", vn_registration_file.display());
-
-    let info = fs::read_to_string(vn_registration_file).await?;
-    let reg = json5::from_str(&info)?;
-    Ok(reg)
+pub async fn read_registration_file<P: AsRef<Path>>(
+    vn_registration_file: P,
+) -> anyhow::Result<Option<ValidatorNodeRegistration>> {
+    log::debug!(
+        "Using VN registration file at: {}",
+        vn_registration_file.as_ref().display()
+    );
+    match fs::read_to_string(vn_registration_file).await {
+        Ok(info) => {
+            let reg = json5::from_str(&info)?;
+            Ok(Some(reg))
+        },
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => {
+            log::error!("Failed to read VN registration file: {}", e);
+            Err(e.into())
+        },
+    }
 }
 
 pub fn to_vn_public_keys(vns: Vec<GetActiveValidatorNodesResponse>) -> Vec<PublicKey> {

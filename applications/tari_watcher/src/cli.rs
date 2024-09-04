@@ -6,11 +6,11 @@ use std::path::PathBuf;
 use clap::Parser;
 
 use crate::{
-    config::{Config, InstanceType},
+    config::Config,
     constants::{
-        DEFAULT_MAIN_PROJECT_PATH,
         DEFAULT_VALIDATOR_DIR,
         DEFAULT_VALIDATOR_KEY_PATH,
+        DEFAULT_WATCHER_BASE_PATH,
         DEFAULT_WATCHER_CONFIG_PATH,
     },
 };
@@ -35,7 +35,7 @@ impl Cli {
 
 #[derive(Debug, Clone, clap::Args)]
 pub struct CommonCli {
-    #[clap(short = 'b', long, parse(from_os_str), default_value = DEFAULT_MAIN_PROJECT_PATH)]
+    #[clap(short = 'b', long, parse(from_os_str), default_value = DEFAULT_WATCHER_BASE_PATH)]
     pub base_dir: PathBuf,
     #[clap(short = 'c', long, parse(from_os_str), default_value = DEFAULT_WATCHER_CONFIG_PATH)]
     pub config_path: PathBuf,
@@ -71,27 +71,16 @@ impl InitArgs {
 
 #[derive(Clone, Debug, clap::Args)]
 pub struct Overrides {
+    /// The path to the validator node binary (optional)
     #[clap(long)]
-    // The path to the validator node binary (optional)
     pub vn_node_path: Option<PathBuf>,
 }
 
 impl Overrides {
     pub fn apply(&self, config: &mut Config) {
-        if self.vn_node_path.is_none() {
-            return;
+        if let Some(path) = self.vn_node_path.clone() {
+            log::info!("Overriding validator node binary path to {:?}", path);
+            config.validator_node_executable_path = path;
         }
-
-        if let Some(exec_config) = config
-            .executable_config
-            .iter_mut()
-            .find(|c| c.instance_type == InstanceType::TariValidatorNode)
-        {
-            exec_config.executable_path = self.vn_node_path.clone();
-        }
-        log::info!(
-            "Overriding validator node binary path to {:?}",
-            self.vn_node_path.as_ref().unwrap()
-        );
     }
 }

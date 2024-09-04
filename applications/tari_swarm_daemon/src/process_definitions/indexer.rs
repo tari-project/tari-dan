@@ -35,11 +35,11 @@ impl ProcessDefinition for Indexer {
             .next()
             .ok_or_else(|| anyhow!("Base nodes should be started before validator nodes"))?;
 
-        let base_node_grpc_address = base_node
+        let base_node_grpc_url = base_node
             .instance()
             .allocated_ports()
             .get("grpc")
-            .map(|port| format!("{listen_ip}:{port}"))
+            .map(|port| format!("http://{listen_ip}:{port}"))
             .ok_or_else(|| anyhow!("grpc port not found for base node"))?;
 
         command
@@ -48,7 +48,7 @@ impl ProcessDefinition for Indexer {
             .arg(context.base_path())
             .arg("--network")
             .arg(context.network().to_string())
-            .arg(format!("-pindexer.base_node_grpc_address={base_node_grpc_address}"))
+            .arg(format!("-pindexer.base_node_grpc_url={base_node_grpc_url}"))
             .arg(format!("-pindexer.json_rpc_address={json_rpc_address}"))
             .arg(format!("-pindexer.http_ui_address={web_ui_address}"))
             .arg(format!("-pindexer.ui_connect_address={json_rpc_public_address}"))
