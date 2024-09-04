@@ -115,13 +115,14 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
             .map_err(|e| RpcStatus::bad_request(format!("Malformed transaction: {}", e)))?;
 
         let transaction_id = *transaction.id();
+        info!(target: LOG_TARGET, "🌐 Received transaction {transaction_id} from peer");
 
         self.mempool
             .submit_transaction(transaction)
             .await
             .map_err(|e| RpcStatus::bad_request(format!("Invalid transaction: {}", e)))?;
 
-        debug!(target: LOG_TARGET, "Accepted instruction into mempool");
+        debug!(target: LOG_TARGET, "Accepted transaction {transaction_id} into mempool");
 
         Ok(Response::new(proto::rpc::SubmitTransactionResponse {
             transaction_id: transaction_id.as_bytes().to_vec(),

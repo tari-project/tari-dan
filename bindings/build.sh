@@ -5,14 +5,18 @@ set -e
 
 SOURCE_PATH="./src"
 TYPES_DIR="types"
+DIST_DIR="dist"
 HELPERS_DIR="helpers"
 MAIN_INDEX_FILE="index.ts"
 
 if [ -f "$SOURCE_PATH/$TYPES_DIR" ]; then
   npx shx rm -rf $SOURCE_PATH/$TYPES_DIR
 fi
-if [ -f "$SOURCE_PATH/$TYPES_DIR" ]; then
+if [ -f "$SOURCE_PATH/$MAIN_INDEX_FILE" ]; then
   npx shx rm -rf $SOURCE_PATH/$MAIN_INDEX_FILE
+fi
+if [ -f "$SOURCE_PATH/$DIST_DIR" ]; then
+  npx shx rm -rf ./$DIST_DIR
 fi
 
 cargo test --workspace --exclude integration_tests export_bindings --features ts

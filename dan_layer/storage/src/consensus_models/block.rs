@@ -853,40 +853,46 @@ impl Block {
     {
         self.justify().update_high_qc(tx)?;
 
-        // b'' <- b*.justify.node i.e the newly justified block
-        let commit_node = self.justify().get_block(&**tx)?;
+        // b'' <- b*.justify.node i.e. the (possibly new) justified block
+        let justified_node = self.justify().get_block(&**tx)?;
 
         // b' <- b''.justify.node
-        let precommit_node = commit_node.justify().get_block(&**tx)?;
+        let prepared_node = justified_node.justify().get_block(&**tx)?;
 
-        if precommit_node.is_genesis() {
-            return Ok(commit_node);
+        if prepared_node.is_genesis() {
+            return Ok(justified_node);
         }
 
-        let locked = LockedBlock::get(&**tx)?;
-        if precommit_node.height() > locked.height {
-            on_locked_block_recurse(tx, &locked, &precommit_node, commit_node.justify(), &mut on_lock_block)?;
-            precommit_node.as_locked_block().set(tx)?;
+        let current_locked = LockedBlock::get(&**tx)?;
+        if prepared_node.height() > current_locked.height {
+            on_locked_block_recurse(
+                tx,
+                &current_locked,
+                &prepared_node,
+                justified_node.justify(),
+                &mut on_lock_block,
+            )?;
+            prepared_node.as_locked_block().set(tx)?;
         }
 
         // b <- b'.justify.node
-        let prepare_node = precommit_node.justify().block_id();
-        if commit_node.parent() == precommit_node.id() && precommit_node.parent() == prepare_node {
+        let commit_node = prepared_node.justify().block_id();
+        if justified_node.parent() == prepared_node.id() && prepared_node.parent() == commit_node {
             debug!(
                 target: LOG_TARGET,
                 "✅ Node {} {} forms a 3-chain b'' = {}, b' = {}, b = {}",
                 self.height(),
                 self.id(),
-                commit_node.id(),
-                precommit_node.id(),
-                prepare_node,
+                justified_node.id(),
+                prepared_node.id(),
+                commit_node,
             );
 
             // Commit prepare_node (b)
-            if prepare_node.is_zero() {
-                return Ok(commit_node);
+            if commit_node.is_zero() {
+                return Ok(justified_node);
             }
-            let prepare_node = Block::get(&**tx, prepare_node)?;
+            let prepare_node = Block::get(&**tx, commit_node)?;
             let last_executed = LastExecuted::get(&**tx)?;
             on_commit_block_recurse(tx, &last_executed, &prepare_node, &mut on_commit)?;
             prepare_node.as_last_executed().set(tx)?;
@@ -896,14 +902,14 @@ impl Block {
                 "Node {} {} DOES NOT form a 3-chain b'' = {}, b' = {}, b = {}, b* = {}",
                 self.height(),
                 self.id(),
-                commit_node.id(),
-                precommit_node.id(),
-                prepare_node,
+                justified_node.id(),
+                prepared_node.id(),
+                commit_node,
                 self.id()
             );
         }
 
-        Ok(commit_node)
+        Ok(justified_node)
     }
 
     /// safeNode predicate (https://arxiv.org/pdf/1803.05069v6.pdf)

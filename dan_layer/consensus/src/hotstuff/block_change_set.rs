@@ -1,11 +1,11 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::Deref;
+use std::{collections::HashMap, ops::Deref};
 
 use indexmap::IndexMap;
 use log::*;
-use tari_dan_common_types::{shard::Shard, Epoch};
+use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, ShardGroup};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -15,16 +15,18 @@ use tari_dan_storage::{
         BurntUtxo,
         ForeignProposal,
         LeafBlock,
+        LockedBlock,
         PendingShardStateTreeDiff,
         QuorumCertificate,
         QuorumDecision,
         SubstateChange,
         SubstateLock,
+        SubstatePledge,
+        SubstatePledges,
         SubstateRecord,
         TransactionExecution,
         TransactionPoolError,
         TransactionPoolRecord,
-        TransactionPoolStage,
         TransactionPoolStatusUpdate,
         VersionedStateHashTreeDiff,
     },
@@ -73,8 +75,10 @@ impl ProposedBlockChangeSet {
         }
     }
 
-    pub fn no_vote(mut self) -> Self {
+    pub fn no_vote(&mut self) -> &mut Self {
+        // This means no vote
         self.quorum_decision = None;
+        // The remaining info discarded (not strictly necessary)
         self.block_diff = Vec::new();
         self.transaction_changes = IndexMap::new();
         self.state_tree_diffs = IndexMap::new();
@@ -109,16 +113,51 @@ impl ProposedBlockChangeSet {
         self
     }
 
+    pub fn proposed_foreign_proposals(&self) -> &[BlockId] {
+        &self.proposed_foreign_proposals
+    }
+
     pub fn set_utxo_mint_proposed_in(&mut self, mint: SubstateId) -> &mut Self {
         self.proposed_utxo_mints.push(mint);
         self
     }
 
-    // TODO: this is a hack to allow the update to be modified after the fact. This should be removed.
-    pub fn next_update_mut(&mut self, transaction_id: &TransactionId) -> Option<&mut TransactionPoolStatusUpdate> {
+    pub fn apply_evidence(&self, tx_rec_mut: &mut TransactionPoolRecord) {
+        if let Some(update) = self.transaction_changes.get(tx_rec_mut.transaction_id()) {
+            update.apply_evidence(tx_rec_mut);
+        }
+    }
+
+    #[allow(clippy::mutable_key_type)]
+    pub fn add_foreign_pledges(
+        &mut self,
+        transaction_id: &TransactionId,
+        shard_group: ShardGroup,
+        foreign_pledges: SubstatePledges,
+    ) -> &mut Self {
+        let change_mut = self.transaction_changes.entry(*transaction_id).or_default();
+        if change_mut
+            .foreign_pledges
+            .insert(shard_group, foreign_pledges)
+            .is_some()
+        {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ NEVER HAPPEN: Foreign pledges for transaction {} in shard group {} already exist in block {}",
+                transaction_id,
+                shard_group,
+                self.block.block_id
+            );
+        }
+        self
+    }
+
+    pub fn get_foreign_pledges(&self, transaction_id: &TransactionId) -> impl Iterator<Item = &SubstatePledge> + Clone {
         self.transaction_changes
-            .get_mut(transaction_id)
-            .and_then(|change| change.next_update.as_mut())
+            .get(transaction_id)
+            .into_iter()
+            .flat_map(|change| change.foreign_pledges.values())
+            .flatten()
     }
 
     pub fn is_accept(&self) -> bool {
@@ -146,42 +185,36 @@ impl ProposedBlockChangeSet {
         Ok(self)
     }
 
+    pub fn get_transaction<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &TTx,
+        locked_block: &LockedBlock,
+        leaf_block: &LeafBlock,
+        transaction_id: &TransactionId,
+    ) -> Result<Option<TransactionPoolRecord>, TransactionPoolError> {
+        self.transaction_changes
+            .get(transaction_id)
+            .and_then(|change| change.next_update.as_ref().map(|u| &u.transaction))
+            .cloned()
+            .map(Ok)
+            .or_else(|| {
+                TransactionPoolRecord::get(tx, locked_block.block_id(), leaf_block.block_id(), transaction_id)
+                    .optional()
+                    .transpose()
+            })
+            .transpose()
+    }
+
     pub fn set_next_transaction_update(
         &mut self,
-        transaction: &TransactionPoolRecord,
-        next_stage: TransactionPoolStage,
-        is_ready: bool,
+        transaction: TransactionPoolRecord,
     ) -> Result<&mut Self, TransactionPoolError> {
-        transaction.check_pending_status_update(next_stage, is_ready)?;
-
         let change_mut = self
             .transaction_changes
             .entry(*transaction.transaction_id())
             .or_default();
-        if change_mut.next_update.is_some() {
-            return Err(TransactionPoolError::TransactionAlreadyUpdated {
-                transaction_id: *transaction.transaction_id(),
-                block_id: self.block.block_id,
-            });
-        }
-        info!(
-            target: LOG_TARGET,
-            "📝 Setting next update for transaction {} to {:?},{},is_ready={} in block {}",
-            transaction.transaction_id(),
-            next_stage,
-            transaction.current_decision(),
-            is_ready,
-            self.block.block_id
-        );
 
-        change_mut.next_update = Some(TransactionPoolStatusUpdate {
-            block_id: self.block.block_id,
-            transaction_id: *transaction.transaction_id(),
-            stage: next_stage,
-            evidence: transaction.evidence().clone(),
-            is_ready,
-            local_decision: transaction.current_decision(),
-        });
+        change_mut.next_update = Some(TransactionPoolStatusUpdate { transaction });
         Ok(self)
     }
 }
@@ -205,7 +238,7 @@ impl ProposedBlockChangeSet {
         // Save locks
         SubstateRecord::lock_all(tx, self.block.block_id, self.substate_locks)?;
 
-        for change in self.transaction_changes.values() {
+        for (transaction_id, change) in self.transaction_changes {
             // Save any transaction executions for the block
             if let Some(ref execution) = change.execution {
                 // This may already exist if we proposed the block
@@ -228,7 +261,11 @@ impl ProposedBlockChangeSet {
 
             // Save any transaction pool updates
             if let Some(ref update) = change.next_update {
-                update.insert(tx)?;
+                update.insert_for_block(tx, self.block.block_id())?;
+            }
+
+            for (shard_group, pledges) in change.foreign_pledges {
+                tx.foreign_substate_pledges_save(transaction_id, shard_group, pledges)?;
             }
         }
 
@@ -245,7 +282,16 @@ impl ProposedBlockChangeSet {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct TransactionChangeSet {
+struct TransactionChangeSet {
     execution: Option<BlockTransactionExecution>,
     next_update: Option<TransactionPoolStatusUpdate>,
+    foreign_pledges: HashMap<ShardGroup, SubstatePledges>,
+}
+
+impl TransactionChangeSet {
+    pub fn apply_evidence(&self, tx_rec_mut: &mut TransactionPoolRecord) {
+        if let Some(update) = self.next_update.as_ref() {
+            update.apply_evidence(tx_rec_mut);
+        }
+    }
 }

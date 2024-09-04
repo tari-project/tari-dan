@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_dan_common_types::{
@@ -11,7 +11,16 @@ use tari_dan_common_types::{
     NodeHeight,
 };
 use tari_dan_storage::{
-    consensus_models::{Block, HighQc, LastSentVote, QuorumCertificate, QuorumDecision, TransactionPool, ValidBlock},
+    consensus_models::{
+        Block,
+        BlockId,
+        HighQc,
+        LastSentVote,
+        QuorumCertificate,
+        QuorumDecision,
+        TransactionPool,
+        ValidBlock,
+    },
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
@@ -23,13 +32,14 @@ use crate::{
         create_epoch_checkpoint,
         error::HotStuffError,
         on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
+        on_receive_foreign_proposal::OnReceiveForeignProposalHandler,
         pacemaker_handle::PaceMakerHandle,
         transaction_manager::ConsensusTransactionManager,
         HotstuffConfig,
         HotstuffEvent,
         ProposalValidationError,
     },
-    messages::{ForeignProposalMessage, HotstuffMessage, VoteMessage},
+    messages::{ForeignProposalMessage, HotstuffMessage, ProposalMessage, VoteMessage},
     traits::{
         hooks::ConsensusHooks,
         ConsensusSpec,
@@ -51,6 +61,7 @@ pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock<TConsensusSpec>,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     vote_signing_service: TConsensusSpec::SignatureService,
+    on_receive_foreign_proposal: OnReceiveForeignProposalHandler<TConsensusSpec>,
     hooks: TConsensusSpec::Hooks,
 }
 
@@ -76,12 +87,13 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         Self {
             config: config.clone(),
             store: store.clone(),
-            epoch_manager,
+            epoch_manager: epoch_manager.clone(),
             leader_strategy,
-            pacemaker,
+            pacemaker: pacemaker.clone(),
             vote_signing_service,
             outbound_messaging,
             hooks,
+            on_receive_foreign_proposal: OnReceiveForeignProposalHandler::new(store.clone(), epoch_manager, pacemaker),
             on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock::new(
                 local_validator_pk,
                 config,
@@ -93,15 +105,42 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         }
     }
 
-    pub async fn handle(&mut self, current_epoch: Epoch, block: Block) -> Result<(), HotStuffError> {
+    pub async fn handle(
+        &mut self,
+        current_epoch: Epoch,
+        local_committee_info: &CommitteeInfo,
+        msg: ProposalMessage,
+    ) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
             "🔥 LOCAL PROPOSAL: block {} from {}",
-            block,
-            block.proposed_by()
+            msg.block,
+            msg.block.proposed_by()
         );
+        // First validate and save the attached foreign proposals
+        let mut foreign_committees = HashMap::with_capacity(msg.foreign_proposals.len());
+        for foreign_proposal in msg.foreign_proposals {
+            let block_id = *foreign_proposal.block.id();
+            let foreign_committee_info = self
+                .epoch_manager
+                .get_committee_info_by_validator_public_key(
+                    foreign_proposal.block.epoch(),
+                    foreign_proposal.block.proposed_by(),
+                )
+                .await?;
 
-        match self.process_block(current_epoch, block).await {
+            self.on_receive_foreign_proposal.validate_and_save(
+                foreign_proposal.into(),
+                local_committee_info,
+                &foreign_committee_info,
+            )?;
+            foreign_committees.insert(block_id, foreign_committee_info);
+        }
+
+        match self
+            .process_block(current_epoch, local_committee_info, msg.block, foreign_committees)
+            .await
+        {
             Ok(()) => Ok(()),
             Err(err @ HotStuffError::ProposalValidationError(_)) => {
                 self.hooks.on_block_validation_failed(&err);
@@ -112,7 +151,13 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn process_block(&mut self, current_epoch: Epoch, block: Block) -> Result<(), HotStuffError> {
+    async fn process_block(
+        &mut self,
+        current_epoch: Epoch,
+        local_committee_info: &CommitteeInfo,
+        block: Block,
+        foreign_committees: HashMap<BlockId, CommitteeInfo>,
+    ) -> Result<(), HotStuffError> {
         if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
             return Err(HotStuffError::EpochNotActive {
                 epoch: block.epoch(),
@@ -124,10 +169,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .epoch_manager
             .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
-        let local_committee_info = self
-            .epoch_manager
-            .get_committee_info_by_validator_public_key(block.epoch(), block.proposed_by())
-            .await?;
 
         let maybe_high_qc_and_block = self.store.with_write_tx(|tx| {
             if block.exists(&**tx)? {
@@ -135,7 +176,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 return Ok(None);
             }
 
-            let Some(valid_block) = self.validate_block_header(&*tx, block, &local_committee, &local_committee_info)?
+            let Some(valid_block) = self.validate_block_header(&*tx, block, &local_committee, local_committee_info)?
             else {
                 return Ok(None);
             };
@@ -151,13 +192,18 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             let can_propose_epoch_end = em_epoch > current_epoch;
 
             let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
-            let (block_decision, valid_block) = task::spawn_blocking(move || {
-                let decision = on_ready_to_vote_on_local_block.handle(
-                    &valid_block,
-                    &local_committee_info,
-                    can_propose_epoch_end,
-                )?;
-                Ok::<_, HotStuffError>((decision, valid_block))
+            let (block_decision, valid_block) = task::spawn_blocking({
+                // Move into task
+                let local_committee_info = *local_committee_info;
+                move || {
+                    let decision = on_ready_to_vote_on_local_block.handle(
+                        &valid_block,
+                        &local_committee_info,
+                        can_propose_epoch_end,
+                        foreign_committees,
+                    )?;
+                    Ok::<_, HotStuffError>((decision, valid_block))
+                }
             })
             .await??;
 

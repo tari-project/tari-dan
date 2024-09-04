@@ -129,16 +129,8 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
 
     async fn handle_request(&mut self, request: MempoolRequest) {
         match request {
-            MempoolRequest::SubmitTransaction {
-                transaction,
-                should_propagate,
-                reply,
-            } => {
-                handle(
-                    reply,
-                    self.handle_new_transaction_from_local(*transaction, should_propagate)
-                        .await,
-                );
+            MempoolRequest::SubmitTransaction { transaction, reply } => {
+                handle(reply, self.handle_new_transaction_from_local(*transaction).await);
             },
             MempoolRequest::RemoveTransactions { transaction_ids, reply } => {
                 let num_found = self.remove_transactions(&transaction_ids);
@@ -160,11 +152,7 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
         num_found
     }
 
-    async fn handle_new_transaction_from_local(
-        &mut self,
-        transaction: Transaction,
-        should_propagate: bool,
-    ) -> Result<(), MempoolError> {
+    async fn handle_new_transaction_from_local(&mut self, transaction: Transaction) -> Result<(), MempoolError> {
         if self.transaction_exists(transaction.id())? {
             return Ok(());
         }
@@ -175,8 +163,7 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
             transaction
         );
 
-        self.handle_new_transaction(transaction, vec![], should_propagate, None)
-            .await?;
+        self.handle_new_transaction(transaction, vec![], None).await?;
 
         Ok(())
     }
@@ -239,7 +226,7 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
             }
         }
 
-        self.handle_new_transaction(transaction, unverified_output_shards, true, maybe_sender_shard_group)
+        self.handle_new_transaction(transaction, unverified_output_shards, maybe_sender_shard_group)
             .await?;
 
         Ok(())
@@ -250,7 +237,6 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
         &mut self,
         transaction: Transaction,
         unverified_output_shards: Vec<SubstateAddress>,
-        should_propagate: bool,
         sender_shard_group: Option<ShardGroup>,
     ) -> Result<(), MempoolError> {
         #[cfg(feature = "metrics")]
@@ -311,18 +297,46 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
                 .await
                 .map_err(|_| MempoolError::ConsensusChannelClosed)?;
 
-            if should_propagate {
-                // This validator is involved, we to send the transaction to local replicas
+            // This validator is involved, we to send the transaction to local replicas
+            if let Err(e) = self
+                .gossip
+                .forward_to_local_replicas(
+                    current_epoch,
+                    NewTransactionMessage {
+                        transaction: transaction.clone(),
+                        output_shards: unverified_output_shards, /* Or send to local only when we are input shard
+                                                                  * and if we are output send after execution */
+                    }
+                    .into(),
+                )
+                .await
+            {
+                warn!(
+                    target: LOG_TARGET,
+                    "Unable to propagate transaction among peers: {}",
+                    e
+                );
+            }
+
+            // Only input shards propagate to foreign shards
+            if is_input_shard {
+                // Forward to foreign replicas.
+                // We assume that at least f other local replicas receive this transaction and also forward to their
+                // matching replica(s)
+                let substate_addresses = transaction
+                    .all_inputs_iter()
+                    .map(|i| i.or_zero_version().to_substate_address())
+                    .collect();
                 if let Err(e) = self
                     .gossip
-                    .forward_to_local_replicas(
+                    .forward_to_foreign_replicas(
                         current_epoch,
+                        substate_addresses,
                         NewTransactionMessage {
-                            transaction: transaction.clone(),
-                            output_shards: unverified_output_shards, /* Or send to local only when we are input shard
-                                                                      * and if we are output send after execution */
-                        }
-                        .into(),
+                            transaction,
+                            output_shards: vec![],
+                        },
+                        sender_shard_group,
                     )
                     .await
                 {
@@ -332,65 +346,39 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
                         e
                     );
                 }
-
-                // Only input shards propagate to foreign shards
-                if is_input_shard {
-                    // Forward to foreign replicas.
-                    // We assume that at least f other local replicas receive this transaction and also forward to their
-                    // matching replica(s)
-                    let substate_addresses = transaction
-                        .all_inputs_iter()
-                        .map(|i| i.or_zero_version().to_substate_address())
-                        .collect();
-                    if let Err(e) = self
-                        .gossip
-                        .forward_to_foreign_replicas(
-                            current_epoch,
-                            substate_addresses,
-                            NewTransactionMessage {
-                                transaction,
-                                output_shards: vec![],
-                            },
-                            sender_shard_group,
-                        )
-                        .await
-                    {
-                        warn!(
-                            target: LOG_TARGET,
-                            "Unable to propagate transaction among peers: {}",
-                            e
-                        );
-                    }
-                }
             }
         } else {
             debug!(
                 target: LOG_TARGET,
                 "🙇 Not in committee for transaction {}",
-                transaction.id()
+                transaction.id(),
             );
 
-            if should_propagate {
-                // This validator is not involved, so we forward the transaction to f + 1 replicas per distinct shard
-                // per input shard ID because we may be the only validator that has received this transaction.
-                let substate_addresses = transaction
-                    .all_inputs_iter()
-                    .map(|input| input.or_zero_version().to_substate_address())
-                    .collect();
-                if let Err(e) = self
-                    .gossip
-                    .gossip_to_foreign_replicas(current_epoch, substate_addresses, NewTransactionMessage {
-                        transaction,
-                        output_shards: vec![],
-                    })
-                    .await
-                {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Unable to propagate transaction among peers: {}",
-                        e
-                    );
-                }
+            // This validator is not involved, so we forward the transaction to f + 1 replicas per distinct shard
+            // per input shard ID because we may be the only validator that has received this transaction.
+            let substate_addresses = transaction
+                .all_inputs_iter()
+                .map(|input| input.or_zero_version().to_substate_address())
+                .collect::<HashSet<_>>();
+            debug!(
+                target: LOG_TARGET,
+                "🎱 Propagating transaction {} ({} address(es))",
+                transaction.id(),
+                substate_addresses.len()
+            );
+            if let Err(e) = self
+                .gossip
+                .gossip_to_foreign_replicas(current_epoch, substate_addresses, NewTransactionMessage {
+                    transaction,
+                    output_shards: vec![],
+                })
+                .await
+            {
+                warn!(
+                    target: LOG_TARGET,
+                    "Unable to propagate transaction among peers: {}",
+                    e
+                );
             }
         }
 

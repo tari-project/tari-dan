@@ -1,6 +1,8 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::str::FromStr;
+
 use diesel::Queryable;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, NodeHeight, ShardGroup};
@@ -37,6 +39,7 @@ pub struct ForeignProposal {
     pub block_pledge: String,
     pub proposed_in_block: Option<String>,
     pub proposed_in_block_height: Option<i64>,
+    pub status: String,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -83,6 +86,8 @@ impl ForeignProposal {
             deserialize_hex_try_from(&self.base_layer_block_hash)?,
         );
 
+        let status = consensus_models::ForeignProposalStatus::from_str(&self.status)?;
+
         Ok(consensus_models::ForeignProposal {
             block,
             block_pledge: deserialize_json(&self.block_pledge)?,
@@ -92,6 +97,7 @@ impl ForeignProposal {
                 .as_deref()
                 .map(deserialize_hex_try_from)
                 .transpose()?,
+            status,
         })
     }
 }

@@ -1,5 +1,6 @@
 import type { SubstateLockType } from "./SubstateLockType";
 export interface ShardEvidence {
-    qc_ids: Array<string>;
+    prepare_justify: string | null;
+    accept_justify: string | null;
     lock: SubstateLockType;
 }
