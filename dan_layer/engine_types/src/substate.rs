@@ -30,8 +30,13 @@ use tari_bor::{decode, decode_exact, encode, BorError};
 use tari_common_types::types::FixedHash;
 use tari_template_lib::{
     models::{
-        ComponentAddress, NonFungibleAddress, NonFungibleIndexAddress, ObjectKey, ResourceAddress,
-        UnclaimedConfidentialOutputAddress, VaultId,
+        ComponentAddress,
+        NonFungibleAddress,
+        NonFungibleIndexAddress,
+        ObjectKey,
+        ResourceAddress,
+        UnclaimedConfidentialOutputAddress,
+        VaultId,
     },
     prelude::{NonFungibleId, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
     Hash,
@@ -147,14 +152,14 @@ impl SubstateId {
     /// Returns true for any substate that has is "versionable" i.e. can have a version > 0, otherwise false.
     pub fn is_versioned(&self) -> bool {
         match self {
-            SubstateId::Component(_)
-            | SubstateId::Resource(_)
-            | SubstateId::Vault(_)
-            | SubstateId::NonFungibleIndex(_)
-            | SubstateId::NonFungible(_) => true,
-            SubstateId::UnclaimedConfidentialOutput(_)
-            | SubstateId::TransactionReceipt(_)
-            | SubstateId::FeeClaim(_) => false,
+            SubstateId::Component(_) |
+            SubstateId::Resource(_) |
+            SubstateId::Vault(_) |
+            SubstateId::NonFungibleIndex(_) |
+            SubstateId::NonFungible(_) => true,
+            SubstateId::UnclaimedConfidentialOutput(_) |
+            SubstateId::TransactionReceipt(_) |
+            SubstateId::FeeClaim(_) => false,
         }
     }
 
