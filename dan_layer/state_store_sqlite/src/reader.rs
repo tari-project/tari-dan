@@ -51,6 +51,7 @@ use tari_dan_storage::{
         EpochCheckpoint,
         ForeignProposal,
         ForeignProposalAtom,
+        ForeignProposalStatus,
         ForeignReceiveCounters,
         ForeignSendCounters,
         HighQc,
@@ -123,7 +124,7 @@ impl<'a, TAddr> SqliteStateStoreReadTransaction<'a, TAddr> {
 }
 
 impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteStateStoreReadTransaction<'a, TAddr> {
-    pub fn get_transaction_atom_state_updates_between_blocks<'i, ITx>(
+    pub(crate) fn get_transaction_atom_state_updates_between_blocks<'i, ITx>(
         &self,
         from_block_id: &BlockId,
         to_block_id: &BlockId,
@@ -136,7 +137,9 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
             return Ok(IndexMap::new());
         }
 
-        let applicable_block_ids = self.get_block_ids_with_commands_between(from_block_id, to_block_id)?;
+        // Blocks without commands may change pending transaction state because they justify a
+        // block that proposes a change. So we cannot only use blocks that have commands.
+        let applicable_block_ids = self.get_block_ids_between(from_block_id, to_block_id)?;
 
         debug!(
             target: LOG_TARGET,
@@ -164,6 +167,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
     }
 
     /// Creates a query to select the latest transaction pool state updates for the given transaction ids and block ids.
+    /// If no transaction ids are provided, all updates for the given block ids are returned.
     /// WARNING: This method does not protect against SQL-injection, Be sure that the transaction ids and block ids
     /// strings are what they are meant to be.
     fn create_transaction_atom_updates_query<
@@ -176,6 +180,15 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
         transaction_ids: ITx,
         block_ids: IBlk,
     ) -> SqlQuery {
+        // Query all updates if the transaction_ids are empty
+        let in_transactions = if transaction_ids.len() == 0 {
+            String::new()
+        } else {
+            format!(
+                "AND tpsu.transaction_id in ({})",
+                self.sql_frag_for_in_statement(transaction_ids, TransactionId::byte_size() * 2)
+            )
+        };
         // Unfortunate hack. Binding array types in diesel is only supported for postgres.
         sql_query(format!(
             r#"
@@ -186,8 +199,9 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
                     FROM
                         transaction_pool_state_updates AS tpsu
                     WHERE
+                        is_applied = 0  AND
                         tpsu.block_id in ({})
-                    AND tpsu.transaction_id in ({})
+                    {}
                 )
                 SELECT
                     id,
@@ -198,6 +212,8 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
                     evidence,
                     is_ready,
                     local_decision,
+                    remote_decision,
+                    is_applied,
                     created_at
                 FROM
                     RankedResults
@@ -205,7 +221,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
                     rank = 1;
                 "#,
             self.sql_frag_for_in_statement(block_ids, BlockId::byte_size() * 2),
-            self.sql_frag_for_in_statement(transaction_ids, TransactionId::byte_size() * 2),
+            in_transactions
         ))
     }
 
@@ -524,6 +540,23 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         Ok(foreign_proposals > 0)
     }
 
+    fn foreign_proposals_has_unconfirmed(&self, max_base_layer_block_height: u64) -> Result<bool, StorageError> {
+        use crate::schema::foreign_proposals;
+
+        let foreign_proposals = foreign_proposals::table
+            .filter(foreign_proposals::base_layer_block_height.le(max_base_layer_block_height as i64))
+            .filter(foreign_proposals::status.ne(ForeignProposalStatus::Confirmed.to_string()))
+            .count()
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposals_has_unproposed",
+                source: e,
+            })?;
+
+        Ok(foreign_proposals > 0)
+    }
+
     fn foreign_proposals_get_all_new(
         &self,
         max_base_layer_block_height: u64,
@@ -539,6 +572,9 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .left_join(quorum_certificates::table.on(foreign_proposals::justify_qc_id.eq(quorum_certificates::qc_id)))
             // Only propose the Foreign proposal if we have reached the base layer block height specified in the block
             .filter(foreign_proposals::base_layer_block_height.le(max_base_layer_block_height as i64))
+            .filter(
+                foreign_proposals::status.ne(ForeignProposalStatus::Confirmed.to_string())
+            )
             .filter(
                 foreign_proposals::proposed_in_block.is_null()
                     .or(foreign_proposals::proposed_in_block.ne_all(pending_block_ids)
@@ -1406,7 +1442,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .filter(transaction_pool::transaction_id.eq(&transaction_id))
             .first::<sql_models::TransactionPoolRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transaction_pool_get",
+                operation: "transaction_pool_get_for_blocks",
                 source: e,
             })?;
 
@@ -1421,7 +1457,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .filter(transaction_pool::transaction_id.eq(serialize_hex(transaction_id)))
             .first::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transaction_pool_get",
+                operation: "transaction_pool_exists",
                 source: e,
             })?;
 
@@ -1468,7 +1504,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         debug!(
             target: LOG_TARGET,
-            "transaction_pool_get: from_block_id={}, to_block_id={}, len(ready_txs)={}, updates={}",
+            "transaction_pool_get_many_ready: locked.block_id={}, leaf.block_id={}, len(ready_txs)={}, updates={}",
             locked.block_id,
             leaf.block_id,
             ready_txs.len(),
@@ -2148,6 +2184,28 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             })?;
 
         checkpoint.try_into()
+    }
+
+    fn foreign_substate_pledges_exists_for_address<T: ToSubstateAddress>(
+        &self,
+        transaction_id: &TransactionId,
+        address: T,
+    ) -> Result<bool, StorageError> {
+        use crate::schema::foreign_substate_pledges;
+
+        let address = address.to_substate_address();
+        let count = foreign_substate_pledges::table
+            .count()
+            .filter(foreign_substate_pledges::transaction_id.eq(serialize_hex(transaction_id)))
+            .filter(foreign_substate_pledges::address.eq(serialize_hex(address)))
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_substate_pledges_exists",
+                source: e,
+            })?;
+
+        Ok(count > 0)
     }
 
     fn foreign_substate_pledges_get_all_by_transaction_id(

@@ -437,8 +437,6 @@ async fn multishard_local_inputs_foreign_outputs() {
 async fn multishard_local_inputs_and_outputs_foreign_outputs() {
     setup_logger();
     let mut test = Test::builder()
-        // TODO: investigate
-        .with_test_timeout(Duration::from_secs(60))
         .add_committee(0, vec!["1", "2"])
         .add_committee(1, vec!["3", "4"])
         .add_committee(2, vec!["5", "6"])

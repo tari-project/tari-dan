@@ -280,6 +280,18 @@ impl FromStr for SubstateAddress {
     }
 }
 
+impl ToSubstateAddress for SubstateAddress {
+    fn to_substate_address(&self) -> SubstateAddress {
+        *self
+    }
+}
+
+impl ToSubstateAddress for &SubstateAddress {
+    fn to_substate_address(&self) -> SubstateAddress {
+        **self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{

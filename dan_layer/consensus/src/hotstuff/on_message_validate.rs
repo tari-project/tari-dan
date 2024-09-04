@@ -214,6 +214,12 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         from: TConsensusSpec::Addr,
         proposal: ProposalMessage,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
+        // TODO: we need to check foreign proposals for missing transactions as well
+        // for proposal in proposal.foreign_proposals.iter() {
+        //     self.process_foreign_proposal(&CommitteeInfo::default(), from.clone(), proposal.clone())
+        //         .await?;
+        // }
+
         let missing_tx_ids = self
             .store
             .with_write_tx(|tx| self.check_for_missing_transactions(tx, &proposal))?;
