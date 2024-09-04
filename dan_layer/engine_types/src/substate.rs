@@ -30,13 +30,8 @@ use tari_bor::{decode, decode_exact, encode, BorError};
 use tari_common_types::types::FixedHash;
 use tari_template_lib::{
     models::{
-        ComponentAddress,
-        NonFungibleAddress,
-        NonFungibleIndexAddress,
-        ObjectKey,
-        ResourceAddress,
-        UnclaimedConfidentialOutputAddress,
-        VaultId,
+        ComponentAddress, NonFungibleAddress, NonFungibleIndexAddress, ObjectKey, ResourceAddress,
+        UnclaimedConfidentialOutputAddress, VaultId,
     },
     prelude::{NonFungibleId, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
     Hash,
@@ -152,14 +147,14 @@ impl SubstateId {
     /// Returns true for any substate that has is "versionable" i.e. can have a version > 0, otherwise false.
     pub fn is_versioned(&self) -> bool {
         match self {
-            SubstateId::Component(_) |
-            SubstateId::Resource(_) |
-            SubstateId::Vault(_) |
-            SubstateId::NonFungibleIndex(_) |
-            SubstateId::NonFungible(_) => true,
-            SubstateId::UnclaimedConfidentialOutput(_) |
-            SubstateId::TransactionReceipt(_) |
-            SubstateId::FeeClaim(_) => false,
+            SubstateId::Component(_)
+            | SubstateId::Resource(_)
+            | SubstateId::Vault(_)
+            | SubstateId::NonFungibleIndex(_)
+            | SubstateId::NonFungible(_) => true,
+            SubstateId::UnclaimedConfidentialOutput(_)
+            | SubstateId::TransactionReceipt(_)
+            | SubstateId::FeeClaim(_) => false,
         }
     }
 
@@ -359,43 +354,37 @@ impl FromStr for SubstateId {
                 Err(InvalidSubstateIdFormat("Missing resource address".to_string()))
             },
             Some(("nft", rest)) => {
-                let mut splitted = rest.split('_');
-                let resource_addr: ResourceAddress;
-                if let Some(token) = splitted.next() {
-                    resource_addr =
-                        ResourceAddress::from_hex(token).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
-                } else {
-                    return Err(InvalidSubstateIdFormat(
-                        "Missing NFT resource address field".to_string(),
-                    ));
-                }
+                // nft_{resource_addr}_{id_type}_{id}
+                let (resource, nft_rest) = rest
+                    .split_once('_')
+                    .ok_or_else(|| InvalidSubstateIdFormat(s.to_string()))?;
 
-                let id_type: &str;
-                if let Some(token) = splitted.next() {
-                    id_type = token;
-                } else {
-                    return Err(InvalidSubstateIdFormat("Missing NFT id type".to_string()));
-                }
+                let resource_addr =
+                    ResourceAddress::from_hex(resource).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
 
-                let id: NonFungibleId;
-                if let Some(token) = splitted.next() {
-                    // nft_{resource_hex}_index_{id}
-                    if id_type == "index" {
-                        let index = u64::from_str(token).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
-                        return Ok(SubstateId::NonFungibleIndex(NonFungibleIndexAddress::new(
-                            resource_addr,
-                            index,
-                        )));
-                    }
+                let (id_type, id) = nft_rest
+                    .split_once('_')
+                    .ok_or_else(|| InvalidSubstateIdFormat(s.to_string()))?;
 
-                    id = NonFungibleId::try_from_canonical_string(&format!("{id_type}_{token}"))
-                        .map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
-                } else {
-                    return Err(InvalidSubstateIdFormat("Missing NFT id".to_string()));
-                }
+                let nft_id = NonFungibleId::try_from_canonical_string(&format!("{id_type}_{id}"))
+                    .map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
 
-                let nft_addr = NonFungibleAddress::new(resource_addr, id);
-                Ok(SubstateId::NonFungible(nft_addr))
+                let full_addr = NonFungibleAddress::new(resource_addr, nft_id);
+                Ok(SubstateId::NonFungible(full_addr))
+            },
+            Some(("nftindex", rest)) => {
+                // nftindex_{resource_id}_{index}
+                let (resource, idx) = rest
+                    .split_once('_')
+                    .ok_or_else(|| InvalidSubstateIdFormat(s.to_string()))?;
+                let resource_addr =
+                    ResourceAddress::from_hex(resource).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
+                let index = u64::from_str(idx).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
+
+                Ok(SubstateId::NonFungibleIndex(NonFungibleIndexAddress::new(
+                    resource_addr,
+                    index,
+                )))
             },
             Some(("vault", addr)) => {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
@@ -773,7 +762,7 @@ mod tests {
             .unwrap()
             .as_non_fungible_address()
             .unwrap();
-            SubstateId::from_str("nft_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_index_0")
+            SubstateId::from_str("nftindex_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_0")
                 .unwrap()
                 .as_non_fungible_index_address()
                 .unwrap();
