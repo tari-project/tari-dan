@@ -3,7 +3,7 @@
 
 use log::*;
 use tari_common_types::types::FixedHash;
-use tokio::time::{self, Duration};
+use tokio::time::{self, Duration, MissedTickBehavior};
 
 use crate::{
     config::Config,
@@ -20,15 +20,20 @@ const REGISTRATION_LOOP_INTERVAL: Duration = Duration::from_secs(30);
 // It will do nothing if it is registered already and not close to expiry.
 pub async fn registration_loop(config: Config, mut handle: ManagerHandle) -> anyhow::Result<ManagerHandle> {
     let mut interval = time::interval(REGISTRATION_LOOP_INTERVAL);
-    let local_node = read_registration_file(config.vn_registration_file).await?;
-    let local_key = local_node.public_key;
-    debug!("Local public key: {}", local_key.clone());
+    interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let mut last_block_hash: Option<FixedHash> = None;
     let mut last_registered: Option<u64> = None;
     let mut recently_registered = false;
 
     loop {
         interval.tick().await;
+
+        let Some(vn_reg_data) = read_registration_file(&config.vn_registration_file).await? else {
+            info!("No registration data found, will try again in 30s");
+            continue;
+        };
+        let public_key = vn_reg_data.public_key;
+        debug!("Local public key: {}", public_key.clone());
 
         let tip_info = handle.get_tip_info().await;
         if let Err(e) = tip_info {
@@ -66,7 +71,7 @@ pub async fn registration_loop(config: Config, mut handle: ManagerHandle) -> any
         }
 
         // if the node is already registered and not close to expiring in the next epoch, skip registration
-        if contains_key(active_keys.clone(), local_key.clone()) &&
+        if contains_key(active_keys.clone(), public_key.clone()) &&
             !is_close_to_expiry(constants.unwrap(), current_block, last_registered) ||
             recently_registered
         {

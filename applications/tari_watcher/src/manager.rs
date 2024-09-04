@@ -1,8 +1,6 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use std::path::PathBuf;
-
 use log::*;
 use minotari_app_grpc::tari_rpc::{
     self as grpc,
@@ -20,24 +18,18 @@ use tokio::{
 };
 
 use crate::{
-    config::{Channels, Config, ExecutableConfig},
-    constants::DEFAULT_VALIDATOR_NODE_BINARY_PATH,
-    minotari::{Minotari, TipStatus},
+    config::{Channels, Config},
+    minotari::{MinotariNodes, TipStatus},
     monitoring::{process_status_alert, process_status_log, ProcessStatus, Transaction},
     process::{start_validator, ChildChannel},
 };
 
 pub struct ProcessManager {
-    pub base_dir: PathBuf,
-    pub validator_base_dir: PathBuf,
-    pub validator_config: ExecutableConfig,
-    pub wallet_config: ExecutableConfig,
+    pub config: Config,
     pub shutdown_signal: ShutdownSignal, // listen for keyboard exit signal
     pub trigger_signal: Shutdown,        // triggered when validator auto-restart is disabled
     pub rx_request: mpsc::Receiver<ManagerRequest>,
-    pub chain: Minotari,
-    pub alerting_config: Channels,
-    pub auto_restart: bool,
+    pub chain: MinotariNodes,
 }
 
 pub struct ChannelReceivers {
@@ -51,20 +43,15 @@ impl ProcessManager {
     pub fn new(config: Config, shutdown_signal: ShutdownSignal, trigger_signal: Shutdown) -> (Self, ManagerHandle) {
         let (tx_request, rx_request) = mpsc::channel(1);
         let this = Self {
-            base_dir: config.base_dir.clone(),
-            validator_base_dir: config.vn_base_dir,
-            validator_config: config.executable_config[0].clone(),
-            wallet_config: config.executable_config[1].clone(),
             shutdown_signal,
             trigger_signal,
             rx_request,
-            chain: Minotari::new(
-                config.base_node_grpc_address,
-                config.base_wallet_grpc_address,
-                config.vn_registration_file,
+            chain: MinotariNodes::new(
+                config.base_node_grpc_url.clone(),
+                config.base_wallet_grpc_url.clone(),
+                config.vn_registration_file.clone(),
             ),
-            alerting_config: config.channel_config,
-            auto_restart: config.auto_restart,
+            config,
         };
         (this, ManagerHandle::new(tx_request))
     }
@@ -166,21 +153,17 @@ impl ProcessManager {
     }
 
     async fn start_child_process(&self) -> ChildChannel {
-        let vn_binary_path = self
-            .validator_config
-            .clone()
-            .executable_path
-            .unwrap_or(PathBuf::from(DEFAULT_VALIDATOR_NODE_BINARY_PATH));
-
-        let vn_base_dir = self.base_dir.join(self.validator_base_dir.clone());
+        let vn_binary_path = self.config.validator_node_executable_path.clone();
+        let vn_base_dir = self.config.base_dir.join(self.config.vn_base_dir.clone());
 
         // get child channel to communicate with the validator node process
         let cc = start_validator(
             vn_binary_path,
             vn_base_dir,
-            self.base_dir.clone(),
-            self.alerting_config.clone(),
-            self.auto_restart,
+            // TODO: just pass in config
+            self.config.base_node_grpc_url.clone(),
+            self.config.channel_config.clone(),
+            self.config.auto_restart,
             self.trigger_signal.clone(),
         )
         .await;

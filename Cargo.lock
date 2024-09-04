@@ -8706,6 +8706,7 @@ dependencies = [
  "thiserror",
  "tonic 0.8.3",
  "ts-rs",
+ "url",
 ]
 
 [[package]]
@@ -9496,6 +9497,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tower-http",
+ "url",
 ]
 
 [[package]]
@@ -10083,6 +10085,7 @@ dependencies = [
  "time",
  "tokio",
  "tower-http",
+ "url",
 ]
 
 [[package]]
@@ -10196,6 +10199,7 @@ dependencies = [
  "tokio",
  "toml 0.8.15",
  "tonic 0.8.3",
+ "url",
 ]
 
 [[package]]
@@ -11156,6 +11160,7 @@ dependencies = [
  "form_urlencoded",
  "idna 0.5.0",
  "percent-encoding",
+ "serde",
 ]
 
 [[package]]

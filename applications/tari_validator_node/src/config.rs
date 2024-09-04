@@ -40,6 +40,7 @@ use tari_dan_app_utilities::{
     p2p_config::{P2pConfig, PeerSeedsConfig, RpcConfig},
     template_manager::implementation::TemplateConfig,
 };
+use url::Url;
 
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {
@@ -72,8 +73,8 @@ pub struct ValidatorNodeConfig {
     pub identity_file: PathBuf,
     //// The node's publicly-accessible hostname
     // pub public_address: Option<Multiaddr>,
-    /// The Tari base node's GRPC address
-    pub base_node_grpc_address: Option<String>,
+    /// The Tari base node's GRPC URL
+    pub base_node_grpc_url: Option<Url>,
     /// If set to false, there will be no base layer scanning at all
     pub scan_base_layer: bool,
     /// How often do we want to scan the base layer for changes
@@ -134,7 +135,7 @@ impl Default for ValidatorNodeConfig {
             override_from: None,
             shard_key_file: PathBuf::from("shard_key.json"),
             identity_file: PathBuf::from("validator_node_id.json"),
-            base_node_grpc_address: None,
+            base_node_grpc_url: None,
             scan_base_layer: true,
             base_layer_scanning_interval: Duration::from_secs(10),
             data_dir: PathBuf::from("data/validator_node"),

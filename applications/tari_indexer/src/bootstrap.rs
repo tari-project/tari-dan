@@ -62,11 +62,12 @@ pub async fn spawn_services(
     ensure_directories_exist(config)?;
 
     // GRPC client connection to base node
-    let base_node_client =
-        GrpcBaseNodeClient::new(config.indexer.base_node_grpc_address.clone().unwrap_or_else(|| {
-            let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-            format!("127.0.0.1:{port}")
-        }));
+    let base_node_client = GrpcBaseNodeClient::new(config.indexer.base_node_grpc_url.clone().unwrap_or_else(|| {
+        let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+        format!("http://127.0.0.1:{port}")
+            .parse()
+            .expect("Default base node GRPC URL is malformed")
+    }));
 
     // Initialize networking
     let identity = identity::Keypair::sr25519_from_bytes(keypair.secret_key().as_bytes().to_vec()).map_err(|e| {

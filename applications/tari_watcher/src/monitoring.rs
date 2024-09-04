@@ -12,7 +12,6 @@ use tokio::{
 use crate::{
     alerting::{Alerting, MatterMostNotifier, TelegramNotifier},
     config::Channels,
-    constants::DEFAULT_PROCESS_MONITORING_INTERVAL,
     helpers::is_warning_close_to_expiry,
 };
 
@@ -47,12 +46,46 @@ pub async fn monitor_child(
     tx_alerting: mpsc::Sender<ProcessStatus>,
     tx_restart: mpsc::Sender<()>,
 ) {
-    loop {
-        sleep(DEFAULT_PROCESS_MONITORING_INTERVAL).await;
+    // process is still running
+    tx_logging
+        .send(ProcessStatus::Running)
+        .await
+        .expect("Failed to send process running status to logging");
+    tx_alerting
+        .send(ProcessStatus::Running)
+        .await
+        .expect("Failed to send process running status to alerting");
+    let exit = child.wait().await;
 
+    match exit {
+        Ok(status) => {
+            if status.success() {
+                info!("Child process exited with status: {}", status);
+                tx_logging
+                    .send(ProcessStatus::Exited(status.code().unwrap_or(0)))
+                    .await
+                    .expect("Failed to send process exit status to logging");
+                tx_alerting
+                    .send(ProcessStatus::Exited(status.code().unwrap_or(0)))
+                    .await
+                    .expect("Failed to send process exit status to alerting");
+                tx_restart.send(()).await.expect("Failed to send restart node signal");
+            } else {
+                warn!("Child process CRASHED with status: {}", status);
+                tx_logging
+                    .send(ProcessStatus::Crashed)
+                    .await
+                    .expect("Failed to send status to logging");
+                tx_alerting
+                    .send(ProcessStatus::Crashed)
+                    .await
+                    .expect("Failed to send status to alerting");
+                tx_restart.send(()).await.expect("Failed to send restart node signal");
+            }
+        },
         // if the child process encountered an unexpected error, not related to the process itself
-        if child.try_wait().is_err() {
-            let err = child.try_wait().err().unwrap();
+        Err(err) => {
+            error!("Child process encountered an error: {}", err);
             let err_msg = err.to_string();
             tx_logging
                 .send(ProcessStatus::InternalError(err_msg.clone()))
@@ -63,42 +96,7 @@ pub async fn monitor_child(
                 .await
                 .expect("Failed to send internal error status to alerting");
             tx_restart.send(()).await.expect("Failed to send restart node signal");
-            break;
-        }
-        // process has finished, intentional or not, if it has some status
-        if let Some(status) = child.try_wait().expect("Failed to poll child process") {
-            if !status.success() {
-                tx_logging
-                    .send(ProcessStatus::Crashed)
-                    .await
-                    .expect("Failed to send status to logging");
-                tx_alerting
-                    .send(ProcessStatus::Crashed)
-                    .await
-                    .expect("Failed to send status to alerting");
-                tx_restart.send(()).await.expect("Failed to send restart node signal");
-                break;
-            }
-            tx_logging
-                .send(ProcessStatus::Exited(status.code().unwrap_or(0)))
-                .await
-                .expect("Failed to send process exit status to logging");
-            tx_alerting
-                .send(ProcessStatus::Exited(status.code().unwrap_or(0)))
-                .await
-                .expect("Failed to send process exit status to alerting");
-            tx_restart.send(()).await.expect("Failed to send restart node signal");
-            break;
-        }
-        // process is still running
-        tx_logging
-            .send(ProcessStatus::Running)
-            .await
-            .expect("Failed to send process running status to logging");
-        tx_alerting
-            .send(ProcessStatus::Running)
-            .await
-            .expect("Failed to send process running status to alerting");
+        },
     }
 }
 
