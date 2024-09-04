@@ -111,12 +111,13 @@ pub enum Command {
     EndEpoch,
 }
 
-#[derive(Debug, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum CommandOrdering<'a> {
+    EndEpoch,
     TransactionId(&'a TransactionId),
     MintConfidentialOutput(&'a SubstateId),
+    /// Foreign proposals must come first in the block
     ForeignProposal(&'a BlockId),
-    EndEpoch,
 }
 
 impl Command {
@@ -213,23 +214,6 @@ impl Command {
         }
     }
 
-    /// Returns Some if the command should NOT result in finalising the transaction, otherwise None.
-    pub fn progressing(&self) -> Option<&TransactionAtom> {
-        match self {
-            Command::Prepare(tx) |
-            Command::LocalPrepare(tx) |
-            Command::AllPrepare(tx) |
-            Command::SomePrepare(tx) |
-            Command::LocalAccept(tx) => Some(tx),
-            Command::LocalOnly(_) |
-            Command::AllAccept(_) |
-            Command::SomeAccept(_) |
-            Command::EndEpoch |
-            Command::MintConfidentialOutput(_) |
-            Command::ForeignProposal(_) => None,
-        }
-    }
-
     /// Returns Some if the command should result in finalising (COMMITing or ABORTing) the transaction, otherwise None.
     pub fn finalising(&self) -> Option<&TransactionAtom> {
         self.all_accept()
@@ -288,5 +272,27 @@ impl Display for Command {
             Command::MintConfidentialOutput(mint) => write!(f, "MintConfidentialOutput({})", mint.substate_id),
             Command::EndEpoch => write!(f, "EndEpoch"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn ordering() {
+        assert!(
+            CommandOrdering::ForeignProposal(&BlockId::zero()) >
+                CommandOrdering::TransactionId(&TransactionId::default())
+        );
+        let substate_id =
+            SubstateId::from_str("component_0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+        assert!(
+            CommandOrdering::MintConfidentialOutput(&substate_id) >
+                CommandOrdering::TransactionId(&TransactionId::default())
+        );
+        assert!(CommandOrdering::MintConfidentialOutput(&substate_id) > CommandOrdering::EndEpoch);
     }
 }

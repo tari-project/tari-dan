@@ -320,8 +320,13 @@ async fn assert_template_is_registered_by_all(world: &mut TariWorld, template_na
     }
 }
 
-#[then(expr = "validator node {word} has state at {word}")]
-async fn then_validator_node_has_state_at(world: &mut TariWorld, vn_name: String, state_address_name: String) {
+#[then(expr = "validator node {word} has state at {word} within {int} seconds")]
+async fn then_validator_node_has_state_at(
+    world: &mut TariWorld,
+    vn_name: String,
+    state_address_name: String,
+    timeout_secs: u64,
+) {
     let state_address = world
         .addresses
         .get(&state_address_name)
@@ -330,14 +335,25 @@ async fn then_validator_node_has_state_at(world: &mut TariWorld, vn_name: String
     let mut client = vn.create_client();
     let substate_address =
         SubstateAddress::from_substate_id(&SubstateId::from_str(state_address).expect("Invalid state address"), 0);
-    if let Err(e) = client
-        .get_state(GetStateRequest {
-            address: substate_address,
-        })
-        .await
-    {
-        println!("Failed to get state: {}", e);
-        panic!("Failed to get state: {}", e);
+    let mut attempts = 0;
+    loop {
+        match client
+            .get_state(GetStateRequest {
+                address: substate_address,
+            })
+            .await
+        {
+            Ok(_) => return,
+            Err(e) => {
+                attempts += 1;
+                if attempts == timeout_secs {
+                    println!("Failed to get state: {}", e);
+                    panic!("Failed to get state: {}", e);
+                }
+            },
+        }
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 

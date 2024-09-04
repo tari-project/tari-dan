@@ -59,11 +59,6 @@ impl SubstateRequirement {
             .map(|v| SubstateAddress::from_substate_id(self.substate_id(), v))
     }
 
-    pub fn to_substate_address_default_version(&self, default: u32) -> SubstateAddress {
-        let v = self.version.unwrap_or(default);
-        SubstateAddress::from_substate_id(self.substate_id(), v)
-    }
-
     /// Calculates and returns the shard number that this SubstateAddress belongs.
     /// A shard is a fixed division of the 256-bit shard space.
     /// If the substate version is not known, None is returned.
