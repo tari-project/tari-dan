@@ -133,25 +133,7 @@ impl NonFungibleId {
     }
 
     pub fn try_from_canonical_string(s: &str) -> Result<Self, ParseNonFungibleIdError> {
-        let mut splitted = s.split('_');
-
-        // ideally wanted this method to receive `id_type` and `id` but since it is used elsewhere,
-        // this will keep it compatible with the rest of the code, so potentially doing the same token parsing
-        // again is easier
-        let id_type: &str;
-        if let Some(token) = splitted.next() {
-            id_type = token;
-        } else {
-            return Err(ParseNonFungibleIdError::InvalidFormat);
-        }
-
-        let id: &str;
-        if let Some(token) = splitted.next() {
-            id = token;
-        } else {
-            return Err(ParseNonFungibleIdError::InvalidFormat);
-        }
-
+        let (id_type, id) = s.split_once('_').ok_or(ParseNonFungibleIdError::InvalidFormat)?;
         match id_type {
             "uuid" => Ok(NonFungibleId::U256(
                 Hash::from_hex(id)
@@ -281,41 +263,19 @@ impl FromStr for NonFungibleAddress {
     type Err = ParseNonFungibleAddressError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // the expected format is nft_{resource_hex}_{type}_{id}
-        let mut splitted = s.split('_');
+        // nft_{resource_hex}_{type}_{id}
 
-        if let Some(token) = splitted.next() {
-            if token != "nft" {
-                return Err(ParseNonFungibleAddressError::InvalidFormat);
-            }
-        } else {
-            return Err(ParseNonFungibleAddressError::InvalidFormat);
-        }
+        let rest = s.strip_prefix("nft_").unwrap_or(s);
+        let (resource, nft_rest) = rest
+            .split_once('_')
+            .ok_or(ParseNonFungibleAddressError::InvalidFormat)?;
 
-        let resource_addr: ResourceAddress;
-        if let Some(token) = splitted.next() {
-            resource_addr = ResourceAddress::from_str(token)
-                .map_err(|e| ParseNonFungibleAddressError::InvalidResource(e.to_string()))?;
-        } else {
-            return Err(ParseNonFungibleAddressError::InvalidFormat);
-        }
+        let resource_addr =
+            ResourceAddress::from_hex(resource).map_err(|_| ParseNonFungibleAddressError::InvalidFormat)?;
+        let nft_id = NonFungibleId::try_from_canonical_string(nft_rest)
+            .map_err(|_| ParseNonFungibleAddressError::InvalidFormat)?;
 
-        let id_type: &str;
-        if let Some(token) = splitted.next() {
-            id_type = token;
-        } else {
-            return Err(ParseNonFungibleAddressError::InvalidFormat);
-        }
-
-        let id: NonFungibleId;
-        if let Some(token) = splitted.next() {
-            id = NonFungibleId::try_from_canonical_string(&format!("{id_type}_{token}"))
-                .map_err(ParseNonFungibleAddressError::InvalidId)?;
-        } else {
-            return Err(ParseNonFungibleAddressError::InvalidFormat);
-        }
-
-        Ok(NonFungibleAddress::new(resource_addr, id))
+        Ok(NonFungibleAddress::new(resource_addr, nft_id))
     }
 }
 
