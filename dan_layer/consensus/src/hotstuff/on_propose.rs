@@ -281,11 +281,11 @@ where TConsensusSpec: ConsensusSpec
 
             // Leader thinks that all local nodes agree that all shard groups have prepared, we are ready to accept
             // locally
-            TransactionPoolStage::AllPrepared => self.local_accept_transaction(local_committee_info, &mut tx_rec),
-            // Leader thinks local nodes are ready to accept an ABORT
-            TransactionPoolStage::SomePrepared => Ok(Some(Command::LocalAccept(
-                self.get_current_transaction_atom(local_committee_info, &mut tx_rec)?,
+            TransactionPoolStage::AllPrepared => Ok(Some(Command::LocalAccept(
+                self.get_transaction_atom_with_leader_fee(local_committee_info, &mut tx_rec)?,
             ))),
+            // Leader thinks local nodes are ready to accept an ABORT
+            TransactionPoolStage::SomePrepared => Ok(Some(Command::LocalAccept(tx_rec.get_current_transaction_atom()))),
             // Leader thinks that all foreign ACCEPT pledges have been received and, we are ready to accept the result
             // (COMMIT/ABORT)
             TransactionPoolStage::LocalAccepted => {
@@ -641,11 +641,11 @@ where TConsensusSpec: ConsensusSpec
                     "🏠️ Transaction {} is local only, proposing LocalOnly",
                     tx_rec.transaction_id(),
                 );
-                let involved = NonZeroU64::new(1).expect("1 > 0");
-                let leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);
-                tx_rec.set_leader_fee(leader_fee);
-                let atom = tx_rec.get_current_transaction_atom();
-                if atom.decision.is_commit() {
+
+                if tx_rec.current_decision().is_commit() {
+                    let involved = NonZeroU64::new(1).expect("1 > 0");
+                    let leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);
+                    tx_rec.set_leader_fee(leader_fee);
                     let diff = execution.result().finalize.result.accept().ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
                             "prepare_transaction: Transaction {} has COMMIT decision but execution failed when \
@@ -668,6 +668,7 @@ where TConsensusSpec: ConsensusSpec
 
                 executed_transactions.insert(*tx_rec.transaction_id(), execution);
 
+                let atom = tx_rec.get_current_transaction_atom();
                 Command::LocalOnly(atom)
             },
             PreparedTransaction::LocalOnly(LocalPreparedTransaction::EarlyAbort { transaction, .. }) => {
@@ -743,7 +744,7 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<Option<Command>, HotStuffError> {
         // Only set to abort if either the local or one or more foreign shards decided to ABORT
         if tx_rec.current_decision().is_abort() {
-            return Ok(Some(Command::SomePrepare(tx_rec.get_local_transaction_atom())));
+            return Ok(Some(Command::SomePrepare(tx_rec.get_current_transaction_atom())));
         }
 
         let mut execution =
@@ -771,27 +772,15 @@ where TConsensusSpec: ConsensusSpec
             tx_rec.update_from_execution(&execution);
 
             executed_transactions.insert(*tx_rec.transaction_id(), execution);
-            return Ok(Some(Command::AllPrepare(
-                self.get_current_transaction_atom(local_committee_info, tx_rec)?,
-            )));
+            return Ok(Some(Command::AllPrepare(tx_rec.get_current_transaction_atom())));
         }
 
         tx_rec.update_from_execution(&execution);
 
-        let atom = self.get_current_transaction_atom(local_committee_info, tx_rec)?;
         executed_transactions.insert(*tx_rec.transaction_id(), execution);
         // If we locally decided to ABORT, we are still saying that we think all prepared. When we enter the acceptance
         // phase, we will propose SomeAccept for this case.
-        Ok(Some(Command::AllPrepare(atom)))
-    }
-
-    fn local_accept_transaction(
-        &self,
-        local_committee_info: &CommitteeInfo,
-        tx_rec: &mut TransactionPoolRecord,
-    ) -> Result<Option<Command>, HotStuffError> {
-        let atom = self.get_current_transaction_atom(local_committee_info, tx_rec)?;
-        Ok(Some(Command::LocalAccept(atom)))
+        Ok(Some(Command::AllPrepare(tx_rec.get_current_transaction_atom())))
     }
 
     fn accept_transaction(
@@ -825,24 +814,27 @@ where TConsensusSpec: ConsensusSpec
             *tx_rec.transaction_id(),
             &filter_diff_for_committee(local_committee_info, diff),
         )?;
-        Ok(Some(Command::AllAccept(tx_rec.get_current_transaction_atom())))
+        let atom = self.get_transaction_atom_with_leader_fee(local_committee_info, tx_rec)?;
+        Ok(Some(Command::AllAccept(atom)))
     }
 
-    fn get_current_transaction_atom(
+    fn get_transaction_atom_with_leader_fee(
         &self,
         local_committee_info: &CommitteeInfo,
         tx_rec: &mut TransactionPoolRecord,
     ) -> Result<TransactionAtom, HotStuffError> {
-        let num_involved_shard_groups =
-            local_committee_info.count_distinct_shard_groups(tx_rec.evidence().substate_addresses_iter());
-        let involved = NonZeroU64::new(num_involved_shard_groups as u64).ok_or_else(|| {
-            HotStuffError::InvariantError(format!(
-                "PROPOSE: Transaction {} involves zero shard groups",
-                tx_rec.transaction_id(),
-            ))
-        })?;
-        let leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);
-        tx_rec.set_leader_fee(leader_fee);
+        if tx_rec.current_decision().is_commit() {
+            let num_involved_shard_groups =
+                local_committee_info.count_distinct_shard_groups(tx_rec.evidence().substate_addresses_iter());
+            let involved = NonZeroU64::new(num_involved_shard_groups as u64).ok_or_else(|| {
+                HotStuffError::InvariantError(format!(
+                    "PROPOSE: Transaction {} involves zero shard groups",
+                    tx_rec.transaction_id(),
+                ))
+            })?;
+            let leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);
+            tx_rec.set_leader_fee(leader_fee);
+        }
         let atom = tx_rec.get_current_transaction_atom();
         Ok(atom)
     }
