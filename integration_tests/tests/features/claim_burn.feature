@@ -36,7 +36,7 @@ Feature: Claim Burn
     Then VN has scanned to height 30
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
-    Then validator node VN has state at COMM_ADDRESS
+    Then validator node VN has state at COMM_ADDRESS within 20 seconds
 
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC via the wallet daemon WALLET_D
   # Then account ACC has one confidential bucket in it
@@ -73,10 +73,8 @@ Feature: Claim Burn
     When miner MINER mines 13 new blocks
     Then VN has scanned to height 30
 
-    # TODO: remove sleep - this is needed to allow validators enough time to propose the UTXO
-    When I wait 20 seconds
     When I convert commitment COMMITMENT into COMM_ADDRESS address
-    Then validator node VN has state at COMM_ADDRESS
+    Then validator node VN has state at COMM_ADDRESS within 20 seconds
 
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC via the wallet daemon WALLET_D
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC via the wallet daemon WALLET_D, it fails
