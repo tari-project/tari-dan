@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 
+use indexmap::{map::Entry, IndexMap};
 use serde::{Deserialize, Serialize};
 use tari_template_lib::models::{Amount, VaultId};
 #[cfg(feature = "ts")]
@@ -18,7 +19,7 @@ pub struct FeeReceipt {
     /// Total fees paid after refunds
     pub total_fees_paid: Amount,
     /// Breakdown of fee costs
-    pub cost_breakdown: Vec<FeeBreakdown>,
+    pub cost_breakdown: FeeBreakdown,
 }
 
 impl FeeReceipt {
@@ -31,13 +32,7 @@ impl FeeReceipt {
 
     /// The total amount of fees charged. This may be more than total_fees_paid if the user paid an insufficient amount.
     pub fn total_fees_charged(&self) -> Amount {
-        Amount::try_from(
-            self.cost_breakdown
-                .iter()
-                .map(|breakdown| breakdown.amount)
-                .sum::<u64>(),
-        )
-        .unwrap()
+        Amount::try_from(self.cost_breakdown.get_total()).unwrap()
     }
 
     pub fn total_refunded(&self) -> Amount {
@@ -69,7 +64,7 @@ impl FeeReceipt {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum FeeSource {
     Initial,
@@ -79,19 +74,40 @@ pub enum FeeSource {
     Logs,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FeeBreakdown {
-    pub source: FeeSource,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
-    pub amount: u64,
+    breakdown: IndexMap<FeeSource, u64>,
+}
+
+impl FeeBreakdown {
+    pub fn insert(&mut self, source: FeeSource, amount: u64) {
+        match self.breakdown.entry(source) {
+            Entry::Occupied(entry) => {
+                *entry.into_mut() += amount;
+            },
+            Entry::Vacant(entry) => {
+                entry.insert(amount);
+                self.breakdown.sort_keys();
+            },
+        }
+    }
+
+    /// Returns an iterator over the fee breakdown in a canonical order.
+    pub fn iter(&self) -> impl Iterator<Item = (&FeeSource, &u64)> {
+        self.breakdown.iter()
+    }
+
+    pub fn get_total(&self) -> u64 {
+        self.breakdown.values().sum()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub struct FeeCostBreakdown {
     pub total_fees_charged: Amount,
-    pub breakdown: Vec<FeeBreakdown>,
+    pub breakdown: FeeBreakdown,
 }
 
 #[derive(Debug)]

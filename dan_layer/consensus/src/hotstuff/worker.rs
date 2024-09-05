@@ -267,13 +267,25 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             );
 
             tokio::select! {
-                Some(result) = self.on_inbound_message.next_message(current_epoch, current_height) => {
-                    if let Err(err) = self.on_unvalidated_message(current_epoch, current_height, result, &local_committee_info).await {
-                        self.hooks.on_error(&err);
-                        error!(target: LOG_TARGET, "🚨Error handling new message: {}", err);
+                // BIASED:
+                biased;
+
+                // Epoch manager events are rare, but have priority if they happen
+                Ok(event) = epoch_manager_events.recv() => {
+                    self.on_epoch_manager_event(event).await?;
+                },
+
+
+                // Proposing is highest priority
+                maybe_leaf_block = on_force_beat.wait() => {
+                    self.hooks.on_beat();
+                    if let Err(e) = self.propose_if_leader(current_epoch, maybe_leaf_block, &local_committee_info).await {
+                        self.on_failure("propose_if_leader", &e).await;
+                        return Err(e);
                     }
                 },
 
+                // Sequencing transactions is next highest priority
                 Some((tx_id, pending)) = self.rx_new_transactions.recv() => {
                     if let Err(err) = self.on_new_transaction(tx_id, pending, current_epoch, current_height, &local_committee_info).await {
                         self.hooks.on_error(&err);
@@ -281,11 +293,14 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     }
                 },
 
-                Ok(event) = epoch_manager_events.recv() => {
-                    self.on_epoch_manager_event(event).await?;
+                Some(result) = self.on_inbound_message.next_message(current_epoch, current_height) => {
+                    if let Err(err) = self.on_unvalidated_message(current_epoch, current_height, result, &local_committee_info).await {
+                        self.hooks.on_error(&err);
+                        error!(target: LOG_TARGET, "🚨Error handling new message: {}", err);
+                    }
                 },
 
-                // TODO: This channel is used to work around some design-flaws in missing transactions handling.
+               // TODO: This channel is used to work around some design-flaws in missing transactions handling.
                 //       We cannot simply call check_if_block_can_be_unparked in dispatch_hotstuff_message as that creates a cycle.
                 //       One suggestion is to refactor consensus to emit events (kinda like libp2p does) and handle those events.
                 //       This should be easy to reason about and avoid a large depth of async calls and "callback channels".
@@ -299,14 +314,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 _ = on_beat.wait() => {
                     if let Err(e) = self.on_beat(current_epoch, &local_committee_info).await {
                         self.on_failure("on_beat", &e).await;
-                        return Err(e);
-                    }
-                },
-
-                maybe_leaf_block = on_force_beat.wait() => {
-                    self.hooks.on_beat();
-                    if let Err(e) = self.propose_if_leader(current_epoch, maybe_leaf_block, &local_committee_info).await {
-                        self.on_failure("propose_if_leader", &e).await;
                         return Err(e);
                     }
                 },

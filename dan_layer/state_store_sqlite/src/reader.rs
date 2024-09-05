@@ -2088,13 +2088,29 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
     ) -> Result<Vec<StateTransition>, StorageError> {
         use crate::schema::{state_transitions, substates};
 
-        // Never return epoch 0 state transitions
-        let min_epoch = Some(id.epoch().as_u64()).filter(|e| *e > 0).unwrap_or(1) as i64;
+        let (transition_id, epoch) = state_transitions::table
+            .select((state_transitions::id, state_transitions::epoch))
+            // seq is monotonic for each shard, it does not reset for the epoch
+            .filter(state_transitions::seq.eq(id.seq() as i64))
+            .filter(state_transitions::shard.eq(id.shard().as_u32() as i32))
+            .get_result::<(i32, i64)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "state_transitions_get_n_after",
+                source: e,
+            })?;
+
+        let next_transition_id = if epoch > id.epoch().as_u64() as i64 {
+            // If the provided id is from a previous epoch, include the first (seq=0) transition
+            transition_id
+        } else {
+            // Fetch from the next transition
+            transition_id + 1
+        };
+
         let transitions = state_transitions::table
             .left_join(substates::table.on(state_transitions::substate_address.eq(substates::address)))
             .select((state_transitions::all_columns, substates::all_columns.nullable()))
-            .filter(state_transitions::seq.ge(id.seq() as i64))
-            .filter(state_transitions::epoch.ge(min_epoch))
+            .filter(state_transitions::id.ge(next_transition_id))
             .filter(state_transitions::epoch.lt(end_epoch.as_u64() as i64))
             .filter(state_transitions::shard.eq(id.shard().as_u32() as i32))
             .limit(n as i64)

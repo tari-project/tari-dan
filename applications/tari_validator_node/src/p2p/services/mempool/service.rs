@@ -56,7 +56,6 @@ const LOG_TARGET: &str = "tari::validator_node::mempool::service";
 
 #[derive(Debug)]
 pub struct MempoolService<TValidator> {
-    num_preshards: NumPreshards,
     transactions: HashSet<TransactionId>,
     mempool_requests: mpsc::Receiver<MempoolRequest>,
     epoch_manager: EpochManagerHandle<PeerAddress>,
@@ -82,7 +81,6 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
         #[cfg(feature = "metrics")] metrics: PrometheusMempoolMetrics,
     ) -> Self {
         Self {
-            num_preshards,
             gossip: MempoolGossip::new(num_preshards, epoch_manager.clone(), gossip),
             transactions: Default::default(),
             mempool_requests,
@@ -200,25 +198,21 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
         );
 
         let current_epoch = self.consensus_handle.current_view().get_epoch();
-        let maybe_sender_shard_group = self
+        let maybe_sender_committee_info = self
             .epoch_manager
             .get_committee_info_by_validator_address(current_epoch, &from)
             .await
-            .optional()?
-            .map(|c| c.shard_group());
+            .optional()?;
 
         // Only input shards propagate transactions to output shards. Check that this is true.
         if !unverified_output_shards.is_empty() {
-            let Some(sender_shard) = maybe_sender_shard_group else {
+            let Some(sender_committee_info) = maybe_sender_committee_info else {
                 debug!(target: LOG_TARGET, "Sender {from} isn't registered but tried to send a new transaction with
         output shards");
                 return Ok(());
             };
 
-            let is_input_shard = transaction
-                .all_inputs_iter()
-                .filter_map(|s| s.to_shard(self.num_preshards))
-                .any(|s| sender_shard.contains(&s));
+            let is_input_shard = transaction.is_involved_inputs(&sender_committee_info);
             if !is_input_shard {
                 warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input
         shard. Ignoring message.");
@@ -226,8 +220,12 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
             }
         }
 
-        self.handle_new_transaction(transaction, unverified_output_shards, maybe_sender_shard_group)
-            .await?;
+        self.handle_new_transaction(
+            transaction,
+            unverified_output_shards,
+            maybe_sender_committee_info.map(|c| c.shard_group()),
+        )
+        .await?;
 
         Ok(())
     }
@@ -276,8 +274,7 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
         let tx_substate_address = SubstateAddress::for_transaction_receipt(transaction.id().into_receipt_address());
 
         let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
-        let transaction_inputs = transaction.all_inputs_iter().filter_map(|i| i.to_substate_address());
-        let is_input_shard = local_committee_shard.includes_any_address(transaction_inputs);
+        let is_input_shard = transaction.is_involved_inputs(&local_committee_shard);
         let is_output_shard = local_committee_shard.includes_any_address(
             // Known output shards
             // This is to allow for the txreceipt output

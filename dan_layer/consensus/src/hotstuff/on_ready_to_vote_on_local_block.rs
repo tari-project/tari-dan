@@ -894,6 +894,8 @@ where TConsensusSpec: ConsensusSpec
             let execution = self.execute_transaction(tx, block.id(), block.epoch(), tx_rec.transaction_id())?;
             let mut execution = execution.into_transaction_execution();
 
+            // TODO: check the diff is valid against the provided input evidence (correct locks etc).
+
             // TODO: can we modify the locks at this point? For multi-shard input transactions, we locked all inputs
             // as Write due to lack of information. We now know what locks are necessary, and this
             // block has the correct evidence (TODO: verify the atom) so this should be fine.

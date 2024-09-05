@@ -134,8 +134,8 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             Ok(inputs) => inputs,
             Err(err) => {
                 warn!(target: LOG_TARGET, "⚠️ PREPARE: failed to resolve local inputs: {err}");
-                // We only expect not found errors here. If we get any other error, this is fatal.
-                if !err.is_not_found_error() {
+                // We only expect not found or down errors here. If we get any other error, this is fatal.
+                if !err.is_not_found_error() && !err.is_substate_down_error() {
                     return Err(err);
                 }
                 let is_local_only = local_committee_info.includes_all_substate_addresses(
@@ -235,7 +235,11 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                     //       specify this or we can correct the locks after execution. Currently, this limitation
                     //       prevents concurrent multi-shard read locks.
                     let requested_locks = multishard.local_inputs().iter().map(|(substate_id, substate)| {
-                        SubstateRequirementLockIntent::write(substate_id.clone(), substate.version())
+                        if substate_id.substate_id.is_read_only() {
+                            SubstateRequirementLockIntent::read(substate_id.clone(), substate.version())
+                        } else {
+                            SubstateRequirementLockIntent::write(substate_id.clone(), substate.version())
+                        }
                     });
                     store.try_lock_all(transaction_id, requested_locks, false)?
                 } else {

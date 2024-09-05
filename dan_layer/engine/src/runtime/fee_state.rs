@@ -7,7 +7,7 @@ use tari_template_lib::models::{Amount, VaultId};
 #[derive(Debug, Clone, Default)]
 pub struct FeeState {
     pub fee_payments: Vec<(ResourceContainer, VaultId)>,
-    pub fee_charges: Vec<FeeBreakdown>,
+    pub fee_charges: FeeBreakdown,
 }
 
 impl FeeState {
@@ -16,7 +16,7 @@ impl FeeState {
     }
 
     pub fn total_charges(&self) -> u64 {
-        self.fee_charges.iter().map(|breakdown| breakdown.amount).sum()
+        self.fee_charges.get_total()
     }
 
     pub fn total_payments(&self) -> Amount {

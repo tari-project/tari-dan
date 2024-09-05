@@ -9382,6 +9382,7 @@ dependencies = [
  "blake2",
  "digest",
  "hex",
+ "indexmap 2.2.6",
  "lazy_static",
  "rand",
  "serde",

@@ -24,6 +24,14 @@ pub enum BlockTransactionExecutorError {
     #[error("BUG: Invariant error: {0}")]
     InvariantError(String),
 }
+impl BlockTransactionExecutorError {
+    pub fn is_substate_down_error(&self) -> bool {
+        matches!(
+            self,
+            BlockTransactionExecutorError::SubstateStoreError(SubstateStoreError::SubstateIsDown { .. })
+        )
+    }
+}
 
 impl IsNotFoundError for BlockTransactionExecutorError {
     fn is_not_found_error(&self) -> bool {

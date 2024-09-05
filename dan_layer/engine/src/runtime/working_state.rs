@@ -900,7 +900,7 @@ impl WorkingState {
             fee_receipt: FeeReceipt {
                 total_fee_payment,
                 total_fees_paid: fee_resource.amount(),
-                cost_breakdown: self.fee_state.fee_charges.drain(..).collect(),
+                cost_breakdown: mem::take(&mut self.fee_state.fee_charges),
             },
         })
     }

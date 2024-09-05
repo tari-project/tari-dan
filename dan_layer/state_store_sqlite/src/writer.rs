@@ -1508,7 +1508,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .set(changes)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substates_down",
+                operation: "substates_down (update substates)",
                 source: e,
             })?;
 
@@ -1517,7 +1517,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .filter(state_transitions::shard.eq(shard.as_u32() as i32))
             .first::<Option<i64>>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substates_create",
+                operation: "substates_down (get max seq)",
                 source: e,
             })?;
         let next_seq = seq.map(|s| s + 1).unwrap_or(0);
@@ -1538,7 +1538,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .values(values)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substates_down",
+                operation: "substates_down(insert into state_transitions)",
                 source: e,
             })?;
 

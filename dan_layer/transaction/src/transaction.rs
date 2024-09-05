@@ -7,7 +7,7 @@ use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_crypto::ristretto::RistrettoSecretKey;
-use tari_dan_common_types::{Epoch, SubstateRequirement, VersionedSubstateId};
+use tari_dan_common_types::{committee::CommitteeInfo, Epoch, SubstateRequirement, VersionedSubstateId};
 use tari_engine_types::{
     hashing::{hasher32, EngineHashDomainLabel},
     indexed_value::{IndexedValue, IndexedValueError},
@@ -142,6 +142,12 @@ impl Transaction {
             .filter(|i| self.filled_inputs().iter().all(|fi| fi.substate_id() != i.substate_id()))
             .map(|i| i.substate_id())
             .chain(self.filled_inputs().iter().map(|fi| fi.substate_id()))
+    }
+
+    /// Returns true if the provided committee is involved in at least one input of this transaction.
+    pub fn is_involved_inputs(&self, committee_info: &CommitteeInfo) -> bool {
+        self.all_inputs_iter()
+            .any(|id| committee_info.includes_substate_id(id.substate_id()))
     }
 
     pub fn num_unique_inputs(&self) -> usize {
