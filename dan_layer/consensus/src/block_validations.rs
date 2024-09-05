@@ -2,7 +2,8 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common::configuration::Network;
-use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey};
+use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
+use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey, ExtraFieldKey};
 use tari_dan_storage::consensus_models::Block;
 use tari_epoch_manager::EpochManagerReader;
 
@@ -23,6 +24,7 @@ pub async fn check_proposal<TConsensusSpec: ConsensusSpec>(
     //       tip. Without this, the check has a race condition between the base layer scanner and consensus.
     // check_base_layer_block_hash::<TConsensusSpec>(block, epoch_manager, config).await?;
     check_network(block, config.network)?;
+    check_sidechain_id(block, config)?;
     check_hash_and_height(block)?;
     let committee_for_block = epoch_manager
         .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
@@ -216,5 +218,48 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     {
         return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
     }
+    Ok(())
+}
+
+pub fn check_sidechain_id(candidate_block: &Block, config: &HotstuffConfig) -> Result<(), HotStuffError> {
+    // We only require the sidechain id on the genesis block
+    if !candidate_block.is_genesis() {
+        return Ok(());
+    }
+
+    // If we are using a sidechain id in the network, we need to check it matches the candidate block one
+    if let Some(expected_sidechain_id) = &config.sidechain_id {
+        // Extract the sidechain id from the candidate block
+        let extra_data = candidate_block.extra_data().ok_or::<HotStuffError>(
+            ProposalValidationError::MissingSidechainId {
+                block_id: *candidate_block.id(),
+            }
+            .into(),
+        )?;
+        let sidechain_id_bytes = extra_data.get(&ExtraFieldKey::SidechainId).ok_or::<HotStuffError>(
+            ProposalValidationError::InvalidSidechainId {
+                block_id: *candidate_block.id(),
+                reason: "SidechainId key not present".to_owned(),
+            }
+            .into(),
+        )?;
+        let sidechain_id = RistrettoPublicKey::from_canonical_bytes(sidechain_id_bytes).map_err(|e| {
+            ProposalValidationError::InvalidSidechainId {
+                block_id: *candidate_block.id(),
+                reason: e.to_string(),
+            }
+        })?;
+
+        // The sidechain id must match the sidechain of the current network
+        if sidechain_id != *expected_sidechain_id {
+            return Err(ProposalValidationError::MismatchedSidechainId {
+                block_id: *candidate_block.id(),
+                expected_sidechain_id: expected_sidechain_id.clone(),
+                sidechain_id,
+            }
+            .into());
+        }
+    }
+
     Ok(())
 }

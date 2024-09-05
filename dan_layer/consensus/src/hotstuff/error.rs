@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common_types::types::FixedHash;
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{BlockError, BlockId, LeafBlock, LockedBlock, QuorumCertificate, TransactionPoolError},
@@ -237,4 +238,17 @@ pub enum ProposalValidationError {
          node"
     )]
     NoTransactionsInCommittee { block_id: BlockId },
+    #[error("Foreign node submitted an foreign proposal {block_id} that did not contain a sidechain ID")]
+    MissingSidechainId { block_id: BlockId },
+    #[error("Foreign node submitted an foreign proposal {block_id} with an invalid sidechain ID: {reason}")]
+    InvalidSidechainId { block_id: BlockId, reason: String },
+    #[error(
+        "Foreign node submitted an foreign proposal {block_id} with a mistmatched sidechain ID: expected \
+         {expected_sidechain_id} but got {sidechain_id}"
+    )]
+    MismatchedSidechainId {
+        block_id: BlockId,
+        expected_sidechain_id: RistrettoPublicKey,
+        sidechain_id: RistrettoPublicKey,
+    },
 }
