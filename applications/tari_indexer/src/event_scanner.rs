@@ -26,7 +26,7 @@ use futures::StreamExt;
 use log::*;
 use tari_bor::decode;
 use tari_common::configuration::Network;
-use tari_crypto::tari_utilities::message_format::MessageFormat;
+use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::message_format::MessageFormat};
 use tari_dan_app_utilities::consensus_constants::ConsensusConstants;
 use tari_dan_common_types::{committee::Committee, Epoch, NumPreshards, PeerAddress, ShardGroup};
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
@@ -40,6 +40,7 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_template_lib::models::{EntityId, TemplateAddress};
 use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory};
+use tari_dan_storage::consensus_models::BlockError;
 
 use crate::{
     config::EventFilterConfig,
@@ -96,6 +97,7 @@ struct TransactionMetadata {
 
 pub struct EventScanner {
     network: Network,
+    sidechain_id: Option<RistrettoPublicKey>,
     epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
     client_factory: TariValidatorNodeRpcClientFactory,
     substate_store: SqliteSubstateStore,
@@ -105,6 +107,7 @@ pub struct EventScanner {
 impl EventScanner {
     pub fn new(
         network: Network,
+        sidechain_id: Option<RistrettoPublicKey>,
         epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
         client_factory: TariValidatorNodeRpcClientFactory,
         substate_store: SqliteSubstateStore,
@@ -112,6 +115,7 @@ impl EventScanner {
     ) -> Self {
         Self {
             network,
+            sidechain_id,
             epoch_manager,
             client_factory,
             substate_store,
@@ -447,10 +451,10 @@ impl EventScanner {
             .collect()
     }
 
-    fn build_genesis_block_id(&self, num_preshards: NumPreshards) -> BlockId {
+    fn build_genesis_block_id(&self, num_preshards: NumPreshards) -> Result<BlockId, BlockError> {
         // TODO: this should return the actual genesis for the shard group and epoch
-        let start_block = Block::zero_block(self.network, num_preshards);
-        *start_block.id()
+        let start_block = Block::zero_block(self.network, num_preshards, self.sidechain_id.clone())?;
+        Ok(*start_block.id())
     }
 
     async fn get_oldest_scanned_epoch(&self) -> Result<Option<Epoch>, anyhow::Error> {
@@ -470,10 +474,14 @@ impl EventScanner {
         let start_block_id = self
             .substate_store
             .with_read_tx(|tx| tx.get_last_scanned_block_id(epoch, shard_group))?;
-        let start_block_id = start_block_id.unwrap_or_else(|| {
-            let consensus_constants = ConsensusConstants::from(self.network);
-            self.build_genesis_block_id(consensus_constants.num_preshards)
-        });
+
+        let start_block_id = match start_block_id {
+            Some(block_id) => block_id,
+            None => {
+                let consensus_constants = ConsensusConstants::from(self.network);
+                self.build_genesis_block_id(consensus_constants.num_preshards)?
+            },
+        };
 
         committee.shuffle();
         let mut last_block_id = start_block_id;

@@ -181,6 +181,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Invalid event filters: {}", e)))?;
     let event_scanner = Arc::new(EventScanner::new(
         config.network,
+        config.indexer.sidechain_id,
         Box::new(services.epoch_manager.clone()),
         services.validator_node_client_factory.clone(),
         services.substate_store.clone(),
