@@ -30,9 +30,6 @@ pub use validator_metadata::{vn_node_hash, ValidatorMetadata};
 mod node_addressable;
 pub use node_addressable::*;
 
-mod sidechain_id;
-pub use sidechain_id::SidechainId;
-
 pub mod services;
 
 mod substate_address;

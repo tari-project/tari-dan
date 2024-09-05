@@ -12,9 +12,9 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, FixedHashSizeError, PublicKey};
-use tari_crypto::tari_utilities::epoch_time::EpochTime;
+use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::epoch_time::EpochTime};
 use tari_dan_common_types::{
-    committee::CommitteeInfo, hashing, optional::Optional, serde_with, shard::Shard, Epoch, ExtraData, MaxSizeBytesError, NodeAddressable, NodeHeight, NumPreshards, ShardGroup, SidechainId, SubstateAddress
+    committee::CommitteeInfo, hashing, optional::Optional, serde_with, shard::Shard, Epoch, ExtraData, MaxSizeBytesError, NodeAddressable, NodeHeight, NumPreshards, ShardGroup, SubstateAddress
 };
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
@@ -210,7 +210,7 @@ impl Block {
         }
     }
 
-    pub fn genesis(network: Network, epoch: Epoch, shard_group: ShardGroup, sidechain_id: Option<SidechainId>) -> Result<Self, BlockError> {
+    pub fn genesis(network: Network, epoch: Epoch, shard_group: ShardGroup, sidechain_id: Option<RistrettoPublicKey>) -> Result<Self, BlockError> {
         Ok(Self::new(
             network,
             BlockId::zero(),
@@ -233,7 +233,7 @@ impl Block {
     }
 
     /// This is the parent block for all genesis blocks. Its block ID is always zero.
-    pub fn zero_block(network: Network, num_preshards: NumPreshards, sidechain_id: Option<SidechainId>) -> Result<Self, BlockError> {
+    pub fn zero_block(network: Network, num_preshards: NumPreshards, sidechain_id: Option<RistrettoPublicKey>) -> Result<Self, BlockError> {
         Ok(Self {
             network,
             id: BlockId::zero(),
@@ -302,7 +302,7 @@ impl Block {
         block
     }
 
-    fn extra_data_from_sidechain_id(sidechain_id: Option<SidechainId>) -> Result<Option<ExtraData>, BlockError> {
+    fn extra_data_from_sidechain_id(sidechain_id: Option<RistrettoPublicKey>) -> Result<Option<ExtraData>, BlockError> {
         let extra_data = sidechain_id
             .map(|id| ExtraData::new().insert_sidechain_id(id).cloned())
             .transpose()?;

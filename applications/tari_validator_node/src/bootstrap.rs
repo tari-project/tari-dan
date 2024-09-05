@@ -49,7 +49,7 @@ use tari_dan_app_utilities::{
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
 };
-use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, NumPreshards, PeerAddress, ShardGroup, SidechainId};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, NumPreshards, PeerAddress, ShardGroup};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
@@ -110,6 +110,7 @@ use crate::{
     ApplicationConfig,
     ValidatorNodeConfig,
 };
+use tari_crypto::ristretto::RistrettoPublicKey;
 
 const LOG_TARGET: &str = "tari::validator_node::bootstrap";
 
@@ -442,7 +443,7 @@ async fn spawn_p2p_rpc(
     Ok(())
 }
 
-fn bootstrap_state<TTx>(tx: &mut TTx, network: Network, num_preshards: NumPreshards, sidechain_id: Option<SidechainId>) -> Result<(), StorageError>
+fn bootstrap_state<TTx>(tx: &mut TTx, network: Network, num_preshards: NumPreshards, sidechain_id: Option<RistrettoPublicKey>) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + Deref,
     TTx::Target: StateStoreReadTransaction,
@@ -520,7 +521,7 @@ fn create_substate<TTx, TId, TVal>(
     tx: &mut TTx,
     network: Network,
     num_preshards: NumPreshards,
-    sidechain_id: &Option<SidechainId>,
+    sidechain_id: &Option<RistrettoPublicKey>,
     substate_id: TId,
     value: TVal,
 ) -> Result<(), StorageError>

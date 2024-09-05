@@ -21,11 +21,11 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
+use tari_crypto::ristretto::RistrettoPublicKey;
 use std::collections::BTreeMap;
 use tari_crypto::tari_utilities::ByteArray;
 
 use crate::MaxSizeBytes;
-use crate::SidechainId;
 
 use crate::MaxSizeBytesError;
 
@@ -55,7 +55,7 @@ impl ExtraData {
         self
     }
 
-    pub fn insert_sidechain_id(&mut self, sidechain_id: SidechainId) -> Result<&mut Self, MaxSizeBytesError> {
+    pub fn insert_sidechain_id(&mut self, sidechain_id: RistrettoPublicKey) -> Result<&mut Self, MaxSizeBytesError> {
         self.0.insert(ExtraFieldKey::SidechainId, sidechain_id.as_bytes().to_vec().try_into()?);
         Ok(self)
     }
