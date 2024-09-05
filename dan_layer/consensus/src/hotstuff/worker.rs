@@ -739,7 +739,11 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     fn create_zero_block_if_required(&self, epoch: Epoch, shard_group: ShardGroup) -> Result<(), HotStuffError> {
         self.state_store.with_write_tx(|tx| {
             // The parent for genesis blocks refer to this zero block
-            let mut zero_block = Block::zero_block(self.config.network, self.config.num_preshards, self.config.sidechain_id.clone())?;
+            let mut zero_block = Block::zero_block(
+                self.config.network,
+                self.config.num_preshards,
+                self.config.sidechain_id.clone(),
+            )?;
             if !zero_block.exists(&**tx)? {
                 debug!(target: LOG_TARGET, "Creating zero block");
                 zero_block.justify().insert(tx)?;
@@ -753,7 +757,12 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 zero_block.commit_diff(tx, BlockDiff::empty(*zero_block.id()))?;
             }
 
-            let mut genesis = Block::genesis(self.config.network, epoch, shard_group, self.config.sidechain_id.clone())?;
+            let mut genesis = Block::genesis(
+                self.config.network,
+                epoch,
+                shard_group,
+                self.config.sidechain_id.clone(),
+            )?;
             if !genesis.exists(&**tx)? {
                 info!(target: LOG_TARGET, "✨Creating genesis block {genesis}");
                 genesis.justify().insert(tx)?;

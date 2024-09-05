@@ -7,6 +7,7 @@ use std::{
     hash::Hash,
     ops::{Deref, RangeInclusive},
 };
+
 use indexmap::IndexMap;
 use log::*;
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,19 @@ use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, FixedHashSizeError, PublicKey};
 use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::epoch_time::EpochTime};
 use tari_dan_common_types::{
-    committee::CommitteeInfo, hashing, optional::Optional, serde_with, shard::Shard, Epoch, ExtraData, MaxSizeBytesError, NodeAddressable, NodeHeight, NumPreshards, ShardGroup, SubstateAddress
+    committee::CommitteeInfo,
+    hashing,
+    optional::Optional,
+    serde_with,
+    shard::Shard,
+    Epoch,
+    ExtraData,
+    MaxSizeBytesError,
+    NodeAddressable,
+    NodeHeight,
+    NumPreshards,
+    ShardGroup,
+    SubstateAddress,
 };
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
@@ -182,7 +195,7 @@ impl Block {
         timestamp: u64,
         base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
-        extra_data: Option<ExtraData>
+        extra_data: Option<ExtraData>,
     ) -> Self {
         Self {
             id,
@@ -206,11 +219,16 @@ impl Block {
             timestamp,
             base_layer_block_height,
             base_layer_block_hash,
-            extra_data
+            extra_data,
         }
     }
 
-    pub fn genesis(network: Network, epoch: Epoch, shard_group: ShardGroup, sidechain_id: Option<RistrettoPublicKey>) -> Result<Self, BlockError> {
+    pub fn genesis(
+        network: Network,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+        sidechain_id: Option<RistrettoPublicKey>,
+    ) -> Result<Self, BlockError> {
         Ok(Self::new(
             network,
             BlockId::zero(),
@@ -228,12 +246,16 @@ impl Block {
             0,
             0,
             FixedHash::zero(),
-            Self::extra_data_from_sidechain_id(sidechain_id)?
+            Self::extra_data_from_sidechain_id(sidechain_id)?,
         ))
     }
 
     /// This is the parent block for all genesis blocks. Its block ID is always zero.
-    pub fn zero_block(network: Network, num_preshards: NumPreshards, sidechain_id: Option<RistrettoPublicKey>) -> Result<Self, BlockError> {
+    pub fn zero_block(
+        network: Network,
+        num_preshards: NumPreshards,
+        sidechain_id: Option<RistrettoPublicKey>,
+    ) -> Result<Self, BlockError> {
         Ok(Self {
             network,
             id: BlockId::zero(),

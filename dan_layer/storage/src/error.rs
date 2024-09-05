@@ -22,6 +22,7 @@
 
 use tari_common_types::types::FixedHashSizeError;
 use tari_dan_common_types::optional::IsNotFoundError;
+
 use crate::consensus_models::BlockError;
 
 #[derive(Debug, thiserror::Error)]

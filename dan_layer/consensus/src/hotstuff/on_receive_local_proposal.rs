@@ -210,7 +210,12 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                             create_epoch_checkpoint(tx, epoch, local_committee_info.shard_group())?;
 
                             // Create the next genesis
-                            let mut genesis = Block::genesis(self.config.network, next_epoch, next_shard_group, self.config.sidechain_id.clone())?;
+                            let mut genesis = Block::genesis(
+                                self.config.network,
+                                next_epoch,
+                                next_shard_group,
+                                self.config.sidechain_id.clone(),
+                            )?;
                             info!(target: LOG_TARGET, "⭐️ Creating new genesis block {genesis}");
                             genesis.justify().insert(tx)?;
                             genesis.insert(tx)?;

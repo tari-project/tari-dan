@@ -38,7 +38,7 @@ use tari_consensus::messages::{
     VoteMessage,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight, ShardGroup, ValidatorMetadata};
+use tari_dan_common_types::{shard::Shard, Epoch, ExtraData, NodeHeight, ShardGroup, ValidatorMetadata};
 use tari_dan_storage::consensus_models::{
     BlockId,
     Command,
@@ -61,7 +61,6 @@ use tari_dan_storage::consensus_models::{
 };
 use tari_engine_types::substate::{SubstateId, SubstateValue};
 use tari_transaction::{TransactionId, VersionedSubstateId};
-use tari_dan_common_types::ExtraData;
 
 use crate::proto::{self};
 // -------------------------------- HotstuffMessage -------------------------------- //
@@ -457,7 +456,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             base_layer_block_height: value.base_layer_block_height(),
             base_layer_block_hash: value.base_layer_block_hash().as_bytes().to_vec(),
             is_dummy: value.is_dummy(),
-            extra_data: value.extra_data().map(Into::into)
+            extra_data: value.extra_data().map(Into::into),
         }
     }
 }
@@ -517,7 +516,7 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
                 value.timestamp,
                 value.base_layer_block_height,
                 value.base_layer_block_hash.try_into()?,
-                extra_data
+                extra_data,
             ))
         }
     }

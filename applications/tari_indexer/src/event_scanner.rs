@@ -30,7 +30,7 @@ use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::message_format:
 use tari_dan_app_utilities::consensus_constants::ConsensusConstants;
 use tari_dan_common_types::{committee::Committee, Epoch, NumPreshards, PeerAddress, ShardGroup};
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
-use tari_dan_storage::consensus_models::{Block, BlockId, Decision, TransactionRecord};
+use tari_dan_storage::consensus_models::{Block, BlockError, BlockId, Decision, TransactionRecord};
 use tari_engine_types::{
     commit_result::{ExecuteResult, TransactionResult},
     events::Event,
@@ -40,7 +40,6 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_template_lib::models::{EntityId, TemplateAddress};
 use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory};
-use tari_dan_storage::consensus_models::BlockError;
 
 use crate::{
     config::EventFilterConfig,

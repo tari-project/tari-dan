@@ -24,18 +24,7 @@ use std::{cmp, convert::TryFrom, ops::Deref};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(
-    Debug,
-    Clone,
-    Hash,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Default,
-    Deserialize,
-    Serialize,
-)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Default, Deserialize, Serialize)]
 pub struct MaxSizeBytes<const MAX: usize> {
     inner: Vec<u8>,
 }

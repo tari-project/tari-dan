@@ -7,6 +7,7 @@ use tari_dan_common_types::{Epoch, NodeHeight, ShardGroup};
 use tari_dan_storage::{consensus_models, StorageError};
 use tari_utilities::byte_array::ByteArray;
 use time::PrimitiveDateTime;
+
 use crate::{
     schema::blocks,
     serialization::{deserialize_hex, deserialize_hex_try_from, deserialize_json},
@@ -38,7 +39,7 @@ pub struct Block {
     pub base_layer_block_height: i64,
     pub base_layer_block_hash: String,
     pub created_at: PrimitiveDateTime,
-    pub extra_data: Option<String>
+    pub extra_data: Option<String>,
 }
 
 impl Block {

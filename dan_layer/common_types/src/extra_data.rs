@@ -20,15 +20,14 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use serde::{Deserialize, Serialize};
-use tari_crypto::ristretto::RistrettoPublicKey;
 use std::collections::BTreeMap;
-use tari_crypto::tari_utilities::ByteArray;
-use crate::MaxSizeBytes;
-use crate::MaxSizeBytesError;
 
+use serde::{Deserialize, Serialize};
+use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
+
+use crate::{MaxSizeBytes, MaxSizeBytesError};
 
 const MAX_DATA_SIZE: usize = 256;
 type ExtraFieldValue = MaxSizeBytes<MAX_DATA_SIZE>;
@@ -44,7 +43,6 @@ pub enum ExtraFieldKey {
 pub struct ExtraData(#[cfg_attr(feature = "ts", ts(type = "string"))] BTreeMap<ExtraFieldKey, ExtraFieldValue>);
 
 impl ExtraData {
-
     pub const fn new() -> Self {
         Self(BTreeMap::new())
     }
@@ -56,7 +54,8 @@ impl ExtraData {
     }
 
     pub fn insert_sidechain_id(&mut self, sidechain_id: RistrettoPublicKey) -> Result<&mut Self, MaxSizeBytesError> {
-        self.0.insert(ExtraFieldKey::SidechainId, sidechain_id.as_bytes().to_vec().try_into()?);
+        self.0
+            .insert(ExtraFieldKey::SidechainId, sidechain_id.as_bytes().to_vec().try_into()?);
         Ok(self)
     }
 
