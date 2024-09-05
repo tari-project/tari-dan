@@ -39,6 +39,7 @@ use tari_dan_app_utilities::{
     p2p_config::{P2pConfig, PeerSeedsConfig},
     template_manager::implementation::TemplateConfig,
 };
+use url::Url;
 
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {
@@ -70,8 +71,8 @@ pub struct IndexerConfig {
     pub identity_file: PathBuf,
     /// A path to the file that stores the tor hidden service private key, if using the tor transport
     pub tor_identity_file: PathBuf,
-    /// The Tari base node's GRPC address
-    pub base_node_grpc_address: Option<String>,
+    /// The Tari base node's GRPC URL (e.g. http://localhost:18142)
+    pub base_node_grpc_url: Option<Url>,
     /// How often do we want to scan the base layer for changes
     #[serde(with = "serializers::seconds")]
     pub base_layer_scanning_interval: Duration,
@@ -127,7 +128,7 @@ impl Default for IndexerConfig {
             override_from: None,
             identity_file: PathBuf::from("indexer_id.json"),
             tor_identity_file: PathBuf::from("indexer_tor_id.json"),
-            base_node_grpc_address: None,
+            base_node_grpc_url: None,
             base_layer_scanning_interval: Duration::from_secs(10),
             data_dir: PathBuf::from("data/indexer"),
             p2p: P2pConfig::default(),

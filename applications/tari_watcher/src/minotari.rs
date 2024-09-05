@@ -12,14 +12,15 @@ use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::ByteArray;
 use tonic::transport::Channel;
+use url::Url;
 
 use crate::helpers::read_registration_file;
 
 #[derive(Clone)]
-pub struct Minotari {
+pub struct MinotariNodes {
     bootstrapped: bool,
-    node_grpc_address: String,
-    wallet_grpc_address: String,
+    node_grpc_address: Url,
+    wallet_grpc_address: Url,
     node_registration_file: PathBuf,
     current_height: u64,
     node: Option<BaseNodeGrpcClient<Channel>>,
@@ -42,8 +43,8 @@ impl TipStatus {
     }
 }
 
-impl Minotari {
-    pub fn new(node_grpc_address: String, wallet_grpc_address: String, node_registration_file: PathBuf) -> Self {
+impl MinotariNodes {
+    pub fn new(node_grpc_address: Url, wallet_grpc_address: Url, node_registration_file: PathBuf) -> Self {
         Self {
             bootstrapped: false,
             node_grpc_address,
@@ -67,16 +68,16 @@ impl Minotari {
     }
 
     async fn connect_wallet(&mut self) -> anyhow::Result<()> {
-        log::info!("Connecting to wallet on gRPC {}", self.wallet_grpc_address.clone());
-        let client = WalletGrpcClient::connect(&self.wallet_grpc_address).await?;
+        log::info!("Connecting to wallet on gRPC {}", self.wallet_grpc_address);
+        let client = WalletGrpcClient::connect(self.wallet_grpc_address.as_str()).await?;
 
         self.wallet = Some(client);
         Ok(())
     }
 
     async fn connect_node(&mut self) -> anyhow::Result<()> {
-        log::info!("Connecting to base node on gRPC {}", self.node_grpc_address.clone());
-        let client = BaseNodeGrpcClient::connect(self.node_grpc_address.clone())
+        log::info!("Connecting to base node on gRPC {}", self.node_grpc_address);
+        let client = BaseNodeGrpcClient::connect(self.node_grpc_address.to_string())
             .await
             .map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
 
@@ -156,7 +157,14 @@ impl Minotari {
 
         info!("Preparing to send a VN registration request");
 
-        let info = read_registration_file(self.node_registration_file.clone()).await?;
+        let info = read_registration_file(self.node_registration_file.clone())
+            .await?
+            .ok_or_else(|| {
+                anyhow!(
+                    "No registration data found in file: {}",
+                    self.node_registration_file.display()
+                )
+            })?;
         let sig = info.signature.signature();
         let resp = self
             .wallet

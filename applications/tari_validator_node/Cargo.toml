@@ -80,6 +80,7 @@ tokio = { workspace = true, features = [
     "rt-multi-thread",
 ] }
 tower-http = { workspace = true, features = ["default", "cors"] }
+url = { workspace = true, features = ["serde"] }
 
 [build-dependencies]
 tari_common = { workspace = true, features = ["build"] }

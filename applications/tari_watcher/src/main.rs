@@ -1,7 +1,7 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, Context};
 use registration::registration_loop;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tokio::{fs, task::JoinHandle};
@@ -9,9 +9,11 @@ use tokio::{fs, task::JoinHandle};
 use crate::{
     cli::{Cli, Commands},
     config::{get_base_config, Config},
+    constants::DEFAULT_WATCHER_BASE_PATH,
     helpers::read_config_file,
     logger::init_logger,
     manager::{start_receivers, ManagerHandle, ProcessManager},
+    process::create_pid_file,
     shutdown::exit_signal,
 };
 
@@ -33,12 +35,16 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::init();
     let config_path = cli.get_config_path();
 
+    let config_path = config_path
+        .canonicalize()
+        .context("Failed to canonicalize config path")?;
+
     init_logger()?;
 
     match cli.command {
         Commands::Init(ref args) => {
             // set by default in CommonCli
-            let parent = config_path.parent().unwrap();
+            let parent = config_path.parent().context("parent path")?;
             fs::create_dir_all(parent).await?;
 
             let mut config = get_base_config(&cli)?;
@@ -50,17 +56,11 @@ async fn main() -> anyhow::Result<()> {
                 .with_context(|| anyhow!("Failed to open config path {}", config_path.display()))?;
             config.write(file).await.context("Writing config failed")?;
 
-            let config_path = config_path
-                .canonicalize()
-                .context("Failed to canonicalize config path")?;
-
             log::info!("Config file created at {}", config_path.display());
         },
         Commands::Start(ref args) => {
-            let mut cfg = read_config_file(cli.get_config_path()).await?;
-            if let Some(conf) = cfg.missing_conf() {
-                bail!("Missing configuration values: {:?}", conf);
-            }
+            log::info!("Starting watcher using config {}", config_path.display());
+            let mut cfg = read_config_file(config_path).await.context("read config file")?;
 
             // optionally override config values
             args.apply(&mut cfg);
@@ -74,6 +74,14 @@ async fn main() -> anyhow::Result<()> {
 async fn start(config: Config) -> anyhow::Result<()> {
     let shutdown = Shutdown::new();
     let signal = shutdown.to_signal().select(exit_signal()?);
+    fs::create_dir_all(config.base_dir.join(DEFAULT_WATCHER_BASE_PATH))
+        .await
+        .context("create watcher base path")?;
+    create_pid_file(
+        config.base_dir.join(DEFAULT_WATCHER_BASE_PATH).join("watcher.pid"),
+        std::process::id(),
+    )
+    .await?;
     let handlers = spawn_manager(config.clone(), shutdown.to_signal(), shutdown).await?;
     let manager_handle = handlers.manager;
     let task_handle = handlers.task;
@@ -86,9 +94,9 @@ async fn start(config: Config) -> anyhow::Result<()> {
             result?;
             log::info!("Process manager exited");
         },
-        _ = async {
-            drop(registration_loop(config, manager_handle).await);
-        } => {},
+        Err(err) = registration_loop(config, manager_handle) => {
+            log::error!("Registration loop exited with error {err}");
+        },
     }
 
     Ok(())

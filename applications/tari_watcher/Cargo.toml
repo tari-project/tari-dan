@@ -21,6 +21,7 @@ tari_shutdown = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
 anyhow = { workspace = true }
+url = { workspace = true, features = ["serde"] }
 tokio = { workspace = true, features = [
     "rt-multi-thread",
     "macros",

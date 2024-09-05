@@ -1,7 +1,10 @@
 // Copyright 2024 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use std::{path::PathBuf, process::Stdio};
+use std::{
+    path::{Path, PathBuf},
+    process::Stdio,
+};
 
 use anyhow::bail;
 use log::*;
@@ -11,7 +14,9 @@ use tokio::{
     io::AsyncWriteExt,
     process::{Child, Command as TokioCommand},
     sync::mpsc::{self},
+    time::sleep,
 };
+use url::Url;
 
 use crate::{
     config::Channels,
@@ -45,19 +50,6 @@ pub async fn clean_stale_pid_file(pid_file_path: PathBuf) -> anyhow::Result<()> 
     Ok(())
 }
 
-async fn create_pid_file(path: PathBuf) -> anyhow::Result<()> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(&path)
-        .await?;
-
-    file.write_all(std::process::id().to_string().as_bytes()).await?;
-
-    Ok(())
-}
-
 pub struct ChildChannel {
     pub rx_log: mpsc::Receiver<ProcessStatus>,
     pub tx_log: mpsc::Sender<ProcessStatus>,
@@ -66,52 +58,35 @@ pub struct ChildChannel {
     pub cfg_alert: Channels,
 }
 
-async fn spawn_child(
-    validator_node_path: PathBuf,
-    validator_config_path: PathBuf,
+async fn spawn_validator_node(
+    binary_path: PathBuf,
     base_dir: PathBuf,
+    minotari_node_grpc_url: &Url,
 ) -> anyhow::Result<Child> {
-    let node_binary_path = base_dir.join(validator_node_path);
-    let vn_cfg_path = base_dir.join(validator_config_path);
-    debug!("Using VN binary at: {}", node_binary_path.display());
-    debug!("Using VN config in directory: {}", vn_cfg_path.display());
+    debug!("Using VN binary at: {}", binary_path.display());
+    debug!("Using VN base dir in directory: {}", base_dir.display());
+    // Needed to ensure the base dir exists before we create the pid file
+    fs::create_dir_all(&base_dir).await?;
 
-    let child = TokioCommand::new(node_binary_path.clone().into_os_string())
-        .arg("-b")
-        .arg(vn_cfg_path)
+    let child = TokioCommand::new(binary_path)
+        .arg(format!("-b{}", base_dir.display()))
+        .arg(format!("--node-grpc={minotari_node_grpc_url}"))
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        // TODO: redirect these to a file and optionally stdout
+        // .stdout(Stdio::null())
+        // .stderr(Stdio::null())
         .kill_on_drop(false)
         .spawn()?;
-
-    let pid = child.id().expect("Failed to get PID for child process");
-    info!("Spawned validator child process with id {}", pid);
-
-    let path = base_dir.join(DEFAULT_VALIDATOR_PID_PATH);
-    if let Err(e) = create_pid_file(path.clone()).await {
-        log::error!("Failed to create PID file when spawning node: {}", e);
-    }
-
-    create_pid_file(path.clone()).await?;
-
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(path)
-        .await?;
-    file.write_all(pid.to_string().as_bytes()).await?;
 
     Ok(child)
 }
 
 pub async fn spawn_validator_node_os(
-    validator_node_path: PathBuf,
-    validator_config_path: PathBuf,
-    base_dir: PathBuf,
+    binary_path: PathBuf,
+    vn_base_dir: PathBuf,
     cfg_alert: Channels,
     auto_restart: bool,
+    minotari_node_grpc_url: Url,
     mut trigger_signal: Shutdown,
 ) -> anyhow::Result<ChildChannel> {
     let (tx_log, rx_log) = mpsc::channel(16);
@@ -123,25 +98,35 @@ pub async fn spawn_validator_node_os(
     let tx_restart_clone_main = tx_restart.clone();
     tokio::spawn(async move {
         loop {
-            let child_res = spawn_child(
-                validator_node_path.clone(),
-                validator_config_path.clone(),
-                base_dir.clone(),
-            )
-            .await;
+            let child_res =
+                spawn_validator_node(binary_path.clone(), vn_base_dir.clone(), &minotari_node_grpc_url).await;
 
             match child_res {
                 Ok(child) => {
+                    let pid = child.id().unwrap_or(0);
+                    info!("Spawned validator child process with id {}", pid);
+
+                    // TODO: the VN should create a PID file in its base dir
+                    let path = vn_base_dir.join(DEFAULT_VALIDATOR_PID_PATH);
+                    if let Err(err) = create_pid_file(path, pid).await {
+                        error!("Failed to create VN PID file: {}", err);
+                    }
+
                     let tx_log_monitor = tx_log_clone_main.clone();
                     let tx_alert_monitor = tx_alert_clone_main.clone();
                     let tx_restart_monitor = tx_restart_clone_main.clone();
                     // spawn monitoring and handle logs and alerts
-                    tokio::spawn(async move {
-                        monitor_child(child, tx_log_monitor, tx_alert_monitor, tx_restart_monitor).await;
-                    });
+                    tokio::spawn(monitor_child(
+                        child,
+                        tx_log_monitor,
+                        tx_alert_monitor,
+                        tx_restart_monitor,
+                    ));
                 },
                 Err(e) => {
-                    error!("Failed to spawn child process: {:?}", e);
+                    error!("Failed to spawn child process: {}. Retrying in 5s", e);
+                    sleep(std::time::Duration::from_secs(5)).await;
+                    continue;
                 },
             }
 
@@ -173,6 +158,19 @@ pub async fn spawn_validator_node_os(
     })
 }
 
+pub async fn create_pid_file<P: AsRef<Path>>(path: P, pid: u32) -> anyhow::Result<()> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(path)
+        .await?;
+
+    file.write_all(pid.to_string().as_bytes()).await?;
+
+    Ok(())
+}
+
 async fn check_existing_node_os(base_dir: PathBuf) -> Option<u32> {
     let process_dir = base_dir.join("processes");
     if !process_dir.exists() {
@@ -199,13 +197,13 @@ async fn check_existing_node_os(base_dir: PathBuf) -> Option<u32> {
 
 pub async fn start_validator(
     validator_path: PathBuf,
-    validator_config_path: PathBuf,
-    base_dir: PathBuf,
+    vn_base_dir: PathBuf,
+    minotari_node_grpc_url: Url,
     alerting_config: Channels,
     auto_restart: bool,
     trigger_signal: Shutdown,
 ) -> Option<ChildChannel> {
-    let opt = check_existing_node_os(base_dir.clone()).await;
+    let opt = check_existing_node_os(vn_base_dir.clone()).await;
     if let Some(pid) = opt {
         info!("Picking up existing VN process with id: {}", pid);
         // todo: create new process status channel for picked up process
@@ -216,10 +214,10 @@ pub async fn start_validator(
 
     let cc = spawn_validator_node_os(
         validator_path,
-        validator_config_path,
-        base_dir,
+        vn_base_dir,
         alerting_config,
         auto_restart,
+        minotari_node_grpc_url,
         trigger_signal,
     )
     .await

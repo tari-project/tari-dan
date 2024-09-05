@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use super::TOKEN_SYMBOL;
+use super::{IMAGE_URL, TOKEN_SYMBOL};
 use crate::{
     args::MintArg,
     auth::{AccessRule, AuthHook, OwnerRule, ResourceAccessRules},
@@ -90,6 +90,11 @@ impl FungibleResourceBuilder {
     pub fn with_metadata(mut self, metadata: Metadata) -> Self {
         self.metadata = metadata;
         self
+    }
+
+    /// Sets up the image URL of the resource
+    pub fn with_image_url(self, url: String) -> Self {
+        self.add_metadata(IMAGE_URL, url)
     }
 
     /// Specify a hook method that will be called to authorize actions on the resource.

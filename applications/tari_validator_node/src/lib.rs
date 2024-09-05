@@ -167,14 +167,24 @@ pub async fn run_validator_node(
 }
 
 async fn create_base_layer_client(config: &ApplicationConfig) -> Result<GrpcBaseNodeClient, ExitError> {
-    let base_node_address = config.validator_node.base_node_grpc_address.clone().unwrap_or_else(|| {
+    let base_node_address = config.validator_node.base_node_grpc_url.clone().unwrap_or_else(|| {
         let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-        format!("127.0.0.1:{port}")
+        format!("http://127.0.0.1:{port}")
+            .parse()
+            .expect("Default base node GRPC URL is malformed")
     });
     info!(target: LOG_TARGET, "Connecting to base node on GRPC at {}", base_node_address);
-    let base_node_client = GrpcBaseNodeClient::connect(base_node_address)
+    let base_node_client = GrpcBaseNodeClient::connect(base_node_address.clone())
         .await
-        .map_err(|error| ExitError::new(ExitCode::ConfigError, error))?;
+        .map_err(|error| {
+            ExitError::new(
+                ExitCode::ConfigError,
+                format!(
+                    "Could not connect to the Minotari node at address {base_node_address}: {error}. Please ensure \
+                     that the Minotari node is running and configured for GRPC."
+                ),
+            )
+        })?;
 
     Ok(base_node_client)
 }
