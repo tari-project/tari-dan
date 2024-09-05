@@ -212,6 +212,8 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
                     evidence,
                     is_ready,
                     local_decision,
+                    transaction_fee,
+                    leader_fee,
                     remote_decision,
                     is_applied,
                     created_at

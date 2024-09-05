@@ -19,9 +19,8 @@ pub struct TransactionPoolRecord {
     pub local_decision: Option<String>,
     pub remote_decision: Option<String>,
     pub evidence: Option<String>,
-    pub transaction_fee: Option<i64>,
-    pub leader_fee: Option<i64>,
-    pub global_exhaust_burn: Option<i64>,
+    pub transaction_fee: i64,
+    pub leader_fee: Option<String>,
     pub stage: String,
     // TODO: This is the last stage update, but does not reflect the actual stage (which comes from the
     //       transaction_pool_state_updates table). This is kind of a hack to make transaction_pool_count work
@@ -48,6 +47,8 @@ impl TransactionPoolRecord {
         let mut local_decision = self.local_decision;
         let mut is_ready = self.is_ready;
         let mut remote_decision = self.remote_decision;
+        let mut leader_fee = self.leader_fee;
+        let mut transaction_fee = self.transaction_fee;
 
         if let Some(update) = update {
             evidence.merge(deserialize_json(&update.evidence)?);
@@ -55,32 +56,18 @@ impl TransactionPoolRecord {
             pending_stage = Some(parse_from_string(&update.stage)?);
             local_decision = Some(update.local_decision);
             remote_decision = update.remote_decision;
+            leader_fee = update.leader_fee;
+            transaction_fee = update.transaction_fee;
         }
 
         let remote_decision = remote_decision.as_deref().map(parse_from_string).transpose()?;
-
-        let leader_fee = self
-            .leader_fee
-            .map(|leader_fee| -> Result<LeaderFee, StorageError> {
-                Ok(LeaderFee {
-                    fee: leader_fee as u64,
-                    global_exhaust_burn: self.global_exhaust_burn.map(|burn| burn as u64).ok_or_else(|| {
-                        StorageError::DataInconsistency {
-                            details: format!(
-                                "TransactionPoolRecord {} has a leader_fee but no global_exhaust_burn",
-                                self.id
-                            ),
-                        }
-                    })?,
-                })
-            })
-            .transpose()?;
+        let leader_fee = leader_fee.as_deref().map(deserialize_json::<LeaderFee>).transpose()?;
         let original_decision = parse_from_string(&self.original_decision)?;
 
         Ok(consensus_models::TransactionPoolRecord::load(
             deserialize_hex_try_from(&self.transaction_id)?,
             evidence,
-            self.transaction_fee.map(|f| f as u64),
+            transaction_fee as u64,
             leader_fee,
             parse_from_string(&self.stage)?,
             pending_stage,
@@ -111,6 +98,10 @@ pub struct TransactionPoolStateUpdate {
     pub is_ready: bool,
     #[diesel(sql_type = diesel::sql_types::Text)]
     pub local_decision: String,
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    pub transaction_fee: i64,
+    #[diesel(sql_type = diesel::sql_types::Nullable < diesel::sql_types::Text >)]
+    pub leader_fee: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable < diesel::sql_types::Text >)]
     pub remote_decision: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Bool)]

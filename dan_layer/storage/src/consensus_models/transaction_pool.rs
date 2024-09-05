@@ -332,7 +332,7 @@ impl TransactionPoolRecord {
     pub fn load(
         id: TransactionId,
         evidence: Evidence,
-        transaction_fee: Option<u64>,
+        transaction_fee: u64,
         leader_fee: Option<LeaderFee>,
         stage: TransactionPoolStage,
         pending_stage: Option<TransactionPoolStage>,
@@ -344,7 +344,7 @@ impl TransactionPoolRecord {
         Self {
             transaction_id: id,
             evidence,
-            transaction_fee: transaction_fee.unwrap_or(0),
+            transaction_fee,
             leader_fee,
             stage,
             pending_stage,

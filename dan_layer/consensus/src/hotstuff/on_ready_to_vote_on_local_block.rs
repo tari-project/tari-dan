@@ -360,7 +360,14 @@ where TConsensusSpec: ConsensusSpec
                     }
                 },
                 Command::LocalAccept(atom) => {
-                    if !self.evaluate_local_accept_command(tx, block, &locked_block, atom, proposed_block_change_set)? {
+                    if !self.evaluate_local_accept_command(
+                        tx,
+                        block,
+                        &locked_block,
+                        atom,
+                        local_committee_info,
+                        proposed_block_change_set,
+                    )? {
                         proposed_block_change_set.no_vote();
                         return Ok(());
                     }
@@ -374,6 +381,7 @@ where TConsensusSpec: ConsensusSpec
                         local_committee_info,
                         &mut substate_store,
                         proposed_block_change_set,
+                        &mut total_leader_fee,
                     )? {
                         proposed_block_change_set.no_vote();
                         return Ok(());
@@ -919,10 +927,12 @@ where TConsensusSpec: ConsensusSpec
                         err
                     );
 
-                    tx_rec.set_local_decision(Decision::Abort);
                     execution.set_abort_reason(RejectReason::FailedToLockOutputs(err.to_string()));
 
+                    tx_rec.set_local_decision(Decision::Abort);
+                    tx_rec.set_transaction_fee(0);
                     tx_rec.set_next_stage(TransactionPoolStage::AllPrepared, true)?;
+
                     proposed_block_change_set
                         .set_next_transaction_update(tx_rec)?
                         .add_transaction_execution(execution)?;
@@ -1062,6 +1072,7 @@ where TConsensusSpec: ConsensusSpec
         block: &Block,
         locked_block: &LockedBlock,
         atom: &TransactionAtom,
+        local_committee_info: &CommitteeInfo,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<bool, HotStuffError> {
         let Some(mut tx_rec) =
@@ -1115,6 +1126,39 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
+        if atom.decision.is_commit() {
+            let Some(ref leader_fee) = atom.leader_fee else {
+                warn!(
+                    target: LOG_TARGET,
+                    "❌ NO VOTE: Leader fee in tx {} not set for AllAccept command in block {}",
+                    atom.id,
+                    block,
+                );
+                return Ok(false);
+            };
+
+            // Check the leader fee in the local accept phase. The fee only applied (is added to the block fee) for
+            // AllAccept
+            let num_involved_shard_groups =
+                local_committee_info.count_distinct_shard_groups(tx_rec.evidence().substate_addresses_iter());
+            let involved = NonZeroU64::new(num_involved_shard_groups as u64)
+                .ok_or_else(|| HotStuffError::InvariantError("Number of involved shard groups is 0".to_string()))?;
+            let calculated_leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);
+            if calculated_leader_fee != *leader_fee {
+                warn!(
+                    target: LOG_TARGET,
+                    "❌ NO VOTE: LocalAccept leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
+                    block,
+                    atom.leader_fee.as_ref().expect("None already checked"),
+                    calculated_leader_fee
+                );
+
+                return Ok(false);
+            }
+
+            tx_rec.set_leader_fee(calculated_leader_fee);
+        }
+
         tx_rec.set_next_stage(
             TransactionPoolStage::LocalAccepted,
             tx_rec.evidence().all_addresses_justified(),
@@ -1133,11 +1177,12 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
+        total_leader_fee: &mut u64,
     ) -> Result<bool, HotStuffError> {
         if atom.decision.is_abort() {
             warn!(
                 target: LOG_TARGET,
-                "❌ AllAccept command received for block {} but requires that the transaction is COMMIT",
+                "❌ NO VOTE: AllAccept command received for block {} but requires that the transaction is COMMIT",
                 block.id(),
             );
             return Ok(false);
@@ -1148,7 +1193,7 @@ where TConsensusSpec: ConsensusSpec
         else {
             warn!(
                 target: LOG_TARGET,
-                "⚠️ Local proposal received ({}) for transaction {} which is not in the pool. This is likely a previous transaction that has been re-proposed. Not voting on block.",
+                "⚠️ NO VOTE: Local proposal received ({}) for transaction {} which is not in the pool. This is likely a previous transaction that has been re-proposed. Not voting on block.",
                 block,
                 atom.id(),
             );
@@ -1158,7 +1203,7 @@ where TConsensusSpec: ConsensusSpec
         if !tx_rec.current_stage().is_local_accepted() {
             warn!(
                 target: LOG_TARGET,
-                "{} ❌ AllAccept Stage disagreement in block {} for transaction {}. Leader proposed AllAccept, but local stage is {}",
+                "{} ❌ NO VOTE: AllAccept Stage disagreement in block {} for transaction {}. Leader proposed AllAccept, but local stage is {}",
                 self.local_validator_pk,
                 block,
                 tx_rec.transaction_id(),
@@ -1170,7 +1215,7 @@ where TConsensusSpec: ConsensusSpec
         if tx_rec.current_decision().is_abort() {
             warn!(
                 target: LOG_TARGET,
-                "❌ AllAccept decision disagreement for transaction {} in block {}. Leader proposed COMMIT, we decided ABORT",
+                "❌ NO VOTE: AllAccept decision disagreement for transaction {} in block {}. Leader proposed COMMIT, we decided ABORT",
                 tx_rec.transaction_id(),
                 block,
             );
@@ -1180,11 +1225,41 @@ where TConsensusSpec: ConsensusSpec
         if tx_rec.transaction_fee() != atom.transaction_fee {
             warn!(
                 target: LOG_TARGET,
-                "❌ AllAccept transaction fee disagreement tx {} in block {}. Leader proposed {}, we calculated {}",
+                "❌ NO VOTE: AllAccept transaction fee disagreement tx {} in block {}. Leader proposed {}, we calculated {}",
                 tx_rec.transaction_id(),
                 block,
                 atom.transaction_fee,
                 tx_rec.transaction_fee()
+            );
+            return Ok(false);
+        }
+
+        let Some(ref leader_fee) = atom.leader_fee else {
+            warn!(
+                target: LOG_TARGET,
+                "❌ NO VOTE: Leader fee in tx {} not set for AllAccept command in block {}",
+                atom.id,
+                block,
+            );
+            return Ok(false);
+        };
+
+        let local_leader_fee = tx_rec.leader_fee().ok_or_else(|| {
+            HotStuffError::InvariantError(format!(
+                "evaluate_all_accept_command: Transaction {} has COMMIT decision and is at LocalAccepted stage but \
+                 leader fee is missing",
+                tx_rec.transaction_id()
+            ))
+        })?;
+
+        if local_leader_fee != leader_fee {
+            warn!(
+                target: LOG_TARGET,
+                "❌ NO VOTE: Leader fee disagreement for tx {} in block {}. Leader proposed {}, we calculated {}",
+                atom.id,
+                block,
+                leader_fee,
+                local_leader_fee
             );
             return Ok(false);
         }
@@ -1204,6 +1279,8 @@ where TConsensusSpec: ConsensusSpec
                 tx_rec.transaction_id(),
             ))
         })?;
+
+        *total_leader_fee += leader_fee.fee();
 
         substate_store.put_diff(
             *tx_rec.transaction_id(),
