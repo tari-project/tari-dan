@@ -457,7 +457,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             base_layer_block_height: value.base_layer_block_height(),
             base_layer_block_hash: value.base_layer_block_hash().as_bytes().to_vec(),
             is_dummy: value.is_dummy(),
-            extra_data: value.extra_data().map(|val| val.try_into().unwrap())
+            extra_data: value.extra_data().map(Into::into)
         }
     }
 }

@@ -47,7 +47,7 @@ mod confirm_all_transitions {
         let atom3 = create_tx_atom();
 
         let network = Default::default();
-        let zero_block = Block::zero_block(network, NumPreshards::P64);
+        let zero_block = Block::zero_block(network, NumPreshards::P64, None).unwrap();
         zero_block.insert(&mut tx).unwrap();
         let block1 = Block::new(
             network,
@@ -67,6 +67,7 @@ mod confirm_all_transitions {
             EpochTime::now().as_u64(),
             0,
             FixedHash::zero(),
+            None,
         );
         block1.insert(&mut tx).unwrap();
 

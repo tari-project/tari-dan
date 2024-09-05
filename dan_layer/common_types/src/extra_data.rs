@@ -24,10 +24,11 @@ use serde::{Deserialize, Serialize};
 use tari_crypto::ristretto::RistrettoPublicKey;
 use std::collections::BTreeMap;
 use tari_crypto::tari_utilities::ByteArray;
-
 use crate::MaxSizeBytes;
-
 use crate::MaxSizeBytesError;
+
+#[cfg(feature = "ts")]
+use ts_rs::TS;
 
 const MAX_DATA_SIZE: usize = 256;
 type ExtraFieldValue = MaxSizeBytes<MAX_DATA_SIZE>;
@@ -49,7 +50,6 @@ impl ExtraData {
     }
 
     pub fn insert<V: Into<ExtraFieldValue>>(&mut self, key: ExtraFieldKey, value: V) -> &mut Self {
-        let key = key.into();
         let value = value.into();
         self.0.insert(key, value);
         self
