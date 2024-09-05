@@ -88,6 +88,7 @@ export * from "./types/SubstateDiff";
 export * from "./types/SubstateId";
 export * from "./types/SubstateLockType";
 export * from "./types/SubstateRecord";
+export * from "./types/SubstateRequirementLockIntent";
 export * from "./types/SubstateRequirement";
 export * from "./types/Substate";
 export * from "./types/SubstateType";

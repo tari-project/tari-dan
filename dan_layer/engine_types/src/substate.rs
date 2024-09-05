@@ -355,33 +355,20 @@ impl FromStr for SubstateId {
                 Ok(SubstateId::Component(addr))
             },
             Some(("resource", addr)) => {
-                match addr.split_once(' ') {
-                    Some((resource_str, addr)) => match addr.split_once('_') {
-                        // resource_xxxx nft_xxxxx
-                        Some(("nft", _)) => {
-                            let nft_address =
-                                NonFungibleAddress::from_str(s).map_err(|e| InvalidSubstateIdFormat(e.to_string()))?;
-                            Ok(SubstateId::NonFungible(nft_address))
-                        },
-                        // resource_xxxx index_
-                        Some(("index", index_str)) => {
-                            let resource_addr = ResourceAddress::from_hex(resource_str)
-                                .map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
-                            let index = u64::from_str(index_str).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
-                            Ok(SubstateId::NonFungibleIndex(NonFungibleIndexAddress::new(
-                                resource_addr,
-                                index,
-                            )))
-                        },
-                        _ => Err(InvalidSubstateIdFormat(s.to_string())),
-                    },
-                    // resource_xxxx
-                    None => {
-                        let addr =
-                            ResourceAddress::from_hex(addr).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
-                        Ok(SubstateId::Resource(addr))
-                    },
-                }
+                // resource_xxxxx
+                let addr = ResourceAddress::from_hex(addr).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
+                Ok(SubstateId::Resource(addr))
+            },
+            Some(("nft", rest)) => {
+                // nft_{resource_hex}_{id_type}_{id}
+                let addr = NonFungibleAddress::from_str(rest).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
+                Ok(SubstateId::NonFungible(addr))
+            },
+            Some(("nftindex", rest)) => {
+                // nftindex_{resource_id}_{index}
+                let addr =
+                    NonFungibleIndexAddress::from_str(rest).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
+                Ok(SubstateId::NonFungibleIndex(addr))
             },
             Some(("vault", addr)) => {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
@@ -732,11 +719,11 @@ impl SubstateDiff {
 mod tests {
     use super::*;
 
-    mod substate_address_parse {
+    mod substate_id_parse {
         use super::*;
 
         #[test]
-        fn it_parses_valid_substate_addresses() {
+        fn it_parses_valid_substate_ids() {
             SubstateId::from_str("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff")
                 .unwrap()
                 .as_component_address()
@@ -749,23 +736,39 @@ mod tests {
                 .unwrap()
                 .as_resource_address()
                 .unwrap();
+            SubstateId::from_str("nft_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_str_SpecialNft")
+                .unwrap()
+                .as_non_fungible_address()
+                .unwrap();
             SubstateId::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff nft_str:SpecialNft",
+                "nft_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fffffffff_uuid_7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
             )
             .unwrap()
             .as_non_fungible_address()
             .unwrap();
-            SubstateId::from_str(
-                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fffffffff \
-                 nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
-            )
-            .unwrap()
-            .as_non_fungible_address()
-            .unwrap();
-            SubstateId::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff index_0")
+            SubstateId::from_str("nftindex_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_0")
                 .unwrap()
                 .as_non_fungible_index_address()
                 .unwrap();
+        }
+
+        #[test]
+        fn it_parses_a_display_string() {
+            fn check(s: &str) {
+                let id = SubstateId::from_str(s).unwrap();
+                assert_eq!(id.to_string(), s);
+            }
+            check("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff");
+            check("vault_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff");
+            check("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff");
+            check("nft_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_str_SpecialNft");
+            check(
+                "nft_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fffffffff_uuid_7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
+            );
+            check("nftindex_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_0");
+            check("feeclaim_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff");
+            check("txreceipt_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff");
+            check("commitment_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff");
         }
     }
 }

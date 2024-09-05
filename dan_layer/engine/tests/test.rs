@@ -759,16 +759,16 @@ mod basic_nft {
             .collect::<Vec<_>>();
         assert_eq!(
             nfts.iter()
-                .filter(|n| n.to_canonical_string() == "str:SpecialNft")
+                .filter(|n| n.to_canonical_string() == "str_SpecialNft")
                 .count(),
             1
         );
-        assert_eq!(nfts.iter().filter(|n| n.to_canonical_string() == "u32:123").count(), 1);
-        assert_eq!(nfts.iter().filter(|n| n.to_canonical_string() == "u64:456").count(), 1);
+        assert_eq!(nfts.iter().filter(|n| n.to_canonical_string() == "u32_123").count(), 1);
+        assert_eq!(nfts.iter().filter(|n| n.to_canonical_string() == "u64_456").count(), 1);
         assert_eq!(
             nfts.iter()
                 .filter(|n| n.to_canonical_string() ==
-                    "uuid:746869732077696c6c20626520696e7465727072657465642061732075756964")
+                    "uuid_746869732077696c6c20626520696e7465727072657465642061732075756964")
                 .count(),
             1
         );

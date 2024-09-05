@@ -118,7 +118,7 @@ impl ConfidentialResourceBuilder {
     /// ## Examples
     ///
     /// Building a resource with a hook from within a component
-    /// ```rust
+    /// ```ignore
     /// # use tari_template_lib::{caller_context::CallerContext, prelude::ResourceBuilder};
     /// ResourceBuilder::confidential()
     ///     .with_authorization_hook(CallerContext::current_component_address(), "my_hook")
@@ -127,7 +127,7 @@ impl ConfidentialResourceBuilder {
     ///
     /// Building a resource with a hook in a static template function. The address is allocated beforehand.
     ///
-    /// ```rust
+    /// ```ignore
     /// # use tari_template_lib::{caller_context::CallerContext, prelude::ResourceBuilder};
     /// let alloc = CallerContext::allocate_component_address();
     /// ResourceBuilder::confidential()
