@@ -57,7 +57,11 @@ impl NonFungibleIndexAddress {
 
 impl Display for NonFungibleIndexAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} index_{}", self.resource_address, self.index)
+        write!(f, "nftindex_")?;
+        for byte in self.resource_address.as_bytes() {
+            write!(f, "{:02x}", byte)?;
+        }
+        write!(f, "_{}", self.index)
     }
 }
 
@@ -65,11 +69,11 @@ impl FromStr for NonFungibleIndexAddress {
     type Err = NonFungibleIndexAddressParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (resource, index) = s.split_once(" index_").ok_or(NonFungibleIndexAddressParseError)?;
-
+        // nftindex_{resource_id}_{index}
+        let s = s.strip_prefix("nftindex_").unwrap_or(s);
+        let (resource, index) = s.split_once('_').ok_or(NonFungibleIndexAddressParseError)?;
         let resource_address = resource.parse().map_err(|_| NonFungibleIndexAddressParseError)?;
         let index = index.parse().map_err(|_| NonFungibleIndexAddressParseError)?;
-
         Ok(Self::new(resource_address, index))
     }
 }
@@ -82,5 +86,21 @@ impl Error for NonFungibleIndexAddressParseError {}
 impl Display for NonFungibleIndexAddressParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Invalid non-fungible index address string")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_parses_a_display_string() {
+        let address = NonFungibleIndexAddress::new(
+            ResourceAddress::from_hex("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaA").unwrap(),
+            123,
+        );
+        let display = address.to_string();
+        let parsed = NonFungibleIndexAddress::from_str(&display).unwrap();
+        assert_eq!(address, parsed);
     }
 }

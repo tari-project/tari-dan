@@ -20,8 +20,6 @@ use crate::{
     Hash,
 };
 
-const DELIM: char = ':';
-
 /// The unique identification of a non-fungible token inside it's parent resource
 #[serde_as]
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -74,7 +72,7 @@ impl NonFungibleId {
         let type_name = self.type_name();
         let mut s = String::with_capacity(type_name.len() + 1 + self.str_repr_len());
         s.push_str(self.type_name());
-        s.push(DELIM);
+        s.push('_');
 
         match self {
             NonFungibleId::U256(uuid) => {
@@ -193,10 +191,10 @@ fn validate_nft_id_str(s: &str) -> Result<(), ParseNonFungibleIdError> {
 impl Display for NonFungibleId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NonFungibleId::U256(v) => write!(f, "uuid:{}", Hash::from(*v)),
-            NonFungibleId::String(s) => write!(f, "str:{}", s),
-            NonFungibleId::Uint32(v) => write!(f, "u32:{}", v),
-            NonFungibleId::Uint64(v) => write!(f, "u64:{}", v),
+            NonFungibleId::U256(v) => write!(f, "uuid_{}", Hash::from(*v)),
+            NonFungibleId::String(s) => write!(f, "str_{}", s),
+            NonFungibleId::Uint32(v) => write!(f, "u32_{}", v),
+            NonFungibleId::Uint64(v) => write!(f, "u64_{}", v),
         }
     }
 }
@@ -287,7 +285,11 @@ impl From<NonFungibleAddressContents> for NonFungibleAddress {
 
 impl Display for NonFungibleAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} nft_{}", self.0.resource_address, self.0.id)
+        write!(f, "nft_")?;
+        for byte in self.resource_address().as_bytes() {
+            write!(f, "{:02x}", byte)?;
+        }
+        write!(f, "_{}", self.id())
     }
 }
 
@@ -437,21 +439,21 @@ mod tests {
         #[test]
         fn it_generates_correct_canonical_string() {
             // u32
-            assert_eq!(NonFungibleId::from_u32(0).to_canonical_string(), "u32:0");
-            assert_eq!(NonFungibleId::from_u32(100000).to_canonical_string(), "u32:100000");
+            assert_eq!(NonFungibleId::from_u32(0).to_canonical_string(), "u32_0");
+            assert_eq!(NonFungibleId::from_u32(100000).to_canonical_string(), "u32_100000");
             assert_eq!(
                 NonFungibleId::from_u32(u32::MAX).to_canonical_string(),
-                format!("u32:{}", u32::MAX)
+                format!("u32_{}", u32::MAX)
             );
 
             // u64
-            assert_eq!(NonFungibleId::from_u64(0).to_canonical_string(), "u64:0");
-            assert_eq!(NonFungibleId::from_u64(1).to_canonical_string(), "u64:1");
-            assert_eq!(NonFungibleId::from_u64(10).to_canonical_string(), "u64:10");
-            assert_eq!(NonFungibleId::from_u64(100).to_canonical_string(), "u64:100");
+            assert_eq!(NonFungibleId::from_u64(0).to_canonical_string(), "u64_0");
+            assert_eq!(NonFungibleId::from_u64(1).to_canonical_string(), "u64_1");
+            assert_eq!(NonFungibleId::from_u64(10).to_canonical_string(), "u64_10");
+            assert_eq!(NonFungibleId::from_u64(100).to_canonical_string(), "u64_100");
             assert_eq!(
                 NonFungibleId::from_u64(u64::MAX).to_canonical_string(),
-                format!("u64:{}", u64::MAX)
+                format!("u64_{}", u64::MAX)
             );
 
             // uuid
@@ -462,7 +464,7 @@ mod tests {
                         .into_array()
                 )
                 .to_canonical_string(),
-                "uuid:736bab0c3af393a0423c578ddcf7e19b81086f6ecbbc148713e95da75ef8171d"
+                "uuid_736bab0c3af393a0423c578ddcf7e19b81086f6ecbbc148713e95da75ef8171d"
             );
 
             // string
@@ -470,8 +472,16 @@ mod tests {
                 NonFungibleId::try_from_string("hello_world")
                     .unwrap()
                     .to_canonical_string(),
-                "str:hello_world"
+                "str_hello_world"
             );
+        }
+
+        #[test]
+        fn it_parses_a_display_string() {
+            let id = NonFungibleId::from_u32(123);
+            let s = id.to_string();
+            let id2 = NonFungibleId::try_from_canonical_string(&s).unwrap();
+            assert_eq!(id, id2);
         }
     }
 

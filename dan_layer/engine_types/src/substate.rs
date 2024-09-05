@@ -362,17 +362,9 @@ impl FromStr for SubstateId {
             },
             Some(("nftindex", rest)) => {
                 // nftindex_{resource_id}_{index}
-                let (resource, idx) = rest
-                    .split_once('_')
-                    .ok_or_else(|| InvalidSubstateIdFormat(s.to_string()))?;
-                let resource_addr =
-                    ResourceAddress::from_hex(resource).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
-                let index = u64::from_str(idx).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
-
-                Ok(SubstateId::NonFungibleIndex(NonFungibleIndexAddress::new(
-                    resource_addr,
-                    index,
-                )))
+                let addr =
+                    NonFungibleIndexAddress::from_str(rest).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
+                Ok(SubstateId::NonFungibleIndex(addr))
             },
             Some(("vault", addr)) => {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateIdFormat(s.to_string()))?;
@@ -723,11 +715,11 @@ impl SubstateDiff {
 mod tests {
     use super::*;
 
-    mod substate_address_parse {
+    mod substate_id_parse {
         use super::*;
 
         #[test]
-        fn it_parses_valid_substate_addresses() {
+        fn it_parses_valid_substate_ids() {
             SubstateId::from_str("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff")
                 .unwrap()
                 .as_component_address()
@@ -754,6 +746,25 @@ mod tests {
                 .unwrap()
                 .as_non_fungible_index_address()
                 .unwrap();
+        }
+
+        #[test]
+        fn it_parses_a_display_string() {
+            fn check(s: &str) {
+                let id = SubstateId::from_str(s).unwrap();
+                assert_eq!(id.to_string(), s);
+            }
+            check("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff");
+            check("vault_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff");
+            check("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff");
+            check("nft_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_str_SpecialNft");
+            check(
+                "nft_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fffffffff_uuid_7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
+            );
+            check("nftindex_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff_0");
+            check("feeclaim_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff");
+            check("txreceipt_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff");
+            check("commitment_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab5ffffffff");
         }
     }
 }
