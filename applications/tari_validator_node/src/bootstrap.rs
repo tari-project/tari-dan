@@ -49,7 +49,7 @@ use tari_dan_app_utilities::{
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
 };
-use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, NumPreshards, PeerAddress, ShardGroup};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, NumPreshards, PeerAddress, ShardGroup, SidechainId};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
@@ -182,7 +182,8 @@ pub async fn spawn_services(
     // Connect to shard db
     let state_store =
         SqliteStateStore::connect(&format!("sqlite://{}", config.validator_node.state_db_path().display()))?;
-    state_store.with_write_tx(|tx| bootstrap_state(tx, config.network, consensus_constants.num_preshards))?;
+    let sidechain_id = config.validator_node.validator_node_sidechain_id.clone();
+    state_store.with_write_tx(|tx| bootstrap_state(tx, config.network, consensus_constants.num_preshards, sidechain_id))?;
 
     info!(target: LOG_TARGET, "Epoch manager initializing");
     let epoch_manager_config = EpochManagerConfig {
@@ -440,7 +441,7 @@ async fn spawn_p2p_rpc(
     Ok(())
 }
 
-fn bootstrap_state<TTx>(tx: &mut TTx, network: Network, num_preshards: NumPreshards) -> Result<(), StorageError>
+fn bootstrap_state<TTx>(tx: &mut TTx, network: Network, num_preshards: NumPreshards, sidechain_id: Option<SidechainId>) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + Deref,
     TTx::Target: StateStoreReadTransaction,
@@ -463,7 +464,7 @@ where
         None,
         None,
     );
-    create_substate(tx, network, num_preshards, PUBLIC_IDENTITY_RESOURCE_ADDRESS, value)?;
+    create_substate(tx, network, num_preshards, sidechain_id, PUBLIC_IDENTITY_RESOURCE_ADDRESS, value)?;
 
     let mut xtr_resource = Resource::new(
         ResourceType::Confidential,
@@ -488,7 +489,7 @@ where
                 state: cbor!({"vault" => XTR_FAUCET_VAULT_ADDRESS}).unwrap(),
             },
         };
-        create_substate(tx, network, num_preshards, XTR_FAUCET_COMPONENT_ADDRESS, value)?;
+        create_substate(tx, network, num_preshards, sidechain_id, XTR_FAUCET_COMPONENT_ADDRESS, value)?;
 
         xtr_resource.increase_total_supply(Amount::MAX);
         let value = Vault::new(ResourceContainer::Confidential {
@@ -499,7 +500,7 @@ where
             locked_revealed_amount: Default::default(),
         });
 
-        create_substate(tx, network, num_preshards, XTR_FAUCET_VAULT_ADDRESS, value)?;
+        create_substate(tx, network, num_preshards, sidechain_id, XTR_FAUCET_VAULT_ADDRESS, value)?;
     }
 
     create_substate(
@@ -517,6 +518,7 @@ fn create_substate<TTx, TId, TVal>(
     tx: &mut TTx,
     network: Network,
     num_preshards: NumPreshards,
+    sidechain_id: Option<SidechainId>,
     substate_id: TId,
     value: TVal,
 ) -> Result<(), StorageError>
@@ -527,7 +529,7 @@ where
     TId: Into<SubstateId>,
     TVal: Into<SubstateValue>,
 {
-    let genesis_block = Block::genesis(network, Epoch(0), ShardGroup::all_shards(num_preshards));
+    let genesis_block = Block::genesis(network, Epoch(0), ShardGroup::all_shards(num_preshards), sidechain_id)?;
     let substate_id = substate_id.into();
     let id = VersionedSubstateId::new(substate_id, 0);
     SubstateRecord {

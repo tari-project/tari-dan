@@ -22,6 +22,7 @@
 
 use tari_common_types::types::FixedHashSizeError;
 use tari_dan_common_types::optional::IsNotFoundError;
+use tari_core::blocks::BlockError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -60,6 +61,8 @@ pub enum StorageError {
     DataInconsistency { details: String },
     #[error("General storage error: {details}")]
     General { details: String },
+    #[error("Block creation error: {0}")]
+    BlockError(#[from] BlockError),
 }
 
 impl IsNotFoundError for StorageError {

@@ -38,6 +38,7 @@ pub struct ForeignProposal {
     pub proposed_in_block: Option<String>,
     pub proposed_in_block_height: Option<i64>,
     pub created_at: PrimitiveDateTime,
+    pub extra_data: Option<String>
 }
 
 impl ForeignProposal {
@@ -81,6 +82,7 @@ impl ForeignProposal {
             self.timestamp as u64,
             self.base_layer_block_height as u64,
             deserialize_hex_try_from(&self.base_layer_block_hash)?,
+            self.extra_data.map(|val| deserialize_json(&val)).transpose()?,
         );
 
         Ok(consensus_models::ForeignProposal {

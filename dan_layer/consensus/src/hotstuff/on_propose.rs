@@ -469,6 +469,7 @@ where TConsensusSpec: ConsensusSpec
             EpochTime::now().as_u64(),
             base_layer_block_height,
             base_layer_block_hash,
+            None
         );
 
         let signature = self.signing_service.sign(next_block.id());

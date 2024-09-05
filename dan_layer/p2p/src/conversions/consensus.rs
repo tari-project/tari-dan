@@ -61,6 +61,7 @@ use tari_dan_storage::consensus_models::{
 };
 use tari_engine_types::substate::{SubstateId, SubstateValue};
 use tari_transaction::{TransactionId, VersionedSubstateId};
+use tari_dan_common_types::ExtraData;
 
 use crate::proto::{self};
 // -------------------------------- HotstuffMessage -------------------------------- //
@@ -456,6 +457,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             base_layer_block_height: value.base_layer_block_height(),
             base_layer_block_hash: value.base_layer_block_hash().as_bytes().to_vec(),
             is_dummy: value.is_dummy(),
+            extra_data: value.extra_data().map(|val| val.try_into().unwrap())
         }
     }
 }
@@ -477,6 +479,8 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
             .justify
             .ok_or_else(|| anyhow!("Block conversion: QC not provided"))?
             .try_into()?;
+
+        let extra_data = value.extra_data.map(TryInto::try_into).transpose()?;
 
         if value.is_dummy {
             Ok(Self::dummy_block(
@@ -513,8 +517,27 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
                 value.timestamp,
                 value.base_layer_block_height,
                 value.base_layer_block_hash.try_into()?,
+                extra_data
             ))
         }
+    }
+}
+
+//---------------------------------- Evidence --------------------------------------------//
+
+impl From<&ExtraData> for proto::consensus::ExtraData {
+    fn from(value: &ExtraData) -> Self {
+        Self {
+            encoded_extra_data: encode(value).unwrap(),
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::ExtraData> for ExtraData {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::ExtraData) -> Result<Self, Self::Error> {
+        Ok(decode_exact(&value.encoded_extra_data)?)
     }
 }
 

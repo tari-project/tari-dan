@@ -1,11 +1,17 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+mod bytes;
+pub use bytes::{MaxSizeBytes, MaxSizeBytesError};
+
 pub mod crypto;
 
 mod epoch;
 
 pub use epoch::Epoch;
+
+mod extra_data;
+pub use extra_data::{ExtraData, ExtraFieldKey};
 
 pub mod committee;
 pub mod hasher;
@@ -23,6 +29,9 @@ pub use validator_metadata::{vn_node_hash, ValidatorMetadata};
 
 mod node_addressable;
 pub use node_addressable::*;
+
+mod sidechain_id;
+pub use sidechain_id::SidechainId;
 
 pub mod services;
 

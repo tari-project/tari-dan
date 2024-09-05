@@ -4,7 +4,7 @@
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{BlockId, LeafBlock, LockedBlock, QuorumCertificate, TransactionPoolError},
+    consensus_models::{BlockError, BlockId, LeafBlock, LockedBlock, QuorumCertificate, TransactionPoolError},
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
@@ -103,6 +103,8 @@ pub enum HotStuffError {
         foreign_block_id: BlockId,
         transaction_id: TransactionId,
     },
+    #[error("Block building error: {0}")]
+    BlockBuildingError(#[from] BlockError),
 }
 
 impl From<EpochManagerError> for HotStuffError {

@@ -9110,6 +9110,7 @@ dependencies = [
  "tari_hashing",
  "tari_mmr",
  "tari_template_lib",
+ "thiserror",
  "ts-rs",
 ]
 
@@ -9177,6 +9178,7 @@ dependencies = [
  "log",
  "rand",
  "serde",
+ "tari_bor",
  "tari_common",
  "tari_common_types",
  "tari_core",

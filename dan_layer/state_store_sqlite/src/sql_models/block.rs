@@ -7,7 +7,6 @@ use tari_dan_common_types::{Epoch, NodeHeight, ShardGroup};
 use tari_dan_storage::{consensus_models, StorageError};
 use tari_utilities::byte_array::ByteArray;
 use time::PrimitiveDateTime;
-
 use crate::{
     schema::blocks,
     serialization::{deserialize_hex, deserialize_hex_try_from, deserialize_json},
@@ -39,6 +38,7 @@ pub struct Block {
     pub base_layer_block_height: i64,
     pub base_layer_block_hash: String,
     pub created_at: PrimitiveDateTime,
+    pub extra_data: Option<String>
 }
 
 impl Block {
@@ -81,6 +81,7 @@ impl Block {
             self.timestamp as u64,
             self.base_layer_block_height as u64,
             deserialize_hex_try_from(&self.base_layer_block_hash)?,
+            self.extra_data.map(|val| deserialize_json(&val)).transpose()?,
         ))
     }
 }
@@ -107,6 +108,7 @@ pub struct ParkedBlock {
     pub base_layer_block_hash: String,
     pub foreign_proposals: String,
     pub created_at: PrimitiveDateTime,
+    pub extra_data: Option<String>,
 }
 
 impl TryFrom<ParkedBlock> for (consensus_models::Block, Vec<consensus_models::ForeignProposal>) {
@@ -151,6 +153,7 @@ impl TryFrom<ParkedBlock> for (consensus_models::Block, Vec<consensus_models::Fo
             value.timestamp as u64,
             value.base_layer_block_height as u64,
             deserialize_hex_try_from(&value.base_layer_block_hash)?,
+            value.extra_data.map(|val| deserialize_json(&val)).transpose()?,
         );
         let foreign_proposals = deserialize_json(&value.foreign_proposals)?;
         Ok((block, foreign_proposals))
