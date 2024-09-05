@@ -950,6 +950,8 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             transaction_pool_state_updates::stage.eq(update.stage().to_string()),
             transaction_pool_state_updates::local_decision.eq(update.decision().to_string()),
             transaction_pool_state_updates::remote_decision.eq(update.remote_decision().map(|d| d.to_string())),
+            transaction_pool_state_updates::transaction_fee.eq(update.transaction_fee() as i64),
+            transaction_pool_state_updates::leader_fee.eq(update.leader_fee().map(serialize_json).transpose()?),
             transaction_pool_state_updates::is_ready.eq(update.is_ready()),
         );
 
@@ -1080,6 +1082,8 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         struct TransactionPoolChangeSet {
             stage: Option<String>,
             local_decision: Option<String>,
+            transaction_fee: Option<i64>,
+            leader_fee: Option<Option<String>>,
             evidence: Option<Option<String>>,
             is_ready: Option<bool>,
             confirm_stage: Option<Option<String>>,
@@ -1096,6 +1100,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             let changeset = TransactionPoolChangeSet {
                 stage: Some(update.stage),
                 local_decision: Some(update.local_decision),
+                transaction_fee: Some(update.transaction_fee),
+                // Only update if Some. This isn't technically necessary since leader fee should be in every update, but
+                // it does shorten the update query FWIW.
+                leader_fee: update.leader_fee.map(Some),
                 evidence: Some(Some(update.evidence)),
                 is_ready: Some(update.is_ready),
                 confirm_stage,

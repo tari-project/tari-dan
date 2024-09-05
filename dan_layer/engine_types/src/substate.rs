@@ -261,6 +261,10 @@ impl SubstateId {
     pub fn is_transaction_receipt(&self) -> bool {
         matches!(self, Self::TransactionReceipt(_))
     }
+
+    pub fn is_read_only(&self) -> bool {
+        matches!(self, Self::TransactionReceipt(_) | Self::Resource(_))
+    }
 }
 
 impl From<ComponentAddress> for SubstateId {

@@ -4,7 +4,7 @@
 use tari_transaction::TransactionId;
 
 use crate::{
-    consensus_models::{BlockId, Decision, Evidence, TransactionPoolRecord, TransactionPoolStage},
+    consensus_models::{BlockId, Decision, Evidence, LeaderFee, TransactionPoolRecord, TransactionPoolStage},
     StateStoreWriteTransaction,
 };
 
@@ -40,6 +40,14 @@ impl TransactionPoolStatusUpdate {
 
     pub fn remote_decision(&self) -> Option<Decision> {
         self.transaction.remote_decision()
+    }
+
+    pub fn transaction_fee(&self) -> u64 {
+        self.transaction.transaction_fee()
+    }
+
+    pub fn leader_fee(&self) -> Option<&LeaderFee> {
+        self.transaction.leader_fee()
     }
 
     pub fn apply_evidence(&self, tx_rec_mut: &mut TransactionPoolRecord) {

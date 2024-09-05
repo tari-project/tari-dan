@@ -382,8 +382,6 @@ async fn foreign_shard_group_decides_to_abort() {
 async fn multishard_local_inputs_foreign_outputs() {
     setup_logger();
     let mut test = Test::builder()
-        // Test can take 11s, this could cut it a little fine - may indicate that we need to optimise
-        .with_test_timeout(Duration::from_secs(60))
         .add_committee(0, vec!["1", "2"])
         .add_committee(1, vec!["3", "4"])
         .start()
