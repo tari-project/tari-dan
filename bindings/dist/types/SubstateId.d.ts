@@ -7,19 +7,19 @@ import type { TransactionReceiptAddress } from "./TransactionReceiptAddress";
 import type { UnclaimedConfidentialOutputAddress } from "./UnclaimedConfidentialOutputAddress";
 import type { VaultId } from "./VaultId";
 export type SubstateId = {
-    "Component": ComponentAddress;
+    Component: ComponentAddress;
 } | {
-    "Resource": ResourceAddress;
+    Resource: ResourceAddress;
 } | {
-    "Vault": VaultId;
+    Vault: VaultId;
 } | {
-    "UnclaimedConfidentialOutput": UnclaimedConfidentialOutputAddress;
+    UnclaimedConfidentialOutput: UnclaimedConfidentialOutputAddress;
 } | {
-    "NonFungible": NonFungibleAddress;
+    NonFungible: NonFungibleAddress;
 } | {
-    "NonFungibleIndex": NonFungibleIndexAddress;
+    NonFungibleIndex: NonFungibleIndexAddress;
 } | {
-    "TransactionReceipt": TransactionReceiptAddress;
+    TransactionReceipt: TransactionReceiptAddress;
 } | {
-    "FeeClaim": FeeClaimAddress;
+    FeeClaim: FeeClaimAddress;
 };

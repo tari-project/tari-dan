@@ -1,7 +1,7 @@
 import type { Decision } from "../Decision";
 import type { ExecuteResult } from "../ExecuteResult";
 export type IndexerTransactionFinalizedResult = "Pending" | {
-    "Finalized": {
+    Finalized: {
         final_decision: Decision;
         execution_result: ExecuteResult | null;
         execution_time: {

@@ -1,6 +1,6 @@
 import type { AccessRule } from "./AccessRule";
 export type OwnerRule = "OwnedBySigner" | "None" | {
-    "ByAccessRule": AccessRule;
+    ByAccessRule: AccessRule;
 } | {
-    "ByPublicKey": Array<number>;
+    ByPublicKey: Array<number>;
 };

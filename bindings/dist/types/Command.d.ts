@@ -2,23 +2,23 @@ import type { ForeignProposalAtom } from "./ForeignProposalAtom";
 import type { MintConfidentialOutputAtom } from "./MintConfidentialOutputAtom";
 import type { TransactionAtom } from "./TransactionAtom";
 export type Command = {
-    "LocalOnly": TransactionAtom;
+    LocalOnly: TransactionAtom;
 } | {
-    "Prepare": TransactionAtom;
+    Prepare: TransactionAtom;
 } | {
-    "LocalPrepare": TransactionAtom;
+    LocalPrepare: TransactionAtom;
 } | {
-    "AllPrepare": TransactionAtom;
+    AllPrepare: TransactionAtom;
 } | {
-    "SomePrepare": TransactionAtom;
+    SomePrepare: TransactionAtom;
 } | {
-    "LocalAccept": TransactionAtom;
+    LocalAccept: TransactionAtom;
 } | {
-    "AllAccept": TransactionAtom;
+    AllAccept: TransactionAtom;
 } | {
-    "SomeAccept": TransactionAtom;
+    SomeAccept: TransactionAtom;
 } | {
-    "ForeignProposal": ForeignProposalAtom;
+    ForeignProposal: ForeignProposalAtom;
 } | {
-    "MintConfidentialOutput": MintConfidentialOutputAtom;
+    MintConfidentialOutput: MintConfidentialOutputAtom;
 } | "EndEpoch";

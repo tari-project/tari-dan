@@ -1,9 +1,9 @@
 import type { RejectReason } from "./RejectReason";
 import type { SubstateDiff } from "./SubstateDiff";
 export type TransactionResult = {
-    "Accept": SubstateDiff;
+    Accept: SubstateDiff;
 } | {
-    "AcceptFeeRejectRest": [SubstateDiff, RejectReason];
+    AcceptFeeRejectRest: [SubstateDiff, RejectReason];
 } | {
-    "Reject": RejectReason;
+    Reject: RejectReason;
 };

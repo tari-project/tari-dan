@@ -1,6 +1,6 @@
 import type { ComponentAddress } from "../ComponentAddress";
 export type ComponentAddressOrName = {
-    "ComponentAddress": ComponentAddress;
+    ComponentAddress: ComponentAddress;
 } | {
-    "Name": string;
+    Name: string;
 };

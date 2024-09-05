@@ -1,9 +1,9 @@
 export type NonFungibleId = {
-    "U256": Array<number>;
+    U256: Array<number>;
 } | {
-    "String": string;
+    String: string;
 } | {
-    "Uint32": number;
+    Uint32: number;
 } | {
-    "Uint64": number;
+    Uint64: number;
 };
