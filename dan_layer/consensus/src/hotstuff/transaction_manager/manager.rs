@@ -250,6 +250,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         };
 
         if let Some(err) = lock_summary.hard_conflict() {
+            warn!(target: LOG_TARGET, "⚠️ PREPARE: Hard conflict when locking inputs: {err}");
             prepared.set_abort_reason(RejectReason::FailedToLockInputs(err.to_string()));
         }
         Ok((prepared, lock_summary))

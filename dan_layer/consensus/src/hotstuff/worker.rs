@@ -275,7 +275,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     self.on_epoch_manager_event(event).await?;
                 },
 
-
                 // Proposing is highest priority
                 maybe_leaf_block = on_force_beat.wait() => {
                     self.hooks.on_beat();
@@ -649,14 +648,14 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 .handle(
                     epoch,
                     &local_committee,
-                    local_committee_info,
+                    *local_committee_info,
                     leaf_block,
                     is_newview_propose,
                     propose_epoch_end,
                 )
                 .await?;
         } else {
-            // We can make this a warm/error in future, but for now I want to be sure this never happens
+            // We can make this a warn/error in future, but for now I want to be sure this never happens
             debug_assert!(
                 !is_newview_propose,
                 "propose_if_leader called with is_newview_propose=true but we're not the leader"

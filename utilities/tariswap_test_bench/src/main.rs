@@ -58,9 +58,9 @@ async fn run(cli: cli::CommonArgs, _args: cli::RunArgs) -> anyhow::Result<()> {
     info!("✅ Created faucet {}", faucet.component_address);
 
     info!("⏳️ Funding accounts ...");
-    for batch in accounts.chunks(500) {
+    for batch in accounts.chunks(250) {
         runner.fund_accounts(&faucet, &primary_account, batch).await?;
-        info!("✅ Funded 500 accounts");
+        info!("✅ Funded 250 accounts");
     }
 
     info!("⏳️ Creating 1000 tariswap components...");

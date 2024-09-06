@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashSet;
+use std::{collections::HashSet, fmt::Display};
 
 use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
@@ -235,5 +235,20 @@ impl Transaction {
 
     pub fn has_inputs_without_version(&self) -> bool {
         self.inputs().iter().any(|i| i.version().is_none())
+    }
+}
+
+impl Display for Transaction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Transaction[{}, Inputs: {}, Fee Instructions: {}, Instructions: {}, Signatures: {}, Filled Inputs: {}]",
+            self.id,
+            self.transaction.inputs.len(),
+            self.transaction.fee_instructions.len(),
+            self.transaction.instructions.len(),
+            self.signatures.len(),
+            self.filled_inputs.len(),
+        )
     }
 }

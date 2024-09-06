@@ -410,19 +410,16 @@ CREATE TABLE burnt_utxos
 
 CREATE TABLE state_tree
 (
-    id       integer not NULL primary key AUTOINCREMENT,
-    shard    int     not NULL,
-    key      text    not NULL,
-    node     text    not NULL,
-    is_stale boolean not null default '0'
+    id    integer not NULL primary key AUTOINCREMENT,
+    shard int     not NULL,
+    key   text    not NULL,
+    node  text    not NULL
 );
 
 -- Scoping by shard
-CREATE INDEX state_tree_idx_shard_key on state_tree (shard) WHERE is_stale = false;
+CREATE INDEX state_tree_idx_shard_key on state_tree (shard);
 -- Duplicate keys are not allowed
-CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (shard, key) WHERE is_stale = false;
--- filtering out or by is_stale is used in every query
-CREATE INDEX state_tree_idx_is_stale on state_tree (is_stale);
+CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (shard, key);
 
 create table state_tree_shard_versions
 (

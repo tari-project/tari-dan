@@ -23,7 +23,6 @@ use tari_engine_types::{
     lock::LockFlag,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
-    non_fungible_index::NonFungibleIndex,
     proof::{ContainerRef, LockedResource, Proof},
     resource::Resource,
     resource_container::{ResourceContainer, ResourceError},
@@ -42,7 +41,6 @@ use tari_template_lib::{
         BucketId,
         ComponentAddress,
         NonFungibleAddress,
-        NonFungibleIndexAddress,
         ProofId,
         UnclaimedConfidentialOutputAddress,
         VaultId,
@@ -505,35 +503,32 @@ impl WorkingState {
                 );
                 let mut token_ids = BTreeSet::new();
 
-                let resource = self.get_resource(locked_resource)?;
+                // let resource = self.get_resource(locked_resource)?;
                 // TODO: This isn't correct (assumes tokens are never burnt), we'll need to rethink this
-                let mut index = resource
-                    .total_supply()
-                    .as_u64_checked()
-                    .ok_or(RuntimeError::InvalidAmount {
-                        amount: resource.total_supply(),
-                        reason: "Could not convert to u64".to_owned(),
-                    })?;
+                // let mut index = resource
+                //     .total_supply()
+                //     .as_u64_checked()
+                //     .ok_or(RuntimeError::InvalidAmount {
+                //         amount: resource.total_supply(),
+                //         reason: "Could not convert to u64".to_owned(),
+                //     })?;
 
                 for (id, (data, mut_data)) in tokens {
-                    let nft_address = NonFungibleAddress::new(resource_address, id.clone());
-                    let addr = SubstateId::NonFungible(nft_address.clone());
+                    let nft_address = NonFungibleAddress::new(resource_address, id);
+                    let token_id = nft_address.id().clone();
+                    let addr = SubstateId::NonFungible(nft_address);
                     if self.substate_exists(&addr)? {
-                        return Err(RuntimeError::DuplicateNonFungibleId {
-                            token_id: nft_address.id().clone(),
-                        });
+                        return Err(RuntimeError::DuplicateNonFungibleId { token_id });
+                    } else {
+                        token_ids.insert(token_id);
+                        self.new_substate(addr.clone(), NonFungibleContainer::new(data, mut_data))?;
                     }
-                    if !token_ids.insert(id.clone()) {
-                        // Can't happen
-                        return Err(RuntimeError::DuplicateNonFungibleId { token_id: id });
-                    }
-                    self.new_substate(addr.clone(), NonFungibleContainer::new(data, mut_data))?;
 
                     // for each new nft we also create an index to be allow resource scanning
-                    let index_address = NonFungibleIndexAddress::new(resource_address, index);
-                    index += 1;
-                    let nft_index = NonFungibleIndex::new(nft_address);
-                    self.new_substate(index_address, nft_index)?;
+                    // let index_address = NonFungibleIndexAddress::new(resource_address, index);
+                    // index += 1;
+                    // let nft_index = NonFungibleIndex::new(nft_address);
+                    // self.new_substate(index_address, nft_index)?;
                 }
 
                 ResourceContainer::non_fungible(resource_address, token_ids)

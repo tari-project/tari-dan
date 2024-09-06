@@ -156,9 +156,7 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
         }
         info!(
             target: LOG_TARGET,
-            "🎱 Received NEW transaction from local: {} {:?}",
-            transaction.id(),
-            transaction
+            "🎱 Received NEW transaction from local: {transaction}",
         );
 
         self.handle_new_transaction(transaction, vec![], None).await?;

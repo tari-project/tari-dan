@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use tari_common_types::types::PrivateKey;
 use tari_consensus::hotstuff::HotStuffError;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, SubstateLockType, SubstateRequirement};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, SubstateRequirement};
 use tari_dan_storage::{
     consensus_models::{BlockId, Command, Decision, TransactionRecord, VersionedSubstateIdLockIntent},
     StateStore,
@@ -397,7 +397,10 @@ async fn multishard_local_inputs_foreign_outputs() {
             .build(),
         Decision::Commit,
         1,
-        inputs.into_iter().map(VersionedSubstateIdLockIntent::write).collect(),
+        inputs
+            .into_iter()
+            .map(|input| VersionedSubstateIdLockIntent::write(input, true))
+            .collect(),
         outputs,
     );
     test.send_transaction_to_destination(TestVnDestination::All, tx1.clone())
@@ -456,7 +459,7 @@ async fn multishard_local_inputs_and_outputs_foreign_outputs() {
         inputs_0
             .into_iter()
             .chain(inputs_1)
-            .map(VersionedSubstateIdLockIntent::write)
+            .map(|input| VersionedSubstateIdLockIntent::write(input, true))
             .collect(),
         outputs_0.into_iter().chain(outputs_2).collect(),
     );
@@ -526,7 +529,10 @@ async fn multishard_output_conflict_abort() {
         tx,
         Decision::Commit,
         1,
-        inputs.into_iter().map(VersionedSubstateIdLockIntent::write).collect(),
+        inputs
+            .into_iter()
+            .map(|input| VersionedSubstateIdLockIntent::write(input, true))
+            .collect(),
         resulting_outputs,
     );
     assert_ne!(tx1.id(), tx2.id());
@@ -578,9 +584,7 @@ async fn single_shard_inputs_from_previous_outputs() {
         .resulting_outputs()
         .unwrap()
         .iter()
-        .map(|output| {
-            VersionedSubstateIdLockIntent::new(output.versioned_substate_id().clone(), SubstateLockType::Write)
-        })
+        .map(|output| VersionedSubstateIdLockIntent::write(output.versioned_substate_id().clone(), true))
         .collect::<Vec<_>>();
 
     let tx2 = Transaction::builder()
@@ -658,9 +662,7 @@ async fn multishard_inputs_from_previous_outputs() {
         1,
         resulting_outputs
             .into_iter()
-            .map(|output| {
-                VersionedSubstateIdLockIntent::new(output.into_versioned_substate_id(), SubstateLockType::Write)
-            })
+            .map(|output| VersionedSubstateIdLockIntent::write(output.into_versioned_substate_id(), true))
             .collect(),
         vec![],
     );
@@ -723,7 +725,7 @@ async fn single_shard_input_conflict() {
             *tx1.id(),
             Decision::Commit,
             0,
-            vec![VersionedSubstateIdLockIntent::read(substate_id.clone())],
+            vec![VersionedSubstateIdLockIntent::read(substate_id.clone(), true)],
             vec![],
         ),
     )
@@ -733,7 +735,7 @@ async fn single_shard_input_conflict() {
             *tx2.id(),
             Decision::Commit,
             0,
-            vec![VersionedSubstateIdLockIntent::write(substate_id)],
+            vec![VersionedSubstateIdLockIntent::write(substate_id, true)],
             vec![],
         ),
     );
@@ -960,7 +962,10 @@ async fn single_shard_unversioned_inputs() {
             *tx.id(),
             Decision::Commit,
             0,
-            inputs.into_iter().map(VersionedSubstateIdLockIntent::write).collect(),
+            inputs
+                .into_iter()
+                .map(|input| VersionedSubstateIdLockIntent::write(input, true))
+                .collect(),
             vec![],
         ),
     );

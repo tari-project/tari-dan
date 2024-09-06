@@ -111,10 +111,7 @@ impl IndexedValue {
 
     pub fn get_value<T>(&self, path: &str) -> Result<Option<T>, IndexedValueError>
     where for<'a> T: serde::Deserialize<'a> {
-        get_value_by_path(&self.value, path)
-            .map(tari_bor::from_value)
-            .transpose()
-            .map_err(Into::into)
+        decode_value_at_path(&self.value, path)
     }
 }
 
@@ -457,6 +454,14 @@ impl From<&str> for IndexedValueError {
     fn from(s: &str) -> Self {
         Self::Custom(s.to_string())
     }
+}
+
+pub fn decode_value_at_path<T>(value: &tari_bor::Value, path: &str) -> Result<Option<T>, IndexedValueError>
+where for<'a> T: serde::Deserialize<'a> {
+    get_value_by_path(value, path)
+        .map(tari_bor::from_value)
+        .transpose()
+        .map_err(Into::into)
 }
 
 fn get_value_by_path<'a>(value: &'a tari_bor::Value, path: &str) -> Option<&'a tari_bor::Value> {

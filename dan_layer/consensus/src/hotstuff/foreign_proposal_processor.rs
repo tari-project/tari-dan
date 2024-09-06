@@ -14,9 +14,11 @@ use tari_dan_storage::{
         TransactionAtom,
         TransactionPoolRecord,
         TransactionPoolStage,
+        TransactionRecord,
     },
     StateStoreReadTransaction,
 };
+use tari_engine_types::commit_result::RejectReason;
 use tari_transaction::TransactionId;
 
 use crate::hotstuff::{block_change_set::ProposedBlockChangeSet, error::HotStuffError, ProposalValidationError};
@@ -112,6 +114,15 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                         "⚠️ Foreign committee ABORT transaction {}. Update overall decision to ABORT. Local stage: {}, Leaf: {}",
                         tx_rec.transaction_id(), tx_rec.current_stage(), local_leaf
                     );
+
+                    // Add an abort execution since we previously decided to commit
+                    let mut transaction = TransactionRecord::get(tx, tx_rec.transaction_id())?;
+                    transaction.set_abort_reason(RejectReason::ForeignShardGroupDecidedToAbort(format!(
+                        "Foreign shard group {} decided to abort the transaction",
+                        foreign_committee_info.shard_group()
+                    )));
+                    let exec = transaction.into_execution().expect("ABORT set above");
+                    proposed_block_change_set.add_transaction_execution(exec)?;
                 }
 
                 // We need to add the justify QC to the evidence because the all prepare block could not include it

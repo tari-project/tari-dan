@@ -54,6 +54,7 @@ impl ExecutionOutput {
             inputs
                 .iter()
                 .map(|(substate_req, substate)| {
+                    let requested_specific_version = substate_req.version().is_some();
                     let lock_flag = if diff.down_iter().any(|(id, _)| id == substate_req.substate_id()) {
                         // Update all inputs that were DOWNed to be write locked
                         SubstateLockType::Write
@@ -64,6 +65,7 @@ impl ExecutionOutput {
                     VersionedSubstateIdLockIntent::new(
                         VersionedSubstateId::new(substate_req.substate_id().clone(), substate.version()),
                         lock_flag,
+                        requested_specific_version,
                     )
                 })
                 .collect()
@@ -76,6 +78,7 @@ impl ExecutionOutput {
                     VersionedSubstateIdLockIntent::new(
                         VersionedSubstateId::new(substate_req.substate_id().clone(), substate.version()),
                         SubstateLockType::Read,
+                        true,
                     )
                 })
                 .collect()

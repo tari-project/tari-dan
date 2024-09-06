@@ -171,7 +171,7 @@ impl TransactionRecord {
         let resolved_inputs = self.resolved_inputs.take().unwrap_or_else(|| {
             self.transaction
                 .all_inputs_iter()
-                .map(|i| VersionedSubstateIdLockIntent::new(i.or_zero_version(), SubstateLockType::Write))
+                .map(|i| VersionedSubstateIdLockIntent::from_requirement(i, SubstateLockType::Write))
                 .collect()
         });
         let resulting_outputs = self.resulting_outputs.take().unwrap_or_default();

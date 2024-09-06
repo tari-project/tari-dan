@@ -5,7 +5,7 @@ use std::{iter, time::Duration};
 
 use rand::{distributions::Alphanumeric, rngs::OsRng, Rng};
 use tari_common_types::types::PrivateKey;
-use tari_dan_common_types::{SubstateLockType, VersionedSubstateId};
+use tari_dan_common_types::VersionedSubstateId;
 use tari_dan_storage::consensus_models::{
     Decision,
     ExecutedTransaction,
@@ -105,13 +105,10 @@ pub fn create_execution_result_for_transaction(
         ))
     };
 
-    resulting_outputs.push(VersionedSubstateIdLockIntent::new(
-        VersionedSubstateId::new(
-            SubstateId::TransactionReceipt(TransactionReceiptAddress::from(tx_id)),
-            0,
-        ),
-        SubstateLockType::Output,
-    ));
+    resulting_outputs.push(VersionedSubstateIdLockIntent::output(VersionedSubstateId::new(
+        SubstateId::TransactionReceipt(TransactionReceiptAddress::from(tx_id)),
+        0,
+    )));
 
     TransactionExecution::new(
         tx_id,

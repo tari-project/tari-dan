@@ -1,13 +1,16 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::collections::HashMap;
+
 use log::info;
-use tari_dan_common_types::SubstateRequirement;
+use tari_dan_common_types::{optional::Optional, SubstateRequirement};
 use tari_dan_wallet_sdk::{apis::key_manager::TRANSACTION_BRANCH, models::Account};
+use tari_engine_types::indexed_value::decode_value_at_path;
 use tari_template_lib::{
     args,
-    models::{Amount, ComponentAddress},
-    prelude::XTR,
+    models::{Amount, ComponentAddress, VaultId},
+    prelude::{ResourceAddress, ResourceType, XTR},
 };
 use tari_transaction::Transaction;
 
@@ -15,6 +18,8 @@ use crate::{faucet::Faucet, runner::Runner};
 
 pub struct TariSwap {
     pub component_address: ComponentAddress,
+    pub vaults: HashMap<ResourceAddress, VaultId>,
+    pub lp_resource_address: ResourceAddress,
 }
 
 impl Runner {
@@ -36,17 +41,43 @@ impl Runner {
                 Amount(1)
             ]);
         }
-        let transaction = builder.sign(&key.key).build();
+
+        let fee_vault = self
+            .sdk
+            .accounts_api()
+            .get_vault_by_resource(&in_account.address, &XTR)?;
+
+        let transaction = builder
+            .with_inputs([
+                SubstateRequirement::unversioned(in_account.address.clone()),
+                SubstateRequirement::unversioned(fee_vault.address.clone()),
+                SubstateRequirement::unversioned(XTR),
+                SubstateRequirement::unversioned(faucet.resource_address),
+            ])
+            .sign(&key.key)
+            .build();
 
         let finalize = self.submit_transaction_and_wait(transaction).await?;
         let diff = finalize.result.accept().unwrap();
         Ok(diff
             .up_iter()
             .filter_map(|(addr, value)| {
-                addr.as_component_address()
-                    .filter(|_| value.substate_value().component().unwrap().module_name == "TariSwapPool")
+                let addr = addr
+                    .as_component_address()
+                    .filter(|_| value.substate_value().component().unwrap().module_name == "TariSwapPool")?;
+                let vaults = decode_value_at_path(value.substate_value().component().unwrap().state(), "$.pools")
+                    .unwrap()
+                    .unwrap();
+                let lp_resource_address =
+                    decode_value_at_path(value.substate_value().component().unwrap().state(), "$.lp_resource")
+                        .unwrap()
+                        .unwrap();
+                Some(TariSwap {
+                    component_address: addr,
+                    vaults,
+                    lp_resource_address,
+                })
             })
-            .map(|component_address| TariSwap { component_address })
             .collect())
     }
 
@@ -63,8 +94,8 @@ impl Runner {
             .sdk
             .key_manager_api()
             .derive_key(TRANSACTION_BRANCH, primary_account.key_index)?;
-        let mut tx_ids = vec![];
-        // Batch these otherwise we can break consensus (proposed with locked object)
+        let mut tx_ids = Vec::with_capacity(200);
+
         for i in 0..5 {
             for (i, tariswap) in tariswaps.iter().enumerate().skip(i * 200).take(200) {
                 let account = &accounts[i % accounts.len()];
@@ -72,11 +103,28 @@ impl Runner {
                     .sdk
                     .key_manager_api()
                     .derive_key(TRANSACTION_BRANCH, account.key_index)?;
+                let xtr_vault = self.sdk.accounts_api().get_vault_by_resource(&account.address, &XTR)?;
+                let faucet_vault = self
+                    .sdk
+                    .accounts_api()
+                    .get_vault_by_resource(&account.address, &faucet.resource_address)?;
+                let maybe_lp_vault = self
+                    .sdk
+                    .accounts_api()
+                    .get_vault_by_resource(&account.address, &tariswap.lp_resource_address)
+                    .optional()?;
+
                 let transaction = Transaction::builder()
-                    .with_inputs(vec![
-                        SubstateRequirement::new(faucet.resource_address.into(), Some(0)),
-                        SubstateRequirement::new(XTR.into(), Some(0)),
+                    .with_inputs(maybe_lp_vault.map(|v| SubstateRequirement::unversioned(v.address)))
+                    .with_inputs([
+                        SubstateRequirement::unversioned(account.address.clone()),
+                        SubstateRequirement::unversioned(xtr_vault.address),
+                        SubstateRequirement::unversioned(faucet_vault.address),
+                        SubstateRequirement::unversioned(tariswap.component_address),
+                        SubstateRequirement::unversioned(faucet.resource_address),
+                        SubstateRequirement::unversioned(XTR),
                     ])
+                    .with_inputs(tariswap.vaults.values().map(|v| SubstateRequirement::unversioned(*v)))
                     .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), Amount(1000))
                     .call_method(account.address.as_component_address().unwrap(), "withdraw", args![
                         XTR, amount_a
@@ -99,11 +147,30 @@ impl Runner {
                     .sign(&key.key)
                     .build();
 
-                tx_ids.push(self.submit_transaction(transaction).await?);
+                tx_ids.push((account.address.clone(), self.submit_transaction(transaction).await?));
             }
 
-            for tx_id in tx_ids.drain(..) {
-                self.wait_for_transaction(tx_id).await?;
+            for (account, tx_id) in tx_ids.drain(..) {
+                let result = self.wait_for_transaction(tx_id).await?;
+                let diff = result.result.accept().unwrap();
+                let lp_vault = diff
+                    .up_iter()
+                    .find_map(|(addr, s)| {
+                        let addr = addr.as_vault_id()?;
+                        if *s.substate_value().vault().unwrap().resource_address() == tariswaps[0].lp_resource_address {
+                            Some(addr)
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or_else(|| anyhow::anyhow!("LP Vault not found"))?;
+                self.sdk.accounts_api().add_vault(
+                    account,
+                    lp_vault.into(),
+                    tariswaps[0].lp_resource_address,
+                    ResourceType::NonFungible,
+                    Some("LP".to_string()),
+                )?;
             }
             info!("⏳️ Added liquidity to pools {}-{}", i * 200, (i + 1) * 200);
         }
@@ -128,37 +195,58 @@ impl Runner {
 
         let mut tx_ids = vec![];
         // Swap XTR for faucet
-        // Batch these otherwise we can break consensus (proposed with locked object)
         for i in 0..5 {
             for (i, account) in accounts.iter().enumerate().skip(i * 200).take(200) {
+                let tariswap = &tariswaps[i % tariswaps.len()];
                 let key = self
                     .sdk
                     .key_manager_api()
                     .derive_key(TRANSACTION_BRANCH, account.key_index)?;
-                let tariswap = &tariswaps[i % tariswaps.len()];
+                let xtr_vault = self.sdk.accounts_api().get_vault_by_resource(&account.address, &XTR)?;
+                let faucet_vault = self
+                    .sdk
+                    .accounts_api()
+                    .get_vault_by_resource(&account.address, &faucet.resource_address)?;
+                let maybe_lp_vault = self
+                    .sdk
+                    .accounts_api()
+                    .get_vault_by_resource(&account.address, &tariswap.lp_resource_address)
+                    .optional()?;
                 let transaction = Transaction::builder()
-                    // Use resources as input refs to allow concurrent access.
-                    .with_inputs(vec![
-                        SubstateRequirement::new(faucet.resource_address.into(), Some(0)),
-                        SubstateRequirement::new(XTR.into(), Some(0)),
+                    .with_inputs(maybe_lp_vault.map(|v| SubstateRequirement::unversioned(v.address)))
+                    .with_inputs([
+                        SubstateRequirement::unversioned(account.address.clone()),
+                        SubstateRequirement::unversioned(xtr_vault.address),
+                        SubstateRequirement::unversioned(faucet_vault.address),
+                        SubstateRequirement::unversioned(tariswap.component_address),
+                        SubstateRequirement::unversioned(faucet.resource_address),
+                        SubstateRequirement::unversioned(XTR),
+                        SubstateRequirement::unversioned(tariswap.lp_resource_address),
                     ])
+                    .with_inputs(tariswap.vaults.values().map(|v| SubstateRequirement::unversioned(*v)))
                     .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), Amount(1000))
-                    .call_method(tariswap.component_address, "get_pool_balance", args![ XTR, ])
-                    .call_method(tariswap.component_address, "get_pool_balance", args![ faucet.resource_address, ])
+                    .call_method(tariswap.component_address, "get_pool_balance", args![XTR,])
+                    .call_method(tariswap.component_address, "get_pool_balance", args![
+                        faucet.resource_address,
+                    ])
                     .call_method(tariswap.component_address, "get_pool_ratio", args![XTR, Amount(1000)])
-                    .call_method(tariswap.component_address, "get_pool_ratio", args![faucet.resource_address, Amount(1000)])
+                    .call_method(tariswap.component_address, "get_pool_ratio", args![
+                        faucet.resource_address,
+                        Amount(1000)
+                    ])
                     .call_method(account.address.as_component_address().unwrap(), "withdraw", args![
-                    XTR, amount_a_for_b
-                ])
+                        XTR,
+                        amount_a_for_b
+                    ])
                     .put_last_instruction_output_on_workspace("a")
                     .call_method(tariswap.component_address, "swap", args![
-                    Workspace("a"),
-                    faucet.resource_address,
-                ])
+                        Workspace("a"),
+                        faucet.resource_address,
+                    ])
                     .put_last_instruction_output_on_workspace("swapped")
                     .call_method(account.address.as_component_address().unwrap(), "deposit", args![
-                    Workspace("swapped")
-                ])
+                        Workspace("swapped")
+                    ])
                     .sign(&primary_account_key.key)
                     .sign(&key.key)
                     .build();
@@ -188,26 +276,39 @@ impl Runner {
                     .sdk
                     .key_manager_api()
                     .derive_key(TRANSACTION_BRANCH, account.key_index)?;
+                let xtr_vault = self.sdk.accounts_api().get_vault_by_resource(&account.address, &XTR)?;
+                let faucet_vault = self
+                    .sdk
+                    .accounts_api()
+                    .get_vault_by_resource(&account.address, &faucet.resource_address)?;
                 let tariswap = &tariswaps[i % tariswaps.len()];
                 let transaction = Transaction::builder()
-                    // Use resources as input refs to allow concurrent access.
-                    .with_inputs(vec![
-                        SubstateRequirement::new(faucet.resource_address.into(), Some(0)),
-                        SubstateRequirement::new(XTR.into(), Some(0)),
+                    .with_inputs([
+                        SubstateRequirement::unversioned(account.address.clone()),
+                        SubstateRequirement::unversioned(xtr_vault.address),
+                        SubstateRequirement::unversioned(faucet_vault.address),
+                        SubstateRequirement::unversioned(tariswap.component_address),
+                        SubstateRequirement::unversioned(faucet.resource_address),
+                        SubstateRequirement::unversioned(XTR),
+                        SubstateRequirement::unversioned(tariswap.lp_resource_address),
                     ])
+                    .with_inputs(tariswap.vaults.values().map(|v| SubstateRequirement::unversioned(*v)))
                     .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), Amount(1000))
                     .call_method(tariswap.component_address, "get_pool_balance", args![XTR])
-                    .call_method(tariswap.component_address, "get_pool_balance", args![faucet.resource_address])
+                    .call_method(tariswap.component_address, "get_pool_balance", args![
+                        faucet.resource_address
+                    ])
                     .call_method(tariswap.component_address, "get_pool_ratio", args![XTR, Amount(1000)])
-                    .call_method(tariswap.component_address, "get_pool_ratio", args![faucet.resource_address, Amount(1000)])
+                    .call_method(tariswap.component_address, "get_pool_ratio", args![
+                        faucet.resource_address,
+                        Amount(1000)
+                    ])
                     .call_method(account.address.as_component_address().unwrap(), "withdraw", args![
-                        faucet.resource_address, amount_b_for_a
+                        faucet.resource_address,
+                        amount_b_for_a
                     ])
                     .put_last_instruction_output_on_workspace("b")
-                    .call_method(tariswap.component_address, "swap", args![
-                        Workspace("b"),
-                        XTR,
-                    ])
+                    .call_method(tariswap.component_address, "swap", args![Workspace("b"), XTR,])
                     .put_last_instruction_output_on_workspace("swapped")
                     .call_method(account.address.as_component_address().unwrap(), "deposit", args![
                         Workspace("swapped")

@@ -4,7 +4,6 @@
 use std::{path::Path, time::Duration};
 
 use log::info;
-use tari_dan_common_types::SubstateRequirement;
 use tari_dan_wallet_daemon::indexer_jrpc_impl::IndexerJsonRpcNetworkInterface;
 use tari_dan_wallet_sdk::{DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
@@ -20,7 +19,7 @@ type WalletSdk = DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>
 pub struct Runner {
     pub(crate) sdk: WalletSdk,
     pub(crate) _cli: CommonArgs,
-    pub(crate) _faucet_template: TemplateMetadata,
+    pub(crate) faucet_template: TemplateMetadata,
     pub(crate) tariswap_template: TemplateMetadata,
     pub(crate) stats: Stats,
 }
@@ -32,7 +31,7 @@ impl Runner {
         Ok(Self {
             sdk,
             _cli: cli,
-            _faucet_template: faucet_template,
+            faucet_template,
             tariswap_template,
             stats: Stats::default(),
         })
@@ -46,16 +45,16 @@ impl Runner {
 
     pub async fn submit_transaction(&mut self, transaction: Transaction) -> anyhow::Result<TransactionId> {
         // TODO: remove the filled inputs here and allow consensus to figure out input versions
-        let inputs = transaction
-            .to_referenced_substates()?
-            .into_iter()
-            .map(|s| SubstateRequirement::new(s, None))
-            .collect();
+        // let inputs = transaction
+        //     .to_referenced_substates()?
+        //     .into_iter()
+        //     .map(|s| SubstateRequirement::new(s, None))
+        //     .collect();
 
         let tx_id = self
             .sdk
             .transaction_api()
-            .insert_new_transaction(transaction, inputs, None, false)
+            .insert_new_transaction(transaction, vec![], None, false)
             .await?;
 
         self.sdk.transaction_api().submit_transaction(tx_id).await?;

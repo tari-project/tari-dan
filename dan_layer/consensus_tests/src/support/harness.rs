@@ -17,7 +17,6 @@ use tari_dan_common_types::{
     NodeHeight,
     NumPreshards,
     ShardGroup,
-    SubstateLockType,
     VersionedSubstateId,
 };
 use tari_dan_storage::{
@@ -98,7 +97,7 @@ impl Test {
             fee,
             all_inputs
                 .into_iter()
-                .map(|i| VersionedSubstateIdLockIntent::new(i, SubstateLockType::Write))
+                .map(|i| VersionedSubstateIdLockIntent::write(i, true))
                 .collect(),
             vec![],
         );
@@ -173,7 +172,7 @@ impl Test {
             fee,
             all_inputs
                 .into_iter()
-                .map(|i| VersionedSubstateIdLockIntent::new(i, SubstateLockType::Write))
+                .map(|i| VersionedSubstateIdLockIntent::write(i, true))
                 .collect(),
             outputs,
         )
