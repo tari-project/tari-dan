@@ -20,6 +20,10 @@ use tari_template_lib::models::ObjectKey;
 
 use crate::{shard::Shard, uint::U256, NumPreshards, ShardGroup};
 
+pub trait ToSubstateAddress {
+    fn to_substate_address(&self) -> SubstateAddress;
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "ts",
@@ -273,6 +277,18 @@ impl FromStr for SubstateAddress {
         // TODO: error isnt correct
         let bytes = from_hex(s).map_err(|_| FixedHashSizeError)?;
         Self::from_bytes(&bytes)
+    }
+}
+
+impl ToSubstateAddress for SubstateAddress {
+    fn to_substate_address(&self) -> SubstateAddress {
+        *self
+    }
+}
+
+impl ToSubstateAddress for &SubstateAddress {
+    fn to_substate_address(&self) -> SubstateAddress {
+        **self
     }
 }
 

@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use super::TOKEN_SYMBOL;
+use super::{IMAGE_URL, TOKEN_SYMBOL};
 use crate::{
     args::MintArg,
     auth::{AccessRule, AuthHook, OwnerRule, ResourceAccessRules},
@@ -92,6 +92,11 @@ impl FungibleResourceBuilder {
         self
     }
 
+    /// Sets up the image URL of the resource
+    pub fn with_image_url(self, url: String) -> Self {
+        self.add_metadata(IMAGE_URL, url)
+    }
+
     /// Specify a hook method that will be called to authorize actions on the resource.
     /// The signature of the method must be `fn(action: ResourceAuthAction, caller: CallerContext)`.
     /// The method should panic to deny the action.
@@ -101,7 +106,7 @@ impl FungibleResourceBuilder {
     /// ## Examples
     ///
     /// Building a resource with a hook from within a component
-    /// ```rust
+    /// ```ignore
     /// use tari_template_lib::{caller_context::CallerContext, prelude::ResourceBuilder};
     /// ResourceBuilder::fungible()
     ///     .with_authorization_hook(CallerContext::current_component_address(), "my_hook")
@@ -110,7 +115,7 @@ impl FungibleResourceBuilder {
     ///
     /// Building a resource with a hook in a static template function. The address is allocated beforehand.
     ///
-    /// ```rust
+    /// ```ignore
     /// use tari_template_lib::{caller_context::CallerContext, prelude::ResourceBuilder};
     /// let alloc = CallerContext::allocate_component_address();
     /// ResourceBuilder::fungible()

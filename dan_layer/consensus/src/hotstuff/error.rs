@@ -3,14 +3,14 @@
 
 use tari_common_types::types::FixedHash;
 use tari_crypto::ristretto::RistrettoPublicKey;
-use tari_dan_common_types::{Epoch, NodeHeight};
+use tari_dan_common_types::{Epoch, NodeHeight, VersionedSubstateIdError};
 use tari_dan_storage::{
     consensus_models::{BlockError, BlockId, LeafBlock, LockedBlock, QuorumCertificate, TransactionPoolError},
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
 use tari_state_tree::StateTreeError;
-use tari_transaction::{TransactionId, VersionedSubstateIdError};
+use tari_transaction::TransactionId;
 use tokio::task::JoinError;
 
 use crate::{

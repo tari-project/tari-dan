@@ -8706,6 +8706,7 @@ dependencies = [
  "thiserror",
  "tonic 0.8.3",
  "ts-rs",
+ "url",
 ]
 
 [[package]]
@@ -9497,6 +9498,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tower-http",
+ "url",
 ]
 
 [[package]]
@@ -9993,7 +9995,6 @@ dependencies = [
  "tari_dan_common_types",
  "tari_engine_types",
  "tari_template_lib",
- "thiserror",
  "ts-rs",
 ]
 
@@ -10085,6 +10086,7 @@ dependencies = [
  "time",
  "tokio",
  "tower-http",
+ "url",
 ]
 
 [[package]]
@@ -10198,6 +10200,7 @@ dependencies = [
  "tokio",
  "toml 0.8.15",
  "tonic 0.8.3",
+ "url",
 ]
 
 [[package]]
@@ -10209,6 +10212,7 @@ dependencies = [
  "fern",
  "log",
  "tari_crypto",
+ "tari_dan_common_types",
  "tari_dan_wallet_daemon",
  "tari_dan_wallet_sdk",
  "tari_dan_wallet_storage_sqlite",
@@ -10820,6 +10824,7 @@ dependencies = [
  "rayon",
  "serde",
  "tari_crypto",
+ "tari_dan_common_types",
  "tari_engine_types",
  "tari_template_builtin",
  "tari_template_lib",
@@ -11156,6 +11161,7 @@ dependencies = [
  "form_urlencoded",
  "idna 0.5.0",
  "percent-encoding",
+ "serde",
 ]
 
 [[package]]

@@ -8,10 +8,17 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use tari_dan_common_types::{
+    SubstateAddress,
+    SubstateLockType,
+    SubstateRequirement,
+    ToSubstateAddress,
+    VersionedSubstateId,
+};
 use tari_engine_types::substate::{SubstateId, SubstateValue};
-use tari_transaction::{SubstateRequirement, TransactionId, VersionedSubstateId};
+use tari_transaction::TransactionId;
 
-use crate::consensus_models::{SubstateLockType, VersionedSubstateIdLockIntent};
+use crate::consensus_models::VersionedSubstateIdLockIntent;
 #[allow(clippy::mutable_key_type)]
 pub type SubstatePledges = HashSet<SubstatePledge>;
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -114,6 +121,21 @@ impl SubstatePledge {
     pub fn substate_id(&self) -> &SubstateId {
         self.versioned_substate_id().substate_id()
     }
+
+    pub fn to_substate_address(&self) -> SubstateAddress {
+        self.versioned_substate_id().to_substate_address()
+    }
+
+    pub fn satisfies_requirement(&self, req: &SubstateRequirement) -> bool {
+        // Check if a requirement is met by this pledge. If the requirement does not specify a version, then the version
+        // requirement is, by definition, met.
+        req.version.map_or(true, |v| v == self.versioned_substate_id().version) &&
+            self.substate_id() == req.substate_id()
+    }
+
+    pub fn satisfies_address(&self, substate_address: &SubstateAddress) -> bool {
+        self.to_substate_address() == *substate_address
+    }
 }
 
 /// These are to detect and prevent duplicates in pledging. A pledge may only
@@ -130,17 +152,6 @@ impl PartialEq for SubstatePledge {
 }
 
 impl Eq for SubstatePledge {}
-
-impl PartialEq<SubstateRequirement> for SubstatePledge {
-    fn eq(&self, other: &SubstateRequirement) -> bool {
-        // Check if a requirement is met by this pledge. If the requirement does not specify a version, then the version
-        // requirement is, by definition, met.
-        other
-            .version
-            .map_or(true, |v| v == self.versioned_substate_id().version) &&
-            self.substate_id() == other.substate_id()
-    }
-}
 
 impl Display for SubstatePledge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

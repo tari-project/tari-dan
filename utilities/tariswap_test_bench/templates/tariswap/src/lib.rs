@@ -137,7 +137,7 @@ mod tariswap {
             ResourceManager::get(self.lp_resource).mint_fungible(new_lp_amount)
         }
 
-        pub fn remove_liquidity(&mut self, mut lp_bucket: Bucket) -> (Bucket, Bucket) {
+        pub fn remove_liquidity(&mut self, lp_bucket: Bucket) -> (Bucket, Bucket) {
             assert!(lp_bucket.resource_address() == self.lp_resource, "Invalid LP resource");
 
             // get the pool information

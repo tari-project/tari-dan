@@ -120,7 +120,7 @@ Feature: Wallet Daemon
     Then VN has scanned to height 30
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
-    Then validator node VN has state at COMM_ADDRESS
+    Then validator node VN has state at COMM_ADDRESS within 20 seconds
 
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACCOUNT_1 via the wallet daemon WALLET_D
     When I print the cucumber world

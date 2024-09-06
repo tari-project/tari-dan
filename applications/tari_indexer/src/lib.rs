@@ -241,10 +241,13 @@ async fn handle_epoch_manager_event(services: &Services, event: EpochManagerEven
 }
 
 async fn create_base_layer_clients(config: &ApplicationConfig) -> Result<GrpcBaseNodeClient, ExitError> {
-    GrpcBaseNodeClient::connect(config.indexer.base_node_grpc_address.clone().unwrap_or_else(|| {
+    let url = config.indexer.base_node_grpc_url.clone().unwrap_or_else(|| {
         let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-        format!("127.0.0.1:{port}")
-    }))
-    .await
-    .map_err(|err| ExitError::new(ExitCode::ConfigError, format!("Could not connect to base node {}", err)))
+        format!("http://127.0.0.1:{port}")
+            .parse()
+            .expect("Default base node GRPC URL is malformed")
+    });
+    GrpcBaseNodeClient::connect(url)
+        .await
+        .map_err(|err| ExitError::new(ExitCode::ConfigError, format!("Could not connect to base node {}", err)))
 }

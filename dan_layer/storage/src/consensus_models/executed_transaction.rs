@@ -2,21 +2,22 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    borrow::Borrow,
     collections::{HashMap, HashSet},
-    fmt,
     hash::Hash,
     ops::Deref,
     time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{optional::Optional, SubstateAddress};
-use tari_engine_types::{
-    commit_result::{ExecuteResult, RejectReason},
-    substate::SubstateId,
+use tari_dan_common_types::{
+    optional::Optional,
+    SubstateAddress,
+    SubstateLockType,
+    ToSubstateAddress,
+    VersionedSubstateId,
 };
-use tari_transaction::{Transaction, TransactionId, VersionedSubstateId};
+use tari_engine_types::commit_result::{ExecuteResult, RejectReason};
+use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
     consensus_models::{
@@ -24,10 +25,10 @@ use crate::{
         BlockTransactionExecution,
         Decision,
         Evidence,
-        SubstateLockType,
         TransactionAtom,
         TransactionExecution,
         TransactionRecord,
+        VersionedSubstateIdLockIntent,
     },
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
@@ -126,7 +127,7 @@ impl ExecutedTransaction {
     }
 
     pub fn all_inputs_iter(&self) -> impl Iterator<Item = &VersionedSubstateId> + '_ {
-        self.resolved_inputs.iter().map(|input| &input.versioned_substate_id)
+        self.resolved_inputs.iter().map(|input| input.versioned_substate_id())
     }
 
     pub fn involved_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
@@ -397,80 +398,5 @@ impl Eq for ExecutedTransaction {}
 impl Hash for ExecutedTransaction {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.transaction.id().hash(state);
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[cfg_attr(
-    feature = "ts",
-    derive(ts_rs::TS),
-    ts(export, export_to = "../../bindings/src/types/")
-)]
-pub struct VersionedSubstateIdLockIntent {
-    versioned_substate_id: VersionedSubstateId,
-    lock_type: SubstateLockType,
-}
-
-impl VersionedSubstateIdLockIntent {
-    pub fn new(versioned_substate_id: VersionedSubstateId, lock: SubstateLockType) -> Self {
-        Self {
-            versioned_substate_id,
-            lock_type: lock,
-        }
-    }
-
-    pub fn read(versioned_substate_id: VersionedSubstateId) -> Self {
-        Self::new(versioned_substate_id, SubstateLockType::Read)
-    }
-
-    pub fn write(versioned_substate_id: VersionedSubstateId) -> Self {
-        Self::new(versioned_substate_id, SubstateLockType::Write)
-    }
-
-    pub fn output(versioned_substate_id: VersionedSubstateId) -> Self {
-        Self::new(versioned_substate_id, SubstateLockType::Output)
-    }
-
-    pub fn to_substate_address(&self) -> SubstateAddress {
-        self.versioned_substate_id.to_substate_address()
-    }
-
-    pub fn versioned_substate_id(&self) -> &VersionedSubstateId {
-        &self.versioned_substate_id
-    }
-
-    pub fn into_versioned_substate_id(self) -> VersionedSubstateId {
-        self.versioned_substate_id
-    }
-
-    pub fn substate_id(&self) -> &SubstateId {
-        self.versioned_substate_id.substate_id()
-    }
-
-    pub fn version(&self) -> u32 {
-        self.versioned_substate_id.version()
-    }
-
-    pub fn lock_type(&self) -> SubstateLockType {
-        self.lock_type
-    }
-}
-
-impl Borrow<SubstateId> for VersionedSubstateIdLockIntent {
-    fn borrow(&self) -> &SubstateId {
-        self.substate_id()
-    }
-}
-
-impl fmt::Display for VersionedSubstateIdLockIntent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({})", self.versioned_substate_id, self.lock_type)
-    }
-}
-
-impl Hash for VersionedSubstateIdLockIntent {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        // A VersionedSubstateIdLockIntent is uniquely identified by the VersionedSubstateId
-        self.versioned_substate_id.hash(state);
     }
 }

@@ -12,20 +12,13 @@ use std::time::Duration;
 
 use tari_common_types::types::PrivateKey;
 use tari_consensus::hotstuff::HotStuffError;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, SubstateLockType, SubstateRequirement};
 use tari_dan_storage::{
-    consensus_models::{
-        BlockId,
-        Command,
-        Decision,
-        SubstateLockType,
-        TransactionRecord,
-        VersionedSubstateIdLockIntent,
-    },
+    consensus_models::{BlockId, Command, Decision, TransactionRecord, VersionedSubstateIdLockIntent},
     StateStore,
     StateStoreReadTransaction,
 };
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::Transaction;
 
 use crate::support::{
     build_transaction_from,
@@ -389,8 +382,6 @@ async fn foreign_shard_group_decides_to_abort() {
 async fn multishard_local_inputs_foreign_outputs() {
     setup_logger();
     let mut test = Test::builder()
-        // Test can take 11s, this could cut it a little fine - may indicate that we need to optimise
-        .with_test_timeout(Duration::from_secs(60))
         .add_committee(0, vec!["1", "2"])
         .add_committee(1, vec!["3", "4"])
         .start()
@@ -444,8 +435,6 @@ async fn multishard_local_inputs_foreign_outputs() {
 async fn multishard_local_inputs_and_outputs_foreign_outputs() {
     setup_logger();
     let mut test = Test::builder()
-        // TODO: investigate
-        .with_test_timeout(Duration::from_secs(60))
         .add_committee(0, vec!["1", "2"])
         .add_committee(1, vec!["3", "4"])
         .add_committee(2, vec!["5", "6"])

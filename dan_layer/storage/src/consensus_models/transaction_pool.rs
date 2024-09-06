@@ -15,7 +15,9 @@ use tari_dan_common_types::{
     committee::CommitteeInfo,
     optional::{IsNotFoundError, Optional},
     ShardGroup,
+    ToSubstateAddress,
 };
+use tari_engine_types::transaction_receipt::TransactionReceiptAddress;
 use tari_transaction::TransactionId;
 
 use crate::{
@@ -31,7 +33,6 @@ use crate::{
         SubstatePledges,
         TransactionAtom,
         TransactionExecution,
-        TransactionPoolStatusUpdate,
         TransactionRecord,
     },
     StateStore,
@@ -55,7 +56,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
     pub fn get(
         &self,
         tx: &TStateStore::ReadTransaction<'_>,
-        leaf: LeafBlock,
+        leaf: &LeafBlock,
         id: &TransactionId,
     ) -> Result<TransactionPoolRecord, TransactionPoolError> {
         // We always want to fetch the state at the current leaf block until the leaf block
@@ -157,14 +158,12 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         Ok(count)
     }
 
-    pub fn confirm_all_transitions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+    pub fn confirm_all_transitions(
         &self,
         tx: &mut TStateStore::WriteTransaction<'_>,
         locked_block: &LockedBlock,
-        new_locked_block: &LockedBlock,
-        tx_ids: I,
     ) -> Result<(), TransactionPoolError> {
-        tx.transaction_pool_confirm_all_transitions(locked_block, new_locked_block, tx_ids)?;
+        tx.transaction_pool_confirm_all_transitions(locked_block)?;
         Ok(())
     }
 
@@ -318,7 +317,6 @@ pub struct TransactionPoolRecord {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     transaction_id: TransactionId,
     evidence: Evidence,
-    remote_evidence: Option<Evidence>,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     transaction_fee: u64,
     leader_fee: Option<LeaderFee>,
@@ -334,8 +332,7 @@ impl TransactionPoolRecord {
     pub fn load(
         id: TransactionId,
         evidence: Evidence,
-        remote_evidence: Option<Evidence>,
-        transaction_fee: Option<u64>,
+        transaction_fee: u64,
         leader_fee: Option<LeaderFee>,
         stage: TransactionPoolStage,
         pending_stage: Option<TransactionPoolStage>,
@@ -347,8 +344,7 @@ impl TransactionPoolRecord {
         Self {
             transaction_id: id,
             evidence,
-            remote_evidence,
-            transaction_fee: transaction_fee.unwrap_or(0),
+            transaction_fee,
             leader_fee,
             stage,
             pending_stage,
@@ -390,7 +386,7 @@ impl TransactionPoolRecord {
         &self.evidence
     }
 
-    fn evidence_mut(&mut self) -> &mut Evidence {
+    pub fn evidence_mut(&mut self) -> &mut Evidence {
         &mut self.evidence
     }
 
@@ -419,6 +415,10 @@ impl TransactionPoolRecord {
 
     pub fn is_ready(&self) -> bool {
         self.is_ready
+    }
+
+    pub fn to_receipt_id(&self) -> TransactionReceiptAddress {
+        (*self.transaction_id()).into()
     }
 
     pub fn get_current_transaction_atom(&self) -> TransactionAtom {
@@ -522,13 +522,43 @@ impl TransactionPoolRecord {
         self
     }
 
+    pub fn set_next_stage(
+        &mut self,
+        next_stage: TransactionPoolStage,
+        is_ready: bool,
+    ) -> Result<(), TransactionPoolError> {
+        if next_stage == self.stage && is_ready == self.is_ready {
+            return Ok(());
+        }
+
+        self.check_pending_status_update(next_stage, is_ready)?;
+        info!(
+            target: LOG_TARGET,
+            "📝 Setting next update for transaction {} to {}->{},is_ready={}->{},{}",
+            self.transaction_id(),
+            self.current_stage(),
+            next_stage,
+            self.is_ready,
+            is_ready,
+            self.current_decision(),
+        );
+        self.pending_stage = Some(next_stage);
+        self.is_ready = is_ready;
+        Ok(())
+    }
+
     pub fn set_evidence(&mut self, evidence: Evidence) -> &mut Self {
         self.evidence = evidence;
         self
     }
 
-    pub fn add_qc_evidence(&mut self, committee_info: &CommitteeInfo, qc_id: QcId) -> &mut Self {
-        self.evidence.add_qc_evidence(committee_info, qc_id);
+    pub fn add_prepare_qc_evidence(&mut self, committee_info: &CommitteeInfo, qc_id: QcId) -> &mut Self {
+        self.evidence.add_prepare_qc_evidence(committee_info, qc_id);
+        self
+    }
+
+    pub fn add_accept_qc_evidence(&mut self, committee_info: &CommitteeInfo, qc_id: QcId) -> &mut Self {
+        self.evidence.add_accept_qc_evidence(committee_info, qc_id);
         self
     }
 
@@ -575,78 +605,6 @@ impl TransactionPoolRecord {
 }
 
 impl TransactionPoolRecord {
-    pub fn add_pending_status_update<TTx: StateStoreWriteTransaction>(
-        &mut self,
-        tx: &mut TTx,
-        block: LeafBlock,
-        pending_stage: TransactionPoolStage,
-        is_ready: bool,
-    ) -> Result<(), TransactionPoolError> {
-        self.check_pending_status_update(pending_stage, is_ready)?;
-
-        debug!(
-            target: LOG_TARGET,
-            "add_pending_status_update: tx: {}, blk: {}, transition: {}->{}, ready {}->{}",
-            self.transaction_id,
-            block.block_id,
-            self.stage,
-            pending_stage,
-            self.is_ready,
-            is_ready,
-        );
-
-        let update = TransactionPoolStatusUpdate {
-            block_id: block.block_id,
-            transaction_id: self.transaction_id,
-            stage: pending_stage,
-            evidence: self.evidence.clone(),
-            is_ready,
-            local_decision: self.current_decision(),
-        };
-
-        update.insert(tx)?;
-        self.pending_stage = Some(pending_stage);
-
-        Ok(())
-    }
-
-    pub fn update_remote_data<TTx: StateStoreWriteTransaction>(
-        &mut self,
-        tx: &mut TTx,
-        decision: Decision,
-        foreign_qc_id: QcId,
-        foreign_committee_info: &CommitteeInfo,
-        remote_evidence: Evidence,
-    ) -> Result<(), TransactionPoolError> {
-        match self.remote_evidence.as_mut() {
-            Some(evidence) => {
-                evidence.update(remote_evidence.iter().map(|(addr, e)| (*addr, e.lock)));
-            },
-            None => {
-                self.remote_evidence = Some(remote_evidence);
-            },
-        }
-        self.remote_evidence
-            .as_mut()
-            .expect("set above")
-            .add_qc_evidence(foreign_committee_info, foreign_qc_id);
-
-        tx.transaction_pool_update(
-            &self.transaction_id,
-            None,
-            None,
-            None,
-            Some(decision),
-            self.remote_evidence.as_ref(),
-        )?;
-        // Update the local evidence so that we can check if we have enough evidence to proceed
-        self.evidence
-            .merge(self.remote_evidence.as_ref().expect("set above").clone());
-        // self.add_qc_evidence(foreign_committee_info, foreign_qc_id);
-        self.set_remote_decision(decision);
-        Ok(())
-    }
-
     #[allow(clippy::mutable_key_type)]
     pub fn add_foreign_pledges<TTx: StateStoreWriteTransaction>(
         &self,
@@ -655,29 +613,6 @@ impl TransactionPoolRecord {
         foreign_pledges: SubstatePledges,
     ) -> Result<(), TransactionPoolError> {
         tx.foreign_substate_pledges_save(self.transaction_id, shard_group, foreign_pledges)?;
-        Ok(())
-    }
-
-    pub fn update_local_data<TTx: StateStoreWriteTransaction>(
-        &mut self,
-        tx: &mut TTx,
-        is_ready: bool,
-    ) -> Result<(), TransactionPoolError> {
-        if self
-            .local_decision
-            .map(|d| d != self.current_decision())
-            .unwrap_or(true)
-        {
-            self.set_local_decision(self.current_decision());
-            tx.transaction_pool_update(
-                &self.transaction_id,
-                Some(is_ready),
-                Some(self.current_decision()),
-                Some(&self.evidence),
-                None,
-                None,
-            )?;
-        }
         Ok(())
     }
 
@@ -712,6 +647,16 @@ impl TransactionPoolRecord {
         Ok(recs)
     }
 
+    pub fn get<TTx: StateStoreReadTransaction>(
+        tx: &TTx,
+        from_block_id: &BlockId,
+        to_block_id: &BlockId,
+        transaction_id: &TransactionId,
+    ) -> Result<TransactionPoolRecord, TransactionPoolError> {
+        let rec = tx.transaction_pool_get_for_blocks(from_block_id, to_block_id, transaction_id)?;
+        Ok(rec)
+    }
+
     pub fn get_transaction<TTx: StateStoreReadTransaction>(
         &self,
         tx: &TTx,
@@ -728,6 +673,12 @@ impl TransactionPoolRecord {
         let exec = BlockTransactionExecution::get_pending_for_block(tx, self.transaction_id(), from_block_id)?;
         Ok(exec)
     }
+
+    pub fn has_any_local_inputs(&self, local_committee_info: &CommitteeInfo) -> bool {
+        self.evidence
+            .iter()
+            .any(|(addr, ev)| !ev.lock.is_output() && local_committee_info.includes_substate_address(addr))
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -739,11 +690,6 @@ pub enum TransactionPoolError {
         from: TransactionPoolStage,
         to: TransactionPoolStage,
         is_ready: bool,
-    },
-    #[error("Transaction already updated: {transaction_id} in block {block_id}")]
-    TransactionAlreadyUpdated {
-        transaction_id: TransactionId,
-        block_id: BlockId,
     },
     #[error("Transaction already executed: {transaction_id} in block {block_id}")]
     TransactionAlreadyExecuted {
@@ -792,7 +738,6 @@ mod tests {
                 transaction_id: TransactionId::new([0; 32]),
                 original_decision: Decision::Commit,
                 evidence: Default::default(),
-                remote_evidence: None,
                 transaction_fee: fee,
                 leader_fee: None,
                 stage: TransactionPoolStage::New,

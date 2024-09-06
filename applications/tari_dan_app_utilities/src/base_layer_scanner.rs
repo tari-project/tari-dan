@@ -43,7 +43,7 @@ use tari_crypto::{
     ristretto::RistrettoPublicKey,
     tari_utilities::{hex::Hex, ByteArray},
 };
-use tari_dan_common_types::{optional::Optional, NodeAddressable};
+use tari_dan_common_types::{optional::Optional, NodeAddressable, VersionedSubstateId};
 use tari_dan_storage::{
     consensus_models::{BurntUtxo, SubstateRecord},
     global::{GlobalDb, MetadataKey},
@@ -59,7 +59,6 @@ use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, Epoc
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::models::{EncryptedData, TemplateAddress, UnclaimedConfidentialOutputAddress};
-use tari_transaction::VersionedSubstateId;
 use tokio::{task, task::JoinHandle, time};
 
 use crate::{

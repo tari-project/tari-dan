@@ -1,10 +1,11 @@
 create table quorum_certificates
 (
-    id         integer   not null primary key AUTOINCREMENT,
-    qc_id      text      not NULL,
-    block_id   text      not NULL,
-    json       text      not NULL,
-    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id          integer   not null primary key AUTOINCREMENT,
+    qc_id       text      not NULL,
+    block_id    text      not NULL,
+    shard_group integer   not NULL,
+    json        text      not NULL,
+    created_at  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- fetching by qc_id is a very common operation
@@ -83,12 +84,12 @@ CREATE TABLE missing_transactions
 
 create table foreign_parked_blocks
 (
-    id                      integer   not null primary key AUTOINCREMENT,
-    block_id                text      not NULL,
-    block                   text      not NULL,
-    block_pledges           text      not NULL,
-    justify_qc              text      not NULL,
-    created_at              timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id            integer   not null primary key AUTOINCREMENT,
+    block_id      text      not NULL,
+    block         text      not NULL,
+    block_pledges text      not NULL,
+    justify_qc    text      not NULL,
+    created_at    timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- block_id must be unique. Optimise fetching by block_id
@@ -96,10 +97,10 @@ create unique index foreign_parked_blocks_uniq_idx_id on parked_blocks (block_id
 
 CREATE TABLE foreign_missing_transactions
 (
-    id                    integer   not NULL primary key AUTOINCREMENT,
-    parked_block_id       integer   not NULL,
-    transaction_id        text      not NULL,
-    created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    id              integer   not NULL primary key AUTOINCREMENT,
+    parked_block_id integer   not NULL,
+    transaction_id  text      not NULL,
+    created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (parked_block_id) REFERENCES foreign_parked_blocks (id)
 );
 
@@ -168,6 +169,7 @@ create table foreign_substate_pledges
 (
     id             integer   NOT NULL primary key AUTOINCREMENT,
     transaction_id text      NOT NULL,
+    address        text      NOT NULL,
     substate_id    text      NOT NULL,
     version        int       NOT NULL,
     substate_value text      NULL,
@@ -300,22 +302,20 @@ create unique index transaction_executions_uniq_block_id_transaction_id on trans
 
 create table transaction_pool
 (
-    id                  integer   not null primary key AUTOINCREMENT,
-    transaction_id      text      not null,
-    original_decision   text      not null,
-    local_decision      text      null,
-    remote_decision     text      null,
-    evidence            text      null,
-    remote_evidence     text      null,
-    transaction_fee     bigint    null,
-    leader_fee          bigint    null,
-    global_exhaust_burn bigint    null,
-    stage               text      not null,
-    pending_stage       text      null,
-    is_ready            boolean   not null,
-    confirm_stage       text      null,
-    updated_at          timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at          timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                integer   not null primary key AUTOINCREMENT,
+    transaction_id    text      not null,
+    original_decision text      not null,
+    local_decision    text      null,
+    remote_decision   text      null,
+    evidence          text      null,
+    transaction_fee   bigint    not null DEFAULT 0,
+    leader_fee        text      null,
+    stage             text      not null,
+    pending_stage     text      null,
+    is_ready          boolean   not null,
+    confirm_stage     text      null,
+    updated_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
 create unique index transaction_pool_uniq_idx_transaction_id on transaction_pool (transaction_id);
@@ -323,19 +323,24 @@ create index transaction_pool_idx_is_ready on transaction_pool (is_ready);
 
 create table transaction_pool_state_updates
 (
-    id             integer   not null primary key AUTOINCREMENT,
-    block_id       text      not null,
-    block_height   bigint    not null,
-    transaction_id text      not null,
-    stage          text      not null,
-    evidence       text      not null,
-    is_ready       boolean   not null,
-    local_decision text      not null,
-    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id              integer   not null primary key AUTOINCREMENT,
+    block_id        text      not null,
+    block_height    bigint    not null,
+    transaction_id  text      not null,
+    stage           text      not null,
+    evidence        text      not null,
+    is_ready        boolean   not null,
+    local_decision  text      not null,
+    transaction_fee bigint    not null,
+    leader_fee      text      null,
+    remote_decision text      null,
+    is_applied      boolean   not null DEFAULT '0',
+    created_at      timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (block_id) REFERENCES blocks (block_id),
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
-create unique index transaction_pool_uniq_block_id_transaction_id on transaction_pool_state_updates (block_id, transaction_id);
+create unique index transaction_pool_state_updates_uniq_block_id_transaction_id on transaction_pool_state_updates (block_id, transaction_id);
+create index transaction_pool_state_updates_idx_is_applied on transaction_pool_state_updates (is_applied);
 
 create table votes
 (
@@ -351,30 +356,31 @@ create table votes
 
 CREATE TABLE foreign_proposals
 (
-    id                      integer   not null primary key AUTOINCREMENT,
-    block_id                text      not NULL,
-    parent_block_id         text      not NULL,
-    merkle_root             text      not NULL,
-    network                 text      not NULL,
-    height                  bigint    not NULL,
-    epoch                   bigint    not NULL,
-    shard_group             integer   not NULL,
-    proposed_by             text      not NULL,
-    qc                      text      not NULL,
-    command_count           bigint    not NULL,
-    commands                text      not NULL,
-    total_leader_fee        bigint    not NULL,
-    foreign_indexes         text      not NULL,
-    signature               text      NULL,
-    timestamp               bigint    not NULL,
-    base_layer_block_height bigint    not NULL,
-    base_layer_block_hash   text      not NULL,
-    justify_qc_id           text      not NULL REFERENCES quorum_certificates (qc_id),
-    block_pledge            text      not NULL,
-    proposed_in_block       text      NULL REFERENCES blocks (block_id),
-    proposed_in_block_height bigint   NULL,
-    created_at              timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    extra_data              text      NULL,
+    id                       integer   not null primary key AUTOINCREMENT,
+    block_id                 text      not NULL,
+    parent_block_id          text      not NULL,
+    merkle_root              text      not NULL,
+    network                  text      not NULL,
+    height                   bigint    not NULL,
+    epoch                    bigint    not NULL,
+    shard_group              integer   not NULL,
+    proposed_by              text      not NULL,
+    qc                       text      not NULL,
+    command_count            bigint    not NULL,
+    commands                 text      not NULL,
+    total_leader_fee         bigint    not NULL,
+    foreign_indexes          text      not NULL,
+    signature                text      NULL,
+    timestamp                bigint    not NULL,
+    base_layer_block_height  bigint    not NULL,
+    base_layer_block_hash    text      not NULL,
+    justify_qc_id            text      not NULL REFERENCES quorum_certificates (qc_id),
+    block_pledge             text      not NULL,
+    proposed_in_block        text      NULL REFERENCES blocks (block_id),
+    proposed_in_block_height bigint    NULL,
+    status                   text      not NULL,
+    created_at               timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    extra_data               text      NULL,
     UNIQUE (block_id)
 );
 
@@ -395,12 +401,12 @@ CREATE TABLE foreign_receive_counters
 
 CREATE TABLE burnt_utxos
 (
-    id                      integer   not null primary key AUTOINCREMENT,
-    substate_id              text     not NULL,
-    substate                 text     not NULL,
-    base_layer_block_height  bigint   not NULL,
-    proposed_in_block        text     NULL REFERENCES blocks (block_id),
-    proposed_in_block_height bigint   NULL,
+    id                       integer   not null primary key AUTOINCREMENT,
+    substate_id              text      not NULL,
+    substate                 text      not NULL,
+    base_layer_block_height  bigint    not NULL,
+    proposed_in_block        text      NULL REFERENCES blocks (block_id),
+    proposed_in_block_height bigint    NULL,
     created_at               timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (substate_id)
 );
@@ -448,12 +454,12 @@ CREATE UNIQUE INDEX pending_state_tree_diffs_uniq_idx_block_id_shard on pending_
 
 CREATE TABLE epoch_checkpoints
 (
-    id              integer   not NULL primary key AUTOINCREMENT,
-    epoch           bigint    not NULL,
-    commit_block    text      not NULL,
-    qcs             text      not NULL,
-    shard_roots     text      not NULL,
-    created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP
+    id           integer   not NULL primary key AUTOINCREMENT,
+    epoch        bigint    not NULL,
+    commit_block text      not NULL,
+    qcs          text      not NULL,
+    shard_roots  text      not NULL,
+    created_at   timestamp not NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- An append-only store of state transitions
@@ -494,6 +500,8 @@ CREATE TABLE transaction_pool_history
     global_exhaust_burn bigint    null,
     stage               text      not null,
     new_stage           text      not null,
+    pending_stage       text      null,
+    new_pending_stage   text      null,
     is_ready            boolean   not null,
     new_is_ready        boolean   not null,
     confirm_stage       text      null,
@@ -517,9 +525,10 @@ BEGIN
                                           new_evidence,
                                           transaction_fee,
                                           leader_fee,
-                                          global_exhaust_burn,
                                           stage,
                                           new_stage,
+                                          pending_stage,
+                                          new_pending_stage,
                                           is_ready,
                                           new_is_ready,
                                           confirm_stage,
@@ -533,11 +542,12 @@ BEGIN
             OLD.remote_decision,
             OLD.evidence,
             NEW.evidence,
-            OLD.transaction_fee,
-            OLD.leader_fee,
-            OLD.global_exhaust_burn,
+            NEW.transaction_fee,
+            NEW.leader_fee,
             OLD.stage,
             NEW.stage,
+            OLD.pending_stage,
+            NEW.pending_stage,
             OLD.is_ready,
             NEW.is_ready,
             OLD.confirm_stage,

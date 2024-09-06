@@ -4,52 +4,63 @@
 use tari_transaction::TransactionId;
 
 use crate::{
-    consensus_models::{BlockId, Decision, Evidence, TransactionPoolStage},
+    consensus_models::{BlockId, Decision, Evidence, LeaderFee, TransactionPoolRecord, TransactionPoolStage},
     StateStoreWriteTransaction,
 };
 
 #[derive(Debug, Clone)]
 pub struct TransactionPoolStatusUpdate {
-    pub block_id: BlockId,
-    pub transaction_id: TransactionId,
-    pub stage: TransactionPoolStage,
-    pub evidence: Evidence,
-    pub is_ready: bool,
-    pub local_decision: Decision,
+    pub transaction: TransactionPoolRecord,
 }
 
 impl TransactionPoolStatusUpdate {
-    pub fn block_id(&self) -> &BlockId {
-        &self.block_id
-    }
-
     pub fn transaction_id(&self) -> &TransactionId {
-        &self.transaction_id
+        self.transaction.transaction_id()
     }
 
     pub fn stage(&self) -> TransactionPoolStage {
-        self.stage
+        self.transaction.current_stage()
     }
 
     pub fn evidence(&self) -> &Evidence {
-        &self.evidence
+        self.transaction.evidence()
     }
 
     pub fn evidence_mut(&mut self) -> &mut Evidence {
-        &mut self.evidence
+        self.transaction.evidence_mut()
     }
 
     pub fn is_ready(&self) -> bool {
-        self.is_ready
+        self.transaction.is_ready()
     }
 
-    pub fn local_decision(&self) -> Decision {
-        self.local_decision
+    pub fn decision(&self) -> Decision {
+        self.transaction.current_decision()
+    }
+
+    pub fn remote_decision(&self) -> Option<Decision> {
+        self.transaction.remote_decision()
+    }
+
+    pub fn transaction_fee(&self) -> u64 {
+        self.transaction.transaction_fee()
+    }
+
+    pub fn leader_fee(&self) -> Option<&LeaderFee> {
+        self.transaction.leader_fee()
+    }
+
+    pub fn apply_evidence(&self, tx_rec_mut: &mut TransactionPoolRecord) {
+        tx_rec_mut.set_evidence(self.evidence().clone());
     }
 }
 
 impl TransactionPoolStatusUpdate {
-    pub fn insert<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), crate::StorageError> {
-        tx.transaction_pool_add_pending_update(self)
+    pub fn insert_for_block<TTx: StateStoreWriteTransaction>(
+        &self,
+        tx: &mut TTx,
+        block_id: &BlockId,
+    ) -> Result<(), crate::StorageError> {
+        tx.transaction_pool_add_pending_update(block_id, self)
     }
 }

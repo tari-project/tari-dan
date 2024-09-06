@@ -6,7 +6,7 @@ use std::fmt::{Debug, Formatter};
 use log::*;
 use tari_dan_common_types::{committee::CommitteeInfo, Epoch, NodeHeight, ShardGroup};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockDiff, BurntUtxo, HighQc, LeafBlock, TransactionPool},
+    consensus_models::{Block, BlockDiff, BurntUtxo, ForeignProposal, HighQc, LeafBlock, TransactionPool},
     StateStore,
 };
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
@@ -142,7 +142,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             on_receive_foreign_proposal: OnReceiveForeignProposalHandler::new(
                 state_store.clone(),
                 epoch_manager.clone(),
-                transaction_pool.clone(),
                 pacemaker.clone_handle(),
             ),
             on_receive_vote: OnReceiveVoteHandler::new(vote_receiver.clone()),
@@ -207,7 +206,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 .filter(|h| !h.is_zero())
                 .unwrap_or_else(NodeHeight::zero);
 
-            Ok::<_, HotStuffError>((current_epoch, current_height, HighQc::get(tx)?))
+            let high_qc = HighQc::get(tx, leaf.epoch())?;
+            Ok::<_, HotStuffError>((current_epoch, current_height, high_qc))
         })?;
 
         info!(
@@ -583,10 +583,13 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
     async fn on_beat(&mut self, epoch: Epoch, local_committee_info: &CommitteeInfo) -> Result<(), HotStuffError> {
         self.hooks.on_beat();
+        let (base_layer_block_height, _) = self.epoch_manager.current_base_layer_block_info().await?;
         if !self.state_store.with_read_tx(|tx| {
             // Propose quickly if there are UTXOs to mint or transactions to propose
             Ok::<_, HotStuffError>(
-                BurntUtxo::has_unproposed(tx)? || self.transaction_pool.has_uncommitted_transactions(tx)?,
+                ForeignProposal::has_unconfirmed(tx, base_layer_block_height)? ||
+                    BurntUtxo::has_unproposed(tx)? ||
+                    self.transaction_pool.has_uncommitted_transactions(tx)?,
             )
         })? {
             let current_epoch = self.epoch_manager.current_epoch().await?;
@@ -672,19 +675,11 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     .await,
             ),
             HotstuffMessage::Proposal(msg) => {
-                // First process attached foreign proposals
-                for foreign_proposal in msg.foreign_proposals {
-                    log_err(
-                        "on_receive_foreign_proposal",
-                        self.on_receive_foreign_proposal
-                            .handle(from.clone(), foreign_proposal.into(), local_committee_info)
-                            .await,
-                    )?;
-                }
-
                 match log_err(
                     "on_receive_local_proposal",
-                    self.on_receive_local_proposal.handle(current_epoch, msg.block).await,
+                    self.on_receive_local_proposal
+                        .handle(current_epoch, local_committee_info, msg)
+                        .await,
                 ) {
                     Ok(_) => Ok(()),
                     Err(
@@ -704,9 +699,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             },
             HotstuffMessage::ForeignProposal(msg) => log_err(
                 "on_receive_foreign_proposal",
-                self.on_receive_foreign_proposal
-                    .handle(from, msg, local_committee_info)
-                    .await,
+                self.on_receive_foreign_proposal.handle(msg, local_committee_info).await,
             ),
             HotstuffMessage::Vote(msg) => log_err(
                 "on_receive_vote",

@@ -24,6 +24,7 @@ use std::net::SocketAddr;
 
 use clap::Parser;
 use minotari_app_utilities::common_cli_args::CommonCliArgs;
+use reqwest::Url;
 use tari_common::configuration::{ConfigOverrideProvider, Network};
 use tari_dan_app_utilities::p2p_config::ReachabilityMode;
 
@@ -43,6 +44,8 @@ pub struct Cli {
     pub http_ui_listener_address: Option<SocketAddr>,
     #[clap(long, env = "TARI_VN_JSON_RPC_PUBLIC_ADDRESS")]
     pub json_rpc_public_address: Option<String>,
+    #[clap(long, alias = "node-grpc", short = 'g', env = "TARI_VN_MINOTARI_NODE_GRPC_URL")]
+    pub minotari_node_grpc_url: Option<Url>,
     #[clap(long, short = 's')]
     pub peer_seeds: Vec<String>,
     #[clap(long)]
@@ -101,6 +104,9 @@ impl ConfigOverrideProvider for Cli {
         }
         if self.disable_mdns {
             overrides.push(("validator_node.p2p.enable_mdns".to_string(), "false".to_string()));
+        }
+        if let Some(url) = self.minotari_node_grpc_url.as_ref() {
+            overrides.push(("validator_node.base_node_grpc_url".to_string(), url.to_string()));
         }
         overrides
     }

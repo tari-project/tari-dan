@@ -24,8 +24,7 @@ message HotStuffMessage {
 message NewViewMessage {
   QuorumCertificate high_qc = 1;
   uint64 new_height = 2;
-  uint64 epoch = 3;
-  VoteMessage last_vote = 4;
+  VoteMessage last_vote = 3;
 }
 
 message ProposalMessage {

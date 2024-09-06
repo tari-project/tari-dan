@@ -8,7 +8,12 @@ use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::services::template_provider::TemplateProvider;
+use tari_dan_common_types::{
+    services::template_provider::TemplateProvider,
+    SubstateLockType,
+    SubstateRequirement,
+    VersionedSubstateId,
+};
 use tari_dan_engine::{
     fees::{FeeModule, FeeTable},
     runtime::{AuthParams, RuntimeModule},
@@ -16,14 +21,10 @@ use tari_dan_engine::{
     template::LoadedTemplate,
     transaction::{TransactionError, TransactionProcessor},
 };
-use tari_dan_storage::consensus_models::{SubstateLockType, VersionedSubstateIdLockIntent};
-use tari_engine_types::{
-    commit_result::ExecuteResult,
-    substate::{Substate, SubstateId},
-    virtual_substate::VirtualSubstates,
-};
+use tari_dan_storage::consensus_models::VersionedSubstateIdLockIntent;
+use tari_engine_types::{commit_result::ExecuteResult, substate::Substate, virtual_substate::VirtualSubstates};
 use tari_template_lib::{crypto::RistrettoPublicKeyBytes, prelude::NonFungibleAddress};
-use tari_transaction::{Transaction, VersionedSubstateId};
+use tari_transaction::Transaction;
 
 const _LOG_TARGET: &str = "tari::dan::transaction_executor";
 
@@ -45,12 +46,15 @@ pub struct ExecutionOutput {
 }
 
 impl ExecutionOutput {
-    pub fn resolve_inputs(&self, inputs: &IndexMap<SubstateId, Substate>) -> Vec<VersionedSubstateIdLockIntent> {
+    pub fn resolve_inputs(
+        &self,
+        inputs: &IndexMap<SubstateRequirement, Substate>,
+    ) -> Vec<VersionedSubstateIdLockIntent> {
         if let Some(diff) = self.result.finalize.accept() {
             inputs
                 .iter()
-                .map(|(substate_id, substate)| {
-                    let lock_flag = if diff.down_iter().any(|(id, _)| id == substate_id) {
+                .map(|(substate_req, substate)| {
+                    let lock_flag = if diff.down_iter().any(|(id, _)| id == substate_req.substate_id()) {
                         // Update all inputs that were DOWNed to be write locked
                         SubstateLockType::Write
                     } else {
@@ -58,7 +62,7 @@ impl ExecutionOutput {
                         SubstateLockType::Read
                     };
                     VersionedSubstateIdLockIntent::new(
-                        VersionedSubstateId::new(substate_id.clone(), substate.version()),
+                        VersionedSubstateId::new(substate_req.substate_id().clone(), substate.version()),
                         lock_flag,
                     )
                 })
@@ -68,9 +72,9 @@ impl ExecutionOutput {
             // shards involved but do not lock them. We dont actually lock anything for rejected transactions anyway.
             inputs
                 .iter()
-                .map(|(substate_id, substate)| {
+                .map(|(substate_req, substate)| {
                     VersionedSubstateIdLockIntent::new(
-                        VersionedSubstateId::new(substate_id.clone(), substate.version()),
+                        VersionedSubstateId::new(substate_req.substate_id().clone(), substate.version()),
                         SubstateLockType::Read,
                     )
                 })

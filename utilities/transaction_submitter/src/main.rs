@@ -40,11 +40,11 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn stress_test(args: StressTestArgs) -> anyhow::Result<Option<StressTestResultSummary>> {
-    if args.jrpc_address.is_empty() {
+    if args.jrpc_addresses.is_empty() {
         bail!("No validator nodes specified");
     }
-    let mut clients = Vec::with_capacity(args.jrpc_address.len());
-    for address in args.jrpc_address {
+    let mut clients = Vec::with_capacity(args.jrpc_addresses.len());
+    for address in args.jrpc_addresses {
         let mut client = ValidatorNodeClient::connect(format!("http://{}/json_rpc", address))?;
         if let Err(e) = client.get_identity().await {
             bail!("Failed to connect to {}: {}", address, e);
@@ -139,7 +139,6 @@ async fn fetch_result_summary(
     mut submitted_rx: mpsc::UnboundedReceiver<TransactionId>,
 ) -> StressTestResultSummary {
     let bounded_spawn = BoundedSpawn::new(clients.len());
-    let mut count = 0;
     let (results_tx, mut results_rx) = mpsc::channel::<TxFinalized>(10);
 
     // Result collector
@@ -177,11 +176,15 @@ async fn fetch_result_summary(
 
     // Result emitter
     while let Some(transaction_id) = submitted_rx.recv().await {
-        let mut client = clients[count % clients.len()].clone();
+        let mut clients = clients.clone();
+        let num_clients = clients.len();
         let results_tx = results_tx.clone();
         bounded_spawn
             .spawn(async move {
+                let mut i = 0usize;
                 loop {
+                    let client = &mut clients[i % num_clients];
+                    i += 1;
                     match client
                         .get_transaction_result(GetTransactionResultRequest { transaction_id })
                         .await
@@ -215,8 +218,9 @@ async fn fetch_result_summary(
                         },
                         Ok(None) => {
                             println!(
-                                "Transaction result not found: {}. This is likely due to a race condition. Retrying \
-                                 later...",
+                                "[{}] Result not found for transaction {}. This is likely due to a race condition or \
+                                 requesting the result from a non-involved validator (multi-shard). Retrying later...",
+                                client.endpoint(),
                                 transaction_id
                             );
                             sleep(Duration::from_secs(1)).await;
@@ -239,8 +243,6 @@ async fn fetch_result_summary(
                 }
             })
             .await;
-
-        count += 1;
     }
 
     // Drop the remaining sender handle so that the result collector ends when all results have been received

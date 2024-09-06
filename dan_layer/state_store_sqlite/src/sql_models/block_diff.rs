@@ -2,9 +2,8 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
-use tari_dan_common_types::shard::Shard;
+use tari_dan_common_types::{shard::Shard, VersionedSubstateId};
 use tari_dan_storage::{consensus_models, consensus_models::BlockId, StorageError};
-use tari_transaction::VersionedSubstateId;
 use time::PrimitiveDateTime;
 
 use crate::serialization::{deserialize_hex_try_from, deserialize_json};

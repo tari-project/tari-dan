@@ -49,7 +49,16 @@ use tari_dan_app_utilities::{
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
 };
-use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, NodeHeight, NumPreshards, PeerAddress, ShardGroup};
+use tari_dan_common_types::{
+    shard::Shard,
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    NumPreshards,
+    PeerAddress,
+    ShardGroup,
+    VersionedSubstateId,
+};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
@@ -86,7 +95,7 @@ use tari_template_lib::{
     prelude::{ComponentAccessRules, OwnerRule, ResourceType},
     resource::TOKEN_SYMBOL,
 };
-use tari_transaction::{Transaction, VersionedSubstateId};
+use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{sync::mpsc, task::JoinHandle};
 
@@ -369,7 +378,8 @@ async fn create_registration_file(
     let fee_claim_public_key = config.validator_node.fee_claim_public_key.clone();
     epoch_manager
         .set_fee_claim_public_key(fee_claim_public_key.clone())
-        .await?;
+        .await
+        .context("set_fee_claim_public_key failed when creating registration file")?;
 
     let signature = ValidatorNodeSignature::sign(keypair.secret_key(), &fee_claim_public_key, b"");
 
@@ -382,7 +392,7 @@ async fn create_registration_file(
         config.common.base_path.join("registration.json"),
         serde_json::to_string(&registration)?,
     )
-    .map_err(|e| ExitError::new(ExitCode::UnknownError, e))?;
+    .context("failed to write registration file")?;
     Ok(())
 }
 

@@ -34,7 +34,7 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_bor::decode_exact;
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, SubstateAddress};
+use tari_dan_common_types::{Epoch, SubstateAddress, SubstateRequirement};
 use tari_dan_engine::abi::Type;
 use tari_dan_wallet_sdk::apis::confidential_transfer::ConfidentialTransferInputSelection;
 use tari_engine_types::{
@@ -53,7 +53,7 @@ use tari_template_lib::{
     models::{Amount, BucketId, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
-use tari_transaction::{SubstateRequirement, TransactionId};
+use tari_transaction::TransactionId;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::{

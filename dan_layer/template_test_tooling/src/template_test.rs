@@ -18,7 +18,7 @@ use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::{hex::Hex, ByteArray},
 };
-use tari_dan_common_types::crypto::create_key_pair_from_seed;
+use tari_dan_common_types::{crypto::create_key_pair_from_seed, VersionedSubstateId};
 use tari_dan_engine::{
     fees::{FeeModule, FeeTable},
     runtime::{AuthParams, RuntimeModule},
@@ -53,7 +53,7 @@ use tari_template_lib::{
     prelude::{ComponentAccessRules, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };
-use tari_transaction::{Transaction, VersionedSubstateId};
+use tari_transaction::Transaction;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
 use crate::{read_only_state_store::ReadOnlyStateStore, track_calls::TrackCallsModule, Package};
@@ -594,7 +594,7 @@ impl TemplateTest {
             .name_to_template
             .iter()
             // Account is implicitly imported.
-            .filter(|(name, _)|* name != "Account")
+            .filter(|(name, _)| *name != "Account")
             .map(|(name, addr)| format!("use template_{} as {};", addr, name))
             .collect::<Vec<_>>()
             .join("\n");

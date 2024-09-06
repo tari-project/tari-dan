@@ -4,8 +4,9 @@
 use std::{borrow::Borrow, fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{shard::Shard, NumPreshards, ShardGroup, SubstateAddress};
 use tari_engine_types::{serde_with, substate::SubstateId};
+
+use crate::{shard::Shard, NumPreshards, ShardGroup, SubstateAddress, ToSubstateAddress};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(
@@ -56,11 +57,6 @@ impl SubstateRequirement {
     pub fn to_substate_address(&self) -> Option<SubstateAddress> {
         self.version()
             .map(|v| SubstateAddress::from_substate_id(self.substate_id(), v))
-    }
-
-    pub fn to_substate_address_default_version(&self, default: u32) -> SubstateAddress {
-        let v = self.version.unwrap_or(default);
-        SubstateAddress::from_substate_id(self.substate_id(), v)
     }
 
     /// Calculates and returns the shard number that this SubstateAddress belongs.
@@ -184,10 +180,6 @@ impl VersionedSubstateId {
         self.version
     }
 
-    pub fn to_substate_address(&self) -> SubstateAddress {
-        SubstateAddress::from_substate_id(self.substate_id(), self.version())
-    }
-
     /// Calculates and returns the shard number that this SubstateAddress belongs.
     /// A shard is an equal division of the 256-bit shard space.
     pub fn to_shard(&self, num_shards: NumPreshards) -> Shard {
@@ -206,6 +198,12 @@ impl VersionedSubstateId {
 
     pub fn to_next_version(&self) -> Self {
         Self::new(self.substate_id.clone(), self.version + 1)
+    }
+}
+
+impl ToSubstateAddress for VersionedSubstateId {
+    fn to_substate_address(&self) -> SubstateAddress {
+        SubstateAddress::from_substate_id(self.substate_id(), self.version())
     }
 }
 

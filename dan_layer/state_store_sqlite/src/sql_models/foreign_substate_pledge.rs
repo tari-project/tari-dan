@@ -8,6 +8,7 @@ use time::PrimitiveDateTime;
 pub struct ForeignSubstatePledge {
     pub id: i32,
     pub transaction_id: String,
+    pub address: String,
     pub substate_id: String,
     pub version: i32,
     pub substate_value: Option<String>,

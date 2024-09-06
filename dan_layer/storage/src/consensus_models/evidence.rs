@@ -6,11 +6,14 @@ use std::{
     fmt::{Display, Formatter},
 };
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
+use log::*;
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{committee::CommitteeInfo, SubstateAddress};
+use tari_dan_common_types::{committee::CommitteeInfo, SubstateAddress, SubstateLockType, ToSubstateAddress};
 
-use crate::consensus_models::{QcId, SubstateLockType, VersionedSubstateIdLockIntent};
+use crate::consensus_models::{QcId, VersionedSubstateIdLockIntent};
+
+const LOG_TARGET: &str = "tari::dan::consensus_models::evidence";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[cfg_attr(
@@ -43,14 +46,16 @@ impl Evidence {
             .map(|input| {
                 let i = input.borrow();
                 (i.to_substate_address(), ShardEvidence {
-                    qc_ids: IndexSet::new(),
+                    prepare_justify: None,
+                    accept_justify: None,
                     lock: i.lock_type(),
                 })
             })
             .chain(resulting_outputs.into_iter().map(|output| {
                 let o = output.borrow();
                 (o.to_substate_address(), ShardEvidence {
-                    qc_ids: IndexSet::new(),
+                    prepare_justify: None,
+                    accept_justify: None,
                     lock: o.lock_type(),
                 })
             }))
@@ -58,15 +63,27 @@ impl Evidence {
     }
 
     pub fn all_addresses_justified(&self) -> bool {
-        // TODO: we should check that remote has one QC and local has three
-        self.evidence.values().all(|qc_ids| !qc_ids.is_empty())
+        // CASE: all inputs and outputs are accept justified. If they have been accept justified, they have implicitly
+        // been prepare justified. This may happen if the local node is only involved in outputs (and therefore
+        // sequences using the LocalAccept foreign proposal)
+        self.evidence.values().all(|e| e.is_accept_justified())
     }
 
-    pub fn all_input_addresses_justified(&self) -> bool {
+    pub fn all_input_addresses_prepared(&self) -> bool {
         self.evidence
             .values()
             .filter(|e| !e.lock.is_output())
-            .all(|qc_ids| !qc_ids.is_empty())
+            // CASE: we use prepare OR accept because inputs can only be accept justified if they were prepared. Prepared
+            // may be implicit (null) if the local node is only involved in outputs (and therefore sequences using the LocalAccept
+            // foreign proposal)
+            .all(|e| e.is_prepare_justified() || e.is_accept_justified())
+    }
+
+    pub fn is_committee_output_only(&self, committee_info: &CommitteeInfo) -> bool {
+        self.evidence
+            .iter()
+            .filter(|(addr, _)| committee_info.includes_substate_address(addr))
+            .all(|(_, e)| e.lock.is_output())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -81,13 +98,6 @@ impl Evidence {
         self.evidence.get(substate_address)
     }
 
-    pub fn num_justified_shards(&self) -> usize {
-        self.evidence
-            .values()
-            .filter(|evidence| !evidence.qc_ids.is_empty())
-            .count()
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = (&SubstateAddress, &ShardEvidence)> {
         self.evidence.iter()
     }
@@ -96,14 +106,41 @@ impl Evidence {
         self.evidence.iter_mut()
     }
 
-    pub fn add_qc_evidence(&mut self, committee_info: &CommitteeInfo, qc_id: QcId) -> &mut Self {
-        for (address, evidence_mut) in self.iter_mut() {
-            if committee_info.includes_substate_address(address) {
-                evidence_mut.qc_ids.insert(qc_id);
-            }
+    pub fn add_prepare_qc_evidence(&mut self, committee_info: &CommitteeInfo, qc_id: QcId) -> &mut Self {
+        for (address, evidence_mut) in self.evidence_in_committee_iter_mut(committee_info) {
+            debug!(
+                target: LOG_TARGET,
+                "add_prepare_qc_evidence {} {address} QC[{qc_id}] {}",
+                committee_info.shard_group(),
+                evidence_mut.lock
+            );
+            evidence_mut.prepare_justify = Some(qc_id);
         }
 
         self
+    }
+
+    pub fn add_accept_qc_evidence(&mut self, committee_info: &CommitteeInfo, qc_id: QcId) -> &mut Self {
+        for (address, evidence_mut) in self.evidence_in_committee_iter_mut(committee_info) {
+            debug!(
+                target: LOG_TARGET,
+                "add_accept_qc_evidence {} {address} QC[{qc_id}] {}",
+                committee_info.shard_group(),
+                evidence_mut.lock
+            );
+            evidence_mut.accept_justify = Some(qc_id);
+        }
+
+        self
+    }
+
+    fn evidence_in_committee_iter_mut<'a>(
+        &'a mut self,
+        committee_info: &'a CommitteeInfo,
+    ) -> impl Iterator<Item = (&'a SubstateAddress, &'a mut ShardEvidence)> {
+        self.evidence
+            .iter_mut()
+            .filter(|(addr, _)| committee_info.includes_substate_address(addr))
     }
 
     /// Returns an iterator over the substate addresses in this Evidence object.
@@ -118,7 +155,9 @@ impl Evidence {
     }
 
     pub fn qc_ids_iter(&self) -> impl Iterator<Item = &QcId> + '_ {
-        self.evidence.values().flat_map(|e| e.qc_ids.iter())
+        self.evidence
+            .values()
+            .flat_map(|e| e.prepare_justify.iter().chain(e.accept_justify.iter()))
     }
 
     /// Add or update substate addresses and locks into Evidence
@@ -129,18 +168,20 @@ impl Evidence {
                 .iter()
                 // If the update contains an object (as in ObjectKey) that is already in the evidence, update it without duplicating the object key (inputs and outputs may have the same object key)
                 .position(|(address, e)| {
+                    // There may up to two matching object_key_bytes, but only if one is an input and the other is an output
                     (lock_type.is_output() == e.lock.is_output()) &&
                         address.object_key_bytes() == substate_address.object_key_bytes()
                 });
             match maybe_pos {
                 Some(pos) => {
-                    let (_, mut evidence) = self.evidence.swap_remove_index(pos).expect("position is valid");
-                    evidence.lock = lock_type;
-                    self.evidence.insert(substate_address, evidence);
+                    if let Some((_, evidence_mut)) = self.evidence.get_index_mut(pos) {
+                        evidence_mut.lock = lock_type;
+                    }
                 },
                 None => {
                     self.evidence.insert(substate_address, ShardEvidence {
-                        qc_ids: IndexSet::new(),
+                        prepare_justify: None,
+                        accept_justify: None,
                         lock: lock_type,
                     });
                 },
@@ -166,10 +207,15 @@ impl Evidence {
                 });
             match maybe_pos {
                 Some(pos) => {
-                    let (_, mut evidence) = self.evidence.swap_remove_index(pos).expect("position is valid");
-                    evidence.lock = shard_evidence.lock;
-                    evidence.qc_ids.extend(shard_evidence.qc_ids);
-                    self.evidence.insert(substate_address, evidence);
+                    if let Some((_, evidence_mut)) = self.evidence.get_index_mut(pos) {
+                        evidence_mut.lock = shard_evidence.lock;
+                        if let Some(qc_id) = shard_evidence.prepare_justify {
+                            evidence_mut.prepare_justify = Some(qc_id);
+                        }
+                        if let Some(qc_id) = shard_evidence.accept_justify {
+                            evidence_mut.accept_justify = Some(qc_id);
+                        }
+                    }
                 },
                 None => {
                     self.evidence.insert(substate_address, shard_evidence);
@@ -209,28 +255,37 @@ impl Display for Evidence {
     ts(export, export_to = "../../bindings/src/types/")
 )]
 pub struct ShardEvidence {
-    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
-    pub qc_ids: IndexSet<QcId>,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub prepare_justify: Option<QcId>,
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub accept_justify: Option<QcId>,
     pub lock: SubstateLockType,
 }
 
 impl ShardEvidence {
-    pub fn is_empty(&self) -> bool {
-        self.qc_ids.is_empty()
+    pub fn is_prepare_justified(&self) -> bool {
+        self.prepare_justify.is_some()
     }
 
-    pub fn contains(&self, qc_id: &QcId) -> bool {
-        self.qc_ids.contains(qc_id)
-    }
-
-    pub fn insert(&mut self, qc_id: QcId) {
-        self.qc_ids.insert(qc_id);
+    pub fn is_accept_justified(&self) -> bool {
+        self.accept_justify.is_some()
     }
 }
 
 impl Display for ShardEvidence {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, {} QC(s))", self.lock, self.qc_ids.len())
+        write!(f, "({}, ", self.lock)?;
+        if let Some(qc_id) = self.prepare_justify {
+            write!(f, "Prepare[{}]", qc_id)?;
+        } else {
+            write!(f, "Prepare[NONE]")?;
+        }
+        if let Some(qc_id) = self.accept_justify {
+            write!(f, ", Accept[{}]", qc_id)?;
+        } else {
+            write!(f, ", Accept[NONE]")?;
+        }
+        write!(f, ")")
     }
 }
 

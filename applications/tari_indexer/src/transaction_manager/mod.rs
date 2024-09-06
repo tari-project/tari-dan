@@ -29,6 +29,8 @@ use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
     NodeAddressable,
     SubstateAddress,
+    SubstateRequirement,
+    ToSubstateAddress,
 };
 use tari_engine_types::substate::SubstateId;
 use tari_epoch_manager::EpochManagerReader;
@@ -37,7 +39,7 @@ use tari_indexer_lib::{
     substate_scanner::SubstateScanner,
     transaction_autofiller::TransactionAutofiller,
 };
-use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::client::{
     SubstateResult,
     TransactionResultStatus,
@@ -86,7 +88,7 @@ where
         let transaction_substate_address = SubstateAddress::for_transaction_receipt(tx_hash.into_array().into());
 
         if transaction.all_inputs_iter().next().is_none() {
-            self.try_with_committee(iter::once(transaction_substate_address), |mut client| {
+            self.try_with_committee(iter::once(transaction_substate_address), 2, |mut client| {
                 let transaction = transaction.clone();
                 async move { client.submit_transaction(transaction).await }
             })
@@ -96,7 +98,7 @@ where
                 .all_inputs_iter()
                 // If there is no version specified, submit to the validator node with version 0
                 .map(|i| i.or_zero_version().to_substate_address());
-            self.try_with_committee(involved, |mut client| {
+            self.try_with_committee(involved, 2, |mut client| {
                 let transaction = transaction.clone();
                 async move { client.submit_transaction(transaction).await }
             })
@@ -121,7 +123,7 @@ where
         transaction_id: TransactionId,
     ) -> Result<TransactionResultStatus, TransactionManagerError> {
         let transaction_substate_address = SubstateAddress::for_transaction_receipt(transaction_id.into_array().into());
-        self.try_with_committee(iter::once(transaction_substate_address), |mut client| async move {
+        self.try_with_committee(iter::once(transaction_substate_address), 1, |mut client| async move {
             client.get_finalized_transaction_result(transaction_id).await.optional()
         })
         .await?
@@ -138,7 +140,7 @@ where
     ) -> Result<SubstateResult, TransactionManagerError> {
         let shard = SubstateAddress::from_substate_id(&substate_address, version);
 
-        self.try_with_committee(iter::once(shard), |mut client| {
+        self.try_with_committee(iter::once(shard), 1, |mut client| {
             // This double clone looks strange, but it's needed because this function is called in a loop
             // and each iteration needs its own copy of the address (because of the move).
             let substate_address = substate_address.clone();
@@ -158,6 +160,7 @@ where
     async fn try_with_committee<'a, F, T, E, TFut, IShard>(
         &self,
         substate_addresses: IShard,
+        mut num_to_query: usize,
         mut callback: F,
     ) -> Result<T, TransactionManagerError>
     where
@@ -184,12 +187,19 @@ where
             return Err(TransactionManagerError::NoCommitteeMembers);
         }
 
+        let mut num_succeeded = 0;
         let mut last_error = None;
+        let mut last_return = None;
         for validator in all_members {
             let client = self.client_provider.create_client(&validator);
             match callback(client).await {
                 Ok(ret) => {
-                    return Ok(ret);
+                    num_to_query = num_to_query.saturating_sub(1);
+                    num_succeeded += 1;
+                    last_return = Some(ret);
+                    if num_to_query == 0 {
+                        break;
+                    }
                 },
                 Err(err) => {
                     warn!(
@@ -197,14 +207,17 @@ where
                         "Request failed for validator '{}': {}", validator, err
                     );
                     last_error = Some(err.to_string());
-                    continue;
                 },
             }
         }
 
-        Err(TransactionManagerError::AllValidatorsFailed {
-            committee_size,
-            last_error,
-        })
+        if num_succeeded == 0 {
+            return Err(TransactionManagerError::AllValidatorsFailed {
+                committee_size,
+                last_error,
+            });
+        }
+
+        Ok(last_return.expect("last_return must be Some if num_succeeded > 0"))
     }
 }

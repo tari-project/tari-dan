@@ -2,19 +2,12 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::{
-    hotstuff::substate_store::{PendingSubstateStore, SubstateStoreError},
+    hotstuff::substate_store::{LockFailedError, PendingSubstateStore, SubstateStoreError},
     traits::{ReadableSubstateStore, WriteableSubstateStore},
 };
-use tari_dan_common_types::{shard::Shard, NodeAddressable, PeerAddress};
+use tari_dan_common_types::{shard::Shard, NodeAddressable, PeerAddress, SubstateLockType, VersionedSubstateId};
 use tari_dan_storage::{
-    consensus_models::{
-        BlockId,
-        QcId,
-        SubstateChange,
-        SubstateLockType,
-        SubstateRecord,
-        VersionedSubstateIdLockIntent,
-    },
+    consensus_models::{BlockId, QcId, SubstateChange, SubstateRecord, SubstateRequirementLockIntent},
     StateStore,
 };
 use tari_engine_types::{
@@ -23,7 +16,6 @@ use tari_engine_types::{
 };
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::models::{ComponentAddress, EntityId, ObjectKey};
-use tari_transaction::VersionedSubstateId;
 
 use crate::support::{logging::setup_logger, TEST_NUM_PRESHARDS};
 
@@ -129,14 +121,14 @@ fn it_disallows_more_than_one_write_lock_non_local_only() {
     store
         .try_lock(
             tx_id(1),
-            &VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockType::Read),
+            &SubstateRequirementLockIntent::new(id.clone(), 0, SubstateLockType::Read),
             true,
         )
         .unwrap();
     store
         .try_lock(
             tx_id(2),
-            &VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockType::Read),
+            &SubstateRequirementLockIntent::new(id.clone(), 0, SubstateLockType::Read),
             true,
         )
         .unwrap();
@@ -148,12 +140,15 @@ fn it_disallows_more_than_one_write_lock_non_local_only() {
     let err = store
         .try_lock(
             tx_id(3),
-            &VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockType::Write),
+            &SubstateRequirementLockIntent::new(id.clone(), 0, SubstateLockType::Write),
             false,
         )
         .unwrap_err();
 
-    assert!(matches!(err, SubstateStoreError::LockConflict { .. }));
+    assert!(matches!(
+        err.ok_lock_failed().unwrap(),
+        LockFailedError::LockConflict { .. }
+    ));
 }
 
 #[test]
@@ -168,7 +163,7 @@ fn it_allows_requesting_the_same_lock_within_one_transaction() {
     store
         .try_lock(
             tx_id(1),
-            &VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockType::Write),
+            &SubstateRequirementLockIntent::new(id.clone(), 0, SubstateLockType::Write),
             false,
         )
         .unwrap();
@@ -176,17 +171,20 @@ fn it_allows_requesting_the_same_lock_within_one_transaction() {
     let err = store
         .try_lock(
             tx_id(2),
-            &VersionedSubstateIdLockIntent::new(id.to_next_version(), SubstateLockType::Output),
+            &SubstateRequirementLockIntent::new(id.to_next_version(), 0, SubstateLockType::Output),
             false,
         )
         .unwrap_err();
-    assert!(matches!(err, SubstateStoreError::LockConflict { .. }));
+    assert!(matches!(
+        err.ok_lock_failed().unwrap(),
+        LockFailedError::LockConflict { .. }
+    ));
 
     // The same transaction is able to lock
     store
         .try_lock(
             tx_id(1),
-            &VersionedSubstateIdLockIntent::new(id.to_next_version(), SubstateLockType::Output),
+            &SubstateRequirementLockIntent::new(id.to_next_version(), 0, SubstateLockType::Output),
             false,
         )
         .unwrap();

@@ -1,12 +1,13 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::optional::IsNotFoundError;
-use tari_dan_storage::{consensus_models::SubstateLockType, StorageError};
-use tari_transaction::VersionedSubstateId;
+use tari_dan_common_types::{optional::IsNotFoundError, SubstateLockType, VersionedSubstateId};
+use tari_dan_storage::StorageError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubstateStoreError {
+    #[error(transparent)]
+    LockFailed(#[from] LockFailedError),
     #[error("Substate {id} not found")]
     SubstateNotFound { id: VersionedSubstateId },
     #[error("Substate {id} is DOWN")]
@@ -15,25 +16,6 @@ pub enum SubstateStoreError {
     ExpectedSubstateNotExist { id: VersionedSubstateId },
     #[error("Expected substate {id} to be DOWN but it was UP")]
     ExpectedSubstateDown { id: VersionedSubstateId },
-    #[error(
-        "Failed to {requested_lock} lock substate {substate_id} due to conflict with existing {existing_lock} lock"
-    )]
-    LockConflict {
-        substate_id: VersionedSubstateId,
-        existing_lock: SubstateLockType,
-        requested_lock: SubstateLockType,
-    },
-    #[error("Substate {substate_id} requires lock {required_lock} but is currently locked with {existing_lock}")]
-    RequiresLock {
-        substate_id: VersionedSubstateId,
-        existing_lock: SubstateLockType,
-        required_lock: SubstateLockType,
-    },
-    #[error("Substate {substate_id} is not {required_lock} locked")]
-    NotLocked {
-        substate_id: VersionedSubstateId,
-        required_lock: SubstateLockType,
-    },
 
     #[error(transparent)]
     StoreError(#[from] StorageError),
@@ -44,6 +26,7 @@ pub enum SubstateStoreError {
 impl IsNotFoundError for SubstateStoreError {
     fn is_not_found_error(&self) -> bool {
         match self {
+            SubstateStoreError::LockFailed(LockFailedError::SubstateNotFound { .. }) => true,
             SubstateStoreError::SubstateNotFound { .. } => true,
             SubstateStoreError::StoreError(err) => err.is_not_found_error(),
             _ => false,
@@ -52,11 +35,25 @@ impl IsNotFoundError for SubstateStoreError {
 }
 
 impl SubstateStoreError {
-    pub fn or_fatal_error(self) -> Result<Self, Self> {
+    pub fn ok_lock_failed(self) -> Result<LockFailedError, Self> {
         match self {
-            err @ SubstateStoreError::StoreError(_) => Err(err),
-            err @ SubstateStoreError::StateTreeError(_) => Err(err),
-            other => Ok(other),
+            SubstateStoreError::LockFailed(err) => Ok(err),
+            other => Err(other),
         }
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum LockFailedError {
+    #[error("Substate {id} not found")]
+    SubstateNotFound { id: VersionedSubstateId },
+
+    #[error(
+        "Failed to {requested_lock} lock substate {substate_id} due to conflict with existing {existing_lock} lock"
+    )]
+    LockConflict {
+        substate_id: VersionedSubstateId,
+        existing_lock: SubstateLockType,
+        requested_lock: SubstateLockType,
+    },
 }

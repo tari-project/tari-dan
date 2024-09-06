@@ -110,6 +110,7 @@ diesel::table! {
         block_pledge -> Text,
         proposed_in_block -> Nullable<Text>,
         proposed_in_block_height -> Nullable<BigInt>,
+        status -> Text,
         created_at -> Timestamp,
         extra_data -> Nullable<Text>,
     }
@@ -136,6 +137,7 @@ diesel::table! {
     foreign_substate_pledges (id) {
         id -> Integer,
         transaction_id -> Text,
+        address -> Text,
         substate_id -> Text,
         version -> Integer,
         substate_value -> Nullable<Text>,
@@ -272,6 +274,7 @@ diesel::table! {
         id -> Integer,
         qc_id -> Text,
         block_id -> Text,
+        shard_group -> Integer,
         json -> Text,
         created_at -> Timestamp,
     }
@@ -371,10 +374,8 @@ diesel::table! {
         local_decision -> Nullable<Text>,
         remote_decision -> Nullable<Text>,
         evidence -> Nullable<Text>,
-        remote_evidence -> Nullable<Text>,
-        transaction_fee -> Nullable<BigInt>,
-        leader_fee -> Nullable<BigInt>,
-        global_exhaust_burn -> Nullable<BigInt>,
+        transaction_fee -> BigInt,
+        leader_fee -> Nullable<Text>,
         stage -> Text,
         pending_stage -> Nullable<Text>,
         is_ready -> Bool,
@@ -399,6 +400,8 @@ diesel::table! {
         global_exhaust_burn -> Nullable<BigInt>,
         stage -> Text,
         new_stage -> Text,
+        pending_stage -> Nullable<Text>,
+        new_pending_stage -> Nullable<Text>,
         is_ready -> Bool,
         new_is_ready -> Bool,
         confirm_stage -> Nullable<Text>,
@@ -419,6 +422,10 @@ diesel::table! {
         evidence -> Text,
         is_ready -> Bool,
         local_decision -> Text,
+        transaction_fee -> BigInt,
+        leader_fee -> Nullable<Text>,
+        remote_decision -> Nullable<Text>,
+        is_applied -> Bool,
         created_at -> Timestamp,
     }
 }
