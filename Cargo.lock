@@ -9179,7 +9179,6 @@ dependencies = [
  "log",
  "rand",
  "serde",
- "tari_bor",
  "tari_common",
  "tari_common_types",
  "tari_core",
