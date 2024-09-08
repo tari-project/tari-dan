@@ -40,8 +40,8 @@ pub struct ForeignProposal {
     pub proposed_in_block: Option<String>,
     pub proposed_in_block_height: Option<i64>,
     pub status: String,
-    pub created_at: PrimitiveDateTime,
     pub extra_data: Option<String>,
+    pub created_at: PrimitiveDateTime,
 }
 
 impl ForeignProposal {

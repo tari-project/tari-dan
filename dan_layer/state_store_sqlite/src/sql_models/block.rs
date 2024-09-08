@@ -38,8 +38,8 @@ pub struct Block {
     pub timestamp: i64,
     pub base_layer_block_height: i64,
     pub base_layer_block_hash: String,
-    pub created_at: PrimitiveDateTime,
     pub extra_data: Option<String>,
+    pub created_at: PrimitiveDateTime,
 }
 
 impl Block {
@@ -108,8 +108,8 @@ pub struct ParkedBlock {
     pub base_layer_block_height: i64,
     pub base_layer_block_hash: String,
     pub foreign_proposals: String,
-    pub created_at: PrimitiveDateTime,
     pub extra_data: Option<String>,
+    pub created_at: PrimitiveDateTime,
 }
 
 impl TryFrom<ParkedBlock> for (consensus_models::Block, Vec<consensus_models::ForeignProposal>) {

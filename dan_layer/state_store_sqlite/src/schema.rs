@@ -38,8 +38,8 @@ diesel::table! {
         timestamp -> BigInt,
         base_layer_block_height -> BigInt,
         base_layer_block_hash -> Text,
-        created_at -> Timestamp,
         extra_data -> Nullable<Text>,
+        created_at -> Timestamp,
     }
 }
 
@@ -111,8 +111,8 @@ diesel::table! {
         proposed_in_block -> Nullable<Text>,
         proposed_in_block_height -> Nullable<BigInt>,
         status -> Text,
-        created_at -> Timestamp,
         extra_data -> Nullable<Text>,
+        created_at -> Timestamp,
     }
 }
 
@@ -252,8 +252,8 @@ diesel::table! {
         base_layer_block_height -> BigInt,
         base_layer_block_hash -> Text,
         foreign_proposals -> Text,
-        created_at -> Timestamp,
         extra_data -> Nullable<Text>,
+        created_at -> Timestamp,
     }
 }
 
