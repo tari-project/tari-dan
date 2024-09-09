@@ -361,6 +361,7 @@ impl Block {
             .chain(&self.timestamp)
             .chain(&self.base_layer_block_height)
             .chain(&self.base_layer_block_hash)
+            .chain(&self.extra_data)
             .result();
 
         hashing::block_hasher().chain(&self.parent).chain(&inner_hash).result()
