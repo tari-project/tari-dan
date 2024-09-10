@@ -49,7 +49,7 @@ use tari_template_lib::models::ObjectKey;
 use tokio::task;
 
 use crate::{
-    helpers::{check_join_handle, get_os_assigned_ports, wait_listener_on_local_port},
+    helpers::{check_join_handle, get_address_from_output, get_os_assigned_ports, wait_listener_on_local_port},
     logging::get_base_dir_for_scenario,
     TariWorld,
 };
@@ -140,22 +140,6 @@ impl IndexerProcess {
         let endpoint: Url = Url::parse(&format!("http://localhost:{}", self.graphql_port)).unwrap();
         IndexerGraphQLClient::connect(endpoint).unwrap()
     }
-}
-
-fn get_address_from_output(world: &TariWorld, output_ref: String) -> &SubstateId {
-    world
-        .outputs
-        .iter()
-        .find_map(|(name, outputs)| {
-            outputs
-                .iter()
-                .find(|(child_name, _)| {
-                    let fqn = format!("{}/{}", name, child_name);
-                    fqn == output_ref
-                })
-                .map(|(_, addr)| &addr.substate_id)
-        })
-        .unwrap()
 }
 
 pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_node_name: String) {
