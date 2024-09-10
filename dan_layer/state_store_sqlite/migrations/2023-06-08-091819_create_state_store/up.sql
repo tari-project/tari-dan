@@ -35,6 +35,7 @@ create table blocks
     timestamp               bigint    not NULL,
     base_layer_block_height bigint    not NULL,
     base_layer_block_hash   text      not NULL,
+    extra_data              text      NULL,
     created_at              timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
@@ -63,6 +64,7 @@ create table parked_blocks
     base_layer_block_height bigint    not NULL,
     base_layer_block_hash   text      not NULL,
     foreign_proposals       text      not NULL,
+    extra_data              text      NULL,
     created_at              timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -377,6 +379,7 @@ CREATE TABLE foreign_proposals
     proposed_in_block        text      NULL REFERENCES blocks (block_id),
     proposed_in_block_height bigint    NULL,
     status                   text      not NULL,
+    extra_data               text      NULL,
     created_at               timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (block_id)
 );

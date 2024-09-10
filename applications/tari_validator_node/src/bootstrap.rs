@@ -38,7 +38,7 @@ use tari_common::{
 #[cfg(not(feature = "metrics"))]
 use tari_consensus::traits::hooks::NoopHooks;
 use tari_core::transactions::transaction_components::ValidatorNodeSignature;
-use tari_crypto::tari_utilities::ByteArray;
+use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
 use tari_dan_app_utilities::{
     base_layer_scanner,
     consensus_constants::ConsensusConstants,
@@ -191,7 +191,15 @@ pub async fn spawn_services(
     // Connect to shard db
     let state_store =
         SqliteStateStore::connect(&format!("sqlite://{}", config.validator_node.state_db_path().display()))?;
-    state_store.with_write_tx(|tx| bootstrap_state(tx, config.network, consensus_constants.num_preshards))?;
+    let sidechain_id = config.validator_node.validator_node_sidechain_id.clone();
+    state_store.with_write_tx(|tx| {
+        bootstrap_state(
+            tx,
+            config.network,
+            consensus_constants.num_preshards,
+            sidechain_id.clone(),
+        )
+    })?;
 
     info!(target: LOG_TARGET, "Epoch manager initializing");
     let epoch_manager_config = EpochManagerConfig {
@@ -265,6 +273,7 @@ pub async fn spawn_services(
     let signing_service = consensus::TariSignatureService::new(keypair.clone());
     let (consensus_join_handle, consensus_handle) = consensus::spawn(
         config.network,
+        sidechain_id,
         state_store.clone(),
         local_address,
         signing_service,
@@ -450,7 +459,12 @@ async fn spawn_p2p_rpc(
     Ok(())
 }
 
-fn bootstrap_state<TTx>(tx: &mut TTx, network: Network, num_preshards: NumPreshards) -> Result<(), StorageError>
+fn bootstrap_state<TTx>(
+    tx: &mut TTx,
+    network: Network,
+    num_preshards: NumPreshards,
+    sidechain_id: Option<RistrettoPublicKey>,
+) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + Deref,
     TTx::Target: StateStoreReadTransaction,
@@ -473,7 +487,14 @@ where
         None,
         None,
     );
-    create_substate(tx, network, num_preshards, PUBLIC_IDENTITY_RESOURCE_ADDRESS, value)?;
+    create_substate(
+        tx,
+        network,
+        num_preshards,
+        &sidechain_id,
+        PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+        value,
+    )?;
 
     let mut xtr_resource = Resource::new(
         ResourceType::Confidential,
@@ -498,7 +519,14 @@ where
                 state: cbor!({"vault" => XTR_FAUCET_VAULT_ADDRESS}).unwrap(),
             },
         };
-        create_substate(tx, network, num_preshards, XTR_FAUCET_COMPONENT_ADDRESS, value)?;
+        create_substate(
+            tx,
+            network,
+            num_preshards,
+            &sidechain_id,
+            XTR_FAUCET_COMPONENT_ADDRESS,
+            value,
+        )?;
 
         xtr_resource.increase_total_supply(Amount::MAX);
         let value = Vault::new(ResourceContainer::Confidential {
@@ -509,13 +537,21 @@ where
             locked_revealed_amount: Default::default(),
         });
 
-        create_substate(tx, network, num_preshards, XTR_FAUCET_VAULT_ADDRESS, value)?;
+        create_substate(
+            tx,
+            network,
+            num_preshards,
+            &sidechain_id,
+            XTR_FAUCET_VAULT_ADDRESS,
+            value,
+        )?;
     }
 
     create_substate(
         tx,
         network,
         num_preshards,
+        &sidechain_id,
         CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
         xtr_resource,
     )?;
@@ -527,6 +563,7 @@ fn create_substate<TTx, TId, TVal>(
     tx: &mut TTx,
     network: Network,
     num_preshards: NumPreshards,
+    sidechain_id: &Option<RistrettoPublicKey>,
     substate_id: TId,
     value: TVal,
 ) -> Result<(), StorageError>
@@ -537,7 +574,12 @@ where
     TId: Into<SubstateId>,
     TVal: Into<SubstateValue>,
 {
-    let genesis_block = Block::genesis(network, Epoch(0), ShardGroup::all_shards(num_preshards));
+    let genesis_block = Block::genesis(
+        network,
+        Epoch(0),
+        ShardGroup::all_shards(num_preshards),
+        sidechain_id.clone(),
+    )?;
     let substate_id = substate_id.into();
     let id = VersionedSubstateId::new(substate_id, 0);
     SubstateRecord {
