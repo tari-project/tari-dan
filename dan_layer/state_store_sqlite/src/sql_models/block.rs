@@ -38,6 +38,7 @@ pub struct Block {
     pub timestamp: i64,
     pub base_layer_block_height: i64,
     pub base_layer_block_hash: String,
+    pub extra_data: Option<String>,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -81,6 +82,7 @@ impl Block {
             self.timestamp as u64,
             self.base_layer_block_height as u64,
             deserialize_hex_try_from(&self.base_layer_block_hash)?,
+            self.extra_data.map(|val| deserialize_json(&val)).transpose()?,
         ))
     }
 }
@@ -106,6 +108,7 @@ pub struct ParkedBlock {
     pub base_layer_block_height: i64,
     pub base_layer_block_hash: String,
     pub foreign_proposals: String,
+    pub extra_data: Option<String>,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -151,6 +154,7 @@ impl TryFrom<ParkedBlock> for (consensus_models::Block, Vec<consensus_models::Fo
             value.timestamp as u64,
             value.base_layer_block_height as u64,
             deserialize_hex_try_from(&value.base_layer_block_hash)?,
+            value.extra_data.map(|val| deserialize_json(&val)).transpose()?,
         );
         let foreign_proposals = deserialize_json(&value.foreign_proposals)?;
         Ok((block, foreign_proposals))

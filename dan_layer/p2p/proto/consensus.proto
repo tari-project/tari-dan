@@ -98,6 +98,11 @@ message Block {
   uint64 base_layer_block_height = 14;
   bytes base_layer_block_hash = 15;
   bool is_dummy = 16;
+  ExtraData extra_data = 17;
+}
+
+message ExtraData {
+  bytes encoded_extra_data = 1;
 }
 
 message LeaderFee {

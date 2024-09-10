@@ -13,7 +13,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common::configuration::Network;
 use tari_common_types::types::{FixedHash, FixedHashSizeError, PublicKey};
-use tari_crypto::tari_utilities::epoch_time::EpochTime;
+use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::epoch_time::EpochTime};
 use tari_dan_common_types::{
     committee::CommitteeInfo,
     hashing,
@@ -21,6 +21,8 @@ use tari_dan_common_types::{
     serde_with,
     shard::Shard,
     Epoch,
+    ExtraData,
+    MaxSizeBytesError,
     NodeAddressable,
     NodeHeight,
     NumPreshards,
@@ -66,6 +68,12 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan::storage::consensus_models::block";
+
+#[derive(Debug, thiserror::Error)]
+pub enum BlockError {
+    #[error("Extra data size error: {0}")]
+    ExtraDataSizeError(#[from] MaxSizeBytesError),
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
@@ -113,6 +121,7 @@ pub struct Block {
     base_layer_block_height: u64,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     base_layer_block_hash: FixedHash,
+    extra_data: Option<ExtraData>,
 }
 
 impl Block {
@@ -133,6 +142,7 @@ impl Block {
         timestamp: u64,
         base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
+        extra_data: Option<ExtraData>,
     ) -> Self {
         let mut block = Self {
             id: BlockId::zero(),
@@ -156,6 +166,7 @@ impl Block {
             timestamp,
             base_layer_block_height,
             base_layer_block_hash,
+            extra_data,
         };
         block.id = block.calculate_hash().into();
         block
@@ -184,6 +195,7 @@ impl Block {
         timestamp: u64,
         base_layer_block_height: u64,
         base_layer_block_hash: FixedHash,
+        extra_data: Option<ExtraData>,
     ) -> Self {
         Self {
             id,
@@ -207,11 +219,17 @@ impl Block {
             timestamp,
             base_layer_block_height,
             base_layer_block_hash,
+            extra_data,
         }
     }
 
-    pub fn genesis(network: Network, epoch: Epoch, shard_group: ShardGroup) -> Self {
-        Self::new(
+    pub fn genesis(
+        network: Network,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+        sidechain_id: Option<RistrettoPublicKey>,
+    ) -> Result<Self, BlockError> {
+        Ok(Self::new(
             network,
             BlockId::zero(),
             QuorumCertificate::genesis(epoch, shard_group),
@@ -228,12 +246,17 @@ impl Block {
             0,
             0,
             FixedHash::zero(),
-        )
+            Self::extra_data_from_sidechain_id(sidechain_id)?,
+        ))
     }
 
     /// This is the parent block for all genesis blocks. Its block ID is always zero.
-    pub fn zero_block(network: Network, num_preshards: NumPreshards) -> Self {
-        Self {
+    pub fn zero_block(
+        network: Network,
+        num_preshards: NumPreshards,
+        sidechain_id: Option<RistrettoPublicKey>,
+    ) -> Result<Self, BlockError> {
+        Ok(Self {
             network,
             id: BlockId::zero(),
             parent: BlockId::zero(),
@@ -255,7 +278,8 @@ impl Block {
             timestamp: EpochTime::now().as_u64(),
             base_layer_block_height: 0,
             base_layer_block_hash: FixedHash::zero(),
-        }
+            extra_data: Self::extra_data_from_sidechain_id(sidechain_id)?,
+        })
     }
 
     pub fn dummy_block(
@@ -293,10 +317,18 @@ impl Block {
             timestamp: parent_timestamp,
             base_layer_block_height: parent_base_layer_block_height,
             base_layer_block_hash: parent_base_layer_block_hash,
+            extra_data: None,
         };
         block.id = block.calculate_hash().into();
         block.is_justified = false;
         block
+    }
+
+    fn extra_data_from_sidechain_id(sidechain_id: Option<RistrettoPublicKey>) -> Result<Option<ExtraData>, BlockError> {
+        let extra_data = sidechain_id
+            .map(|id| ExtraData::new().insert_sidechain_id(id).cloned())
+            .transpose()?;
+        Ok(extra_data)
     }
 
     pub fn calculate_hash(&self) -> FixedHash {
@@ -329,6 +361,7 @@ impl Block {
             .chain(&self.timestamp)
             .chain(&self.base_layer_block_height)
             .chain(&self.base_layer_block_hash)
+            .chain(&self.extra_data)
             .result();
 
         hashing::block_hasher().chain(&self.parent).chain(&inner_hash).result()
@@ -537,6 +570,10 @@ impl Block {
 
     pub fn base_layer_block_hash(&self) -> &FixedHash {
         &self.base_layer_block_hash
+    }
+
+    pub fn extra_data(&self) -> Option<&ExtraData> {
+        self.extra_data.as_ref()
     }
 }
 

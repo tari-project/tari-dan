@@ -40,6 +40,7 @@ pub struct ForeignProposal {
     pub proposed_in_block: Option<String>,
     pub proposed_in_block_height: Option<i64>,
     pub status: String,
+    pub extra_data: Option<String>,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -84,6 +85,7 @@ impl ForeignProposal {
             self.timestamp as u64,
             self.base_layer_block_height as u64,
             deserialize_hex_try_from(&self.base_layer_block_hash)?,
+            self.extra_data.map(|val| deserialize_json(&val)).transpose()?,
         );
 
         let status = consensus_models::ForeignProposalStatus::from_str(&self.status)?;
