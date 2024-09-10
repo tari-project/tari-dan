@@ -2,9 +2,10 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common_types::types::FixedHash;
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::{Epoch, NodeHeight, VersionedSubstateIdError};
 use tari_dan_storage::{
-    consensus_models::{BlockId, LeafBlock, LockedBlock, QuorumCertificate, TransactionPoolError},
+    consensus_models::{BlockError, BlockId, LeafBlock, LockedBlock, QuorumCertificate, TransactionPoolError},
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
@@ -103,6 +104,8 @@ pub enum HotStuffError {
         foreign_block_id: BlockId,
         transaction_id: TransactionId,
     },
+    #[error("Block building error: {0}")]
+    BlockBuildingError(#[from] BlockError),
 }
 
 impl From<EpochManagerError> for HotStuffError {
@@ -235,4 +238,17 @@ pub enum ProposalValidationError {
          node"
     )]
     NoTransactionsInCommittee { block_id: BlockId },
+    #[error("Foreign node submitted an foreign proposal {block_id} that did not contain a sidechain ID")]
+    MissingSidechainId { block_id: BlockId },
+    #[error("Foreign node submitted an foreign proposal {block_id} with an invalid sidechain ID: {reason}")]
+    InvalidSidechainId { block_id: BlockId, reason: String },
+    #[error(
+        "Foreign node submitted an foreign proposal {block_id} with a mistmatched sidechain ID: expected \
+         {expected_sidechain_id} but got {sidechain_id}"
+    )]
+    MismatchedSidechainId {
+        block_id: BlockId,
+        expected_sidechain_id: RistrettoPublicKey,
+        sidechain_id: RistrettoPublicKey,
+    },
 }
