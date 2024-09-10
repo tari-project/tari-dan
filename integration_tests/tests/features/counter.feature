@@ -4,7 +4,7 @@
 @counter
 Feature: Counter template
 
-  @serial @doit
+  @serial
   Scenario: Counter template registration and invocation
 
     # Initialize a base node, wallet, miner and VN
