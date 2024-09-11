@@ -375,7 +375,7 @@ pub async fn list_account_nfts(
 
     let request = ListAccountNftRequest {
         account: Some(ComponentAddressOrName::Name(account_name.clone())),
-        limit: 10,
+        limit: 100,
         offset: 0,
     };
     let submit_resp = client
