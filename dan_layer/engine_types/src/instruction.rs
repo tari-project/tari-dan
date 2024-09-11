@@ -7,9 +7,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_template_lib::{
-    args::{Arg, LogLevel},
-    models::{ComponentAddress, ResourceAddress, TemplateAddress},
-    prelude::Amount,
+    args::{Arg, LogLevel}, auth::OwnerRule, models::{ComponentAddress, ResourceAddress, TemplateAddress}, prelude::{AccessRules, Amount}
 };
 #[cfg(feature = "ts")]
 use ts_rs::TS;
@@ -20,8 +18,9 @@ use crate::{confidential::ConfidentialClaim, serde_with};
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum Instruction {
     CreateAccount {
-        #[cfg_attr(feature = "ts", ts(type = "string"))]
-        owner_public_key: PublicKey,
+        public_key_address: PublicKey,
+        owner_rule: Option<OwnerRule>,
+        access_rules: Option<AccessRules>,
         #[cfg_attr(feature = "ts", ts(type = "string | null"))]
         workspace_bucket: Option<String>,
     },
@@ -71,10 +70,12 @@ impl Display for Instruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::CreateAccount {
-                owner_public_key,
+                public_key_address,
+                owner_rule,
+                access_rules,
                 workspace_bucket,
             } => {
-                write!(f, "CreateAccount {{ owner_public_key: {}, bucket: ", owner_public_key,)?;
+                write!(f, "CreateAccount {{ public_key_address: {}, owner_rule: {:?}, acces_rules: {:?}, bucket: ", public_key_address, owner_rule, access_rules)?;
                 match workspace_bucket {
                     Some(bucket) => write!(f, "{}", bucket)?,
                     None => write!(f, "None")?,

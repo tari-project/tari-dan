@@ -40,15 +40,10 @@ use tari_engine_types::{
 use tari_template_abi::FunctionDef;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
-    arg,
-    args,
-    args::{Arg, WorkspaceAction},
-    crypto::RistrettoPublicKeyBytes,
-    invoke_args,
-    models::{ComponentAddress, NonFungibleAddress},
-    prelude::TemplateAddress,
+    arg, args, args::{Arg, WorkspaceAction}, auth::OwnerRule, crypto::RistrettoPublicKeyBytes, invoke_args, models::{ComponentAddress, NonFungibleAddress}, prelude::TemplateAddress
 };
 use tari_transaction::Transaction;
+use tari_template_lib::prelude::AccessRules;
 use tari_utilities::ByteArray;
 
 use crate::{
@@ -70,6 +65,7 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::engine::instruction_processor";
 pub const MAX_CALL_DEPTH: usize = 10;
+const ACCOUNT_CONSTRUCTOR_FUNCTION: &str = "create";
 
 pub struct TransactionProcessor<TTemplateProvider> {
     template_provider: Arc<TTemplateProvider>,
@@ -240,9 +236,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         debug!(target: LOG_TARGET, "instruction = {:?}", instruction);
         match instruction {
             Instruction::CreateAccount {
-                owner_public_key,
+                public_key_address,
+                owner_rule,
+                access_rules,
                 workspace_bucket,
-            } => Self::create_account(template_provider, runtime, &owner_public_key, workspace_bucket),
+            } => Self::create_account(template_provider, runtime, &public_key_address, owner_rule, access_rules, workspace_bucket),
             Instruction::CallFunction {
                 template_address,
                 function,
@@ -312,7 +310,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
     pub fn create_account(
         template_provider: &TTemplateProvider,
         runtime: &Runtime,
-        owner_public_key: &PublicKey,
+        public_key_address: &PublicKey,
+        owner_rule: Option<OwnerRule>,
+        access_rules: Option<AccessRules>,
         workspace_bucket: Option<String>,
     ) -> Result<InstructionResult, TransactionError> {
         let template = template_provider
@@ -325,23 +325,41 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 address: ACCOUNT_TEMPLATE_ADDRESS,
             })?;
 
-        let function = if workspace_bucket.is_some() {
-            "create_with_bucket"
+        let function_def = template
+            .template_def()
+            .get_function(ACCOUNT_CONSTRUCTOR_FUNCTION)
+            .cloned()
+            .ok_or_else(|| {
+                TransactionError::FunctionNotFound {
+                    name: ACCOUNT_CONSTRUCTOR_FUNCTION.to_string(),
+                }
+            })?;
+        
+        let account_address = new_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, public_key_address);
+
+        // the publick key is the first argument of the Account template constructor
+        let public_key = RistrettoPublicKeyBytes::from_bytes(public_key_address.as_bytes()).unwrap();
+        let mut args = args![NonFungibleAddress::from_public_key(public_key)];
+
+        // add the optional owner rule if specified
+        if let Some(access_rules) = access_rules {
+            args.push(arg![Literal(access_rules)]);
         } else {
-            "create"
-        };
+            args.push(arg![Literal(None)]);
+        }
 
-        let function_def = template.template_def().get_function(function).cloned().ok_or_else(|| {
-            TransactionError::FunctionNotFound {
-                name: function.to_string(),
-            }
-        })?;
-        let owner_pk = RistrettoPublicKeyBytes::from_bytes(owner_public_key.as_bytes()).unwrap();
-        let account_address = new_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, owner_public_key);
+        // add the optional access rules if specified
+        if let Some(owner_rule) = owner_rule {
+            args.push(arg![Literal(owner_rule)]);
+        } else {
+            args.push(arg![Literal(None)]);
+        }
 
-        let mut args = args![NonFungibleAddress::from_public_key(owner_pk)];
+        // add the optional workspace bucket with the initial funds of the account
         if let Some(workspace_bucket) = workspace_bucket {
             args.push(arg![Workspace(workspace_bucket)]);
+        } else {
+            args.push(arg![Literal(None)]);
         }
 
         let args = runtime.resolve_args(args)?;

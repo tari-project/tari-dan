@@ -12,7 +12,7 @@ pub struct Ownership<'a> {
 }
 
 /// An enum for all possible ways to specify ownership of values
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 #[cfg_attr(
     feature = "ts",
     derive(ts_rs::TS),

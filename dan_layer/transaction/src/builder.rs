@@ -4,12 +4,10 @@
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_dan_common_types::{Epoch, SubstateRequirement};
 use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, TemplateAddress};
-use tari_template_lib::{
-    args,
-    args::Arg,
-    models::{Amount, ComponentAddress, ConfidentialWithdrawProof, ResourceAddress},
+use tari_template_lib::{args, 
+    args::Arg, auth::OwnerRule, models::{Amount, ComponentAddress, ConfidentialWithdrawProof, ResourceAddress}
 };
-
+use tari_template_lib::prelude::AccessRules;
 use crate::{unsigned_transaction::UnsignedTransaction, Transaction, TransactionSignature};
 
 #[derive(Debug, Clone, Default)]
@@ -62,14 +60,27 @@ impl TransactionBuilder {
 
     pub fn create_account(self, owner_public_key: PublicKey) -> Self {
         self.add_instruction(Instruction::CreateAccount {
-            owner_public_key,
+            public_key_address: owner_public_key,
+            owner_rule: None,
+            access_rules: None,
             workspace_bucket: None,
         })
     }
 
     pub fn create_account_with_bucket<T: Into<String>>(self, owner_public_key: PublicKey, workspace_bucket: T) -> Self {
         self.add_instruction(Instruction::CreateAccount {
-            owner_public_key,
+            public_key_address: owner_public_key,
+            owner_rule: None,
+            access_rules: None,
+            workspace_bucket: Some(workspace_bucket.into()),
+        })
+    }
+
+    pub fn create_account_with_custom_rules<T: Into<String>>(self, public_key_address: PublicKey, owner_rule: OwnerRule, access_rules: AccessRules, workspace_bucket: T) -> Self {
+        self.add_instruction(Instruction::CreateAccount {
+            public_key_address,
+            owner_rule: Some(owner_rule),
+            access_rules: Some(access_rules),
             workspace_bucket: Some(workspace_bucket.into()),
         })
     }
