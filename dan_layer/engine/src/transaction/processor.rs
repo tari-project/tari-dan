@@ -46,7 +46,7 @@ use tari_template_lib::{
     auth::OwnerRule,
     crypto::RistrettoPublicKeyBytes,
     invoke_args,
-    models::{ComponentAddress, NonFungibleAddress},
+    models::{Bucket, ComponentAddress, NonFungibleAddress},
     prelude::{AccessRules, TemplateAddress},
 };
 use tari_transaction::Transaction;
@@ -371,6 +371,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         // add the optional workspace bucket with the initial funds of the account
         if let Some(workspace_bucket) = workspace_bucket {
             args.push(arg![Workspace(workspace_bucket)]);
+        } else {
+            let none: Option<Bucket> = None;
+            args.push(arg![Literal(none)]);
         }
 
         let args = runtime.resolve_args(args)?;
