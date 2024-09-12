@@ -83,15 +83,15 @@ impl TransactionBuilder {
     pub fn create_account_with_custom_rules<T: Into<String>>(
         self,
         public_key_address: PublicKey,
-        owner_rule: OwnerRule,
-        access_rules: AccessRules,
-        workspace_bucket: T,
+        owner_rule: Option<OwnerRule>,
+        access_rules: Option<AccessRules>,
+        workspace_bucket: Option<T>,
     ) -> Self {
         self.add_instruction(Instruction::CreateAccount {
             public_key_address,
-            owner_rule: Some(owner_rule),
-            access_rules: Some(access_rules),
-            workspace_bucket: Some(workspace_bucket.into()),
+            owner_rule,
+            access_rules,
+            workspace_bucket: workspace_bucket.map(|b| b.into()),
         })
     }
 
