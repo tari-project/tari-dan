@@ -7,6 +7,7 @@ use std::{
     time::Duration,
 };
 
+use tari_dan_common_types::SubstateRequirement;
 use tari_engine_types::substate::SubstateId;
 use tokio::{io::AsyncWriteExt, task::JoinHandle};
 
@@ -135,4 +136,22 @@ pub fn get_address_from_output(world: &TariWorld, output_ref: String) -> &Substa
                 .map(|(_, addr)| &addr.substate_id)
         })
         .unwrap_or_else(|| panic!("Output not found: {}", output_ref))
+}
+
+pub fn get_component_from_namespace(world: &TariWorld, fq_component_name: String) -> SubstateRequirement {
+    let (input_group, component_name) = fq_component_name.split_once('/').unwrap_or_else(|| {
+        panic!(
+            "Component name must be in the format '{{group}}/components/{{template_name}}', got {}",
+            fq_component_name
+        )
+    });
+
+    world
+        .outputs
+        .get(input_group)
+        .unwrap_or_else(|| panic!("No outputs found with name {}", input_group))
+        .iter()
+        .find(|(name, _)| **name == component_name)
+        .map(|(_, data)| data.clone())
+        .unwrap_or_else(|| panic!("No component named {}", component_name))
 }
