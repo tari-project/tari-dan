@@ -132,6 +132,7 @@ impl ValidatorBuilder {
                 max_base_layer_blocks_behind: 5,
                 network: Network::LocalNet,
                 pacemaker_max_base_time: Duration::from_secs(10),
+                sidechain_id: None,
             },
             self.address.clone(),
             inbound_messaging,

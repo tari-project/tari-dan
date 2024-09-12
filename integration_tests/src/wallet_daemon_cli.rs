@@ -30,7 +30,10 @@ use tari_crypto::{
     tari_utilities::ByteArray,
 };
 use tari_dan_common_types::{Epoch, SubstateRequirement};
-use tari_dan_wallet_sdk::apis::confidential_transfer::ConfidentialTransferInputSelection;
+use tari_dan_wallet_sdk::{
+    apis::confidential_transfer::ConfidentialTransferInputSelection,
+    models::{Account, NonFungibleToken},
+};
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
@@ -39,7 +42,7 @@ use tari_template_lib::{
     prelude::{ComponentAddress, ResourceAddress},
     resource::TOKEN_SYMBOL,
 };
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, UnsignedTransaction};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::command::transaction::CliArg;
 use tari_wallet_daemon_client::{
@@ -55,6 +58,7 @@ use tari_wallet_daemon_client::{
         ClaimValidatorFeesRequest,
         ClaimValidatorFeesResponse,
         ConfidentialTransferRequest,
+        ListAccountNftRequest,
         MintAccountNftRequest,
         ProofsGenerateRequest,
         RevealFundsRequest,
@@ -67,7 +71,7 @@ use tari_wallet_daemon_client::{
 };
 use tokio::time::timeout;
 
-use crate::{validator_node_cli::add_substate_ids, TariWorld};
+use crate::{helpers::get_address_from_output, validator_node_cli::add_substate_ids, TariWorld};
 
 pub async fn claim_burn(
     world: &mut TariWorld,
@@ -146,7 +150,6 @@ pub async fn reveal_burned_funds(world: &mut TariWorld, account_name: String, am
     assert!(wait_resp.result.unwrap().result.is_accept());
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn transfer_confidential(
     world: &mut TariWorld,
     source_account_name: String,
@@ -318,7 +321,7 @@ pub async fn create_account_with_free_coins(
 
 pub async fn mint_new_nft_on_account(
     world: &mut TariWorld,
-    _nft_name: String,
+    nft_name: String,
     account_name: String,
     wallet_daemon_name: String,
     existing_nft_component: Option<ComponentAddress>,
@@ -328,7 +331,7 @@ pub async fn mint_new_nft_on_account(
 
     let metadata = metadata.unwrap_or_else(|| {
         serde_json::json!({
-            TOKEN_SYMBOL: "MY_NFT",
+            TOKEN_SYMBOL: nft_name,
             "name": "TariProject",
             "departure": "Now",
             "landing_on": "Moon"
@@ -361,6 +364,26 @@ pub async fn mint_new_nft_on_account(
         account_name,
         &resp.result.result.expect("Failed to obtain substate diffs"),
     );
+}
+
+pub async fn list_account_nfts(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+) -> Vec<NonFungibleToken> {
+    let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
+
+    let request = ListAccountNftRequest {
+        account: Some(ComponentAddressOrName::Name(account_name.clone())),
+        limit: 100,
+        offset: 0,
+    };
+    let submit_resp = client
+        .list_account_nfts(request)
+        .await
+        .expect("Failed to list account NFTs");
+
+    submit_resp.nfts
 }
 
 pub async fn get_balance(world: &mut TariWorld, account_name: &str, wallet_daemon_name: &str) -> i64 {
@@ -513,7 +536,8 @@ pub async fn submit_manifest(
         .map(|(_, addr)| addr.clone())
         .collect::<Vec<_>>();
 
-    let instructions = parse_manifest(&manifest_content, globals, HashMap::new()).unwrap();
+    let instructions = parse_manifest(&manifest_content, globals, HashMap::new())
+        .unwrap_or_else(|_| panic!("Attempted to parse manifest but failed"));
 
     let transaction_submit_req = TransactionSubmitRequest {
         transaction: None,
@@ -605,7 +629,12 @@ pub async fn create_component(
     let template_address = world
         .templates
         .get(&template_name)
-        .unwrap_or_else(|| panic!("Template not found with name {}", template_name))
+        .unwrap_or_else(|| {
+            panic!(
+                "Create component failed, template not found with name {}",
+                template_name
+            )
+        })
         .address;
     let args = args.iter().map(|a| CliArg::from_str(a).unwrap().into_arg()).collect();
     let AccountGetResponse { account, .. } = client
@@ -654,6 +683,48 @@ pub async fn create_component(
             .result
             .expect("Failed to obtain substate diffs"),
     );
+}
+
+pub async fn call_component(
+    world: &mut TariWorld,
+    account_name: String,
+    output_ref: String,
+    wallet_daemon_name: String,
+    function_call: String,
+) -> anyhow::Result<TransactionWaitResultResponse> {
+    let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
+
+    let source_component_address = get_address_from_output(world, output_ref.clone())
+        .as_component_address()
+        .expect("Failed to get component address from output");
+
+    let account = get_account_from_name(&mut client, account_name).await;
+    let account_component_address = account
+        .address
+        .as_component_address()
+        .expect("Failed to get account component address");
+
+    let tx = Transaction::builder()
+        .fee_transaction_pay_from_component(account_component_address, Amount(1))
+        .call_method(source_component_address, &function_call, vec![])
+        .build_unsigned_transaction();
+
+    let resp = submit_unsigned_tx_and_wait_for_response(&mut client, tx, vec![], account).await;
+
+    add_substate_ids(
+        world,
+        output_ref,
+        &resp
+            .as_ref()
+            .unwrap()
+            .clone()
+            .result
+            .expect("Call component transaction has timed out")
+            .result
+            .expect("Call component transaction has failed"),
+    );
+
+    resp
 }
 
 pub async fn transfer(
@@ -720,4 +791,56 @@ pub async fn get_auth_wallet_daemon_client(world: &TariWorld, wallet_daemon_name
         .unwrap_or_else(|| panic!("Wallet daemon not found with name {}", wallet_daemon_name))
         .get_authed_client()
         .await
+}
+
+async fn get_account_from_name(client: &mut WalletDaemonClient, account_name: String) -> Account {
+    let source_account_name = ComponentAddressOrName::Name(account_name.clone());
+    let AccountGetResponse { account, .. } =
+        client
+            .accounts_get(source_account_name.clone())
+            .await
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to get account with name {}. Error: {:?}",
+                    source_account_name, e
+                )
+            });
+    account
+}
+
+async fn submit_unsigned_tx_and_wait_for_response(
+    client: &mut WalletDaemonClient,
+    tx: UnsignedTransaction,
+    inputs: Vec<SubstateRequirement>,
+    account: Account,
+) -> anyhow::Result<TransactionWaitResultResponse> {
+    let submit_req = TransactionSubmitRequest {
+        transaction: Some(tx),
+        signing_key_index: Some(account.key_index),
+        inputs,
+        override_inputs: false,
+        is_dry_run: false,
+        proof_ids: vec![],
+        // TODO: remove
+        fee_instructions: vec![],
+        instructions: vec![],
+        min_epoch: None,
+        max_epoch: None,
+    };
+
+    let submit_resp = client.submit_transaction(submit_req).await?;
+    let wait_req = TransactionWaitResultRequest {
+        transaction_id: submit_resp.transaction_id,
+        timeout_secs: Some(120),
+    };
+    let resp = client
+        .wait_transaction_result(wait_req)
+        .await
+        .unwrap_or_else(|_| panic!("Waiting for the transaction when calling component failed"));
+
+    if let Some(reason) = resp.result.as_ref().and_then(|finalize| finalize.reject()) {
+        panic!("Calling component result rejected: {}", reason);
+    }
+
+    Ok(resp)
 }

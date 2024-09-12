@@ -1,5 +1,6 @@
 import type { Command } from "./Command";
 import type { Epoch } from "./Epoch";
+import type { ExtraData } from "./ExtraData";
 import type { NodeHeight } from "./NodeHeight";
 import type { QuorumCertificate } from "./QuorumCertificate";
 import type { Shard } from "./Shard";
@@ -29,4 +30,5 @@ export interface Block {
     timestamp: number;
     base_layer_block_height: number;
     base_layer_block_hash: string;
+    extra_data: ExtraData | null;
 }

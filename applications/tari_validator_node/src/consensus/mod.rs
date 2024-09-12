@@ -7,6 +7,7 @@ use tari_consensus::{
     hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffConfig, HotstuffWorker},
     traits::ConsensusSpec,
 };
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_app_utilities::{
     consensus_constants::ConsensusConstants,
     template_manager::implementation::TemplateManager,
@@ -60,6 +61,7 @@ pub type ConsensusTransactionValidator = BoxedValidator<ValidationContext, Trans
 
 pub async fn spawn(
     network: Network,
+    sidechain_id: Option<RistrettoPublicKey>,
     store: SqliteStateStore<PeerAddress>,
     local_addr: PeerAddress,
     signing_service: TariSignatureService,
@@ -83,6 +85,7 @@ pub async fn spawn(
 
     let hs_config = HotstuffConfig {
         network,
+        sidechain_id,
         max_base_layer_blocks_behind: consensus_constants.max_base_layer_blocks_behind,
         max_base_layer_blocks_ahead: consensus_constants.max_base_layer_blocks_ahead,
         num_preshards: consensus_constants.num_preshards,
