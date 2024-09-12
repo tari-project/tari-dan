@@ -297,7 +297,9 @@ impl TemplateTest {
         let result = self
             .execute_and_commit(
                 vec![Instruction::CreateAccount {
-                    owner_public_key,
+                    public_key_address: owner_public_key,
+                    owner_rule: None,
+                    access_rules: None,
                     workspace_bucket,
                 }],
                 proofs,

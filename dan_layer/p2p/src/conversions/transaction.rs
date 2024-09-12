@@ -29,7 +29,10 @@ use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tari_dan_common_types::{Epoch, SubstateRequirement, VersionedSubstateId};
 use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateId};
 use tari_template_lib::{
-    args::Arg, auth::OwnerRule, crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes}, models::{
+    args::Arg,
+    auth::OwnerRule,
+    crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
+    models::{
         Amount,
         ConfidentialOutputStatement,
         ConfidentialStatement,
@@ -37,7 +40,8 @@ use tari_template_lib::{
         EncryptedData,
         ObjectKey,
         ViewableBalanceProof,
-    }, prelude::AccessRules
+    },
+    prelude::AccessRules,
 };
 use tari_transaction::{Transaction, UnsignedTransaction};
 
@@ -190,9 +194,9 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
         let instruction_type =
             InstructionType::try_from(request.instruction_type).map_err(|e| anyhow!("invalid instruction_type {e}"))?;
         let instruction = match instruction_type {
-            InstructionType::CreateAccount => Instruction::CreateAccount {       
+            InstructionType::CreateAccount => Instruction::CreateAccount {
                 public_key_address: PublicKey::from_canonical_bytes(&request.create_account_public_key)
-                    .map_err(|e| anyhow!("create_account_public_key: {}", e))?,  
+                    .map_err(|e| anyhow!("create_account_public_key: {}", e))?,
                 owner_rule: request.create_account_owner_rule.map(TryInto::try_into).transpose()?,
                 access_rules: request.create_account_access_rules.map(TryInto::try_into).transpose()?,
                 workspace_bucket: Some(request.create_account_workspace_bucket).filter(|s| !s.is_empty()),

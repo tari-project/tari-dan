@@ -40,10 +40,16 @@ use tari_engine_types::{
 use tari_template_abi::FunctionDef;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
-    arg, args, args::{Arg, WorkspaceAction}, auth::OwnerRule, crypto::RistrettoPublicKeyBytes, invoke_args, models::{ComponentAddress, NonFungibleAddress}, prelude::TemplateAddress
+    arg,
+    args,
+    args::{Arg, WorkspaceAction},
+    auth::OwnerRule,
+    crypto::RistrettoPublicKeyBytes,
+    invoke_args,
+    models::{ComponentAddress, NonFungibleAddress},
+    prelude::{AccessRules, TemplateAddress},
 };
 use tari_transaction::Transaction;
-use tari_template_lib::prelude::AccessRules;
 use tari_utilities::ByteArray;
 
 use crate::{
@@ -240,7 +246,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 owner_rule,
                 access_rules,
                 workspace_bucket,
-            } => Self::create_account(template_provider, runtime, &public_key_address, owner_rule, access_rules, workspace_bucket),
+            } => Self::create_account(
+                template_provider,
+                runtime,
+                &public_key_address,
+                owner_rule,
+                access_rules,
+                workspace_bucket,
+            ),
             Instruction::CallFunction {
                 template_address,
                 function,
@@ -329,12 +342,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             .template_def()
             .get_function(ACCOUNT_CONSTRUCTOR_FUNCTION)
             .cloned()
-            .ok_or_else(|| {
-                TransactionError::FunctionNotFound {
-                    name: ACCOUNT_CONSTRUCTOR_FUNCTION.to_string(),
-                }
+            .ok_or_else(|| TransactionError::FunctionNotFound {
+                name: ACCOUNT_CONSTRUCTOR_FUNCTION.to_string(),
             })?;
-        
+
         let account_address = new_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, public_key_address);
 
         // the publick key is the first argument of the Account template constructor
@@ -342,24 +353,24 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         let mut args = args![NonFungibleAddress::from_public_key(public_key)];
 
         // add the optional owner rule if specified
-        if let Some(access_rules) = access_rules {
-            args.push(arg![Literal(access_rules)]);
-        } else {
-            args.push(arg![Literal(None)]);
-        }
-
-        // add the optional access rules if specified
         if let Some(owner_rule) = owner_rule {
             args.push(arg![Literal(owner_rule)]);
         } else {
-            args.push(arg![Literal(None)]);
+            let none: Option<OwnerRule> = None;
+            args.push(arg![Literal(none)]);
+        }
+
+        // add the optional access rules if specified
+        if let Some(access_rules) = access_rules {
+            args.push(arg![Literal(access_rules)]);
+        } else {
+            let none: Option<AccessRules> = None;
+            args.push(arg![Literal(none)]);
         }
 
         // add the optional workspace bucket with the initial funds of the account
         if let Some(workspace_bucket) = workspace_bucket {
             args.push(arg![Workspace(workspace_bucket)]);
-        } else {
-            args.push(arg![Literal(None)]);
         }
 
         let args = runtime.resolve_args(args)?;
