@@ -30,7 +30,10 @@ use tari_crypto::{
     tari_utilities::ByteArray,
 };
 use tari_dan_common_types::{Epoch, SubstateRequirement};
-use tari_dan_wallet_sdk::{apis::confidential_transfer::ConfidentialTransferInputSelection, models::Account};
+use tari_dan_wallet_sdk::{
+    apis::confidential_transfer::ConfidentialTransferInputSelection,
+    models::{Account, NonFungibleToken},
+};
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
@@ -55,6 +58,7 @@ use tari_wallet_daemon_client::{
         ClaimValidatorFeesRequest,
         ClaimValidatorFeesResponse,
         ConfidentialTransferRequest,
+        ListAccountNftRequest,
         MintAccountNftRequest,
         ProofsGenerateRequest,
         RevealFundsRequest,
@@ -317,7 +321,7 @@ pub async fn create_account_with_free_coins(
 
 pub async fn mint_new_nft_on_account(
     world: &mut TariWorld,
-    _nft_name: String,
+    nft_name: String,
     account_name: String,
     wallet_daemon_name: String,
     existing_nft_component: Option<ComponentAddress>,
@@ -327,7 +331,7 @@ pub async fn mint_new_nft_on_account(
 
     let metadata = metadata.unwrap_or_else(|| {
         serde_json::json!({
-            TOKEN_SYMBOL: "MY_NFT",
+            TOKEN_SYMBOL: nft_name,
             "name": "TariProject",
             "departure": "Now",
             "landing_on": "Moon"
@@ -360,6 +364,26 @@ pub async fn mint_new_nft_on_account(
         account_name,
         &resp.result.result.expect("Failed to obtain substate diffs"),
     );
+}
+
+pub async fn list_account_nfts(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+) -> Vec<NonFungibleToken> {
+    let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
+
+    let request = ListAccountNftRequest {
+        account: Some(ComponentAddressOrName::Name(account_name.clone())),
+        limit: 100,
+        offset: 0,
+    };
+    let submit_resp = client
+        .list_account_nfts(request)
+        .await
+        .expect("Failed to list account NFTs");
+
+    submit_resp.nfts
 }
 
 pub async fn get_balance(world: &mut TariWorld, account_name: &str, wallet_daemon_name: &str) -> i64 {
@@ -512,7 +536,8 @@ pub async fn submit_manifest(
         .map(|(_, addr)| addr.clone())
         .collect::<Vec<_>>();
 
-    let instructions = parse_manifest(&manifest_content, globals, HashMap::new()).unwrap();
+    let instructions = parse_manifest(&manifest_content, globals, HashMap::new())
+        .unwrap_or_else(|_| panic!("Attempted to parse manifest but failed"));
 
     let transaction_submit_req = TransactionSubmitRequest {
         transaction: None,
@@ -813,7 +838,7 @@ async fn submit_unsigned_tx_and_wait_for_response(
         .await
         .unwrap_or_else(|_| panic!("Waiting for the transaction when calling component failed"));
 
-    if let Some(reason) = resp.result.clone().and_then(|finalize| finalize.reject().cloned()) {
+    if let Some(reason) = resp.result.as_ref().and_then(|finalize| finalize.reject()) {
         panic!("Calling component result rejected: {}", reason);
     }
 

@@ -503,6 +503,12 @@ async fn mint_new_nft_on_account(
     wallet_daemon_cli::mint_new_nft_on_account(world, nft_name, account_name, wallet_daemon_name, None, None).await;
 }
 
+#[when(expr = r#"I list all non fungible tokens on {word} using wallet daemon {word} the amount is {word}"#)]
+async fn list_nfts_on_account(world: &mut TariWorld, account_name: String, wallet_daemon_name: String, amount: usize) {
+    let nfts = wallet_daemon_cli::list_account_nfts(world, account_name, wallet_daemon_name).await;
+    assert_eq!(amount, nfts.len());
+}
+
 #[when(expr = "I mint a new non fungible token {word} on {word} using wallet daemon with metadata {word}")]
 async fn mint_new_nft_on_account_with_metadata(
     world: &mut TariWorld,

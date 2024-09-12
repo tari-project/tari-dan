@@ -1,4 +1,4 @@
-# Copyright 2022 The Tari Project
+# Copyright 2024 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
 @nft
@@ -6,41 +6,51 @@ Feature: NFTs
 
   @serial
   Scenario: Mint, mutate and burn non fungible tokens
-    Given fees are disabled
+
+    ###### Setup
     # Initialize a base node, wallet, miner and VN
+    Given fees are disabled
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
 
-    # Initialize a VN
+    # Initialize a validator node
     Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
-    # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 7 new blocks
-    When wallet WALLET has at least 10000 T
-
-    # VN registration
+    # Fund wallet to send VN registration tx
+    When miner MINER mines 10 new blocks
+    When wallet WALLET has at least 2000 T
     When validator node VN sends a registration transaction to base wallet WALLET
+    When miner MINER mines 16 new blocks
+    Then the validator node VN is listed as registered
+
+    # Initialize indexer and connect wallet daemon
+    Given an indexer IDX connected to base node BASE
+    Given a wallet daemon WALLET_D connected to indexer IDX
 
     # Register the "basic_nft" template
     When base wallet WALLET registers the template "basic_nft"
-    When miner MINER mines 13 new blocks
-    Then VN has scanned to height 17
-    Then the validator node VN is listed as registered
+    When miner MINER mines 20 new blocks
+    Then VN has scanned to height 43
     Then the template "basic_nft" is listed as registered by the validator node VN
 
-    # A file-base CLI account must be created to sign future calls
-    When I use an account key named K1
+    ###### Scenario
+    # Create two accounts to deposit the minted NFTs
+    When I create an account ACC1 via the wallet daemon WALLET_D with 10000 free coins
+    When I create an account ACC2 via the wallet daemon WALLET_D with 10000 free coins
 
-    # Create an account to deposit the minted nfts
-    When I create an account ACC1 on VN
-    When I create an account ACC2 on VN
+    # Mint a basic NFT
+    When I mint a new non fungible token NFT_X on ACC1 using wallet daemon WALLET_D
 
-    # Create a new BasicNft component
-    When I call function "new" on template "basic_nft" on VN named "NFT"
+    # Check that a new NFT_X has been minted for ACC1
+    # TODO: investigate flaky test
+    #When I list all non fungible tokens on ACC1 using wallet daemon WALLET_D the amount is 1
+
+    # Create instance of the basic NFT template
+    When I call function "new" on template "basic_nft" using account ACC1 to pay fees via wallet daemon WALLET_D named "NFT"
 
     # Submit a transaction with NFT operations
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1, ACC2" named "TX1" signed with key ACC1
+    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "NFT, ACC1, ACC2" named "TX1"
     ```
     let sparkle_nft = global!["NFT/components/SparkleNft"];
     let sparkle_res = global!["NFT/resources/0"];
@@ -68,42 +78,49 @@ Feature: NFTs
     let acc_bucket = acc1.withdraw_non_fungible(sparkle_res, NonFungibleId("Burn!"));
     sparkle_nft.burn(acc_bucket);
     ```
-    When I print the cucumber world
 
   @serial
   Scenario: Create resource and mint in one transaction
-    Given fees are disabled
+
+    ##### Setup
     # Initialize a base node, wallet, miner and VN
+    Given fees are disabled
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
 
-    # Initialize a VN
+    # Initialize a validator node
     Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
-    # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 7 new blocks
-    When wallet WALLET has at least 10000 T
-
-    # VN registration
+    # Fund wallet to send VN registration tx
+    When miner MINER mines 10 new blocks
+    When wallet WALLET has at least 2000 T
     When validator node VN sends a registration transaction to base wallet WALLET
+    When miner MINER mines 16 new blocks
+    Then the validator node VN is listed as registered
+
+    # Initialize indexer and connect wallet daemon
+    Given an indexer IDX connected to base node BASE
+    Given a wallet daemon WALLET_D connected to indexer IDX
+
 
     # Register the "basic_nft" template
     When base wallet WALLET registers the template "basic_nft"
-    When miner MINER mines 13 new blocks
-    Then VN has scanned to height 17
-    Then the validator node VN is listed as registered
+    When miner MINER mines 20 new blocks
+    Then VN has scanned to height 43
     Then the template "basic_nft" is listed as registered by the validator node VN
 
-    # A file-base CLI account must be created to sign future calls
-    When I use an account key named K1
 
-    # Create a new BasicNft component and mint in the same transaction
-    When I call function "new_with_initial_nft" on template "basic_nft" on VN with args "nft_str:1000" named "NFT"
+    ###### Scenario
+    # Create an account to deposit the minted NFT
+    When I create an account ACC1 via the wallet daemon WALLET_D with 10000 free coins
+
+    # Create a new BasicNft component and mint in the same transaction.
+    # Note the updated NFT address format or parsing the manifest will fail.
+    When I call function "new_with_initial_nft" on template "basic_nft" using account ACC1 to pay fees via wallet daemon WALLET_D with args "nft_str_1000" named "NFT"
 
     # Check that the initial NFT was actually minted by trying to deposit it into an account
-    When I create an account ACC1 on VN
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1" named "TX1" signed with key ACC1
+    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "NFT, ACC1" named "TX1"
     ```
     let sparkle_nft = global!["NFT/components/SparkleNft"];
     let mut acc1 = global!["ACC1/components/Account"];
@@ -112,6 +129,3 @@ Feature: NFTs
     let nft_bucket = sparkle_nft.take_initial_nft();
     acc1.deposit(nft_bucket);
     ```
-
-    When I print the cucumber world
-

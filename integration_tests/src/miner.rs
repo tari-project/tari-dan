@@ -115,10 +115,6 @@ async fn mine_block_without_wallet_with_template(base_client: &mut BaseNodeClien
 
     // We don't need to mine, as Localnet blocks have difficulty 1s
     let _submit_res = base_client.submit_block(block).await.unwrap();
-    println!(
-        "Block successfully mined at height {:?}",
-        block_template.header.unwrap().height
-    );
 }
 
 async fn create_block_template_with_coinbase(
