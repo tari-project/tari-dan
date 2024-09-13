@@ -33,31 +33,27 @@ mod account_template {
     }
 
     impl Account {
-        pub fn create(owner_token: NonFungibleAddress) -> Component<Account> {
-            Self::internal_create(owner_token, None)
-        }
-
-        pub fn create_with_bucket(owner_token: NonFungibleAddress, bucket: Bucket) -> Component<Account> {
-            Self::internal_create(owner_token, Some(bucket))
-        }
-
-        fn internal_create(owner_token: NonFungibleAddress, bucket: Option<Bucket>) -> Component<Account> {
+        pub fn create(public_key_token: NonFungibleAddress, owner_rule: Option<OwnerRule>, access_rules: Option<AccessRules>, bucket: Option<Bucket>) -> Component<Account> {
             // extract the public key from the token
-            // we only allow owner tokens that correspond to public keys
-            let public_key = owner_token
+            // we only allow tokens that correspond to public keys
+            let public_key = public_key_token
                 .to_public_key()
-                .unwrap_or_else(|| panic!("owner_token is not a valid public key: {}", owner_token));
+                .unwrap_or_else(|| panic!("public_key_token is not a valid public key: {}", public_key_token));
 
-            // only the owner of the token will be able to withdraw funds from the account
-            let withdraw_rule =
-                AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(owner_token.into())));
-            let rules = AccessRules::new()
-                .add_method_rule("balance", AccessRule::AllowAll)
-                .add_method_rule("get_balances", AccessRule::AllowAll)
-                .add_method_rule("deposit", AccessRule::AllowAll)
-                .add_method_rule("deposit_all", AccessRule::AllowAll)
-                .add_method_rule("get_non_fungible_ids", AccessRule::AllowAll)
-                .default(withdraw_rule);
+            let owner_rule = owner_rule.unwrap_or(
+                OwnerRule::ByPublicKey(public_key)
+            );
+
+            let access_rules = access_rules.unwrap_or(
+                AccessRules::new()
+                    .add_method_rule("balance", AccessRule::AllowAll)
+                    .add_method_rule("get_balances", AccessRule::AllowAll)
+                    .add_method_rule("deposit", AccessRule::AllowAll)
+                    .add_method_rule("deposit_all", AccessRule::AllowAll)
+                    .add_method_rule("get_non_fungible_ids", AccessRule::AllowAll)
+                    // By defaul, only the owner of the token will be able to withdraw funds from the account
+                    .default(AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(public_key_token.into()))))
+            );
 
             // add the funds from the (optional) bucket
             let mut vaults = BTreeMap::new();
@@ -66,9 +62,9 @@ mod account_template {
             }
 
             Component::new(Self { vaults })
-                .with_access_rules(rules)
+                .with_access_rules(access_rules)
                 .with_public_key_address(public_key)
-                .with_owner_rule(OwnerRule::ByPublicKey(public_key))
+                .with_owner_rule(owner_rule)
                 .create()
         }
 

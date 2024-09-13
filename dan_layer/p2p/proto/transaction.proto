@@ -72,13 +72,16 @@ message Instruction {
   bytes claim_validator_fees_validator_public_key = 15;
   uint64 claim_validator_fees_epoch = 16;
 
-  bytes create_account_owner_public_key = 17;
-  string create_account_workspace_bucket = 18;
+  bytes create_account_public_key = 17;
+  OwnerRule create_account_owner_rule = 18;
+  AccessRules create_account_access_rules = 19;
+  string create_account_workspace_bucket = 20;
 
   // AssertBucketContains
-  bytes resource_address = 19;
-  int64 min_amount = 20;
+  bytes resource_address = 21;
+  int64 min_amount = 22;
 }
+
 
 message Arg {
   enum ArgType {
@@ -135,4 +138,12 @@ message ViewableBalanceProof {
   bytes s_v = 6;
   bytes s_m = 7;
   bytes s_r = 8;
+}
+
+message OwnerRule {
+  bytes encoded_owner_rule = 1;
+}
+
+message AccessRules {
+  bytes encoded_access_rules = 1;
 }

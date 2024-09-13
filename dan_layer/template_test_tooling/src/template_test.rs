@@ -296,7 +296,9 @@ impl TemplateTest {
         let result = self
             .execute_and_commit(
                 vec![Instruction::CreateAccount {
-                    owner_public_key,
+                    public_key_address: owner_public_key,
+                    owner_rule: None,
+                    access_rules: None,
                     workspace_bucket,
                 }],
                 proofs,
@@ -398,6 +400,28 @@ impl TemplateTest {
     }
 
     pub fn create_funded_account(&mut self) -> (ComponentAddress, NonFungibleAddress, RistrettoSecretKey) {
+        let (owner_proof, public_key, secret_key) = self.create_owner_proof();
+        let old_fail_fees = self.enable_fees;
+        self.enable_fees = false;
+        let result = self.execute_expect_success(
+            Transaction::builder()
+                .call_method(test_faucet_component(), "take_free_coins", args![])
+                .put_last_instruction_output_on_workspace("bucket")
+                .create_account_with_bucket(public_key, "bucket")
+                .sign(&secret_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        let component = result.finalize.execution_results[2]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        self.enable_fees = old_fail_fees;
+        (component, owner_proof, secret_key)
+    }
+
+    pub fn create_custom_funded_account(&mut self) -> (ComponentAddress, NonFungibleAddress, RistrettoSecretKey) {
         let (owner_proof, public_key, secret_key) = self.create_owner_proof();
         let old_fail_fees = self.enable_fees;
         self.enable_fees = false;

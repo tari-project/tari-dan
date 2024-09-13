@@ -1,16 +1,19 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
+use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
 use tari_dan_engine::runtime::{ActionIdent, RuntimeError};
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
+    auth::AccessRule,
     constants::XTR,
     models::{Amount, ComponentAddress, ResourceAddress},
+    prelude::AccessRules,
 };
 use tari_template_test_tooling::{
     support::assert_error::{assert_access_denied_for_action, assert_reject_reason},
+    test_faucet_component,
     TemplateTest,
 };
 use tari_transaction::Transaction;
@@ -251,4 +254,51 @@ fn gasless() {
 
     let balance = result.expect_return::<Vec<(ResourceAddress, Amount)>>(3);
     assert_eq!(balance[0].1, 100);
+}
+
+#[test]
+fn custom_access_rules() {
+    let mut template_test = TemplateTest::new::<_, &str>([]);
+
+    // First we create a account with a custom rule that anyone can withdraw
+    let (owner_proof, public_key, secret_key) = template_test.create_owner_proof();
+
+    let access_rules = AccessRules::new()
+        .add_method_rule("balance", AccessRule::AllowAll)
+        .add_method_rule("get_balances", AccessRule::AllowAll)
+        .add_method_rule("deposit", AccessRule::AllowAll)
+        .add_method_rule("deposit_all", AccessRule::AllowAll)
+        .add_method_rule("get_non_fungible_ids", AccessRule::AllowAll)
+        // We are going to make it so anyone can withdraw
+        .default(AccessRule::AllowAll);
+
+    let result = template_test.execute_expect_success(
+        Transaction::builder()
+            .call_method(test_faucet_component(), "take_free_coins", args![])
+            .put_last_instruction_output_on_workspace("bucket")
+            // Create component with the same ID
+            .create_account_with_custom_rules(
+                public_key,
+                None,
+                Some(access_rules),
+                Some("bucket"),
+            )
+            // Signed by source account so that it can pay the fees for the new account creation
+            .sign(&secret_key)
+            .build(),
+        vec![owner_proof],
+    );
+    let user_account = result.finalize.execution_results[2].decode().unwrap();
+
+    // We create another account and we we will withdraw from the custom one
+    let (user2_account, user2_account_proof, user2_secret_key) = template_test.create_funded_account();
+    template_test.execute_expect_success(
+        Transaction::builder()
+            .call_method(user_account, "withdraw", args![XTR, Amount(100)])
+            .put_last_instruction_output_on_workspace("b")
+            .call_method(user2_account, "deposit", args![Workspace("b")])
+            .build()
+            .sign(&user2_secret_key),
+        vec![user2_account_proof],
+    );
 }

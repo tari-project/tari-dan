@@ -155,6 +155,30 @@ async fn call_template_constructor_via_wallet_daemon(
     // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
+#[when(
+    expr = r#"I call function "{word}" on template "{word}" using account {word} to pay fees via wallet daemon {word} named "{word}""#
+)]
+async fn call_template_constructor_via_wallet_daemon_no_args(
+    world: &mut TariWorld,
+    function_call: String,
+    template_name: String,
+    account_name: String,
+    wallet_daemon_name: String,
+    outputs_name: String,
+) {
+    wallet_daemon_cli::create_component(
+        world,
+        outputs_name,
+        template_name,
+        account_name,
+        wallet_daemon_name,
+        function_call,
+        vec![],
+        None,
+        None,
+    )
+    .await;
+}
 #[when(expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" named "{word}""#)]
 async fn call_template_constructor(
     world: &mut TariWorld,
@@ -303,6 +327,52 @@ async fn call_component_method_and_check_result(
 }
 
 #[when(
+    expr = r#"I invoke on wallet daemon {word} on account {word} on component {word} the method call "{word}" the result is "{word}""#
+)]
+async fn call_wallet_daemon_method_and_check_result(
+    world: &mut TariWorld,
+    wallet_daemon_name: String,
+    account_name: String,
+    output_ref: String,
+    method_call: String,
+    expected_result: String,
+) -> anyhow::Result<()> {
+    let resp =
+        wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call).await?;
+
+    let finalize_result = resp
+        .result
+        .clone()
+        .unwrap_or_else(|| panic!("Failed to unwrap result from response: {:?}", resp));
+    let result = finalize_result
+        .execution_results
+        .first()
+        .unwrap_or_else(|| panic!("Failed to call first() on results: {:?}", resp));
+    match result.return_type {
+        Type::U32 => {
+            let u32_result: u32 = result.decode().unwrap();
+            assert_eq!(u32_result.to_string(), expected_result);
+        },
+        _ => todo!(),
+    };
+
+    Ok(())
+}
+
+#[when(expr = r#"I invoke on wallet daemon {word} on account {word} on component {word} the method call "{word}""#)]
+async fn call_wallet_daemon_method(
+    world: &mut TariWorld,
+    wallet_daemon_name: String,
+    account_name: String,
+    output_ref: String,
+    method_call: String,
+) -> anyhow::Result<()> {
+    wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call).await?;
+
+    Ok(())
+}
+
+#[when(
     expr = "I invoke on all validator nodes on component {word} the method call \"{word}\" the result is \"{word}\""
 )]
 async fn call_component_method_on_all_vns_and_check_result(
@@ -431,6 +501,12 @@ async fn mint_new_nft_on_account(
     wallet_daemon_name: String,
 ) {
     wallet_daemon_cli::mint_new_nft_on_account(world, nft_name, account_name, wallet_daemon_name, None, None).await;
+}
+
+#[when(expr = r#"I list all non fungible tokens on {word} using wallet daemon {word} the amount is {word}"#)]
+async fn list_nfts_on_account(world: &mut TariWorld, account_name: String, wallet_daemon_name: String, amount: usize) {
+    let nfts = wallet_daemon_cli::list_account_nfts(world, account_name, wallet_daemon_name).await;
+    assert_eq!(amount, nfts.len());
 }
 
 #[when(expr = "I mint a new non fungible token {word} on {word} using wallet daemon with metadata {word}")]

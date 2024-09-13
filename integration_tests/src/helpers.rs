@@ -7,7 +7,10 @@ use std::{
     time::Duration,
 };
 
+use tari_engine_types::substate::SubstateId;
 use tokio::{io::AsyncWriteExt, task::JoinHandle};
+
+use crate::TariWorld;
 
 pub fn get_os_assigned_port() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -116,4 +119,20 @@ pub async fn check_join_handle<E: Display>(
             panic!("Node {} panicked: {:?}", name, e.try_into_panic());
         },
     }
+}
+
+pub fn get_address_from_output(world: &TariWorld, output_ref: String) -> &SubstateId {
+    world
+        .outputs
+        .iter()
+        .find_map(|(parent_name, outputs)| {
+            outputs
+                .iter()
+                .find(|(child_name, _)| {
+                    let fqn = format!("{}/{}", parent_name, child_name);
+                    fqn == output_ref
+                })
+                .map(|(_, addr)| &addr.substate_id)
+        })
+        .unwrap_or_else(|| panic!("Output not found: {}", output_ref))
 }
