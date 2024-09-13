@@ -69,7 +69,9 @@ pub async fn handle_create(
         .ok_or_else(|| anyhow::anyhow!("No active key"))?;
 
     let instruction = Instruction::CreateAccount {
-        owner_public_key: key.public_key,
+        public_key_address: key.public_key,
+        owner_rule: None,
+        access_rules: None,
         workspace_bucket: None,
     };
 
