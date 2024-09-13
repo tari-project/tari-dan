@@ -32,7 +32,9 @@ fn airdrop() {
     let instructions = iter::repeat_with(|| {
         let (_, owner_public_key, _) = template_test.create_owner_proof();
         Instruction::CreateAccount {
-            owner_public_key,
+            public_key_address: owner_public_key,
+            owner_rule: None,
+            access_rules: None,
             workspace_bucket: None,
         }
     })

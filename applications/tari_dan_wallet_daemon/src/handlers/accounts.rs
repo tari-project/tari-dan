@@ -676,7 +676,9 @@ async fn finish_claiming<T: WalletStore>(
         });
     } else {
         instructions.push(Instruction::CreateAccount {
-            owner_public_key: account_public_key.clone(),
+            public_key_address: account_public_key.clone(),
+            owner_rule: None,
+            access_rules: None,
             workspace_bucket: Some("bucket".to_string()),
         });
     }
@@ -884,7 +886,9 @@ pub async fn handle_transfer(
         inputs.push(address);
     } else {
         instructions.push(Instruction::CreateAccount {
-            owner_public_key: req.destination_public_key,
+            public_key_address: req.destination_public_key,
+            owner_rule: None,
+            access_rules: None,
             workspace_bucket: None,
         });
     }
