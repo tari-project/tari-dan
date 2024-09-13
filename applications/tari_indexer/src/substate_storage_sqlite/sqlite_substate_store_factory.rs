@@ -529,12 +529,14 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
     }
 
     fn get_all_events(&mut self, substate_id: &SubstateId) -> Result<Vec<EventData>, StorageError> {
-        let res = sql_query("SELECT substate_id, tx_hash, topic, payload FROM events WHERE substate_id = ?")
-            .bind::<Text, _>(substate_id.to_string())
-            .get_results::<EventData>(self.connection())
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("get_events_by_version: {}", e),
-            })?;
+        let res = sql_query(
+            "SELECT substate_id, template_address, tx_hash, topic, payload, version FROM events WHERE substate_id = ?",
+        )
+        .bind::<Text, _>(substate_id.to_string())
+        .get_results::<EventData>(self.connection())
+        .map_err(|e| StorageError::QueryError {
+            reason: format!("get_all_events: {}", e),
+        })?;
         Ok(res)
     }
 
