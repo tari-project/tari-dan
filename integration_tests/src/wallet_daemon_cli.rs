@@ -22,6 +22,7 @@
 
 use std::{collections::HashMap, str::FromStr, time::Duration};
 
+use anyhow::bail;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde_json::json;
 use tari_crypto::{
@@ -709,7 +710,7 @@ pub async fn call_component(
         .call_method(source_component_address, &function_call, vec![])
         .build_unsigned_transaction();
 
-    let resp = submit_unsigned_tx_and_wait_for_response(&mut client, tx, vec![], account).await;
+    let resp = submit_unsigned_tx_and_wait_for_response(client, tx, vec![], account).await;
 
     add_substate_ids(
         world,
@@ -725,6 +726,57 @@ pub async fn call_component(
     );
 
     resp
+}
+
+pub async fn concurrent_call_component(
+    world: &mut TariWorld,
+    account_name: String,
+    output_ref: String,
+    wallet_daemon_name: String,
+    function_call: String,
+    times: usize,
+) -> anyhow::Result<()> {
+    let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
+
+    let source_component_address = get_address_from_output(world, output_ref.clone())
+        .as_component_address()
+        .expect("Failed to get component address from output");
+
+    let account = get_account_from_name(&mut client, account_name).await;
+    let account_component_address = account
+        .address
+        .as_component_address()
+        .expect("Failed to get account component address");
+
+    let mut handles = Vec::new();
+    for _ in 0..times {
+        let acc = account.clone();
+        let clt = client.clone();
+        let tx = Transaction::builder()
+            .fee_transaction_pay_from_component(account_component_address, Amount(1))
+            .call_method(source_component_address, &function_call, vec![])
+            .build_unsigned_transaction();
+        let handle = tokio::spawn(submit_unsigned_tx_and_wait_for_response(clt, tx, vec![], acc));
+        handles.push(handle);
+    }
+
+    let mut last_resp = None;
+    for handle in handles {
+        let result = handle.await.map_err(|e| e.to_string());
+        if result.is_err() {
+            bail!("{}", result.as_ref().unwrap_err());
+        }
+        match result {
+            Ok(response) => last_resp = Some(response),
+            Err(e) => bail!("Failed to get response from handler: {}", e),
+        }
+    }
+
+    if last_resp.is_none() {
+        bail!("No responses from any of the wallet daemon concurrent calls");
+    }
+
+    Ok(())
 }
 
 pub async fn transfer(
@@ -809,7 +861,7 @@ async fn get_account_from_name(client: &mut WalletDaemonClient, account_name: St
 }
 
 async fn submit_unsigned_tx_and_wait_for_response(
-    client: &mut WalletDaemonClient,
+    mut client: WalletDaemonClient,
     tx: UnsignedTransaction,
     inputs: Vec<SubstateRequirement>,
     account: Account,
@@ -836,10 +888,10 @@ async fn submit_unsigned_tx_and_wait_for_response(
     let resp = client
         .wait_transaction_result(wait_req)
         .await
-        .unwrap_or_else(|_| panic!("Waiting for the transaction when calling component failed"));
+        .map_err(|e| anyhow::Error::msg(e.to_string()))?;
 
     if let Some(reason) = resp.result.as_ref().and_then(|finalize| finalize.reject()) {
-        panic!("Calling component result rejected: {}", reason);
+        bail!("Calling component result rejected: {}", reason);
     }
 
     Ok(resp)

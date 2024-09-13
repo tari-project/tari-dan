@@ -373,6 +373,29 @@ async fn call_wallet_daemon_method(
 }
 
 #[when(
+    expr = r#"I invoke on wallet daemon {word} on account {word} on component {word} the method call "{word}" concurrently {int} times"#
+)]
+async fn call_wallet_daemon_method_concurrently(
+    world: &mut TariWorld,
+    wallet_daemon_name: String,
+    account_name: String,
+    output_ref: String,
+    method_call: String,
+    times: usize,
+) {
+    wallet_daemon_cli::concurrent_call_component(
+        world,
+        account_name,
+        output_ref,
+        wallet_daemon_name,
+        method_call,
+        times,
+    )
+    .await
+    .unwrap_or_else(|e| panic!("Concurrent wallet daemon call failed: {:?}", e));
+}
+
+#[when(
     expr = "I invoke on all validator nodes on component {word} the method call \"{word}\" the result is \"{word}\""
 )]
 async fn call_component_method_on_all_vns_and_check_result(

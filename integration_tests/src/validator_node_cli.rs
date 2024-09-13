@@ -19,7 +19,7 @@ use tari_validator_node_cli::{
 };
 use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNodeClient};
 
-use crate::{logging::get_base_dir_for_scenario, TariWorld};
+use crate::{helpers::get_component_from_namespace, logging::get_base_dir_for_scenario, TariWorld};
 
 fn get_key_manager(world: &mut TariWorld) -> KeyManager {
     let path = get_cli_data_dir(world);
@@ -206,29 +206,12 @@ pub async fn concurrent_call_method(
     method_call: String,
     times: usize,
 ) -> Result<SubmitTransactionResponse, RejectReason> {
-    let vn_data_dir = get_cli_data_dir(world);
-    let (input_group, component_name) = fq_component_name.split_once('/').unwrap_or_else(|| {
-        panic!(
-            "Component name must be in the format '{{group}}/components/{{template_name}}', got {}",
-            fq_component_name
-        )
-    });
-
-    let vn_client = world.get_validator_node(&vn_name).get_client();
-
-    let mut component = world
-        .outputs
-        .get(input_group)
-        .unwrap_or_else(|| panic!("No outputs found with name {}", input_group))
-        .iter()
-        .find(|(name, _)| **name == component_name)
-        .map(|(_, data)| data.clone())
-        .unwrap_or_else(|| panic!("No component named {}", component_name));
+    let mut component = get_component_from_namespace(world, fq_component_name);
     // For concurrent transactions we DO NOT specify the versions
     component.version = None;
 
-    // call_method_inner(vn_client.clone(), vn_data_dir.clone(), component.clone(), method_call.clone()).await
-
+    let vn_data_dir = get_cli_data_dir(world);
+    let vn_client = world.get_validator_node(&vn_name).get_client();
     let mut handles = Vec::new();
     for _ in 0..times {
         let handle = tokio::spawn(call_method_inner(
@@ -268,47 +251,9 @@ pub async fn call_method(
     method_call: String,
 ) -> Result<SubmitTransactionResponse, RejectReason> {
     let data_dir = get_cli_data_dir(world);
-    let (input_group, component_name) = fq_component_name.split_once('/').unwrap_or_else(|| {
-        panic!(
-            "Component name must be in the format '{{group}}/components/{{template_name}}', got {}",
-            fq_component_name
-        )
-    });
-    let component = world
-        .outputs
-        .get(input_group)
-        .unwrap_or_else(|| panic!("No outputs found with name {}", input_group))
-        .iter()
-        .find(|(name, _)| **name == component_name)
-        .map(|(_, data)| data.clone())
-        .unwrap_or_else(|| panic!("No component named {}", component_name));
-
-    let instruction = CliInstruction::CallMethod {
-        component_address: component.substate_id.clone(),
-        // TODO: actually parse the method call for arguments
-        method_name: method_call,
-        args: vec![],
-    };
-
-    println!("Inputs: {}", component);
-    let args = SubmitArgs {
-        instruction,
-        common: CommonSubmitArgs {
-            wait_for_result: true,
-            wait_for_result_timeout: Some(60),
-            inputs: vec![component],
-            version: None,
-            dump_outputs_into: None,
-            account_template_address: None,
-            dry_run: false,
-        },
-    };
-    let mut client = world.get_validator_node(&vn_name).get_client();
-    let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
-
-    if let Some(failure) = resp.dry_run_result.as_ref().unwrap().finalize.full_reject() {
-        return Err(failure.clone());
-    }
+    let component = get_component_from_namespace(world, fq_component_name);
+    let vn_client = world.get_validator_node(&vn_name).get_client();
+    let resp = call_method_inner(vn_client, data_dir, component, method_call).await?;
 
     // store the account component address and other substate ids for later reference
     add_substate_ids(
