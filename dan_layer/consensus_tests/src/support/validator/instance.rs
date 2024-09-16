@@ -5,8 +5,12 @@ use tari_consensus::{
     hotstuff::{ConsensusCurrentState, HotstuffEvent},
     messages::HotstuffMessage,
 };
-use tari_dan_common_types::{ShardGroup, SubstateAddress};
-use tari_dan_storage::{consensus_models::LeafBlock, StateStore, StateStoreReadTransaction};
+use tari_dan_common_types::{optional::Optional, NodeHeight, ShardGroup, SubstateAddress};
+use tari_dan_storage::{
+    consensus_models::{BlockId, LeafBlock},
+    StateStore,
+    StateStoreReadTransaction,
+};
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::Transaction;
 use tokio::{
@@ -17,8 +21,7 @@ use tokio::{
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
-    executions_store::TestTransactionExecutionsStore,
-    RoundRobinLeaderStrategy,
+    executions_store::TestExecutionSpecStore,
     ValidatorBuilder,
 };
 
@@ -41,9 +44,8 @@ pub struct Validator {
     pub num_committees: u32,
 
     pub state_store: SqliteStateStore<TestAddress>,
-    pub transaction_executions: TestTransactionExecutionsStore,
+    pub transaction_executions: TestExecutionSpecStore,
     pub epoch_manager: TestEpochManager,
-    pub leader_strategy: RoundRobinLeaderStrategy,
     pub events: broadcast::Receiver<HotstuffEvent>,
     pub current_state_machine_state: watch::Receiver<ConsensusCurrentState>,
 
@@ -53,11 +55,6 @@ pub struct Validator {
 impl Validator {
     pub fn builder() -> ValidatorBuilder {
         ValidatorBuilder::new()
-    }
-
-    #[allow(dead_code)]
-    pub fn leader_strategy(&self) -> &RoundRobinLeaderStrategy {
-        &self.leader_strategy
     }
 
     pub fn state_store(&self) -> &SqliteStateStore<TestAddress> {
@@ -75,7 +72,16 @@ impl Validator {
     }
 
     pub fn get_leaf_block(&self) -> LeafBlock {
-        self.state_store.with_read_tx(|tx| LeafBlock::get(tx)).unwrap()
+        let epoch = self.epoch_manager.get_current_epoch();
+        self.state_store
+            .with_read_tx(|tx| LeafBlock::get(tx, epoch))
+            .optional()
+            .unwrap()
+            .unwrap_or_else(|| LeafBlock {
+                block_id: BlockId::zero(),
+                height: NodeHeight::zero(),
+                epoch,
+            })
     }
 
     pub fn has_committed_substates(&self) -> bool {

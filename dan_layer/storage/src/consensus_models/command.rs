@@ -7,6 +7,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use tari_dan_common_types::ShardGroup;
 use tari_engine_types::substate::SubstateId;
 use tari_transaction::TransactionId;
 
@@ -116,8 +117,8 @@ enum CommandOrdering<'a> {
     EndEpoch,
     TransactionId(&'a TransactionId),
     MintConfidentialOutput(&'a SubstateId),
-    /// Foreign proposals must come first in the block
-    ForeignProposal(&'a BlockId),
+    /// Foreign proposals should come first in the block so that they are processed before commands
+    ForeignProposal(ShardGroup, &'a BlockId),
 }
 
 impl Command {
@@ -145,7 +146,10 @@ impl Command {
             Command::AllAccept(tx) |
             Command::SomeAccept(tx) |
             Command::LocalOnly(tx) => CommandOrdering::TransactionId(&tx.id),
-            Command::ForeignProposal(foreign_proposal) => CommandOrdering::ForeignProposal(&foreign_proposal.block_id),
+            Command::ForeignProposal(foreign_proposal) => {
+                // Order by shard group then by block id
+                CommandOrdering::ForeignProposal(foreign_proposal.shard_group, &foreign_proposal.block_id)
+            },
             Command::MintConfidentialOutput(mint) => CommandOrdering::MintConfidentialOutput(&mint.substate_id),
             Command::EndEpoch => CommandOrdering::EndEpoch,
         }
@@ -284,7 +288,11 @@ mod tests {
     #[test]
     fn ordering() {
         assert!(
-            CommandOrdering::ForeignProposal(&BlockId::zero()) >
+            CommandOrdering::ForeignProposal(ShardGroup::new(32, 63), &BlockId::zero()) >
+                CommandOrdering::ForeignProposal(ShardGroup::new(0, 31), &BlockId::zero())
+        );
+        assert!(
+            CommandOrdering::ForeignProposal(ShardGroup::new(0, 64), &BlockId::zero()) >
                 CommandOrdering::TransactionId(&TransactionId::default())
         );
         let substate_id =

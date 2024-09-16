@@ -1,7 +1,11 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, ops::Deref};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    fmt::{Display, Formatter},
+    ops::Deref,
+};
 
 use indexmap::IndexMap;
 use log::*;
@@ -36,6 +40,8 @@ use tari_dan_storage::{
 };
 use tari_engine_types::substate::SubstateId;
 use tari_transaction::TransactionId;
+
+use crate::tracing::TraceTimer;
 
 const LOG_TARGET: &str = "tari::dan::consensus::block_change_set";
 
@@ -76,6 +82,7 @@ impl ProposedBlockChangeSet {
     }
 
     pub fn no_vote(&mut self) -> &mut Self {
+        // TODO: store a NO-VOTE reason for debugging purposes so that we can review it easily
         // This means no vote
         self.quorum_decision = None;
         // The remaining info discarded (not strictly necessary)
@@ -136,18 +143,16 @@ impl ProposedBlockChangeSet {
         foreign_pledges: SubstatePledges,
     ) -> &mut Self {
         let change_mut = self.transaction_changes.entry(*transaction_id).or_default();
-        if change_mut
-            .foreign_pledges
-            .insert(shard_group, foreign_pledges)
-            .is_some()
-        {
-            warn!(
-                target: LOG_TARGET,
-                "⚠️ NEVER HAPPEN: Foreign pledges for transaction {} in shard group {} already exist in block {}",
-                transaction_id,
-                shard_group,
-                self.block.block_id
-            );
+        match change_mut.foreign_pledges.entry(shard_group) {
+            Entry::Vacant(entry) => {
+                entry.insert(foreign_pledges);
+            },
+            Entry::Occupied(mut entry) => {
+                // Multiple foreign pledges for the same shard group included the block
+                // This can happen if a LocalPrepare and LocalAccept are proposed for the same transaction in the same
+                // block
+                entry.get_mut().extend(foreign_pledges);
+            },
         }
         self
     }
@@ -194,7 +199,7 @@ impl ProposedBlockChangeSet {
     ) -> Result<Option<TransactionPoolRecord>, TransactionPoolError> {
         self.transaction_changes
             .get(transaction_id)
-            .and_then(|change| change.next_update.as_ref().map(|u| &u.transaction))
+            .and_then(|change| change.next_update.as_ref().map(|u| u.transaction()))
             .cloned()
             .map(Ok)
             .or_else(|| {
@@ -214,7 +219,8 @@ impl ProposedBlockChangeSet {
             .entry(*transaction.transaction_id())
             .or_default();
 
-        change_mut.next_update = Some(TransactionPoolStatusUpdate { transaction });
+        let ready_now = transaction.is_ready_for_next_stage();
+        change_mut.next_update = Some(TransactionPoolStatusUpdate::new(transaction, ready_now));
         Ok(self)
     }
 }
@@ -225,6 +231,7 @@ impl ProposedBlockChangeSet {
         TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
+        let _timer = TraceTimer::debug(LOG_TARGET, "ProposedBlockChangeSet::save");
         let block_diff = BlockDiff::new(self.block.block_id, self.block_diff);
         // Store the block diff
         block_diff.insert(tx)?;
@@ -243,14 +250,14 @@ impl ProposedBlockChangeSet {
             if let Some(ref execution) = change.execution {
                 // This may already exist if we proposed the block
                 if execution.insert_if_required(tx)? {
-                    info!(
+                    debug!(
                         target: LOG_TARGET,
                         "📝 Transaction execution for {} saved in block {}",
                         execution.transaction_id(),
                         self.block.block_id
                     );
                 } else {
-                    info!(
+                    debug!(
                         target: LOG_TARGET,
                         "📝 Transaction execution for {} already exists in block {}",
                         execution.transaction_id(),
@@ -278,6 +285,39 @@ impl ProposedBlockChangeSet {
         }
 
         Ok(())
+    }
+}
+
+impl Display for ProposedBlockChangeSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ProposedBlockChangeSet({}, ", self.block)?;
+        match self.quorum_decision {
+            Some(decision) => write!(f, " Decision: {},", decision)?,
+            None => write!(f, " Decision: NO VOTE, ")?,
+        }
+        if !self.block_diff.is_empty() {
+            write!(f, " BlockDiff: {} change(s), ", self.block_diff.len())?;
+        }
+        if !self.state_tree_diffs.is_empty() {
+            write!(f, " StateTreeDiff: {} change(s), ", self.state_tree_diffs.len())?;
+        }
+        if !self.substate_locks.is_empty() {
+            write!(f, " SubstateLocks: {} lock(s), ", self.substate_locks.len())?;
+        }
+        if !self.transaction_changes.is_empty() {
+            write!(f, " TransactionChanges: {} change(s), ", self.transaction_changes.len())?;
+        }
+        if !self.proposed_foreign_proposals.is_empty() {
+            write!(
+                f,
+                " ProposedForeignProposals: {} proposal(s), ",
+                self.proposed_foreign_proposals.len()
+            )?;
+        }
+        if !self.proposed_utxo_mints.is_empty() {
+            write!(f, " ProposedUtxoMints: {} mint(s), ", self.proposed_utxo_mints.len())?;
+        }
+        write!(f, ")")
     }
 }
 

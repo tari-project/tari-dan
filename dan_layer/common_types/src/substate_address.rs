@@ -117,6 +117,11 @@ impl SubstateAddress {
         &self.0[..ObjectKey::LENGTH]
     }
 
+    pub fn to_object_key(&self) -> ObjectKey {
+        ObjectKey::try_from(self.object_key_bytes())
+            .expect("SubstateAddress: object_key_bytes must return valid ObjectKey bytes")
+    }
+
     pub fn to_version(&self) -> u32 {
         let mut buf = [0u8; size_of::<u32>()];
         buf.copy_from_slice(&self.0[ObjectKey::LENGTH..]);

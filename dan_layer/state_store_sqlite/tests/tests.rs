@@ -93,17 +93,17 @@ mod confirm_all_transitions {
             .unwrap()
             .clone();
 
-        tx_1.set_next_stage(TransactionPoolStage::Prepared, true).unwrap();
-        tx_1.set_next_stage(TransactionPoolStage::LocalPrepared, false).unwrap();
+        tx_1.set_next_stage(TransactionPoolStage::Prepared).unwrap();
+        tx_1.set_next_stage(TransactionPoolStage::LocalPrepared).unwrap();
 
-        tx_2.set_next_stage(TransactionPoolStage::Prepared, true).unwrap();
-        tx_3.set_next_stage(TransactionPoolStage::Prepared, true).unwrap();
+        tx_2.set_next_stage(TransactionPoolStage::Prepared).unwrap();
+        tx_3.set_next_stage(TransactionPoolStage::Prepared).unwrap();
 
-        tx.transaction_pool_add_pending_update(&block_id, &TransactionPoolStatusUpdate { transaction: tx_1 })
+        tx.transaction_pool_add_pending_update(&block_id, &TransactionPoolStatusUpdate::new(tx_1, true))
             .unwrap();
-        tx.transaction_pool_add_pending_update(&block_id, &TransactionPoolStatusUpdate { transaction: tx_2 })
+        tx.transaction_pool_add_pending_update(&block_id, &TransactionPoolStatusUpdate::new(tx_2, true))
             .unwrap();
-        tx.transaction_pool_add_pending_update(&block_id, &TransactionPoolStatusUpdate { transaction: tx_3 })
+        tx.transaction_pool_add_pending_update(&block_id, &TransactionPoolStatusUpdate::new(tx_3, true))
             .unwrap();
 
         let rec = tx

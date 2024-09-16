@@ -1,13 +1,14 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use indexmap::IndexMap;
+use std::collections::HashMap;
+
 use tari_dan_common_types::{optional::IsNotFoundError, Epoch, SubstateRequirement};
 use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore, StorageError};
 use tari_engine_types::substate::Substate;
 use tari_transaction::Transaction;
 
-use crate::hotstuff::substate_store::SubstateStoreError;
+use crate::hotstuff::substate_store::{LockFailedError, SubstateStoreError};
 
 #[derive(thiserror::Error, Debug)]
 pub enum BlockTransactionExecutorError {
@@ -28,7 +29,10 @@ impl BlockTransactionExecutorError {
     pub fn is_substate_down_error(&self) -> bool {
         matches!(
             self,
-            BlockTransactionExecutorError::SubstateStoreError(SubstateStoreError::SubstateIsDown { .. })
+            BlockTransactionExecutorError::SubstateStoreError(SubstateStoreError::SubstateIsDown { .. }) |
+                BlockTransactionExecutorError::SubstateStoreError(SubstateStoreError::LockFailed(
+                    LockFailedError::SubstateIsDown { .. }
+                ))
         )
     }
 }
@@ -55,6 +59,6 @@ pub trait BlockTransactionExecutor<TStateStore: StateStore> {
         &self,
         transaction: Transaction,
         current_epoch: Epoch,
-        resolved_inputs: &IndexMap<SubstateRequirement, Substate>,
+        resolved_inputs: &HashMap<SubstateRequirement, Substate>,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError>;
 }

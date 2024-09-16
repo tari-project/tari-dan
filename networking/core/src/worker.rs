@@ -544,8 +544,12 @@ where
             Gossipsub(event) => {
                 info!(target: LOG_TARGET, "ℹ️ Gossipsub event: {:?}", event);
             },
-            Messaging(messaging::Event::ReceivedMessage { peer_id, message }) => {
-                info!(target: LOG_TARGET, "📧 Messaging: received message from peer {peer_id}");
+            Messaging(messaging::Event::ReceivedMessage {
+                peer_id,
+                message,
+                length,
+            }) => {
+                info!(target: LOG_TARGET, "📧 Rx Messaging: peer {peer_id} ({length} bytes)");
                 let _ignore = self.messaging_mode.send_message(peer_id, message);
             },
             Messaging(event) => {
@@ -637,7 +641,8 @@ where
                 .decode_from(&mut message.data.as_slice())
                 .await
             {
-                Ok(msg) => {
+                Ok((length, msg)) => {
+                    info!(target: LOG_TARGET, "📢 Rx Gossipsub: {length} bytes from {source}");
                     let _ignore = self.messaging_mode.send_gossip_message(source, msg);
                     self.swarm.behaviour_mut().gossipsub.report_message_validation_result(
                         &message_id,

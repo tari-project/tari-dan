@@ -75,8 +75,8 @@ pub trait StateReader {
 pub trait StateWriter: StateReader {
     fn set_state_raw(&mut self, key: &[u8], value: Vec<u8>) -> Result<(), StateStoreError>;
 
-    fn set_state<K: Serialize, V: Serialize>(&mut self, key: &K, value: V) -> Result<(), StateStoreError> {
-        self.set_state_raw(&encode(key)?, encode(&value)?)
+    fn set_state<K: Serialize, V: Serialize>(&mut self, key: &K, value: &V) -> Result<(), StateStoreError> {
+        self.set_state_raw(&encode(key)?, encode(value)?)
     }
 
     fn delete_state_raw(&mut self, key: &[u8]) -> Result<(), StateStoreError>;

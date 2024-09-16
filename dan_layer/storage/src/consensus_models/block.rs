@@ -41,6 +41,7 @@ use super::{
     ForeignProposalAtom,
     ForeignSendCounters,
     MintConfidentialOutputAtom,
+    PendingShardStateTreeDiff,
     QuorumCertificate,
     SubstateChange,
     SubstateDestroyedProof,
@@ -488,6 +489,10 @@ impl Block {
         self.height
     }
 
+    pub fn is_zero(&self) -> bool {
+        self.id.is_zero()
+    }
+
     pub fn epoch(&self) -> Epoch {
         self.epoch
     }
@@ -661,6 +666,47 @@ impl Block {
         Ok(true)
     }
 
+    pub fn remove_parallel_chains<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
+    where
+        TTx: StateStoreWriteTransaction + Deref,
+        TTx::Target: StateStoreReadTransaction,
+    {
+        let other_blocks = tx.blocks_get_all_ids_by_height(self.epoch(), self.height())?;
+        for block_id in other_blocks {
+            if block_id == *self.id() {
+                continue;
+            }
+            delete_block_and_children(tx, &block_id)?;
+        }
+        Ok(())
+    }
+
+    pub fn remove_diff<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        tx.block_diffs_remove(self.id())
+    }
+
+    pub fn remove_pending_tree_diff<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        tx.pending_state_tree_diffs_remove_by_block(self.id())
+    }
+
+    pub fn remove_pending_tree_diff_and_return<TTx: StateStoreWriteTransaction>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<IndexMap<Shard, Vec<PendingShardStateTreeDiff>>, StorageError> {
+        tx.pending_state_tree_diffs_remove_and_return_by_block(self.id())
+    }
+
+    pub fn delete<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        Self::delete_record(tx, self.id())
+    }
+
+    pub fn delete_record<TTx: StateStoreWriteTransaction>(
+        tx: &mut TTx,
+        block_id: &BlockId,
+    ) -> Result<(), StorageError> {
+        tx.blocks_delete(block_id)
+    }
+
     pub fn commit_diff<TTx: StateStoreWriteTransaction>(
         &self,
         tx: &mut TTx,
@@ -789,8 +835,8 @@ impl Block {
         Vote::get_for_block(tx, &self.id)
     }
 
-    pub fn get_child_blocks<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<Vec<Self>, StorageError> {
-        tx.blocks_get_all_by_parent(self.id())
+    pub fn get_child_block_ids<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<Vec<BlockId>, StorageError> {
+        tx.blocks_get_ids_by_parent(self.id())
     }
 
     pub fn get_total_due_for_epoch<TTx: StateStoreReadTransaction>(
@@ -900,7 +946,7 @@ impl Block {
             return Ok(justified_node);
         }
 
-        let current_locked = LockedBlock::get(&**tx)?;
+        let current_locked = LockedBlock::get(&**tx, self.epoch)?;
         if prepared_node.height() > current_locked.height {
             on_locked_block_recurse(
                 tx,
@@ -957,7 +1003,7 @@ impl Block {
     /// hand, the liveness rule is the replica will accept m if m.justify has a higher view than the current
     /// lockedQC. The predicate is true as long as either one of two rules holds.
     pub fn is_safe<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<bool, StorageError> {
-        let locked = LockedBlock::get(tx)?;
+        let locked = LockedBlock::get(tx, self.epoch())?;
         let locked_block = locked.get_block(tx)?;
 
         // Liveness rules
@@ -1006,6 +1052,17 @@ impl Block {
             if atom.decision.is_abort() {
                 continue;
             }
+
+            let evidence = atom
+                .evidence
+                .get(&self.shard_group)
+                .ok_or_else(|| StorageError::DataInconsistency {
+                    details: format!(
+                        "invariant get_block_pledge: Local evidence for atom {} in block {} is missing",
+                        atom.id, self.id
+                    ),
+                })?;
+
             // TODO(perf): O(n) queries
             let locked_values = tx.substate_locks_get_locked_substates_for_transaction(&atom.id)?;
 
@@ -1015,7 +1072,7 @@ impl Block {
             // atom, so we need to exclude them.
             let locks = locked_values
                 .into_iter()
-                .filter(|lock| atom.evidence.contains(&lock.to_substate_address()));
+                .filter(|lock| evidence.contains(&lock.to_substate_address()));
 
             pledges.reserve(locks.clone().count());
             for locked_value in locks {
@@ -1025,7 +1082,7 @@ impl Block {
                         details: format!("SubstatePledge ({}) is not valid", lock_intent),
                     }
                 })?;
-                pledges.add_substate_pledge(locked_value.lock.transaction_id(), pledge);
+                pledges.add_substate_pledge(*locked_value.lock.transaction_id(), pledge);
             }
         }
         Ok(pledges)
@@ -1160,5 +1217,28 @@ where
         on_commit_block_recurse(tx, last_executed, &parent, callback)?;
         callback(tx, last_executed, block)?;
     }
+    Ok(())
+}
+
+/// Deletes everything related to a block and any children
+fn delete_block_and_children<TTx>(tx: &mut TTx, block_id: &BlockId) -> Result<(), StorageError>
+where
+    TTx: StateStoreWriteTransaction + Deref,
+    TTx::Target: StateStoreReadTransaction,
+{
+    let children = tx.blocks_get_ids_by_parent(block_id)?;
+    for child in children {
+        delete_block_and_children(tx, &child)?;
+    }
+    tx.block_diffs_remove(block_id).optional()?;
+    tx.pending_state_tree_diffs_remove_by_block(block_id).optional()?;
+    tx.substate_locks_remove_any_by_block_id(block_id)?;
+    tx.transaction_pool_state_updates_remove_any_by_block_id(block_id)?;
+    tx.transaction_executions_remove_any_by_block_id(block_id)?;
+    tx.foreign_proposals_clear_proposed_in(block_id)?;
+    tx.burnt_utxos_clear_proposed_block(block_id)?;
+
+    Block::delete_record(tx, block_id)?;
+
     Ok(())
 }

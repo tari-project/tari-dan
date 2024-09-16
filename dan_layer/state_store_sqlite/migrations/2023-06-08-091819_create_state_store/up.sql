@@ -42,6 +42,7 @@ create table blocks
 
 -- block_id must be unique. Optimise fetching by block_id
 create unique index blocks_uniq_idx_id on blocks (block_id);
+create index blocks_idx_epoch_height on blocks (epoch, height);
 
 create table parked_blocks
 (
@@ -111,8 +112,10 @@ create table leaf_blocks
     block_height bigint    not NULL,
     epoch        bigint    not NULL,
     created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id) ON DELETE CASCADE
 );
+
+CREATE INDEX leaf_blocks_idx_epoch ON leaf_blocks (epoch);
 
 create table block_diffs
 (
@@ -130,7 +133,7 @@ create table block_diffs
 --    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
-create index block_diffs_idx_block_id_substate_id on block_diffs (block_id, substate_id);
+create index block_diffs_idx_block_id_substate_id_version on block_diffs (block_id, substate_id, version);
 
 create table substates
 (
@@ -174,10 +177,9 @@ create table foreign_substate_pledges
     version        int       NOT NULL,
     substate_value text      NULL,
     shard_group    int       NOT NULL,
-    lock_type      text      NOT NULL,
+    lock_type      text      NOT NULL CHECK (lock_type IN ('Write', 'Read', 'Output')),
     created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
-    CHECK (lock_type IN ('Write', 'Read', 'Output'))
+    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
 
 create index foreign_substate_pledges_transaction_id_idx on foreign_substate_pledges (transaction_id);
@@ -190,8 +192,7 @@ create table substate_locks
     transaction_id text      NOT NULL,
     substate_id    text      NOT NULL,
     version        int       NOT NULL,
-    -- Write, Read or Output
-    lock           text      NOT NULL,
+    lock           text      NOT NULL CHECK (lock IN ('Write', 'Read', 'Output')),
     is_local_only  boolean   NOT NULL DEFAULT '0',
     created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
@@ -207,7 +208,7 @@ create table high_qcs
     qc_id        text      not null,
     created_at   timestamp NOT NULL default current_timestamp,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id),
-    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id) ON DELETE CASCADE
 );
 
 create table last_voted
@@ -228,7 +229,7 @@ create table last_sent_vote
     decision     integer   NOT NULL,
     signature    text      NOT NULL,
     created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id) ON DELETE CASCADE
 );
 
 create table last_executed
@@ -238,7 +239,7 @@ create table last_executed
     height     bigint    not null,
     epoch      bigint    not null,
     created_at timestamp NOT NULL default current_timestamp,
-    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id) ON DELETE CASCADE
 );
 
 create table last_proposed
@@ -257,8 +258,10 @@ create table locked_block
     height     bigint    not null,
     epoch      bigint    not null,
     created_at timestamp NOT NULL default current_timestamp,
-    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id) ON DELETE CASCADE
 );
+
+CREATE INDEX locked_block_idx_epoch ON locked_block (epoch);
 
 create table transactions
 (
@@ -275,6 +278,7 @@ create table transactions
     execution_time_ms bigint    NULL,
     final_decision    text      NULL,
     finalized_at      timestamp NULL,
+    outcome           TEXT      NULL,
     abort_details     text      NULL,
     min_epoch         BIGINT    NULL,
     max_epoch         BIGINT    NULL,
@@ -282,6 +286,19 @@ create table transactions
 );
 
 create unique index transactions_uniq_idx_id on transactions (transaction_id);
+
+create table lock_conflicts
+(
+    id             integer   not null primary key AUTOINCREMENT,
+    block_id       text      not null,
+    transaction_id text      not null,
+    depends_on_tx  text      not null,
+    lock_type      text      not null CHECK (lock_type IN ('Write', 'Read', 'Output')),
+    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Note: cannot use foreign key for block_id since it does not yet exist when proposing
+    FOREIGN KEY (transaction_id) REFERENCES transaction_pool (transaction_id) ON DELETE CASCADE,
+    FOREIGN KEY (depends_on_tx) REFERENCES transaction_pool (transaction_id) ON DELETE CASCADE
+);
 
 create table transaction_executions
 (

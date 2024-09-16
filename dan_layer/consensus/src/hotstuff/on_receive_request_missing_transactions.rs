@@ -7,6 +7,7 @@ use tari_dan_storage::{consensus_models::TransactionRecord, StateStore};
 use crate::{
     hotstuff::error::HotStuffError,
     messages::{HotstuffMessage, MissingTransactionsRequest, MissingTransactionsResponse},
+    tracing::TraceTimer,
     traits::{ConsensusSpec, OutboundMessaging},
 };
 
@@ -32,6 +33,7 @@ where TConsensusSpec: ConsensusSpec
         from: TConsensusSpec::Addr,
         msg: MissingTransactionsRequest,
     ) -> Result<(), HotStuffError> {
+        let _timer = TraceTimer::debug(LOG_TARGET, "OnReceiveRequestMissingTransactions");
         info!(target: LOG_TARGET, "{} requested {} missing transaction(s) from block {}", from, msg.transactions.len(), msg.block_id);
         let (txs, missing) = self
             .store

@@ -208,6 +208,10 @@ impl CommitteeInfo {
         self.num_shards
     }
 
+    pub fn num_committees(&self) -> u32 {
+        self.num_committees
+    }
+
     pub fn shard_group(&self) -> ShardGroup {
         self.shard_group
     }

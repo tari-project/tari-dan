@@ -183,13 +183,13 @@ function ExtraInfoVN({ name, url, addTxToPool, autoRefresh, state, horizontal }:
             <td>Decision</td>
             <td>Stage</td>
           </tr>
-          {pool.map((atom, i) => (
+          {pool.map((rec, i) => (
             <tr key={i}>
               <td
-                onClick={() => copyToClipboard(atom.transaction_id)}>{copied && "Copied" || shorten(atom.transaction_id)}</td>
-              <td>{atom.is_ready && "Yes" || "No"}</td>
-              <td>{atom.decision || "_"}</td>
-              <td>{atom.stage}</td>
+                onClick={() => copyToClipboard(rec.transaction_id)}>{copied && "Copied" || shorten(rec.transaction_id)}</td>
+              <td>{(rec.is_ready) ? "Yes" : "No"}</td>
+              <td>{getDecision(rec)}</td>
+              <td>{rec.stage}</td>
             </tr>))}
         </table>
       </>
@@ -556,4 +556,16 @@ export default function Main() {
       </div>
     </div>
   );
+}
+
+function getDecision(tx: any): string {
+  if (!tx) {
+    return "-";
+  }
+
+  if (tx.remote_decision == "Abort") {
+    return "Abort";
+  }
+
+  return tx.local_decision || tx.original_decision;
 }

@@ -244,6 +244,13 @@ impl SubstateRecord {
         Ok((found, substate_ids))
     }
 
+    pub fn get_latest_version<TTx: StateStoreReadTransaction + ?Sized>(
+        tx: &TTx,
+        substate_id: &SubstateId,
+    ) -> Result<(u32, bool), StorageError> {
+        tx.substates_get_max_version_for_substate(substate_id)
+    }
+
     pub fn get_latest<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &TTx,
         substate_id: &SubstateId,

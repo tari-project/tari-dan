@@ -97,7 +97,7 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
     with_dummy_blocks(
         candidate_block.network(),
         candidate_block.epoch(),
-        justify_block.shard_group(),
+        candidate_block.shard_group(),
         candidate_block.justify(),
         *justify_block.merkle_root(),
         candidate_block.height(),

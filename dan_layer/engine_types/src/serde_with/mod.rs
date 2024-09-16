@@ -24,3 +24,4 @@ pub mod base64;
 pub mod cbor_value;
 pub mod hex;
 pub mod string;
+pub mod vec;

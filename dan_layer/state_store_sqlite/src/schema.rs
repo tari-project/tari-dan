@@ -211,6 +211,17 @@ diesel::table! {
 }
 
 diesel::table! {
+    lock_conflicts (id) {
+        id -> Integer,
+        block_id -> Text,
+        transaction_id -> Text,
+        depends_on_tx -> Text,
+        lock_type -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     locked_block (id) {
         id -> Integer,
         block_id -> Text,
@@ -444,6 +455,7 @@ diesel::table! {
         execution_time_ms -> Nullable<BigInt>,
         final_decision -> Nullable<Text>,
         finalized_at -> Nullable<Timestamp>,
+        outcome -> Nullable<Text>,
         abort_details -> Nullable<Text>,
         min_epoch -> Nullable<BigInt>,
         max_epoch -> Nullable<BigInt>,
@@ -483,6 +495,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     last_sent_vote,
     last_voted,
     leaf_blocks,
+    lock_conflicts,
     locked_block,
     missing_transactions,
     parked_blocks,

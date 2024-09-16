@@ -49,6 +49,7 @@ use crate::{
         LastSentVote,
         LastVoted,
         LeafBlock,
+        LockConflict,
         LockedBlock,
         LockedSubstateValue,
         PendingShardStateTreeDiff,
@@ -114,8 +115,8 @@ pub trait StateStoreReadTransaction: Sized {
     fn last_voted_get(&self) -> Result<LastVoted, StorageError>;
     fn last_executed_get(&self) -> Result<LastExecuted, StorageError>;
     fn last_proposed_get(&self) -> Result<LastProposed, StorageError>;
-    fn locked_block_get(&self) -> Result<LockedBlock, StorageError>;
-    fn leaf_block_get(&self) -> Result<LeafBlock, StorageError>;
+    fn locked_block_get(&self, epoch: Epoch) -> Result<LockedBlock, StorageError>;
+    fn leaf_block_get(&self, epoch: Epoch) -> Result<LeafBlock, StorageError>;
     fn high_qc_get(&self, epoch: Epoch) -> Result<HighQc, StorageError>;
     fn foreign_proposals_get_any<'a, I: IntoIterator<Item = &'a BlockId>>(
         &self,
@@ -163,6 +164,7 @@ pub trait StateStoreReadTransaction: Sized {
         from_block_id: &BlockId,
     ) -> Result<BlockTransactionExecution, StorageError>;
     fn blocks_get(&self, block_id: &BlockId) -> Result<Block, StorageError>;
+    fn blocks_get_all_ids_by_height(&self, epoch: Epoch, height: NodeHeight) -> Result<Vec<BlockId>, StorageError>;
     fn blocks_get_genesis_for_epoch(&self, epoch: Epoch) -> Result<Block, StorageError>;
     fn blocks_get_last_n_in_epoch(&self, n: usize, epoch: Epoch) -> Result<Vec<Block>, StorageError>;
     /// Returns all blocks from and excluding the start block (lower height) to the end block (inclusive)
@@ -177,6 +179,7 @@ pub trait StateStoreReadTransaction: Sized {
     fn blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
     fn blocks_get_all_by_parent(&self, parent: &BlockId) -> Result<Vec<Block>, StorageError>;
+    fn blocks_get_ids_by_parent(&self, parent: &BlockId) -> Result<Vec<BlockId>, StorageError>;
     fn blocks_get_parent_chain(&self, block_id: &BlockId, limit: usize) -> Result<Vec<Block>, StorageError>;
     fn blocks_get_pending_transactions(&self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
     fn blocks_get_total_leader_fee_for_epoch(
@@ -262,6 +265,7 @@ pub trait StateStoreReadTransaction: Sized {
         &self,
         substate_ids: I,
     ) -> Result<Vec<SubstateRecord>, StorageError>;
+    fn substates_get_max_version_for_substate(&self, substate_id: &SubstateId) -> Result<(u32, bool), StorageError>;
     fn substates_any_exist<I, S>(&self, substates: I) -> Result<bool, StorageError>
     where
         I: IntoIterator<Item = S>,
@@ -348,6 +352,7 @@ pub trait StateStoreWriteTransaction {
 
     // -------------------------------- Block -------------------------------- //
     fn blocks_insert(&mut self, block: &Block) -> Result<(), StorageError>;
+    fn blocks_delete(&mut self, block_id: &BlockId) -> Result<(), StorageError>;
     fn blocks_set_flags(
         &mut self,
         block_id: &BlockId,
@@ -389,6 +394,7 @@ pub trait StateStoreWriteTransaction {
         block_id: &BlockId,
         proposed_in_block: &BlockId,
     ) -> Result<(), StorageError>;
+    fn foreign_proposals_clear_proposed_in(&mut self, proposed_in_block: &BlockId) -> Result<(), StorageError>;
     fn foreign_send_counters_set(
         &mut self,
         foreign_send_counter: &ForeignSendCounters,
@@ -418,6 +424,8 @@ pub trait StateStoreWriteTransaction {
         transaction_execution: &BlockTransactionExecution,
     ) -> Result<bool, StorageError>;
 
+    fn transaction_executions_remove_any_by_block_id(&mut self, block_id: &BlockId) -> Result<(), StorageError>;
+
     // -------------------------------- Transaction Pool -------------------------------- //
     fn transaction_pool_insert_new(
         &mut self,
@@ -437,6 +445,8 @@ pub trait StateStoreWriteTransaction {
         transaction_ids: I,
     ) -> Result<Vec<TransactionPoolRecord>, StorageError>;
     fn transaction_pool_confirm_all_transitions(&mut self, new_locked_block: &LockedBlock) -> Result<(), StorageError>;
+    fn transaction_pool_state_updates_remove_any_by_block_id(&mut self, block_id: &BlockId)
+        -> Result<(), StorageError>;
 
     // -------------------------------- Missing Transactions -------------------------------- //
 
@@ -481,6 +491,8 @@ pub trait StateStoreWriteTransaction {
         transaction_ids: Peekable<I>,
     ) -> Result<(), StorageError>;
 
+    fn substate_locks_remove_any_by_block_id(&mut self, block_id: &BlockId) -> Result<(), StorageError>;
+
     fn substates_create(&mut self, substate: &SubstateRecord) -> Result<(), StorageError>;
     fn substates_down(
         &mut self,
@@ -514,7 +526,8 @@ pub trait StateStoreWriteTransaction {
         shard: Shard,
         diff: VersionedStateHashTreeDiff,
     ) -> Result<(), StorageError>;
-    fn pending_state_tree_diffs_remove_by_block(
+    fn pending_state_tree_diffs_remove_by_block(&mut self, block_id: &BlockId) -> Result<(), StorageError>;
+    fn pending_state_tree_diffs_remove_and_return_by_block(
         &mut self,
         block_id: &BlockId,
     ) -> Result<IndexMap<Shard, Vec<PendingShardStateTreeDiff>>, StorageError>;
@@ -539,7 +552,15 @@ pub trait StateStoreWriteTransaction {
         substate_id: &SubstateId,
         proposed_in_block: &BlockId,
     ) -> Result<(), StorageError>;
+    fn burnt_utxos_clear_proposed_block(&mut self, proposed_in_block: &BlockId) -> Result<(), StorageError>;
     fn burnt_utxos_delete(&mut self, substate_id: &SubstateId) -> Result<(), StorageError>;
+
+    // -------------------------------- Lock conflicts -------------------------------- //
+    fn lock_conflicts_insert_all<'a, I: IntoIterator<Item = (&'a TransactionId, &'a Vec<LockConflict>)>>(
+        &mut self,
+        block_id: &BlockId,
+        conflicts: I,
+    ) -> Result<(), StorageError>;
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

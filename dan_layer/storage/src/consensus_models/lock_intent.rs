@@ -99,6 +99,28 @@ impl Hash for VersionedSubstateIdLockIntent {
     }
 }
 
+impl LockIntent for VersionedSubstateIdLockIntent {
+    fn substate_id(&self) -> &SubstateId {
+        self.versioned_substate_id.substate_id()
+    }
+
+    fn lock_type(&self) -> SubstateLockType {
+        self.lock_type
+    }
+
+    fn version_to_lock(&self) -> u32 {
+        self.version()
+    }
+
+    fn requested_version(&self) -> Option<u32> {
+        if self.require_version {
+            Some(self.version())
+        } else {
+            None
+        }
+    }
+}
+
 impl<'a> LockIntent for &'a VersionedSubstateIdLockIntent {
     fn substate_id(&self) -> &SubstateId {
         self.versioned_substate_id.substate_id()
@@ -137,15 +159,15 @@ impl SubstateRequirementLockIntent {
         }
     }
 
-    pub fn read(substate_id: SubstateRequirement, version_to_lock: u32) -> Self {
+    pub fn read<T: Into<SubstateRequirement>>(substate_id: T, version_to_lock: u32) -> Self {
         Self::new(substate_id, version_to_lock, SubstateLockType::Read)
     }
 
-    pub fn write(substate_id: SubstateRequirement, version_to_lock: u32) -> Self {
+    pub fn write<T: Into<SubstateRequirement>>(substate_id: T, version_to_lock: u32) -> Self {
         Self::new(substate_id, version_to_lock, SubstateLockType::Write)
     }
 
-    pub fn output(substate_id: SubstateRequirement, version_to_lock: u32) -> Self {
+    pub fn output<T: Into<SubstateRequirement>>(substate_id: T, version_to_lock: u32) -> Self {
         Self::new(substate_id, version_to_lock, SubstateLockType::Output)
     }
 

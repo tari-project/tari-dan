@@ -41,7 +41,6 @@ libp2p-identity = { workspace = true }
 log = { workspace = true, features = ["std"] }
 mini-moka = { workspace = true }
 multiaddr = { workspace = true }
-indexmap = { workspace = true }
 std-semaphore = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }

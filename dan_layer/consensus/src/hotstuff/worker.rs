@@ -36,6 +36,7 @@ use crate::{
         vote_receiver::VoteReceiver,
     },
     messages::HotstuffMessage,
+    tracing::TraceTimer,
     traits::{hooks::ConsensusHooks, ConsensusSpec, LeaderStrategy},
 };
 
@@ -199,15 +200,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         self.create_zero_block_if_required(current_epoch, local_committee_info.shard_group())?;
 
         // Resume pacemaker from the last epoch/height
-        let (current_epoch, current_height, high_qc) = self.state_store.with_read_tx(|tx| {
-            let leaf = LeafBlock::get(tx)?;
-            let current_epoch = Some(leaf.epoch()).filter(|e| !e.is_zero()).unwrap_or(current_epoch);
-            let current_height = Some(leaf.height())
-                .filter(|h| !h.is_zero())
-                .unwrap_or_else(NodeHeight::zero);
-
+        let (current_height, high_qc) = self.state_store.with_read_tx(|tx| {
+            let leaf = LeafBlock::get(tx, current_epoch)?;
             let high_qc = HighQc::get(tx, leaf.epoch())?;
-            Ok::<_, HotStuffError>((current_epoch, current_height, high_qc))
+            Ok::<_, HotStuffError>((leaf.height(), high_qc))
         })?;
 
         info!(
@@ -267,15 +263,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             );
 
             tokio::select! {
-                // BIASED:
-                biased;
-
-                // Epoch manager events are rare, but have priority if they happen
                 Ok(event) = epoch_manager_events.recv() => {
                     self.on_epoch_manager_event(event).await?;
                 },
 
-                // Proposing is highest priority
                 maybe_leaf_block = on_force_beat.wait() => {
                     self.hooks.on_beat();
                     if let Err(e) = self.propose_if_leader(current_epoch, maybe_leaf_block, &local_committee_info).await {
@@ -284,7 +275,13 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     }
                 },
 
-                // Sequencing transactions is next highest priority
+                _ = on_beat.wait() => {
+                    if let Err(e) = self.on_beat(current_epoch, &local_committee_info).await {
+                        self.on_failure("on_beat", &e).await;
+                        return Err(e);
+                    }
+                },
+
                 Some((tx_id, pending)) = self.rx_new_transactions.recv() => {
                     if let Err(err) = self.on_new_transaction(tx_id, pending, current_epoch, current_height, &local_committee_info).await {
                         self.hooks.on_error(&err);
@@ -293,9 +290,9 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 },
 
                 Some(result) = self.on_inbound_message.next_message(current_epoch, current_height) => {
-                    if let Err(err) = self.on_unvalidated_message(current_epoch, current_height, result, &local_committee_info).await {
-                        self.hooks.on_error(&err);
-                        error!(target: LOG_TARGET, "🚨Error handling new message: {}", err);
+                    if let Err(e) = self.on_unvalidated_message(current_epoch, current_height, result, &local_committee_info).await {
+                        self.on_failure("on_beat", &e).await;
+                        return Err(e);
                     }
                 },
 
@@ -307,13 +304,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     if let Err(err) = self.check_if_block_can_be_unparked(current_epoch, current_height, &tx_id, &local_committee_info).await {
                         self.hooks.on_error(&err);
                         error!(target: LOG_TARGET, "🚨Error handling missing transaction: {}", err);
-                    }
-                },
-
-                _ = on_beat.wait() => {
-                    if let Err(e) = self.on_beat(current_epoch, &local_committee_info).await {
-                        self.on_failure("on_beat", &e).await;
-                        return Err(e);
                     }
                 },
 
@@ -406,7 +396,11 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 Ok(())
             },
             MessageValidationResult::Discard => Ok(()),
-            MessageValidationResult::Invalid { err, .. } => Err(err),
+            MessageValidationResult::Invalid { err, .. } => {
+                self.hooks.on_error(&err);
+                error!(target: LOG_TARGET, "🚨 Invalid new message: {}", err);
+                Ok(())
+            },
         }
     }
 
@@ -418,6 +412,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         current_height: NodeHeight,
         local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
+        let _timer = TraceTimer::info(LOG_TARGET, "on_new_transaction");
         let maybe_transaction = self.on_receive_new_transaction.try_sequence_transaction(
             current_epoch,
             transaction,
@@ -620,7 +615,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         let is_newview_propose = leaf_block.is_some();
         let leaf_block = match leaf_block {
             Some(leaf_block) => leaf_block,
-            None => self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?,
+            None => self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?,
         };
 
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
@@ -677,7 +672,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             HotstuffMessage::NewView(message) => log_err(
                 "on_receive_new_view",
                 self.on_receive_new_view
-                    .handle(from, message, local_committee_info)
+                    .handle(current_epoch, from, message, local_committee_info)
                     .await,
             ),
             HotstuffMessage::Proposal(msg) => {
@@ -722,7 +717,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     .await,
             ),
             HotstuffMessage::CatchUpSyncRequest(msg) => {
-                self.on_sync_request.handle(from, msg);
+                self.on_sync_request.handle(from, current_epoch, msg);
                 Ok(())
             },
             HotstuffMessage::SyncResponse(_) => {
@@ -749,7 +744,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 zero_block.insert(tx)?;
                 zero_block.set_as_justified(tx)?;
                 zero_block.as_locked_block().set(tx)?;
-                zero_block.as_leaf_block().set(tx)?;
+                // zero_block.as_leaf_block().set(tx)?;
                 zero_block.as_last_executed().set(tx)?;
                 zero_block.as_last_voted().set(tx)?;
                 zero_block.justify().as_high_qc().set(tx)?;

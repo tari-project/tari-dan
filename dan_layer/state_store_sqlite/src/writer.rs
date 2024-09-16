@@ -47,6 +47,7 @@ use tari_dan_storage::{
         LastSentVote,
         LastVoted,
         LeafBlock,
+        LockConflict,
         LockedBlock,
         PendingShardStateTreeDiff,
         QcId,
@@ -266,6 +267,27 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             operation: "blocks_insert_set_delta_time",
             source: e,
         })?;
+
+        Ok(())
+    }
+
+    fn blocks_delete(&mut self, block_id: &BlockId) -> Result<(), StorageError> {
+        use crate::schema::blocks;
+
+        let num_deleted = diesel::delete(blocks::table)
+            .filter(blocks::block_id.eq(serialize_hex(block_id)))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_delete",
+                source: e,
+            })?;
+
+        if num_deleted == 0 {
+            return Err(StorageError::NotFound {
+                item: "blocks".to_string(),
+                key: block_id.to_string(),
+            });
+        }
 
         Ok(())
     }
@@ -650,6 +672,25 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
+    fn foreign_proposals_clear_proposed_in(&mut self, proposed_in_block: &BlockId) -> Result<(), StorageError> {
+        use crate::schema::foreign_proposals;
+
+        diesel::update(foreign_proposals::table)
+            .filter(foreign_proposals::proposed_in_block.eq(serialize_hex(proposed_in_block)))
+            .set((
+                foreign_proposals::proposed_in_block.eq(None::<String>),
+                foreign_proposals::proposed_in_block_height.eq(None::<i64>),
+                foreign_proposals::status.eq(ForeignProposalStatus::New.to_string()),
+            ))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposals_clear_proposed_in",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
     fn foreign_send_counters_set(
         &mut self,
         foreign_send_counter: &ForeignSendCounters,
@@ -855,6 +896,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                         transactions::execution_time_ms.eq(exec.execution_time().as_millis() as i64),
                         transactions::final_decision.eq(rec.current_decision().to_string()),
                         transactions::abort_details.eq(exec.abort_reason().map(serialize_json).transpose()?),
+                        transactions::outcome.eq(exec.result().finalize.result.to_string()),
                         transactions::finalized_at.eq(now()),
                     ),
                 ))
@@ -903,6 +945,20 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             })?;
 
         Ok(num_inserted > 0)
+    }
+
+    fn transaction_executions_remove_any_by_block_id(&mut self, block_id: &BlockId) -> Result<(), StorageError> {
+        use crate::schema::transaction_executions;
+
+        diesel::delete(transaction_executions::table)
+            .filter(transaction_executions::block_id.eq(serialize_hex(block_id)))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_executions_remove_any_by_block_id",
+                source: e,
+            })?;
+
+        Ok(())
     }
 
     fn transaction_pool_insert_new(
@@ -966,12 +1022,12 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 source: e,
             })?;
 
-        // Set is_ready to the last value we set here. Bit of a hack to get has_uncommitted_transactions to return a
-        // more accurate value without querying the updates table
+        // Set is_ready and pending_stage to the updated values. This allows has_uncommitted_transactions to return an
+        // accurate value without querying records in the updates table.
         diesel::update(transaction_pool::table)
             .filter(transaction_pool::transaction_id.eq(&transaction_id))
             .set((
-                transaction_pool::is_ready.eq(update.is_ready()),
+                transaction_pool::is_ready.eq(update.is_ready_now()),
                 transaction_pool::pending_stage.eq(update.stage().to_string()),
             ))
             .execute(self.connection())
@@ -1123,6 +1179,23 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                     source: e,
                 })?;
         }
+
+        Ok(())
+    }
+
+    fn transaction_pool_state_updates_remove_any_by_block_id(
+        &mut self,
+        block_id: &BlockId,
+    ) -> Result<(), StorageError> {
+        use crate::schema::transaction_pool_state_updates;
+
+        diesel::delete(transaction_pool_state_updates::table)
+            .filter(transaction_pool_state_updates::block_id.eq(serialize_hex(block_id)))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_state_updates_remove_any_by_block_id",
+                source: e,
+            })?;
 
         Ok(())
     }
@@ -1415,6 +1488,20 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
+    fn substate_locks_remove_any_by_block_id(&mut self, block_id: &BlockId) -> Result<(), StorageError> {
+        use crate::schema::substate_locks;
+
+        diesel::delete(substate_locks::table)
+            .filter(substate_locks::block_id.eq(serialize_hex(block_id)))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substate_locks_remove_any_by_block_id",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
     fn substates_create(&mut self, substate: &SubstateRecord) -> Result<(), StorageError> {
         use crate::schema::{state_transitions, substates};
 
@@ -1626,7 +1713,52 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn pending_state_tree_diffs_remove_by_block(
+    fn pending_state_tree_diffs_insert(
+        &mut self,
+        block_id: BlockId,
+        shard: Shard,
+        diff: VersionedStateHashTreeDiff,
+    ) -> Result<(), StorageError> {
+        use crate::schema::{blocks, pending_state_tree_diffs};
+
+        let insert = (
+            pending_state_tree_diffs::block_id.eq(serialize_hex(block_id)),
+            pending_state_tree_diffs::shard.eq(shard.as_u32() as i32),
+            pending_state_tree_diffs::block_height.eq(blocks::table
+                .select(blocks::height)
+                .filter(blocks::block_id.eq(serialize_hex(block_id)))
+                .single_value()
+                .assume_not_null()),
+            pending_state_tree_diffs::version.eq(diff.version as i64),
+            pending_state_tree_diffs::diff_json.eq(serialize_json(&diff.diff)?),
+        );
+
+        diesel::insert_into(pending_state_tree_diffs::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "pending_state_tree_diffs_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn pending_state_tree_diffs_remove_by_block(&mut self, block_id: &BlockId) -> Result<(), StorageError> {
+        use crate::schema::pending_state_tree_diffs;
+
+        diesel::delete(pending_state_tree_diffs::table)
+            .filter(pending_state_tree_diffs::block_id.eq(serialize_hex(block_id)))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "pending_state_tree_diffs_remove_by_block",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn pending_state_tree_diffs_remove_and_return_by_block(
         &mut self,
         block_id: &BlockId,
     ) -> Result<IndexMap<Shard, Vec<PendingShardStateTreeDiff>>, StorageError> {
@@ -1657,37 +1789,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         }
 
         Ok(diffs)
-    }
-
-    fn pending_state_tree_diffs_insert(
-        &mut self,
-        block_id: BlockId,
-        shard: Shard,
-        diff: VersionedStateHashTreeDiff,
-    ) -> Result<(), StorageError> {
-        use crate::schema::{blocks, pending_state_tree_diffs};
-
-        let insert = (
-            pending_state_tree_diffs::block_id.eq(serialize_hex(block_id)),
-            pending_state_tree_diffs::shard.eq(shard.as_u32() as i32),
-            pending_state_tree_diffs::block_height.eq(blocks::table
-                .select(blocks::height)
-                .filter(blocks::block_id.eq(serialize_hex(block_id)))
-                .single_value()
-                .assume_not_null()),
-            pending_state_tree_diffs::version.eq(diff.version as i64),
-            pending_state_tree_diffs::diff_json.eq(serialize_json(&diff.diff)?),
-        );
-
-        diesel::insert_into(pending_state_tree_diffs::table)
-            .values(insert)
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "pending_state_tree_diffs_insert",
-                source: e,
-            })?;
-
-        Ok(())
     }
 
     fn state_tree_nodes_insert(&mut self, shard: Shard, key: NodeKey, node: Node<Version>) -> Result<(), StorageError> {
@@ -1847,6 +1948,25 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
+    fn burnt_utxos_clear_proposed_block(&mut self, proposed_in_block: &BlockId) -> Result<(), StorageError> {
+        use crate::schema::burnt_utxos;
+
+        let proposed_in_block_hex = serialize_hex(proposed_in_block);
+        diesel::update(burnt_utxos::table)
+            .filter(burnt_utxos::proposed_in_block.eq(&proposed_in_block_hex))
+            .set((
+                burnt_utxos::proposed_in_block.eq(None::<String>),
+                burnt_utxos::proposed_in_block_height.eq(None::<i64>),
+            ))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "burnt_utxos_clear_proposed_block",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
     fn burnt_utxos_delete(&mut self, substate_id: &SubstateId) -> Result<(), StorageError> {
         use crate::schema::burnt_utxos;
 
@@ -1864,6 +1984,38 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 key: substate_id.to_string(),
             });
         }
+
+        Ok(())
+    }
+
+    fn lock_conflicts_insert_all<'a, I: IntoIterator<Item = (&'a TransactionId, &'a Vec<LockConflict>)>>(
+        &mut self,
+        block_id: &BlockId,
+        conflicts: I,
+    ) -> Result<(), StorageError> {
+        use crate::schema::lock_conflicts;
+
+        let values = conflicts
+            .into_iter()
+            .flat_map(|(tx_id, conflicts)| {
+                conflicts.iter().map(move |conflict| {
+                    (
+                        lock_conflicts::block_id.eq(serialize_hex(block_id)),
+                        lock_conflicts::transaction_id.eq(serialize_hex(tx_id)),
+                        lock_conflicts::depends_on_tx.eq(serialize_hex(conflict.transaction_id)),
+                        lock_conflicts::lock_type.eq(conflict.requested_lock.to_string()),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+
+        diesel::insert_into(lock_conflicts::table)
+            .values(values)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "lock_conflicts_insert_all",
+                source: e,
+            })?;
 
         Ok(())
     }

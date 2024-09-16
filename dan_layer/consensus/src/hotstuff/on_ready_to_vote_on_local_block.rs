@@ -62,6 +62,7 @@ use crate::{
         ProposalValidationError,
         EXHAUST_DIVISOR,
     },
+    tracing::TraceTimer,
     traits::{ConsensusSpec, WriteableSubstateStore},
 };
 
@@ -108,6 +109,8 @@ where TConsensusSpec: ConsensusSpec
         can_propose_epoch_end: bool,
         foreign_committee_infos: HashMap<BlockId, CommitteeInfo>,
     ) -> Result<BlockDecision, HotStuffError> {
+        let _timer =
+            TraceTimer::info(LOG_TARGET, "Decide on local block").with_iterations(valid_block.block().commands().len());
         debug!(
             target: LOG_TARGET,
             "🔥 LOCAL PROPOSAL READY: {}",
@@ -162,7 +165,16 @@ where TConsensusSpec: ConsensusSpec
             }
 
             let quorum_decision = change_set.quorum_decision();
-            change_set.save(tx)?;
+            if quorum_decision.is_some() {
+                info!(
+                    target: LOG_TARGET,
+                    "✅ Saving changeset for Local block {} decision {:?}, change set: {}",
+                    valid_block.block(),
+                    quorum_decision,
+                    change_set
+                );
+                change_set.save(tx)?;
+            }
 
             Ok::<_, HotStuffError>(BlockDecision {
                 quorum_decision,
@@ -180,7 +192,9 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         change_set: &mut ProposedBlockChangeSet,
     ) -> Result<(), HotStuffError> {
-        let locked_block = LockedBlock::get(tx)?;
+        let _timer = TraceTimer::info(LOG_TARGET, "Process newly justified block")
+            .with_iterations(new_leaf_block.commands().len());
+        let locked_block = LockedBlock::get(tx, new_leaf_block.epoch())?;
         info!(
             target: LOG_TARGET,
             "✅ New leaf block {} is justified. Updating evidence for transactions",
@@ -213,10 +227,10 @@ where TConsensusSpec: ConsensusSpec
             }
 
             if !pool_tx.is_ready() {
-                if pool_tx.current_stage().is_local_prepared() && pool_tx.evidence().all_input_addresses_prepared() {
-                    pool_tx.set_next_stage(TransactionPoolStage::LocalPrepared, true)?;
-                } else if pool_tx.current_stage().is_local_accepted() && pool_tx.evidence().all_addresses_justified() {
-                    pool_tx.set_next_stage(TransactionPoolStage::LocalAccepted, true)?;
+                if pool_tx.current_stage().is_local_prepared() && pool_tx.is_ready_for_next_stage() {
+                    pool_tx.set_next_stage(TransactionPoolStage::LocalPrepared)?;
+                } else if pool_tx.current_stage().is_local_accepted() && pool_tx.is_ready_for_next_stage() {
+                    pool_tx.set_next_stage(TransactionPoolStage::LocalAccepted)?;
                 } else {
                     // Nothing
                 }
@@ -293,7 +307,7 @@ where TConsensusSpec: ConsensusSpec
         // It lives through the entire block so multiple transactions can be sequenced together in the same block
         let mut substate_store = PendingSubstateStore::new(tx, *block.parent(), self.config.num_preshards);
         let mut total_leader_fee = 0;
-        let locked_block = LockedBlock::get(tx)?;
+        let locked_block = LockedBlock::get(tx, block.epoch())?;
 
         for cmd in block.commands() {
             match cmd {
@@ -513,6 +527,7 @@ where TConsensusSpec: ConsensusSpec
         proposed_block_change_set: &mut ProposedBlockChangeSet,
         total_leader_fee: &mut u64,
     ) -> Result<bool, HotStuffError> {
+        let _timer = TraceTimer::info(LOG_TARGET, "Evaluate LocalOnly command");
         let Some(mut tx_rec) =
             proposed_block_change_set.get_transaction(tx, locked_block, &block.as_leaf_block(), atom.id())?
         else {
@@ -537,15 +552,24 @@ where TConsensusSpec: ConsensusSpec
         }
 
         // TODO(perf): proposer shouldn't have to do this twice, esp. executing the transaction and locking
-        let (prepared, _lock_status) = self
+        let prepared = self
             .transaction_manager
-            .prepare(substate_store, local_committee_info, block.epoch(), *atom.id())
+            .prepare(
+                substate_store,
+                local_committee_info,
+                block.epoch(),
+                *atom.id(),
+                block.id(),
+            )
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
         match prepared {
-            PreparedTransaction::LocalOnly(LocalPreparedTransaction::Accept(executed)) => {
-                let execution = executed.into_execution();
-                tx_rec.update_from_execution(&execution);
+            PreparedTransaction::LocalOnly(LocalPreparedTransaction::Accept { execution, .. }) => {
+                tx_rec.update_from_execution(
+                    local_committee_info.num_preshards(),
+                    local_committee_info.num_committees(),
+                    &execution,
+                );
 
                 info!(
                     target: LOG_TARGET,
@@ -624,7 +648,7 @@ where TConsensusSpec: ConsensusSpec
 
                 proposed_block_change_set.add_transaction_execution(execution)?;
             },
-            PreparedTransaction::LocalOnly(LocalPreparedTransaction::EarlyAbort { transaction }) => {
+            PreparedTransaction::LocalOnly(LocalPreparedTransaction::EarlyAbort { execution }) => {
                 if atom.decision.is_commit() {
                     warn!(
                         target: LOG_TARGET,
@@ -643,10 +667,11 @@ where TConsensusSpec: ConsensusSpec
                     block,
                     tx_rec.transaction_id(),
                 );
-                // TODO: Add a reason for the ABORT. Perhaps a reason enum
-                //       Decision::Abort(AbortReason::LockConflict)
-                let execution = transaction.into_execution().expect("Abort should have execution");
-                tx_rec.update_from_execution(&execution);
+                tx_rec.update_from_execution(
+                    local_committee_info.num_preshards(),
+                    local_committee_info.num_committees(),
+                    &execution,
+                );
                 proposed_block_change_set.add_transaction_execution(execution)?;
             },
             PreparedTransaction::MultiShard(_) => {
@@ -660,7 +685,7 @@ where TConsensusSpec: ConsensusSpec
             },
         }
 
-        tx_rec.set_next_stage(TransactionPoolStage::LocalOnly, false)?;
+        tx_rec.set_next_stage(TransactionPoolStage::LocalOnly)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
         Ok(true)
     }
@@ -675,6 +700,7 @@ where TConsensusSpec: ConsensusSpec
         substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<bool, HotStuffError> {
+        let _timer = TraceTimer::info(LOG_TARGET, "Evaluate Prepare command");
         let Some(mut tx_rec) =
             proposed_block_change_set.get_transaction(tx, locked_block, &block.as_leaf_block(), atom.id())?
         else {
@@ -705,9 +731,15 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        let (prepared, _lock_status) = self
+        let prepared = self
             .transaction_manager
-            .prepare(substate_store, local_committee_info, block.epoch(), *atom.id())
+            .prepare(
+                substate_store,
+                local_committee_info,
+                block.epoch(),
+                *atom.id(),
+                block.id(),
+            )
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
         match prepared {
@@ -735,30 +767,41 @@ where TConsensusSpec: ConsensusSpec
 
                 match multishard.current_decision() {
                     Decision::Commit => {
-                        if multishard.transaction().is_executed() {
+                        if multishard.is_executed() {
                             // CASE: All inputs are local and outputs are foreign (i.e. the transaction is executed), or
                             let execution = multishard.into_execution().expect("Abort should have execution");
-                            tx_rec.update_from_execution(&execution);
+                            tx_rec.update_from_execution(
+                                local_committee_info.num_preshards(),
+                                local_committee_info.num_committees(),
+                                &execution,
+                            );
                             proposed_block_change_set.add_transaction_execution(execution)?;
                         } else {
                             // CASE: All local inputs were resolved. We need to continue with consensus to get the
                             // foreign inputs/outputs.
                             tx_rec.set_local_decision(Decision::Commit);
                             // Set partial evidence for local inputs using what we know.
-                            tx_rec.set_evidence(multishard.to_initial_evidence());
+                            tx_rec.set_evidence(multishard.to_initial_evidence(
+                                local_committee_info.num_preshards(),
+                                local_committee_info.num_committees(),
+                            ));
                         }
                     },
                     Decision::Abort => {
                         // CASE: The transaction was ABORTed due to a lock conflict
                         let execution = multishard.into_execution().expect("Abort should have execution");
-                        tx_rec.update_from_execution(&execution);
+                        tx_rec.update_from_execution(
+                            local_committee_info.num_preshards(),
+                            local_committee_info.num_committees(),
+                            &execution,
+                        );
                         proposed_block_change_set.add_transaction_execution(execution)?;
                     },
                 }
             },
         }
 
-        tx_rec.set_next_stage(TransactionPoolStage::Prepared, true)?;
+        tx_rec.set_next_stage(TransactionPoolStage::Prepared)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
         Ok(true)
@@ -822,10 +865,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        tx_rec.set_next_stage(
-            TransactionPoolStage::LocalPrepared,
-            tx_rec.evidence().all_input_addresses_prepared(),
-        )?;
+        tx_rec.set_next_stage(TransactionPoolStage::LocalPrepared)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
         Ok(true)
@@ -842,6 +882,7 @@ where TConsensusSpec: ConsensusSpec
         substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<bool, HotStuffError> {
+        let _timer = TraceTimer::info(LOG_TARGET, "Evaluate AllPrepare command (execute)");
         let Some(mut tx_rec) =
             proposed_block_change_set.get_transaction(tx, locked_block, &block.as_leaf_block(), atom.id())?
         else {
@@ -880,7 +921,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        if !tx_rec.evidence().all_input_addresses_prepared() {
+        if !tx_rec.evidence().all_inputs_prepared() {
             warn!(
                 target: LOG_TARGET,
                 "❌ NO VOTE: AllPrepare disagreement for transaction {} in block {}. Leader proposed that all inputs are justified, but not all inputs are justified",
@@ -891,15 +932,21 @@ where TConsensusSpec: ConsensusSpec
         }
 
         let maybe_execution = if tx_rec.current_decision().is_commit() {
+            // TODO: provide the current input locks to the executor, the executor must fail if a write lock is
+            // requested for a read-locked substate.
             let execution = self.execute_transaction(tx, block.id(), block.epoch(), tx_rec.transaction_id())?;
             let mut execution = execution.into_transaction_execution();
 
             // TODO: check the diff is valid against the provided input evidence (correct locks etc).
 
             // TODO: can we modify the locks at this point? For multi-shard input transactions, we locked all inputs
-            // as Write due to lack of information. We now know what locks are necessary, and this
+            // as Read due to lack of information. We now know what locks are necessary, and this
             // block has the correct evidence (TODO: verify the atom) so this should be fine.
-            tx_rec.update_from_execution(&execution);
+            tx_rec.update_from_execution(
+                local_committee_info.num_preshards(),
+                local_committee_info.num_committees(),
+                &execution,
+            );
 
             if execution.decision().is_commit() {
                 // Lock all local outputs
@@ -933,7 +980,7 @@ where TConsensusSpec: ConsensusSpec
 
                     tx_rec.set_local_decision(Decision::Abort);
                     tx_rec.set_transaction_fee(0);
-                    tx_rec.set_next_stage(TransactionPoolStage::AllPrepared, true)?;
+                    tx_rec.set_next_stage(TransactionPoolStage::AllPrepared)?;
 
                     proposed_block_change_set
                         .set_next_transaction_update(tx_rec)?
@@ -991,7 +1038,7 @@ where TConsensusSpec: ConsensusSpec
             proposed_block_change_set.add_transaction_execution(execution)?;
         }
 
-        tx_rec.set_next_stage(TransactionPoolStage::AllPrepared, true)?;
+        tx_rec.set_next_stage(TransactionPoolStage::AllPrepared)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
         Ok(true)
@@ -1062,7 +1109,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        tx_rec.set_next_stage(TransactionPoolStage::SomePrepared, true)?;
+        tx_rec.set_next_stage(TransactionPoolStage::SomePrepared)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
         Ok(true)
@@ -1161,10 +1208,7 @@ where TConsensusSpec: ConsensusSpec
             tx_rec.set_leader_fee(calculated_leader_fee);
         }
 
-        tx_rec.set_next_stage(
-            TransactionPoolStage::LocalAccepted,
-            tx_rec.evidence().all_addresses_justified(),
-        )?;
+        tx_rec.set_next_stage(TransactionPoolStage::LocalAccepted)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
         Ok(true)
@@ -1205,8 +1249,7 @@ where TConsensusSpec: ConsensusSpec
         if !tx_rec.current_stage().is_local_accepted() {
             warn!(
                 target: LOG_TARGET,
-                "{} ❌ NO VOTE: AllAccept Stage disagreement in block {} for transaction {}. Leader proposed AllAccept, but local stage is {}",
-                self.local_validator_pk,
+                "❌ NO VOTE: AllAccept Stage disagreement in block {} for transaction {}. Leader proposed AllAccept, but local stage is {}",
                 block,
                 tx_rec.transaction_id(),
                 tx_rec.current_stage()
@@ -1289,7 +1332,7 @@ where TConsensusSpec: ConsensusSpec
             &filter_diff_for_committee(local_committee_info, diff),
         )?;
 
-        tx_rec.set_next_stage(TransactionPoolStage::AllAccepted, false)?;
+        tx_rec.set_next_stage(TransactionPoolStage::AllAccepted)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
         Ok(true)
@@ -1360,32 +1403,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        // Check our previous local decision
-        if tx_rec.current_local_decision().is_commit() {
-            // CASE: We originally decided to commit the transaction, however the remote committee decided to abort.
-            //       We may need to create a TransactionExecution for this.
-            let mut transaction = tx_rec.get_transaction(tx)?;
-            if transaction.abort_reason().is_none() {
-                info!(
-                    target: LOG_TARGET,
-                    "⚠️ ForeignShardGroupDecidedToAbort for transaction {} in block {}",
-                    block,
-                    tx_rec.transaction_id(),
-                );
-
-                // TODO: consider putting the reason in the block so that all shards can report the same reason
-                transaction.set_abort_reason(RejectReason::ForeignShardGroupDecidedToAbort(format!(
-                    "Transaction {} was rejected by the foreign committee",
-                    tx_rec.transaction_id()
-                )));
-                let execution = transaction
-                    .into_execution()
-                    .expect("set_abort_reason will always result in an execution");
-                proposed_block_change_set.add_transaction_execution(execution)?;
-            }
-        }
-
-        tx_rec.set_next_stage(TransactionPoolStage::SomeAccepted, false)?;
+        tx_rec.set_next_stage(TransactionPoolStage::SomeAccepted)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
         Ok(true)
@@ -1448,8 +1466,9 @@ where TConsensusSpec: ConsensusSpec
             // TODO: split validation errors from HotStuff errors so that we can selectively crash or not vote
             warn!(
                 target: LOG_TARGET,
-                "❌ NO VOTE: Failed to process foreign proposal for block {block_id} (shard group: {shard_group}). Error: {error}",
-                block_id = fp_atom.block_id,
+                "❌ NO VOTE: Failed to process foreign proposal for local block {block} (foreign block: {foreign_block_id} shard group: {shard_group}). Error: {error}",
+                block = block,
+                foreign_block_id = fp_atom.block_id,
                 error = err,
                 shard_group = foreign_committee_info.shard_group(),
             );
@@ -1570,6 +1589,10 @@ where TConsensusSpec: ConsensusSpec
         // Release all locks for SomePrepare transactions since these can never be committed
         SubstateRecord::unlock_all(tx, new_locked_block.all_some_prepare().map(|t| &t.id).peekable())?;
 
+        // Remove the chains that are no longer in this block's chain
+        // This will also release any locks for blocks that no longer apply
+        new_locked_block.remove_parallel_chains(tx)?;
+
         // This moves the stage update from pending to current for all transactions on the locked block
         self.transaction_pool
             .confirm_all_transitions(tx, &new_locked_block.as_locked_block())?;
@@ -1609,7 +1632,7 @@ where TConsensusSpec: ConsensusSpec
         }
 
         // NOTE: this must happen before we commit the substate diff because the state transitions use this version
-        let pending = PendingShardStateTreeDiff::remove_by_block(tx, block.id())?;
+        let pending = block.remove_pending_tree_diff_and_return(tx)?;
         let mut state_tree = ShardedStateTree::new(tx);
         state_tree.commit_diffs(pending)?;
         let tx = state_tree.into_transaction();

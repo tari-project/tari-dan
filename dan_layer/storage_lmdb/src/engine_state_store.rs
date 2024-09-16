@@ -142,7 +142,7 @@ mod tests {
         let store = LmdbStateStore::new(&path);
         {
             let mut access = store.write_access().unwrap();
-            access.set_state(b"abc", user_data.clone()).unwrap();
+            access.set_state(b"abc", &user_data).unwrap();
             assert!(access.exists_raw(b"abc").unwrap());
             let res: UserData = access.get_state(b"abc").unwrap();
             assert_eq!(res, user_data);
@@ -160,7 +160,7 @@ mod tests {
 
         {
             let mut access = store.write_access().unwrap();
-            access.set_state(b"abc", user_data.clone()).unwrap();
+            access.set_state(b"abc", &user_data).unwrap();
             access.commit().unwrap();
         }
 

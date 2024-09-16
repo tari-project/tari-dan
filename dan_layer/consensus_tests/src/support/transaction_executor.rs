@@ -1,26 +1,53 @@
 //    Copyright 2024 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use indexmap::IndexMap;
+use std::{collections::HashMap, iter};
+
 use tari_consensus::traits::{BlockTransactionExecutor, BlockTransactionExecutorError};
-use tari_dan_common_types::{Epoch, SubstateRequirement};
+use tari_dan_common_types::{Epoch, LockIntent, SubstateRequirement, VersionedSubstateId};
+use tari_dan_engine::state_store::{memory::MemoryStateStore, new_memory_store, AtomicDb, StateWriter};
 use tari_dan_storage::{
-    consensus_models::{ExecutedTransaction, TransactionRecord},
+    consensus_models::{ExecutedTransaction, VersionedSubstateIdLockIntent},
     StateStore,
 };
-use tari_engine_types::substate::Substate;
+use tari_engine_types::{
+    substate::{Substate, SubstateId},
+    transaction_receipt::TransactionReceiptAddress,
+    virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates},
+};
 use tari_transaction::Transaction;
 
-use crate::support::executions_store::TestTransactionExecutionsStore;
+use crate::support::{create_execution_result_for_transaction, executions_store::TestExecutionSpecStore};
 
 #[derive(Debug, Clone)]
 pub struct TestBlockTransactionProcessor {
-    store: TestTransactionExecutionsStore,
+    store: TestExecutionSpecStore,
 }
 
 impl TestBlockTransactionProcessor {
-    pub fn new(store: TestTransactionExecutionsStore) -> Self {
+    pub fn new(store: TestExecutionSpecStore) -> Self {
         Self { store }
+    }
+
+    fn add_substates_to_memory_db<'a, I: IntoIterator<Item = (&'a SubstateRequirement, &'a Substate)>>(
+        &self,
+        inputs: I,
+        out: &MemoryStateStore,
+    ) -> Result<(), BlockTransactionExecutorError> {
+        // TODO: pass the impl SubstateStore directly into the engine
+        let mut access = out
+            .write_access()
+            .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
+        for (id, substate) in inputs {
+            access
+                .set_state(id.substate_id(), substate)
+                .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
+        }
+        access
+            .commit()
+            .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
+
+        Ok(())
     }
 }
 
@@ -37,27 +64,67 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
     fn execute(
         &self,
         transaction: Transaction,
-        _current_epoch: Epoch,
-        _resolved_inputs: &IndexMap<SubstateRequirement, Substate>,
+        current_epoch: Epoch,
+        resolved_inputs: &HashMap<SubstateRequirement, Substate>,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
-        let execution = self.store.get(transaction.id()).unwrap_or_else(|| {
-            panic!(
-                "Missing execution for transaction {} to TestTransactionExecutionsStore",
-                transaction.id()
-            )
-        });
-        let mut rec = TransactionRecord::new(transaction);
-        rec.resolved_inputs = Some(execution.resolved_inputs().to_vec());
-        rec.execution_result = Some(execution.result().clone());
-        rec.resulting_outputs = Some(execution.resulting_outputs().to_vec());
+        let id = *transaction.id();
 
-        Ok(rec.try_into().unwrap())
-        // let executed = ExecutedTransaction::get(store.read_transaction(), transaction.id())
-        //     .optional()?
-        //     .expect(
-        //         "ExecutedTransaction was not found by the test executor. Perhaps you need to explicitly add an \
-        //          execution",
-        //     );
-        // Ok(executed)
+        log::info!("Transaction {} executing. {} input(s)", id, resolved_inputs.len());
+
+        // Create a memory db with all the input substates, needed for the transaction execution
+        let state_db = new_memory_store();
+        self.add_substates_to_memory_db(resolved_inputs, &state_db)?;
+
+        let mut virtual_substates = VirtualSubstates::new();
+        virtual_substates.insert(
+            VirtualSubstateId::CurrentEpoch,
+            VirtualSubstate::CurrentEpoch(current_epoch.as_u64()),
+        );
+
+        let spec = self
+            .store
+            .get(transaction.id())
+            .unwrap_or_else(|| panic!("Missing execution spec for transaction {}", transaction.id()));
+
+        let resolved_inputs = spec
+            .inputs
+            .into_iter()
+            .map(|spec| {
+                let substate = resolved_inputs[spec.substate_requirement()].clone();
+                VersionedSubstateIdLockIntent::new(
+                    VersionedSubstateId::new(spec.substate_id().clone(), substate.version()),
+                    spec.lock_type(),
+                    spec.requested_version().is_some(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let resulting_outputs = spec
+            .new_outputs
+            .into_iter()
+            .map(|substate_id| VersionedSubstateId::new(substate_id, 0))
+            // Generate corresponding up substates to all consumed inputs
+            .chain(
+                resolved_inputs.iter().filter(|input| input.lock_type().is_write())
+                    .map(|input| input.versioned_substate_id().to_next_version()),
+            )
+            .chain(iter::once(VersionedSubstateId::new(
+                SubstateId::TransactionReceipt(TransactionReceiptAddress::from(*transaction.id())),
+                0,
+            )))
+            .map(VersionedSubstateIdLockIntent::output)
+            .collect::<Vec<_>>();
+
+        let exec_output = create_execution_result_for_transaction(
+            transaction,
+            spec.decision,
+            spec.fee,
+            &resolved_inputs,
+            &resulting_outputs,
+        );
+
+        let executed = ExecutedTransaction::new(exec_output.transaction, exec_output.result, resolved_inputs);
+        log::info!("Transaction {} executed. {}", id, executed.result().finalize.result);
+        Ok(executed)
     }
 }

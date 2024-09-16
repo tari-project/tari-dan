@@ -26,6 +26,7 @@ pub struct Transaction {
     pub execution_time_ms: Option<i64>,
     pub final_decision: Option<String>,
     pub finalized_at: Option<PrimitiveDateTime>,
+    pub outcome: Option<String>,
     pub abort_details: Option<String>,
     pub min_epoch: Option<i64>,
     pub max_epoch: Option<i64>,

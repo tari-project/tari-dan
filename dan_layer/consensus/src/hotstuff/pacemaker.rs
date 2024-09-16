@@ -21,6 +21,8 @@ use crate::hotstuff::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::pacemaker";
 const MAX_DELTA: Duration = Duration::from_secs(300);
+/// Propose a block OFFSET_BLOCK_TIME sooner than the required block time
+const OFFSET_BLOCK_TIME: Duration = Duration::from_secs(1);
 
 pub struct PaceMaker {
     pace_maker_handle: PaceMakerHandle,
@@ -84,6 +86,8 @@ impl PaceMaker {
         tokio::pin!(block_timer);
 
         let mut started = false;
+        let mut leader_failure_suspended = false;
+        let mut leader_failure_triggered_during_suspension = false;
 
         loop {
             tokio::select! {
@@ -95,6 +99,8 @@ impl PaceMaker {
                                 if !started {
                                     continue;
                                 }
+                                leader_failure_suspended = false;
+                                leader_failure_triggered_during_suspension = false;
 
                                 if let Some(height) = high_qc_height {
                                     self.current_high_qc_height =  height;
@@ -103,10 +109,12 @@ impl PaceMaker {
                                 info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_view, delta);
                                 leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
                                 // set a timer for when we must send a block...
-                                block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                                block_timer.as_mut().reset(self.block_time());
                            },
                             PacemakerRequest::Start { high_qc_height } => {
                                 info!(target: LOG_TARGET, "🚀 Starting pacemaker at leaf height {} and high QC: {}", self.current_view, high_qc_height);
+                                leader_failure_suspended = false;
+                                leader_failure_triggered_during_suspension = false;
                                 if started {
                                     continue;
                                 }
@@ -114,16 +122,40 @@ impl PaceMaker {
                                 let delta = self.delta_time();
                                 info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_view, delta);
                                 leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
-                                block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                                block_timer.as_mut().reset(self.block_time());
                                 on_beat.beat();
                                 started = true;
                             }
                             PacemakerRequest::Stop => {
                                 info!(target: LOG_TARGET, "💤 Stopping pacemaker");
                                 started = false;
+                                leader_failure_suspended = false;
+                                leader_failure_triggered_during_suspension = false;
                                 // TODO: we could use futures-rs Either
                                 leader_timeout.as_mut().reset(far_future());
                                 block_timer.as_mut().reset(far_future());
+                            },
+                           PacemakerRequest::SuspendLeaderFailure => {
+                                if !started {
+                                    continue;
+                                }
+                                leader_failure_suspended = true;
+                                debug!(target: LOG_TARGET, "🧿 Pacemaker suspend leader failure");
+                           },
+                            PacemakerRequest::ResumeLeaderFailure => {
+                                if !started {
+                                    continue;
+                                }
+                                leader_failure_suspended = false;
+                                if leader_failure_triggered_during_suspension {
+                                    leader_failure_triggered_during_suspension = false;
+                                    let delta = self.delta_time();
+                                    leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
+                                    info!(target: LOG_TARGET, "⚠️ Resumed leader timeout! Current view: {}, Delta: {:.2?}", self.current_view, delta);
+                                    self.current_view.set_next_height();
+                                    on_leader_timeout.leader_timed_out(self.current_view.get_height());
+                                }
+                                debug!(target: LOG_TARGET, "🧿 Pacemaker resume leader failure");
                             }
                         }
                     } else{
@@ -132,23 +164,34 @@ impl PaceMaker {
                     }
                 },
                 () = &mut block_timer => {
-                    block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                    block_timer.as_mut().reset(self.block_time());
                     on_force_beat.beat(None);
                 }
                 () = &mut leader_timeout => {
-                    block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                    block_timer.as_mut().reset(self.block_time());
 
+                    // Must be reset otherwise this branch will trigger endlessly
                     let delta = self.delta_time();
                     leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
-                    info!(target: LOG_TARGET, "⚠️ Leader timeout! Current view: {}, Delta: {:.2?}", self.current_view, delta);
-                    self.current_view.set_next_height();
-                    on_leader_timeout.leader_timed_out(self.current_view.get_height());
+
+                    if leader_failure_suspended {
+                        info!(target: LOG_TARGET, "🧿 Leader timeout while suspended. Current view: {}", self.current_view);
+                        leader_failure_triggered_during_suspension = true;
+                    } else {
+                        info!(target: LOG_TARGET, "⚠️ Leader timeout! Current view: {}, Delta: {:.2?}", self.current_view, delta);
+                        self.current_view.set_next_height();
+                        on_leader_timeout.leader_timed_out(self.current_view.get_height());
+                    }
                 },
 
             }
         }
 
         Ok(())
+    }
+
+    fn block_time(&self) -> tokio::time::Instant {
+        tokio::time::Instant::now() + self.block_time.saturating_sub(OFFSET_BLOCK_TIME)
     }
 
     /// Current delta time defined as 2^n where n is the difference in height between the last seen block height and the

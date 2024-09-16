@@ -307,7 +307,7 @@ where
         for (component_addr, substate) in components {
             let header = substate.substate_value().component().unwrap();
 
-            info!(target: LOG_TARGET, "Substate {} up", component_addr);
+            debug!(target: LOG_TARGET, "Substate {} up", component_addr);
             tx.substates_upsert_root(
                 transaction_id,
                 VersionedSubstateId {

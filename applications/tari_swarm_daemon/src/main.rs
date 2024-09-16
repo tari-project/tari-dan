@@ -150,10 +150,6 @@ fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
         InstanceConfig::new(InstanceType::MinoTariConsoleWallet)
             .with_name("Minotari Wallet")
             .with_num_instances(1),
-        // Let's mine 10 blocks on startup by default.
-        InstanceConfig::new(InstanceType::MinoTariMiner)
-            .with_name("Minotari Miner")
-            .with_setting("max_blocks", "10"),
         InstanceConfig::new(InstanceType::TariValidatorNode)
             .with_name("Validator node")
             .with_num_instances(1),

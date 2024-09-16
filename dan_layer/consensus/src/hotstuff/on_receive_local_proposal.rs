@@ -8,7 +8,7 @@ use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
     optional::Optional,
     Epoch,
-    NodeHeight,
+    NumPreshards,
 };
 use tari_dan_storage::{
     consensus_models::{
@@ -40,6 +40,7 @@ use crate::{
         ProposalValidationError,
     },
     messages::{ForeignProposalMessage, HotstuffMessage, ProposalMessage, VoteMessage},
+    tracing::TraceTimer,
     traits::{
         hooks::ConsensusHooks,
         ConsensusSpec,
@@ -111,6 +112,18 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         local_committee_info: &CommitteeInfo,
         msg: ProposalMessage,
     ) -> Result<(), HotStuffError> {
+        let _timer = TraceTimer::debug(LOG_TARGET, "OnReceiveLocalProposalHandler");
+
+        let exists = self.store.with_read_tx(|tx| msg.block.exists(tx))?;
+        if exists {
+            info!(target: LOG_TARGET, "🧊 Block {} already exists", msg.block);
+            return Ok(());
+        }
+        // Do not trigger leader failures while processing a proposal.
+        // Leader failures will be resumed after the proposal has been processed.
+        // If we vote ACCEPT for the proposal, the leader failure timer will be reset and resume, otherwise (no vote)
+        // the timer will resume but not be reset.
+        self.pacemaker.suspend_leader_failure().await?;
         debug!(
             target: LOG_TARGET,
             "🔥 LOCAL PROPOSAL: block {} from {}",
@@ -137,10 +150,15 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             foreign_committees.insert(block_id, foreign_committee_info);
         }
 
-        match self
+        let result = self
             .process_block(current_epoch, local_committee_info, msg.block, foreign_committees)
-            .await
-        {
+            .await;
+
+        if let Err(err) = self.pacemaker.resume_leader_failure().await {
+            error!(target: LOG_TARGET, "Error resuming leader failure: {:?}", err);
+        }
+
+        match result {
             Ok(()) => Ok(()),
             Err(err @ HotStuffError::ProposalValidationError(_)) => {
                 self.hooks.on_block_validation_failed(&err);
@@ -158,24 +176,12 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         block: Block,
         foreign_committees: HashMap<BlockId, CommitteeInfo>,
     ) -> Result<(), HotStuffError> {
-        if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
-            return Err(HotStuffError::EpochNotActive {
-                epoch: block.epoch(),
-                details: "Cannot reprocess block from inactive epoch".to_string(),
-            });
-        }
-
         let local_committee = self
             .epoch_manager
             .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
 
         let maybe_high_qc_and_block = self.store.with_write_tx(|tx| {
-            if block.exists(&**tx)? {
-                info!(target: LOG_TARGET, "🧊 Block {} already exists", block);
-                return Ok(None);
-            }
-
             let Some(valid_block) = self.validate_block_header(&*tx, block, &local_committee, local_committee_info)?
             else {
                 return Ok(None);
@@ -187,110 +193,97 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             Ok::<_, HotStuffError>(Some((high_qc, valid_block)))
         })?;
 
-        if let Some((high_qc, valid_block)) = maybe_high_qc_and_block {
-            let em_epoch = self.epoch_manager.current_epoch().await?;
-            let can_propose_epoch_end = em_epoch > current_epoch;
+        let Some((high_qc, valid_block)) = maybe_high_qc_and_block else {
+            // Validation failed, this is already logged so we can exit here
+            return Ok(());
+        };
 
-            let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
-            let (block_decision, valid_block) = task::spawn_blocking({
-                // Move into task
-                let local_committee_info = *local_committee_info;
-                move || {
-                    let decision = on_ready_to_vote_on_local_block.handle(
-                        &valid_block,
-                        &local_committee_info,
-                        can_propose_epoch_end,
-                        foreign_committees,
+        let em_epoch = self.epoch_manager.current_epoch().await?;
+        let can_propose_epoch_end = em_epoch > current_epoch;
+
+        let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
+        let (block_decision, valid_block) = task::spawn_blocking({
+            // Move into task
+            let local_committee_info = *local_committee_info;
+            move || {
+                let decision = on_ready_to_vote_on_local_block.handle(
+                    &valid_block,
+                    &local_committee_info,
+                    can_propose_epoch_end,
+                    foreign_committees,
+                )?;
+                Ok::<_, HotStuffError>((decision, valid_block))
+            }
+        })
+        .await??;
+
+        if let Some(decision) = block_decision.quorum_decision {
+            self.pacemaker
+                .update_view(valid_block.epoch(), valid_block.height(), high_qc.block_height())
+                .await?;
+
+            debug!(
+                target: LOG_TARGET,
+                "🔥 LOCAL PROPOSAL {} DECIDED {:?}",
+                valid_block,
+                decision,
+            );
+
+            let local_committee = self.epoch_manager.get_local_committee(valid_block.epoch()).await?;
+
+            let vote = self.generate_vote_message(valid_block.block(), decision).await?;
+            self.send_vote_to_leader(&local_committee, vote, valid_block.block())
+                .await?;
+        }
+
+        self.hooks
+            .on_local_block_decide(&valid_block, block_decision.quorum_decision);
+        for t in block_decision.finalized_transactions.into_iter().flatten() {
+            self.hooks.on_transaction_finalized(&t.into_current_transaction_atom());
+        }
+        self.propose_newly_locked_blocks(block_decision.locked_blocks);
+
+        if let Some(epoch) = block_decision.end_of_epoch {
+            let next_epoch = epoch + Epoch(1);
+
+            // If we're registered for the next epoch. Create a new genesis block.
+            if let Some(vn) = self.epoch_manager.get_our_validator_node(next_epoch).await.optional()? {
+                // TODO: Change VN db to include the shard group in the ValidatorNode struct.
+                let num_committees = self.epoch_manager.get_num_committees(next_epoch).await?;
+                let next_shard_group = vn.shard_key.to_shard_group(self.config.num_preshards, num_committees);
+                self.store.with_write_tx(|tx| {
+                    // Generate checkpoint
+                    create_epoch_checkpoint(tx, epoch, local_committee_info.shard_group())?;
+
+                    // Create the next genesis
+                    let mut genesis = Block::genesis(
+                        self.config.network,
+                        next_epoch,
+                        next_shard_group,
+                        self.config.sidechain_id.clone(),
                     )?;
-                    Ok::<_, HotStuffError>((decision, valid_block))
-                }
-            })
-            .await??;
+                    info!(target: LOG_TARGET, "⭐️ Creating new genesis block {genesis}");
+                    genesis.justify().insert(tx)?;
+                    genesis.insert(tx)?;
+                    genesis.set_as_justified(tx)?;
+                    // We'll propose using the new genesis as parent
+                    genesis.as_locked_block().set(tx)?;
+                    genesis.as_leaf_block().set(tx)?;
+                    genesis.as_last_executed().set(tx)?;
+                    genesis.as_last_voted().set(tx)?;
+                    genesis.justify().as_high_qc().set(tx)?;
+                    Ok::<_, HotStuffError>(())
+                })?;
 
-            self.hooks
-                .on_local_block_decide(&valid_block, block_decision.quorum_decision);
-            for t in block_decision.finalized_transactions.into_iter().flatten() {
-                self.hooks.on_transaction_finalized(&t.into_current_transaction_atom());
-            }
-            self.propose_newly_locked_blocks(block_decision.locked_blocks).await?;
-
-            if let Some(decision) = block_decision.quorum_decision {
-                let is_registered = self
-                    .epoch_manager
-                    .is_this_validator_registered_for_epoch(valid_block.epoch())
-                    .await?;
-
-                if is_registered {
-                    debug!(
-                        target: LOG_TARGET,
-                        "🔥 LOCAL PROPOSAL {} DECIDED {:?}",
-                        valid_block,
-                        decision,
-                    );
-                    let local_committee = self.epoch_manager.get_local_committee(valid_block.epoch()).await?;
-
-                    let vote = self.generate_vote_message(valid_block.block(), decision).await?;
-                    self.send_vote_to_leader(&local_committee, vote, valid_block.block())
-                        .await?;
-                } else {
-                    info!(
-                        target: LOG_TARGET,
-                        "❓️ Local validator not registered for epoch {}. Not voting on block {}",
-                        valid_block.epoch(),
-                        valid_block,
-                    );
-                }
-            }
-
-            match block_decision.end_of_epoch {
-                Some(epoch) => {
-                    let next_epoch = epoch + Epoch(1);
-
-                    // If we're registered for the next epoch. Create a new genesis block.
-                    if let Some(vn) = self.epoch_manager.get_our_validator_node(next_epoch).await.optional()? {
-                        // TODO: Change VN db to include the shard group in the ValidatorNode struct.
-                        let num_committees = self.epoch_manager.get_num_committees(next_epoch).await?;
-                        let next_shard_group = vn.shard_key.to_shard_group(self.config.num_preshards, num_committees);
-                        self.store.with_write_tx(|tx| {
-                            // Generate checkpoint
-                            create_epoch_checkpoint(tx, epoch, local_committee_info.shard_group())?;
-
-                            // Create the next genesis
-                            let mut genesis = Block::genesis(
-                                self.config.network,
-                                next_epoch,
-                                next_shard_group,
-                                self.config.sidechain_id.clone(),
-                            )?;
-                            info!(target: LOG_TARGET, "⭐️ Creating new genesis block {genesis}");
-                            genesis.justify().insert(tx)?;
-                            genesis.insert(tx)?;
-                            genesis.set_as_justified(tx)?;
-                            // We'll propose using the new genesis as parent
-                            genesis.as_locked_block().set(tx)?;
-                            genesis.as_leaf_block().set(tx)?;
-                            genesis.as_last_executed().set(tx)?;
-                            genesis.as_last_voted().set(tx)?;
-                            genesis.justify().as_high_qc().set(tx)?;
-                            Ok::<_, HotStuffError>(())
-                        })?;
-
-                        // TODO: We should exit consensus to sync for the epoch - when this is implemented, we will not
-                        // need to create the genesis, set the pacemaker, etc.
-                        self.pacemaker.set_epoch(next_epoch).await?;
-                        self.pacemaker.on_beat();
-                    } else {
-                        info!(
-                            target: LOG_TARGET,
-                            "💤 Our validator node is not registered for epoch {next_epoch}.",
-                        )
-                    }
-                },
-                None => {
-                    self.pacemaker
-                        .update_view(valid_block.epoch(), valid_block.height(), high_qc.block_height())
-                        .await?;
-                },
+                // TODO: We should exit consensus to sync for the epoch - when this is implemented, we will not
+                // need to create the genesis, set the pacemaker, etc.
+                self.pacemaker.set_epoch(next_epoch).await?;
+                self.pacemaker.on_beat();
+            } else {
+                info!(
+                    target: LOG_TARGET,
+                    "💤 Our validator node is not registered for epoch {next_epoch}.",
+                )
             }
         }
 
@@ -303,6 +296,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         vote: VoteMessage,
         block: &Block,
     ) -> Result<(), HotStuffError> {
+        let _timer = TraceTimer::debug(LOG_TARGET, "SendVoteToLeader");
         let leader = self
             .leader_strategy
             .get_leader_for_next_block(local_committee, block.height());
@@ -314,9 +308,12 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             block.proposed_by(),
             leader,
         );
+        let send = TraceTimer::debug(LOG_TARGET, "SendVoteToLeader(send)");
         self.outbound_messaging
             .send(leader.clone(), HotstuffMessage::Vote(vote.clone()))
             .await?;
+        send.done();
+        let write = TraceTimer::debug(LOG_TARGET, "SendVoteToLeader(write last vote)");
         self.store.with_write_tx(|tx| {
             let last_sent_vote = LastSentVote {
                 epoch: vote.epoch,
@@ -327,53 +324,23 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             };
             last_sent_vote.set(tx)
         })?;
+        write.done();
         Ok(())
     }
 
-    async fn propose_newly_locked_blocks(
-        &mut self,
-        blocks: Vec<(Block, QuorumCertificate)>,
-    ) -> Result<(), HotStuffError> {
-        for (block, justify_qc) in blocks {
-            debug!(target:LOG_TARGET,"Broadcast new locked block: {block}");
-            let Some(our_vn) = self
-                .epoch_manager
-                .get_our_validator_node(block.epoch())
-                .await
-                .optional()?
-            else {
-                info!(
-                    target: LOG_TARGET,
-                    "❌ Our validator node is not registered for epoch {}. Not proposing {block} to foreign committee", block.epoch(),
-                );
-                continue;
-            };
-
-            let local_committee = self
-                .epoch_manager
-                .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
-                .await?;
-            let leader_index = self.leader_strategy.calculate_leader(&local_committee, block.height()) as usize;
-            let my_index = local_committee
-                .addresses()
-                .position(|addr| *addr == our_vn.address)
-                .ok_or_else(|| HotStuffError::InvariantError("Our address not found in local committee".to_string()))?;
-            // There are other ways to approach this. But for simplicity, it is better just to make sure at least one
-            // honest node will send it to the whole foreign committee. So we select the leader and f other
-            // nodes. It has to be deterministic so we select by index (leader, leader+1, ..., leader+f).
-            // f+1 nodes (including the leader) send the proposal to the foreign committee
-
-            let should_broadcast = if my_index >= leader_index {
-                my_index - leader_index <= local_committee.len() / 3
-            } else {
-                my_index + local_committee.len() - leader_index <= local_committee.len() / 3
-            };
-
-            if should_broadcast {
-                self.broadcast_foreign_proposal_if_required(block, justify_qc).await?;
-            }
+    fn propose_newly_locked_blocks(&mut self, blocks: Vec<(Block, QuorumCertificate)>) {
+        if blocks.is_empty() {
+            return;
         }
-        Ok(())
+
+        task::spawn(propose_newly_locked_blocks_task::<TConsensusSpec>(
+            self.epoch_manager.clone(),
+            self.leader_strategy.clone(),
+            self.outbound_messaging.clone(),
+            self.store.clone(),
+            self.config.num_preshards,
+            blocks,
+        ));
     }
 
     async fn generate_vote_message(
@@ -381,6 +348,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         block: &Block,
         decision: QuorumDecision,
     ) -> Result<VoteMessage, HotStuffError> {
+        let _timer = TraceTimer::debug(LOG_TARGET, "GenerateVoteMessage");
         let vn = self
             .epoch_manager
             .get_validator_node_by_public_key(block.epoch(), self.vote_signing_service.public_key())
@@ -599,12 +567,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .into());
         }
 
-        // Special case for genesis block. A genesis block contains a genesis QC that does not justify anything, this is
-        // the HIGH QC for the first block.
-        if candidate_block.height() == NodeHeight(1) && candidate_block.justify().is_zero() {
-            return Ok(ValidBlock::new(candidate_block));
-        }
-
         // TODO: this is broken
         // self.check_foreign_indexes(
         //     tx,
@@ -616,7 +578,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         // if the block parent is not the justify parent, then we have experienced a leader failure
         // and should make dummy blocks to fill in the gaps.
-        if !candidate_block.justifies_parent() {
+        if !justify_block.is_zero() && !candidate_block.justifies_parent() {
             let dummy_blocks =
                 calculate_dummy_blocks(&candidate_block, &justify_block, &self.leader_strategy, local_committee);
 
@@ -659,83 +621,158 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         Ok(ValidBlock::new(candidate_block))
     }
+}
 
-    async fn broadcast_foreign_proposal_if_required(
-        &mut self,
-        block: Block,
-        justify_qc: QuorumCertificate,
-    ) -> Result<(), HotStuffError> {
-        let num_committees = self.epoch_manager.get_num_committees(block.epoch()).await?;
+async fn propose_newly_locked_blocks_task<TConsensusSpec: ConsensusSpec>(
+    epoch_manager: TConsensusSpec::EpochManager,
+    leader_strategy: TConsensusSpec::LeaderStrategy,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
+    store: TConsensusSpec::StateStore,
+    num_preshards: NumPreshards,
+    blocks: Vec<(Block, QuorumCertificate)>,
+) {
+    let _timer = TraceTimer::debug(LOG_TARGET, "ProposeNewlyLockedBlocks").with_iterations(blocks.len());
+    if let Err(err) = propose_newly_locked_blocks_task_inner::<TConsensusSpec>(
+        epoch_manager,
+        leader_strategy,
+        outbound_messaging,
+        store,
+        num_preshards,
+        blocks,
+    )
+    .await
+    {
+        error!(target: LOG_TARGET, "Error in propose_newly_locked_blocks_task: {:?}", err);
+    }
+}
 
-        let validator = self.epoch_manager.get_our_validator_node(block.epoch()).await?;
-        let local_shard_group = validator
-            .shard_key
-            .to_shard_group(self.config.num_preshards, num_committees);
-        let non_local_shard_groups = block
-            .commands()
-            .iter()
-            .filter_map(|c| c.local_prepare().or_else(|| c.local_accept()))
-            .flat_map(|p| p.evidence.substate_addresses_iter())
-            .map(|addr| addr.to_shard_group(self.config.num_preshards, num_committees))
-            .filter(|shard_group| local_shard_group != *shard_group)
-            .collect::<HashSet<_>>();
-        if non_local_shard_groups.is_empty() {
-            return Ok(());
-        }
-        info!(
-            target: LOG_TARGET,
-            "🌿 PROPOSING new locked block {} to {} foreign shard groups. justify: {} ({}), parent: {}",
-            block,
-            non_local_shard_groups.len(),
-            justify_qc.block_id(),
-            justify_qc.block_height(),
-            block.parent()
-        );
-        debug!(
-            target: LOG_TARGET,
-            "non_local_shards : [{}]",
-            non_local_shard_groups.iter().map(|s|s.to_string()).collect::<Vec<_>>().join(","),
-        );
-
-        let block_pledge = self
-            .store
-            .with_read_tx(|tx| block.get_block_pledge(tx))
-            .optional()?
-            .ok_or_else(|| HotStuffError::InvariantError(format!("Pledges not found for block {}", block)))?;
-
-        // TODO(perf/message-size): the pledges for a given foreign proposal are not necessarily the same for each shard
-        // group involved in the block. Currently we send all pledges to all shard groups but we could limit the
-        // substates we send to validators to only those that are applicable to the transactions that involve
-        // them.
-
-        let mut addresses = HashSet::new();
-        // TODO(perf): fetch only applicable committee addresses
-        let mut committees = self.epoch_manager.get_committees(block.epoch()).await?;
-        for shard_group in non_local_shard_groups {
-            addresses.extend(
-                committees
-                    .remove(&shard_group)
-                    .into_iter()
-                    .flat_map(|c| c.into_iter().map(|(addr, _)| addr)),
+async fn propose_newly_locked_blocks_task_inner<TConsensusSpec: ConsensusSpec>(
+    epoch_manager: TConsensusSpec::EpochManager,
+    leader_strategy: TConsensusSpec::LeaderStrategy,
+    mut outbound_messaging: TConsensusSpec::OutboundMessaging,
+    store: TConsensusSpec::StateStore,
+    num_preshards: NumPreshards,
+    blocks: Vec<(Block, QuorumCertificate)>,
+) -> Result<(), HotStuffError> {
+    for (block, justify_qc) in blocks.into_iter().rev() {
+        debug!(target:LOG_TARGET,"Broadcast new locked block: {block}");
+        let Some(our_vn) = epoch_manager.get_our_validator_node(block.epoch()).await.optional()? else {
+            info!(
+                target: LOG_TARGET,
+                "❌ Our validator node is not registered for epoch {}. Not proposing {block} to foreign committee", block.epoch(),
             );
-        }
-        info!(
-            target: LOG_TARGET,
-            "🌿 FOREIGN PROPOSE: Broadcasting locked block {} with {} pledge(s) to {} foreign committees.",
-            block,
-            block_pledge.num_substates_pledged(),
-            addresses.len(),
-        );
-        self.outbound_messaging
-            .multicast(
-                &addresses,
-                HotstuffMessage::ForeignProposal(ForeignProposalMessage {
-                    block,
-                    block_pledge,
-                    justify_qc,
-                }),
+            continue;
+        };
+
+        let local_committee = epoch_manager
+            .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
+            .await?;
+        let leader_index = leader_strategy.calculate_leader(&local_committee, block.height()) as usize;
+        let my_index = local_committee
+            .addresses()
+            .position(|addr| *addr == our_vn.address)
+            .ok_or_else(|| HotStuffError::InvariantError("Our address not found in local committee".to_string()))?;
+        // There are other ways to approach this. But for simplicity, it is better just to make sure at least one
+        // honest node will send it to the whole foreign committee. So we select the leader and f other
+        // nodes. It has to be deterministic so we select by index (leader, leader+1, ..., leader+f).
+        // f+1 nodes (including the leader) send the proposal to the foreign committee
+
+        let should_broadcast = if my_index >= leader_index {
+            my_index - leader_index <= local_committee.len() / 3
+        } else {
+            my_index + local_committee.len() - leader_index <= local_committee.len() / 3
+        };
+
+        if should_broadcast {
+            broadcast_foreign_proposal_if_required::<TConsensusSpec>(
+                &mut outbound_messaging,
+                &epoch_manager,
+                &store,
+                num_preshards,
+                block,
+                justify_qc,
             )
             .await?;
-        Ok(())
+        }
     }
+    Ok(())
+}
+
+async fn broadcast_foreign_proposal_if_required<TConsensusSpec: ConsensusSpec>(
+    outbound_messaging: &mut TConsensusSpec::OutboundMessaging,
+    epoch_manager: &TConsensusSpec::EpochManager,
+    store: &TConsensusSpec::StateStore,
+    num_preshards: NumPreshards,
+    block: Block,
+    justify_qc: QuorumCertificate,
+) -> Result<(), HotStuffError> {
+    let num_committees = epoch_manager.get_num_committees(block.epoch()).await?;
+
+    let validator = epoch_manager.get_our_validator_node(block.epoch()).await?;
+    let local_shard_group = validator.shard_key.to_shard_group(num_preshards, num_committees);
+    let non_local_shard_groups = block
+        .commands()
+        .iter()
+        .filter_map(|c| c.local_prepare().or_else(|| c.local_accept()))
+        .flat_map(|p| p.evidence.substate_addresses_iter())
+        .map(|addr| addr.to_shard_group(num_preshards, num_committees))
+        .filter(|shard_group| local_shard_group != *shard_group)
+        .collect::<HashSet<_>>();
+    if non_local_shard_groups.is_empty() {
+        return Ok(());
+    }
+    info!(
+        target: LOG_TARGET,
+        "🌿 PROPOSING new locked block {} to {} foreign shard groups. justify: {} ({}), parent: {}",
+        block,
+        non_local_shard_groups.len(),
+        justify_qc.block_id(),
+        justify_qc.block_height(),
+        block.parent()
+    );
+    debug!(
+        target: LOG_TARGET,
+        "non_local_shards : [{}]",
+        non_local_shard_groups.iter().map(|s|s.to_string()).collect::<Vec<_>>().join(","),
+    );
+
+    let block_pledge = store
+        .with_read_tx(|tx| block.get_block_pledge(tx))
+        .optional()?
+        .ok_or_else(|| HotStuffError::InvariantError(format!("Pledges not found for block {}", block)))?;
+
+    // TODO(perf/message-size): the pledges for a given foreign proposal are not necessarily the same for each shard
+    // group involved in the block. Currently we send all pledges to all shard groups but we could limit the
+    // substates we send to validators to only those that are applicable to the transactions that involve
+    // them.
+
+    let mut addresses = HashSet::new();
+    // TODO(perf): fetch only applicable committee addresses
+    let mut committees = epoch_manager.get_committees(block.epoch()).await?;
+    for shard_group in non_local_shard_groups {
+        addresses.extend(
+            committees
+                .remove(&shard_group)
+                .into_iter()
+                .flat_map(|c| c.into_iter().map(|(addr, _)| addr)),
+        );
+    }
+    info!(
+        target: LOG_TARGET,
+        "🌿 FOREIGN PROPOSE: Broadcasting locked block {} with {} pledge(s) to {} foreign committees.",
+        block,
+        block_pledge.num_substates_pledged(),
+        addresses.len(),
+    );
+    outbound_messaging
+        .multicast(
+            &addresses,
+            HotstuffMessage::ForeignProposal(ForeignProposalMessage {
+                block,
+                block_pledge,
+                justify_qc,
+            }),
+        )
+        .await?;
+    Ok(())
 }

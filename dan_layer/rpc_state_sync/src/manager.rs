@@ -22,7 +22,6 @@ use tari_dan_common_types::{
 use tari_dan_p2p::proto::rpc::{GetCheckpointRequest, GetCheckpointResponse, SyncStateRequest};
 use tari_dan_storage::{
     consensus_models::{
-        Block,
         EpochCheckpoint,
         LeafBlock,
         QcId,
@@ -368,11 +367,9 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
         let current_epoch = self.epoch_manager.current_epoch().await?;
 
         let leaf_epoch = self.state_store.with_read_tx(|tx| {
-            let epoch = LeafBlock::get(tx)
+            let epoch = LeafBlock::get(tx, current_epoch)
                 .optional()?
-                .map(|leaf| Block::get(tx, leaf.block_id()))
-                .transpose()?
-                .map(|b| b.epoch())
+                .map(|leaf| leaf.epoch())
                 .unwrap_or(Epoch(0));
             Ok::<_, Self::Error>(epoch)
         })?;

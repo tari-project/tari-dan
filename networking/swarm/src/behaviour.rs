@@ -120,6 +120,7 @@ where
             // Identify
             let identify = identify::Behaviour::new(
                 identify::Config::new(config.protocol_version.to_string(), keypair.public())
+                    .with_interval(config.identify_interval)
                     .with_agent_version(config.user_agent),
             );
 

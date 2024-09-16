@@ -20,32 +20,20 @@ use tari_dan_common_types::{
     VersionedSubstateId,
 };
 use tari_dan_storage::{
-    consensus_models::{
-        BlockId,
-        Decision,
-        QcId,
-        SubstateRecord,
-        TransactionExecution,
-        TransactionRecord,
-        VersionedSubstateIdLockIntent,
-    },
+    consensus_models::{BlockId, Decision, QcId, SubstateRecord, SubstateRequirementLockIntent, TransactionRecord},
     StateStore,
     StateStoreReadTransaction,
     StorageError,
 };
-use tari_engine_types::{
-    component::{ComponentBody, ComponentHeader},
-    substate::SubstateValue,
-};
+use tari_engine_types::substate::SubstateId;
 use tari_epoch_manager::EpochManagerReader;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tari_transaction::TransactionId;
 use tokio::{sync::broadcast, task, time::sleep};
 
 use super::{
-    build_random_outputs,
-    build_transaction_with_inputs_and_outputs,
-    create_execution_result_for_transaction,
+    build_substate_id_for_committee,
+    build_transaction,
     helpers,
     random_substates_ids_for_committee_generator,
     MessageFilter,
@@ -54,6 +42,8 @@ use super::{
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
+    executions_store::ExecuteSpec,
+    helpers::make_test_component,
     network::{spawn_network, TestNetwork, TestVnDestination},
     validator::Validator,
     RoundRobinLeaderStrategy,
@@ -75,57 +65,41 @@ impl Test {
         TestBuilder::new()
     }
 
-    pub async fn send_transaction_to(
-        &self,
-        addr: &TestAddress,
-        decision: Decision,
-        fee: u64,
-        num_inputs_per_committee: usize,
-    ) -> TransactionRecord {
-        let num_committees = self.epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
-        let mut all_inputs = vec![];
-        // This creates and uses inputs on all committees. This may be unexpected for tests which do not want
-        // transactions to involve all shard groups
-        for committee_no in 0..num_committees {
-            let inputs =
-                self.create_substates_on_vns(TestVnDestination::Committee(committee_no), num_inputs_per_committee);
-            all_inputs.extend(inputs);
-        }
-
-        let transaction = build_transaction_with_inputs_and_outputs(
-            decision,
-            fee,
-            all_inputs
-                .into_iter()
-                .map(|i| VersionedSubstateIdLockIntent::write(i, true))
-                .collect(),
-            vec![],
-        );
-
-        self.send_transaction_to_destination(TestVnDestination::Address(addr.clone()), transaction.clone())
-            .await;
-        transaction
-    }
-
     pub async fn send_transaction_to_all(
         &self,
         decision: Decision,
         fee: u64,
         num_inputs: usize,
-        num_outputs: usize,
-    ) -> TransactionRecord {
-        let transaction = self.build_transaction(decision, fee, num_inputs, num_outputs);
+        num_new_outputs: usize,
+    ) -> (TransactionRecord, Vec<VersionedSubstateId>, Vec<SubstateId>) {
+        let (transaction, inputs) = self.build_transaction(decision, num_inputs);
+
+        let new_outputs = (0..num_new_outputs)
+            .map(|i| build_substate_id_for_committee(i as u32 % self.num_committees, self.num_committees))
+            .collect::<Vec<_>>();
+
+        self.add_execution_at_destination(TestVnDestination::All, ExecuteSpec {
+            transaction: transaction.transaction().clone(),
+            decision,
+            fee,
+            inputs: inputs
+                .iter()
+                .map(|input| SubstateRequirementLockIntent::write(input.clone(), input.version()))
+                .collect(),
+            new_outputs: new_outputs.clone(),
+        });
+
         self.send_transaction_to_destination(TestVnDestination::All, transaction.clone())
             .await;
-        transaction
+
+        (transaction, inputs, new_outputs)
     }
 
     pub async fn send_transaction_to_destination(&self, dest: TestVnDestination, transaction: TransactionRecord) {
-        self.create_execution_at_destination_for_transaction(dest.clone(), &transaction);
         self.network.send_transaction(dest, transaction).await;
     }
 
-    pub fn add_execution_at_destination(&self, dest: TestVnDestination, execution: TransactionExecution) -> &Self {
+    pub fn add_execution_at_destination(&self, dest: TestVnDestination, execution: ExecuteSpec) -> &Self {
         for vn in self.validators.values() {
             if dest.is_for(&vn.address, vn.shard_group, vn.num_committees) {
                 vn.transaction_executions.insert(execution.clone());
@@ -138,44 +112,27 @@ impl Test {
         &self,
         dest: TestVnDestination,
         transaction: &TransactionRecord,
+        inputs: Vec<SubstateRequirementLockIntent>,
+        new_outputs: Vec<SubstateId>,
     ) -> &Self {
-        let execution = transaction.clone().into_execution().unwrap_or_else(|| {
-            create_execution_result_for_transaction(
-                *transaction.id(),
-                transaction.current_decision(),
-                0,
-                transaction.resolved_inputs.clone().unwrap_or_default(),
-                transaction.resulting_outputs.clone().unwrap_or_default(),
-            )
+        self.add_execution_at_destination(dest, ExecuteSpec {
+            transaction: transaction.transaction().clone(),
+            decision: transaction.current_decision(),
+            fee: transaction.transaction_fee().unwrap_or(0),
+            inputs,
+            new_outputs,
         });
-        for vn in self.validators.values() {
-            if dest.is_for(&vn.address, vn.shard_group, vn.num_committees) {
-                vn.transaction_executions.insert(execution.clone());
-            }
-        }
         self
     }
 
     pub fn build_transaction(
         &self,
         decision: Decision,
-        fee: u64,
         num_inputs: usize,
-        num_outputs: usize,
-    ) -> TransactionRecord {
+    ) -> (TransactionRecord, Vec<VersionedSubstateId>) {
         let all_inputs = self.create_substates_on_vns(TestVnDestination::All, num_inputs);
-
-        let outputs = build_random_outputs(num_outputs, self.num_committees);
-
-        build_transaction_with_inputs_and_outputs(
-            decision,
-            fee,
-            all_inputs
-                .into_iter()
-                .map(|i| VersionedSubstateIdLockIntent::write(i, true))
-                .collect(),
-            outputs,
-        )
+        let transaction = build_transaction(decision, all_inputs.iter().cloned().map(Into::into).collect());
+        (transaction, all_inputs)
     }
 
     pub fn create_substates_on_vns(&self, dest: TestVnDestination, num: usize) -> Vec<VersionedSubstateId> {
@@ -189,6 +146,7 @@ impl Test {
                 .flat_map(|committee_no| {
                     random_substates_ids_for_committee_generator(committee_no, self.num_committees).take(num)
                 })
+                .map(|id| VersionedSubstateId::new(id, 0))
                 .collect::<Vec<_>>(),
             TestVnDestination::Address(_) => unimplemented!(
                 "Creating substates for a specific validator is not supported as it isn't typically useful"
@@ -196,6 +154,7 @@ impl Test {
             TestVnDestination::Committee(committee_no) => {
                 random_substates_ids_for_committee_generator(committee_no, self.num_committees)
                     .take(num)
+                    .map(|id| VersionedSubstateId::new(id, 0))
                     .collect::<Vec<_>>()
             },
         };
@@ -203,17 +162,7 @@ impl Test {
         let substates = substate_ids
             .iter()
             .map(|id| {
-                let value = SubstateValue::Component(ComponentHeader {
-                    template_address: Default::default(),
-                    module_name: "Test".to_string(),
-                    owner_key: None,
-                    owner_rule: Default::default(),
-                    access_rules: Default::default(),
-                    entity_id: id.substate_id().as_component_address().unwrap().entity_id(),
-                    body: ComponentBody {
-                        state: tari_bor::Value::Null,
-                    },
-                });
+                let value = make_test_component(id.substate_id().as_component_address().unwrap().entity_id());
                 SubstateRecord::new(
                     id.substate_id.clone(),
                     id.version,
@@ -246,14 +195,9 @@ impl Test {
         substate_ids
     }
 
-    pub fn build_outputs_for_committee(
-        &self,
-        committee_no: u32,
-        num_outputs: usize,
-    ) -> Vec<VersionedSubstateIdLockIntent> {
+    pub fn build_outputs_for_committee(&self, committee_no: u32, num_outputs: usize) -> Vec<SubstateId> {
         random_substates_ids_for_committee_generator(committee_no, self.num_committees)
             .take(num_outputs)
-            .map(VersionedSubstateIdLockIntent::output)
             .collect()
     }
 
@@ -325,7 +269,7 @@ impl Test {
     }
 
     pub async fn start_epoch(&mut self, epoch: Epoch) {
-        for validator in self.validators.values() {
+        for validator in self.validators.values_mut() {
             // Fire off initial epoch change event so that the pacemaker starts
             validator.epoch_manager.set_current_epoch(epoch).await;
         }

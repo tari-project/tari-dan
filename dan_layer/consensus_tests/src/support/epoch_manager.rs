@@ -11,6 +11,7 @@ use tari_dan_common_types::{
     ShardGroup,
     SubstateAddress,
     ToSubstateAddress,
+    VersionedSubstateId,
 };
 use tari_dan_storage::global::models::ValidatorNode;
 use tari_epoch_manager::{EpochManagerError, EpochManagerEvent, EpochManagerReader};
@@ -23,6 +24,7 @@ pub struct TestEpochManager {
     inner: Arc<Mutex<TestEpochManagerState>>,
     our_validator_node: Option<ValidatorNode<TestAddress>>,
     tx_epoch_events: broadcast::Sender<EpochManagerEvent>,
+    current_epoch: Epoch,
 }
 
 impl TestEpochManager {
@@ -31,10 +33,12 @@ impl TestEpochManager {
             inner: Default::default(),
             our_validator_node: None,
             tx_epoch_events,
+            current_epoch: Epoch(0),
         }
     }
 
-    pub async fn set_current_epoch(&self, current_epoch: Epoch) -> &Self {
+    pub async fn set_current_epoch(&mut self, current_epoch: Epoch) -> &Self {
+        self.current_epoch = current_epoch;
         {
             let mut lock = self.inner.lock().await;
             lock.current_epoch = current_epoch;
@@ -84,12 +88,13 @@ impl TestEpochManager {
         let mut state = self.state_lock().await;
         for (shard_group, committee) in committees {
             for (address, pk) in &committee.members {
-                let substate_address = random_substate_in_shard_group(shard_group, TEST_NUM_PRESHARDS);
+                let substate_id = random_substate_in_shard_group(shard_group, TEST_NUM_PRESHARDS);
+                let substate_id = VersionedSubstateId::new(substate_id, 0);
                 state.validator_shards.insert(
                     address.clone(),
                     (
                         shard_group,
-                        substate_address.to_substate_address(),
+                        substate_id.to_substate_address(),
                         pk.clone(),
                         None,
                         0,
@@ -133,6 +138,10 @@ impl TestEpochManager {
 
     pub async fn all_committees(&self) -> HashMap<ShardGroup, Committee<TestAddress>> {
         self.state_lock().await.committees.clone()
+    }
+
+    pub fn get_current_epoch(&self) -> Epoch {
+        self.current_epoch
     }
 }
 

@@ -3,7 +3,6 @@
 
 use std::sync::Arc;
 
-use indexmap::IndexMap;
 use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
@@ -46,13 +45,13 @@ pub struct ExecutionOutput {
 }
 
 impl ExecutionOutput {
-    pub fn resolve_inputs(
+    pub fn resolve_inputs<'a, I: IntoIterator<Item = (&'a SubstateRequirement, &'a Substate)>>(
         &self,
-        inputs: &IndexMap<SubstateRequirement, Substate>,
+        inputs: I,
     ) -> Vec<VersionedSubstateIdLockIntent> {
         if let Some(diff) = self.result.finalize.accept() {
             inputs
-                .iter()
+                .into_iter()
                 .map(|(substate_req, substate)| {
                     let requested_specific_version = substate_req.version().is_some();
                     let lock_flag = if diff.down_iter().any(|(id, _)| id == substate_req.substate_id()) {
@@ -73,7 +72,7 @@ impl ExecutionOutput {
             // TODO: we might want to have a SubstateLockFlag::None for rejected transactions so that we still know the
             // shards involved but do not lock them. We dont actually lock anything for rejected transactions anyway.
             inputs
-                .iter()
+                .into_iter()
                 .map(|(substate_req, substate)| {
                     VersionedSubstateIdLockIntent::new(
                         VersionedSubstateId::new(substate_req.substate_id().clone(), substate.version()),

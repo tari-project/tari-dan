@@ -11,9 +11,18 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct TransactionPoolStatusUpdate {
     pub transaction: TransactionPoolRecord,
+    ready_now: bool,
 }
 
 impl TransactionPoolStatusUpdate {
+    pub fn new(transaction: TransactionPoolRecord, ready_now: bool) -> Self {
+        Self { transaction, ready_now }
+    }
+
+    pub fn transaction(&self) -> &TransactionPoolRecord {
+        &self.transaction
+    }
+
     pub fn transaction_id(&self) -> &TransactionId {
         self.transaction.transaction_id()
     }
@@ -26,12 +35,12 @@ impl TransactionPoolStatusUpdate {
         self.transaction.evidence()
     }
 
-    pub fn evidence_mut(&mut self) -> &mut Evidence {
-        self.transaction.evidence_mut()
-    }
-
     pub fn is_ready(&self) -> bool {
         self.transaction.is_ready()
+    }
+
+    pub fn is_ready_now(&self) -> bool {
+        self.ready_now
     }
 
     pub fn decision(&self) -> Decision {

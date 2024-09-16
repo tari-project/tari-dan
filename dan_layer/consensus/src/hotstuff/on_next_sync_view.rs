@@ -4,7 +4,7 @@
 use log::*;
 use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{HighQc, LastSentVote},
+    consensus_models::{HighQc, LastSentVote, LeafBlock},
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
@@ -41,22 +41,19 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
 
     pub async fn handle(&mut self, epoch: Epoch, new_height: NodeHeight) -> Result<(), HotStuffError> {
         info!(target: LOG_TARGET, "⚠️ Leader failure: NEXTSYNCVIEW for epoch {} and node height {}", epoch, new_height);
-        // Is the VN registered?
-        if !self.epoch_manager.is_epoch_active(epoch).await? {
-            info!(
-                target: LOG_TARGET,
-                "[on_leader_timeout] Validator is not active within this epoch"
-            );
-            return Ok(());
-        }
-
-        let (high_qc, last_sent_vote) = self.store.with_read_tx(|tx| {
+        let (leaf_block, high_qc, last_sent_vote) = self.store.with_read_tx(|tx| {
+            let leaf_block = LeafBlock::get(tx, epoch)?;
             let high_qc = HighQc::get(tx, epoch)?.get_quorum_certificate(tx)?;
             let last_sent_vote = LastSentVote::get(tx)
                 .optional()?
                 .filter(|vote| high_qc.block_height() < vote.block_height);
-            Ok::<_, HotStuffError>((high_qc, last_sent_vote))
+            Ok::<_, HotStuffError>((leaf_block, high_qc, last_sent_vote))
         })?;
+
+        if leaf_block.height() == new_height {
+            info!(target: LOG_TARGET, "❓️ Leader failure occurred just before we completed processing of the leaf block {leaf_block}. Ignoring.");
+            return Ok(());
+        }
 
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         let next_leader = self

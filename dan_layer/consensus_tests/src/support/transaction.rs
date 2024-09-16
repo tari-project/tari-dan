@@ -3,16 +3,10 @@
 
 use std::{iter, time::Duration};
 
-use rand::{distributions::Alphanumeric, rngs::OsRng, Rng};
 use tari_common_types::types::PrivateKey;
-use tari_dan_common_types::VersionedSubstateId;
-use tari_dan_storage::consensus_models::{
-    Decision,
-    ExecutedTransaction,
-    TransactionExecution,
-    TransactionRecord,
-    VersionedSubstateIdLockIntent,
-};
+use tari_dan_app_utilities::transaction_executor::ExecutionOutput;
+use tari_dan_common_types::SubstateRequirement;
+use tari_dan_storage::consensus_models::{Decision, TransactionRecord, VersionedSubstateIdLockIntent};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     component::{ComponentBody, ComponentHeader},
@@ -20,41 +14,35 @@ use tari_engine_types::{
     substate::{Substate, SubstateDiff, SubstateId},
     transaction_receipt::{TransactionReceipt, TransactionReceiptAddress},
 };
-use tari_transaction::{Transaction, TransactionId};
+use tari_template_lib::args;
+use tari_transaction::Transaction;
 
 use crate::support::{committee_number_to_shard_group, helpers::random_substate_in_shard_group, TEST_NUM_PRESHARDS};
 
-pub fn build_transaction_from(
-    tx: Transaction,
-    decision: Decision,
-    fee: u64,
-    resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
-    resulting_outputs: Vec<VersionedSubstateIdLockIntent>,
-) -> TransactionRecord {
+pub fn build_transaction_from(tx: Transaction, decision: Decision) -> TransactionRecord {
     let mut tx = TransactionRecord::new(tx);
     if decision.is_abort() {
         tx.set_abort_reason(RejectReason::ExecutionFailure("Test aborted".to_string()));
     }
-
-    let execution =
-        create_execution_result_for_transaction(*tx.id(), decision, fee, resolved_inputs, resulting_outputs.clone());
-
-    tx.execution_result = Some(execution.result);
-    tx.resulting_outputs = Some(execution.resulting_outputs);
-    tx.resolved_inputs = Some(execution.resolved_inputs);
     tx
 }
 
 pub fn create_execution_result_for_transaction(
-    tx_id: TransactionId,
+    transaction: Transaction,
     decision: Decision,
     fee: u64,
-    resolved_inputs: Vec<VersionedSubstateIdLockIntent>,
-    mut resulting_outputs: Vec<VersionedSubstateIdLockIntent>,
-) -> TransactionExecution {
+    resolved_inputs: &[VersionedSubstateIdLockIntent],
+    resulting_outputs: &[VersionedSubstateIdLockIntent],
+) -> ExecutionOutput {
     let result = if decision.is_commit() {
         let mut diff = SubstateDiff::new();
-        for output in &resulting_outputs {
+        for input in resolved_inputs.iter().filter(|input| input.lock_type().is_write()) {
+            diff.down(
+                input.versioned_substate_id().substate_id().clone(),
+                input.versioned_substate_id().version(),
+            );
+        }
+        for output in resulting_outputs {
             if output.substate_id().is_transaction_receipt() {
                 continue;
             }
@@ -64,8 +52,8 @@ pub fn create_execution_result_for_transaction(
                  Got {output}"
             );
 
-            let s = (0..100).map(|_| OsRng.sample(Alphanumeric) as char).collect::<String>();
-            let random_state = tari_bor::to_value(&s).unwrap();
+            // Generate consistent state for the component by simply using the ID
+            let state = tari_bor::to_value(output.versioned_substate_id()).unwrap();
             diff.up(
                 output.versioned_substate_id().substate_id.clone(),
                 Substate::new(output.versioned_substate_id().version, ComponentHeader {
@@ -80,15 +68,15 @@ pub fn create_execution_result_for_transaction(
                         .as_component_address()
                         .unwrap()
                         .entity_id(),
-                    body: ComponentBody { state: random_state },
+                    body: ComponentBody { state },
                 }),
             )
         }
         // We MUST create the transaction receipt
         diff.up(
-            SubstateId::TransactionReceipt(TransactionReceiptAddress::from(tx_id)),
+            SubstateId::TransactionReceipt(TransactionReceiptAddress::from(*transaction.id())),
             Substate::new(0, TransactionReceipt {
-                transaction_hash: tx_id.into_array().into(),
+                transaction_hash: transaction.id().into_array().into(),
                 events: vec![],
                 logs: vec![],
                 fee_receipt: FeeReceipt {
@@ -98,6 +86,7 @@ pub fn create_execution_result_for_transaction(
                 },
             }),
         );
+
         TransactionResult::Accept(diff)
     } else {
         TransactionResult::Reject(RejectReason::ExecutionFailure(
@@ -105,42 +94,34 @@ pub fn create_execution_result_for_transaction(
         ))
     };
 
-    resulting_outputs.push(VersionedSubstateIdLockIntent::output(VersionedSubstateId::new(
-        SubstateId::TransactionReceipt(TransactionReceiptAddress::from(tx_id)),
-        0,
-    )));
-
-    TransactionExecution::new(
-        tx_id,
-        ExecuteResult {
-            finalize: FinalizeResult::new(tx_id.into_array().into(), vec![], vec![], result, FeeReceipt {
+    let result = ExecuteResult {
+        finalize: FinalizeResult::new(
+            transaction.id().into_array().into(),
+            vec![],
+            vec![],
+            result,
+            FeeReceipt {
                 total_fee_payment: fee.try_into().unwrap(),
                 total_fees_paid: fee.try_into().unwrap(),
                 cost_breakdown: FeeBreakdown::default(),
-            }),
-            execution_time: Duration::from_secs(0),
-        },
-        resolved_inputs,
-        resulting_outputs,
-        None,
-    )
+            },
+        ),
+        execution_time: Duration::from_secs(0),
+    };
+
+    ExecutionOutput { transaction, result }
 }
 
-pub fn build_random_outputs(total_num_outputs: usize, num_committees: u32) -> Vec<VersionedSubstateIdLockIntent> {
-    // We create these outputs so that the test VNs dont have to have any UP substates
-    // Equal potion of shards to each committee
-    (0..num_committees)
-        .flat_map(|group_no| {
-            random_substates_ids_for_committee_generator(group_no, num_committees).take(total_num_outputs)
-        })
-        .map(VersionedSubstateIdLockIntent::output)
-        .collect::<Vec<_>>()
+pub fn build_substate_id_for_committee(committee_no: u32, num_committees: u32) -> SubstateId {
+    random_substates_ids_for_committee_generator(committee_no, num_committees)
+        .next()
+        .unwrap()
 }
 
 pub fn random_substates_ids_for_committee_generator(
     committee_no: u32,
     num_committees: u32,
-) -> impl Iterator<Item = VersionedSubstateId> {
+) -> impl Iterator<Item = SubstateId> {
     iter::repeat_with(move || {
         random_substate_in_shard_group(
             committee_number_to_shard_group(TEST_NUM_PRESHARDS, committee_no, num_committees),
@@ -149,29 +130,16 @@ pub fn random_substates_ids_for_committee_generator(
     })
 }
 
-pub fn build_transaction_with_inputs_and_outputs(
-    decision: Decision,
-    fee: u64,
-    inputs: Vec<VersionedSubstateIdLockIntent>,
-    outputs: Vec<VersionedSubstateIdLockIntent>,
-) -> TransactionRecord {
+pub fn build_transaction(decision: Decision, inputs: Vec<SubstateRequirement>) -> TransactionRecord {
     let k = PrivateKey::default();
     let tx = Transaction::builder()
-        .with_inputs(inputs.iter().map(|i| i.versioned_substate_id().clone().into()))
+        .call_function(Default::default(), "foo", args![])
+        .with_inputs(inputs)
         .sign(&k)
         .build();
-
-    build_transaction_from(tx, decision, fee, inputs, outputs)
-}
-
-pub fn change_decision(tx: ExecutedTransaction, new_decision: Decision) -> TransactionRecord {
-    let total_fees_paid = tx
-        .result()
-        .finalize
-        .fee_receipt
-        .total_allocated_fee_payments()
-        .as_u64_checked()
-        .unwrap();
-    let (tx, _, resolved_inputs, resulting_outputs) = tx.dissolve();
-    build_transaction_from(tx, new_decision, total_fees_paid, resolved_inputs, resulting_outputs)
+    let mut tx = TransactionRecord::new(tx);
+    if decision.is_abort() {
+        tx.set_abort_reason(RejectReason::ExecutionFailure("Test aborted".to_string()));
+    }
+    tx
 }

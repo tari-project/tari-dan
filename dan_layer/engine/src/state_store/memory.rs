@@ -48,7 +48,7 @@ impl MemoryStateStore {
     ) -> Result<(), StateStoreError> {
         let mut state = self.write_access()?;
         for (k, v) in iter {
-            state.set_state(&k, v)?;
+            state.set_state(&k, &v)?;
         }
         state.commit()
     }
@@ -197,7 +197,7 @@ mod tests {
         let store = MemoryStateStore::default();
         {
             let mut access = store.write_access().unwrap();
-            access.set_state(b"abc", user_data.clone()).unwrap();
+            access.set_state(b"abc", &user_data).unwrap();
             let res: UserData = access.get_state(b"abc").unwrap();
             assert_eq!(res, user_data);
             let res = access.get_state::<_, UserData>(b"def").optional().unwrap();
@@ -213,7 +213,7 @@ mod tests {
 
         {
             let mut access = store.write_access().unwrap();
-            access.set_state(b"abc", user_data.clone()).unwrap();
+            access.set_state(b"abc", &user_data).unwrap();
             access.commit().unwrap();
         }
 

@@ -11,21 +11,22 @@ use tari_dan_common_types::{
     NumPreshards,
     ShardGroup,
     SubstateAddress,
-    VersionedSubstateId,
 };
-use tari_engine_types::substate::SubstateId;
+use tari_engine_types::{
+    component::{ComponentBody, ComponentHeader},
+    substate::{SubstateId, SubstateValue},
+};
 use tari_template_lib::models::{ComponentAddress, ComponentKey, EntityId, ObjectKey};
 
 use crate::support::TestAddress;
 
-pub(crate) fn random_substate_in_shard_group(shard_group: ShardGroup, num_shards: NumPreshards) -> VersionedSubstateId {
+pub(crate) fn random_substate_in_shard_group(shard_group: ShardGroup, num_shards: NumPreshards) -> SubstateId {
     let range = shard_group.to_substate_address_range(num_shards);
     let middlish = random_substate_address_range(range);
     let entity_id = EntityId::new(copy_fixed(&middlish.to_u256().to_be_bytes()[0..EntityId::LENGTH]));
     let rand_bytes = OsRng.gen::<[u8; ComponentKey::LENGTH]>();
     let component_key = ComponentKey::new(copy_fixed(&rand_bytes));
-    let substate_id = SubstateId::Component(ComponentAddress::new(ObjectKey::new(entity_id, component_key)));
-    VersionedSubstateId::new(substate_id, 0)
+    SubstateId::Component(ComponentAddress::new(ObjectKey::new(entity_id, component_key)))
 }
 
 fn random_substate_address_range<R: RangeBounds<SubstateAddress>>(range: R) -> SubstateAddress {
@@ -57,4 +58,18 @@ pub fn derive_keypair_from_address(addr: &TestAddress) -> (PrivateKey, PublicKey
     let secret_key = PrivateKey::from_uniform_bytes(&bytes).unwrap();
     let public_key = PublicKey::from_secret_key(&secret_key);
     (secret_key, public_key)
+}
+
+pub fn make_test_component(entity_id: EntityId) -> SubstateValue {
+    SubstateValue::Component(ComponentHeader {
+        template_address: Default::default(),
+        module_name: "Test".to_string(),
+        owner_key: None,
+        owner_rule: Default::default(),
+        access_rules: Default::default(),
+        entity_id,
+        body: ComponentBody {
+            state: tari_bor::Value::Null,
+        },
+    })
 }

@@ -1,7 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::{ToSubstateAddress, VersionedSubstateId};
+use tari_dan_common_types::{ToSubstateAddress, VersionedSubstateIdRef};
 use tari_dan_storage::{
     consensus_models::{SubstateChange, SubstateRecord},
     StateStoreReadTransaction,
@@ -14,7 +14,7 @@ use crate::hotstuff::substate_store::SubstateStoreError;
 pub trait ReadableSubstateStore {
     type Error;
 
-    fn get(&self, id: &VersionedSubstateId) -> Result<Substate, Self::Error>;
+    fn get(&self, id: VersionedSubstateIdRef<'_>) -> Result<Substate, Self::Error>;
 }
 
 pub trait WriteableSubstateStore: ReadableSubstateStore {
@@ -30,7 +30,7 @@ impl<T: ReadableSubstateStore + WriteableSubstateStore> SubstateStore for T {}
 impl<T: StateStoreReadTransaction> ReadableSubstateStore for &T {
     type Error = SubstateStoreError;
 
-    fn get(&self, id: &VersionedSubstateId) -> Result<Substate, Self::Error> {
+    fn get(&self, id: VersionedSubstateIdRef<'_>) -> Result<Substate, Self::Error> {
         let substate = SubstateRecord::get(*self, &id.to_substate_address())?;
         Ok(substate.into_substate())
     }

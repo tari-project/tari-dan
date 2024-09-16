@@ -7,7 +7,7 @@ use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{committee::CommitteeInfo, Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, ForeignParkedProposal, TransactionRecord},
+    consensus_models::{Block, BlockId, ForeignParkedProposal, ForeignProposal, TransactionRecord},
     StateStore,
     StateStoreWriteTransaction,
 };
@@ -19,6 +19,7 @@ use crate::{
     block_validations,
     hotstuff::{error::HotStuffError, HotstuffEvent, ProposalValidationError},
     messages::{ForeignProposalMessage, HotstuffMessage, MissingTransactionsRequest, ProposalMessage},
+    tracing::TraceTimer,
     traits::{ConsensusSpec, OutboundMessaging},
 };
 
@@ -67,8 +68,12 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
+        let _timer = TraceTimer::debug(LOG_TARGET, "on_message_validate");
         match msg {
-            HotstuffMessage::Proposal(msg) => self.process_local_proposal(current_height, from, msg).await,
+            HotstuffMessage::Proposal(msg) => {
+                self.process_local_proposal(current_height, from, local_committee_info, msg)
+                    .await
+            },
             HotstuffMessage::ForeignProposal(proposal) => {
                 self.process_foreign_proposal(local_committee_info, from, proposal)
                     .await
@@ -124,6 +129,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         &mut self,
         current_height: NodeHeight,
         from: TConsensusSpec::Addr,
+        local_committee_info: &CommitteeInfo,
         proposal: ProposalMessage,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
         info!(
@@ -152,7 +158,8 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             });
         }
 
-        self.handle_missing_transactions_local_block(from, proposal).await
+        self.handle_missing_transactions_local_block(from, local_committee_info, proposal)
+            .await
     }
 
     pub fn update_local_parked_blocks(
@@ -212,17 +219,12 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
     async fn handle_missing_transactions_local_block(
         &mut self,
         from: TConsensusSpec::Addr,
+        local_committee_info: &CommitteeInfo,
         proposal: ProposalMessage,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
-        // TODO: we need to check foreign proposals for missing transactions as well
-        // for proposal in proposal.foreign_proposals.iter() {
-        //     self.process_foreign_proposal(&CommitteeInfo::default(), from.clone(), proposal.clone())
-        //         .await?;
-        // }
-
         let missing_tx_ids = self
             .store
-            .with_write_tx(|tx| self.check_for_missing_transactions(tx, &proposal))?;
+            .with_write_tx(|tx| self.check_for_missing_transactions(tx, local_committee_info, &proposal))?;
 
         if missing_tx_ids.is_empty() {
             return Ok(MessageValidationResult::Ready {
@@ -249,6 +251,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
     fn check_for_missing_transactions(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        local_committee_info: &CommitteeInfo,
         proposal: &ProposalMessage,
     ) -> Result<HashSet<TransactionId>, HotStuffError> {
         if proposal.block.commands().is_empty() {
@@ -258,7 +261,13 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             );
             return Ok(HashSet::new());
         }
-        let missing_tx_ids = TransactionRecord::get_missing(&**tx, proposal.block.all_transaction_ids())?;
+        let mut missing_tx_ids = TransactionRecord::get_missing(&**tx, proposal.block.all_transaction_ids())?;
+        // Also park block if it has missing transactions from foreign proposals
+        for proposal in &proposal.foreign_proposals {
+            let foreign_missing =
+                self.get_missing_transactions_for_foreign_proposal(tx, local_committee_info, proposal)?;
+            missing_tx_ids.extend(foreign_missing);
+        }
 
         if missing_tx_ids.is_empty() {
             debug!(
@@ -279,7 +288,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
     }
 
     async fn process_foreign_proposal(
-        &mut self,
+        &self,
         local_committee_info: &CommitteeInfo,
         from: TConsensusSpec::Addr,
         msg: ForeignProposalMessage,
@@ -366,6 +375,26 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
                 missing_txs: missing_tx_ids,
             })
         })
+    }
+
+    fn get_missing_transactions_for_foreign_proposal(
+        &self,
+        tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        local_committee_info: &CommitteeInfo,
+        proposal: &ForeignProposal,
+    ) -> Result<HashSet<TransactionId>, HotStuffError> {
+        let mut all_involved_transactions = proposal
+            .block
+            .all_transaction_ids_in_committee(local_committee_info)
+            .peekable();
+
+        if all_involved_transactions.peek().is_none() {
+            return Ok(HashSet::new());
+        }
+
+        let missing = TransactionRecord::get_missing(tx, all_involved_transactions)?;
+
+        Ok(missing)
     }
 }
 

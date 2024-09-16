@@ -56,6 +56,10 @@ impl ProcessManager {
         let executables = self.executable_manager.prepare_all().await?;
         self.instance_manager.fork_all(executables).await?;
 
+        // Wait some time for all instances to start
+        sleep(Duration::from_secs(self.instance_manager.num_instances() as u64)).await;
+        self.check_instances_running()?;
+
         if !self.skip_registration {
             let num_vns = self.instance_manager.num_validator_nodes();
             // Mine some initial funds, guessing 10 blocks to allow for coinbase maturity
@@ -69,6 +73,24 @@ impl ProcessManager {
                 .context("registering validator node via GRPC")?;
         }
 
+        Ok(())
+    }
+
+    fn check_instances_running(&mut self) -> anyhow::Result<()> {
+        for instance in self
+            .instance_manager
+            .instances_mut()
+            .filter(|i| !i.instance_type().is_tari_node())
+        {
+            if let Some(status) = instance.check_running()? {
+                return Err(anyhow!(
+                    "Failed to start instance: {} {} {}",
+                    instance.name(),
+                    instance.instance_type(),
+                    status
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -256,11 +278,12 @@ impl ProcessManager {
     async fn register_all_validator_nodes(&mut self) -> anyhow::Result<()> {
         let mut skip = vec![];
         for vn in self.instance_manager.validator_nodes_mut() {
-            if !vn.instance_mut().check_running() {
+            if let Some(status) = vn.instance_mut().check_running()? {
                 log::error!(
-                    "Skipping registration for validator node {}: {} since it is not running",
+                    "Skipping registration for validator node {}: {} since it is not running: {}",
                     vn.instance().id(),
-                    vn.instance().name()
+                    vn.instance().name(),
+                    status
                 );
                 skip.push(vn.instance().id());
             }

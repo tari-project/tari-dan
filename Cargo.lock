@@ -1566,7 +1566,7 @@ dependencies = [
  "fern",
  "futures 0.3.30",
  "humantime 2.1.0",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "itertools 0.11.0",
  "log",
  "rand",
@@ -3262,7 +3262,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "http",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "slab",
  "tokio",
  "tokio-util 0.7.11",
@@ -3898,9 +3898,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.2.6"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
+checksum = "68b900aa2f7301e21c36462b170ee99994de34dff39a4a6a528e80e7376d07e5"
 dependencies = [
  "equivalent",
  "hashbrown 0.14.5",
@@ -3953,7 +3953,7 @@ dependencies = [
  "config",
  "cucumber",
  "httpmock",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "libp2p",
  "log",
  "log4rs",
@@ -6481,7 +6481,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4c5cc86750666a3ed20bdaf5ca2a0344f9c67674cae0515bec2da16fbaa47db"
 dependencies = [
  "fixedbitset",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
 ]
 
 [[package]]
@@ -8055,7 +8055,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "itoa",
  "ryu",
  "serde",
@@ -8902,7 +8902,7 @@ version = "0.7.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "log",
  "serde",
  "tari_common",
@@ -9052,7 +9052,6 @@ dependencies = [
  "config",
  "dashmap",
  "futures 0.3.30",
- "indexmap 2.2.6",
  "json5",
  "libp2p-identity",
  "log",
@@ -9096,7 +9095,7 @@ version = "0.7.0"
 dependencies = [
  "blake2",
  "ethnum",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "libp2p-identity",
  "newtype-ops",
  "prost 0.12.6",
@@ -9124,7 +9123,7 @@ dependencies = [
  "cargo_toml 0.11.8",
  "d3ne",
  "env_logger 0.10.2",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "log",
  "rand",
  "semver",
@@ -9175,7 +9174,7 @@ version = "0.7.0"
 dependencies = [
  "anyhow",
  "chrono",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "log",
  "rand",
  "serde",
@@ -9382,7 +9381,7 @@ dependencies = [
  "blake2",
  "digest",
  "hex",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "lazy_static",
  "rand",
  "serde",
@@ -9807,7 +9806,7 @@ dependencies = [
  "diesel",
  "diesel_migrations",
  "hex",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "log",
  "rand",
  "serde",
@@ -9828,7 +9827,7 @@ name = "tari_state_tree"
 version = "0.7.0"
 dependencies = [
  "hex",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "itertools 0.11.0",
  "log",
  "serde",
@@ -9987,7 +9986,7 @@ dependencies = [
 name = "tari_transaction"
 version = "0.7.0"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "rand",
  "serde",
  "tari_common_types",
@@ -10042,7 +10041,7 @@ dependencies = [
  "config",
  "futures 0.3.30",
  "include_dir",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "json5",
  "libp2p",
  "libsqlite3-sys",
@@ -10574,7 +10573,7 @@ version = "0.19.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "serde",
  "serde_spanned",
  "toml_datetime",
@@ -10587,7 +10586,7 @@ version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8534fd7f78b5405e860340ad6575217ce99f38d4d5c8f2442cb5ecb50090e1"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "toml_datetime",
  "winnow 0.5.40",
 ]
@@ -10598,7 +10597,7 @@ version = "0.22.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "278f3d518e152219c994ce877758516bca5e118eaed6996192a774fb9fbf0788"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "serde",
  "serde_spanned",
  "toml_datetime",
@@ -10818,7 +10817,7 @@ dependencies = [
  "bincode 2.0.0-rc.3",
  "bytes 1.6.1",
  "clap 4.5.10",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "once_cell",
  "rand",
  "rayon",
@@ -10917,7 +10916,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2cae1fc5d05d47aa24b64f9a4f7cba24cdc9187a2084dd97ac57bef5eccae6"
 dependencies = [
  "chrono",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "thiserror",
  "ts-rs-macros",
 ]

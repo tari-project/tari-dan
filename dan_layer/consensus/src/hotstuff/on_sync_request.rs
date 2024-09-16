@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_dan_common_types::optional::Optional;
+use tari_dan_common_types::{optional::Optional, Epoch};
 use tari_dan_storage::{
     consensus_models::{Block, LastSentVote, LeafBlock},
     StateStore,
@@ -31,13 +31,25 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
         }
     }
 
-    pub fn handle(&self, from: TConsensusSpec::Addr, msg: SyncRequestMessage) {
+    #[allow(clippy::too_many_lines)]
+    pub fn handle(&self, from: TConsensusSpec::Addr, epoch: Epoch, msg: SyncRequestMessage) {
+        if msg.epoch != epoch {
+            warn!(
+                target: LOG_TARGET,
+                "Received SyncRequest from {} for epoch {} but our epoch is {}. Ignoring request.",
+                from,
+                msg.epoch,
+                epoch
+            );
+            return;
+        }
+
         let mut outbound_messaging = self.outbound_messaging.clone();
         let store = self.store.clone();
 
         task::spawn(async move {
             let result = store.with_read_tx(|tx| {
-                let leaf_block = LeafBlock::get(tx)?.get_block(tx)?;
+                let leaf_block = LeafBlock::get(tx, epoch)?.get_block(tx)?;
 
                 if leaf_block.height() < msg.high_qc.block_height() {
                     return Err(HotStuffError::InvalidSyncRequest {

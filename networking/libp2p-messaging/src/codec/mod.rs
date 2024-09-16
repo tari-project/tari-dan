@@ -18,7 +18,7 @@ pub trait Codec: Default {
 
     /// Reads a message from the given I/O stream according to the
     /// negotiated protocol.
-    async fn decode_from<R>(&mut self, reader: &mut R) -> io::Result<Self::Message>
+    async fn decode_from<R>(&mut self, reader: &mut R) -> io::Result<(usize, Self::Message)>
     where R: AsyncRead + Unpin + Send;
 
     /// Writes a request to the given I/O stream according to the

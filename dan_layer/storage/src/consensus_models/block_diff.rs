@@ -3,7 +3,7 @@
 
 use std::fmt::Debug;
 
-use tari_dan_common_types::committee::CommitteeInfo;
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional};
 use tari_engine_types::substate::SubstateId;
 
 use crate::{
@@ -67,7 +67,28 @@ impl BlockDiff {
     }
 
     pub fn remove<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        tx.block_diffs_remove(&self.block_id)
+        if Self::remove_any(tx, Some(self.block_id))? == 0 {
+            return Err(StorageError::NotFound {
+                item: "BlockDiff (remove)".to_string(),
+                key: self.block_id.to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    pub fn remove_any<TTx, I>(tx: &mut TTx, block_ids: I) -> Result<usize, StorageError>
+    where
+        TTx: StateStoreWriteTransaction,
+        I: IntoIterator<Item = BlockId>,
+    {
+        // TODO(perf): bulk remove
+        let mut removed = 0usize;
+        for block_id in block_ids {
+            if tx.block_diffs_remove(&block_id).optional()?.is_some() {
+                removed += 1;
+            }
+        }
+        Ok(removed)
     }
 
     pub fn get_for_substate<TTx: StateStoreReadTransaction>(

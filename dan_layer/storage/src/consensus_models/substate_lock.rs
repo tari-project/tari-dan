@@ -27,8 +27,8 @@ impl SubstateLock {
         }
     }
 
-    pub fn transaction_id(&self) -> TransactionId {
-        self.transaction_id
+    pub fn transaction_id(&self) -> &TransactionId {
+        &self.transaction_id
     }
 
     pub fn substate_lock(&self) -> SubstateLockType {

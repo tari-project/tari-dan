@@ -1,8 +1,8 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::{optional::IsNotFoundError, SubstateLockType, VersionedSubstateId};
-use tari_dan_storage::StorageError;
+use tari_dan_common_types::{optional::IsNotFoundError, VersionedSubstateId};
+use tari_dan_storage::{consensus_models::LockConflict, StorageError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubstateStoreError {
@@ -50,11 +50,19 @@ pub enum LockFailedError {
     #[error("Substate {id} is DOWN")]
     SubstateIsDown { id: VersionedSubstateId },
     #[error(
-        "Failed to {requested_lock} lock substate {substate_id} due to conflict with existing {existing_lock} lock"
+        "Failed to {} lock substate {substate_id} due to conflict with existing {} lock on {}", conflict.requested_lock, conflict.existing_lock, conflict.transaction_id
     )]
     LockConflict {
         substate_id: VersionedSubstateId,
-        existing_lock: SubstateLockType,
-        requested_lock: SubstateLockType,
+        conflict: LockConflict,
     },
+}
+
+impl LockFailedError {
+    pub fn lock_conflict(&self) -> Option<&LockConflict> {
+        match self {
+            LockFailedError::LockConflict { conflict, .. } => Some(conflict),
+            _ => None,
+        }
+    }
 }
