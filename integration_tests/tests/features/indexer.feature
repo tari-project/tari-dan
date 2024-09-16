@@ -9,7 +9,6 @@ Feature: Indexer node
 
     ##### Setup
     # Initialize a base node, wallet, miner and VN
-    Given fees are disabled
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
@@ -46,7 +45,7 @@ Feature: Indexer node
 
     # Create a new SparkleNft component and mint an NFT
     When I call function "new" on template "basic_nft" using account ACC to pay fees via wallet daemon WALLET_D named "NFT"
-    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "NFT, ACC" named "TX1"
+    When I submit a transaction manifest via wallet daemon WALLET_D signed by the key of ACC with inputs "NFT, ACC" named "TX1"
     ```
     // $mint NFT/resources/0 6
     // $nft_index NFT/resources/0 0
@@ -86,7 +85,7 @@ Feature: Indexer node
     Then the indexer IDX returns 6 non fungibles for resource NFT/resources/0
 
     # Scan the network for the event emitted on ACC creation
-    When indexer IDX scans the network events for account ACC with topics component-created,pay_fee,pay_fee,pay_fee,pay_fee,deposit,component-created,pay_fee,deposit,deposit,deposit,deposit,deposit,deposit
+    When indexer IDX scans the network events for account ACC with topics component-created,pay_fee,pay_fee,pay_fee,pay_fee,pay_fee,deposit,component-created,pay_fee,pay_fee,deposit,deposit,deposit,deposit,deposit,deposit
 
   @serial
   Scenario: Indexer GraphQL requests work
@@ -104,7 +103,6 @@ Feature: Indexer node
 
     ##### Setup
     # Initialize a base node, wallet, miner and VN
-    Given fees are disabled
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
@@ -138,7 +136,6 @@ Feature: Indexer node
 
     ##### Setup
     # Initialize a base node, wallet, miner and VN
-    Given fees are disabled
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
@@ -171,7 +168,7 @@ Feature: Indexer node
     When I call function "mint" on template "faucet" using account ACC_1 to pay fees via wallet daemon WALLET_D with args "10000" named "FAUCET"
 
     # Generate some events by doing vault operations with the faucet and the acounts
-    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACC_1, ACC_2" named "TX1"
+    When I submit a transaction manifest via wallet daemon WALLET_D signed by the key of ACC_1 with inputs "FAUCET, ACC_1, ACC_2" named "TX1"
     ```
     let faucet = global!["FAUCET/components/TestFaucet"];
     let faucet_resource = global!["FAUCET/resources/0"];

@@ -470,7 +470,11 @@ pub async fn submit_manifest_with_signing_keys(
         transaction: None,
         signing_key_index: Some(account.key_index),
         instructions: instructions.instructions,
-        fee_instructions: vec![],
+        fee_instructions: vec![Instruction::CallMethod {
+            component_address: account.address.as_component_address().unwrap(),
+            method: "pay_fee".to_string(),
+            args: args![Amount(2000)],
+        }],
         override_inputs: false,
         is_dry_run: false,
         proof_ids: vec![],
@@ -654,7 +658,7 @@ pub async fn create_component(
         fee_instructions: vec![Instruction::CallMethod {
             component_address: account.address.as_component_address().unwrap(),
             method: "pay_fee".to_string(),
-            args: args![Amount(100)],
+            args: args![Amount(2000)],
         }],
         override_inputs: false,
         is_dry_run: false,
@@ -672,8 +676,8 @@ pub async fn create_component(
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
 
-    if let Some(reason) = wait_resp.result.clone().and_then(|finalize| finalize.reject().cloned()) {
-        panic!("Transaction failed: {}", reason);
+    if let Some(reason) = wait_resp.result.as_ref().and_then(|finalize| finalize.full_reject()) {
+        panic!("Create component tx failed: {}", reason);
     }
     add_substate_ids(
         world,
@@ -706,7 +710,7 @@ pub async fn call_component(
         .expect("Failed to get account component address");
 
     let tx = Transaction::builder()
-        .fee_transaction_pay_from_component(account_component_address, Amount(1))
+        .fee_transaction_pay_from_component(account_component_address, Amount(1000))
         .call_method(source_component_address, &function_call, vec![])
         .build_unsigned_transaction();
 
