@@ -498,6 +498,15 @@ CREATE TABLE state_transitions
 CREATE UNIQUE INDEX state_transitions_shard_seq on state_transitions (shard, seq);
 CREATE INDEX state_transitions_epoch on state_transitions (epoch);
 
+CREATE TABLE diagnostics_no_votes
+(
+    id          integer   not NULL primary key AUTOINCREMENT,
+    block_id    text      not NULL,
+    reason_code text      not NULL,
+    reason_text text      not NULL,
+    created_at  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Debug Triggers
 CREATE TABLE transaction_pool_history
 (

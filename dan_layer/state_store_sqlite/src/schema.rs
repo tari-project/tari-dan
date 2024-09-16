@@ -56,6 +56,16 @@ diesel::table! {
 }
 
 diesel::table! {
+    diagnostics_no_votes (id) {
+        id -> Integer,
+        block_id -> Text,
+        reason_code -> Text,
+        reason_text -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     epoch_checkpoints (id) {
         id -> Integer,
         epoch -> BigInt,
@@ -482,6 +492,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     block_diffs,
     blocks,
     burnt_utxos,
+    diagnostics_no_votes,
     epoch_checkpoints,
     foreign_missing_transactions,
     foreign_parked_blocks,

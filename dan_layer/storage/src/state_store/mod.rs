@@ -52,6 +52,7 @@ use crate::{
         LockConflict,
         LockedBlock,
         LockedSubstateValue,
+        NoVoteReason,
         PendingShardStateTreeDiff,
         QcId,
         QuorumCertificate,
@@ -561,6 +562,9 @@ pub trait StateStoreWriteTransaction {
         block_id: &BlockId,
         conflicts: I,
     ) -> Result<(), StorageError>;
+
+    // -------------------------------- Diagnotics -------------------------------- //
+    fn diagnostics_add_no_vote(&mut self, block_id: BlockId, reason: NoVoteReason) -> Result<(), StorageError>;
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

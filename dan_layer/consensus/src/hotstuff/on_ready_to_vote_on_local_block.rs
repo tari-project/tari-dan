@@ -26,6 +26,7 @@ use tari_dan_storage::{
         LastVoted,
         LockedBlock,
         MintConfidentialOutputAtom,
+        NoVoteReason,
         PendingShardStateTreeDiff,
         QuorumDecision,
         SubstateChange,
@@ -165,16 +166,14 @@ where TConsensusSpec: ConsensusSpec
             }
 
             let quorum_decision = change_set.quorum_decision();
-            if quorum_decision.is_some() {
-                info!(
-                    target: LOG_TARGET,
-                    "✅ Saving changeset for Local block {} decision {:?}, change set: {}",
-                    valid_block.block(),
-                    quorum_decision,
-                    change_set
-                );
-                change_set.save(tx)?;
-            }
+            info!(
+                target: LOG_TARGET,
+                "✅ Saving changeset for Local block {} decision {:?}, change set: {}",
+                valid_block.block(),
+                quorum_decision,
+                change_set
+            );
+            change_set.save(tx)?;
 
             Ok::<_, HotStuffError>(BlockDecision {
                 quorum_decision,
@@ -252,7 +251,7 @@ where TConsensusSpec: ConsensusSpec
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<(), HotStuffError> {
         if !self.should_vote(tx, valid_block.block())? {
-            proposed_block_change_set.no_vote();
+            proposed_block_change_set.no_vote(NoVoteReason::ShouldNotVote);
             return Ok(());
         }
 
@@ -312,7 +311,7 @@ where TConsensusSpec: ConsensusSpec
         for cmd in block.commands() {
             match cmd {
                 Command::LocalOnly(atom) => {
-                    if !self.evaluate_local_only_command(
+                    if let Some(reason) = self.evaluate_local_only_command(
                         tx,
                         block,
                         &locked_block,
@@ -322,12 +321,12 @@ where TConsensusSpec: ConsensusSpec
                         proposed_block_change_set,
                         &mut total_leader_fee,
                     )? {
-                        proposed_block_change_set.no_vote();
+                        proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
                 },
                 Command::Prepare(atom) => {
-                    if !self.evaluate_prepare_command(
+                    if let Some(reason) = self.evaluate_prepare_command(
                         tx,
                         block,
                         &locked_block,
@@ -336,25 +335,21 @@ where TConsensusSpec: ConsensusSpec
                         &mut substate_store,
                         proposed_block_change_set,
                     )? {
-                        proposed_block_change_set.no_vote();
+                        proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
                 },
                 Command::LocalPrepare(atom) => {
-                    if !self.evaluate_local_prepare_command(
-                        tx,
-                        block,
-                        &locked_block,
-                        atom,
-                        proposed_block_change_set,
-                    )? {
-                        proposed_block_change_set.no_vote();
+                    if let Some(reason) =
+                        self.evaluate_local_prepare_command(tx, block, &locked_block, atom, proposed_block_change_set)?
+                    {
+                        proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
                 },
                 Command::AllPrepare(atom) => {
                     // Execute here
-                    if !self.evaluate_all_prepare_command(
+                    if let Some(reason) = self.evaluate_all_prepare_command(
                         tx,
                         block,
                         &locked_block,
@@ -363,18 +358,20 @@ where TConsensusSpec: ConsensusSpec
                         &mut substate_store,
                         proposed_block_change_set,
                     )? {
-                        proposed_block_change_set.no_vote();
+                        proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
                 },
                 Command::SomePrepare(atom) => {
-                    if !self.evaluate_some_prepare_command(tx, block, &locked_block, atom, proposed_block_change_set)? {
-                        proposed_block_change_set.no_vote();
+                    if let Some(reason) =
+                        self.evaluate_some_prepare_command(tx, block, &locked_block, atom, proposed_block_change_set)?
+                    {
+                        proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
                 },
                 Command::LocalAccept(atom) => {
-                    if !self.evaluate_local_accept_command(
+                    if let Some(reason) = self.evaluate_local_accept_command(
                         tx,
                         block,
                         &locked_block,
@@ -382,12 +379,12 @@ where TConsensusSpec: ConsensusSpec
                         local_committee_info,
                         proposed_block_change_set,
                     )? {
-                        proposed_block_change_set.no_vote();
+                        proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
                 },
                 Command::AllAccept(atom) => {
-                    if !self.evaluate_all_accept_command(
+                    if let Some(reason) = self.evaluate_all_accept_command(
                         tx,
                         block,
                         &locked_block,
@@ -397,13 +394,15 @@ where TConsensusSpec: ConsensusSpec
                         proposed_block_change_set,
                         &mut total_leader_fee,
                     )? {
-                        proposed_block_change_set.no_vote();
+                        proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
                 },
                 Command::SomeAccept(atom) => {
-                    if !self.evaluate_some_accept_command(tx, block, &locked_block, atom, proposed_block_change_set)? {
-                        proposed_block_change_set.no_vote();
+                    if let Some(reason) =
+                        self.evaluate_some_accept_command(tx, block, &locked_block, atom, proposed_block_change_set)?
+                    {
+                        proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
                 },
@@ -414,11 +413,11 @@ where TConsensusSpec: ConsensusSpec
                             "❌ NO VOTE: ForeignProposal command in block {} but no foreign proposal found",
                             fp_atom.block_id,
                         );
-                        proposed_block_change_set.no_vote();
+                        proposed_block_change_set.no_vote(NoVoteReason::ForeignProposalCommandInBlockMissing);
                         return Ok(());
                     };
 
-                    if !self.evaluate_foreign_proposal_command(
+                    if let Some(reason) = self.evaluate_foreign_proposal_command(
                         tx,
                         block,
                         &locked_block,
@@ -427,21 +426,21 @@ where TConsensusSpec: ConsensusSpec
                         foreign_committee_info,
                         proposed_block_change_set,
                     )? {
-                        proposed_block_change_set.no_vote();
+                        proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
 
                     continue;
                 },
                 Command::MintConfidentialOutput(atom) => {
-                    if !self.evaluate_mint_confidential_output_command(
+                    if let Some(reason) = self.evaluate_mint_confidential_output_command(
                         tx,
                         atom,
                         local_committee_info,
                         &mut substate_store,
                         proposed_block_change_set,
                     )? {
-                        proposed_block_change_set.no_vote();
+                        proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
                 },
@@ -452,7 +451,7 @@ where TConsensusSpec: ConsensusSpec
                             "❌ EpochEvent::End command received for block {} but it is not the next epoch",
                             block.id(),
                         );
-                        proposed_block_change_set.no_vote();
+                        proposed_block_change_set.no_vote(NoVoteReason::NotEndOfEpoch);
                         return Ok(());
                     }
                     if block.commands().len() > 1 {
@@ -461,7 +460,7 @@ where TConsensusSpec: ConsensusSpec
                             "❌ EpochEvent::End command in block {} but block contains other commands",
                             block.id()
                         );
-                        proposed_block_change_set.no_vote();
+                        proposed_block_change_set.no_vote(NoVoteReason::EndOfEpochWithOtherCommands);
                         return Ok(());
                     }
 
@@ -478,7 +477,7 @@ where TConsensusSpec: ConsensusSpec
                 block.total_leader_fee(),
                 total_leader_fee
             );
-            proposed_block_change_set.no_vote();
+            proposed_block_change_set.no_vote(NoVoteReason::TotalLeaderFeeDisagreement);
             return Ok(());
         }
 
@@ -501,7 +500,7 @@ where TConsensusSpec: ConsensusSpec
                 block.merkle_root(),
                 expected_merkle_root
             );
-            proposed_block_change_set.no_vote();
+            proposed_block_change_set.no_vote(NoVoteReason::MerkleRootMismatch);
             return Ok(());
         }
 
@@ -526,7 +525,7 @@ where TConsensusSpec: ConsensusSpec
         substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
         total_leader_fee: &mut u64,
-    ) -> Result<bool, HotStuffError> {
+    ) -> Result<Option<NoVoteReason>, HotStuffError> {
         let _timer = TraceTimer::info(LOG_TARGET, "Evaluate LocalOnly command");
         let Some(mut tx_rec) =
             proposed_block_change_set.get_transaction(tx, locked_block, &block.as_leaf_block(), atom.id())?
@@ -537,7 +536,7 @@ where TConsensusSpec: ConsensusSpec
                 block,
                 atom.id(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::TransactionNotInPool));
         };
 
         if !tx_rec.current_stage().is_new() {
@@ -548,7 +547,10 @@ where TConsensusSpec: ConsensusSpec
                 block,
                 tx_rec.current_stage(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::StageDisagreement {
+                stage: tx_rec.current_stage(),
+                expected: TransactionPoolStage::New,
+            }));
         }
 
         // TODO(perf): proposer shouldn't have to do this twice, esp. executing the transaction and locking
@@ -590,7 +592,10 @@ where TConsensusSpec: ConsensusSpec
                         atom.decision,
                         tx_rec.current_decision()
                     );
-                    return Ok(false);
+                    return Ok(Some(NoVoteReason::DecisionDisagreement {
+                        local: tx_rec.current_decision(),
+                        remote: atom.decision,
+                    }));
                 }
 
                 if tx_rec.transaction_fee() != atom.transaction_fee {
@@ -601,22 +606,12 @@ where TConsensusSpec: ConsensusSpec
                         atom.transaction_fee,
                         tx_rec.transaction_fee()
                     );
-                    return Ok(false);
+                    return Ok(Some(NoVoteReason::FeeDisagreement));
                 }
 
                 if tx_rec.current_decision().is_commit() {
                     if let Some(diff) = execution.result().finalize.accept() {
-                        if let Err(err) = substate_store.put_diff(atom.id, diff) {
-                            warn!(
-                                target: LOG_TARGET,
-                                "❌ Failed to store diff for transaction {} in block {}. Error: {}",
-                                block,
-                                tx_rec.transaction_id(),
-                                err
-                            );
-                            let _err = err.ok_lock_failed()?;
-                            return Ok(false);
-                        }
+                        substate_store.put_diff(atom.id, diff)?;
                     }
 
                     if atom.leader_fee.is_none() {
@@ -626,7 +621,7 @@ where TConsensusSpec: ConsensusSpec
                             atom.id,
                             block,
                         );
-                        return Ok(false);
+                        return Ok(Some(NoVoteReason::NoLeaderFee));
                     }
 
                     let calculated_leader_fee =
@@ -640,7 +635,7 @@ where TConsensusSpec: ConsensusSpec
                             calculated_leader_fee
                         );
 
-                        return Ok(false);
+                        return Ok(Some(NoVoteReason::LeaderFeeDisagreement));
                     }
 
                     *total_leader_fee += calculated_leader_fee.fee();
@@ -656,7 +651,10 @@ where TConsensusSpec: ConsensusSpec
                         tx_rec.transaction_id(),
                         block,
                     );
-                    return Ok(false);
+                    return Ok(Some(NoVoteReason::DecisionDisagreement {
+                        local: Decision::Abort,
+                        remote: Decision::Commit,
+                    }));
                 }
 
                 // They want to ABORT a successfully executed transaction because of a lock conflict, which
@@ -681,13 +679,13 @@ where TConsensusSpec: ConsensusSpec
                     atom.id(),
                     block,
                 );
-                return Ok(false);
+                return Ok(Some(NoVoteReason::LocalOnlyProposedForMultiShard));
             },
         }
 
         tx_rec.set_next_stage(TransactionPoolStage::LocalOnly)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
-        Ok(true)
+        Ok(None)
     }
 
     fn evaluate_prepare_command(
@@ -699,7 +697,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
-    ) -> Result<bool, HotStuffError> {
+    ) -> Result<Option<NoVoteReason>, HotStuffError> {
         let _timer = TraceTimer::info(LOG_TARGET, "Evaluate Prepare command");
         let Some(mut tx_rec) =
             proposed_block_change_set.get_transaction(tx, locked_block, &block.as_leaf_block(), atom.id())?
@@ -710,7 +708,7 @@ where TConsensusSpec: ConsensusSpec
                 block,
                 atom.id(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::TransactionNotInPool));
         };
 
         info!(
@@ -728,7 +726,10 @@ where TConsensusSpec: ConsensusSpec
                 block,
                 tx_rec.current_stage(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::StageDisagreement {
+                stage: tx_rec.current_stage(),
+                expected: TransactionPoolStage::New,
+            }));
         }
 
         let prepared = self
@@ -750,7 +751,7 @@ where TConsensusSpec: ConsensusSpec
                     atom.id(),
                     block,
                 );
-                return Ok(false);
+                return Ok(Some(NoVoteReason::MultiShardProposedForLocalOnly));
             },
             PreparedTransaction::MultiShard(multishard) => {
                 if multishard.current_decision() != atom.decision {
@@ -762,7 +763,10 @@ where TConsensusSpec: ConsensusSpec
                         atom.decision,
                         multishard.current_decision(),
                     );
-                    return Ok(false);
+                    return Ok(Some(NoVoteReason::DecisionDisagreement {
+                        local: multishard.current_decision(),
+                        remote: atom.decision,
+                    }));
                 }
 
                 match multishard.current_decision() {
@@ -804,7 +808,7 @@ where TConsensusSpec: ConsensusSpec
         tx_rec.set_next_stage(TransactionPoolStage::Prepared)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
-        Ok(true)
+        Ok(None)
     }
 
     fn evaluate_local_prepare_command(
@@ -814,7 +818,7 @@ where TConsensusSpec: ConsensusSpec
         locked_block: &LockedBlock,
         atom: &TransactionAtom,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
-    ) -> Result<bool, HotStuffError> {
+    ) -> Result<Option<NoVoteReason>, HotStuffError> {
         let Some(mut tx_rec) =
             proposed_block_change_set.get_transaction(tx, locked_block, &block.as_leaf_block(), atom.id())?
         else {
@@ -824,7 +828,7 @@ where TConsensusSpec: ConsensusSpec
                 block,
                 atom.id(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::TransactionNotInPool));
         };
 
         if !tx_rec.current_stage().is_prepared() {
@@ -836,7 +840,10 @@ where TConsensusSpec: ConsensusSpec
                 tx_rec.transaction_id(),
                 tx_rec.current_stage()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::StageDisagreement {
+                expected: TransactionPoolStage::Prepared,
+                stage: tx_rec.current_stage(),
+            }));
         }
         // We check that the leader decision is the same as our local decision.
         // We disregard the remote decision because not all validators may have received the foreign
@@ -850,7 +857,10 @@ where TConsensusSpec: ConsensusSpec
                 atom.decision,
                 tx_rec.current_local_decision()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::DecisionDisagreement {
+                local: tx_rec.current_local_decision(),
+                remote: atom.decision,
+            }));
         }
 
         if tx_rec.transaction_fee() != atom.transaction_fee {
@@ -862,13 +872,13 @@ where TConsensusSpec: ConsensusSpec
                 atom.transaction_fee,
                 tx_rec.transaction_fee()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::FeeDisagreement));
         }
 
         tx_rec.set_next_stage(TransactionPoolStage::LocalPrepared)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
-        Ok(true)
+        Ok(None)
     }
 
     #[allow(clippy::too_many_lines)]
@@ -881,7 +891,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
-    ) -> Result<bool, HotStuffError> {
+    ) -> Result<Option<NoVoteReason>, HotStuffError> {
         let _timer = TraceTimer::info(LOG_TARGET, "Evaluate AllPrepare command (execute)");
         let Some(mut tx_rec) =
             proposed_block_change_set.get_transaction(tx, locked_block, &block.as_leaf_block(), atom.id())?
@@ -892,7 +902,7 @@ where TConsensusSpec: ConsensusSpec
                 block,
                 atom.id(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::TransactionNotInPool));
         };
 
         if !tx_rec.current_stage().is_local_prepared() {
@@ -904,7 +914,10 @@ where TConsensusSpec: ConsensusSpec
                 tx_rec.transaction_id(),
                 tx_rec.current_stage()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::StageDisagreement {
+                expected: TransactionPoolStage::LocalPrepared,
+                stage: tx_rec.current_stage(),
+            }));
         }
 
         // If we've already decided to abort, we cannot change to commit in LocalPrepared phase so proposing AllPrepared
@@ -918,7 +931,10 @@ where TConsensusSpec: ConsensusSpec
                 atom.decision,
                 tx_rec.current_decision()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::DecisionDisagreement {
+                local: tx_rec.current_decision(),
+                remote: atom.decision,
+            }));
         }
 
         if !tx_rec.evidence().all_inputs_prepared() {
@@ -928,7 +944,7 @@ where TConsensusSpec: ConsensusSpec
                 tx_rec.transaction_id(),
                 block,
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::NotAllInputsPrepared));
         }
 
         let maybe_execution = if tx_rec.current_decision().is_commit() {
@@ -965,7 +981,10 @@ where TConsensusSpec: ConsensusSpec
                             tx_rec.transaction_id(),
                             block,
                         );
-                        return Ok(false);
+                        return Ok(Some(NoVoteReason::DecisionDisagreement {
+                            local: Decision::Abort,
+                            remote: Decision::Commit,
+                        }));
                     }
 
                     info!(
@@ -986,7 +1005,7 @@ where TConsensusSpec: ConsensusSpec
                         .set_next_transaction_update(tx_rec)?
                         .add_transaction_execution(execution)?;
 
-                    return Ok(true);
+                    return Ok(None);
                 }
             }
 
@@ -1006,7 +1025,10 @@ where TConsensusSpec: ConsensusSpec
                 atom.decision,
                 tx_rec.current_decision()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::DecisionDisagreement {
+                local: tx_rec.current_decision(),
+                remote: atom.decision,
+            }));
         }
 
         if tx_rec.transaction_fee() != atom.transaction_fee {
@@ -1018,7 +1040,7 @@ where TConsensusSpec: ConsensusSpec
                 atom.transaction_fee,
                 tx_rec.transaction_fee()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::FeeDisagreement));
         }
 
         if tx_rec.transaction_fee() != atom.transaction_fee {
@@ -1030,7 +1052,7 @@ where TConsensusSpec: ConsensusSpec
                 atom.transaction_fee,
                 tx_rec.transaction_fee()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::FeeDisagreement));
         }
 
         // maybe_execution is only None if the transaction is not committed
@@ -1041,7 +1063,7 @@ where TConsensusSpec: ConsensusSpec
         tx_rec.set_next_stage(TransactionPoolStage::AllPrepared)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
-        Ok(true)
+        Ok(None)
     }
 
     fn evaluate_some_prepare_command(
@@ -1051,14 +1073,17 @@ where TConsensusSpec: ConsensusSpec
         locked_block: &LockedBlock,
         atom: &TransactionAtom,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
-    ) -> Result<bool, HotStuffError> {
+    ) -> Result<Option<NoVoteReason>, HotStuffError> {
         if atom.decision.is_commit() {
             warn!(
                 target: LOG_TARGET,
                 "❌ SomePrepare command received for block {} but requires that the transaction is ABORT",
                 block.id(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::DecisionDisagreement {
+                local: Decision::Abort,
+                remote: Decision::Commit,
+            }));
         }
 
         let Some(mut tx_rec) =
@@ -1070,7 +1095,7 @@ where TConsensusSpec: ConsensusSpec
                 block,
                 atom.id(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::TransactionNotInPool));
         };
 
         // If the local node would decide SomePrepare too, we should have already ABORTed due to foreign prepare abort
@@ -1082,7 +1107,10 @@ where TConsensusSpec: ConsensusSpec
                 tx_rec.transaction_id(),
                 block,
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::DecisionDisagreement {
+                local: Decision::Commit,
+                remote: Decision::Abort,
+            }));
         }
 
         if !tx_rec.current_stage().is_local_prepared() {
@@ -1094,7 +1122,10 @@ where TConsensusSpec: ConsensusSpec
                 tx_rec.transaction_id(),
                 tx_rec.current_stage()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::StageDisagreement {
+                expected: TransactionPoolStage::LocalPrepared,
+                stage: tx_rec.current_stage(),
+            }));
         }
 
         if tx_rec.transaction_fee() != atom.transaction_fee {
@@ -1106,13 +1137,13 @@ where TConsensusSpec: ConsensusSpec
                 atom.transaction_fee,
                 tx_rec.transaction_fee()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::FeeDisagreement));
         }
 
         tx_rec.set_next_stage(TransactionPoolStage::SomePrepared)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
-        Ok(true)
+        Ok(None)
     }
 
     fn evaluate_local_accept_command(
@@ -1123,7 +1154,7 @@ where TConsensusSpec: ConsensusSpec
         atom: &TransactionAtom,
         local_committee_info: &CommitteeInfo,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
-    ) -> Result<bool, HotStuffError> {
+    ) -> Result<Option<NoVoteReason>, HotStuffError> {
         let Some(mut tx_rec) =
             proposed_block_change_set.get_transaction(tx, locked_block, &block.as_leaf_block(), atom.id())?
         else {
@@ -1133,7 +1164,7 @@ where TConsensusSpec: ConsensusSpec
                 block,
                 atom.id(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::TransactionNotInPool));
         };
 
         if !tx_rec.current_stage().is_all_prepared() && !tx_rec.current_stage().is_some_prepared() {
@@ -1145,7 +1176,10 @@ where TConsensusSpec: ConsensusSpec
                 tx_rec.transaction_id(),
                 tx_rec.current_stage()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::StageDisagreement {
+                expected: TransactionPoolStage::AllPrepared,
+                stage: tx_rec.current_stage(),
+            }));
         }
 
         // We check that the leader decision is the same as our local decision.
@@ -1160,7 +1194,10 @@ where TConsensusSpec: ConsensusSpec
                 atom.decision,
                 tx_rec.current_decision()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::DecisionDisagreement {
+                local: tx_rec.current_decision(),
+                remote: atom.decision,
+            }));
         }
 
         if tx_rec.transaction_fee() != atom.transaction_fee {
@@ -1172,7 +1209,7 @@ where TConsensusSpec: ConsensusSpec
                 atom.transaction_fee,
                 tx_rec.transaction_fee()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::FeeDisagreement));
         }
 
         if atom.decision.is_commit() {
@@ -1183,7 +1220,7 @@ where TConsensusSpec: ConsensusSpec
                     atom.id,
                     block,
                 );
-                return Ok(false);
+                return Ok(Some(NoVoteReason::NoLeaderFee));
             };
 
             // Check the leader fee in the local accept phase. The fee only applied (is added to the block fee) for
@@ -1202,7 +1239,7 @@ where TConsensusSpec: ConsensusSpec
                     calculated_leader_fee
                 );
 
-                return Ok(false);
+                return Ok(Some(NoVoteReason::LeaderFeeDisagreement));
             }
 
             tx_rec.set_leader_fee(calculated_leader_fee);
@@ -1211,9 +1248,10 @@ where TConsensusSpec: ConsensusSpec
         tx_rec.set_next_stage(TransactionPoolStage::LocalAccepted)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
-        Ok(true)
+        Ok(None)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn evaluate_all_accept_command(
         &self,
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
@@ -1224,14 +1262,17 @@ where TConsensusSpec: ConsensusSpec
         substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
         total_leader_fee: &mut u64,
-    ) -> Result<bool, HotStuffError> {
+    ) -> Result<Option<NoVoteReason>, HotStuffError> {
         if atom.decision.is_abort() {
             warn!(
                 target: LOG_TARGET,
                 "❌ NO VOTE: AllAccept command received for block {} but requires that the transaction is COMMIT",
                 block.id(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::DecisionDisagreement {
+                local: Decision::Commit,
+                remote: Decision::Abort,
+            }));
         }
 
         let Some(mut tx_rec) =
@@ -1243,7 +1284,7 @@ where TConsensusSpec: ConsensusSpec
                 block,
                 atom.id(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::TransactionNotInPool));
         };
 
         if !tx_rec.current_stage().is_local_accepted() {
@@ -1254,7 +1295,10 @@ where TConsensusSpec: ConsensusSpec
                 tx_rec.transaction_id(),
                 tx_rec.current_stage()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::StageDisagreement {
+                expected: TransactionPoolStage::LocalAccepted,
+                stage: tx_rec.current_stage(),
+            }));
         }
 
         if tx_rec.current_decision().is_abort() {
@@ -1264,7 +1308,10 @@ where TConsensusSpec: ConsensusSpec
                 tx_rec.transaction_id(),
                 block,
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::DecisionDisagreement {
+                local: Decision::Abort,
+                remote: Decision::Commit,
+            }));
         }
 
         if tx_rec.transaction_fee() != atom.transaction_fee {
@@ -1276,7 +1323,7 @@ where TConsensusSpec: ConsensusSpec
                 atom.transaction_fee,
                 tx_rec.transaction_fee()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::FeeDisagreement));
         }
 
         let Some(ref leader_fee) = atom.leader_fee else {
@@ -1286,7 +1333,7 @@ where TConsensusSpec: ConsensusSpec
                 atom.id,
                 block,
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::NoLeaderFee));
         };
 
         let local_leader_fee = tx_rec.leader_fee().ok_or_else(|| {
@@ -1306,7 +1353,7 @@ where TConsensusSpec: ConsensusSpec
                 leader_fee,
                 local_leader_fee
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::LeaderFeeDisagreement));
         }
 
         let execution = BlockTransactionExecution::get_pending_for_block(tx, tx_rec.transaction_id(), block.parent())
@@ -1335,7 +1382,7 @@ where TConsensusSpec: ConsensusSpec
         tx_rec.set_next_stage(TransactionPoolStage::AllAccepted)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
-        Ok(true)
+        Ok(None)
     }
 
     fn evaluate_some_accept_command(
@@ -1345,14 +1392,17 @@ where TConsensusSpec: ConsensusSpec
         locked_block: &LockedBlock,
         atom: &TransactionAtom,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
-    ) -> Result<bool, HotStuffError> {
+    ) -> Result<Option<NoVoteReason>, HotStuffError> {
         if atom.decision.is_commit() {
             warn!(
                 target: LOG_TARGET,
                 "❌ SomeAccept command received for block {} but requires that the atom is ABORT",
                 block.id(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::DecisionDisagreement {
+                local: Decision::Abort,
+                remote: Decision::Commit,
+            }));
         }
 
         let Some(mut tx_rec) =
@@ -1364,7 +1414,7 @@ where TConsensusSpec: ConsensusSpec
                 block,
                 atom.id(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::TransactionNotInPool));
         };
 
         if !tx_rec.current_stage().is_local_accepted() {
@@ -1376,7 +1426,10 @@ where TConsensusSpec: ConsensusSpec
                 tx_rec.transaction_id(),
                 tx_rec.current_stage()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::StageDisagreement {
+                expected: TransactionPoolStage::LocalAccepted,
+                stage: tx_rec.current_stage(),
+            }));
         }
 
         // We check that the leader decision is the same as our local decision (this will change to ABORT once we've
@@ -1388,7 +1441,10 @@ where TConsensusSpec: ConsensusSpec
                 tx_rec.transaction_id(),
                 block,
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::DecisionDisagreement {
+                local: Decision::Commit,
+                remote: Decision::Abort,
+            }));
         }
 
         if tx_rec.transaction_fee() != atom.transaction_fee {
@@ -1400,13 +1456,13 @@ where TConsensusSpec: ConsensusSpec
                 atom.transaction_fee,
                 tx_rec.transaction_fee()
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::FeeDisagreement));
         }
 
         tx_rec.set_next_stage(TransactionPoolStage::SomeAccepted)?;
         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
 
-        Ok(true)
+        Ok(None)
     }
 
     fn evaluate_foreign_proposal_command(
@@ -1418,7 +1474,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         foreign_committee_info: &CommitteeInfo,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
-    ) -> Result<bool, HotStuffError> {
+    ) -> Result<Option<NoVoteReason>, HotStuffError> {
         if proposed_block_change_set
             .proposed_foreign_proposals()
             .contains(&fp_atom.block_id)
@@ -1428,7 +1484,7 @@ where TConsensusSpec: ConsensusSpec
                 "❌ NO VOTE: Foreign proposal for block {block_id} has already been proposed in this block.",
                 block_id = fp_atom.block_id,
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::ForeignProposalAlreadyProposed));
         }
 
         let Some(fp) = fp_atom.get_proposal(tx).optional()? else {
@@ -1437,7 +1493,7 @@ where TConsensusSpec: ConsensusSpec
                 "❌ NO VOTE: Foreign proposal for block {block_id} has not been received.",
                 block_id = fp_atom.block_id,
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::ForeignProposalNotReceived));
         };
 
         // Case: cannot re-propose if it is already committed
@@ -1450,7 +1506,7 @@ where TConsensusSpec: ConsensusSpec
                 block_id = fp_atom.block_id,
                 status = fp.status(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::ForeignProposalAlreadyConfirmed));
         }
 
         if let Err(err) = process_foreign_block(
@@ -1472,12 +1528,12 @@ where TConsensusSpec: ConsensusSpec
                 error = err,
                 shard_group = foreign_committee_info.shard_group(),
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::ForeignProposalProcessingFailed));
         }
 
         proposed_block_change_set.set_foreign_proposal_proposed_in(fp_atom.block_id);
 
-        Ok(true)
+        Ok(None)
     }
 
     fn evaluate_mint_confidential_output_command(
@@ -1487,14 +1543,14 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         substate_store: &mut PendingSubstateStore<TConsensusSpec::StateStore>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
-    ) -> Result<bool, HotStuffError> {
+    ) -> Result<Option<NoVoteReason>, HotStuffError> {
         let Some(utxo) = atom.get(tx).optional()? else {
             warn!(
                 target: LOG_TARGET,
                 "❌ NO VOTE: MintConfidentialOutputAtom for {} is not known.",
                 atom.substate_id
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::MintConfidentialOutputUnknown));
         };
         let id = VersionedSubstateId::new(utxo.substate_id.clone(), 0);
         let shard = id.to_substate_address().to_shard(local_committee_info.num_preshards());
@@ -1514,12 +1570,12 @@ where TConsensusSpec: ConsensusSpec
                 atom.substate_id,
                 err
             );
-            return Ok(false);
+            return Ok(Some(NoVoteReason::MintConfidentialOutputStoreFailed));
         }
 
         proposed_block_change_set.set_utxo_mint_proposed_in(utxo.substate_id);
 
-        Ok(true)
+        Ok(None)
     }
 
     fn execute_transaction(

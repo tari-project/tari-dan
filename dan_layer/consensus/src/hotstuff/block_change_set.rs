@@ -20,6 +20,7 @@ use tari_dan_storage::{
         ForeignProposal,
         LeafBlock,
         LockedBlock,
+        NoVoteReason,
         PendingShardStateTreeDiff,
         QuorumCertificate,
         QuorumDecision,
@@ -65,6 +66,7 @@ pub struct ProposedBlockChangeSet {
     transaction_changes: IndexMap<TransactionId, TransactionChangeSet>,
     proposed_foreign_proposals: Vec<BlockId>,
     proposed_utxo_mints: Vec<SubstateId>,
+    no_vote_reason: Option<NoVoteReason>,
 }
 
 impl ProposedBlockChangeSet {
@@ -78,11 +80,12 @@ impl ProposedBlockChangeSet {
             state_tree_diffs: IndexMap::new(),
             proposed_foreign_proposals: Vec::new(),
             proposed_utxo_mints: Vec::new(),
+            no_vote_reason: None,
         }
     }
 
-    pub fn no_vote(&mut self) -> &mut Self {
-        // TODO: store a NO-VOTE reason for debugging purposes so that we can review it easily
+    pub fn no_vote(&mut self, no_vote_reason: NoVoteReason) -> &mut Self {
+        self.no_vote_reason = Some(no_vote_reason);
         // This means no vote
         self.quorum_decision = None;
         // The remaining info discarded (not strictly necessary)
@@ -231,6 +234,14 @@ impl ProposedBlockChangeSet {
         TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
+        if let Some(reason) = self.no_vote_reason {
+            if let Err(err) = tx.diagnostics_add_no_vote(self.block.block_id, reason) {
+                error!(target: LOG_TARGET, "Failed to save no vote reason: {}", err);
+            }
+            // No vote
+            return Ok(());
+        }
+
         let _timer = TraceTimer::debug(LOG_TARGET, "ProposedBlockChangeSet::save");
         let block_diff = BlockDiff::new(self.block.block_id, self.block_diff);
         // Store the block diff

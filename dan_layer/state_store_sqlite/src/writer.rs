@@ -49,6 +49,7 @@ use tari_dan_storage::{
         LeafBlock,
         LockConflict,
         LockedBlock,
+        NoVoteReason,
         PendingShardStateTreeDiff,
         QcId,
         QuorumCertificate,
@@ -2014,6 +2015,26 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "lock_conflicts_insert_all",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn diagnostics_add_no_vote(&mut self, block_id: BlockId, reason: NoVoteReason) -> Result<(), StorageError> {
+        use crate::schema::diagnostics_no_votes;
+
+        let values = (
+            diagnostics_no_votes::block_id.eq(serialize_hex(block_id)),
+            diagnostics_no_votes::reason_code.eq(reason.as_code_str()),
+            diagnostics_no_votes::reason_text.eq(reason.to_string()),
+        );
+
+        diesel::insert_into(diagnostics_no_votes::table)
+            .values(values)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "diagnostics_add_no_vote",
                 source: e,
             })?;
 
