@@ -6,7 +6,7 @@ use std::ops::RangeInclusive;
 use tari_crypto::{keys::PublicKey as _, ristretto::RistrettoPublicKey};
 use tari_dan_common_types::SubstateRequirement;
 use tari_dan_wallet_sdk::{apis::key_manager::TRANSACTION_BRANCH, models::Account};
-use tari_engine_types::component::new_component_address_from_public_key;
+use tari_engine_types::{component::new_component_address_from_public_key, indexed_value::IndexedWellKnownTypes};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
@@ -43,7 +43,10 @@ impl Runner {
         let finalize = self.submit_transaction_and_wait(transaction).await?;
         let diff = finalize.result.accept().unwrap();
         let (account, _) = diff.up_iter().find(|(addr, _)| addr.is_component()).unwrap();
-        let (vault, _) = diff.up_iter().find(|(addr, _)| addr.is_vault()).unwrap();
+        let (vault, _) = diff
+            .up_iter()
+            .find(|(addr, _)| *addr != XTR_FAUCET_VAULT_ADDRESS && addr.is_vault())
+            .unwrap();
 
         self.sdk.accounts_api().add_account(None, account, 0, true)?;
         self.sdk.accounts_api().add_vault(
@@ -80,8 +83,18 @@ impl Runner {
         for owner in &owners {
             builder = builder.create_account(RistrettoPublicKey::from_secret_key(&owner.key));
         }
+
+        let pay_fee_vault = self
+            .sdk
+            .accounts_api()
+            .get_vault_by_resource(&pay_fee_account.address, &XTR)?;
+
         let transaction = builder
-            .with_inputs([SubstateRequirement::unversioned(pay_fee_account.address.clone())])
+            .with_inputs([
+                SubstateRequirement::unversioned(pay_fee_account.address.clone()),
+                SubstateRequirement::unversioned(pay_fee_vault.address),
+                SubstateRequirement::unversioned(pay_fee_vault.resource_address),
+            ])
             .sign(&key.key)
             .build();
 
@@ -90,7 +103,7 @@ impl Runner {
         let mut accounts = Vec::with_capacity(num_accounts);
 
         for owner in owners {
-            let account = diff
+            let account_addr = diff
                 .up_iter()
                 .map(|(addr, _)| addr)
                 .filter(|addr| addr.is_component())
@@ -105,8 +118,8 @@ impl Runner {
 
             self.sdk
                 .accounts_api()
-                .add_account(None, account, owner.key_index, false)?;
-            let account = self.sdk.accounts_api().get_account_by_address(account)?;
+                .add_account(None, account_addr, owner.key_index, false)?;
+            let account = self.sdk.accounts_api().get_account_by_address(account_addr)?;
             accounts.push(account);
         }
 
@@ -120,6 +133,10 @@ impl Runner {
         accounts: &[Account],
     ) -> anyhow::Result<()> {
         let key = self.sdk.key_manager_api().derive_key(TRANSACTION_BRANCH, 0)?;
+        let fee_vault = self
+            .sdk
+            .accounts_api()
+            .get_vault_by_resource(&fee_account.address, &XTR)?;
         let mut builder = Transaction::builder().fee_transaction_pay_from_component(
             fee_account.address.as_component_address().unwrap(),
             Amount(1000 * accounts.len() as i64),
@@ -135,18 +152,51 @@ impl Runner {
                 .put_last_instruction_output_on_workspace("xtr")
                 .call_method(account.address.as_component_address().unwrap(), "deposit", args![
                     Workspace("xtr")
-                ]);
+                ])
+                .add_input(SubstateRequirement::unversioned(account.address.clone()));
         }
 
         let transaction = builder
             .with_inputs([
+                SubstateRequirement::unversioned(XTR),
+                SubstateRequirement::unversioned(XTR_FAUCET_COMPONENT_ADDRESS),
+                SubstateRequirement::unversioned(XTR_FAUCET_VAULT_ADDRESS),
                 SubstateRequirement::unversioned(faucet.component_address),
                 SubstateRequirement::unversioned(faucet.resource_address),
+                SubstateRequirement::unversioned(faucet.vault_address),
+                SubstateRequirement::unversioned(fee_vault.account_address),
+                SubstateRequirement::unversioned(fee_vault.address),
             ])
             .sign(&key.key)
             .build();
 
-        self.submit_transaction_and_wait(transaction).await?;
+        let result = self.submit_transaction_and_wait(transaction).await?;
+
+        let accounts_and_state = result
+            .result
+            .accept()
+            .unwrap()
+            .up_iter()
+            .filter(|(addr, _)| {
+                *addr != XTR_FAUCET_COMPONENT_ADDRESS &&
+                    *addr != faucet.component_address &&
+                    *addr != fee_account.address
+            })
+            .filter_map(|(addr, substate)| Some((addr, substate.substate_value().component()?)))
+            .map(|(addr, component)| (addr, IndexedWellKnownTypes::from_value(&component.body.state).unwrap()));
+
+        for (account, indexed) in accounts_and_state {
+            for vault_id in indexed.vault_ids() {
+                log::info!("Adding vault {} to account {}", vault_id, account);
+                self.sdk.accounts_api().add_vault(
+                    account.clone(),
+                    (*vault_id).into(),
+                    faucet.resource_address,
+                    ResourceType::Fungible,
+                    Some("FAUCET".to_string()),
+                )?;
+            }
+        }
 
         Ok(())
     }

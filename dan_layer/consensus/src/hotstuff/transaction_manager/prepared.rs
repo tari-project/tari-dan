@@ -128,11 +128,10 @@ impl MultiShardPreparedTransaction {
                 self.transaction
                     .transaction()
                     .all_inputs_iter()
-                    .map(|input| input.or_zero_version())
-                    .map(|id| VersionedSubstateIdLockIntent::new(id, SubstateLockType::Read)),
+                    .map(|input| VersionedSubstateIdLockIntent::from_requirement(input, SubstateLockType::Read)),
                 self.outputs
                     .iter()
-                    .map(|id| VersionedSubstateIdLockIntent::new(id.clone(), SubstateLockType::Output)),
+                    .map(|id| VersionedSubstateIdLockIntent::output(id.clone())),
             );
         }
 
@@ -146,13 +145,13 @@ impl MultiShardPreparedTransaction {
             // TODO(correctness): to_zero_version is error prone when used in evidence and the correctness depends how it is used.
             // e.g. using it to determining which shard is involved is fine, but loading substate by the address is incorrect (v0 may or may not be the actual pledged substate)
             .chain(self.foreign_inputs().iter().map(|r| r.clone().or_zero_version()))
-            .map(|id| VersionedSubstateIdLockIntent::new(id, SubstateLockType::Write));
+            .map(|id| VersionedSubstateIdLockIntent::write(id, true));
 
         let outputs = self
             .outputs()
             .iter()
             .cloned()
-            .map(|id| VersionedSubstateIdLockIntent::new(id, SubstateLockType::Output));
+            .map(VersionedSubstateIdLockIntent::output);
 
         Evidence::from_inputs_and_outputs(inputs, outputs)
     }

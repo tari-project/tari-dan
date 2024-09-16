@@ -79,6 +79,9 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> ReadableSubstateStore for PendingSu
         let Some(substate) = SubstateRecord::get(self.read_transaction(), &id.to_substate_address()).optional()? else {
             return Err(SubstateStoreError::SubstateNotFound { id: id.clone() });
         };
+        if substate.is_destroyed() {
+            return Err(SubstateStoreError::SubstateIsDown { id: id.clone() });
+        }
         Ok(substate.into_substate())
     }
 }
@@ -151,6 +154,11 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         }
 
         let substate = SubstateRecord::get_latest(self.read_transaction(), id)?;
+        if substate.is_destroyed() {
+            return Err(SubstateStoreError::SubstateIsDown {
+                id: substate.to_versioned_substate_id(),
+            });
+        }
         Ok(substate.into_substate())
     }
 
@@ -171,8 +179,10 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                 Err(err) => {
                     let error = err.ok_lock_failed()?;
                     match error {
+                        err @ LockFailedError::SubstateIsDown { .. } |
                         err @ LockFailedError::SubstateNotFound { .. } => {
-                            // If the substate does not exist, the transaction is invalid
+                            // If the substate does not exist or is not UP (unversioned: previously DOWNed and never
+                            // UPed), the transaction is invalid
                             let index = lock_status.add_failed(err);
                             lock_status.hard_conflict_idx = Some(index);
                         },
@@ -215,7 +225,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             if requested_lock_type.is_output() {
                 self.assert_not_exist(&versioned_substate_id)?;
             } else {
-                self.assert_is_up(&versioned_substate_id)?;
+                self.lock_assert_is_up(&versioned_substate_id)?;
             }
 
             let version = versioned_substate_id.version();
@@ -419,6 +429,16 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
             Some(true) => Ok(()),
             Some(false) => Err(SubstateStoreError::SubstateIsDown { id: id.clone() }),
             None => Err(SubstateStoreError::SubstateNotFound { id: id.clone() }),
+        }
+    }
+
+    fn lock_assert_is_up(&self, id: &VersionedSubstateId) -> Result<(), SubstateStoreError> {
+        match self.assert_is_up(id) {
+            Ok(_) => Ok(()),
+            // Converts a substate store error to a LockFailedError (TODO: improve)
+            Err(SubstateStoreError::SubstateIsDown { id }) => Err(LockFailedError::SubstateIsDown { id }.into()),
+            Err(SubstateStoreError::SubstateNotFound { id }) => Err(LockFailedError::SubstateNotFound { id }.into()),
+            Err(err) => Err(err),
         }
     }
 

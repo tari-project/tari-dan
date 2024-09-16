@@ -1,13 +1,13 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashSet;
+use std::{collections::HashSet, fmt::Display};
 
 use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_crypto::ristretto::RistrettoSecretKey;
-use tari_dan_common_types::{Epoch, SubstateRequirement, VersionedSubstateId};
+use tari_dan_common_types::{committee::CommitteeInfo, Epoch, SubstateRequirement, VersionedSubstateId};
 use tari_engine_types::{
     hashing::{hasher32, EngineHashDomainLabel},
     indexed_value::{IndexedValue, IndexedValueError},
@@ -144,6 +144,12 @@ impl Transaction {
             .chain(self.filled_inputs().iter().map(|fi| fi.substate_id()))
     }
 
+    /// Returns true if the provided committee is involved in at least one input of this transaction.
+    pub fn is_involved_inputs(&self, committee_info: &CommitteeInfo) -> bool {
+        self.all_inputs_iter()
+            .any(|id| committee_info.includes_substate_id(id.substate_id()))
+    }
+
     pub fn num_unique_inputs(&self) -> usize {
         self.all_inputs_substate_ids_iter().count()
     }
@@ -229,5 +235,20 @@ impl Transaction {
 
     pub fn has_inputs_without_version(&self) -> bool {
         self.inputs().iter().any(|i| i.version().is_none())
+    }
+}
+
+impl Display for Transaction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Transaction[{}, Inputs: {}, Fee Instructions: {}, Instructions: {}, Signatures: {}, Filled Inputs: {}]",
+            self.id,
+            self.transaction.inputs.len(),
+            self.transaction.fee_instructions.len(),
+            self.transaction.instructions.len(),
+            self.signatures.len(),
+            self.filled_inputs.len(),
+        )
     }
 }

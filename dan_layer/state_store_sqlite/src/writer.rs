@@ -1457,7 +1457,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 operation: "substates_create",
                 source: e,
             })?;
-        let next_seq = seq.map(|s| s + 1).unwrap_or(0);
+        let next_seq = seq.map(|s| s + 1).unwrap_or(1);
 
         // This means that we MUST do the state tree updates before inserting substates
         let version = self.state_tree_versions_get_latest(substate.created_by_shard)?;
@@ -1511,7 +1511,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .set(changes)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substates_down",
+                operation: "substates_down (update substates)",
                 source: e,
             })?;
 
@@ -1520,10 +1520,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .filter(state_transitions::shard.eq(shard.as_u32() as i32))
             .first::<Option<i64>>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substates_create",
+                operation: "substates_down (get max seq)",
                 source: e,
             })?;
-        let next_seq = seq.map(|s| s + 1).unwrap_or(0);
+        let next_seq = seq.map(|s| s + 1).unwrap_or(1);
 
         let version = self.state_tree_versions_get_latest(shard)?;
         let values = (
@@ -1541,7 +1541,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .values(values)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substates_down",
+                operation: "substates_down(insert into state_transitions)",
                 source: e,
             })?;
 
@@ -1701,7 +1701,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         let values = (
             state_tree::shard.eq(shard.as_u32() as i32),
             state_tree::key.eq(key.to_string()),
-            state_tree::node.eq(node),
+            state_tree::node.eq(&node),
         );
         diesel::insert_into(state_tree::table)
             .values(&values)
@@ -1721,11 +1721,20 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     ) -> Result<(), StorageError> {
         use crate::schema::state_tree;
 
+        //   let num_effected = diesel::update(state_tree::table)
+        //             .filter(state_tree::shard.eq(shard.as_u32() as i32))
+        //             .filter(state_tree::key.eq(key.to_string()))
+        //             .set(state_tree::is_stale.eq(true))
+        //             .execute(self.connection())
+        //             .map_err(|e| SqliteStorageError::DieselError {
+        //                 operation: "state_tree_nodes_mark_stale_tree_node",
+        //                 source: e,
+        //             })?;
+
         let key = node.as_node_key();
-        let num_effected = diesel::update(state_tree::table)
+        let num_effected = diesel::delete(state_tree::table)
             .filter(state_tree::shard.eq(shard.as_u32() as i32))
             .filter(state_tree::key.eq(key.to_string()))
-            .set(state_tree::is_stale.eq(true))
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "state_tree_nodes_mark_stale_tree_node",

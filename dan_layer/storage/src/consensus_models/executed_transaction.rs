@@ -9,13 +9,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{
-    optional::Optional,
-    SubstateAddress,
-    SubstateLockType,
-    ToSubstateAddress,
-    VersionedSubstateId,
-};
+use tari_dan_common_types::{optional::Optional, SubstateAddress, ToSubstateAddress, VersionedSubstateId};
 use tari_engine_types::commit_result::{ExecuteResult, RejectReason};
 use tari_transaction::{Transaction, TransactionId};
 
@@ -65,10 +59,10 @@ impl ExecutedTransaction {
             .map(|diff| {
                 diff.up_iter()
                     .map(|(addr, substate)| {
-                        VersionedSubstateIdLockIntent::new(
-                            VersionedSubstateId::new(addr.clone(), substate.version()),
-                            SubstateLockType::Output,
-                        )
+                        VersionedSubstateIdLockIntent::output(VersionedSubstateId::new(
+                            addr.clone(),
+                            substate.version(),
+                        ))
                     })
                     .collect::<Vec<_>>()
             })

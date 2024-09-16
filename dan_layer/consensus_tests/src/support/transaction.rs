@@ -5,7 +5,7 @@ use std::{iter, time::Duration};
 
 use rand::{distributions::Alphanumeric, rngs::OsRng, Rng};
 use tari_common_types::types::PrivateKey;
-use tari_dan_common_types::{SubstateLockType, VersionedSubstateId};
+use tari_dan_common_types::VersionedSubstateId;
 use tari_dan_storage::consensus_models::{
     Decision,
     ExecutedTransaction,
@@ -16,7 +16,7 @@ use tari_dan_storage::consensus_models::{
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     component::{ComponentBody, ComponentHeader},
-    fees::FeeReceipt,
+    fees::{FeeBreakdown, FeeReceipt},
     substate::{Substate, SubstateDiff, SubstateId},
     transaction_receipt::{TransactionReceipt, TransactionReceiptAddress},
 };
@@ -94,7 +94,7 @@ pub fn create_execution_result_for_transaction(
                 fee_receipt: FeeReceipt {
                     total_fee_payment: fee.try_into().unwrap(),
                     total_fees_paid: fee.try_into().unwrap(),
-                    cost_breakdown: vec![],
+                    cost_breakdown: FeeBreakdown::default(),
                 },
             }),
         );
@@ -105,13 +105,10 @@ pub fn create_execution_result_for_transaction(
         ))
     };
 
-    resulting_outputs.push(VersionedSubstateIdLockIntent::new(
-        VersionedSubstateId::new(
-            SubstateId::TransactionReceipt(TransactionReceiptAddress::from(tx_id)),
-            0,
-        ),
-        SubstateLockType::Output,
-    ));
+    resulting_outputs.push(VersionedSubstateIdLockIntent::output(VersionedSubstateId::new(
+        SubstateId::TransactionReceipt(TransactionReceiptAddress::from(tx_id)),
+        0,
+    )));
 
     TransactionExecution::new(
         tx_id,
@@ -119,7 +116,7 @@ pub fn create_execution_result_for_transaction(
             finalize: FinalizeResult::new(tx_id.into_array().into(), vec![], vec![], result, FeeReceipt {
                 total_fee_payment: fee.try_into().unwrap(),
                 total_fees_paid: fee.try_into().unwrap(),
-                cost_breakdown: vec![],
+                cost_breakdown: FeeBreakdown::default(),
             }),
             execution_time: Duration::from_secs(0),
         },

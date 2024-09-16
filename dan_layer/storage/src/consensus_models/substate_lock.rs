@@ -80,6 +80,7 @@ impl LockedSubstateValue {
         VersionedSubstateIdLockIntent::new(
             VersionedSubstateId::new(self.substate_id.clone(), self.lock.version()),
             self.lock.substate_lock(),
+            true,
         )
     }
 

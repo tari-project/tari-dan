@@ -286,14 +286,14 @@ where
         diff: &SubstateDiff,
     ) -> Result<(), TransactionApiError> {
         let mut downed_substates_with_parents = HashMap::with_capacity(diff.down_len());
-        for (addr, _) in diff.down_iter() {
-            if addr.is_layer1_commitment() {
-                info!(target: LOG_TARGET, "Layer 1 commitment {} downed", addr);
+        for (id, _) in diff.down_iter() {
+            if id.is_layer1_commitment() {
+                info!(target: LOG_TARGET, "Layer 1 commitment {} downed", id);
                 continue;
             }
 
-            let Some(downed) = tx.substates_remove(addr).optional()? else {
-                warn!(target: LOG_TARGET, "Downed substate {} not found", addr);
+            let Some(downed) = tx.substates_remove(id).optional()? else {
+                warn!(target: LOG_TARGET, "Downed substate {} not found", id);
                 continue;
             };
 

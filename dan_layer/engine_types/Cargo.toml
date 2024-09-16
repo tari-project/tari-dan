@@ -23,6 +23,7 @@ blake2 = { workspace = true }
 rand = { workspace = true }
 digest = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
+indexmap = { workspace = true }
 lazy_static = { workspace = true }
 serde = { workspace = true, default-features = true }
 serde_json = { workspace = true }

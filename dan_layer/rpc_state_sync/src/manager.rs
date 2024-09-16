@@ -1,8 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::cmp;
-
 use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -137,13 +135,6 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         }
 
         let mut current_version = persisted_version;
-
-        // Minimum epoch we should request is 1 since Epoch(0) is the genesis epoch.
-        let last_state_transition_id = StateTransitionId::new(
-            cmp::max(last_state_transition_id.epoch(), Epoch(1)),
-            last_state_transition_id.shard(),
-            last_state_transition_id.seq(),
-        );
 
         info!(
             target: LOG_TARGET,

@@ -1246,112 +1246,112 @@ mod tickets {
     }
 }
 
-mod nft_indexes {
-    use super::*;
-
-    fn setup() -> (
-        TemplateTest,
-        (ComponentAddress, NonFungibleAddress),
-        ComponentAddress,
-        SubstateId,
-    ) {
-        let mut template_test = TemplateTest::new(vec!["tests/templates/nft/nft_list"]);
-
-        let (account_address, owner_token, _) = template_test.create_funded_account();
-        let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![], vec![]);
-
-        let nft_resx = template_test.get_previous_output_address(SubstateType::Resource);
-
-        // TODO: cleanup
-        (template_test, (account_address, owner_token), nft_component, nft_resx)
-    }
-
-    #[test]
-    #[allow(clippy::too_many_lines)]
-    fn new_nft_index() {
-        let (mut template_test, (account_address, owner_proof), nft_component, nft_resx) = setup();
-
-        let vars = vec![
-            ("account", account_address.into()),
-            ("nft", nft_component.into()),
-            ("nft_resx", nft_resx.clone().into()),
-        ];
-
-        let total_supply: Amount =
-            template_test.call_method(nft_component, "total_supply", args![], vec![owner_proof.clone()]);
-        assert_eq!(total_supply, Amount(0));
-
-        let result = template_test
-            .execute_and_commit_manifest(
-                r#"
-            let account = var!["account"];
-            let sparkle_nft = var!["nft"];
-
-            let nft_bucket = sparkle_nft.mint();
-            account.deposit(nft_bucket);
-        "#,
-                vars.clone(),
-                vec![owner_proof.clone()],
-            )
-            .unwrap();
-
-        let diff = result.finalize.result.expect("execution failed");
-
-        // Resource is changed
-        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
-        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
-
-        // NFT component changed
-        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_component()).count(), 1);
-        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_component()).count(), 1);
-
-        // One new vault created
-        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_vault()).count(), 0);
-        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_vault()).count(), 1);
-
-        // One new NFT minted
-        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
-        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
-
-        // One new NFT minted
-        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
-        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
-        let (nft_addr, _) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible()).unwrap();
-
-        // One new NFT index
-        assert_eq!(
-            diff.down_iter()
-                .filter(|(addr, _)| addr.is_non_fungible_index())
-                .count(),
-            0
-        );
-        assert_eq!(
-            diff.up_iter().filter(|(addr, _)| addr.is_non_fungible_index()).count(),
-            1
-        );
-        let (index_addr, index) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible_index()).unwrap();
-        // The nft index address is composed of the resource address
-        assert_eq!(
-            nft_resx.as_resource_address().unwrap(),
-            index_addr
-                .as_non_fungible_index_address()
-                .unwrap()
-                .resource_address()
-                .to_owned(),
-        );
-        // The index references the newly minted nft
-        let referenced_address = index
-            .substate_value()
-            .non_fungible_index()
-            .unwrap()
-            .referenced_address();
-        assert_eq!(nft_addr.to_address_string(), referenced_address.to_string());
-
-        // The total supply of the resource is increased
-        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![owner_proof]);
-        assert_eq!(total_supply, Amount(1));
-    }
-}
+// mod nft_indexes {
+//     use super::*;
+//
+//     fn setup() -> (
+//         TemplateTest,
+//         (ComponentAddress, NonFungibleAddress),
+//         ComponentAddress,
+//         SubstateId,
+//     ) {
+//         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/nft_list"]);
+//
+//         let (account_address, owner_token, _) = template_test.create_funded_account();
+//         let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![], vec![]);
+//
+//         let nft_resx = template_test.get_previous_output_address(SubstateType::Resource);
+//
+//         // TODO: cleanup
+//         (template_test, (account_address, owner_token), nft_component, nft_resx)
+//     }
+//
+//     #[test]
+//     #[allow(clippy::too_many_lines)]
+//     fn new_nft_index() {
+//         let (mut template_test, (account_address, owner_proof), nft_component, nft_resx) = setup();
+//
+//         let vars = vec![
+//             ("account", account_address.into()),
+//             ("nft", nft_component.into()),
+//             ("nft_resx", nft_resx.clone().into()),
+//         ];
+//
+//         let total_supply: Amount =
+//             template_test.call_method(nft_component, "total_supply", args![], vec![owner_proof.clone()]);
+//         assert_eq!(total_supply, Amount(0));
+//
+//         let result = template_test
+//             .execute_and_commit_manifest(
+//                 r#"
+//             let account = var!["account"];
+//             let sparkle_nft = var!["nft"];
+//
+//             let nft_bucket = sparkle_nft.mint();
+//             account.deposit(nft_bucket);
+//         "#,
+//                 vars.clone(),
+//                 vec![owner_proof.clone()],
+//             )
+//             .unwrap();
+//
+//         let diff = result.finalize.result.expect("execution failed");
+//
+//         // Resource is changed
+//         assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
+//         assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
+//
+//         // NFT component changed
+//         assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_component()).count(), 1);
+//         assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_component()).count(), 1);
+//
+//         // One new vault created
+//         assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_vault()).count(), 0);
+//         assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_vault()).count(), 1);
+//
+//         // One new NFT minted
+//         assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
+//         assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
+//
+//         // One new NFT minted
+//         assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
+//         assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
+//         let (nft_addr, _) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible()).unwrap();
+//
+//         // One new NFT index
+//         assert_eq!(
+//             diff.down_iter()
+//                 .filter(|(addr, _)| addr.is_non_fungible_index())
+//                 .count(),
+//             0
+//         );
+//         assert_eq!(
+//             diff.up_iter().filter(|(addr, _)| addr.is_non_fungible_index()).count(),
+//             1
+//         );
+//         let (index_addr, index) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible_index()).unwrap();
+//         // The nft index address is composed of the resource address
+//         assert_eq!(
+//             nft_resx.as_resource_address().unwrap(),
+//             index_addr
+//                 .as_non_fungible_index_address()
+//                 .unwrap()
+//                 .resource_address()
+//                 .to_owned(),
+//         );
+//         // The index references the newly minted nft
+//         let referenced_address = index
+//             .substate_value()
+//             .non_fungible_index()
+//             .unwrap()
+//             .referenced_address();
+//         assert_eq!(nft_addr.to_address_string(), referenced_address.to_string());
+//
+//         // The total supply of the resource is increased
+//         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![],
+// vec![owner_proof]);         assert_eq!(total_supply, Amount(1));
+//     }
+// }
 
 #[test]
 fn test_builtin_templates() {

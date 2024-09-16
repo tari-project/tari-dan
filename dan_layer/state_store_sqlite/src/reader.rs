@@ -777,6 +777,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         let execution = transaction_executions::table
             .filter(transaction_executions::transaction_id.eq(serialize_hex(tx_id)))
             .filter(transaction_executions::block_id.eq_any(block_ids))
+            // Get last execution
             .order_by(transaction_executions::id.desc())
             .first::<sql_models::TransactionExecution>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -2088,15 +2089,14 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
     ) -> Result<Vec<StateTransition>, StorageError> {
         use crate::schema::{state_transitions, substates};
 
-        // Never return epoch 0 state transitions
-        let min_epoch = Some(id.epoch().as_u64()).filter(|e| *e > 0).unwrap_or(1) as i64;
+        debug!(target: LOG_TARGET, "state_transitions_get_n_after: {id}, end_epoch:{end_epoch}");
+
         let transitions = state_transitions::table
             .left_join(substates::table.on(state_transitions::substate_address.eq(substates::address)))
             .select((state_transitions::all_columns, substates::all_columns.nullable()))
-            .filter(state_transitions::seq.ge(id.seq() as i64))
-            .filter(state_transitions::epoch.ge(min_epoch))
-            .filter(state_transitions::epoch.lt(end_epoch.as_u64() as i64))
+            .filter(state_transitions::seq.gt(id.seq() as i64))
             .filter(state_transitions::shard.eq(id.shard().as_u32() as i32))
+            .filter(state_transitions::epoch.lt(end_epoch.as_u64() as i64))
             .limit(n as i64)
             .get_results::<(sql_models::StateTransition, Option<sql_models::SubstateRecord>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -2143,7 +2143,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             .select(state_tree::node)
             .filter(state_tree::shard.eq(shard.as_u32() as i32))
             .filter(state_tree::key.eq(key.to_string()))
-            .filter(state_tree::is_stale.eq(false))
             .first::<String>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "state_tree_nodes_get",
@@ -2231,7 +2230,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             let version = pledge.version as u32;
             let id = VersionedSubstateId::new(substate_id, version);
             let lock_type = parse_from_string(&pledge.lock_type)?;
-            let lock_intent = VersionedSubstateIdLockIntent::new(id, lock_type);
+            let lock_intent = VersionedSubstateIdLockIntent::new(id, lock_type, true);
             let substate_value = pledge.substate_value.as_deref().map(deserialize_json).transpose()?;
             let pledge = SubstatePledge::try_create(lock_intent.clone(), substate_value).ok_or_else(|| {
                 StorageError::DataInconsistency {

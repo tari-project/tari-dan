@@ -49,6 +49,7 @@ use tari_dan_storage::{
 use tari_engine_types::{commit_result::RejectReason, substate::Substate};
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::TransactionId;
+use tokio::task;
 
 use crate::{
     hotstuff::{
@@ -78,6 +79,7 @@ type NextBlock = (
     HashMap<TransactionId, TransactionExecution>,
 );
 
+#[derive(Debug, Clone)]
 pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     config: HotstuffConfig,
     store: TConsensusSpec::StateStore,
@@ -119,7 +121,7 @@ where TConsensusSpec: ConsensusSpec
         &mut self,
         epoch: Epoch,
         local_committee: &Committee<TConsensusSpec::Addr>,
-        local_committee_info: &CommitteeInfo,
+        local_committee_info: CommitteeInfo,
         leaf_block: LeafBlock,
         is_newview_propose: bool,
         propose_epoch_end: bool,
@@ -168,41 +170,45 @@ where TConsensusSpec: ConsensusSpec
         let base_layer_block_hash = current_base_layer_block_hash;
         let base_layer_block_height = current_base_layer_block_height;
 
-        let (next_block, foreign_proposals) = self.store.with_write_tx(|tx| {
-            let high_qc = HighQc::get(&**tx, epoch)?;
-            let high_qc_cert = high_qc.get_quorum_certificate(&**tx)?;
+        let on_propose = self.clone();
+        let (next_block, foreign_proposals) = task::spawn_blocking(move || {
+            on_propose.store.with_write_tx(|tx| {
+                let high_qc = HighQc::get(&**tx, epoch)?;
+                let high_qc_cert = high_qc.get_quorum_certificate(&**tx)?;
 
-            let (next_block, foreign_proposals, executed_transactions) = self.build_next_block(
-                tx,
-                epoch,
-                &leaf_block,
-                high_qc_cert,
-                validator.public_key,
-                local_committee_info,
-                // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
-                //       is a good idea.
-                is_newview_propose,
-                base_layer_block_height,
-                base_layer_block_hash,
-                propose_epoch_end,
-            )?;
+                let (next_block, foreign_proposals, executed_transactions) = on_propose.build_next_block(
+                    tx,
+                    epoch,
+                    &leaf_block,
+                    high_qc_cert,
+                    validator.public_key,
+                    &local_committee_info,
+                    // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if
+                    // this       is a good idea.
+                    is_newview_propose,
+                    base_layer_block_height,
+                    base_layer_block_hash,
+                    propose_epoch_end,
+                )?;
 
-            // Add executions for this block
-            if !executed_transactions.is_empty() {
-                debug!(
-                    target: LOG_TARGET,
-                    "Saving {} executed transaction(s) for block {}",
-                    executed_transactions.len(),
-                    next_block.id()
-                );
-            }
-            for executed in executed_transactions.into_values() {
-                executed.for_block(*next_block.id()).insert_if_required(tx)?;
-            }
+                // Add executions for this block
+                if !executed_transactions.is_empty() {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Saving {} executed transaction(s) for block {}",
+                        executed_transactions.len(),
+                        next_block.id()
+                    );
+                }
+                for executed in executed_transactions.into_values() {
+                    executed.for_block(*next_block.id()).insert_if_required(tx)?;
+                }
 
-            next_block.as_last_proposed().set(tx)?;
-            Ok::<_, HotStuffError>((next_block, foreign_proposals))
-        })?;
+                next_block.as_last_proposed().set(tx)?;
+                Ok::<_, HotStuffError>((next_block, foreign_proposals))
+            })
+        })
+        .await??;
 
         info!(
             target: LOG_TARGET,

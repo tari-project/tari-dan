@@ -6,7 +6,7 @@ use tari_dan_storage::StorageError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubstateStoreError {
-    #[error(transparent)]
+    #[error("Lock failure: {0}")]
     LockFailed(#[from] LockFailedError),
     #[error("Substate {id} not found")]
     SubstateNotFound { id: VersionedSubstateId },
@@ -47,7 +47,8 @@ impl SubstateStoreError {
 pub enum LockFailedError {
     #[error("Substate {id} not found")]
     SubstateNotFound { id: VersionedSubstateId },
-
+    #[error("Substate {id} is DOWN")]
+    SubstateIsDown { id: VersionedSubstateId },
     #[error(
         "Failed to {requested_lock} lock substate {substate_id} due to conflict with existing {existing_lock} lock"
     )]

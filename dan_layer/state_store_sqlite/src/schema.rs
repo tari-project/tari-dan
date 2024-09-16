@@ -302,7 +302,6 @@ diesel::table! {
         shard -> Integer,
         key -> Text,
         node -> Text,
-        is_stale -> Bool,
     }
 }
 

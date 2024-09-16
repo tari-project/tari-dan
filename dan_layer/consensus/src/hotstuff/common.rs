@@ -96,7 +96,7 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
     let mut dummies = Vec::new();
     with_dummy_blocks(
         candidate_block.network(),
-        justify_block.epoch(),
+        candidate_block.epoch(),
         justify_block.shard_group(),
         candidate_block.justify(),
         *justify_block.merkle_root(),
@@ -141,7 +141,7 @@ fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
     let mut parent_block = high_qc.as_leaf_block();
     let mut current_height = high_qc.block_height() + NodeHeight(1);
     if current_height > new_height {
-        warn!(
+        error!(
             target: LOG_TARGET,
             "BUG: 🍼 no dummy blocks to calculate. current height {} is greater than new height {}",
             current_height,
@@ -152,7 +152,8 @@ fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
 
     debug!(
         target: LOG_TARGET,
-        "🍼 calculating dummy blocks from {} to {}",
+        "🍼 calculating dummy blocks in epoch {} from {} to {}",
+        epoch,
         current_height,
         new_height,
     );
