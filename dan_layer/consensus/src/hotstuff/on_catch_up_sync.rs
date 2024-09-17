@@ -41,7 +41,8 @@ impl<TConsensusSpec: ConsensusSpec> OnCatchUpSync<TConsensusSpec> {
             from,
             self.pacemaker.current_view()
         );
-        // Reset leader timeout since we're behind. TODO: This is hacky.
+        // Reset leader timeout to previous height since we're behind and need to process catch up blocks. This is the
+        // only case where the view is non-monotonic. TODO: is this correct?
         self.pacemaker
             .reset_view(epoch, high_qc.block_height(), high_qc.block_height)
             .await?;

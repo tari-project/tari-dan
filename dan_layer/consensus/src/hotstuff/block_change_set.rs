@@ -235,6 +235,7 @@ impl ProposedBlockChangeSet {
         TTx::Target: StateStoreReadTransaction,
     {
         if let Some(reason) = self.no_vote_reason {
+            warn!(target: LOG_TARGET, "❌ No vote: {}", reason);
             if let Err(err) = tx.diagnostics_add_no_vote(self.block.block_id, reason) {
                 error!(target: LOG_TARGET, "Failed to save no vote reason: {}", err);
             }

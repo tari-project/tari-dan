@@ -89,7 +89,11 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                     continue;
                 };
 
+                command_count += 1;
+
                 if tx_rec.current_stage() > TransactionPoolStage::LocalPrepared {
+                    // CASE: This will happen if output-only nodes send a prepare to input-involved nodes. TODO:
+                    // output-only nodes can skip sending prepare
                     warn!(
                         target: LOG_TARGET,
                         "⚠️ Foreign LocalPrepare proposal ({}) received LOCAL_PREPARE for transaction {} but current transaction stage is {}. Ignoring.",
@@ -98,8 +102,6 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                     );
                     continue;
                 }
-
-                command_count += 1;
 
                 let remote_decision = atom.decision;
                 let local_decision = tx_rec.current_decision();
@@ -232,6 +234,8 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                     continue;
                 };
 
+                command_count += 1;
+
                 if tx_rec.current_stage() > TransactionPoolStage::LocalAccepted {
                     warn!(
                         target: LOG_TARGET,
@@ -242,8 +246,6 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                     );
                     continue;
                 }
-
-                command_count += 1;
 
                 let remote_decision = atom.decision;
                 let local_decision = tx_rec.current_local_decision();
