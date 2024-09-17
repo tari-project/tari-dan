@@ -67,8 +67,8 @@ pub enum RuntimeError {
     StateStoreError(#[from] StateStoreError),
     #[error("Workspace error: {0}")]
     WorkspaceError(#[from] WorkspaceError),
-    #[error("Substate not found with address '{address}'")]
-    SubstateNotFound { address: SubstateId },
+    #[error("Substate '{id}' not found")]
+    SubstateNotFound { id: SubstateId },
     #[error("Root substate not found with address '{address}'")]
     RootSubstateNotFound { address: SubstateId },
     #[error("Referenced substate not found with address '{address}'")]
