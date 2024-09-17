@@ -3,31 +3,34 @@
 
 use libp2p::PeerId;
 use tari_dan_common_types::PeerAddress;
-use tari_dan_p2p::{proto, DanMessage, TariMessagingSpec};
 use tari_networking::{MessageSpec, NetworkingError, NetworkingHandle, NetworkingService};
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
-pub struct Gossip {
-    networking: NetworkingHandle<TariMessagingSpec>,
-    rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::network::DanMessage)>,
+pub struct Gossip<TMessageSpec: MessageSpec + Send> {
+    networking: NetworkingHandle<TMessageSpec>,
+    rx_gossip: mpsc::UnboundedReceiver<(PeerId, TMessageSpec::GossipMessage)>,
 }
 
-impl Gossip {
+impl<TMessageSpec: MessageSpec + Send> Gossip<TMessageSpec> {
     pub fn new(
-        networking: NetworkingHandle<TariMessagingSpec>,
-        rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::network::DanMessage)>,
+        networking: NetworkingHandle<TMessageSpec>,
+        rx_gossip: mpsc::UnboundedReceiver<(PeerId, TMessageSpec::GossipMessage)>,
     ) -> Self {
         Self { networking, rx_gossip }
     }
 }
 
-impl Gossip {
-    pub async fn next_message(&mut self) -> Option<Result<(PeerAddress, DanMessage), anyhow::Error>> {
+impl<TMessageSpec: MessageSpec + Send + 'static> Gossip<TMessageSpec> {
+    pub async fn next_message<TMsg>(&mut self) -> Option<Result<(PeerAddress, TMsg), anyhow::Error>>
+    where
+        TMsg: TryFrom<TMessageSpec::GossipMessage>,
+        TMsg::Error: Into<anyhow::Error>
+    {
         let (from, msg) = self.rx_gossip.recv().await?;
         match msg.try_into() {
             Ok(msg) => Some(Ok((from.into(), msg))),
-            Err(e) => Some(Err(e)),
+            Err(e) => Some(Err(e.into())),
         }
     }
 
@@ -42,7 +45,7 @@ impl Gossip {
     pub async fn publish_message<T: Into<String> + Send>(
         &mut self,
         topic: T,
-        message: <TariMessagingSpec as MessageSpec>::GossipMessage,
+        message: TMessageSpec::GossipMessage,
     ) -> Result<(), NetworkingError> {
         self.networking.publish_gossip(topic, message).await
     }

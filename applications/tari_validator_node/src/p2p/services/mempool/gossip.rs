@@ -5,23 +5,32 @@ use std::collections::HashSet;
 
 use log::*;
 use tari_dan_common_types::{Epoch, NumPreshards, PeerAddress, ShardGroup, SubstateAddress};
-use tari_dan_p2p::{proto, DanMessage};
+use tari_dan_p2p::{proto, DanMessage, Message};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
+use tari_networking::MessageSpec;
 
 use crate::p2p::services::{mempool::MempoolError, messaging::Gossip};
 
 const LOG_TARGET: &str = "tari::validator_node::mempool::gossip";
 
+#[derive(Debug, Clone, Copy)]
+pub struct MempoolMessagingSpec;
+
+impl MessageSpec for MempoolMessagingSpec {
+    type GossipMessage = proto::network::DanMessage;
+    type Message = proto::consensus::HotStuffMessage;
+}
+
 #[derive(Debug)]
-pub(super) struct MempoolGossip<TAddr> {
+pub(super) struct MempoolGossip<TAddr,> {
     num_preshards: NumPreshards,
     epoch_manager: EpochManagerHandle<TAddr>,
-    gossip: Gossip,
+    gossip: Gossip<MempoolMessagingSpec>,
     is_subscribed: Option<ShardGroup>,
 }
 
 impl MempoolGossip<PeerAddress> {
-    pub fn new(num_preshards: NumPreshards, epoch_manager: EpochManagerHandle<PeerAddress>, outbound: Gossip) -> Self {
+    pub fn new(num_preshards: NumPreshards, epoch_manager: EpochManagerHandle<PeerAddress>, outbound: Gossip<MempoolMessagingSpec>) -> Self {
         Self {
             num_preshards,
             epoch_manager,

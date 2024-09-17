@@ -9,6 +9,6 @@ use crate::proto;
 pub struct TariMessagingSpec;
 
 impl MessageSpec for TariMessagingSpec {
-    type GossipMessage = proto::network::DanMessage;
+    type GossipMessage = proto::network::Message;
     type Message = proto::consensus::HotStuffMessage;
 }

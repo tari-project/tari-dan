@@ -43,6 +43,7 @@ use crate::{
 };
 
 mod block_transaction_executor;
+mod gossip;
 mod handle;
 mod leader_selection;
 #[cfg(feature = "metrics")]
@@ -51,6 +52,7 @@ mod signature_service;
 mod spec;
 
 pub use block_transaction_executor::*;
+pub use gossip::*;
 pub use handle::*;
 pub use signature_service::*;
 
