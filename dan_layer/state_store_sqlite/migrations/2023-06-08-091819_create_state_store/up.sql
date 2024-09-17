@@ -500,11 +500,40 @@ CREATE INDEX state_transitions_epoch on state_transitions (epoch);
 
 CREATE TABLE diagnostics_no_votes
 (
-    id          integer   not NULL primary key AUTOINCREMENT,
-    block_id    text      not NULL,
-    reason_code text      not NULL,
-    reason_text text      not NULL,
-    created_at  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id           integer   not NULL primary key AUTOINCREMENT,
+    block_id     text      not NULL,
+    block_height bigint    not NULL,
+    reason_code  text      not NULL,
+    reason_text  text      not NULL,
+    created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+create table diagnostic_deleted_blocks
+(
+    id                      integer   not null primary key AUTOINCREMENT,
+    block_id                text      not NULL,
+    parent_block_id         text      not NULL,
+    merkle_root             text      not NULL,
+    network                 text      not NULL,
+    height                  bigint    not NULL,
+    epoch                   bigint    not NULL,
+    shard_group             integer   not NULL,
+    proposed_by             text      not NULL,
+    qc_id                   text      not NULL,
+    command_count           bigint    not NULL,
+    commands                text      not NULL,
+    total_leader_fee        bigint    not NULL,
+    is_committed            boolean   not NULL default '0',
+    is_justified            boolean   not NULL,
+    is_dummy                boolean   not NULL,
+    foreign_indexes         text      not NULL,
+    signature               text      NULL,
+    block_time              bigint    NULL,
+    timestamp               bigint    not NULL,
+    base_layer_block_height bigint    not NULL,
+    base_layer_block_hash   text      not NULL,
+    extra_data              text      NULL,
+    created_at              timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Debug Triggers

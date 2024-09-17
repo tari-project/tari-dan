@@ -56,9 +56,39 @@ diesel::table! {
 }
 
 diesel::table! {
+    diagnostic_deleted_blocks (id) {
+        id -> Integer,
+        block_id -> Text,
+        parent_block_id -> Text,
+        merkle_root -> Text,
+        network -> Text,
+        height -> BigInt,
+        epoch -> BigInt,
+        shard_group -> Integer,
+        proposed_by -> Text,
+        qc_id -> Text,
+        command_count -> BigInt,
+        commands -> Text,
+        total_leader_fee -> BigInt,
+        is_committed -> Bool,
+        is_justified -> Bool,
+        is_dummy -> Bool,
+        foreign_indexes -> Text,
+        signature -> Nullable<Text>,
+        block_time -> Nullable<BigInt>,
+        timestamp -> BigInt,
+        base_layer_block_height -> BigInt,
+        base_layer_block_hash -> Text,
+        extra_data -> Nullable<Text>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     diagnostics_no_votes (id) {
         id -> Integer,
         block_id -> Text,
+        block_height -> BigInt,
         reason_code -> Text,
         reason_text -> Text,
         created_at -> Timestamp,
@@ -492,6 +522,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     block_diffs,
     blocks,
     burnt_utxos,
+    diagnostic_deleted_blocks,
     diagnostics_no_votes,
     epoch_checkpoints,
     foreign_missing_transactions,

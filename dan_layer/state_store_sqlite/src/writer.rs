@@ -273,10 +273,20 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     }
 
     fn blocks_delete(&mut self, block_id: &BlockId) -> Result<(), StorageError> {
-        use crate::schema::blocks;
+        use crate::schema::{blocks, diagnostic_deleted_blocks};
+
+        let block_id = serialize_hex(block_id);
+
+        diesel::insert_into(diagnostic_deleted_blocks::table)
+            .values(blocks::table.filter(blocks::block_id.eq(&block_id)))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_delete (insert into diagnostic_deleted_blocks)",
+                source: e,
+            })?;
 
         let num_deleted = diesel::delete(blocks::table)
-            .filter(blocks::block_id.eq(serialize_hex(block_id)))
+            .filter(blocks::block_id.eq(&block_id))
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "blocks_delete",
@@ -286,7 +296,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         if num_deleted == 0 {
             return Err(StorageError::NotFound {
                 item: "blocks".to_string(),
-                key: block_id.to_string(),
+                key: block_id,
             });
         }
 
@@ -2022,10 +2032,16 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
     }
 
     fn diagnostics_add_no_vote(&mut self, block_id: BlockId, reason: NoVoteReason) -> Result<(), StorageError> {
-        use crate::schema::diagnostics_no_votes;
+        use crate::schema::{blocks, diagnostics_no_votes};
+        let block_id = serialize_hex(block_id);
 
         let values = (
-            diagnostics_no_votes::block_id.eq(serialize_hex(block_id)),
+            diagnostics_no_votes::block_id.eq(&block_id),
+            diagnostics_no_votes::block_height.eq(blocks::table
+                .select(blocks::height)
+                .filter(blocks::block_id.eq(&block_id))
+                .single_value()
+                .assume_not_null()),
             diagnostics_no_votes::reason_code.eq(reason.as_code_str()),
             diagnostics_no_votes::reason_text.eq(reason.to_string()),
         );
