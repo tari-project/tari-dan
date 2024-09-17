@@ -97,7 +97,7 @@ pub struct Block {
     // Body
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     merkle_root: FixedHash,
-    // BTreeSet is used for the deterministic block hash, that is, transactions are always ordered by TransactionId.
+    /// Ordered commands that help ensure a deterministic block hash.
     commands: BTreeSet<Command>,
     /// If the block is a dummy block. This is metadata and not sent over
     /// the wire or part of the block hash.

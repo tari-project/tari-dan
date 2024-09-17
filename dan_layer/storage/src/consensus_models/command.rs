@@ -112,13 +112,14 @@ pub enum Command {
     EndEpoch,
 }
 
+/// Defines the order in which commands should be processed in a block. "Smallest" comes first and "largest" comes last.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum CommandOrdering<'a> {
-    EndEpoch,
-    TransactionId(&'a TransactionId),
-    MintConfidentialOutput(&'a SubstateId),
     /// Foreign proposals should come first in the block so that they are processed before commands
     ForeignProposal(ShardGroup, &'a BlockId),
+    MintConfidentialOutput(&'a SubstateId),
+    TransactionId(&'a TransactionId),
+    EndEpoch,
 }
 
 impl Command {
@@ -281,7 +282,7 @@ impl Display for Command {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{collections::BTreeSet, str::FromStr};
 
     use super::*;
 
@@ -292,15 +293,42 @@ mod tests {
                 CommandOrdering::ForeignProposal(ShardGroup::new(0, 31), &BlockId::zero())
         );
         assert!(
-            CommandOrdering::ForeignProposal(ShardGroup::new(0, 64), &BlockId::zero()) >
+            CommandOrdering::ForeignProposal(ShardGroup::new(0, 64), &BlockId::zero()) <
                 CommandOrdering::TransactionId(&TransactionId::default())
         );
         let substate_id =
             SubstateId::from_str("component_0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+
         assert!(
-            CommandOrdering::MintConfidentialOutput(&substate_id) >
+            CommandOrdering::MintConfidentialOutput(&substate_id) <
                 CommandOrdering::TransactionId(&TransactionId::default())
         );
-        assert!(CommandOrdering::MintConfidentialOutput(&substate_id) > CommandOrdering::EndEpoch);
+        assert!(CommandOrdering::MintConfidentialOutput(&substate_id) < CommandOrdering::EndEpoch);
+        let mut set = BTreeSet::new();
+        let cmds = [
+            Command::EndEpoch,
+            Command::MintConfidentialOutput(MintConfidentialOutputAtom { substate_id }),
+            Command::ForeignProposal(ForeignProposalAtom {
+                block_id: BlockId::zero(),
+                shard_group: ShardGroup::new(0, 64),
+                base_layer_block_height: 0,
+            }),
+            Command::Prepare(TransactionAtom {
+                id: TransactionId::default(),
+                decision: Decision::Commit,
+                evidence: Evidence::default(),
+                transaction_fee: 0,
+                leader_fee: None,
+            }),
+        ];
+        let expected = [cmds[2].clone(), cmds[1].clone(), cmds[3].clone(), cmds[0].clone()];
+        set.extend(cmds);
+
+        // Check the ordering in the set
+        let mut iter = set.iter();
+        for exp in &expected {
+            let next = iter.next().unwrap();
+            assert_eq!(next, exp);
+        }
     }
 }
