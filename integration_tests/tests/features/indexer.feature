@@ -1,50 +1,51 @@
-# Copyright 2022 The Tari Project
+# Copyright 2024 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
-  # TODO: Ignored, no inputs - replace with wallet daemon calls
 @indexer
 Feature: Indexer node
 
   @serial
-  Scenario: Indexer is able to connect to validator nodes
-    Given fees are disabled
+  Scenario: Wallet daemon is able to connect to indexer
+
+    ##### Setup
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
 
-    # Initialize a VN
+    # Initialize a validator node
     Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
-    # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 6 new blocks
-    When wallet WALLET has at least 2000000000 uT
-
-    # VN registration
+    # Fund wallet to send VN registration tx
+    When miner MINER mines 10 new blocks
+    When wallet WALLET has at least 2000 T
     When validator node VN sends a registration transaction to base wallet WALLET
+    When miner MINER mines 16 new blocks
+    Then the validator node VN is listed as registered
+
+    # Initialize indexer and connect wallet daemon
+    Given an indexer IDX connected to base node BASE
+    Given a wallet daemon WALLET_D connected to indexer IDX
 
     # Register some templates
     When base wallet WALLET registers the template "counter"
     When base wallet WALLET registers the template "basic_nft"
-    When miner MINER mines 10 new blocks
-    Then VN has scanned to height 13
-    Then the validator node VN is listed as registered
+    When miner MINER mines 20 new blocks
+    Then VN has scanned to height 43
     Then the template "counter" is listed as registered by the validator node VN
     Then the template "basic_nft" is listed as registered by the validator node VN
 
-    # A file-base CLI account must be created to sign future calls
-    When I use an account key named K1
+    # Create the sender account
+    When I create an account ACC via the wallet daemon WALLET_D with 10000 free coins
 
-    # Create a new Counter component and increase it to have a version 1
-    When I create a component COUNTER_1 of template "counter" on VN using "new"
-    When I invoke on VN on component COUNTER_1/components/Counter the method call "increase" named "TX1"
-
-    # Create an account to deposit minted nfts
-    When I create an account ACC1 on VN
+    ##### Scenario
+    # Create a new Counter component and increase it to have version 1
+    When I call function "new" on template "counter" using account ACC to pay fees via wallet daemon WALLET_D named "COUNTER"
+    When I invoke on wallet daemon WALLET_D on account ACC on component COUNTER/components/Counter the method call "increase"
 
     # Create a new SparkleNft component and mint an NFT
-    When I call function "new" on template "basic_nft" on VN named "NFT"
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1" named "TX2" signed with key ACC1
+    When I call function "new" on template "basic_nft" using account ACC to pay fees via wallet daemon WALLET_D named "NFT"
+    When I submit a transaction manifest via wallet daemon WALLET_D signed by the key of ACC with inputs "NFT, ACC" named "TX1"
   ```
   // $mint NFT/resources/0 6
   // $nft_index NFT/resources/0 0
@@ -54,7 +55,7 @@ Feature: Indexer node
   // $nft_index NFT/resources/0 4
   // $nft_index NFT/resources/0 5
   let sparkle_nft = global!["NFT/components/SparkleNft"];
-  let mut acc1 = global!["ACC1/components/Account"];
+  let mut acc1 = global!["ACC/components/Account"];
 
   // mint a couple of nfts with random ids
   let nft_bucket_1 = sparkle_nft.mint("Astronaut (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149622024.jpg");
@@ -71,28 +72,21 @@ Feature: Indexer node
   acc1.deposit(nft_bucket_6);
   ```
 
-    # Initialize an indexer
-    Given an indexer IDX connected to base node BASE
-    Then indexer IDX has scanned to height 13
-
     # Get substate of a component (the counter has been increased, so the version is 1)
-    Then the indexer IDX returns version 1 for substate COUNTER_1/components/Counter
+    Then the indexer IDX returns version 1 for substate COUNTER/components/Counter
 
     # Get substate of a resource (the nft resource has been mutated by the minting, so the version is 1)
     Then the indexer IDX returns version 1 for substate NFT/resources/0
 
     # Get substate of an nft (newly minted and not mutated, so version is 0)
-    Then the indexer IDX returns version 0 for substate TX2/nfts/0
+    Then the indexer IDX returns version 0 for substate TX1/nfts/0
 
     # List the nfts of a resource
-    Then the indexer IDX returns 6 non fungibles for resource NFT/resources/0
+    # FIXME: indexer relies on NFT index which is no longer created
+#    Then the indexer IDX returns 6 non fungibles for resource NFT/resources/0
 
-    # Scan the network for the event emitted on ACC_1 creation
-    When indexer IDX scans the network events for account ACC1 with topics component-created,deposit,deposit,deposit,deposit,deposit,deposit
-
-  # When I print the cucumber world
-  # When I wait 5000 seconds
-
+    # Scan the network for the event emitted on ACC creation
+    When indexer IDX scans the network events for account ACC with topics component-created,pay_fee,pay_fee,pay_fee,pay_fee,pay_fee,deposit,component-created,pay_fee,pay_fee,deposit,deposit,deposit,deposit,deposit,deposit
 
   @serial
   Scenario: Indexer GraphQL requests work
@@ -107,88 +101,75 @@ Feature: Indexer node
 
   @serial
   Scenario: Indexer GraphQL requests events over network substate indexing
-    Given fees are disabled
+
+    ##### Setup
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
 
-    # Initialize a VN
+    # Initialize a validator node
     Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
-    # Initialize an indexer
-    Given an indexer IDX connected to base node BASE
-
-    # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 6 new blocks
-    When wallet WALLET has at least 2000000000 uT
-
-    # VN registration
+    # Fund wallet to send VN registration tx
+    When miner MINER mines 10 new blocks
+    When wallet WALLET has at least 2000 T
     When validator node VN sends a registration transaction to base wallet WALLET
-
     When miner MINER mines 16 new blocks
-    Then VN has scanned to height 19
-    Then indexer IDX has scanned to height 19
     Then the validator node VN is listed as registered
 
-    # A file-base CLI account must be created to sign future calls
-    When I use an account key named K1
+    # Initialize indexer and connect wallet daemon
+    Given an indexer IDX connected to base node BASE
+    Given a wallet daemon WALLET_D connected to indexer IDX
 
-    # Creates a new account
-    When I create an account ACC_1 on VN
-    When I create an account ACC_2 on VN
+    When I create an account ACC_1 via the wallet daemon WALLET_D with 10000 free coins
+    When I create an account ACC_2 via the wallet daemon WALLET_D with 10000 free coins
 
+    ##### Scenario
     # Scan the network for the event emitted on ACC_1 creation
-    When indexer IDX scans the network events for account ACC_1 with topics component-created
+    When indexer IDX scans the network events for account ACC_1 with topics component-created,pay_fee,component-created,pay_fee
 
     # Scan the network for the event emitted on ACC_2 creation
-    When indexer IDX scans the network events for account ACC_2 with topics component-created
+    When indexer IDX scans the network events for account ACC_2 with topics component-created,pay_fee,component-created,pay_fee
 
   @serial
   Scenario: Indexer GraphQL filtering and pagination of events
-    Given fees are disabled
+
+    ##### Setup
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
 
-    # Initialize a VN
+    # Initialize a validator node
     Given a validator node VN connected to base node BASE and wallet daemon WALLET_D
 
-    # Initialize an indexer
-    Given an indexer IDX connected to base node BASE
-
-    # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 6 new blocks
-    When wallet WALLET has at least 2000000000 uT
-
-    # VN registration
+    # Fund wallet to send VN registration tx
+    When miner MINER mines 10 new blocks
+    When wallet WALLET has at least 2000 T
     When validator node VN sends a registration transaction to base wallet WALLET
-
-    # Register the "faucet" template
-    When base wallet WALLET registers the template "faucet"
-
-    # Mine a few block for the VN and template registration
     When miner MINER mines 16 new blocks
-    Then VN has scanned to height 19
-    Then indexer IDX has scanned to height 19
     Then the validator node VN is listed as registered
 
-    # Initialize the wallet daemon
+    # Initialize indexer and connect wallet daemon
+    Given an indexer IDX connected to base node BASE
     Given a wallet daemon WALLET_D connected to indexer IDX
 
-    # A file-base CLI account must be created to sign future calls
-    When I use an account key named K1
+    # Register template
+    When base wallet WALLET registers the template "faucet"
+    When miner MINER mines 20 new blocks
+    Then VN has scanned to height 43
+    Then the template "faucet" is listed as registered by the validator node VN
 
-    # Creates a new account
-    When I create an account ACC_1 on VN
-    When I create an account ACC_2 on VN
+    When I create an account ACC_1 via the wallet daemon WALLET_D with 10000 free coins
+    When I create an account ACC_2 via the wallet daemon WALLET_D with 10000 free coins
 
+    ##### Scenario
     # Create a new faucet component
     When I call function "mint" on template "faucet" using account ACC_1 to pay fees via wallet daemon WALLET_D with args "10000" named "FAUCET"
 
     # Generate some events by doing vault operations with the faucet and the acounts
-    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACC_1, ACC_2" named "TX1"
+    When I submit a transaction manifest via wallet daemon WALLET_D signed by the key of ACC_1 with inputs "FAUCET, ACC_1, ACC_2" named "TX1"
   ```
   let faucet = global!["FAUCET/components/TestFaucet"];
   let faucet_resource = global!["FAUCET/resources/0"];
@@ -213,4 +194,3 @@ Feature: Indexer node
 
     # Query the events from the network
     When indexer IDX scans the network for events of resource FAUCET/resources/0
-
