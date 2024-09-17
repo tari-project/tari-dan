@@ -33,3 +33,20 @@ impl MessageLogger for SqliteMessageLogger {
         self.log_inbound_message(source, message_type, message_tag, message)
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct NopLogger;
+
+impl MessageLogger for NopLogger {
+    fn log_outbound_message<T: Serialize>(
+        &self,
+        _destination_type: &str,
+        _destination: &str,
+        _message_type: &str,
+        _message_tag: &str,
+        _message: &T,
+    ) {
+    }
+
+    fn log_inbound_message<T: Serialize>(&self, _source: &str, _message_type: &str, _message_tag: &str, _message: &T) {}
+}

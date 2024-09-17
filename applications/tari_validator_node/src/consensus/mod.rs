@@ -1,7 +1,6 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use sqlite_message_logger::SqliteMessageLogger;
 use tari_common::configuration::Network;
 use tari_consensus::{
     hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffConfig, HotstuffWorker},
@@ -55,7 +54,7 @@ pub use block_transaction_executor::*;
 pub use handle::*;
 pub use signature_service::*;
 
-use crate::transaction_validators::WithContext;
+use crate::{p2p::NopLogger, transaction_validators::WithContext};
 
 pub type ConsensusTransactionValidator = BoxedValidator<ValidationContext, Transaction, TransactionValidationError>;
 
@@ -66,8 +65,8 @@ pub async fn spawn(
     local_addr: PeerAddress,
     signing_service: TariSignatureService,
     epoch_manager: EpochManagerHandle<PeerAddress>,
-    inbound_messaging: ConsensusInboundMessaging<SqliteMessageLogger>,
-    outbound_messaging: ConsensusOutboundMessaging<SqliteMessageLogger>,
+    inbound_messaging: ConsensusInboundMessaging<NopLogger>,
+    outbound_messaging: ConsensusOutboundMessaging<NopLogger>,
     client_factory: TariValidatorNodeRpcClientFactory,
     hooks: <TariConsensusSpec as ConsensusSpec>::Hooks,
     shutdown_signal: ShutdownSignal,
