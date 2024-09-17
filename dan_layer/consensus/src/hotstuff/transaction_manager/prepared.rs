@@ -4,99 +4,100 @@
 use std::collections::HashSet;
 
 use indexmap::IndexMap;
-use tari_dan_common_types::{SubstateLockType, SubstateRequirement, VersionedSubstateId};
-use tari_dan_storage::consensus_models::{
-    Decision,
-    Evidence,
-    ExecutedTransaction,
-    TransactionExecution,
-    TransactionRecord,
-    VersionedSubstateIdLockIntent,
-};
-use tari_engine_types::{commit_result::RejectReason, substate::Substate};
+use tari_dan_common_types::{NumPreshards, SubstateRequirement, VersionedSubstateId};
+use tari_dan_storage::consensus_models::{Decision, Evidence, TransactionExecution, VersionedSubstateIdLockIntent};
 
-#[derive(Debug, Clone)]
+use crate::hotstuff::substate_store::LockStatus;
+
+#[derive(Debug)]
 pub enum PreparedTransaction {
     LocalOnly(LocalPreparedTransaction),
     MultiShard(MultiShardPreparedTransaction),
 }
 
 impl PreparedTransaction {
-    pub fn new_local_accept(transaction: ExecutedTransaction) -> Self {
-        Self::LocalOnly(LocalPreparedTransaction::Accept(transaction))
-    }
-
-    pub fn new_local_early_abort(transaction: TransactionRecord) -> Self {
-        Self::LocalOnly(LocalPreparedTransaction::EarlyAbort { transaction })
-    }
-
-    pub fn new_multishard(
-        transaction: TransactionRecord,
-        local_inputs: IndexMap<SubstateRequirement, Substate>,
-        foreign_inputs: HashSet<SubstateRequirement>,
-        outputs: HashSet<VersionedSubstateId>,
-    ) -> Self {
-        Self::MultiShard(MultiShardPreparedTransaction {
-            transaction,
-            local_inputs,
-            foreign_inputs,
-            outputs,
+    pub fn new_local_accept(executed: TransactionExecution, lock_status: LockStatus) -> Self {
+        Self::LocalOnly(LocalPreparedTransaction::Accept {
+            execution: executed,
+            lock_status,
         })
     }
 
-    pub fn set_abort_reason(&mut self, reason: RejectReason) {
+    pub fn new_local_early_abort(execution: TransactionExecution) -> Self {
+        Self::LocalOnly(LocalPreparedTransaction::EarlyAbort { execution })
+    }
+
+    pub fn lock_status(&self) -> &LockStatus {
+        static DEFAULT_LOCK_STATUS: LockStatus = LockStatus::new();
         match self {
-            Self::LocalOnly(local) => {
-                local.set_abort_reason(reason);
-            },
-            Self::MultiShard(multishard) => {
-                multishard.set_abort_reason(reason);
-            },
+            Self::LocalOnly(LocalPreparedTransaction::Accept { lock_status, .. }) => lock_status,
+            Self::LocalOnly(LocalPreparedTransaction::EarlyAbort { .. }) => &DEFAULT_LOCK_STATUS,
+            Self::MultiShard(multishard) => &multishard.lock_status,
         }
+    }
+
+    pub fn into_lock_status(self) -> LockStatus {
+        match self {
+            Self::LocalOnly(LocalPreparedTransaction::Accept { lock_status, .. }) => lock_status,
+            Self::LocalOnly(LocalPreparedTransaction::EarlyAbort { .. }) => LockStatus::new(),
+            Self::MultiShard(multishard) => multishard.lock_status,
+        }
+    }
+
+    pub fn new_multishard(
+        execution: Option<TransactionExecution>,
+        local_inputs: IndexMap<SubstateRequirement, u32>,
+        foreign_inputs: HashSet<SubstateRequirement>,
+        outputs: HashSet<VersionedSubstateId>,
+        lock_status: LockStatus,
+    ) -> Self {
+        Self::MultiShard(MultiShardPreparedTransaction {
+            execution,
+            local_inputs,
+            foreign_inputs,
+            outputs,
+            lock_status,
+        })
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum LocalPreparedTransaction {
-    Accept(ExecutedTransaction),
-    EarlyAbort { transaction: TransactionRecord },
+    Accept {
+        execution: TransactionExecution,
+        lock_status: LockStatus,
+    },
+    EarlyAbort {
+        execution: TransactionExecution,
+    },
 }
 
-impl LocalPreparedTransaction {
-    pub fn set_abort_reason(&mut self, reason: RejectReason) {
-        match self {
-            Self::Accept(accept) => {
-                accept.set_abort_reason(reason);
-            },
-            Self::EarlyAbort { transaction } => {
-                transaction.set_abort_reason(reason);
-            },
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MultiShardPreparedTransaction {
-    transaction: TransactionRecord,
-    local_inputs: IndexMap<SubstateRequirement, Substate>,
+    execution: Option<TransactionExecution>,
+    local_inputs: IndexMap<SubstateRequirement, u32>,
     outputs: HashSet<VersionedSubstateId>,
     foreign_inputs: HashSet<SubstateRequirement>,
+    lock_status: LockStatus,
 }
 
 impl MultiShardPreparedTransaction {
-    pub fn transaction(&self) -> &TransactionRecord {
-        &self.transaction
+    pub fn is_executed(&self) -> bool {
+        self.execution.is_some()
     }
 
     pub fn current_decision(&self) -> Decision {
-        self.transaction.current_decision()
+        self.execution
+            .as_ref()
+            .map(|e| e.decision())
+            .unwrap_or(Decision::Commit)
     }
 
     pub fn foreign_inputs(&self) -> &HashSet<SubstateRequirement> {
         &self.foreign_inputs
     }
 
-    pub fn local_inputs(&self) -> &IndexMap<SubstateRequirement, Substate> {
+    pub fn local_inputs(&self) -> &IndexMap<SubstateRequirement, u32> {
         &self.local_inputs
     }
 
@@ -104,36 +105,27 @@ impl MultiShardPreparedTransaction {
         &self.outputs
     }
 
-    pub fn set_abort_reason(&mut self, reason: RejectReason) {
-        self.transaction.set_abort_reason(reason);
-    }
-
     pub fn into_execution(self) -> Option<TransactionExecution> {
-        self.transaction.into_execution()
+        self.execution
     }
 
-    pub fn to_initial_evidence(&self) -> Evidence {
-        if let Some(resolved_inputs) = self.transaction.resolved_inputs() {
-            return Evidence::from_inputs_and_outputs(
-                resolved_inputs,
-                self.transaction
-                    .resulting_outputs()
-                    .expect("invariant: resulting_outputs is Some if resolved_inputs is Some"),
-            );
-        }
-
-        // CASE: One or more local inputs are not found, so the transaction is aborted. We have no resolved inputs.
-        if self.transaction.current_decision().is_abort() {
-            return Evidence::from_inputs_and_outputs(
-                self.transaction
-                    .transaction()
-                    .all_inputs_iter()
-                    .map(|input| VersionedSubstateIdLockIntent::from_requirement(input, SubstateLockType::Read)),
-                self.outputs
-                    .iter()
-                    .map(|id| VersionedSubstateIdLockIntent::output(id.clone())),
-            );
-        }
+    pub fn to_initial_evidence(&self, num_preshards: NumPreshards, num_committees: u32) -> Evidence {
+        // if let Some(ref execution) = self.execution {
+        //     return Evidence::from_inputs_and_outputs(execution.resolved_inputs(), execution.resulting_outputs());
+        // }
+        //
+        // // CASE: One or more local inputs are not found, so the transaction is aborted.
+        // if self.current_decision().is_abort() {
+        //     return Evidence::from_inputs_and_outputs(
+        //         self.execution
+        //             .transaction()
+        //             .all_inputs_iter()
+        //             .map(|input| VersionedSubstateIdLockIntent::from_requirement(input, SubstateLockType::Read)),
+        //         self.outputs
+        //             .iter()
+        //             .map(|id| VersionedSubstateIdLockIntent::output(id.clone())),
+        //     );
+        // }
 
         // TODO: We do not know if the inputs locks required are Read/Write. Either we allow the user to
         //       specify this or we can correct the locks after execution. Currently, this limitation
@@ -141,7 +133,7 @@ impl MultiShardPreparedTransaction {
         let inputs = self
             .local_inputs()
             .iter()
-            .map(|(requirement, substate)| VersionedSubstateId::new(requirement.substate_id.clone(), substate.version()))
+            .map(|(requirement, version)| VersionedSubstateId::new(requirement.substate_id.clone(), *version))
             // TODO(correctness): to_zero_version is error prone when used in evidence and the correctness depends how it is used.
             // e.g. using it to determining which shard is involved is fine, but loading substate by the address is incorrect (v0 may or may not be the actual pledged substate)
             .chain(self.foreign_inputs().iter().map(|r| r.clone().or_zero_version()))
@@ -153,6 +145,6 @@ impl MultiShardPreparedTransaction {
             .cloned()
             .map(VersionedSubstateIdLockIntent::output);
 
-        Evidence::from_inputs_and_outputs(inputs, outputs)
+        Evidence::from_inputs_and_outputs(num_preshards, num_committees, inputs, outputs)
     }
 }

@@ -191,7 +191,7 @@ export default function BlockDetails() {
                           <TableRow>
                             <TableCell>Status</TableCell>
                             <DataTableCell>
-                              <StatusChip status={block!.justify.decision === "Accept" ? "Commit" : "Abort"} />
+                              <StatusChip status={block!.is_committed ? "Commit" : "Pending"} />
                             </DataTableCell>
                           </TableRow>
                           <TableRow>

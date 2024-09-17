@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_common::configuration::Network;
-use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, NodeHeight};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, LeafBlock, LockedBlock, QuorumCertificate},
     StateStore,
@@ -16,6 +16,7 @@ use super::vote_receiver::VoteReceiver;
 use crate::{
     hotstuff::{common::calculate_last_dummy_block, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::NewViewMessage,
+    tracing::TraceTimer,
     traits::{ConsensusSpec, LeaderStrategy},
 };
 
@@ -74,10 +75,12 @@ where TConsensusSpec: ConsensusSpec
     #[allow(clippy::too_many_lines)]
     pub async fn handle(
         &mut self,
+        current_epoch: Epoch,
         from: TConsensusSpec::Addr,
         message: NewViewMessage,
         local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
+        let _timer = TraceTimer::debug(LOG_TARGET, "OnReceiveNewView");
         let NewViewMessage {
             high_qc,
             new_height,
@@ -97,6 +100,11 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
+        if epoch != current_epoch {
+            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for epoch {} because the epoch is not the current epoch", epoch);
+            return Ok(());
+        }
+
         // TODO: This prevents syncing the blocks from previous epoch.
         // if !self.epoch_manager.is_validator_in_local_committee(&from, epoch).await? {
         //     return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
@@ -107,7 +115,7 @@ where TConsensusSpec: ConsensusSpec
         // }
 
         // We can never accept NEWVIEWS for heights that are lower than the locked block height
-        let locked = self.store.with_read_tx(|tx| LockedBlock::get(tx))?;
+        let locked = self.store.with_read_tx(|tx| LockedBlock::get(tx, epoch))?;
         if new_height < locked.height() {
             warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for height less than the locked block, locked block: {} new height: {}", locked, new_height);
             return Ok(());
@@ -116,21 +124,19 @@ where TConsensusSpec: ConsensusSpec
         self.validate_qc(&high_qc)?;
 
         // Sync if we do not have the block for this valid QC
-        let exists = self
-            .store
-            .with_read_tx(|tx| Block::record_exists(tx, high_qc.block_id()))?;
-        if !exists {
-            let local_height = self
-                .store
-                .with_read_tx(|tx| LeafBlock::get(tx))
-                .optional()?
-                .map(|leaf| leaf.height())
-                .unwrap_or_default();
-            return Err(HotStuffError::FallenBehind {
-                local_height,
-                qc_height: high_qc.block_height(),
-            });
-        }
+        self.store.with_read_tx(|tx| {
+            if !Block::record_exists(tx, high_qc.block_id())? {
+                let local_height = LeafBlock::get(tx, epoch)
+                    .optional()?
+                    .map(|leaf| leaf.height())
+                    .unwrap_or_default();
+                return Err(HotStuffError::FallenBehind {
+                    local_height,
+                    qc_height: high_qc.block_height(),
+                });
+            }
+            Ok(())
+        })?;
 
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         let leader = self
@@ -176,7 +182,7 @@ where TConsensusSpec: ConsensusSpec
         // Take note of unique NEWVIEWs so that we can count them
         let newview_count = self.collect_new_views(from, new_height, &high_qc);
 
-        let high_qc = self.store.with_write_tx(|tx| {
+        let latest_high_qc = self.store.with_write_tx(|tx| {
             high_qc.save(tx)?;
             let high_qc = high_qc.update_high_qc(tx)?;
             high_qc.get_quorum_certificate(&**tx)
@@ -193,23 +199,30 @@ where TConsensusSpec: ConsensusSpec
             target: LOG_TARGET,
             "🌟 Received NEWVIEW for height {} (QC: {}) has {} votes out of {}",
             new_height,
-            high_qc,
+            latest_high_qc,
             newview_count,
             threshold,
         );
         // Once we have received enough (quorum) NEWVIEWS, we can create the dummy block(s) and propose the next block.
         // Any subsequent NEWVIEWs for this height/view are ignored.
         if newview_count == threshold {
-            info!(target: LOG_TARGET, "🌟✅ NEWVIEW for block {} (high_qc: {}) has reached quorum ({}/{})", new_height, high_qc.as_high_qc(), newview_count, threshold);
+            info!(target: LOG_TARGET, "🌟✅ NEWVIEW for block {} (high_qc: {}) has reached quorum ({}/{})", new_height, latest_high_qc.as_high_qc(), newview_count, threshold);
+            if latest_high_qc.block_height() + NodeHeight(1) > new_height {
+                // CASE: the votes received from NEWVIEWS created a new high QC, so there are no dummy blocks to create
+                // We can force beat with our current leaf.
+                let leaf_block = self.store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
+                self.pacemaker.force_beat(leaf_block);
+                return Ok(());
+            }
 
-            let high_qc_block = self.store.with_read_tx(|tx| high_qc.get_block(tx))?;
+            let high_qc_block = self.store.with_read_tx(|tx| latest_high_qc.get_block(tx))?;
             // Determine how many missing blocks we must fill without actually creating them.
             // This node, as well as all other replicas, will create the blocks in on_receive_proposal.
             let last_dummy_block = calculate_last_dummy_block(
                 self.network,
                 epoch,
-                high_qc.shard_group(),
-                &high_qc,
+                latest_high_qc.shard_group(),
+                &latest_high_qc,
                 *high_qc_block.merkle_root(),
                 new_height,
                 &self.leader_strategy,

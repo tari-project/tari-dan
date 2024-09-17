@@ -1,7 +1,6 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use sqlite_message_logger::SqliteMessageLogger;
 #[cfg(not(feature = "metrics"))]
 use tari_consensus::traits::hooks::NoopHooks;
 use tari_consensus::traits::ConsensusSpec;
@@ -23,7 +22,10 @@ use crate::{
         ConsensusTransactionValidator,
         TariDanBlockTransactionExecutor,
     },
-    p2p::services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
+    p2p::{
+        services::messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
+        NopLogger,
+    },
 };
 
 #[derive(Clone)]
@@ -36,9 +38,9 @@ impl ConsensusSpec for TariConsensusSpec {
     type Hooks = NoopHooks;
     #[cfg(feature = "metrics")]
     type Hooks = PrometheusConsensusMetrics;
-    type InboundMessaging = ConsensusInboundMessaging<SqliteMessageLogger>;
+    type InboundMessaging = ConsensusInboundMessaging<NopLogger>;
     type LeaderStrategy = RoundRobinLeaderStrategy;
-    type OutboundMessaging = ConsensusOutboundMessaging<SqliteMessageLogger>;
+    type OutboundMessaging = ConsensusOutboundMessaging<NopLogger>;
     type SignatureService = TariSignatureService;
     type StateStore = SqliteStateStore<Self::Addr>;
     type SyncManager = RpcStateSyncManager<Self>;

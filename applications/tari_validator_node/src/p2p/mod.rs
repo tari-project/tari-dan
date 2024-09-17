@@ -24,4 +24,5 @@ mod rpc;
 pub use rpc::create_tari_validator_node_rpc_service;
 
 mod logging;
+pub use logging::*;
 pub mod services;

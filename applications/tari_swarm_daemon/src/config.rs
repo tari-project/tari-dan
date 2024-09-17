@@ -113,6 +113,7 @@ impl InstanceConfig {
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_setting<K: Into<String>, V: ToString>(mut self, key: K, value: V) -> Self {
         self.settings.insert(key.into(), value.to_string());
         self
@@ -133,6 +134,19 @@ pub enum InstanceType {
     TariIndexer,
     TariWalletDaemon,
     TariSignalingServer,
+}
+
+impl InstanceType {
+    pub fn is_base_layer_node(self) -> bool {
+        matches!(self, InstanceType::MinoTariNode | InstanceType::MinoTariConsoleWallet)
+    }
+
+    pub fn is_tari_node(self) -> bool {
+        matches!(
+            self,
+            InstanceType::TariValidatorNode | InstanceType::TariIndexer | InstanceType::TariWalletDaemon
+        )
+    }
 }
 
 impl Display for InstanceType {

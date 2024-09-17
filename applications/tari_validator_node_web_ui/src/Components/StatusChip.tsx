@@ -25,20 +25,20 @@ import { IoCheckmarkOutline, IoHourglassOutline, IoCloseOutline, IoBandageOutlin
 import { Decision } from "@tari-project/typescript-bindings";
 
 interface StatusChipProps {
-  status: Decision | "Loading" | "Dummy";
+  status: Decision | "Commit" | "Pending" | "Dummy";
   showTitle?: boolean;
 }
 
 const colorList: Record<string, string> = {
   Commit: "#5F9C91",
-  Loading: "#ECA86A",
+  Pending: "#ECA86A",
   Abort: "#DB7E7E",
   Dummy: "#C0C0C0",
 };
 
 const iconList: Record<string, JSX.Element> = {
   Commit: <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />,
-  Loading: <IoHourglassOutline style={{ height: 14, width: 14 }} color="#FFF" />,
+  Pending: <IoHourglassOutline style={{ height: 14, width: 14 }} color="#FFF" />,
   Abort: <IoCloseOutline style={{ height: 14, width: 14 }} color="#FFF" />,
   Dummy: <IoBandageOutline style={{ height: 14, width: 14 }} color="#FFF" />,
 };

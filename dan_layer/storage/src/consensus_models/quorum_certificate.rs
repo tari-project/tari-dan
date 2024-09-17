@@ -195,7 +195,10 @@ impl QuorumCertificate {
         TTx: StateStoreWriteTransaction + Deref + ?Sized,
         TTx::Target: StateStoreReadTransaction,
     {
-        let high_qc = HighQc::get(&**tx, self.epoch)?;
+        let Some(high_qc) = HighQc::get(&**tx, self.epoch).optional()? else {
+            // We haven't started the epoch
+            return Ok((true, self.as_high_qc()));
+        };
         if high_qc.block_height() < self.block_height() {
             return Ok((true, self.as_high_qc()));
         }

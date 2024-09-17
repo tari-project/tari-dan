@@ -41,7 +41,7 @@ impl PendingShardStateTreeDiff {
         TTx: Deref + StateStoreWriteTransaction,
         TTx::Target: StateStoreReadTransaction,
     {
-        tx.pending_state_tree_diffs_remove_by_block(block_id)
+        tx.pending_state_tree_diffs_remove_and_return_by_block(block_id)
     }
 
     pub fn create<TTx>(

@@ -20,6 +20,7 @@ pub struct Config {
     pub idle_connection_timeout: Duration,
     pub relay_circuit_limits: RelayCircuitLimits,
     pub relay_reservation_limits: RelayReservationLimits,
+    pub identify_interval: Duration,
 }
 
 impl Default for Config {
@@ -36,6 +37,8 @@ impl Default for Config {
             idle_connection_timeout: Duration::from_secs(10 * 60),
             relay_circuit_limits: RelayCircuitLimits::default(),
             relay_reservation_limits: RelayReservationLimits::default(),
+            // This is the default for identify
+            identify_interval: Duration::from_secs(5 * 60),
         }
     }
 }

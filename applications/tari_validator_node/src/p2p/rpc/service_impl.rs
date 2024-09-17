@@ -269,6 +269,11 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
     ) -> Result<Streaming<SyncBlocksResponse>, RpcStatus> {
         let req = request.into_message();
         let store = self.shard_state_store.clone();
+        let current_epoch = self
+            .epoch_manager
+            .current_epoch()
+            .await
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
         let (sender, receiver) = mpsc::channel(10);
 
@@ -282,7 +287,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
 
         // Check that the start block is not after the locked block
         let locked_block = store
-            .with_read_tx(|tx| LockedBlock::get(tx).optional())
+            .with_read_tx(|tx| LockedBlock::get(tx, current_epoch).optional())
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
             .ok_or_else(|| RpcStatus::not_found("No locked block"))?;
         let epoch_is_after = start_block.epoch() > locked_block.epoch();

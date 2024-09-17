@@ -178,9 +178,13 @@ where TCodec: Codec + Send + Clone + 'static
             loop {
                 // TODO: read timeout
                 match codec.decode_from(&mut stream).await {
-                    Ok(msg) => {
+                    Ok((length, msg)) => {
                         events
-                            .send(Event::ReceivedMessage { peer_id, message: msg })
+                            .send(Event::ReceivedMessage {
+                                peer_id,
+                                message: msg,
+                                length,
+                            })
                             .await
                             .expect("Can never be closed because receiver is held in this instance");
                         // TODO

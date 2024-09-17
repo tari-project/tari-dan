@@ -23,6 +23,7 @@ mod transaction_executor;
 mod validator;
 
 pub use address::*;
+pub use executions_store::ExecuteSpec;
 pub use harness::*;
 pub use leader_strategy::*;
 pub use network::*;

@@ -17,6 +17,8 @@ pub enum PacemakerRequest {
     ResetLeaderTimeout { high_qc_height: Option<NodeHeight> },
     Start { high_qc_height: NodeHeight },
     Stop,
+    SuspendLeaderFailure,
+    ResumeLeaderFailure,
 }
 
 #[derive(Debug, Clone)]
@@ -110,6 +112,23 @@ impl PaceMakerHandle {
         // Update current height here to prevent possibility of race conditions
         self.current_view.update(epoch, last_seen_height);
         self.reset_leader_timeout(Some(high_qc_height)).await
+    }
+
+    /// Suspend leader failure trigger. This should be called when a proposal is being processed. No leader failure will
+    /// trigger in this time. The leader failure will be resumed when update_view (also reset) or
+    /// resume_leader_failure (not reset) is called.
+    pub async fn suspend_leader_failure(&self) -> Result<(), HotStuffError> {
+        self.sender
+            .send(PacemakerRequest::SuspendLeaderFailure)
+            .await
+            .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
+    }
+
+    pub async fn resume_leader_failure(&self) -> Result<(), HotStuffError> {
+        self.sender
+            .send(PacemakerRequest::ResumeLeaderFailure)
+            .await
+            .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
 
     /// Reset the leader timeout. This should be called when a valid leader proposal is received.

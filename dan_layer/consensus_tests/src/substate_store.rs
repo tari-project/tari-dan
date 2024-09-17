@@ -83,7 +83,7 @@ fn it_allows_down_then_up() {
         })
         .unwrap();
 
-    let s = store.get(&id.to_next_version()).unwrap();
+    let s = store.get(id.to_next_version().as_ref()).unwrap();
     assert_substate_eq(s, new_substate(1, 1));
     let s = store.get_latest(id.substate_id()).unwrap();
     assert_substate_eq(s, new_substate(1, 1));

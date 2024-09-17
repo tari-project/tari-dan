@@ -14,6 +14,7 @@ use tari_epoch_manager::EpochManagerReader;
 use crate::{
     hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::VoteMessage,
+    tracing::TraceTimer,
     traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
 };
 
@@ -57,6 +58,7 @@ where TConsensusSpec: ConsensusSpec
         check_leadership: bool,
         local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
+        let _timer = TraceTimer::debug(LOG_TARGET, "OnReceiveVote");
         match self
             .handle_vote(from, message, check_leadership, local_committee_info)
             .await
@@ -155,7 +157,7 @@ where TConsensusSpec: ConsensusSpec
             let Some(block) = Block::get(&tx, &message.block_id).optional()? else {
                 warn!(
                     target: LOG_TARGET,
-                    "❌ Received {} votes for unknown block {}", count, message.block_id
+                    "❌ Received {} votes for unknown block {}", count, message.block_id,
                 );
                 return Ok(false);
             };

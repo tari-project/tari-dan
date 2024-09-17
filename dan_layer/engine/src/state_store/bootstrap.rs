@@ -33,7 +33,7 @@ fn add_global_resources<T: StateWriter>(state_db: &mut T) -> Result<(), StateSto
     // Create the resource for badges
     state_db.set_state(
         &address,
-        Substate::new(
+        &Substate::new(
             0,
             Resource::new(
                 ResourceType::NonFungible,
@@ -53,7 +53,7 @@ fn add_global_resources<T: StateWriter>(state_db: &mut T) -> Result<(), StateSto
     metadata.insert(TOKEN_SYMBOL, "XTR".to_string());
     state_db.set_state(
         &address,
-        Substate::new(
+        &Substate::new(
             0,
             Resource::new(
                 ResourceType::Confidential,

@@ -7,7 +7,7 @@ use tari_engine_types::commit_result::{ExecuteResult, RejectReason};
 use tari_transaction::TransactionId;
 
 use crate::{
-    consensus_models::{BlockId, Decision, Evidence, VersionedSubstateIdLockIntent},
+    consensus_models::{BlockId, Decision, VersionedSubstateIdLockIntent},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -37,6 +37,10 @@ impl TransactionExecution {
             resulting_outputs,
             abort_reason,
         }
+    }
+
+    pub fn id(&self) -> &TransactionId {
+        &self.transaction_id
     }
 
     pub fn result(&self) -> &ExecuteResult {
@@ -153,10 +157,6 @@ impl BlockTransactionExecution {
 
     pub fn abort_reason(&self) -> Option<&RejectReason> {
         self.execution.abort_reason()
-    }
-
-    pub fn to_initial_evidence(&self) -> Evidence {
-        Evidence::from_inputs_and_outputs(&self.execution.resolved_inputs, &self.execution.resulting_outputs)
     }
 
     pub fn transaction_fee(&self) -> u64 {

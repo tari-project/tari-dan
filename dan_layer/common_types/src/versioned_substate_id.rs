@@ -199,6 +199,13 @@ impl VersionedSubstateId {
     pub fn to_next_version(&self) -> Self {
         Self::new(self.substate_id.clone(), self.version + 1)
     }
+
+    pub fn as_ref(&self) -> VersionedSubstateIdRef {
+        VersionedSubstateIdRef {
+            substate_id: &self.substate_id,
+            version: self.version,
+        }
+    }
 }
 
 impl ToSubstateAddress for VersionedSubstateId {
@@ -254,6 +261,28 @@ impl TryFrom<SubstateRequirement> for VersionedSubstateId {
 impl Borrow<SubstateId> for VersionedSubstateId {
     fn borrow(&self) -> &SubstateId {
         &self.substate_id
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VersionedSubstateIdRef<'a> {
+    pub substate_id: &'a SubstateId,
+    pub version: u32,
+}
+
+impl<'a> VersionedSubstateIdRef<'a> {
+    pub fn new(substate_id: &'a SubstateId, version: u32) -> Self {
+        Self { substate_id, version }
+    }
+
+    pub fn to_owned(&self) -> VersionedSubstateId {
+        VersionedSubstateId::new(self.substate_id.clone(), self.version)
+    }
+}
+
+impl ToSubstateAddress for VersionedSubstateIdRef<'_> {
+    fn to_substate_address(&self) -> SubstateAddress {
+        SubstateAddress::from_substate_id(self.substate_id, self.version)
     }
 }
 

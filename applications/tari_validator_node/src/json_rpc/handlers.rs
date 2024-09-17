@@ -271,16 +271,24 @@ impl JsonRpcHandlers {
     pub async fn list_blocks(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let req = value.parse_params::<ListBlocksRequest>()?;
+
+        let current_epoch = self
+            .epoch_manager
+            .current_epoch()
+            .await
+            .map_err(internal_error(answer_id))?;
+
         let tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
+
         let start_block = match req.from_id {
             Some(id) => Block::get(&tx, &id)
                 .optional()
                 .map_err(internal_error(answer_id))?
                 .ok_or_else(|| not_found(answer_id, format!("Block {} not found", id)))?,
-            None => LeafBlock::get(&tx)
+            None => LeafBlock::get(&tx, current_epoch)
                 .optional()
                 .map_err(internal_error(answer_id))?
-                .ok_or_else(|| not_found(answer_id, "No leaf block"))?
+                .ok_or_else(|| not_found(answer_id, format!("No leaf block for epoch {current_epoch}")))?
                 .get_block(&tx)
                 .map_err(internal_error(answer_id))?,
         };

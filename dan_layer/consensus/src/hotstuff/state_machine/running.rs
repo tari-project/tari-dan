@@ -40,7 +40,7 @@ where TSpec: ConsensusSpec
                 Ok(ConsensusStateEvent::NotRegisteredForEpoch { epoch })
             },
             Err(err @ HotStuffError::FallenBehind { .. }) => {
-                info!(target: LOG_TARGET, "Behind peers, starting sync ({err})");
+                info!(target: LOG_TARGET, "⚠️ Behind peers, starting sync ({err})");
                 Ok(ConsensusStateEvent::NeedSync)
             },
             Err(err) => {

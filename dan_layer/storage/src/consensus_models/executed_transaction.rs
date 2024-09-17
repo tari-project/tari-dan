@@ -18,8 +18,6 @@ use crate::{
         BlockId,
         BlockTransactionExecution,
         Decision,
-        Evidence,
-        TransactionAtom,
         TransactionExecution,
         TransactionRecord,
         VersionedSubstateIdLockIntent,
@@ -168,10 +166,6 @@ impl ExecutedTransaction {
         )
     }
 
-    pub fn to_initial_evidence(&self) -> Evidence {
-        Evidence::from_inputs_and_outputs(&self.resolved_inputs, &self.resulting_outputs)
-    }
-
     pub fn transaction_fee(&self) -> u64 {
         self.result
             .finalize
@@ -200,23 +194,6 @@ impl ExecutedTransaction {
     pub fn set_abort_reason(&mut self, reason: RejectReason) -> &mut Self {
         self.abort_reason = Some(reason);
         self
-    }
-
-    pub fn to_atom(&self) -> TransactionAtom {
-        TransactionAtom {
-            id: *self.id(),
-            decision: self.original_decision(),
-            evidence: self.to_initial_evidence(),
-            transaction_fee: self
-                .result()
-                .finalize
-                .fee_receipt
-                .total_fees_paid()
-                .as_u64_checked()
-                .unwrap_or(0),
-            // We calculate the leader fee later depending on the epoch of the block
-            leader_fee: None,
-        }
     }
 }
 

@@ -186,14 +186,25 @@ impl Runner {
             .map(|(addr, component)| (addr, IndexedWellKnownTypes::from_value(&component.body.state).unwrap()));
 
         for (account, indexed) in accounts_and_state {
+            log::info!("Funded account {account} with vaults:");
             for vault_id in indexed.vault_ids() {
-                log::info!("Adding vault {} to account {}", vault_id, account);
+                let vault = result
+                    .result
+                    .accept()
+                    .unwrap()
+                    .up_iter()
+                    .find(|(addr, _)| addr == vault_id)
+                    .map(|(_, substate)| substate.substate_value().vault().unwrap())
+                    .unwrap_or_else(|| {
+                        panic!("Vault {vault_id} not found in diff");
+                    });
+                log::info!("- {} {} {}", vault_id, vault.resource_address(), vault.resource_type());
                 self.sdk.accounts_api().add_vault(
                     account.clone(),
                     (*vault_id).into(),
-                    faucet.resource_address,
-                    ResourceType::Fungible,
-                    Some("FAUCET".to_string()),
+                    *vault.resource_address(),
+                    vault.resource_type(),
+                    None,
                 )?;
             }
         }

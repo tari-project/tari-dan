@@ -19,7 +19,7 @@ use tokio::sync::{broadcast, mpsc, watch};
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
-    executions_store::TestTransactionExecutionsStore,
+    executions_store::TestExecutionSpecStore,
     messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
     signing_service::TestVoteSignatureService,
     sync::AlwaysSyncedSyncManager,
@@ -41,7 +41,7 @@ pub struct ValidatorBuilder {
     pub leader_strategy: RoundRobinLeaderStrategy,
     pub num_committees: u32,
     pub epoch_manager: Option<TestEpochManager>,
-    pub transaction_executions: TestTransactionExecutionsStore,
+    pub transaction_executions: TestExecutionSpecStore,
 }
 
 impl ValidatorBuilder {
@@ -56,7 +56,7 @@ impl ValidatorBuilder {
             sql_url: ":memory".to_string(),
             leader_strategy: RoundRobinLeaderStrategy::new(),
             epoch_manager: None,
-            transaction_executions: TestTransactionExecutionsStore::new(),
+            transaction_executions: TestExecutionSpecStore::new(),
         }
     }
 
@@ -179,7 +179,6 @@ impl ValidatorBuilder {
             transaction_executions: self.transaction_executions.clone(),
             state_store: store,
             epoch_manager,
-            leader_strategy: self.leader_strategy,
             events: tx_events.subscribe(),
             current_state_machine_state: rx_current_state,
             handle,

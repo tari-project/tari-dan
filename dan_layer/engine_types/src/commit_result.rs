@@ -274,7 +274,7 @@ impl Display for TransactionResult {
             Self::Accept(diff) => write!(f, "Accept({} up, {} down)", diff.up_len(), diff.down_len()),
             Self::AcceptFeeRejectRest(diff, reason) => write!(
                 f,
-                "Accept({} up, {} down), Reject {}",
+                "AcceptFee({} up, {} down), Reject {}",
                 diff.up_len(),
                 diff.down_len(),
                 reason
@@ -290,10 +290,9 @@ pub enum RejectReason {
     InvalidTransaction(String),
     ExecutionFailure(String),
     OneOrMoreInputsNotFound(String),
-    NoInputs,
     FailedToLockInputs(String),
     FailedToLockOutputs(String),
-    ForeignShardGroupDecidedToAbort(String),
+    ForeignShardGroupDecidedToAbort { start_shard: u32, end_shard: u32 },
     FeesNotPaid(String),
     Unknown,
 }
@@ -304,11 +303,10 @@ impl Display for RejectReason {
             RejectReason::InvalidTransaction(msg) => write!(f, "Invalid transaction: {}", msg),
             RejectReason::ExecutionFailure(msg) => write!(f, "Execution failure: {}", msg),
             RejectReason::OneOrMoreInputsNotFound(msg) => write!(f, "One or more inputs not found: {}", msg),
-            RejectReason::NoInputs => write!(f, "No inputs"),
             RejectReason::FailedToLockInputs(msg) => write!(f, "Failed to lock inputs: {}", msg),
             RejectReason::FailedToLockOutputs(msg) => write!(f, "Failed to lock outputs: {}", msg),
-            RejectReason::ForeignShardGroupDecidedToAbort(msg) => {
-                write!(f, "Foreign shard group decided to abort: {}", msg)
+            RejectReason::ForeignShardGroupDecidedToAbort { start_shard, end_shard } => {
+                write!(f, "Foreign shard group ({start_shard}-{end_shard}) decided to abort")
             },
             RejectReason::FeesNotPaid(msg) => write!(f, "Fee not paid: {}", msg),
             RejectReason::Unknown => write!(f, "<unknown reject reason - this is not valid>"),

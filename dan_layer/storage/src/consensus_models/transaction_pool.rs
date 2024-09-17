@@ -14,6 +14,7 @@ use serde::Serialize;
 use tari_dan_common_types::{
     committee::CommitteeInfo,
     optional::{IsNotFoundError, Optional},
+    NumPreshards,
     ShardGroup,
     ToSubstateAddress,
 };
@@ -60,7 +61,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         id: &TransactionId,
     ) -> Result<TransactionPoolRecord, TransactionPoolError> {
         // We always want to fetch the state at the current leaf block until the leaf block
-        let locked = LockedBlock::get(tx)?;
+        let locked = LockedBlock::get(tx, leaf.epoch())?;
         debug!(
             target: LOG_TARGET,
             "TransactionPool::get: transaction_id {}, leaf block {} and locked block {}",
@@ -362,6 +363,27 @@ impl TransactionPoolRecord {
             .unwrap_or_else(|| self.current_local_decision())
     }
 
+    fn can_continue_to(&self, next_stage: TransactionPoolStage) -> bool {
+        match next_stage {
+            TransactionPoolStage::New => self.is_ready,
+            TransactionPoolStage::Prepared => true,
+            TransactionPoolStage::LocalPrepared => self.evidence.all_inputs_prepared(),
+            TransactionPoolStage::AllPrepared | TransactionPoolStage::SomePrepared => true,
+            TransactionPoolStage::LocalAccepted => match self.current_decision() {
+                Decision::Commit => self.evidence.all_addresses_accepted(),
+                // If we have decided to abort, we can continue if all input addresses are justified
+                Decision::Abort => self.evidence.all_inputs_prepared(),
+            },
+            TransactionPoolStage::AllAccepted |
+            TransactionPoolStage::SomeAccepted |
+            TransactionPoolStage::LocalOnly => false,
+        }
+    }
+
+    pub fn is_ready_for_next_stage(&self) -> bool {
+        self.can_continue_to(self.current_stage())
+    }
+
     pub fn current_local_decision(&self) -> Decision {
         self.local_decision().unwrap_or(self.original_decision())
     }
@@ -506,14 +528,20 @@ impl TransactionPoolRecord {
         self
     }
 
-    pub fn update_from_execution(&mut self, execution: &TransactionExecution) -> &mut Self {
-        let involved_locks = execution
-            .resolved_inputs()
-            .iter()
-            .chain(execution.resulting_outputs())
-            .map(|id| (id.to_substate_address(), id.lock_type()));
+    pub fn update_from_execution(
+        &mut self,
+        num_preshards: NumPreshards,
+        num_committees: u32,
+        execution: &TransactionExecution,
+    ) -> &mut Self {
+        let involved_locks = execution.resolved_inputs().iter().chain(execution.resulting_outputs());
 
-        self.evidence_mut().update(involved_locks);
+        for lock in involved_locks {
+            let addr = lock.to_substate_address();
+            let shard_group = addr.to_shard_group(num_preshards, num_committees);
+            self.evidence_mut()
+                .add_shard_group_evidence(shard_group, addr, lock.lock_type());
+        }
         // Only change the local decision if we haven't already decided to ABORT
         if self.local_decision().map_or(true, |d| d.is_commit()) {
             self.set_local_decision(execution.decision());
@@ -522,15 +550,8 @@ impl TransactionPoolRecord {
         self
     }
 
-    pub fn set_next_stage(
-        &mut self,
-        next_stage: TransactionPoolStage,
-        is_ready: bool,
-    ) -> Result<(), TransactionPoolError> {
-        if next_stage == self.stage && is_ready == self.is_ready {
-            return Ok(());
-        }
-
+    pub fn set_next_stage(&mut self, next_stage: TransactionPoolStage) -> Result<(), TransactionPoolError> {
+        let is_ready = self.can_continue_to(next_stage);
         self.check_pending_status_update(next_stage, is_ready)?;
         info!(
             target: LOG_TARGET,
@@ -545,6 +566,11 @@ impl TransactionPoolRecord {
         self.pending_stage = Some(next_stage);
         self.is_ready = is_ready;
         Ok(())
+    }
+
+    pub fn set_ready(&mut self, is_ready: bool) -> &mut Self {
+        self.is_ready = is_ready;
+        self
     }
 
     pub fn set_evidence(&mut self, evidence: Evidence) -> &mut Self {
@@ -674,10 +700,8 @@ impl TransactionPoolRecord {
         Ok(exec)
     }
 
-    pub fn has_any_local_inputs(&self, local_committee_info: &CommitteeInfo) -> bool {
-        self.evidence
-            .iter()
-            .any(|(addr, ev)| !ev.lock.is_output() && local_committee_info.includes_substate_address(addr))
+    pub fn involves_committee(&self, committee_info: &CommitteeInfo) -> bool {
+        self.evidence.contains(&committee_info.shard_group())
     }
 }
 

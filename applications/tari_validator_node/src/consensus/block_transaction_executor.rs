@@ -1,9 +1,8 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use indexmap::IndexMap;
 use log::info;
 use tari_consensus::traits::{BlockTransactionExecutor, BlockTransactionExecutorError};
 use tari_dan_app_utilities::transaction_executor::TransactionExecutor;
@@ -36,9 +35,9 @@ where TExecutor: TransactionExecutor
         }
     }
 
-    fn add_substates_to_memory_db(
+    fn add_substates_to_memory_db<'a, I: IntoIterator<Item = (&'a SubstateRequirement, &'a Substate)>>(
         &self,
-        inputs: &IndexMap<SubstateRequirement, Substate>,
+        inputs: I,
         out: &MemoryStateStore,
     ) -> Result<(), BlockTransactionExecutorError> {
         // TODO: pass the impl SubstateStore directly into the engine
@@ -81,11 +80,11 @@ where
         &self,
         transaction: Transaction,
         current_epoch: Epoch,
-        resolved_inputs: &IndexMap<SubstateRequirement, Substate>,
+        resolved_inputs: &HashMap<SubstateRequirement, Substate>,
     ) -> Result<ExecutedTransaction, BlockTransactionExecutorError> {
         let id = *transaction.id();
 
-        info!(target: LOG_TARGET, "Transaction {} executing. Inputs: {:?}", id, resolved_inputs);
+        info!(target: LOG_TARGET, "Transaction {} executing. {} input(s)", id, resolved_inputs.len());
 
         // Create a memory db with all the input substates, needed for the transaction execution
         let state_db = new_memory_store();

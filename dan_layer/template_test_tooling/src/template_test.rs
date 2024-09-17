@@ -164,7 +164,7 @@ impl TemplateTest {
             vec![],
             initial_supply,
         ));
-        tx.set_state(&SubstateId::Vault(vault_id), Substate::new(0, vault))
+        tx.set_state(&SubstateId::Vault(vault_id), &Substate::new(0, vault))
             .unwrap();
 
         // This must mirror the test faucet component
@@ -178,7 +178,7 @@ impl TemplateTest {
         .unwrap();
         tx.set_state(
             &SubstateId::Component(test_faucet_component()),
-            Substate::new(0, ComponentHeader {
+            &Substate::new(0, ComponentHeader {
                 template_address: test_faucet_template_address,
                 module_name: "TestFaucet".to_string(),
                 owner_key: Some(RistrettoPublicKeyBytes::from_bytes(signer_public_key.as_bytes()).unwrap()),

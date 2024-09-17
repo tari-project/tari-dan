@@ -28,7 +28,6 @@ use libp2p::identity;
 use log::info;
 use minotari_app_utilities::identity_management;
 use serde::Serialize;
-use sqlite_message_logger::SqliteMessageLogger;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_bor::cbor;
 use tari_common::{
@@ -110,6 +109,7 @@ use crate::{
             mempool::{self, MempoolHandle},
             messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, Gossip},
         },
+        NopLogger,
     },
     substate_resolver::TariSubstateResolver,
     transaction_validators::{FeeTransactionValidator, HasInputs, TemplateExistsValidator, TransactionValidationError},
@@ -245,7 +245,7 @@ pub async fn spawn_services(
     };
 
     // Messaging
-    let message_logger = SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
+    let message_logger = NopLogger; // SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
     let local_address = PeerAddress::from(keypair.public_key().clone());
     let (loopback_sender, loopback_receiver) = mpsc::unbounded_channel();
     let inbound_messaging = ConsensusInboundMessaging::new(

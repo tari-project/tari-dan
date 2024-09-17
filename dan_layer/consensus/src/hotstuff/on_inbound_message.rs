@@ -148,7 +148,7 @@ pub struct NeedsSync<TAddr: NodeAddressable> {
 fn msg_epoch_and_height(msg: &HotstuffMessage) -> Option<EpochAndHeight> {
     match msg {
         HotstuffMessage::Proposal(msg) => Some((msg.block.epoch(), msg.block.height())),
-        // Votes for block 2, occur at current height 3
+        // Votes for block 2 occur in view 3
         HotstuffMessage::Vote(msg) => Some((msg.epoch, msg.block_height.saturating_add(NodeHeight(1)))),
         _ => None,
     }

@@ -4,12 +4,15 @@ export type RejectReason = {
     ExecutionFailure: string;
 } | {
     OneOrMoreInputsNotFound: string;
-} | "NoInputs" | {
+} | {
     FailedToLockInputs: string;
 } | {
     FailedToLockOutputs: string;
 } | {
-    ForeignShardGroupDecidedToAbort: string;
+    ForeignShardGroupDecidedToAbort: {
+        start_shard: number;
+        end_shard: number;
+    };
 } | {
     FeesNotPaid: string;
 } | "Unknown";

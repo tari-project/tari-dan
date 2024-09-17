@@ -34,8 +34,8 @@ impl LockedBlock {
 }
 
 impl LockedBlock {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx) -> Result<Self, StorageError> {
-        tx.locked_block_get()
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx, epoch: Epoch) -> Result<Self, StorageError> {
+        tx.locked_block_get(epoch)
     }
 
     pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<Block, StorageError> {

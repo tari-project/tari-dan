@@ -178,15 +178,10 @@ impl InstanceManager {
             settings,
         );
 
-        // Check if the instance is still running after 2 seconds (except miner *cough*)
-        if matches!(instance_type, InstanceType::MinoTariMiner) {
-            // Update the miners is_running status
-            instance.check_running();
-        } else {
+        // Wait for base layer nodes to start
+        if instance_type.is_base_layer_node() {
             sleep(Duration::from_secs(2)).await;
-            if !instance.check_running() {
-                return Err(anyhow!("Failed to start instance {instance_id} {instance_type}"));
-            }
+            instance.check_running().context("Failed to start instance")?;
         }
 
         log::info!(
@@ -240,6 +235,10 @@ impl InstanceManager {
 
     pub fn validator_nodes(&self) -> impl Iterator<Item = &ValidatorNodeProcess> + Sized {
         self.validator_nodes.values()
+    }
+
+    pub fn num_instances(&self) -> usize {
+        self.instances().count()
     }
 
     pub fn num_validator_nodes(&self) -> u64 {

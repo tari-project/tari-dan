@@ -1,12 +1,16 @@
 import type { Amount } from "./Amount";
 import type { Arg } from "./Arg";
+import type { ComponentAccessRules } from "./ComponentAccessRules";
 import type { ComponentAddress } from "./ComponentAddress";
 import type { ConfidentialClaim } from "./ConfidentialClaim";
 import type { LogLevel } from "./LogLevel";
+import type { OwnerRule } from "./OwnerRule";
 import type { ResourceAddress } from "./ResourceAddress";
 export type Instruction = {
     CreateAccount: {
-        owner_public_key: string;
+        public_key_address: string;
+        owner_rule: OwnerRule | null;
+        access_rules: ComponentAccessRules | null;
         workspace_bucket: string | null;
     };
 } | {

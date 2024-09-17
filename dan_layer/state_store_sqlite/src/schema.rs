@@ -56,6 +56,46 @@ diesel::table! {
 }
 
 diesel::table! {
+    diagnostic_deleted_blocks (id) {
+        id -> Integer,
+        block_id -> Text,
+        parent_block_id -> Text,
+        merkle_root -> Text,
+        network -> Text,
+        height -> BigInt,
+        epoch -> BigInt,
+        shard_group -> Integer,
+        proposed_by -> Text,
+        qc_id -> Text,
+        command_count -> BigInt,
+        commands -> Text,
+        total_leader_fee -> BigInt,
+        is_committed -> Bool,
+        is_justified -> Bool,
+        is_dummy -> Bool,
+        foreign_indexes -> Text,
+        signature -> Nullable<Text>,
+        block_time -> Nullable<BigInt>,
+        timestamp -> BigInt,
+        base_layer_block_height -> BigInt,
+        base_layer_block_hash -> Text,
+        extra_data -> Nullable<Text>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    diagnostics_no_votes (id) {
+        id -> Integer,
+        block_id -> Text,
+        block_height -> BigInt,
+        reason_code -> Text,
+        reason_text -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     epoch_checkpoints (id) {
         id -> Integer,
         epoch -> BigInt,
@@ -206,6 +246,17 @@ diesel::table! {
         block_id -> Text,
         block_height -> BigInt,
         epoch -> BigInt,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    lock_conflicts (id) {
+        id -> Integer,
+        block_id -> Text,
+        transaction_id -> Text,
+        depends_on_tx -> Text,
+        lock_type -> Text,
         created_at -> Timestamp,
     }
 }
@@ -444,6 +495,7 @@ diesel::table! {
         execution_time_ms -> Nullable<BigInt>,
         final_decision -> Nullable<Text>,
         finalized_at -> Nullable<Timestamp>,
+        outcome -> Nullable<Text>,
         abort_details -> Nullable<Text>,
         min_epoch -> Nullable<BigInt>,
         max_epoch -> Nullable<BigInt>,
@@ -470,6 +522,8 @@ diesel::allow_tables_to_appear_in_same_query!(
     block_diffs,
     blocks,
     burnt_utxos,
+    diagnostic_deleted_blocks,
+    diagnostics_no_votes,
     epoch_checkpoints,
     foreign_missing_transactions,
     foreign_parked_blocks,
@@ -483,6 +537,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     last_sent_vote,
     last_voted,
     leaf_blocks,
+    lock_conflicts,
     locked_block,
     missing_transactions,
     parked_blocks,

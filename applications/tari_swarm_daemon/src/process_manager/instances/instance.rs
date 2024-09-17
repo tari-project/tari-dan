@@ -1,7 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, process::ExitStatus};
 
 use tokio::process::Child;
 
@@ -17,7 +17,7 @@ pub struct Instance {
     allocated_ports: AllocatedPorts,
     base_path: PathBuf,
     settings: HashMap<String, String>,
-    is_running: bool,
+    exit_status: Option<ExitStatus>,
 }
 
 impl Instance {
@@ -38,7 +38,7 @@ impl Instance {
             allocated_ports,
             base_path,
             settings,
-            is_running: true,
+            exit_status: None,
         }
     }
 
@@ -75,22 +75,22 @@ impl Instance {
     }
 
     pub fn is_running(&self) -> bool {
-        self.is_running
+        self.exit_status.is_none()
     }
 
-    pub fn check_running(&mut self) -> bool {
-        if !self.is_running {
-            return false;
+    pub fn check_running(&mut self) -> anyhow::Result<Option<ExitStatus>> {
+        if let Some(status) = self.exit_status {
+            return Ok(Some(status));
         }
 
         // try_wait returns none if not exited
-        let is_running = self.child_mut().try_wait().map(|v| v.is_none()).unwrap_or(false);
-        self.is_running = is_running;
-        is_running
+        let status = self.child_mut().try_wait()?;
+        self.exit_status = status;
+        Ok(status)
     }
 
     pub async fn terminate(&mut self) -> anyhow::Result<()> {
-        if !self.is_running {
+        if !self.is_running() {
             return Ok(());
         }
 
@@ -99,7 +99,6 @@ impl Instance {
         #[cfg(target_family = "windows")]
         self.terminate_win().await?;
 
-        self.is_running = false;
         Ok(())
     }
 
@@ -115,7 +114,8 @@ impl Instance {
 
         let pid = Pid::from_raw(pid as i32);
         kill(pid, Signal::SIGINT)?;
-        self.child_mut().wait().await?;
+        let status = self.child_mut().wait().await?;
+        self.exit_status = Some(status);
         Ok(())
     }
 
@@ -123,6 +123,7 @@ impl Instance {
     async fn terminate_win(&mut self) -> anyhow::Result<()> {
         // Should probably also implement a clean exit
         self.child_mut().kill().await?;
+        self.exit_status = Some(ExitStatus::default());
         Ok(())
     }
 }

@@ -14,6 +14,7 @@ use tokio::sync::mpsc;
 use crate::{
     hotstuff::error::HotStuffError,
     messages::MissingTransactionsResponse,
+    tracing::TraceTimer,
     traits::{BlockTransactionExecutor, ConsensusSpec},
 };
 
@@ -50,6 +51,7 @@ where TConsensusSpec: ConsensusSpec
         msg: MissingTransactionsResponse,
         local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
+        let _timer = TraceTimer::debug(LOG_TARGET, "OnReceiveRequestedTransactions");
         info!(target: LOG_TARGET, "Receiving {} requested transactions for block {} from {:?}", msg.transactions.len(), msg.block_id, from, );
         self.store.with_write_tx(|tx| {
             for transaction in msg.transactions {

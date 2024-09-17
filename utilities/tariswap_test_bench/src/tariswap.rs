@@ -121,6 +121,7 @@ impl Runner {
                         SubstateRequirement::unversioned(xtr_vault.address),
                         SubstateRequirement::unversioned(faucet_vault.address),
                         SubstateRequirement::unversioned(tariswap.component_address),
+                        SubstateRequirement::unversioned(tariswap.lp_resource_address),
                         SubstateRequirement::unversioned(faucet.resource_address),
                         SubstateRequirement::unversioned(XTR),
                     ])
@@ -147,23 +148,30 @@ impl Runner {
                     .sign(&key.key)
                     .build();
 
-                tx_ids.push((account.address.clone(), self.submit_transaction(transaction).await?));
+                tx_ids.push((
+                    account.address.clone(),
+                    tariswap.lp_resource_address,
+                    self.submit_transaction(transaction).await?,
+                ));
             }
 
-            for (account, tx_id) in tx_ids.drain(..) {
+            for (account, lp_resource, tx_id) in tx_ids.drain(..) {
                 let result = self.wait_for_transaction(tx_id).await?;
+                if let Some(reject) = result.result.full_reject() {
+                    return Err(anyhow::anyhow!("Transaction failed: {}", reject));
+                }
                 let diff = result.result.accept().unwrap();
                 let lp_vault = diff
                     .up_iter()
                     .find_map(|(addr, s)| {
                         let addr = addr.as_vault_id()?;
-                        if *s.substate_value().vault().unwrap().resource_address() == tariswaps[0].lp_resource_address {
+                        if *s.substate_value().vault().unwrap().resource_address() == lp_resource {
                             Some(addr)
                         } else {
                             None
                         }
                     })
-                    .ok_or_else(|| anyhow::anyhow!("LP Vault not found"))?;
+                    .ok_or_else(|| anyhow::anyhow!("LP Vault not found in {tx_id} result"))?;
                 self.sdk.accounts_api().add_vault(
                     account,
                     lp_vault.into(),

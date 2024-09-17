@@ -53,8 +53,8 @@ impl LeafBlock {
 }
 
 impl LeafBlock {
-    pub fn get<TTx: StateStoreReadTransaction>(tx: &TTx) -> Result<Self, StorageError> {
-        tx.leaf_block_get()
+    pub fn get<TTx: StateStoreReadTransaction>(tx: &TTx, epoch: Epoch) -> Result<Self, StorageError> {
+        tx.leaf_block_get(epoch)
     }
 
     pub fn set<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {

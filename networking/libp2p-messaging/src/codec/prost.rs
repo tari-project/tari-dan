@@ -26,7 +26,7 @@ where TMsg: prost::Message + Default
 {
     type Message = TMsg;
 
-    async fn decode_from<R>(&mut self, reader: &mut R) -> std::io::Result<Self::Message>
+    async fn decode_from<R>(&mut self, reader: &mut R) -> std::io::Result<(usize, Self::Message)>
     where R: AsyncRead + Unpin + Send {
         let mut len_buf = [0u8; 4];
         reader.read_exact(&mut len_buf).await?;
@@ -46,7 +46,7 @@ where TMsg: prost::Message + Default
                 "bytes remaining on buffer",
             ));
         }
-        Ok(message)
+        Ok((len, message))
     }
 
     async fn encode_to<W>(&mut self, writer: &mut W, message: Self::Message) -> std::io::Result<()>

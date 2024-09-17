@@ -10,6 +10,7 @@ pub enum Event<TMsg> {
     ReceivedMessage {
         peer_id: PeerId,
         message: TMsg,
+        length: usize,
     },
     MessageSent {
         message_id: MessageId,

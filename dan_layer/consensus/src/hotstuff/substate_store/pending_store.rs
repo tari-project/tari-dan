@@ -11,11 +11,13 @@ use tari_dan_common_types::{
     NumPreshards,
     SubstateAddress,
     SubstateLockType,
+    SubstateRequirement,
     ToSubstateAddress,
     VersionedSubstateId,
+    VersionedSubstateIdRef,
 };
 use tari_dan_storage::{
-    consensus_models::{BlockDiff, BlockId, SubstateChange, SubstateLock, SubstateRecord},
+    consensus_models::{BlockDiff, BlockId, LockConflict, SubstateChange, SubstateLock, SubstateRecord},
     StateStore,
     StateStoreReadTransaction,
 };
@@ -32,8 +34,10 @@ const LOG_TARGET: &str = "tari::dan::hotstuff::substate_store::pending_store";
 
 pub struct PendingSubstateStore<'a, 'tx, TStore: StateStore + 'a + 'tx> {
     store: &'a TStore::ReadTransaction<'tx>,
-    /// Map from substate address to the index in the diff list
+    /// Map from substate address to the index in the diff list of the corresponding change
     pending: HashMap<SubstateAddress, usize>,
+    /// Map from substate id to the index in the diff list of the latest change
+    head: HashMap<SubstateId, usize>,
     /// Append only list of changes ordered oldest to newest
     diff: Vec<SubstateChange>,
     new_locks: IndexMap<SubstateId, Vec<SubstateLock>>,
@@ -46,6 +50,7 @@ impl<'a, 'tx, TStore: StateStore + 'a> PendingSubstateStore<'a, 'tx, TStore> {
         Self {
             store,
             pending: HashMap::new(),
+            head: HashMap::new(),
             diff: Vec::new(),
             new_locks: IndexMap::new(),
             parent_block,
@@ -58,29 +63,32 @@ impl<'a, 'tx, TStore: StateStore + 'a> PendingSubstateStore<'a, 'tx, TStore> {
     }
 }
 
-impl<'a, 'tx, TStore: StateStore + 'a + 'tx> ReadableSubstateStore for PendingSubstateStore<'a, 'tx, TStore> {
+impl<'store, 'tx, TStore: StateStore + 'store + 'tx> ReadableSubstateStore
+    for PendingSubstateStore<'store, 'tx, TStore>
+{
     type Error = SubstateStoreError;
 
-    fn get(&self, id: &VersionedSubstateId) -> Result<Substate, Self::Error> {
-        if let Some(change) = self.get_pending(&id.to_substate_address()) {
+    fn get(&self, id: VersionedSubstateIdRef<'_>) -> Result<Substate, Self::Error> {
+        let substate_addr = id.to_substate_address();
+        if let Some(change) = self.get_pending(&substate_addr) {
             return change.up().cloned().ok_or_else(|| SubstateStoreError::SubstateIsDown {
                 id: change.versioned_substate_id().clone(),
             });
         }
 
         if let Some(change) =
-            BlockDiff::get_for_substate(self.read_transaction(), &self.parent_block, &id.substate_id).optional()?
+            BlockDiff::get_for_substate(self.read_transaction(), &self.parent_block, id.substate_id).optional()?
         {
             return change
                 .into_up()
-                .ok_or_else(|| SubstateStoreError::SubstateIsDown { id: id.clone() });
+                .ok_or_else(|| SubstateStoreError::SubstateIsDown { id: id.to_owned() });
         }
 
-        let Some(substate) = SubstateRecord::get(self.read_transaction(), &id.to_substate_address()).optional()? else {
-            return Err(SubstateStoreError::SubstateNotFound { id: id.clone() });
+        let Some(substate) = SubstateRecord::get(self.read_transaction(), &substate_addr).optional()? else {
+            return Err(SubstateStoreError::SubstateNotFound { id: id.to_owned() });
         };
         if substate.is_destroyed() {
-            return Err(SubstateStoreError::SubstateIsDown { id: id.clone() });
+            return Err(SubstateStoreError::SubstateIsDown { id: id.to_owned() });
         }
         Ok(substate.into_substate())
     }
@@ -133,6 +141,66 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> WriteableSubstateStore for PendingS
 }
 
 impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStore> {
+    pub fn exists(&self, id: &VersionedSubstateId) -> Result<bool, SubstateStoreError> {
+        if self.pending.contains_key(&id.to_substate_address()) {
+            return Ok(true);
+        }
+
+        if SubstateRecord::exists(self.read_transaction(), id)? {
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    pub fn get_latest_version(&self, id: &SubstateId) -> Result<u32, SubstateStoreError> {
+        if let Some(ch) = self.head.get(id).map(|&pos| &self.diff[pos]) {
+            if ch.is_down() {
+                return Err(SubstateStoreError::SubstateIsDown {
+                    id: ch.versioned_substate_id().clone(),
+                });
+            }
+            return Ok(ch.versioned_substate_id().version());
+        }
+
+        if let Some(change) = BlockDiff::get_for_substate(self.read_transaction(), &self.parent_block, id).optional()? {
+            if change.is_down() {
+                return Err(SubstateStoreError::SubstateIsDown {
+                    id: change.versioned_substate_id().clone(),
+                });
+            }
+
+            let version = change.versioned_substate_id().version();
+            return Ok(version);
+        }
+
+        let (version, is_destroyed) = SubstateRecord::get_latest_version(self.read_transaction(), id)
+            .optional()?
+            .ok_or_else(|| SubstateStoreError::SubstateNotFound {
+                id: VersionedSubstateId::new(id.clone(), 0),
+            })?;
+        if is_destroyed {
+            return Err(SubstateStoreError::SubstateIsDown {
+                id: VersionedSubstateId::new(id.clone(), version),
+            });
+        }
+
+        Ok(version)
+    }
+
+    pub fn get_many<I: IntoIterator<Item = (SubstateRequirement, u32)> + ExactSizeIterator>(
+        &self,
+        ids: I,
+    ) -> Result<HashMap<SubstateRequirement, Substate>, SubstateStoreError> {
+        let mut substates = HashMap::with_capacity(ids.len());
+        for (req, version) in ids {
+            let substate = self.get(VersionedSubstateIdRef::new(req.substate_id(), version))?;
+            substates.insert(req, substate);
+        }
+
+        Ok(substates)
+    }
+
     pub fn get_latest(&self, id: &SubstateId) -> Result<Substate, SubstateStoreError> {
         if let Some(ch) = self
             .diff
@@ -238,7 +306,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
 
         // Local-Only-Rules apply if: current lock is local-only AND requested lock is local only
         let has_local_only_rules = existing.is_local_only() && is_local_only;
-        let same_transaction = existing.transaction_id() == transaction_id;
+        let same_transaction = *existing.transaction_id() == transaction_id;
 
         // Duplicate lock requests on the same transaction are idempotent
         if same_transaction {
@@ -264,8 +332,11 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                     );
                     return Err(LockFailedError::LockConflict {
                         substate_id: versioned_substate_id,
-                        existing_lock: existing.substate_lock(),
-                        requested_lock: requested_lock_type,
+                        conflict: LockConflict {
+                            existing_lock: existing.substate_lock(),
+                            requested_lock: requested_lock_type,
+                            transaction_id: *existing.transaction_id(),
+                        },
                     }
                     .into());
                 }
@@ -294,8 +365,11 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                     );
                     return Err(LockFailedError::LockConflict {
                         substate_id: versioned_substate_id,
-                        existing_lock: existing.substate_lock(),
-                        requested_lock: requested_lock_type,
+                        conflict: LockConflict {
+                            existing_lock: existing.substate_lock(),
+                            requested_lock: requested_lock_type,
+                            transaction_id: *existing.transaction_id(),
+                        },
                     }
                     .into());
                 }
@@ -311,8 +385,11 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                     );
                     return Err(LockFailedError::LockConflict {
                         substate_id: versioned_substate_id,
-                        existing_lock: existing.substate_lock(),
-                        requested_lock: requested_lock_type,
+                        conflict: LockConflict {
+                            existing_lock: existing.substate_lock(),
+                            requested_lock: requested_lock_type,
+                            transaction_id: *existing.transaction_id(),
+                        },
                     }
                     .into());
                 }
@@ -341,8 +418,11 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                     );
                     return Err(LockFailedError::LockConflict {
                         substate_id: versioned_substate_id,
-                        existing_lock: existing.substate_lock(),
-                        requested_lock: requested_lock_type,
+                        conflict: LockConflict {
+                            existing_lock: existing.substate_lock(),
+                            requested_lock: requested_lock_type,
+                            transaction_id: *existing.transaction_id(),
+                        },
                     }
                     .into());
                 }
@@ -358,8 +438,11 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
                     );
                     return Err(LockFailedError::LockConflict {
                         substate_id: versioned_substate_id,
-                        existing_lock: existing.substate_lock(),
-                        requested_lock: requested_lock_type,
+                        conflict: LockConflict {
+                            existing_lock: existing.substate_lock(),
+                            requested_lock: requested_lock_type,
+                            transaction_id: *existing.transaction_id(),
+                        },
                     }
                     .into());
                 }
@@ -388,7 +471,10 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
     }
 
     fn insert(&mut self, change: SubstateChange) {
-        self.pending.insert(change.to_substate_address(), self.diff.len());
+        let index = self.diff.len();
+        self.pending.insert(change.to_substate_address(), index);
+        self.head
+            .insert(change.versioned_substate_id().substate_id().clone(), index);
         self.diff.push(change)
     }
 
@@ -432,7 +518,7 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
         }
     }
 
-    fn lock_assert_is_up(&self, id: &VersionedSubstateId) -> Result<(), SubstateStoreError> {
+    pub fn lock_assert_is_up(&self, id: &VersionedSubstateId) -> Result<(), SubstateStoreError> {
         match self.assert_is_up(id) {
             Ok(_) => Ok(()),
             // Converts a substate store error to a LockFailedError (TODO: improve)
@@ -494,17 +580,38 @@ impl<'a, 'tx, TStore: StateStore + 'a + 'tx> PendingSubstateStore<'a, 'tx, TStor
 pub struct LockStatus {
     lock_failures: Vec<LockFailedError>,
     hard_conflict_idx: Option<usize>,
+    conflicts: Vec<LockConflict>,
 }
 
 impl LockStatus {
-    pub fn new() -> Self {
-        Default::default()
+    pub const fn new() -> Self {
+        Self {
+            lock_failures: Vec::new(),
+            hard_conflict_idx: None,
+            conflicts: Vec::new(),
+        }
+    }
+
+    fn add_conflict(&mut self, lock_conflict: LockConflict) {
+        self.conflicts.push(lock_conflict);
     }
 
     pub(self) fn add_failed(&mut self, err: LockFailedError) -> usize {
+        if let Some(conflict) = err.lock_conflict() {
+            self.add_conflict(*conflict);
+        }
+
         let index = self.lock_failures.len();
         self.lock_failures.push(err);
         index
+    }
+
+    pub fn conflicts(&self) -> &[LockConflict] {
+        &self.conflicts
+    }
+
+    pub fn into_lock_conflicts(self) -> Vec<LockConflict> {
+        self.conflicts
     }
 
     /// Returns true if any of the lock requests failed. If not a hard conflict (see [LockStatus::hard_conflict]), the
