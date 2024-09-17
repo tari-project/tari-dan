@@ -120,7 +120,6 @@ pub async fn spawn_validator_node(
         &validator_node_name,
     );
     let temp_dir_path = temp_dir.clone();
-    let enable_fees = world.fees_enabled;
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
             common: CommonConfig::default(),
@@ -145,7 +144,6 @@ pub async fn spawn_validator_node(
         config.validator_node.http_ui_listener_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
         config.validator_node.p2p.listener_port = port;
 
-        config.validator_node.no_fees = !enable_fees;
         config.validator_node.fee_claim_public_key = key.public_key;
 
         // Add all other VNs as peer seeds

@@ -96,7 +96,6 @@ pub struct TariWorld {
     /// A receiver wallet address that is used for default one-sided coinbase payments
     pub default_payment_address: TariAddress,
     pub consensus_manager: ConsensusManager,
-    pub fees_enabled: bool,
 }
 
 impl TariWorld {
@@ -211,7 +210,6 @@ impl TariWorld {
         self.commitments.clear();
         self.commitment_ownership_proofs.clear();
         self.miners.clear();
-        self.fees_enabled = true;
     }
 
     pub async fn wait_until_base_nodes_have_transaction_in_mempool(&self, min_tx_count: usize, timeout: Duration) {
@@ -289,7 +287,6 @@ impl Default for TariWorld {
             wallet_private_key,
             default_payment_address,
             consensus_manager: ConsensusManager::builder(Network::LocalNet).build().unwrap(),
-            fees_enabled: true,
         }
     }
 }
@@ -317,7 +314,6 @@ impl Debug for TariWorld {
             .field("wallet_keys", &self.wallet_keys.keys())
             .field("claim_public_keys", &self.claim_public_keys.keys())
             .field("wallet_daemons", &self.wallet_daemons.keys())
-            .field("fees_enabled", &self.fees_enabled)
             .finish()
     }
 }

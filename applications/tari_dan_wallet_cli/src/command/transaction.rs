@@ -53,7 +53,7 @@ use tari_template_lib::{
     models::{Amount, BucketId, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
-use tari_transaction::TransactionId;
+use tari_transaction::{Transaction, TransactionId, UnsignedTransaction};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::{
@@ -62,8 +62,8 @@ use tari_wallet_daemon_client::{
         AccountsTransferRequest,
         ConfidentialTransferRequest,
         TransactionGetResultRequest,
+        TransactionSubmitDryRunRequest,
         TransactionSubmitRequest,
-        TransactionSubmitResponse,
         TransactionWaitResultRequest,
         TransactionWaitResultResponse,
     },
@@ -104,8 +104,8 @@ pub struct CommonSubmitArgs {
     pub num_outputs: Option<u8>,
     #[clap(long, short = 'i')]
     pub inputs: Vec<SubstateRequirement>,
-    #[clap(long, short = 'o')]
-    pub override_inputs: Option<bool>,
+    #[clap(long, alias = "autofill")]
+    pub detect_inputs: Option<bool>,
     #[clap(long, short = 'v')]
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -241,41 +241,53 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
         fee_account = client.accounts_get_default().await?.account;
     }
 
-    let mut instructions = vec![instruction];
-    if let Some(dump_account) = common.dump_outputs_into {
-        instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
-            key: b"bucket".to_vec(),
-        });
-        let AccountGetResponse {
-            account: dump_account2, ..
-        } = client.accounts_get(dump_account).await?;
+    let mut builder = Transaction::builder()
+        .fee_transaction_pay_from_component(
+            fee_account.address.as_component_address().unwrap(),
+            Amount::try_from(common.max_fee.unwrap_or(1000))?,
+        )
+        .add_instruction(instruction)
+        .with_inputs(common.inputs)
+        .with_min_epoch(common.min_epoch.map(Epoch))
+        .with_max_epoch(common.max_epoch.map(Epoch));
 
-        instructions.push(Instruction::CallMethod {
-            component_address: dump_account2.address.as_component_address().unwrap(),
-            method: "deposit".to_string(),
-            args: args![Variable("bucket")],
-        });
+    if let Some(dump_account) = common.dump_outputs_into {
+        let AccountGetResponse { account, .. } = client.accounts_get(dump_account).await?;
+
+        builder = builder.put_last_instruction_output_on_workspace("bucket").call_method(
+            account.address.as_component_address().unwrap(),
+            "deposit",
+            args![Workspace("bucket")],
+        );
     }
 
-    let fee_instructions = vec![Instruction::CallMethod {
-        component_address: fee_account.address.as_component_address().unwrap(),
-        method: "pay_fee".to_string(),
-        args: args![Amount::try_from(common.max_fee.unwrap_or(1000))?],
-    }];
+    let transaction = builder.build_unsigned_transaction();
+    summarize_transaction(&transaction);
 
-    let request = TransactionSubmitRequest {
-        transaction: None,
-        signing_key_index: None,
-        fee_instructions,
-        instructions,
-        inputs: common.inputs,
-        override_inputs: common.override_inputs.unwrap_or_default(),
-        is_dry_run: common.dry_run,
-        proof_ids: vec![],
-        min_epoch: common.min_epoch.map(Epoch),
-        max_epoch: common.max_epoch.map(Epoch),
-    };
-    submit_transaction(request, client).await?;
+    if common.dry_run {
+        println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
+        println!();
+        let resp = client
+            .submit_transaction_dry_run(TransactionSubmitDryRunRequest {
+                transaction,
+                signing_key_index: None,
+                autofill_inputs: vec![],
+                detect_inputs: common.detect_inputs.unwrap_or(true),
+                proof_ids: vec![],
+            })
+            .await?;
+        wait_transaction_result(resp.transaction_id, client).await?;
+    } else {
+        let request = TransactionSubmitRequest {
+            transaction,
+            signing_key_index: None,
+            autofill_inputs: vec![],
+            detect_inputs: common.detect_inputs.unwrap_or(true),
+            proof_ids: vec![],
+        };
+        let resp = client.submit_transaction(&request).await?;
+        wait_transaction_result(resp.transaction_id, client).await?;
+    }
     Ok(())
 }
 
@@ -283,6 +295,7 @@ async fn handle_submit_manifest(
     args: SubmitManifestArgs,
     client: &mut WalletDaemonClient,
 ) -> Result<(), anyhow::Error> {
+    let timer = Instant::now();
     let contents = fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
     let instructions = parse_manifest(&contents, parse_globals(args.input_variables)?, Default::default())?;
     let common = args.common;
@@ -294,28 +307,53 @@ async fn handle_submit_manifest(
         fee_account = client.accounts_get_default().await?.account;
     }
 
-    let request = TransactionSubmitRequest {
-        transaction: None,
-        signing_key_index: None,
-        fee_instructions: instructions
-            .fee_instructions
-            .into_iter()
-            .chain(vec![Instruction::CallMethod {
-                component_address: fee_account.address.as_component_address().unwrap(),
-                method: "pay_fee".to_string(),
-                args: args![Amount::try_from(common.max_fee.unwrap_or(1000))?],
-            }])
-            .collect(),
-        instructions: instructions.instructions,
-        inputs: common.inputs,
-        override_inputs: common.override_inputs.unwrap_or_default(),
-        is_dry_run: common.dry_run,
-        proof_ids: vec![],
-        min_epoch: common.min_epoch.map(Epoch),
-        max_epoch: common.max_epoch.map(Epoch),
-    };
+    let builder = Transaction::builder()
+        .with_fee_instructions(
+            instructions
+                .fee_instructions
+                .into_iter()
+                .chain(vec![Instruction::CallMethod {
+                    component_address: fee_account.address.as_component_address().unwrap(),
+                    method: "pay_fee".to_string(),
+                    args: args![Amount::try_from(common.max_fee.unwrap_or(1000))?],
+                }])
+                .collect(),
+        )
+        .with_instructions(instructions.instructions)
+        .with_inputs(common.inputs)
+        .with_min_epoch(common.min_epoch.map(Epoch))
+        .with_max_epoch(common.max_epoch.map(Epoch));
 
-    submit_transaction(request, client).await?;
+    let transaction = builder.build_unsigned_transaction();
+    summarize_transaction(&transaction);
+
+    if common.dry_run {
+        println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
+        println!();
+
+        let resp = client
+            .submit_transaction_dry_run(TransactionSubmitDryRunRequest {
+                transaction,
+                signing_key_index: None,
+                autofill_inputs: vec![],
+                detect_inputs: common.detect_inputs.unwrap_or(true),
+                proof_ids: vec![],
+            })
+            .await?;
+        summarize(&resp.result.finalize, timer.elapsed());
+    } else {
+        let request = TransactionSubmitRequest {
+            transaction,
+            signing_key_index: None,
+            autofill_inputs: vec![],
+            detect_inputs: common.detect_inputs.unwrap_or(true),
+            proof_ids: vec![],
+        };
+
+        let resp = client.submit_transaction(&request).await?;
+        wait_transaction_result(resp.transaction_id, client).await?;
+    }
+
     Ok(())
 }
 
@@ -389,26 +427,22 @@ pub async fn handle_confidential_transfer(
     Ok(())
 }
 
-pub async fn submit_transaction(
-    request: TransactionSubmitRequest,
+pub async fn wait_transaction_result(
+    transaction_id: TransactionId,
     client: &mut WalletDaemonClient,
-) -> Result<TransactionSubmitResponse, anyhow::Error> {
+) -> Result<TransactionWaitResultResponse, anyhow::Error> {
     let timer = Instant::now();
 
-    let resp = client.submit_transaction(&request).await?;
-
     println!();
-    println!("✅ Transaction {} submitted.", resp.transaction_id);
+    println!("✅ Transaction {} submitted.", transaction_id);
     println!();
-    // TODO: Would be great if we could display the substate ids as well as substate addresses
-    summarize_request(&request, &resp.inputs);
 
     println!();
     println!("⏳️ Waiting for transaction result...");
     println!();
     let wait_resp = client
         .wait_transaction_result(TransactionWaitResultRequest {
-            transaction_id: resp.transaction_id,
+            transaction_id,
             // Never timeout, you can ctrl+c to exit
             timeout_secs: None,
         })
@@ -416,41 +450,38 @@ pub async fn submit_transaction(
     if wait_resp.timed_out {
         println!("⏳️ Transaction result timed out.",);
         println!();
+    } else if let Some(ref result) = wait_resp.result {
+        summarize(result, timer.elapsed());
     } else {
-        summarize(&wait_resp, timer.elapsed());
+        println!("⚠️ Transaction not finalized");
     }
 
-    Ok(resp)
+    Ok(wait_resp)
 }
 
-fn summarize_request(request: &TransactionSubmitRequest, inputs: &[SubstateRequirement]) {
-    if request.is_dry_run {
-        println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
-        println!();
-    }
+fn summarize_transaction(transaction: &UnsignedTransaction) {
     println!("Inputs:");
-    if inputs.is_empty() {
+    if transaction.inputs().is_empty() {
         println!("  None");
     } else {
-        for address in inputs {
-            println!("- {}", address);
+        for req in transaction.inputs() {
+            println!("- {}", req);
         }
     }
     println!();
     println!("🌟 Submitting fee instructions:");
-    for instruction in &request.fee_instructions {
+    for instruction in &transaction.fee_instructions {
         println!("- {}", instruction);
     }
     println!();
     println!("🌟 Submitting instructions:");
-    for instruction in &request.instructions {
+    for instruction in &transaction.instructions {
         println!("- {}", instruction);
     }
     println!();
 }
 
-#[allow(clippy::too_many_lines)]
-fn summarize(resp: &TransactionWaitResultResponse, time_taken: Duration) {
+fn summarize(result: &FinalizeResult, time_taken: Duration) {
     println!("✅️ Transaction complete");
     println!();
     // if let Some(qc) = resp.qcs.first() {
@@ -462,19 +493,13 @@ fn summarize(resp: &TransactionWaitResultResponse, time_taken: Duration) {
     // }
     // println!();
 
-    if let Some(ref result) = resp.result {
-        summarize_finalize_result(result);
-    }
+    summarize_finalize_result(result);
 
     println!();
-    println!("Fee: {}", resp.final_fee);
+    println!("Fee: {}", result.fee_receipt.total_fees_charged());
     println!("Time taken: {:?}", time_taken);
     println!();
-    if let Some(ref result) = resp.result {
-        println!("OVERALL DECISION: {}", result.result);
-    } else {
-        println!("STATUS: {:?}", resp.status);
-    }
+    println!("OVERALL DECISION: {}", result.result);
 }
 
 pub fn print_substate_diff(diff: &SubstateDiff) {
