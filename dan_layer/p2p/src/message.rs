@@ -2,7 +2,7 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use std::fmt::{Display, Formatter};
-
+use anyhow::{anyhow, bail};
 use serde::Serialize;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::SubstateAddress;
@@ -58,6 +58,30 @@ impl DanMessage {
     pub fn get_message_tag(&self) -> String {
         match self {
             Self::NewTransaction(msg) => format!("tx_{}", msg.transaction.id()),
+        }
+    }
+}
+
+impl TryFrom<Message> for DanMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(msg: Message) -> Result<Self, Self::Error> {
+        if let Message::Dan(msg) = msg {
+            Ok(msg)
+        } else {
+            bail!("Invalid variant")
+        }
+    }
+}
+
+impl TryFrom<Message> for HotstuffMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(msg: Message) -> Result<Self, Self::Error> {
+        if let Message::Consensus(msg) = msg {
+            Ok(msg)
+        } else {
+            bail!("Invalid variant")
         }
     }
 }

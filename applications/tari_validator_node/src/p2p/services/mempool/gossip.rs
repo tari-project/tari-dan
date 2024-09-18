@@ -7,30 +7,21 @@ use log::*;
 use tari_dan_common_types::{Epoch, NumPreshards, PeerAddress, ShardGroup, SubstateAddress};
 use tari_dan_p2p::{proto, DanMessage, Message};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
-use tari_networking::MessageSpec;
 
 use crate::p2p::services::{mempool::MempoolError, messaging::Gossip};
 
 const LOG_TARGET: &str = "tari::validator_node::mempool::gossip";
 
-#[derive(Debug, Clone, Copy)]
-pub struct MempoolMessagingSpec;
-
-impl MessageSpec for MempoolMessagingSpec {
-    type GossipMessage = proto::network::DanMessage;
-    type Message = proto::consensus::HotStuffMessage;
-}
-
 #[derive(Debug)]
 pub(super) struct MempoolGossip<TAddr,> {
     num_preshards: NumPreshards,
     epoch_manager: EpochManagerHandle<TAddr>,
-    gossip: Gossip<MempoolMessagingSpec>,
+    gossip: Gossip,
     is_subscribed: Option<ShardGroup>,
 }
 
 impl MempoolGossip<PeerAddress> {
-    pub fn new(num_preshards: NumPreshards, epoch_manager: EpochManagerHandle<PeerAddress>, outbound: Gossip<MempoolMessagingSpec>) -> Self {
+    pub fn new(num_preshards: NumPreshards, epoch_manager: EpochManagerHandle<PeerAddress>, outbound: Gossip) -> Self {
         Self {
             num_preshards,
             epoch_manager,
@@ -41,7 +32,7 @@ impl MempoolGossip<PeerAddress> {
 
     pub async fn next_message(&mut self) -> Option<Result<(PeerAddress, DanMessage), MempoolError>> {
         self.gossip
-            .next_message()
+            .next_message::<DanMessage>()
             .await
             .map(|result| result.map_err(MempoolError::InvalidMessage))
     }
@@ -82,7 +73,8 @@ impl MempoolGossip<PeerAddress> {
             "forward_to_local_replicas: topic: {}", topic,
         );
 
-        let msg = proto::network::DanMessage::from(&msg);
+        let msg = Message::Dan(msg);
+        let msg = proto::network::Message::from(&msg);
         self.gossip.publish_message(topic, msg).await?;
 
         Ok(())
@@ -104,7 +96,8 @@ impl MempoolGossip<PeerAddress> {
             .filter(|sg| exclude_shard_group.as_ref() != Some(sg) && sg != &local_shard_group)
             .collect::<HashSet<_>>();
 
-        let msg = proto::network::DanMessage::from(&msg.into());
+        let msg = tari_dan_p2p::Message::from(msg.into());
+        let msg = proto::network::Message::from(&msg.into());
         for sg in shard_groups {
             let topic = shard_group_to_topic(sg);
             debug!(

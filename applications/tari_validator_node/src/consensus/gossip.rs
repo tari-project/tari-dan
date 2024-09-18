@@ -9,21 +9,14 @@ use std::collections::HashSet;
 use log::*;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::{Epoch, PeerAddress, ShardGroup, SubstateAddress};
-use tari_dan_p2p::{proto::{self, consensus::HotStuffMessage, network::Message}, DanMessage};
+use tari_dan_p2p::{proto::{self, network::Message}, DanMessage};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, EpochManagerReader};
-use tari_networking::{MessageSpec, NetworkingError};
+use tari_networking::NetworkingError;
 
 use crate::p2p::services::{mempool::MempoolError, messaging::Gossip};
 
+
 const LOG_TARGET: &str = "tari::validator_node::consensus::gossip";
-
-#[derive(Debug, Clone, Copy)]
-pub struct ConsensusMessagingSpec;
-
-impl MessageSpec for ConsensusMessagingSpec {
-    type GossipMessage = proto::consensus::HotStuffMessage;
-    type Message = proto::consensus::HotStuffMessage;
-}
 
 #[derive(thiserror::Error, Debug)]
 pub enum ConsensusGossipError {
@@ -42,18 +35,18 @@ pub enum ConsensusGossipError {
 #[derive(Debug)]
 pub(super) struct ConsensusGossip<TAddr> {
     epoch_manager: EpochManagerHandle<TAddr>,
-    gossip: Gossip<ConsensusMessagingSpec>,
+    gossip: Gossip,
 }
 
 impl ConsensusGossip<PeerAddress> {
-    pub fn new(epoch_manager: EpochManagerHandle<PeerAddress>, outbound: Gossip<ConsensusMessagingSpec>) -> Self {
+    pub fn new(epoch_manager: EpochManagerHandle<PeerAddress>, outbound: Gossip) -> Self {
         Self {
             epoch_manager,
             gossip: outbound,
         }
     }
 
-    pub async fn next_message(&mut self) -> Option<Result<(PeerAddress, HotStuffMessage), ConsensusGossipError>> {
+    pub async fn next_message(&mut self) -> Option<Result<(PeerAddress, HotstuffMessage), ConsensusGossipError>> {
         self.gossip
             .next_message()
             .await
@@ -107,7 +100,9 @@ impl ConsensusGossip<PeerAddress> {
         Ok(())
     }
 
-    pub async fn multicast(&mut self, shard_group: ShardGroup, msg: HotstuffMessage) -> Result<(), ConsensusGossipError>
+    pub async fn multicast<T>(&mut self, shard_group: ShardGroup, message: T) -> Result<(), ConsensusGossipError>
+    where
+        T: Into<HotstuffMessage> + Send
     {
         let topic = shard_group_to_topic(shard_group);
 
@@ -116,9 +111,10 @@ impl ConsensusGossip<PeerAddress> {
             "multicast: topic: {}", topic,
         );
 
-        let msg = proto::consensus::HotStuffMessage::from(&msg);
+        let message = HotstuffMessage::from(message.into());
+        let message = proto::network::Message::from(&message.into());
 
-        self.gossip.publish_message(topic, msg.into()).await?;
+        self.gossip.publish_message(topic, message).await?;
 
         Ok(())
     }

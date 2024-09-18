@@ -3,34 +3,40 @@
 
 use libp2p::PeerId;
 use tari_dan_common_types::PeerAddress;
+use tari_dan_p2p::{proto, Message, TariMessagingSpec};
 use tari_networking::{MessageSpec, NetworkingError, NetworkingHandle, NetworkingService};
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
-pub struct Gossip<TMessageSpec: MessageSpec + Send> {
-    networking: NetworkingHandle<TMessageSpec>,
-    rx_gossip: mpsc::UnboundedReceiver<(PeerId, TMessageSpec::GossipMessage)>,
+pub struct Gossip {
+    networking: NetworkingHandle<TariMessagingSpec>,
+    rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::network::Message)>,
 }
 
-impl<TMessageSpec: MessageSpec + Send> Gossip<TMessageSpec> {
+impl Gossip {
     pub fn new(
-        networking: NetworkingHandle<TMessageSpec>,
-        rx_gossip: mpsc::UnboundedReceiver<(PeerId, TMessageSpec::GossipMessage)>,
+        networking: NetworkingHandle<TariMessagingSpec>,
+        rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::network::Message)>,
     ) -> Self {
         Self { networking, rx_gossip }
     }
 }
 
-impl<TMessageSpec: MessageSpec + Send + 'static> Gossip<TMessageSpec> {
+impl Gossip {
     pub async fn next_message<TMsg>(&mut self) -> Option<Result<(PeerAddress, TMsg), anyhow::Error>>
     where
-        TMsg: TryFrom<TMessageSpec::GossipMessage>,
+        TMsg: TryFrom<Message>,
         TMsg::Error: Into<anyhow::Error>
     {
-        let (from, msg) = self.rx_gossip.recv().await?;
-        match msg.try_into() {
-            Ok(msg) => Some(Ok((from.into(), msg))),
-            Err(e) => Some(Err(e.into())),
+        let (peer_id, msg) = self.rx_gossip.recv().await?;
+        match TryInto::<Message>::try_into(msg) {
+            Ok(msg) => {
+                match msg.try_into() {
+                    Ok(msg) => Some(Ok((peer_id.into(), msg))),
+                    Err(e) => Some(Err(e.into())),
+                }
+            },
+            Err(e) => Some(Err(e)),
         }
     }
 
@@ -45,7 +51,7 @@ impl<TMessageSpec: MessageSpec + Send + 'static> Gossip<TMessageSpec> {
     pub async fn publish_message<T: Into<String> + Send>(
         &mut self,
         topic: T,
-        message: TMessageSpec::GossipMessage,
+        message: <TariMessagingSpec as MessageSpec>::GossipMessage,
     ) -> Result<(), NetworkingError> {
         self.networking.publish_gossip(topic, message).await
     }
