@@ -95,7 +95,7 @@ impl TransactionBuilder {
         })
     }
 
-    pub fn call_function(self, template_address: TemplateAddress, function: &str, args: Vec<Arg>) -> Self {
+    pub fn call_function<T: ToString>(self, template_address: TemplateAddress, function: T, args: Vec<Arg>) -> Self {
         self.add_instruction(Instruction::CallFunction {
             template_address,
             function: function.to_string(),

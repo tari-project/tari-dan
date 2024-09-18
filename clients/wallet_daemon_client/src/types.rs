@@ -79,8 +79,6 @@ pub struct CallInstructionRequest {
     #[serde(default)]
     pub new_outputs: Option<u8>,
     #[serde(default)]
-    pub is_dry_run: bool,
-    #[serde(default)]
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub proof_ids: Vec<ConfidentialProofId>,
     #[serde(default)]
@@ -98,20 +96,13 @@ pub struct CallInstructionRequest {
     ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
 )]
 pub struct TransactionSubmitRequest {
-    // TODO: make this mandatory once we remove the rest of the deprecated fields
-    pub transaction: Option<UnsignedTransaction>,
+    pub transaction: UnsignedTransaction,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub signing_key_index: Option<u64>,
-    pub inputs: Vec<SubstateRequirement>,
-    pub override_inputs: bool,
-    pub is_dry_run: bool,
+    pub autofill_inputs: Vec<SubstateRequirement>,
+    pub detect_inputs: bool,
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub proof_ids: Vec<ConfidentialProofId>,
-    // TODO: remove the following fields
-    pub fee_instructions: Vec<Instruction>,
-    pub instructions: Vec<Instruction>,
-    pub min_epoch: Option<Epoch>,
-    pub max_epoch: Option<Epoch>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -123,10 +114,36 @@ pub struct TransactionSubmitRequest {
 pub struct TransactionSubmitResponse {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub transaction_id: TransactionId,
-    pub inputs: Vec<SubstateRequirement>,
-    pub result: Option<ExecuteResult>,
-    #[cfg_attr(feature = "ts", ts(type = "Array<any> | null"))]
-    pub json_result: Option<Vec<serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
+)]
+pub struct TransactionSubmitDryRunRequest {
+    pub transaction: UnsignedTransaction,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub signing_key_index: Option<u64>,
+    pub autofill_inputs: Vec<SubstateRequirement>,
+    pub detect_inputs: bool,
+    #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
+    pub proof_ids: Vec<ConfidentialProofId>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(TS),
+    ts(export, export_to = "../../bindings/src/types/wallet-daemon-client/")
+)]
+pub struct TransactionSubmitDryRunResponse {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub transaction_id: TransactionId,
+    pub result: ExecuteResult,
+    #[cfg_attr(feature = "ts", ts(type = "Array<any>"))]
+    pub json_result: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
