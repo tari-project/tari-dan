@@ -62,7 +62,7 @@ use crate::{
         RuntimeModule,
         StateTracker,
     },
-    state_store::memory::MemoryStateStore,
+    state_store::memory::ReadOnlyMemoryStateStore,
     template::LoadedTemplate,
     traits::Invokable,
     transaction::TransactionError,
@@ -75,7 +75,7 @@ const ACCOUNT_CONSTRUCTOR_FUNCTION: &str = "create";
 
 pub struct TransactionProcessor<TTemplateProvider> {
     template_provider: Arc<TTemplateProvider>,
-    state_db: MemoryStateStore,
+    state_db: ReadOnlyMemoryStateStore,
     auth_params: AuthParams,
     virtual_substates: VirtualSubstates,
     modules: Vec<Arc<dyn RuntimeModule>>,
@@ -85,7 +85,7 @@ pub struct TransactionProcessor<TTemplateProvider> {
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> TransactionProcessor<TTemplateProvider> {
     pub fn new(
         template_provider: Arc<TTemplateProvider>,
-        state_db: MemoryStateStore,
+        state_db: ReadOnlyMemoryStateStore,
         auth_params: AuthParams,
         virtual_substates: VirtualSubstates,
         modules: Vec<Arc<dyn RuntimeModule>>,

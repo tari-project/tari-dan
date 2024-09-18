@@ -62,7 +62,7 @@ use crate::{
         RuntimeError,
         TransactionCommitError,
     },
-    state_store::memory::MemoryStateStore,
+    state_store::memory::ReadOnlyMemoryStateStore,
 };
 
 const LOG_TARGET: &str = "dan::engine::runtime::working_state";
@@ -93,7 +93,7 @@ pub(super) struct WorkingState {
 
 impl WorkingState {
     pub fn new(
-        state_store: MemoryStateStore,
+        state_store: ReadOnlyMemoryStateStore,
         virtual_substates: VirtualSubstates,
         initial_call_scope: CallScope,
         transaction_hash: Hash,

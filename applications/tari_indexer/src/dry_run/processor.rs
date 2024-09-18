@@ -111,12 +111,13 @@ where TSubstateCache: SubstateCache + 'static
 
         let virtual_substates = self.get_virtual_substates(&transaction, epoch).await?;
 
-        let state_store = new_memory_store();
+        let mut state_store = new_memory_store();
         state_store.set_many(found_substates)?;
 
         // execute the payload in the WASM engine and return the result
-        let exec_output =
-            task::block_in_place(|| payload_processor.execute(transaction, state_store, virtual_substates))?;
+        let exec_output = task::block_in_place(|| {
+            payload_processor.execute(transaction, state_store.into_read_only(), virtual_substates)
+        })?;
 
         Ok(exec_output.result)
     }

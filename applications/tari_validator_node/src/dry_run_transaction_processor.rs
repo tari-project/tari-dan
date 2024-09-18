@@ -104,7 +104,7 @@ impl DryRunTransactionProcessor {
         transaction: Transaction,
     ) -> Result<ExecuteResult, DryRunTransactionProcessorError> {
         // Resolve all local and foreign substates
-        let temp_state_store = new_memory_store();
+        let mut temp_state_store = new_memory_store();
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let virtual_substates = self
@@ -124,8 +124,10 @@ impl DryRunTransactionProcessor {
 
         // execute the payload in the WASM engine and return the result
         let processor = self.payload_processor.clone();
-        let exec_output =
-            task::spawn_blocking(move || processor.execute(transaction, temp_state_store, virtual_substates)).await??;
+        let exec_output = task::spawn_blocking(move || {
+            processor.execute(transaction, temp_state_store.into_read_only(), virtual_substates)
+        })
+        .await??;
         let result = exec_output.result;
 
         let fees = &result.finalize.fee_receipt;

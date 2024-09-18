@@ -56,7 +56,6 @@ fn test_hello_world() {
 #[test]
 fn test_state() {
     let mut template_test = TemplateTest::new(vec!["tests/templates/state"]);
-    let store = template_test.read_only_state_store();
 
     // constructor
     let component_address1: ComponentAddress = template_test.call_function("State", "new", args![], vec![]);
@@ -70,6 +69,7 @@ fn test_state() {
     let component_address2: ComponentAddress = template_test.call_function("State", "new", args![], vec![]);
     assert_ne!(component_address1, component_address2);
 
+    let store = template_test.read_only_state_store();
     let component = store.get_component(component_address1).unwrap();
     assert_eq!(component.module_name, "State");
 
@@ -90,14 +90,14 @@ fn test_state() {
 #[test]
 fn state_create_multiple_in_one_call() {
     let mut template_test = TemplateTest::new(["tests/templates/state"]);
-    let store = template_test.read_only_state_store();
 
     // constructor
     template_test.call_function::<()>("State", "create_multiple", args![10u32], vec![]);
 
     let template_address = template_test.get_template_address("State");
     let mut count = 0usize;
-    store
+    template_test
+        .read_only_state_store()
         .with_substates(|s| {
             if s.substate_value()
                 .component()
@@ -240,8 +240,7 @@ fn test_engine_errors() {
     // call returned null for op VaultInvoke)
     assert_eq!(
         reason,
-        "Runtime error: Substate not found with address \
-         'resource_7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b'"
+        "Runtime error: Substate 'resource_7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b' not found"
     );
 }
 

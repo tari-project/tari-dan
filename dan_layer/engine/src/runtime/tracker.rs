@@ -56,7 +56,7 @@ use crate::{
         workspace::Workspace,
         RuntimeError,
     },
-    state_store::memory::MemoryStateStore,
+    state_store::memory::ReadOnlyMemoryStateStore,
 };
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::state_tracker";
@@ -69,7 +69,7 @@ pub struct StateTracker {
 
 impl StateTracker {
     pub fn new(
-        state_store: MemoryStateStore,
+        state_store: ReadOnlyMemoryStateStore,
         virtual_substates: VirtualSubstates,
         initial_call_scope: CallScope,
         transaction_hash: Hash,
