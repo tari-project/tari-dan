@@ -96,10 +96,17 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
             let mut store = StagedTreeStore::new(&scoped_store);
             // Apply pending (not yet committed) diffs to the staged store
             if let Some(diffs) = self.pending_diffs.get(&shard) {
-                debug!(target: LOG_TARGET, "Applying {num_diffs} pending diff(s) to shard {shard} (version={version})", num_diffs = diffs.len(), version = diffs.last().map(|d| d.version).unwrap_or(0));
+                let mut num_changes = 0usize;
                 for diff in diffs {
+                    num_changes += diff.diff.new_nodes.len() + diff.diff.stale_tree_nodes.len();
                     store.apply_pending_diff(diff.diff.clone());
                 }
+                debug!(
+                    target: LOG_TARGET,
+                    "Applied {num_diffs} pending diff(s) ({num_changes} change(s)) to shard {shard} (version={version})",
+                    num_diffs = diffs.len(),
+                    version = diffs.last().map(|d| d.version).unwrap_or(0)
+                );
             }
 
             // Apply state updates to the state tree that is backed by the staged shard-scoped store

@@ -235,7 +235,11 @@ pub trait StateStoreReadTransaction: Sized {
     ) -> Result<TransactionPoolRecord, StorageError>;
     fn transaction_pool_exists(&self, transaction_id: &TransactionId) -> Result<bool, StorageError>;
     fn transaction_pool_get_all(&self) -> Result<Vec<TransactionPoolRecord>, StorageError>;
-    fn transaction_pool_get_many_ready(&self, max_txs: usize) -> Result<Vec<TransactionPoolRecord>, StorageError>;
+    fn transaction_pool_get_many_ready(
+        &self,
+        max_txs: usize,
+        block_id: &BlockId,
+    ) -> Result<Vec<TransactionPoolRecord>, StorageError>;
     fn transaction_pool_count(
         &self,
         stage: Option<TransactionPoolStage>,

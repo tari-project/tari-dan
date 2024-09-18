@@ -129,6 +129,7 @@ where TConsensusSpec: ConsensusSpec
         is_newview_propose: bool,
         propose_epoch_end: bool,
     ) -> Result<(), HotStuffError> {
+        let _timer = TraceTimer::info(LOG_TARGET, "OnPropose");
         if let Some(last_proposed) = self.store.with_read_tx(|tx| LastProposed::get(tx)).optional()? {
             if last_proposed.epoch == leaf_block.epoch && last_proposed.height > leaf_block.height {
                 // is_newview_propose means that a NEWVIEW has reached quorum and nodes are expecting us to propose.
@@ -178,6 +179,13 @@ where TConsensusSpec: ConsensusSpec
             on_propose.store.with_write_tx(|tx| {
                 let high_qc = HighQc::get(&**tx, epoch)?;
                 let high_qc_cert = high_qc.get_quorum_certificate(&**tx)?;
+
+                info!(
+                    target: LOG_TARGET,
+                    "🌿 PROPOSE local block with parent {}. HighQC: {}",
+                    leaf_block,
+                    high_qc_cert,
+                );
 
                 let next_block = on_propose.build_next_block(
                     tx,
@@ -444,7 +452,7 @@ where TConsensusSpec: ConsensusSpec
                 // Each foreign proposal is "heavier" than a transaction command
                 .checked_sub(foreign_proposals.len() * 4 + burnt_utxos.len())
                 .filter(|n| *n > 0)
-                .map(|size| self.transaction_pool.get_batch_for_next_block(tx, size))
+                .map(|size| self.transaction_pool.get_batch_for_next_block(tx, size, parent_block.block_id()))
                 .transpose()?
                 .unwrap_or_default()
         };
@@ -527,7 +535,7 @@ where TConsensusSpec: ConsensusSpec
         }
         timer.done();
 
-        // This relies on the UTXO commands being ordered last
+        // This relies on the UTXO commands being ordered after transaction commands
         for utxo in burnt_utxos {
             let id = VersionedSubstateId::new(utxo.substate_id.clone(), 0);
             let shard = id.to_substate_address().to_shard(local_committee_info.num_preshards());
@@ -549,8 +557,7 @@ where TConsensusSpec: ConsensusSpec
         );
 
         let timer = TraceTimer::info(LOG_TARGET, "Propose calculate state root");
-        let pending_tree_diffs =
-            PendingShardStateTreeDiff::get_all_up_to_commit_block(tx, high_qc_certificate.block_id())?;
+        let pending_tree_diffs = PendingShardStateTreeDiff::get_all_up_to_commit_block(tx, parent_block.block_id())?;
 
         let (state_root, _) = calculate_state_merkle_root(
             tx,
@@ -728,7 +735,7 @@ where TConsensusSpec: ConsensusSpec
                             // foreign inputs/outputs.
                             tx_rec.set_local_decision(Decision::Commit);
                             // Set partial evidence using local inputs and known outputs.
-                            tx_rec.set_evidence(multishard.to_initial_evidence(
+                            tx_rec.evidence_mut().update(&multishard.to_initial_evidence(
                                 local_committee_info.num_preshards(),
                                 local_committee_info.num_committees(),
                             ));
@@ -736,7 +743,7 @@ where TConsensusSpec: ConsensusSpec
                     },
                     Decision::Abort => {
                         // CASE: The transaction was ABORTed due to a lock conflict
-                        let execution = multishard.into_execution().expect("Abort should have execution");
+                        let execution = multishard.into_execution().expect("Abort must have execution");
                         tx_rec.update_from_execution(
                             local_committee_info.num_preshards(),
                             local_committee_info.num_committees(),

@@ -1053,15 +1053,14 @@ impl Block {
                 continue;
             }
 
-            let evidence = atom
-                .evidence
-                .get(&self.shard_group)
-                .ok_or_else(|| StorageError::DataInconsistency {
-                    details: format!(
-                        "invariant get_block_pledge: Local evidence for atom {} in block {} is missing",
-                        atom.id, self.id
-                    ),
-                })?;
+            let Some(evidence) = atom.evidence.get(&self.shard_group) else {
+                // CASE: The output-only shard group has sequenced this transaction
+                debug!(
+                    "get_block_pledge: Local evidence for atom {} is missing in block {}",
+                    atom.id, self
+                );
+                continue;
+            };
 
             // TODO(perf): O(n) queries
             let locked_values = tx.substate_locks_get_locked_substates_for_transaction(&atom.id)?;
@@ -1098,10 +1097,15 @@ impl Block {
 
 impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.is_dummy() {
+            write!(f, "Dummy")?;
+        }
         write!(
             f,
-            "[{}, {}, {}, {} cmd(s), {}]",
+            "[{}, justify: {} ({}), {}, {}, {} cmd(s), {}]",
             self.height(),
+            self.justify().block_height(),
+            self.justifies_parent(),
             self.epoch(),
             self.shard_group(),
             self.commands().len(),

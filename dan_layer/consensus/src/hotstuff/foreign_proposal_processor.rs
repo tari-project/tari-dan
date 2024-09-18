@@ -46,7 +46,7 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
     );
     info!(
         target: LOG_TARGET,
-        "🧩 Processing FOREIGN PROPOSAL for block {}, justify_qc: {}",
+        "🧩 Processing FOREIGN PROPOSAL {}, justify_qc: {}",
         proposal.block(),
         proposal.justify_qc(),
     );

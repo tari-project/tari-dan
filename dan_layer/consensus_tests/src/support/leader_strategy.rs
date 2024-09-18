@@ -14,6 +14,6 @@ impl RoundRobinLeaderStrategy {
 
 impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for RoundRobinLeaderStrategy {
     fn calculate_leader(&self, committee: &Committee<TAddr>, height: NodeHeight) -> u32 {
-        (height.0 % committee.members.len() as u64) as u32
+        (height.as_u64() % committee.members.len() as u64) as u32
     }
 }

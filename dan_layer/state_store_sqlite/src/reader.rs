@@ -1538,7 +1538,11 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         txs.into_iter().map(|tx| tx.try_convert(None)).collect()
     }
 
-    fn transaction_pool_get_many_ready(&self, max_txs: usize) -> Result<Vec<TransactionPoolRecord>, StorageError> {
+    fn transaction_pool_get_many_ready(
+        &self,
+        max_txs: usize,
+        block_id: &BlockId,
+    ) -> Result<Vec<TransactionPoolRecord>, StorageError> {
         use crate::schema::{lock_conflicts, transaction_pool};
 
         let mut ready_txs = transaction_pool::table
@@ -1575,11 +1579,10 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         // Fetch all applicable block ids between the locked block and the given block
         let locked = self.get_current_locked_block()?;
-        let leaf = self.leaf_block_get(locked.epoch)?;
 
         let mut updates = self.get_transaction_atom_state_updates_between_blocks(
             &locked.block_id,
-            &leaf.block_id,
+            block_id,
             ready_txs.iter().map(|s| s.transaction_id.as_str()),
         )?;
 
@@ -1587,7 +1590,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             target: LOG_TARGET,
             "transaction_pool_get_many_ready: locked.block_id={}, leaf.block_id={}, len(ready_txs)={}, updates={}",
             locked.block_id,
-            leaf.block_id,
+            block_id,
             ready_txs.len(),
             updates.len()
         );
@@ -2111,10 +2114,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                 .or_insert_with(Vec::new) //PendingStateTreeDiff::default)
                 .push(diff);
         }
-        // diffs
-        //     .into_iter()
-        //     .map(|diff| Ok((Shard::from(diff.shard as u32), diff.try_into()?)))
-        //     .collect()
+
         Ok(diffs)
     }
 

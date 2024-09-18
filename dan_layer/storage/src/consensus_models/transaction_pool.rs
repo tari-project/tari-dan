@@ -97,8 +97,9 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         &self,
         tx: &TStateStore::ReadTransaction<'_>,
         max: usize,
+        block_id: &BlockId,
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
-        let recs = tx.transaction_pool_get_many_ready(max)?;
+        let recs = tx.transaction_pool_get_many_ready(max, block_id)?;
         Ok(recs)
     }
 

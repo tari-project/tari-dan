@@ -301,6 +301,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 //       One suggestion is to refactor consensus to emit events (kinda like libp2p does) and handle those events.
                 //       This should be easy to reason about and avoid a large depth of async calls and "callback channels".
                 Some(tx_id) = self.rx_missing_transactions.recv() => {
+                    // TODO: pass all transactions from missing transaction response to batch process
                     if let Err(err) = self.check_if_block_can_be_unparked(current_epoch, current_height, &tx_id, &local_committee_info).await {
                         self.hooks.on_error(&err);
                         error!(target: LOG_TARGET, "🚨Error handling missing transaction: {}", err);

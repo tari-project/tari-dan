@@ -9,6 +9,7 @@ use tari_dan_common_types::{
     committee::CommitteeInfo,
     optional::Optional,
     Epoch,
+    ShardGroup,
     ToSubstateAddress,
     VersionedSubstateId,
 };
@@ -108,7 +109,7 @@ where TConsensusSpec: ConsensusSpec
         valid_block: &ValidBlock,
         local_committee_info: &CommitteeInfo,
         can_propose_epoch_end: bool,
-        foreign_committee_infos: HashMap<BlockId, CommitteeInfo>,
+        foreign_committee_infos: HashMap<ShardGroup, CommitteeInfo>,
     ) -> Result<BlockDecision, HotStuffError> {
         let _timer =
             TraceTimer::info(LOG_TARGET, "Decide on local block").with_iterations(valid_block.block().commands().len());
@@ -247,7 +248,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         valid_block: &ValidBlock,
         can_propose_epoch_end: bool,
-        foreign_committee_infos: &HashMap<BlockId, CommitteeInfo>,
+        foreign_committee_infos: &HashMap<ShardGroup, CommitteeInfo>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<(), HotStuffError> {
         if !self.should_vote(tx, valid_block.block())? {
@@ -299,7 +300,7 @@ where TConsensusSpec: ConsensusSpec
         block: &Block,
         local_committee_info: &CommitteeInfo,
         can_propose_epoch_end: bool,
-        foreign_committee_infos: &HashMap<BlockId, CommitteeInfo>,
+        foreign_committee_infos: &HashMap<ShardGroup, CommitteeInfo>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<(), HotStuffError> {
         // Store used for transactions that have inputs without specific versions.
@@ -407,11 +408,12 @@ where TConsensusSpec: ConsensusSpec
                     }
                 },
                 Command::ForeignProposal(fp_atom) => {
-                    let Some(foreign_committee_info) = foreign_committee_infos.get(&fp_atom.block_id) else {
+                    let Some(foreign_committee_info) = foreign_committee_infos.get(&fp_atom.shard_group) else {
                         warn!(
                             target: LOG_TARGET,
-                            "❌ NO VOTE: ForeignProposal command in block {} but no foreign proposal found",
+                            "❌ NO VOTE: ForeignProposal command in block {} {} but no foreign proposal found",
                             fp_atom.block_id,
+                            fp_atom.shard_group,
                         );
                         proposed_block_change_set.no_vote(NoVoteReason::ForeignProposalCommandInBlockMissing);
                         return Ok(());
@@ -481,7 +483,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
-        let pending = PendingShardStateTreeDiff::get_all_up_to_commit_block(tx, block.justify().block_id())?;
+        let pending = PendingShardStateTreeDiff::get_all_up_to_commit_block(tx, block.parent())?;
         let (expected_merkle_root, tree_diffs) = calculate_state_merkle_root(
             tx,
             block.shard_group(),
@@ -713,7 +715,7 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "👨‍🔧 PREPARE: Executing transaction {} in block {}",
+            "👨‍🔧 PREPARE: Transaction {} in block {}",
             tx_rec.transaction_id(),
             block,
         );
@@ -785,7 +787,7 @@ where TConsensusSpec: ConsensusSpec
                             // foreign inputs/outputs.
                             tx_rec.set_local_decision(Decision::Commit);
                             // Set partial evidence for local inputs using what we know.
-                            tx_rec.set_evidence(multishard.to_initial_evidence(
+                            tx_rec.evidence_mut().update(&multishard.to_initial_evidence(
                                 local_committee_info.num_preshards(),
                                 local_committee_info.num_committees(),
                             ));
@@ -1481,7 +1483,7 @@ where TConsensusSpec: ConsensusSpec
         {
             warn!(
                 target: LOG_TARGET,
-                "❌ NO VOTE: Foreign proposal for block {block_id} has already been proposed in this block.",
+                "❌ NO VOTE: Foreign proposal {block_id} has already been proposed in this block.",
                 block_id = fp_atom.block_id,
             );
             return Ok(Some(NoVoteReason::ForeignProposalAlreadyProposed));
@@ -1490,7 +1492,7 @@ where TConsensusSpec: ConsensusSpec
         let Some(fp) = fp_atom.get_proposal(tx).optional()? else {
             warn!(
                 target: LOG_TARGET,
-                "❌ NO VOTE: Foreign proposal for block {block_id} has not been received.",
+                "❌ NO VOTE: Foreign proposal {block_id} has not been received.",
                 block_id = fp_atom.block_id,
             );
             return Ok(Some(NoVoteReason::ForeignProposalNotReceived));
@@ -1502,7 +1504,7 @@ where TConsensusSpec: ConsensusSpec
         if matches!(fp.status(), ForeignProposalStatus::Confirmed) {
             warn!(
                 target: LOG_TARGET,
-                "❌ NO VOTE: Foreign proposal for block {block_id} has status {status}.",
+                "❌ NO VOTE: Foreign proposal {block_id} has status {status}.",
                 block_id = fp_atom.block_id,
                 status = fp.status(),
             );

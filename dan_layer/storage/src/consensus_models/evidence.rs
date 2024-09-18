@@ -88,10 +88,8 @@ impl Evidence {
 
     pub fn is_committee_output_only(&self, committee_info: &CommitteeInfo) -> bool {
         self.evidence
-            .iter()
-            .filter(|(sg, _)| committee_info.shard_group() == **sg)
-            .flat_map(|(_, e)| e.substates().values())
-            .all(|lock| lock.is_output())
+            .get(&committee_info.shard_group())
+            .map_or(true, |e| e.substates().values().all(|lock| lock.is_output()))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -182,23 +180,6 @@ impl Evidence {
                 .substates
                 .extend(evidence.substates.iter().map(|(addr, lock)| (*addr, *lock)));
             evidence_mut.sort_substates();
-        }
-        self.evidence.sort_keys();
-        self
-    }
-
-    /// Merges the other Evidence into this Evidence.
-    pub fn merge(&mut self, other: Evidence) -> &mut Self {
-        for (sg, evidence) in other.evidence {
-            let evidence_mut = self.evidence.entry(sg).or_default();
-            evidence_mut.substates.extend(evidence.substates);
-            evidence_mut.sort_substates();
-            if let Some(qc_id) = evidence.prepare_qc {
-                evidence_mut.prepare_qc = Some(qc_id);
-            }
-            if let Some(qc_id) = evidence.accept_qc {
-                evidence_mut.accept_qc = Some(qc_id);
-            }
         }
         self.evidence.sort_keys();
         self
@@ -309,7 +290,7 @@ mod tests {
         evidence2.add_shard_group_evidence(sg2, seed_substate_address(3), SubstateLockType::Output);
         evidence2.add_shard_group_evidence(sg3, seed_substate_address(4), SubstateLockType::Output);
 
-        evidence1.merge(evidence2);
+        evidence1.update(&evidence2);
 
         assert_eq!(evidence1.len(), 3);
         assert_eq!(
