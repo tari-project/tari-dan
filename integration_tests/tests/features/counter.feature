@@ -8,7 +8,6 @@ Feature: Counter template
   Scenario: Counter template registration and invocation
 
     # Initialize a base node, wallet, miner and VN
-    Given fees are disabled
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET

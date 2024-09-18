@@ -123,6 +123,7 @@ async fn handler(
         Some(("transactions", method)) => match method {
             "submit_instruction" => call_handler(context, value, token, transaction::handle_submit_instruction).await,
             "submit" => call_handler(context, value, token, transaction::handle_submit).await,
+            "submit_dry_run" => call_handler(context, value, token, transaction::handle_submit_dry_run).await,
             "get" => call_handler(context, value, token, transaction::handle_get).await,
             "get_result" => call_handler(context, value, token, transaction::handle_get_result).await,
             "wait_result" => call_handler(context, value, token, transaction::handle_wait_result).await,

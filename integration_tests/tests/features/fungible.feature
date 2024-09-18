@@ -9,7 +9,6 @@ Feature: Fungible tokens
 
     ##### Setup
     # Initialize a base node, wallet, miner and VN
-    Given fees are disabled
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
@@ -44,25 +43,25 @@ Feature: Fungible tokens
 
     # Deposit tokens in first account
     When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACC1" named "TX1"
-    ```
-    let faucet = global!["FAUCET/components/TestFaucet"];
-    let mut acc1 = global!["ACC1/components/Account"];
+  ```
+  let faucet = global!["FAUCET/components/TestFaucet"];
+  let mut acc1 = global!["ACC1/components/Account"];
 
-    // get tokens from the faucet
-    let faucet_bucket = faucet.take_free_coins();
-    acc1.deposit(faucet_bucket);
-    ```
+  // get tokens from the faucet
+  let faucet_bucket = faucet.take_free_coins();
+  acc1.deposit(faucet_bucket);
+  ```
 
     # Move tokens from first to second account
     When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, TX1, ACC2" named "TX2"
-    ```
-    let mut acc1 = global!["TX1/components/Account"];
-    let mut acc2 = global!["ACC2/components/Account"];
-    let faucet_resource = global!["FAUCET/resources/0"];
+  ```
+  let mut acc1 = global!["TX1/components/Account"];
+  let mut acc2 = global!["ACC2/components/Account"];
+  let faucet_resource = global!["FAUCET/resources/0"];
 
-    // Withdraw 50 of the tokens and send them to acc2
-    let tokens = acc1.withdraw(faucet_resource, Amount(50));
-    acc2.deposit(tokens);
-    acc2.balance(faucet_resource);
-    acc1.balance(faucet_resource);
-    ```
+  // Withdraw 50 of the tokens and send them to acc2
+  let tokens = acc1.withdraw(faucet_resource, Amount(50));
+  acc2.deposit(tokens);
+  acc2.balance(faucet_resource);
+  acc1.balance(faucet_resource);
+  ```

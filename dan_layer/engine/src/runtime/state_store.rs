@@ -18,7 +18,7 @@ use crate::{
         locking::{LockError, LockedSubstates},
         RuntimeError,
     },
-    state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
+    state_store::{memory::ReadOnlyMemoryStateStore, StateReader},
 };
 
 #[derive(Debug, Clone)]
@@ -29,11 +29,11 @@ pub struct WorkingStateStore {
     loaded_substates: HashMap<SubstateId, SubstateValue>,
     locked_substates: LockedSubstates,
 
-    state_store: MemoryStateStore,
+    state_store: ReadOnlyMemoryStateStore,
 }
 
 impl WorkingStateStore {
-    pub fn new(state_store: MemoryStateStore) -> Self {
+    pub fn new(state_store: ReadOnlyMemoryStateStore) -> Self {
         Self {
             new_substates: IndexMap::new(),
             loaded_substates: HashMap::new(),
@@ -44,9 +44,7 @@ impl WorkingStateStore {
 
     pub fn try_lock(&mut self, address: &SubstateId, lock_flag: LockFlag) -> Result<LockId, RuntimeError> {
         if !self.exists(address)? {
-            return Err(RuntimeError::SubstateNotFound {
-                address: address.clone(),
-            });
+            return Err(RuntimeError::SubstateNotFound { id: address.clone() });
         }
         let lock_id = self.locked_substates.try_lock(address, lock_flag)?;
         self.load(address)?;
@@ -131,38 +129,35 @@ impl WorkingStateStore {
         })
     }
 
-    pub fn exists(&self, address: &SubstateId) -> Result<bool, RuntimeError> {
-        let exists = self.new_substates.contains_key(address) || self.loaded_substates.contains_key(address) || {
-            let tx = self.state_store.read_access()?;
-            tx.exists(address)?
-        };
+    pub fn exists(&self, id: &SubstateId) -> Result<bool, RuntimeError> {
+        let exists = self.new_substates.contains_key(id) ||
+            self.loaded_substates.contains_key(id) ||
+            self.state_store.exists(id)?;
         Ok(exists)
     }
 
-    pub fn insert(&mut self, address: SubstateId, value: SubstateValue) -> Result<(), RuntimeError> {
-        if self.exists(&address)? {
-            return Err(RuntimeError::DuplicateSubstate { address });
+    pub fn insert(&mut self, id: SubstateId, value: SubstateValue) -> Result<(), RuntimeError> {
+        if self.exists(&id)? {
+            return Err(RuntimeError::DuplicateSubstate { address: id });
         }
-        self.new_substates.insert(address, value);
+        self.new_substates.insert(id, value);
         Ok(())
     }
 
-    fn load(&mut self, address: &SubstateId) -> Result<(), RuntimeError> {
-        if self.new_substates.contains_key(address) {
+    fn load(&mut self, id: &SubstateId) -> Result<(), RuntimeError> {
+        if self.new_substates.contains_key(id) {
             return Ok(());
         }
-        if self.loaded_substates.contains_key(address) {
+        if self.loaded_substates.contains_key(id) {
             return Ok(());
         }
-        let tx = self.state_store.read_access()?;
-        let substate =
-            tx.get_state::<_, Substate>(address)
-                .optional()?
-                .ok_or_else(|| RuntimeError::SubstateNotFound {
-                    address: address.clone(),
-                })?;
-        let substate = substate.into_substate_value();
-        self.loaded_substates.insert(address.clone(), substate);
+        let substate = self
+            .state_store
+            .get_state(id)
+            .optional()?
+            .ok_or_else(|| RuntimeError::SubstateNotFound { id: id.clone() })?;
+        let substate = substate.substate_value().clone();
+        self.loaded_substates.insert(id.clone(), substate);
         Ok(())
     }
 
@@ -181,7 +176,7 @@ impl WorkingStateStore {
             .map(|(addr, vault)| (addr.as_vault_id().unwrap(), vault.as_vault().unwrap()))
     }
 
-    pub(super) fn state_store(&self) -> &MemoryStateStore {
+    pub(super) fn state_store(&self) -> &ReadOnlyMemoryStateStore {
         &self.state_store
     }
 
@@ -196,12 +191,10 @@ impl WorkingStateStore {
         })
     }
 
-    pub(super) fn get_unmodified_substate(&self, address: &SubstateId) -> Result<Substate, RuntimeError> {
-        let tx = self.state_store.read_access()?;
-        tx.get_state(address)
+    pub(super) fn get_unmodified_substate(&self, address: &SubstateId) -> Result<&Substate, RuntimeError> {
+        self.state_store
+            .get_state(address)
             .optional()?
-            .ok_or_else(|| RuntimeError::SubstateNotFound {
-                address: address.clone(),
-            })
+            .ok_or_else(|| RuntimeError::SubstateNotFound { id: address.clone() })
     }
 }

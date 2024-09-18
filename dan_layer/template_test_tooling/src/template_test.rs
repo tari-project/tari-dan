@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::anyhow;
 use serde::de::DeserializeOwned;
-use tari_bor::{decode_exact, to_value};
+use tari_bor::to_value;
 use tari_common::configuration::Network;
 use tari_common_types::types::PublicKey;
 use tari_crypto::{
@@ -22,12 +22,7 @@ use tari_dan_common_types::{crypto::create_key_pair_from_seed, VersionedSubstate
 use tari_dan_engine::{
     fees::{FeeModule, FeeTable},
     runtime::{AuthParams, RuntimeModule},
-    state_store::{
-        memory::{MemoryStateStore, MemoryWriteTransaction},
-        new_memory_store,
-        AtomicDb,
-        StateWriter,
-    },
+    state_store::{memory::MemoryStateStore, new_memory_store, StateWriter},
     template::LoadedTemplate,
     transaction::{TransactionError, TransactionProcessor},
     wasm::LoadedWasmTemplate,
@@ -93,7 +88,7 @@ impl TemplateTest {
 
         let package = builder.build();
 
-        let test = Self::from_package(package);
+        let mut test = Self::from_package(package);
         test.bootstrap_state(100_000.into());
         test
     }
@@ -138,19 +133,13 @@ impl TemplateTest {
         }
     }
 
-    pub fn bootstrap_state(&self, amount: Amount) {
-        let mut tx = self.state_store.write_access().unwrap();
-        Self::initial_tari_faucet_supply(
-            &mut tx,
-            &self.public_key,
-            amount,
-            self.get_template_address("TestFaucet"),
-        );
-        tx.commit().unwrap();
+    pub fn bootstrap_state(&mut self, amount: Amount) {
+        let template_addr = self.get_template_address("TestFaucet");
+        Self::initial_tari_faucet_supply(&mut self.state_store, &self.public_key, amount, template_addr);
     }
 
     fn initial_tari_faucet_supply(
-        tx: &mut MemoryWriteTransaction<'_>,
+        store: &mut MemoryStateStore,
         signer_public_key: &RistrettoPublicKey,
         initial_supply: Amount,
         test_faucet_template_address: TemplateAddress,
@@ -164,7 +153,8 @@ impl TemplateTest {
             vec![],
             initial_supply,
         ));
-        tx.set_state(&SubstateId::Vault(vault_id), &Substate::new(0, vault))
+        store
+            .set_state(SubstateId::Vault(vault_id), Substate::new(0, vault))
             .unwrap();
 
         // This must mirror the test faucet component
@@ -176,19 +166,20 @@ impl TemplateTest {
             vault: tari_template_lib::models::Vault::for_test(vault_id),
         })
         .unwrap();
-        tx.set_state(
-            &SubstateId::Component(test_faucet_component()),
-            &Substate::new(0, ComponentHeader {
-                template_address: test_faucet_template_address,
-                module_name: "TestFaucet".to_string(),
-                owner_key: Some(RistrettoPublicKeyBytes::from_bytes(signer_public_key.as_bytes()).unwrap()),
-                owner_rule: OwnerRule::None,
-                access_rules: ComponentAccessRules::allow_all(),
-                entity_id,
-                body: ComponentBody { state },
-            }),
-        )
-        .unwrap();
+        store
+            .set_state(
+                SubstateId::Component(test_faucet_component()),
+                Substate::new(0, ComponentHeader {
+                    template_address: test_faucet_template_address,
+                    module_name: "TestFaucet".to_string(),
+                    owner_key: Some(RistrettoPublicKeyBytes::from_bytes(signer_public_key.as_bytes()).unwrap()),
+                    owner_rule: OwnerRule::None,
+                    access_rules: ComponentAccessRules::allow_all(),
+                    entity_id,
+                    body: ComponentBody { state },
+                }),
+            )
+            .unwrap();
     }
 
     pub fn enable_fees(&mut self) -> &mut Self {
@@ -215,8 +206,8 @@ impl TemplateTest {
         self
     }
 
-    pub fn read_only_state_store(&self) -> ReadOnlyStateStore {
-        ReadOnlyStateStore::new(self.state_store.clone())
+    pub fn read_only_state_store(&self) -> ReadOnlyStateStore<'_> {
+        ReadOnlyStateStore::new(&self.state_store)
     }
 
     pub fn extract_component_value<T: DeserializeOwned>(&self, component_address: ComponentAddress, path: &str) -> T {
@@ -251,20 +242,17 @@ impl TemplateTest {
 
     fn commit_diff(&mut self, diff: &SubstateDiff) {
         self.last_outputs.clear();
-        let mut tx = self.state_store.write_access().unwrap();
 
         for (address, _) in diff.down_iter() {
             eprintln!("DOWN substate: {}", address);
-            tx.delete_state(address).unwrap();
+            self.state_store.delete_state(address);
         }
 
         for (address, substate) in diff.up_iter() {
             eprintln!("UP substate: {}", address);
             self.last_outputs.insert(address.clone());
-            tx.set_state(address, substate).unwrap();
+            self.state_store.set_state(address.clone(), substate.clone()).unwrap();
         }
-
-        tx.commit().unwrap();
     }
 
     pub fn get_module(&self, module_name: &str) -> &LoadedWasmTemplate {
@@ -487,7 +475,7 @@ impl TemplateTest {
         };
         let processor = TransactionProcessor::new(
             self.package.clone(),
-            self.state_store.clone(),
+            self.state_store.clone().into_read_only(),
             auth_params,
             self.virtual_substates.clone(),
             modules,
@@ -495,12 +483,10 @@ impl TemplateTest {
         );
 
         {
-            let access = self.state_store.read_access().unwrap();
             transaction.filled_inputs_mut().extend(
-                access
-                    .iter_raw()
-                    .map(|(k, s)| (SubstateId::from_bytes(k).unwrap(), Substate::from_bytes(s).unwrap()))
-                    .map(|(id, s)| VersionedSubstateId::new(id, s.version())),
+                self.state_store
+                    .iter()
+                    .map(|(id, s)| VersionedSubstateId::new(id.clone(), s.version())),
             );
         }
 
@@ -632,12 +618,8 @@ impl TemplateTest {
     }
 
     pub fn print_state(&self) {
-        let tx = self.state_store.read_access().unwrap();
-        for (k, v) in tx.iter_raw() {
-            let k: SubstateId = decode_exact(k).unwrap();
-            let v: Substate = decode_exact(v).unwrap();
-
-            eprintln!("[{}]: {}", k, v.into_substate_value());
+        for (k, v) in self.state_store.iter() {
+            eprintln!("[{}]: {}", k, v.substate_value());
         }
     }
 }

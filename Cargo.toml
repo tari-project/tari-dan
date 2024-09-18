@@ -30,7 +30,6 @@ members = [
     "dan_layer/rpc_state_sync",
     "dan_layer/state_store_sqlite",
     "dan_layer/state_tree",
-    "dan_layer/storage_lmdb",
     "dan_layer/storage_sqlite",
     "dan_layer/storage",
     "dan_layer/tari_bor",
@@ -193,7 +192,6 @@ libp2p = { git = "https://github.com/tari-project/rust-libp2p.git", rev = "0dccc
 libsqlite3-sys = "0.25"
 liquid = "0.26.4"
 liquid-core = "0.26.4"
-lmdb-zero = "0.4.4"
 log = "0.4.20"
 log4rs = "1.3"
 mime_guess = "2.0.4"

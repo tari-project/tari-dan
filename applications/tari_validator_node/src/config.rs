@@ -97,8 +97,6 @@ pub struct ValidatorNodeConfig {
     pub http_ui_listener_address: Option<SocketAddr>,
     /// Template config
     pub templates: TemplateConfig,
-    /// Dont charge fees
-    pub no_fees: bool,
     /// Fee claim public key
     pub fee_claim_public_key: RistrettoPublicKey,
     /// Create identity file if not exists
@@ -146,7 +144,6 @@ impl Default for ValidatorNodeConfig {
             json_rpc_public_address: None,
             http_ui_listener_address: Some("127.0.0.1:5001".parse().unwrap()),
             templates: TemplateConfig::default(),
-            no_fees: false,
             // Burn your fees
             fee_claim_public_key: RistrettoPublicKey::default(),
             dont_create_id: false,

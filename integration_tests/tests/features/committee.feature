@@ -5,7 +5,6 @@ Feature: Committee scenarios
 
   @serial @fixed
   Scenario: Template registration and invocation in a 2-VN committee
-    Given fees are disabled
     # Initialize a base node, wallet and miner
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -60,7 +59,6 @@ Feature: Committee scenarios
   # TODO: Ignored, investigate flakiness
 #  @serial
 #  Scenario: Template registration and invocation in a 4-VN committee
-#    Given fees are disabled
 #    # Initialize a base node, wallet and miner
 #    Given a base node BASE
 #    Given a wallet WALLET connected to base node BASE

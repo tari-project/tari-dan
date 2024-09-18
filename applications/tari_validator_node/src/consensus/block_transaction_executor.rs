@@ -7,7 +7,7 @@ use log::info;
 use tari_consensus::traits::{BlockTransactionExecutor, BlockTransactionExecutorError};
 use tari_dan_app_utilities::transaction_executor::TransactionExecutor;
 use tari_dan_common_types::{Epoch, SubstateRequirement};
-use tari_dan_engine::state_store::{memory::MemoryStateStore, new_memory_store, AtomicDb, StateWriter};
+use tari_dan_engine::state_store::{memory::MemoryStateStore, new_memory_store, StateWriter};
 use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
 use tari_engine_types::{
     substate::Substate,
@@ -36,22 +36,14 @@ where TExecutor: TransactionExecutor
     }
 
     fn add_substates_to_memory_db<'a, I: IntoIterator<Item = (&'a SubstateRequirement, &'a Substate)>>(
-        &self,
         inputs: I,
-        out: &MemoryStateStore,
+        out: &mut MemoryStateStore,
     ) -> Result<(), BlockTransactionExecutorError> {
-        // TODO: pass the impl SubstateStore directly into the engine
-        let mut access = out
-            .write_access()
-            .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
+        // TODO: pass the SubstateStore directly into the engine
         for (id, substate) in inputs {
-            access
-                .set_state(id.substate_id(), substate)
+            out.set_state(id.substate_id().clone(), substate.clone())
                 .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
         }
-        access
-            .commit()
-            .map_err(|e| BlockTransactionExecutorError::StateStoreError(e.to_string()))?;
 
         Ok(())
     }
@@ -87,8 +79,8 @@ where
         info!(target: LOG_TARGET, "Transaction {} executing. {} input(s)", id, resolved_inputs.len());
 
         // Create a memory db with all the input substates, needed for the transaction execution
-        let state_db = new_memory_store();
-        self.add_substates_to_memory_db(resolved_inputs, &state_db)?;
+        let mut state_db = new_memory_store();
+        Self::add_substates_to_memory_db(resolved_inputs, &mut state_db)?;
 
         let mut virtual_substates = VirtualSubstates::new();
         virtual_substates.insert(
@@ -99,7 +91,7 @@ where
         // Execute the transaction and get the result
         let exec_output = self
             .executor
-            .execute(transaction, state_db, virtual_substates)
+            .execute(transaction, state_db.into_read_only(), virtual_substates)
             .map_err(|e| BlockTransactionExecutorError::ExecutionThreadFailure(e.to_string()))?;
 
         // Generate the resolved inputs to set the specific version and required lock flag, as we know it after
