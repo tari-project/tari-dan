@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use futures::{future, future::Either};
 use log::*;
 use tari_dan_app_utilities::json_encoding;
-use tari_dan_common_types::{optional::Optional, Epoch};
+use tari_dan_common_types::{optional::Optional, Epoch, SubstateRequirement};
 use tari_dan_wallet_sdk::apis::{jwt::JrpcPermission, key_manager};
 use tari_engine_types::{indexed_value::IndexedValue, instruction::Instruction, substate::SubstateId};
 use tari_template_lib::{args, args::Arg, models::Amount};
@@ -21,6 +21,8 @@ use tari_wallet_daemon_client::types::{
     TransactionGetResponse,
     TransactionGetResultRequest,
     TransactionGetResultResponse,
+    TransactionSubmitDryRunRequest,
+    TransactionSubmitDryRunResponse,
     TransactionSubmitRequest,
     TransactionSubmitResponse,
     TransactionWaitResultRequest,
@@ -71,16 +73,11 @@ pub async fn handle_submit_instruction(
         .build_unsigned_transaction();
 
     let request = TransactionSubmitRequest {
-        transaction: Some(transaction),
+        transaction,
         signing_key_index: Some(fee_account.key_index),
-        fee_instructions: vec![],
-        instructions: vec![],
-        inputs: req.inputs,
-        override_inputs: req.override_inputs.unwrap_or_default(),
-        is_dry_run: req.is_dry_run,
+        autofill_inputs: vec![],
+        detect_inputs: req.override_inputs.unwrap_or_default(),
         proof_ids: vec![],
-        min_epoch: None,
-        max_epoch: None,
     };
     handle_submit(context, token, request).await
 }
@@ -99,41 +96,32 @@ pub async fn handle_submit(
     // TODO: Ideally the SDK should take care of signing the transaction internally
     let (_, key) = key_api.get_key_or_active(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
 
-    let inputs = if req.override_inputs {
-        req.inputs
-    } else {
+    let autofill_inputs = req.autofill_inputs;
+    let detected_inputs = if req.detect_inputs {
         // If we are not overriding inputs, we will use inputs that we know about in the local substate id db
-        let mut substates = get_referenced_substate_addresses(
-            req.transaction
-                .as_ref()
-                .map(|t| &t.instructions)
-                .unwrap_or(&req.instructions),
-        )?;
-        substates.extend(get_referenced_substate_addresses(
-            req.transaction
-                .as_ref()
-                .map(|t| &t.fee_instructions)
-                .unwrap_or(&req.fee_instructions),
-        )?);
+        let mut substates = get_referenced_substate_addresses(&req.transaction.instructions)?;
+        substates.extend(get_referenced_substate_addresses(&req.transaction.fee_instructions)?);
         let substates = substates.into_iter().collect::<Vec<_>>();
-        let loaded_dependent_substates = sdk.substate_api().locate_dependent_substates(&substates).await?;
-        [req.inputs, loaded_dependent_substates].concat()
+        let loaded_substates = sdk.substate_api().locate_dependent_substates(&substates).await?;
+        loaded_substates
+            .into_iter()
+            .chain(substates.into_iter().map(SubstateRequirement::unversioned))
+            .collect()
+    } else {
+        vec![]
     };
 
-    let transaction = if let Some(transaction) = req.transaction {
-        Transaction::builder()
-            .with_unsigned_transaction(transaction)
-            .sign(&key.key)
-            .build()
-    } else {
-        Transaction::builder()
-            .with_instructions(req.instructions)
-            .with_fee_instructions(req.fee_instructions)
-            .with_min_epoch(req.min_epoch)
-            .with_max_epoch(req.max_epoch)
-            .sign(&key.key)
-            .build()
-    };
+    info!(
+        target: LOG_TARGET,
+        "Detected {} input(s)",
+        detected_inputs.len()
+    );
+
+    let transaction = Transaction::builder()
+        .with_unsigned_transaction(req.transaction)
+        .with_inputs(detected_inputs)
+        .sign(&key.key)
+        .build();
 
     for proof_id in req.proof_ids {
         // update the proofs table with the corresponding transaction hash
@@ -146,33 +134,69 @@ pub async fn handle_submit(
         "Submitted transaction with hash {}",
         transaction.hash()
     );
-    if req.is_dry_run {
-        let exec_result = context
-            .transaction_service()
-            .submit_dry_run_transaction(transaction, inputs.clone())
-            .await?;
 
-        let json_result = json_encoding::encode_finalize_result_into_json(&exec_result.finalize)?;
+    let transaction_id = context
+        .transaction_service()
+        .submit_transaction(transaction, autofill_inputs.clone())
+        .await?;
 
-        Ok(TransactionSubmitResponse {
-            transaction_id: exec_result.finalize.transaction_hash.into_array().into(),
-            result: Some(exec_result),
-            json_result: Some(json_result),
-            inputs,
-        })
+    Ok(TransactionSubmitResponse { transaction_id })
+}
+
+pub async fn handle_submit_dry_run(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: TransactionSubmitDryRunRequest,
+) -> Result<TransactionSubmitDryRunResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk();
+    // TODO: fine-grained checks of individual addresses involved (resources, components, etc)
+    sdk.jwt_api()
+        .check_auth(token, &[JrpcPermission::TransactionSend(None)])?;
+    let key_api = sdk.key_manager_api();
+    // Fetch the key to sign the transaction
+    // TODO: Ideally the SDK should take care of signing the transaction internally
+    let (_, key) = key_api.get_key_or_active(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
+
+    let autofill_inputs = req.autofill_inputs;
+    let detected_inputs = if req.detect_inputs {
+        // If we are not overriding inputs, we will use inputs that we know about in the local substate id db
+        let mut substates = get_referenced_substate_addresses(&req.transaction.instructions)?;
+        substates.extend(get_referenced_substate_addresses(&req.transaction.fee_instructions)?);
+        let substates = substates.into_iter().collect::<Vec<_>>();
+        sdk.substate_api().locate_dependent_substates(&substates).await?
     } else {
-        let transaction_id = context
-            .transaction_service()
-            .submit_transaction(transaction, inputs.clone())
-            .await?;
+        vec![]
+    };
 
-        Ok(TransactionSubmitResponse {
-            transaction_id,
-            inputs,
-            result: None,
-            json_result: None,
-        })
+    let transaction = Transaction::builder()
+        .with_unsigned_transaction(req.transaction)
+        .with_inputs(detected_inputs)
+        .sign(&key.key)
+        .build();
+
+    for proof_id in req.proof_ids {
+        // update the proofs table with the corresponding transaction hash
+        sdk.confidential_outputs_api()
+            .proofs_set_transaction_hash(proof_id, *transaction.id())?;
     }
+
+    info!(
+        target: LOG_TARGET,
+        "Submitted transaction with hash {}",
+        transaction.hash()
+    );
+    let exec_result = context
+        .transaction_service()
+        .submit_dry_run_transaction(transaction, autofill_inputs.clone())
+        .await?;
+
+    let json_result = json_encoding::encode_finalize_result_into_json(&exec_result.finalize)?;
+
+    Ok(TransactionSubmitDryRunResponse {
+        transaction_id: exec_result.finalize.transaction_hash.into_array().into(),
+        result: exec_result,
+        json_result,
+    })
 }
 
 pub async fn handle_get(

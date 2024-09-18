@@ -117,7 +117,6 @@ use crate::{
     validator_registration_file::ValidatorRegistrationFile,
     virtual_substate::VirtualSubstateManager,
     ApplicationConfig,
-    ValidatorNodeConfig,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::bootstrap";
@@ -233,15 +232,11 @@ pub async fn spawn_services(
 
     info!(target: LOG_TARGET, "Payload processor initializing");
     // Payload processor
-    let fee_table = if config.validator_node.no_fees {
-        FeeTable::zero_rated()
-    } else {
-        FeeTable {
-            per_module_call_cost: 1,
-            per_byte_storage_cost: 1,
-            per_event_cost: 1,
-            per_log_cost: 1,
-        }
+    let fee_table = FeeTable {
+        per_module_call_cost: 1,
+        per_byte_storage_cost: 1,
+        per_event_cost: 1,
+        per_log_cost: 1,
     };
 
     // Messaging
@@ -261,7 +256,7 @@ pub async fn spawn_services(
     let payload_processor = TariDanTransactionProcessor::new(config.network, template_manager.clone(), fee_table);
     let transaction_executor = TariDanBlockTransactionExecutor::new(
         payload_processor.clone(),
-        consensus::create_transaction_validator(&config.validator_node, template_manager.clone()),
+        consensus::create_transaction_validator(template_manager.clone()).boxed(),
     );
 
     #[cfg(feature = "metrics")]
@@ -295,7 +290,7 @@ pub async fn spawn_services(
         consensus_constants.num_preshards,
         gossip,
         epoch_manager.clone(),
-        create_mempool_transaction_validator(&config.validator_node, template_manager.clone()),
+        create_mempool_transaction_validator(template_manager.clone()),
         state_store.clone(),
         consensus_handle.clone(),
         #[cfg(feature = "metrics")]
@@ -600,22 +595,9 @@ where
 }
 
 fn create_mempool_transaction_validator(
-    config: &ValidatorNodeConfig,
     template_manager: TemplateManager<PeerAddress>,
 ) -> impl Validator<Transaction, Context = (), Error = TransactionValidationError> {
-    let mut validator = TemplateExistsValidator::new(template_manager).boxed();
-    if !config.no_fees {
-        // A transaction without fee payment may have 0 inputs.
-        validator = HasInputs::new()
-            .and_then(validator)
-            .and_then(FeeTransactionValidator)
-            .boxed();
-    }
-    validator
+    HasInputs::new()
+        .and_then(TemplateExistsValidator::new(template_manager))
+        .and_then(FeeTransactionValidator)
 }
-
-// fn create_mempool_after_execute_validator<TAddr: NodeAddressable>(
-//     store: SqliteStateStore<TAddr>,
-// ) -> impl MempoolValidator<ExecutedTransaction, Error = MempoolError> {
-//     HasInvolvedShards::new().and_then(OutputsDontExistLocally::new(store))
-// }

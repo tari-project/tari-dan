@@ -76,7 +76,6 @@ async fn main() {
             log::info!(target: LOG_TARGET, "-------------------------------------------------------");
             log::info!(target: LOG_TARGET, "\n\n\n");
             world.current_scenario_name = Some(scenario.name.clone());
-            world.fees_enabled = true;
             Box::pin(async move {
                 // Each scenario gets a mock connection. As each connection is dropped after the scenario, all the mock
                 // urls are deregistered
@@ -101,11 +100,6 @@ async fn main() {
     }
 
     shutdown.trigger();
-}
-
-#[given(expr = "fees are disabled")]
-async fn fees_are_enabled(world: &mut TariWorld) {
-    world.fees_enabled = false;
 }
 
 #[when(expr = "I stop validator node {word}")]

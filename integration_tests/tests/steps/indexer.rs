@@ -130,7 +130,9 @@ async fn indexer_scans_network_events(
     account_name: String,
     topics_str: String,
 ) {
-    let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
+    let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap_or_else(|| {
+        panic!("Indexer {} not found", indexer_name);
+    });
     let accounts_component_addresses = world.outputs.get(&account_name).expect("Account name not found");
     let component_address = accounts_component_addresses
         .into_iter()
