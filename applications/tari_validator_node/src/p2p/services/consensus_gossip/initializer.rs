@@ -1,4 +1,4 @@
-//  Copyright 2021. The Tari Project
+//  Copyright 2024. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,6 +20,36 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod consensus_gossip;
-pub mod mempool;
-pub mod messaging;
+use log::*;
+use tari_dan_common_types::{NumPreshards, PeerAddress};
+use tari_epoch_manager::base_layer::EpochManagerHandle;
+use tari_state_store_sqlite::SqliteStateStore;
+use tari_transaction::Transaction;
+use tokio::{sync::mpsc, task, task::JoinHandle};
+
+use crate::{
+    consensus::ConsensusHandle,
+    p2p::services::{
+        consensus_gossip::{service::ConsensusGossipService, ConsensusGossipHandle}, messaging::Gossip
+    },
+    transaction_validators::TransactionValidationError,
+    validator::Validator,
+};
+
+const LOG_TARGET: &str = "tari::dan::validator_node::mempool";
+
+pub fn spawn(
+    gossip: Gossip,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
+) -> (ConsensusGossipHandle, JoinHandle<anyhow::Result<()>>)
+{
+    let (tx_consensus_request, rx_consensus_request) = mpsc::channel(10);
+
+    let consensus_gossip = ConsensusGossipService::new(rx_consensus_request, epoch_manager, gossip);
+    let handle = ConsensusGossipHandle::new(tx_consensus_request);
+
+    let join_handle = task::spawn(consensus_gossip.run());
+    debug!(target: LOG_TARGET, "Spawning consensus gossip service (task: {:?})", join_handle);
+
+    (handle, join_handle)
+}

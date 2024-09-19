@@ -1,47 +1,57 @@
-//   Copyright 2024 The Tari Project
-//   SPDX-License-Identifier: BSD-3-Clause
+//  Copyright 2024. The Tari Project
+//
+//  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+//  following conditions are met:
+//
+//  1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+//  disclaimer.
+//
+//  2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+//  following disclaimer in the documentation and/or other materials provided with the distribution.
+//
+//  3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
+//  products derived from this software without specific prior written permission.
+//
+//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+//  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+//  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+//  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+//  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+//  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+//  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-//   Copyright 2023 The Tari Project
-//   SPDX-License-Identifier: BSD-3-Clause
-
-use std::collections::HashSet;
+use std::{collections::HashSet, fmt::Display};
 
 use log::*;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::{Epoch, PeerAddress, ShardGroup, SubstateAddress};
-use tari_dan_p2p::{proto::{self, network::Message}, DanMessage};
+use tari_dan_p2p::proto::{self, network::Message};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, EpochManagerEvent, EpochManagerReader};
 use tari_networking::NetworkingError;
+use tokio::sync::{mpsc, oneshot};
+use crate::p2p::services::messaging::Gossip;
 
-use crate::p2p::services::{mempool::MempoolError, messaging::Gossip};
+use super::{ConsensusGossipError, ConsensusGossipRequest};
 
 
-const LOG_TARGET: &str = "tari::validator_node::consensus::gossip";
-
-#[derive(thiserror::Error, Debug)]
-pub enum ConsensusGossipError {
-    #[error("Invalid message: {0}")]
-    InvalidMessage(#[from] anyhow::Error),
-    #[error("Epoch Manager Error: {0}")]
-    EpochManagerError(#[from] EpochManagerError),
-    #[error("Internal service request cancelled")]
-    RequestCancelled,
-    #[error("Consensus channel closed")]
-    ConsensusChannelClosed,
-    #[error("Network error: {0}")]
-    NetworkingError(#[from] NetworkingError),
-}
+const LOG_TARGET: &str = "tari::validator_node::consensus_gossip::service";
 
 #[derive(Debug)]
 pub(super) struct ConsensusGossipService<TAddr> {
+    requests: mpsc::Receiver<ConsensusGossipRequest>,
     epoch_manager: EpochManagerHandle<TAddr>,
     gossip: Gossip,
     is_subscribed: Option<ShardGroup>,
 }
 
 impl ConsensusGossipService<PeerAddress> {
-    pub fn new(epoch_manager: EpochManagerHandle<PeerAddress>, outbound: Gossip) -> Self {
+    pub fn new(
+        requests: mpsc::Receiver<ConsensusGossipRequest>,
+        epoch_manager: EpochManagerHandle<PeerAddress>,
+        outbound: Gossip
+    ) -> Self {
         Self {
+            requests,
             epoch_manager,
             gossip: outbound,
             is_subscribed: None,
@@ -53,8 +63,9 @@ impl ConsensusGossipService<PeerAddress> {
 
         loop {
             tokio::select! {
-                Some(result) = self.next_message() => {
-                    if let Err(e) = self.handle_new_message(result).await {
+                Some(req) = self.requests.recv() => self.handle_request(req).await,
+                Some(msg) = self.gossip.next_message() => {
+                    if let Err(e) = self.handle_new_message(msg).await {
                         warn!(target: LOG_TARGET, "Consensus gossip service rejected message: {}", e);
                     }
                 }
@@ -81,11 +92,12 @@ impl ConsensusGossipService<PeerAddress> {
         Ok(())
     }
 
-    async fn next_message(&mut self) -> Option<Result<(PeerAddress, HotstuffMessage), ConsensusGossipError>> {
-        self.gossip
-            .next_message()
-            .await
-            .map(|result| result.map_err(ConsensusGossipError::InvalidMessage))
+    async fn handle_request(&mut self, request: ConsensusGossipRequest) {
+        match request {
+            ConsensusGossipRequest::Multicast { shard_group, message, reply } => {
+                handle(reply, self.multicast(shard_group, message).await);
+            },
+        }
     }
 
     async fn subscribe(&mut self, epoch: Epoch) -> Result<(), ConsensusGossipError> {
@@ -123,7 +135,7 @@ impl ConsensusGossipService<PeerAddress> {
 
     async fn handle_new_message(
         &mut self,
-        result: Result<(PeerAddress, HotstuffMessage), ConsensusGossipError>,
+        result: Result<(PeerAddress, HotstuffMessage), anyhow::Error>,
     ) -> Result<(), ConsensusGossipError> {
         let (from, msg) = result?;
 
@@ -134,6 +146,7 @@ impl ConsensusGossipService<PeerAddress> {
             msg
         );
 
+        // TODO
         match msg {
             HotstuffMessage::NewView(_msg) => {},
             HotstuffMessage::Proposal(_msg) => {},
@@ -174,4 +187,14 @@ fn shard_group_to_topic(shard_group: ShardGroup) -> String {
         shard_group.start().as_u32(),
         shard_group.end().as_u32()
     )
+}
+
+
+fn handle<T, E: Display>(reply: oneshot::Sender<Result<T, E>>, result: Result<T, E>) {
+    if let Err(ref e) = result {
+        error!(target: LOG_TARGET, "Request failed with error: {}", e);
+    }
+    if reply.send(result).is_err() {
+        error!(target: LOG_TARGET, "Requester abandoned request");
+    }
 }

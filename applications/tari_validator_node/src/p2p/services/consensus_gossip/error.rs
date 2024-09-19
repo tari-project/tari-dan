@@ -1,4 +1,4 @@
-//  Copyright 2021. The Tari Project
+//  Copyright 2024. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,6 +20,34 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod consensus_gossip;
-pub mod mempool;
-pub mod messaging;
+use tari_epoch_manager::EpochManagerError;
+use tari_networking::NetworkingError;
+use tokio::sync::{mpsc, oneshot};
+
+use super::ConsensusGossipRequest;
+
+#[derive(thiserror::Error, Debug)]
+pub enum ConsensusGossipError {
+    #[error("Invalid message: {0}")]
+    InvalidMessage(#[from] anyhow::Error),
+    #[error("Epoch Manager Error: {0}")]
+    EpochManagerError(#[from] EpochManagerError),
+    #[error("Internal service request cancelled")]
+    RequestCancelled,
+    #[error("Consensus channel closed")]
+    ConsensusChannelClosed,
+    #[error("Network error: {0}")]
+    NetworkingError(#[from] NetworkingError),
+}
+
+impl From<mpsc::error::SendError<ConsensusGossipRequest>> for ConsensusGossipError {
+    fn from(_: mpsc::error::SendError<ConsensusGossipRequest>) -> Self {
+        Self::RequestCancelled
+    }
+}
+
+impl From<oneshot::error::RecvError> for ConsensusGossipError {
+    fn from(_: oneshot::error::RecvError) -> Self {
+        Self::RequestCancelled
+    }
+}

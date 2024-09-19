@@ -106,8 +106,7 @@ use crate::{
     p2p::{
         create_tari_validator_node_rpc_service,
         services::{
-            mempool::{self, MempoolHandle},
-            messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, Gossip},
+            consensus_gossip::{self, ConsensusGossipHandle}, mempool::{self, MempoolHandle}, messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, Gossip}
         },
         NopLogger,
     },
@@ -244,6 +243,16 @@ pub async fn spawn_services(
         }
     };
 
+    // Consensus gossip
+    // TODO: use channels linked to actual networking
+    let (_, rx_consensus_gossip_messages) = mpsc::unbounded_channel();
+    let consensus_gossip = Gossip::new(networking.clone(), rx_consensus_gossip_messages);
+    let (consensus_gossip_service, join_handle) = consensus_gossip::spawn(
+        consensus_gossip,
+        epoch_manager.clone(),
+    );
+    handles.push(join_handle);
+
     // Messaging
     let message_logger = NopLogger; // SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
     let local_address = PeerAddress::from(keypair.public_key().clone());
@@ -289,11 +298,11 @@ pub async fn spawn_services(
     .await;
     handles.push(consensus_join_handle);
 
-    let gossip = Gossip::new(networking.clone(), rx_gossip_messages);
+    let mempool_gossip = Gossip::new(networking.clone(), rx_gossip_messages);
 
     let (mempool, join_handle) = mempool::spawn(
         consensus_constants.num_preshards,
-        gossip,
+        mempool_gossip,
         epoch_manager.clone(),
         create_mempool_transaction_validator(&config.validator_node, template_manager.clone()),
         state_store.clone(),
@@ -367,6 +376,7 @@ pub async fn spawn_services(
         dry_run_transaction_processor,
         handles,
         validator_node_client_factory,
+        consensus_gossip_service,
     })
 }
 
@@ -418,6 +428,7 @@ pub struct Services {
     pub global_db: GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
     pub validator_node_client_factory: TariValidatorNodeRpcClientFactory,
+    pub consensus_gossip_service: ConsensusGossipHandle,
     pub state_store: SqliteStateStore<PeerAddress>,
 
     pub handles: Vec<JoinHandle<Result<(), anyhow::Error>>>,
