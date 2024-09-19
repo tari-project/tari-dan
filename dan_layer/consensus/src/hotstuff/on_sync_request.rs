@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_dan_common_types::{optional::Optional, Epoch};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, Epoch};
 use tari_dan_storage::{
     consensus_models::{Block, LastSentVote, LeafBlock},
     StateStore,
@@ -32,7 +32,13 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
     }
 
     #[allow(clippy::too_many_lines)]
-    pub fn handle(&self, from: TConsensusSpec::Addr, epoch: Epoch, msg: SyncRequestMessage) {
+    pub fn handle(
+        &self,
+        from: TConsensusSpec::Addr,
+        local_committee_info: CommitteeInfo,
+        epoch: Epoch,
+        msg: SyncRequestMessage,
+    ) {
         if msg.epoch != epoch {
             warn!(
                 target: LOG_TARGET,
@@ -49,7 +55,7 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
 
         task::spawn(async move {
             let result = store.with_read_tx(|tx| {
-                let leaf_block = LeafBlock::get(tx, epoch)?.get_block(tx)?;
+                let leaf_block = LeafBlock::get(tx, epoch)?;
 
                 if leaf_block.height() < msg.high_qc.block_height() {
                     return Err(HotStuffError::InvalidSyncRequest {
@@ -73,9 +79,9 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                 let blocks = Block::get_all_blocks_between(
                     tx,
                     leaf_block.epoch(),
-                    leaf_block.shard_group(),
+                    local_committee_info.shard_group(),
                     msg.high_qc.block_id(),
-                    leaf_block.id(),
+                    leaf_block.block_id(),
                     true,
                 )?;
 
@@ -84,7 +90,9 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
 
             let blocks = match result {
                 Ok(mut blocks) => {
-                    blocks.retain(|b| !b.is_genesis());
+                    if let Some(pos) = blocks.iter().position(|b| b.is_genesis()) {
+                        blocks.remove(pos);
+                    }
                     blocks
                 },
                 Err(err) => {

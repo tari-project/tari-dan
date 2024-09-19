@@ -21,6 +21,7 @@ use tari_dan_common_types::{
 use tari_dan_storage::{
     consensus_models::{
         Block,
+        BlockId,
         EpochCheckpoint,
         LeafBlock,
         PendingShardStateTreeDiff,
@@ -86,28 +87,35 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
     dummy
 }
 
-/// Calculates the dummy block required to reach the new height
 pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
-    candidate_block: &Block,
-    justify_block: &Block,
+    network: Network,
+    epoch: Epoch,
+    shard_group: ShardGroup,
+    high_qc: &QuorumCertificate,
+    expected_parent_block_id: &BlockId,
+    parent_merkle_root: FixedHash,
+    new_height: NodeHeight,
     leader_strategy: &TLeaderStrategy,
     local_committee: &Committee<TAddr>,
+    parent_timestamp: u64,
+    parent_base_layer_block_height: u64,
+    parent_base_layer_block_hash: FixedHash,
 ) -> Vec<Block> {
     let mut dummies = Vec::new();
     with_dummy_blocks(
-        candidate_block.network(),
-        candidate_block.epoch(),
-        candidate_block.shard_group(),
-        candidate_block.justify(),
-        *justify_block.merkle_root(),
-        candidate_block.height(),
+        network,
+        epoch,
+        shard_group,
+        high_qc,
+        parent_merkle_root,
+        new_height,
         leader_strategy,
         local_committee,
-        justify_block.timestamp(),
-        justify_block.base_layer_block_height(),
-        *justify_block.base_layer_block_hash(),
+        parent_timestamp,
+        parent_base_layer_block_height,
+        parent_base_layer_block_hash,
         |dummy_block| {
-            if dummy_block.id() == candidate_block.parent() {
+            if dummy_block.id() == expected_parent_block_id {
                 dummies.push(dummy_block);
                 ControlFlow::Break(())
             } else {
@@ -118,6 +126,29 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
     );
 
     dummies
+}
+
+/// Calculates the dummy block required to reach the new height
+pub fn calculate_dummy_blocks_from_justify<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
+    candidate_block: &Block,
+    justify_block: &Block,
+    leader_strategy: &TLeaderStrategy,
+    local_committee: &Committee<TAddr>,
+) -> Vec<Block> {
+    calculate_dummy_blocks(
+        candidate_block.network(),
+        candidate_block.epoch(),
+        candidate_block.shard_group(),
+        candidate_block.justify(),
+        candidate_block.parent(),
+        *justify_block.merkle_root(),
+        candidate_block.height(),
+        leader_strategy,
+        local_committee,
+        justify_block.timestamp(),
+        justify_block.base_layer_block_height(),
+        *justify_block.base_layer_block_hash(),
+    )
 }
 
 fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
@@ -139,8 +170,8 @@ fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
     F: FnMut(Block) -> ControlFlow<()>,
 {
     let mut parent_block = high_qc.as_leaf_block();
-    let mut current_height = high_qc.block_height() + NodeHeight(1);
-    if current_height > new_height {
+    let mut current_height = high_qc.block_height();
+    if current_height >= new_height {
         error!(
             target: LOG_TARGET,
             "BUG: 🍼 no dummy blocks to calculate. current height {} is greater than new height {}",
@@ -158,7 +189,12 @@ fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
         new_height,
     );
     loop {
+        if current_height == new_height {
+            break;
+        }
+        current_height += NodeHeight(1);
         let leader = leader_strategy.get_leader_public_key(local_committee, current_height);
+
         let dummy_block = Block::dummy_block(
             network,
             *parent_block.block_id(),
@@ -182,11 +218,6 @@ fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
         if callback(dummy_block).is_break() {
             break;
         }
-
-        if current_height == new_height {
-            break;
-        }
-        current_height += NodeHeight(1);
     }
 }
 

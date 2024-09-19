@@ -692,7 +692,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     .await,
             ),
             HotstuffMessage::CatchUpSyncRequest(msg) => {
-                self.on_sync_request.handle(from, current_epoch, msg);
+                self.on_sync_request
+                    .handle(from, *local_committee_info, current_epoch, msg);
                 Ok(())
             },
             HotstuffMessage::SyncResponse(_) => {

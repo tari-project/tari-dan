@@ -439,7 +439,7 @@ CREATE TABLE state_tree
 -- Scoping by shard
 CREATE INDEX state_tree_idx_shard_key on state_tree (shard);
 -- Duplicate keys are not allowed
-CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (shard, key);
+-- CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (shard, key);
 
 create table state_tree_shard_versions
 (

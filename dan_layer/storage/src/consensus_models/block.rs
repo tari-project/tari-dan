@@ -1102,14 +1102,15 @@ impl Display for Block {
         }
         write!(
             f,
-            "[{}, justify: {} ({}), {}, {}, {} cmd(s), {}]",
+            "[{}, justify: {} ({}), {}, {}, {} cmd(s), {}->{}]",
             self.height(),
             self.justify().block_height(),
-            self.justifies_parent(),
+            if self.justifies_parent() { "🟢" } else { "🟡" },
             self.epoch(),
             self.shard_group(),
             self.commands().len(),
             self.id(),
+            self.parent()
         )
     }
 }

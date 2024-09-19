@@ -20,7 +20,7 @@ use tokio::{sync::broadcast, task};
 
 use crate::{
     hotstuff::{
-        calculate_dummy_blocks,
+        calculate_dummy_blocks_from_justify,
         create_epoch_checkpoint,
         error::HotStuffError,
         on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
@@ -614,8 +614,12 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         // if the block parent is not the justify parent, then we have experienced a leader failure
         // and should make dummy blocks to fill in the gaps.
         if !justify_block.is_zero() && !candidate_block.justifies_parent() {
-            let dummy_blocks =
-                calculate_dummy_blocks(&candidate_block, &justify_block, &self.leader_strategy, local_committee);
+            let dummy_blocks = calculate_dummy_blocks_from_justify(
+                &candidate_block,
+                &justify_block,
+                &self.leader_strategy,
+                local_committee,
+            );
 
             let Some(last_dummy) = dummy_blocks.last() else {
                 warn!(target: LOG_TARGET, "❌ Bad proposal, does not justify parent for candidate block {}", candidate_block);

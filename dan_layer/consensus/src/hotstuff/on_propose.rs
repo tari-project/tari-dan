@@ -382,7 +382,9 @@ where TConsensusSpec: ConsensusSpec
                 high_qc.qc_id
             );
 
-            change_set.set_next_transaction_update(pool_tx)?;
+            if cmd.is_local_prepare() || cmd.is_local_accept() {
+                change_set.set_next_transaction_update(pool_tx)?;
+            }
         }
 
         Ok(())
@@ -405,19 +407,24 @@ where TConsensusSpec: ConsensusSpec
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 500;
 
+        let justifies_parent = high_qc_certificate.block_id() == parent_block.block_id();
         let next_height = parent_block.height() + NodeHeight(1);
+        let start_of_chain_id = if justifies_parent || parent_block.height() == NodeHeight(1) {
+            // Parent is justified - we can include its state in the MR calc, foreign propose etc
+            parent_block.block_id()
+        } else {
+            // Parent is not justified which means we have dummy blocks between the parent and the justified block so we
+            // can exclude them from the query. Also note that the query will fail if we used the parent
+            // block id, since the dummy blocks does not exist yet.
+            high_qc_certificate.block_id()
+        };
 
         let mut total_leader_fee = 0;
 
         let foreign_proposals = if propose_epoch_end {
             vec![]
         } else {
-            ForeignProposal::get_all_new(
-                tx,
-                base_layer_block_height,
-                parent_block.block_id(),
-                TARGET_BLOCK_SIZE / 4,
-            )?
+            ForeignProposal::get_all_new(tx, base_layer_block_height, start_of_chain_id, TARGET_BLOCK_SIZE / 4)?
         };
 
         if !foreign_proposals.is_empty() {
@@ -434,7 +441,7 @@ where TConsensusSpec: ConsensusSpec
             TARGET_BLOCK_SIZE
                 .checked_sub(foreign_proposals.len() * 4)
                 .filter(|n| *n > 0)
-                .map(|size| BurntUtxo::get_all_unproposed(tx, parent_block.block_id(), size))
+                .map(|size| BurntUtxo::get_all_unproposed(tx, start_of_chain_id, size))
                 .transpose()?
                 .unwrap_or_default()
         };
@@ -507,6 +514,12 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
+        debug!(
+            target: LOG_TARGET,
+            "🌿 PROPOSE: {} (or less) transaction(s), {} foreign proposal(s), {} UTXOs for next block (justifies_parent = {})",
+            batch.len(), foreign_proposals.len() , burnt_utxos.len(), justifies_parent
+        );
+
         // batch is empty for is_empty, is_epoch_end and is_epoch_start blocks
         let mut substate_store = PendingSubstateStore::new(tx, *parent_block.block_id(), self.config.num_preshards);
         let mut executed_transactions = HashMap::new();
@@ -557,7 +570,8 @@ where TConsensusSpec: ConsensusSpec
         );
 
         let timer = TraceTimer::info(LOG_TARGET, "Propose calculate state root");
-        let pending_tree_diffs = PendingShardStateTreeDiff::get_all_up_to_commit_block(tx, parent_block.block_id())?;
+
+        let pending_tree_diffs = PendingShardStateTreeDiff::get_all_up_to_commit_block(tx, start_of_chain_id)?;
 
         let (state_root, _) = calculate_state_merkle_root(
             tx,

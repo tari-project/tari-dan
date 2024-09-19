@@ -261,6 +261,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
                 FROM blocks JOIN tree ON
                     block_id = tree.parent
                     AND tree.bid != ?
+                    AND tree.parent != '0000000000000000000000000000000000000000000000000000000000000000'
                 LIMIT 1000
             )
             SELECT bid FROM tree"#,
@@ -297,6 +298,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
                 FROM blocks JOIN tree ON
                     block_id = tree.parent
                     AND tree.bid != ?
+                    AND tree.parent != '0000000000000000000000000000000000000000000000000000000000000000'
                 LIMIT 1000
             )
             SELECT bid FROM tree where is_dummy = 0 AND command_count > 0"#,
@@ -335,18 +337,12 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
     }
 
     pub(crate) fn get_commit_block_id(&self) -> Result<BlockId, StorageError> {
-        use crate::schema::{blocks, locked_block};
+        use crate::schema::blocks;
 
         let block_id = blocks::table
-            .select(blocks::parent_block_id)
-            .filter(
-                blocks::block_id.eq(locked_block::table
-                    .select(locked_block::block_id)
-                    .order_by(locked_block::id.desc())
-                    .limit(1)
-                    .single_value()
-                    .assume_not_null()),
-            )
+            .select(blocks::block_id)
+            .filter(blocks::is_committed.eq(true))
+            .order_by(blocks::id.desc())
             .first::<String>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "get_commit_block_id",
@@ -587,6 +583,13 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         limit: usize,
     ) -> Result<Vec<ForeignProposal>, StorageError> {
         use crate::schema::{foreign_proposals, quorum_certificates};
+
+        if !self.blocks_exists(block_id)? {
+            return Err(StorageError::NotFound {
+                item: "foreign_proposals_get_all_new: Block".to_string(),
+                key: block_id.to_string(),
+            });
+        }
 
         let locked = self.get_current_locked_block()?;
         let pending_block_ids = self.get_block_ids_with_commands_between(&locked.block_id, block_id)?;
@@ -2087,10 +2090,18 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
     ) -> Result<HashMap<Shard, Vec<PendingShardStateTreeDiff>>, StorageError> {
         use crate::schema::pending_state_tree_diffs;
 
+        if !self.blocks_exists(block_id)? {
+            return Err(StorageError::NotFound {
+                item: "pending_state_tree_diffs_get_all_up_to_commit_block: Block".to_string(),
+                key: block_id.to_string(),
+            });
+        }
+
         // Get the last committed block
         let committed_block_id = self.get_commit_block_id()?;
 
-        let block_ids = self.get_block_ids_with_commands_between(&committed_block_id, block_id)?;
+        // Block may modify state with zero commands because the justify a block that changes state
+        let block_ids = self.get_block_ids_between(&committed_block_id, block_id)?;
 
         if block_ids.is_empty() {
             return Ok(HashMap::new());
@@ -2300,6 +2311,13 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         limit: usize,
     ) -> Result<Vec<BurntUtxo>, StorageError> {
         use crate::schema::burnt_utxos;
+        if !self.blocks_exists(leaf_block)? {
+            return Err(StorageError::NotFound {
+                item: "Block".to_string(),
+                key: leaf_block.to_string(),
+            });
+        }
+
         if limit == 0 {
             return Ok(Vec::new());
         }

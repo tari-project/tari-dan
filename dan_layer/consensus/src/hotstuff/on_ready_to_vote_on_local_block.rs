@@ -192,8 +192,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         change_set: &mut ProposedBlockChangeSet,
     ) -> Result<(), HotStuffError> {
-        let _timer = TraceTimer::info(LOG_TARGET, "Process newly justified block")
-            .with_iterations(new_leaf_block.commands().len());
+        let timer = TraceTimer::info(LOG_TARGET, "Process newly justified block");
         let locked_block = LockedBlock::get(tx, new_leaf_block.epoch())?;
         info!(
             target: LOG_TARGET,
@@ -201,12 +200,15 @@ where TConsensusSpec: ConsensusSpec
             new_leaf_block,
         );
 
+        let mut num_applicable_commands = 0;
         let leaf = new_leaf_block.as_leaf_block();
         let justify_id = *new_leaf_block.justify().id();
         for cmd in new_leaf_block.commands() {
             if !cmd.is_local_prepare() && !cmd.is_local_accept() {
                 continue;
             }
+
+            num_applicable_commands += 1;
 
             let atom = cmd.transaction().expect("Command must be a transaction");
 
@@ -236,8 +238,12 @@ where TConsensusSpec: ConsensusSpec
                 }
             }
 
-            change_set.set_next_transaction_update(pool_tx)?;
+            if cmd.is_local_prepare() || cmd.is_local_accept() {
+                change_set.set_next_transaction_update(pool_tx)?;
+            }
         }
+
+        timer.with_iterations(num_applicable_commands);
 
         Ok(())
     }

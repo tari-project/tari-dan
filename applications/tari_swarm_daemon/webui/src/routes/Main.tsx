@@ -173,7 +173,7 @@ function ExtraInfoVN({ name, url, addTxToPool, autoRefresh, state, horizontal }:
     }
     return (<>
         <hr />
-        <h3>Pool transaction</h3>
+        <h3>Pool transactions {pool.length}</h3>
         <table style={{
           width: "100%",
         }}>

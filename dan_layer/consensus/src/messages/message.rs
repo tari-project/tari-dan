@@ -61,7 +61,14 @@ impl HotstuffMessage {
 impl Display for HotstuffMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            HotstuffMessage::NewView(msg) => write!(f, "NewView({})", msg.new_height),
+            HotstuffMessage::NewView(msg) => {
+                write!(
+                    f,
+                    "NewView({}, high-qc: {})",
+                    msg.new_height,
+                    msg.high_qc.block_height()
+                )
+            },
             HotstuffMessage::Proposal(msg) => {
                 write!(f, "Proposal(Epoch={},Height={})", msg.block.epoch(), msg.block.height(),)
             },
