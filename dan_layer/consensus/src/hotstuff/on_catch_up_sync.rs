@@ -32,7 +32,7 @@ impl<TConsensusSpec: ConsensusSpec> OnCatchUpSync<TConsensusSpec> {
         }
     }
 
-    pub async fn request_sync(&mut self, epoch: Epoch, from: &TConsensusSpec::Addr) -> Result<(), HotStuffError> {
+    pub async fn request_sync(&mut self, epoch: Epoch, from: TConsensusSpec::Addr) -> Result<(), HotStuffError> {
         let high_qc = self.store.with_read_tx(|tx| HighQc::get(tx, epoch))?;
         info!(
             target: LOG_TARGET,
@@ -51,7 +51,7 @@ impl<TConsensusSpec: ConsensusSpec> OnCatchUpSync<TConsensusSpec> {
         if self
             .outbound_messaging
             .send(
-                from.clone(),
+                from,
                 HotstuffMessage::CatchUpSyncRequest(SyncRequestMessage { epoch, high_qc }),
             )
             .await

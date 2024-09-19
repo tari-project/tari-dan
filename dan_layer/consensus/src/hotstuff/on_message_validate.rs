@@ -162,46 +162,40 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             .await
     }
 
-    pub fn update_local_parked_blocks(
+    pub fn update_local_parked_blocks<'a, I: IntoIterator<Item = &'a TransactionId> + ExactSizeIterator>(
         &self,
         current_height: NodeHeight,
-        transaction_id: &TransactionId,
-    ) -> Result<Option<ProposalMessage>, HotStuffError> {
-        let maybe_unparked_block = self
-            .store
-            .with_write_tx(|tx| tx.missing_transactions_remove(current_height, transaction_id))?;
+        transaction_ids: I,
+    ) -> Result<(Vec<ProposalMessage>, Vec<ForeignProposalMessage>), HotStuffError> {
+        let _timer = TraceTimer::debug(LOG_TARGET, "update_local_parked_blocks").with_iterations(transaction_ids.len());
+        self.store.with_write_tx(|tx| {
+            // TODO(perf)
+            let mut unparked_blocks = Vec::new();
+            let mut foreign_unparked_blocks = Vec::new();
+            for transaction_id in transaction_ids {
+                if let Some((unparked_block, foreign_proposals)) =
+                    tx.missing_transactions_remove(current_height, transaction_id)?
+                {
+                    info!(target: LOG_TARGET, "♻️ all transactions for local block {unparked_block} are ready for consensus");
 
-        let Some((unparked_block, foreign_proposals)) = maybe_unparked_block else {
-            return Ok(None);
-        };
+                    let _ignore = self.tx_events.send(HotstuffEvent::ParkedBlockReady {
+                        block: unparked_block.as_leaf_block(),
+                    });
 
-        info!(target: LOG_TARGET, "♻️ all transactions for block {unparked_block} are ready for consensus");
+                    unparked_blocks.push(ProposalMessage {
+                        block: unparked_block,
+                        foreign_proposals,
+                    });
+                }
 
-        let _ignore = self.tx_events.send(HotstuffEvent::ParkedBlockReady {
-            block: unparked_block.as_leaf_block(),
-        });
-
-        Ok(Some(ProposalMessage {
-            block: unparked_block,
-            foreign_proposals,
-        }))
-    }
-
-    pub fn update_foreign_parked_blocks(
-        &self,
-        transaction_id: &TransactionId,
-    ) -> Result<Vec<ForeignParkedProposal>, HotStuffError> {
-        let unparked_foreign_blocks = self
-            .store
-            .with_write_tx(|tx| ForeignParkedProposal::remove_by_transaction_id(tx, transaction_id))?;
-
-        if unparked_foreign_blocks.is_empty() {
-            return Ok(vec![]);
-        };
-
-        info!(target: LOG_TARGET, "♻️ all transactions for {} foreign block(s) are ready for consensus", unparked_foreign_blocks.len());
-
-        Ok(unparked_foreign_blocks)
+                let foreign_unparked = ForeignParkedProposal::remove_by_transaction_id(tx, transaction_id)?;
+                if !foreign_unparked.is_empty() {
+                    info!(target: LOG_TARGET, "♻️ all transactions for {} foreign block(s) are ready for consensus", foreign_unparked.len());
+                    foreign_unparked_blocks.extend(foreign_unparked.into_iter().map(Into::into));
+                }
+            }
+            Ok((unparked_blocks, foreign_unparked_blocks))
+        })
     }
 
     async fn check_proposal(&self, block: &Block) -> Result<(), HotStuffError> {

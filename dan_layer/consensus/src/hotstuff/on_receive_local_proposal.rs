@@ -130,7 +130,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         let local_committee = self
             .epoch_manager
-            .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
+            .get_committee_by_validator_public_key(block.epoch(), block.proposed_by().clone())
             .await?;
 
         let maybe_high_qc_and_block = self.store.with_write_tx(|tx| {
@@ -162,7 +162,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 .epoch_manager
                 .get_committee_info_by_validator_public_key(
                     foreign_proposal.block.epoch(),
-                    foreign_proposal.block.proposed_by(),
+                    foreign_proposal.block.proposed_by().clone(),
                 )
                 .await?;
 
@@ -386,7 +386,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         let _timer = TraceTimer::debug(LOG_TARGET, "GenerateVoteMessage");
         let vn = self
             .epoch_manager
-            .get_validator_node_by_public_key(block.epoch(), self.vote_signing_service.public_key())
+            .get_validator_node_by_public_key(block.epoch(), self.vote_signing_service.public_key().clone())
             .await?;
         let leaf_hash = vn.get_node_hash(self.config.network);
 
@@ -703,7 +703,7 @@ async fn propose_newly_locked_blocks_task_inner<TConsensusSpec: ConsensusSpec>(
         };
 
         let local_committee = epoch_manager
-            .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
+            .get_committee_by_validator_public_key(block.epoch(), block.proposed_by().clone())
             .await?;
         let leader_index = leader_strategy.calculate_leader(&local_committee, block.height()) as usize;
         let my_index = local_committee

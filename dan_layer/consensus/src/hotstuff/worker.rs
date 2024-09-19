@@ -1,12 +1,24 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::fmt::{Debug, Formatter};
+use std::{
+    fmt::{Debug, Formatter},
+    iter,
+};
 
 use log::*;
 use tari_dan_common_types::{committee::CommitteeInfo, Epoch, NodeHeight, ShardGroup};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockDiff, BurntUtxo, ForeignProposal, HighQc, LeafBlock, TransactionPool},
+    consensus_models::{
+        Block,
+        BlockDiff,
+        BurntUtxo,
+        ForeignProposal,
+        HighQc,
+        LeafBlock,
+        TransactionPool,
+        TransactionRecord,
+    },
     StateStore,
 };
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
@@ -35,7 +47,7 @@ use crate::{
         transaction_manager::ConsensusTransactionManager,
         vote_receiver::VoteReceiver,
     },
-    messages::HotstuffMessage,
+    messages::{HotstuffMessage, ProposalMessage},
     tracing::TraceTimer,
     traits::{hooks::ConsensusHooks, ConsensusSpec, LeaderStrategy},
 };
@@ -49,7 +61,7 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
 
     tx_events: broadcast::Sender<HotstuffEvent>,
     rx_new_transactions: mpsc::Receiver<(Transaction, usize)>,
-    rx_missing_transactions: mpsc::UnboundedReceiver<TransactionId>,
+    rx_missing_transactions: mpsc::UnboundedReceiver<Vec<TransactionId>>,
 
     on_inbound_message: OnInboundMessage<TConsensusSpec>,
     on_next_sync_view: OnNextSyncViewHandler<TConsensusSpec>,
@@ -291,7 +303,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
                 Some(result) = self.on_inbound_message.next_message(current_epoch, current_height) => {
                     if let Err(e) = self.on_unvalidated_message(current_epoch, current_height, result, &local_committee_info).await {
-                        self.on_failure("on_beat", &e).await;
+                        self.on_failure("on_inbound_message", &e).await;
                         return Err(e);
                     }
                 },
@@ -300,9 +312,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 //       We cannot simply call check_if_block_can_be_unparked in dispatch_hotstuff_message as that creates a cycle.
                 //       One suggestion is to refactor consensus to emit events (kinda like libp2p does) and handle those events.
                 //       This should be easy to reason about and avoid a large depth of async calls and "callback channels".
-                Some(tx_id) = self.rx_missing_transactions.recv() => {
-                    // TODO: pass all transactions from missing transaction response to batch process
-                    if let Err(err) = self.check_if_block_can_be_unparked(current_epoch, current_height, &tx_id, &local_committee_info).await {
+                Some(batch) = self.rx_missing_transactions.recv() => {
+                    if let Err(err) = self.check_if_block_can_be_unparked(current_epoch, current_height, batch.iter(), &local_committee_info).await {
                         self.hooks.on_error(&err);
                         error!(target: LOG_TARGET, "🚨Error handling missing transaction: {}", err);
                     }
@@ -416,7 +427,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         let _timer = TraceTimer::info(LOG_TARGET, "on_new_transaction");
         let maybe_transaction = self.on_receive_new_transaction.try_sequence_transaction(
             current_epoch,
-            transaction,
+            TransactionRecord::new(transaction),
             local_committee_info,
         )?;
 
@@ -434,7 +445,12 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         self.hooks.on_transaction_ready(transaction.id());
 
         if self
-            .check_if_block_can_be_unparked(current_epoch, current_height, transaction.id(), local_committee_info)
+            .check_if_block_can_be_unparked(
+                current_epoch,
+                current_height,
+                iter::once(transaction.id()),
+                local_committee_info,
+            )
             .await?
         {
             // No need to call on_beat, a block was unparked so on_beat will be called as needed
@@ -451,57 +467,33 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     }
 
     /// Returns true if a block was unparked, otherwise false
-    async fn check_if_block_can_be_unparked(
+    async fn check_if_block_can_be_unparked<
+        'a,
+        I: IntoIterator<Item = &'a TransactionId> + ExactSizeIterator + Clone,
+    >(
         &mut self,
         current_epoch: Epoch,
         current_height: NodeHeight,
-        tx_id: &TransactionId,
+        transaction_ids: I,
         local_committee_info: &CommitteeInfo,
     ) -> Result<bool, HotStuffError> {
-        let mut is_any_block_unparked = false;
-        if let Some(msg) = self
+        let (local_proposals, foreign_proposals) = self
             .on_message_validate
-            .update_local_parked_blocks(current_height, tx_id)?
-        {
-            let vn = self
-                .epoch_manager
-                .get_validator_node_by_public_key(msg.block.epoch(), msg.block.proposed_by())
-                .await?;
+            .update_local_parked_blocks(current_height, transaction_ids)?;
 
-            if let Err(e) = self
-                .dispatch_hotstuff_message(
-                    current_epoch,
-                    vn.address,
-                    HotstuffMessage::Proposal(msg),
-                    local_committee_info,
-                )
-                .await
-            {
-                self.on_failure("on_new_transaction -> dispatch_hotstuff_message", &e)
+        let is_any_block_unparked = !local_proposals.is_empty() || !foreign_proposals.is_empty();
+
+        for msg in foreign_proposals {
+            if let Err(e) = self.on_receive_foreign_proposal.handle(msg, local_committee_info).await {
+                self.on_failure("check_if_block_can_be_unparked -> on_receive_foreign_proposal", &e)
                     .await;
                 return Err(e);
             }
-            is_any_block_unparked = true;
         }
 
-        let unparked_foreign_blocks = self.on_message_validate.update_foreign_parked_blocks(tx_id)?;
-        is_any_block_unparked |= !unparked_foreign_blocks.is_empty();
-        for parked in unparked_foreign_blocks {
-            let vn = self
-                .epoch_manager
-                .get_validator_node_by_public_key(parked.block().epoch(), parked.block().proposed_by())
-                .await?;
-
-            if let Err(e) = self
-                .dispatch_hotstuff_message(
-                    current_epoch,
-                    vn.address,
-                    HotstuffMessage::ForeignProposal(parked.into()),
-                    local_committee_info,
-                )
-                .await
-            {
-                self.on_failure("on_new_transaction -> dispatch_hotstuff_message", &e)
+        for msg in local_proposals {
+            if let Err(e) = self.on_proposal_message(current_epoch, local_committee_info, msg).await {
+                self.on_failure("check_if_block_can_be_unparked -> on_proposal_message", &e)
                     .await;
                 return Err(e);
             }
@@ -539,9 +531,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     }
 
     async fn request_initial_catch_up_sync(&mut self, current_epoch: Epoch) -> Result<(), HotStuffError> {
-        let committee = self.epoch_manager.get_local_committee(current_epoch).await?;
-        for member in committee.shuffled() {
-            if *member != self.local_validator_addr {
+        let mut committee = self.epoch_manager.get_local_committee(current_epoch).await?;
+        committee.shuffle();
+        for (member, _) in committee {
+            if member != self.local_validator_addr {
                 self.on_catch_up_sync.request_sync(current_epoch, member).await?;
                 break;
             }
@@ -676,29 +669,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     .handle(current_epoch, from, message, local_committee_info)
                     .await,
             ),
-            HotstuffMessage::Proposal(msg) => {
-                match log_err(
-                    "on_receive_local_proposal",
-                    self.on_receive_local_proposal
-                        .handle(current_epoch, local_committee_info, msg)
-                        .await,
-                ) {
-                    Ok(_) => Ok(()),
-                    Err(
-                        err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound {
-                            ..
-                        }),
-                    ) => {
-                        warn!(
-                            target: LOG_TARGET,
-                            "⚠️This node has fallen behind due to a missing justified block: {err}"
-                        );
-                        self.on_catch_up_sync.request_sync(current_epoch, &from).await?;
-                        Ok(())
-                    },
-                    Err(err) => Err(err),
-                }
-            },
+            HotstuffMessage::Proposal(msg) => log_err(
+                "on_receive_local_proposal",
+                self.on_proposal_message(current_epoch, local_committee_info, msg).await,
+            ),
             HotstuffMessage::ForeignProposal(msg) => log_err(
                 "on_receive_foreign_proposal",
                 self.on_receive_foreign_proposal.handle(msg, local_committee_info).await,
@@ -728,6 +702,36 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 );
                 Ok(())
             },
+        }
+    }
+
+    async fn on_proposal_message(
+        &mut self,
+        current_epoch: Epoch,
+        local_committee_info: &CommitteeInfo,
+        msg: ProposalMessage,
+    ) -> Result<(), HotStuffError> {
+        let proposed_by = msg.block.proposed_by().clone();
+        match log_err(
+            "on_receive_local_proposal",
+            self.on_receive_local_proposal
+                .handle(current_epoch, local_committee_info, msg)
+                .await,
+        ) {
+            Ok(_) => Ok(()),
+            Err(err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound { .. })) => {
+                let vn = self
+                    .epoch_manager
+                    .get_validator_node_by_public_key(current_epoch, proposed_by)
+                    .await?;
+                warn!(
+                    target: LOG_TARGET,
+                    "⚠️This node has fallen behind due to a missing justified block: {err}"
+                );
+                self.on_catch_up_sync.request_sync(current_epoch, vn.address).await?;
+                Ok(())
+            },
+            Err(err) => Err(err),
         }
     }
 

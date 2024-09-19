@@ -93,6 +93,18 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         Ok(())
     }
 
+    pub fn insert_new_batched<'a, I: IntoIterator<Item = (&'a TransactionRecord, bool)>>(
+        &self,
+        tx: &mut TStateStore::WriteTransaction<'_>,
+        transactions: I,
+    ) -> Result<(), TransactionPoolError> {
+        // TODO(perf)
+        for (transaction, is_ready) in transactions {
+            tx.transaction_pool_insert_new(*transaction.id(), transaction.current_decision(), is_ready)?;
+        }
+        Ok(())
+    }
+
     pub fn get_batch_for_next_block(
         &self,
         tx: &TStateStore::ReadTransaction<'_>,

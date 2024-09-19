@@ -60,7 +60,7 @@ where TConsensusSpec: ConsensusSpec
 
         let foreign_committee_info = self
             .epoch_manager
-            .get_committee_info_by_validator_public_key(proposal.block.epoch(), proposal.block.proposed_by())
+            .get_committee_info_by_validator_public_key(proposal.block.epoch(), proposal.block.proposed_by().clone())
             .await?;
         self.store
             .with_write_tx(|tx| self.validate_and_save(tx, proposal, local_committee_info, &foreign_committee_info))?;

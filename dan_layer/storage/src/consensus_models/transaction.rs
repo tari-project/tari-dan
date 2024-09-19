@@ -1,7 +1,11 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, ops::Deref, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+    time::Duration,
+};
 
 use log::*;
 use serde::Deserialize;
@@ -305,6 +309,24 @@ impl TransactionRecord {
         }
 
         Ok((recs, tx_ids))
+    }
+
+    pub fn get_any_or_build<TTx: StateStoreReadTransaction, I: IntoIterator<Item = Transaction> + Clone>(
+        tx: &TTx,
+        transactions: I,
+    ) -> Result<Vec<Self>, StorageError> {
+        let mut tx_ids = transactions
+            .clone()
+            .into_iter()
+            .map(|t| (*t.id(), t))
+            .collect::<HashMap<_, _>>();
+        let mut recs = tx.transactions_get_any(tx_ids.keys())?;
+        for rec in &recs {
+            tx_ids.remove(rec.transaction.id());
+        }
+        recs.extend(tx_ids.into_values().map(Self::new));
+
+        Ok(recs)
     }
 
     pub fn get_missing<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(

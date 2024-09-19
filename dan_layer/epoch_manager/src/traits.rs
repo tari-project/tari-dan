@@ -70,7 +70,7 @@ pub trait EpochManagerReader: Send + Sync {
     async fn get_validator_node_by_public_key(
         &self,
         epoch: Epoch,
-        public_key: &PublicKey,
+        public_key: PublicKey,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError>;
 
     /// Returns a list of validator nodes with the given epoch and public key. If any validator node is not found, an
@@ -82,7 +82,7 @@ pub trait EpochManagerReader: Send + Sync {
         #[allow(clippy::mutable_key_type)]
         let mut results = HashMap::with_capacity(query.len());
         for (epoch, public_key) in query {
-            let vn = self.get_validator_node_by_public_key(epoch, &public_key).await?;
+            let vn = self.get_validator_node_by_public_key(epoch, public_key.clone()).await?;
             results.insert((epoch, public_key), vn);
         }
         Ok(results)
@@ -99,7 +99,7 @@ pub trait EpochManagerReader: Send + Sync {
     async fn get_committee_info_by_validator_public_key(
         &self,
         epoch: Epoch,
-        public_key: &PublicKey,
+        public_key: PublicKey,
     ) -> Result<CommitteeInfo, EpochManagerError> {
         let validator = self.get_validator_node_by_public_key(epoch, public_key).await?;
         self.get_committee_info_for_substate(epoch, validator.shard_key).await
@@ -128,7 +128,7 @@ pub trait EpochManagerReader: Send + Sync {
     async fn get_committee_by_validator_public_key(
         &self,
         epoch: Epoch,
-        public_key: &PublicKey,
+        public_key: PublicKey,
     ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let validator = self.get_validator_node_by_public_key(epoch, public_key).await?;
         let committee = self.get_committee_for_substate(epoch, validator.shard_key).await?;
