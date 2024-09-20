@@ -31,7 +31,6 @@ use tari_dan_common_types::{
 use tari_dan_storage::{
     consensus_models::{
         Block,
-        BlockDiff,
         BlockId,
         BlockTransactionExecution,
         BurntUtxo,
@@ -54,6 +53,7 @@ use tari_dan_storage::{
         PendingShardStateTreeDiff,
         QcId,
         QuorumCertificate,
+        SubstateChange,
         SubstateLock,
         SubstatePledge,
         SubstatePledges,
@@ -335,12 +335,12 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn block_diffs_insert(&mut self, block_diff: &BlockDiff) -> Result<(), StorageError> {
+    fn block_diffs_insert(&mut self, block_id: &BlockId, changes: &[SubstateChange]) -> Result<(), StorageError> {
         use crate::schema::block_diffs;
 
-        let block_id = serialize_hex(block_diff.block_id);
+        let block_id = serialize_hex(block_id);
         // We commit in chunks because we can hit the SQL variable limit
-        for chunk in block_diff.changes.chunks(1000) {
+        for chunk in changes.chunks(1000) {
             let values = chunk
                 .iter()
                 .map(|ch| {
@@ -1439,9 +1439,9 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn substate_locks_insert_all<I: IntoIterator<Item = (SubstateId, Vec<SubstateLock>)>>(
+    fn substate_locks_insert_all<'a, I: IntoIterator<Item = (&'a SubstateId, &'a Vec<SubstateLock>)>>(
         &mut self,
-        block_id: BlockId,
+        block_id: &BlockId,
         locks: I,
     ) -> Result<(), StorageError> {
         use crate::schema::substate_locks;
@@ -1454,9 +1454,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 .by_ref()
                 .take(CHUNK_SIZE)
                 .flat_map(|(id, locks)| {
-                    locks.into_iter().map(move |lock| {
+                    let block_id = serialize_hex(block_id);
+                    locks.iter().map(move |lock| {
                         (
-                            substate_locks::block_id.eq(serialize_hex(block_id)),
+                            substate_locks::block_id.eq(block_id.clone()),
                             substate_locks::substate_id.eq(id.to_string()),
                             substate_locks::version.eq(lock.version() as i32),
                             substate_locks::transaction_id.eq(serialize_hex(lock.transaction_id())),
@@ -1660,20 +1661,20 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
 
     fn foreign_substate_pledges_save(
         &mut self,
-        transaction_id: TransactionId,
+        transaction_id: &TransactionId,
         shard_group: ShardGroup,
-        pledges: SubstatePledges,
+        pledges: &SubstatePledges,
     ) -> Result<(), StorageError> {
         use crate::schema::foreign_substate_pledges;
         let tx_id_hex = serialize_hex(transaction_id);
 
-        let values = pledges.into_iter().map(|pledge| match pledge {
+        let values = pledges.iter().map(|pledge| match pledge {
             SubstatePledge::Input {
                 substate_id,
                 is_write,
                 substate,
             } => {
-                let lock_type = if is_write {
+                let lock_type = if *is_write {
                     SubstateLockType::Write
                 } else {
                     SubstateLockType::Read
@@ -1740,7 +1741,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         &mut self,
         block_id: BlockId,
         shard: Shard,
-        diff: VersionedStateHashTreeDiff,
+        diff: &VersionedStateHashTreeDiff,
     ) -> Result<(), StorageError> {
         use crate::schema::{blocks, pending_state_tree_diffs};
 

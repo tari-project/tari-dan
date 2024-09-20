@@ -15,7 +15,6 @@ use tari_dan_common_types::{
     committee::CommitteeInfo,
     optional::{IsNotFoundError, Optional},
     NumPreshards,
-    ShardGroup,
     ToSubstateAddress,
 };
 use tari_engine_types::transaction_receipt::TransactionReceiptAddress;
@@ -31,7 +30,6 @@ use crate::{
         LeafBlock,
         LockedBlock,
         QcId,
-        SubstatePledges,
         TransactionAtom,
         TransactionExecution,
         TransactionRecord,
@@ -645,17 +643,6 @@ impl TransactionPoolRecord {
 }
 
 impl TransactionPoolRecord {
-    #[allow(clippy::mutable_key_type)]
-    pub fn add_foreign_pledges<TTx: StateStoreWriteTransaction>(
-        &self,
-        tx: &mut TTx,
-        shard_group: ShardGroup,
-        foreign_pledges: SubstatePledges,
-    ) -> Result<(), TransactionPoolError> {
-        tx.foreign_substate_pledges_save(self.transaction_id, shard_group, foreign_pledges)?;
-        Ok(())
-    }
-
     pub fn remove<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), TransactionPoolError> {
         tx.transaction_pool_remove(&self.transaction_id)?;
         Ok(())

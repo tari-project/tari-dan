@@ -110,6 +110,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         can_propose_epoch_end: bool,
         foreign_committee_infos: HashMap<ShardGroup, CommitteeInfo>,
+        change_set: &mut ProposedBlockChangeSet,
     ) -> Result<BlockDecision, HotStuffError> {
         let _timer =
             TraceTimer::info(LOG_TARGET, "Decide on local block").with_iterations(valid_block.block().commands().len());
@@ -119,12 +120,11 @@ where TConsensusSpec: ConsensusSpec
             valid_block,
         );
 
-        self.store.with_write_tx(|tx| {
-            let mut change_set = ProposedBlockChangeSet::new(valid_block.block().as_leaf_block());
+        let block_decision = self.store.with_write_tx(|tx| {
             let mut justified_block = valid_block.justify().get_block(&**tx)?;
             // This comes before decide so that all evidence can be in place before LocalPrepare and LocalAccept
             if !justified_block.is_justified() {
-                self.process_newly_justified_block(tx, &justified_block, local_committee_info, &mut change_set)?;
+                self.process_newly_justified_block(tx, &justified_block, local_committee_info, change_set)?;
                 justified_block.set_as_justified(tx)?;
             }
 
@@ -134,7 +134,7 @@ where TConsensusSpec: ConsensusSpec
                 valid_block,
                 can_propose_epoch_end,
                 &foreign_committee_infos,
-                &mut change_set,
+                change_set,
             )?;
 
             let mut locked_blocks = Vec::new();
@@ -182,7 +182,9 @@ where TConsensusSpec: ConsensusSpec
                 finalized_transactions,
                 end_of_epoch,
             })
-        })
+        })?;
+
+        Ok(block_decision)
     }
 
     fn process_newly_justified_block(

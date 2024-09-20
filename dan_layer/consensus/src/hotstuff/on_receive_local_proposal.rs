@@ -20,6 +20,7 @@ use tokio::{sync::broadcast, task};
 
 use crate::{
     hotstuff::{
+        block_change_set::ProposedBlockChangeSet,
         calculate_dummy_blocks_from_justify,
         create_epoch_checkpoint,
         error::HotStuffError,
@@ -52,6 +53,7 @@ pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     leader_strategy: TConsensusSpec::LeaderStrategy,
     pacemaker: PaceMakerHandle,
     on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock<TConsensusSpec>,
+    change_set: Option<ProposedBlockChangeSet>,
     outbound_messaging: TConsensusSpec::OutboundMessaging,
     vote_signing_service: TConsensusSpec::SignatureService,
     on_receive_foreign_proposal: OnReceiveForeignProposalHandler<TConsensusSpec>,
@@ -95,6 +97,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 tx_events,
                 transaction_manager,
             ),
+            change_set: None,
         }
     }
 
@@ -231,7 +234,16 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         let is_epoch_end = valid_block.block().is_epoch_end();
 
         let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
-        let (block_decision, valid_block) = task::spawn_blocking({
+        // Reusing the change set allocated memory.
+        let mut change_set = self
+            .change_set
+            .take()
+            .map(|mut c| {
+                c.set_block(valid_block.block().as_leaf_block());
+                c
+            })
+            .unwrap_or_else(|| ProposedBlockChangeSet::new(valid_block.block().as_leaf_block()));
+        let (block_decision, valid_block, mut change_set) = task::spawn_blocking({
             // Move into task
             let local_committee_info = *local_committee_info;
             move || {
@@ -240,11 +252,15 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     &local_committee_info,
                     can_propose_epoch_end,
                     foreign_committees,
+                    &mut change_set,
                 )?;
-                Ok::<_, HotStuffError>((decision, valid_block))
+                Ok::<_, HotStuffError>((decision, valid_block, change_set))
             }
         })
         .await??;
+
+        change_set.clear();
+        self.change_set = Some(change_set);
 
         let is_accept_decision = block_decision.is_accept();
         if let Some(decision) = block_decision.quorum_decision {
