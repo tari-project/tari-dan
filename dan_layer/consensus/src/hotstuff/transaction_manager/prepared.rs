@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 
 use indexmap::IndexMap;
-use tari_dan_common_types::{NumPreshards, SubstateRequirement, VersionedSubstateId};
+use tari_dan_common_types::{committee::CommitteeInfo, SubstateRequirement, VersionedSubstateId};
 use tari_dan_storage::consensus_models::{Decision, Evidence, TransactionExecution, VersionedSubstateIdLockIntent};
 
 use crate::hotstuff::substate_store::LockStatus;
@@ -101,7 +101,7 @@ impl MultiShardPreparedTransaction {
         &self.local_inputs
     }
 
-    pub fn outputs(&self) -> &HashSet<VersionedSubstateId> {
+    pub fn known_outputs(&self) -> &HashSet<VersionedSubstateId> {
         &self.outputs
     }
 
@@ -109,24 +109,7 @@ impl MultiShardPreparedTransaction {
         self.execution
     }
 
-    pub fn to_initial_evidence(&self, num_preshards: NumPreshards, num_committees: u32) -> Evidence {
-        // if let Some(ref execution) = self.execution {
-        //     return Evidence::from_inputs_and_outputs(execution.resolved_inputs(), execution.resulting_outputs());
-        // }
-        //
-        // // CASE: One or more local inputs are not found, so the transaction is aborted.
-        // if self.current_decision().is_abort() {
-        //     return Evidence::from_inputs_and_outputs(
-        //         self.execution
-        //             .transaction()
-        //             .all_inputs_iter()
-        //             .map(|input| VersionedSubstateIdLockIntent::from_requirement(input, SubstateLockType::Read)),
-        //         self.outputs
-        //             .iter()
-        //             .map(|id| VersionedSubstateIdLockIntent::output(id.clone())),
-        //     );
-        // }
-
+    pub fn to_initial_evidence(&self, local_committee_info: &CommitteeInfo) -> Evidence {
         // TODO: We do not know if the inputs locks required are Read/Write. Either we allow the user to
         //       specify this or we can correct the locks after execution. Currently, this limitation
         //       prevents concurrent multi-shard read locks.
@@ -134,17 +117,35 @@ impl MultiShardPreparedTransaction {
             .local_inputs()
             .iter()
             .map(|(requirement, version)| VersionedSubstateId::new(requirement.substate_id.clone(), *version))
-            // TODO(correctness): to_zero_version is error prone when used in evidence and the correctness depends how it is used.
-            // e.g. using it to determining which shard is involved is fine, but loading substate by the address is incorrect (v0 may or may not be the actual pledged substate)
-            .chain(self.foreign_inputs().iter().map(|r| r.clone().or_zero_version()))
             .map(|id| VersionedSubstateIdLockIntent::write(id, true));
 
         let outputs = self
-            .outputs()
+            .known_outputs()
             .iter()
             .cloned()
             .map(VersionedSubstateIdLockIntent::output);
 
-        Evidence::from_inputs_and_outputs(num_preshards, num_committees, inputs, outputs)
+        let mut evidence = Evidence::from_inputs_and_outputs(
+            local_committee_info.num_preshards(),
+            local_committee_info.num_committees(),
+            inputs,
+            outputs,
+        );
+
+        // Add foreign involved shard groups without adding any substates (because we do not know the pledged version
+        // yet)
+        self.foreign_inputs()
+            .iter()
+            .map(|r| {
+                r.to_substate_address_zero_version().to_shard_group(
+                    local_committee_info.num_preshards(),
+                    local_committee_info.num_committees(),
+                )
+            })
+            .for_each(|sg| {
+                evidence.add_shard_group(sg);
+            });
+
+        evidence
     }
 }

@@ -229,9 +229,9 @@ where TConsensusSpec: ConsensusSpec
             }
 
             if !pool_tx.is_ready() {
-                if pool_tx.current_stage().is_local_prepared() && pool_tx.is_ready_for_next_stage() {
+                if pool_tx.current_stage().is_local_prepared() && pool_tx.is_ready_for_pending_stage() {
                     pool_tx.set_next_stage(TransactionPoolStage::LocalPrepared)?;
-                } else if pool_tx.current_stage().is_local_accepted() && pool_tx.is_ready_for_next_stage() {
+                } else if pool_tx.current_stage().is_local_accepted() && pool_tx.is_ready_for_pending_stage() {
                     pool_tx.set_next_stage(TransactionPoolStage::LocalAccepted)?;
                 } else {
                     // Nothing
@@ -378,14 +378,9 @@ where TConsensusSpec: ConsensusSpec
                     }
                 },
                 Command::LocalAccept(atom) => {
-                    if let Some(reason) = self.evaluate_local_accept_command(
-                        tx,
-                        block,
-                        &locked_block,
-                        atom,
-                        local_committee_info,
-                        proposed_block_change_set,
-                    )? {
+                    if let Some(reason) =
+                        self.evaluate_local_accept_command(tx, block, &locked_block, atom, proposed_block_change_set)?
+                    {
                         proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
@@ -793,10 +788,9 @@ where TConsensusSpec: ConsensusSpec
                             // foreign inputs/outputs.
                             tx_rec.set_local_decision(Decision::Commit);
                             // Set partial evidence for local inputs using what we know.
-                            tx_rec.evidence_mut().update(&multishard.to_initial_evidence(
-                                local_committee_info.num_preshards(),
-                                local_committee_info.num_committees(),
-                            ));
+                            tx_rec
+                                .evidence_mut()
+                                .update(&multishard.to_initial_evidence(local_committee_info));
                         }
                     },
                     Decision::Abort => {
@@ -1160,7 +1154,6 @@ where TConsensusSpec: ConsensusSpec
         block: &Block,
         locked_block: &LockedBlock,
         atom: &TransactionAtom,
-        local_committee_info: &CommitteeInfo,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<Option<NoVoteReason>, HotStuffError> {
         let Some(mut tx_rec) =
@@ -1233,8 +1226,7 @@ where TConsensusSpec: ConsensusSpec
 
             // Check the leader fee in the local accept phase. The fee only applied (is added to the block fee) for
             // AllAccept
-            let num_involved_shard_groups =
-                local_committee_info.count_distinct_shard_groups(tx_rec.evidence().substate_addresses_iter());
+            let num_involved_shard_groups = tx_rec.evidence().num_shard_groups();
             let involved = NonZeroU64::new(num_involved_shard_groups as u64)
                 .ok_or_else(|| HotStuffError::InvariantError("Number of involved shard groups is 0".to_string()))?;
             let calculated_leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);

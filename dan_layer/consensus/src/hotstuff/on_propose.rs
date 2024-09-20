@@ -311,7 +311,7 @@ where TConsensusSpec: ConsensusSpec
             // Leader thinks that all local nodes agree that all shard groups have prepared, we are ready to accept
             // locally
             TransactionPoolStage::AllPrepared => Ok(Some(Command::LocalAccept(
-                self.get_transaction_atom_with_leader_fee(local_committee_info, &mut tx_rec)?,
+                self.get_transaction_atom_with_leader_fee(&mut tx_rec)?,
             ))),
             // Leader thinks local nodes are ready to accept an ABORT
             TransactionPoolStage::SomePrepared => Ok(Some(Command::LocalAccept(tx_rec.get_current_transaction_atom()))),
@@ -749,10 +749,9 @@ where TConsensusSpec: ConsensusSpec
                             // foreign inputs/outputs.
                             tx_rec.set_local_decision(Decision::Commit);
                             // Set partial evidence using local inputs and known outputs.
-                            tx_rec.evidence_mut().update(&multishard.to_initial_evidence(
-                                local_committee_info.num_preshards(),
-                                local_committee_info.num_committees(),
-                            ));
+                            tx_rec
+                                .evidence_mut()
+                                .update(&multishard.to_initial_evidence(local_committee_info));
                         }
                     },
                     Decision::Abort => {
@@ -871,18 +870,16 @@ where TConsensusSpec: ConsensusSpec
             *tx_rec.transaction_id(),
             &filter_diff_for_committee(local_committee_info, diff),
         )?;
-        let atom = self.get_transaction_atom_with_leader_fee(local_committee_info, tx_rec)?;
+        let atom = self.get_transaction_atom_with_leader_fee(tx_rec)?;
         Ok(Some(Command::AllAccept(atom)))
     }
 
     fn get_transaction_atom_with_leader_fee(
         &self,
-        local_committee_info: &CommitteeInfo,
         tx_rec: &mut TransactionPoolRecord,
     ) -> Result<TransactionAtom, HotStuffError> {
         if tx_rec.current_decision().is_commit() {
-            let num_involved_shard_groups =
-                local_committee_info.count_distinct_shard_groups(tx_rec.evidence().substate_addresses_iter());
+            let num_involved_shard_groups = tx_rec.evidence().num_shard_groups();
             let involved = NonZeroU64::new(num_involved_shard_groups as u64).ok_or_else(|| {
                 HotStuffError::InvariantError(format!(
                     "PROPOSE: Transaction {} involves zero shard groups",

@@ -259,18 +259,6 @@ impl CommitteeInfo {
             .into_iter()
             .filter(|substate_address| self.includes_substate_address(substate_address.borrow()))
     }
-
-    /// Calculates the number of distinct shard groups for the given addresses
-    pub fn count_distinct_shard_groups<B: Borrow<SubstateAddress>, I: IntoIterator<Item = B>>(
-        &self,
-        addresses: I,
-    ) -> usize {
-        addresses
-            .into_iter()
-            .map(|addr| addr.borrow().to_shard_group(self.num_shards, self.num_committees))
-            .collect::<std::collections::HashSet<_>>()
-            .len()
-    }
 }
 
 #[derive(Debug, Clone, Serialize)]

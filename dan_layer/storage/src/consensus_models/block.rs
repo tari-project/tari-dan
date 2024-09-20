@@ -391,8 +391,8 @@ impl Block {
             .filter_map(|cmd| cmd.transaction())
             .filter(|t| {
                 t.evidence
-                    .substate_addresses_iter()
-                    .any(|addr| committee_info.includes_substate_address(addr))
+                    .shard_groups_iter()
+                    .any(|sg| *sg == committee_info.shard_group())
             })
             .map(|t| t.id())
     }

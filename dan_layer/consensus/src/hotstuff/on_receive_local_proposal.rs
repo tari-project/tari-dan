@@ -228,6 +228,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
     ) -> Result<(), HotStuffError> {
         let em_epoch = self.epoch_manager.current_epoch().await?;
         let can_propose_epoch_end = em_epoch > current_epoch;
+        let is_epoch_end = valid_block.block().is_epoch_end();
 
         let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
         let (block_decision, valid_block) = task::spawn_blocking({
@@ -245,6 +246,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         })
         .await??;
 
+        let is_accept_decision = block_decision.is_accept();
         if let Some(decision) = block_decision.quorum_decision {
             self.pacemaker
                 .update_view(valid_block.epoch(), valid_block.height(), high_qc.block_height())
@@ -308,13 +310,17 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 // TODO: We should exit consensus to sync for the epoch - when this is implemented, we will not
                 // need to create the genesis, set the pacemaker, etc.
                 self.pacemaker.set_epoch(next_epoch).await?;
-                self.pacemaker.on_beat();
             } else {
                 info!(
                     target: LOG_TARGET,
                     "💤 Our validator node is not registered for epoch {next_epoch}.",
                 )
             }
+        }
+
+        // Propose quickly for the end of epoch chain
+        if is_accept_decision && is_epoch_end {
+            self.pacemaker.on_beat();
         }
 
         Ok(())
@@ -763,8 +769,7 @@ async fn broadcast_foreign_proposal_if_required<TConsensusSpec: ConsensusSpec>(
                 .filter(|atom| !atom.evidence.is_committee_output_only(local_committee_info))
                 .or_else(|| c.local_accept())
         })
-        .flat_map(|p| p.evidence.substate_addresses_iter())
-        .map(|addr| addr.to_shard_group(num_preshards, num_committees))
+        .flat_map(|p| p.evidence.shard_groups_iter().copied())
         .filter(|shard_group| local_shard_group != *shard_group)
         .collect::<HashSet<_>>();
     if non_local_shard_groups.is_empty() {

@@ -76,20 +76,18 @@ impl Evidence {
             // may be implicit (null) if the local node is only involved in outputs (and therefore sequences using the LocalAccept
             // foreign proposal)
             .all(|e| {
-                if e.is_prepare_justified() || e.is_accept_justified() {
-                    true
-                } else {
-                    // TODO: we should only include input evidence in transactions, so we would only need to check justifies
-                    // At this point output-only shards may not be justified
-                    e.substates.values().all(|lock| lock.is_output())
-                }
+                e.is_prepare_justified() || e.is_accept_justified()
+
             })
     }
 
+    /// Returns true if all substates in the given shard group are output locks.
+    /// This assumes the provided evidence is complete before this is called.
+    /// If no evidence is present for the shard group, false is returned.
     pub fn is_committee_output_only(&self, committee_info: &CommitteeInfo) -> bool {
-        self.evidence
-            .get(&committee_info.shard_group())
-            .map_or(true, |e| e.substates().values().all(|lock| lock.is_output()))
+        self.evidence.get(&committee_info.shard_group()).map_or(false, |e| {
+            !e.substates().is_empty() && e.substates().values().all(|lock| lock.is_output())
+        })
     }
 
     pub fn is_empty(&self) -> bool {
@@ -148,17 +146,22 @@ impl Evidence {
             .map(|(_, e)| e)
     }
 
-    /// Returns an iterator over the substate addresses in this Evidence object.
-    /// NOTE: not all substates involved in the final transaction are necessarily included in this Evidence object until
-    /// the transaction has reached AllAccepted state.
-    pub fn substate_addresses_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
-        self.evidence.values().flat_map(|e| e.substates.keys())
-    }
-
     pub fn qc_ids_iter(&self) -> impl Iterator<Item = &QcId> + '_ {
         self.evidence
             .values()
             .flat_map(|e| e.prepare_qc.iter().chain(e.accept_qc.iter()))
+    }
+
+    pub fn add_shard_group(&mut self, shard_group: ShardGroup) -> &mut ShardGroupEvidence {
+        self.evidence.entry(shard_group).or_default()
+    }
+
+    pub fn shard_groups_iter(&self) -> impl Iterator<Item = &ShardGroup> {
+        self.evidence.keys()
+    }
+
+    pub fn num_shard_groups(&self) -> usize {
+        self.evidence.len()
     }
 
     pub fn add_shard_group_evidence(
@@ -222,12 +225,19 @@ pub struct ShardGroupEvidence {
 }
 
 impl ShardGroupEvidence {
+    pub fn insert(&mut self, address: SubstateAddress, lock: SubstateLockType) -> &mut Self {
+        self.substates.insert_sorted(address, lock);
+        self
+    }
+
     pub fn is_prepare_justified(&self) -> bool {
-        self.prepare_qc.is_some()
+        // No substates means that we have no pledges yet, so we cannot count this as justified
+        !self.substates.is_empty() && self.prepare_qc.is_some()
     }
 
     pub fn is_accept_justified(&self) -> bool {
-        self.accept_qc.is_some()
+        // No substates means that we have no pledges yet, so we cannot count this as justified
+        !self.substates.is_empty() && self.accept_qc.is_some()
     }
 
     pub fn substates(&self) -> &IndexMap<SubstateAddress, SubstateLockType> {

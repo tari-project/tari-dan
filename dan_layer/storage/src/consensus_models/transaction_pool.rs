@@ -393,7 +393,7 @@ impl TransactionPoolRecord {
         }
     }
 
-    pub fn is_ready_for_next_stage(&self) -> bool {
+    pub fn is_ready_for_pending_stage(&self) -> bool {
         self.can_continue_to(self.current_stage())
     }
 

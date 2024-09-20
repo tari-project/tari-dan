@@ -56,6 +56,12 @@ pub struct BlockDecision {
     pub end_of_epoch: Option<Epoch>,
 }
 
+impl BlockDecision {
+    pub fn is_accept(&self) -> bool {
+        matches!(self.quorum_decision, Some(QuorumDecision::Accept))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ProposedBlockChangeSet {
     block: LeafBlock,
@@ -222,7 +228,7 @@ impl ProposedBlockChangeSet {
             .entry(*transaction.transaction_id())
             .or_default();
 
-        let ready_now = transaction.is_ready_for_next_stage();
+        let ready_now = transaction.is_ready_for_pending_stage();
         change_mut.next_update = Some(TransactionPoolStatusUpdate::new(transaction, ready_now));
         Ok(self)
     }
