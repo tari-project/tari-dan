@@ -52,7 +52,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "OnReceiveRequestedTransactions");
-        info!(target: LOG_TARGET, "Receiving {} requested transactions for block {} from {:?}", msg.transactions.len(), msg.block_id, from, );
+        info!(target: LOG_TARGET, "Receiving {} requested transactions for block {} from {:?}", msg.transactions.len(), msg.block_id, from);
         self.store.with_write_tx(|tx| {
             let recs = TransactionRecord::get_any_or_build(&**tx, msg.transactions)?;
             let mut batch = Vec::with_capacity(recs.len());

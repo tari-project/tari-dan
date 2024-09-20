@@ -92,9 +92,8 @@ create table foreign_parked_blocks
     justify_qc    text      not NULL,
     created_at    timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
 -- block_id must be unique. Optimise fetching by block_id
-create unique index foreign_parked_blocks_uniq_idx_id on parked_blocks (block_id);
+create unique index foreign_parked_blocks_uniq_idx_id on foreign_parked_blocks (block_id);
 
 CREATE TABLE foreign_missing_transactions
 (

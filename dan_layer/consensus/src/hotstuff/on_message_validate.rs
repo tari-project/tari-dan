@@ -359,8 +359,9 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             );
 
             let parked_block = ForeignParkedProposal::from(msg);
-            parked_block.insert(tx)?;
-            parked_block.add_missing_transactions(tx, &missing_tx_ids)?;
+            if parked_block.save(tx)? {
+                parked_block.add_missing_transactions(tx, &missing_tx_ids)?;
+            }
 
             Ok(MessageValidationResult::ParkedProposal {
                 block_id: *parked_block.block().id(),

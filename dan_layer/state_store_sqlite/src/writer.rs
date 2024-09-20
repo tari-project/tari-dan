@@ -5,6 +5,7 @@ use std::{iter::Peekable, ops::Deref};
 
 use diesel::{
     dsl,
+    dsl::count_star,
     sql_types::Text,
     AsChangeset,
     ExpressionMethods,
@@ -1378,23 +1379,34 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         if removed_ids.is_empty() {
             return Ok(vec![]);
         }
-
-        let num_remaining = foreign_missing_transactions::table
-            .filter(foreign_missing_transactions::parked_block_id.eq_any(&removed_ids))
-            .count()
-            .get_result::<i64>(self.connection())
+        let counts = foreign_parked_blocks::table
+            .select((
+                foreign_parked_blocks::id,
+                foreign_missing_transactions::table
+                    .select(count_star())
+                    .filter(foreign_missing_transactions::parked_block_id.eq(foreign_parked_blocks::id))
+                    .single_value(),
+            ))
+            .filter(foreign_parked_blocks::id.eq_any(&removed_ids))
+            .get_results::<(i32, Option<i64>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "foreign_parked_blocks_remove_all_by_transaction",
                 source: e,
             })?;
 
-        // If there are still missing transactions for the parked block, it is not yet unparked
-        if num_remaining > 0 {
+        let mut remaining = counts
+            .iter()
+            .filter(|(_, count)| count.map_or(true, |c| c == 0))
+            .map(|(id, _)| *id)
+            .peekable();
+
+        // If there are still missing transactions for ALL parked blocks, then we exit early
+        if remaining.peek().is_none() {
             return Ok(vec![]);
         }
 
         let blocks = diesel::delete(foreign_parked_blocks::table)
-            .filter(foreign_parked_blocks::id.eq_any(&removed_ids))
+            .filter(foreign_parked_blocks::id.eq_any(remaining))
             .get_results::<sql_models::ForeignParkedBlock>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "foreign_parked_blocks_remove_all_by_transaction",

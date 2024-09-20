@@ -347,6 +347,9 @@ pub trait StateStoreReadTransaction: Sized {
     ) -> Result<Vec<BurntUtxo>, StorageError>;
 
     fn burnt_utxos_count(&self) -> Result<u64, StorageError>;
+
+    // -------------------------------- Foreign parked block -------------------------------- //
+    fn foreign_parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {

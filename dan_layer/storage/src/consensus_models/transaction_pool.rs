@@ -553,7 +553,8 @@ impl TransactionPoolRecord {
             let addr = lock.to_substate_address();
             let shard_group = addr.to_shard_group(num_preshards, num_committees);
             self.evidence_mut()
-                .add_shard_group_evidence(shard_group, addr, lock.lock_type());
+                .add_shard_group(shard_group)
+                .insert(addr, lock.lock_type());
         }
         // Only change the local decision if we haven't already decided to ABORT
         if self.local_decision().map_or(true, |d| d.is_commit()) {

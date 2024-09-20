@@ -164,17 +164,6 @@ impl Evidence {
         self.evidence.len()
     }
 
-    pub fn add_shard_group_evidence(
-        &mut self,
-        shard_group: ShardGroup,
-        address: SubstateAddress,
-        lock_type: SubstateLockType,
-    ) -> &mut Self {
-        let entry = self.evidence.entry(shard_group).or_default();
-        entry.substates.insert_sorted(address, lock_type);
-        self
-    }
-
     /// Add or update shard groups, substates and locks into Evidence. Existing prepare/accept QC IDs are not changed.
     pub fn update(&mut self, other: &Evidence) -> &mut Self {
         for (sg, evidence) in other.iter() {
@@ -292,13 +281,23 @@ mod tests {
         let sg3 = ShardGroup::new(4, 5);
 
         let mut evidence1 = Evidence::empty();
-        evidence1.add_shard_group_evidence(sg1, seed_substate_address(1), SubstateLockType::Write);
-        evidence1.add_shard_group_evidence(sg1, seed_substate_address(2), SubstateLockType::Read);
+        evidence1
+            .add_shard_group(sg1)
+            .insert(seed_substate_address(1), SubstateLockType::Write);
+        evidence1
+            .add_shard_group(sg1)
+            .insert(seed_substate_address(2), SubstateLockType::Read);
 
         let mut evidence2 = Evidence::empty();
-        evidence2.add_shard_group_evidence(sg1, seed_substate_address(2), SubstateLockType::Output);
-        evidence2.add_shard_group_evidence(sg2, seed_substate_address(3), SubstateLockType::Output);
-        evidence2.add_shard_group_evidence(sg3, seed_substate_address(4), SubstateLockType::Output);
+        evidence2
+            .add_shard_group(sg1)
+            .insert(seed_substate_address(2), SubstateLockType::Output);
+        evidence2
+            .add_shard_group(sg2)
+            .insert(seed_substate_address(3), SubstateLockType::Output);
+        evidence2
+            .add_shard_group(sg3)
+            .insert(seed_substate_address(4), SubstateLockType::Output);
 
         evidence1.update(&evidence2);
 

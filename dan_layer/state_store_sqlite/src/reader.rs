@@ -2356,6 +2356,21 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         Ok(count as u64)
     }
+
+    fn foreign_parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError> {
+        use crate::schema::foreign_parked_blocks;
+
+        let count = foreign_parked_blocks::table
+            .count()
+            .filter(foreign_parked_blocks::block_id.eq(serialize_hex(block_id)))
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_parked_blocks_exists",
+                source: e,
+            })?;
+
+        Ok(count > 0)
+    }
 }
 
 #[derive(QueryableByName)]

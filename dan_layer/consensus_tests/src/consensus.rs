@@ -476,6 +476,7 @@ async fn multishard_local_inputs_foreign_outputs() {
 async fn multishard_local_inputs_and_outputs_foreign_outputs() {
     setup_logger();
     let mut test = Test::builder()
+        .debug_sql("/tmp/test{}.db")
         .add_committee(0, vec!["1", "2"])
         .add_committee(1, vec!["3", "4"])
         .add_committee(2, vec!["5", "6"])
@@ -509,6 +510,7 @@ async fn multishard_local_inputs_and_outputs_foreign_outputs() {
         .await;
     test.send_transaction_to_destination(TestVnDestination::Committee(1), tx1.clone())
         .await;
+    // Don't send to committee 2 since they are not involved in inputs
 
     test.start_epoch(Epoch(1)).await;
 

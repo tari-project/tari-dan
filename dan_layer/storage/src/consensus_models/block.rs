@@ -676,6 +676,13 @@ impl Block {
             if block_id == *self.id() {
                 continue;
             }
+            info!(
+                target: LOG_TARGET,
+                "❗️🔗 Removing parallel chain block {} from epoch {} height {}",
+                block_id,
+                self.epoch(),
+                self.height()
+            );
             delete_block_and_children(tx, &block_id)?;
         }
         Ok(())
@@ -1225,7 +1232,7 @@ where
     Ok(())
 }
 
-/// Deletes everything related to a block and any children
+/// Deletes everything related to a block as well as any child blocks
 fn delete_block_and_children<TTx>(tx: &mut TTx, block_id: &BlockId) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + Deref,
