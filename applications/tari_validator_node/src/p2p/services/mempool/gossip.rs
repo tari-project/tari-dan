@@ -3,12 +3,15 @@
 
 use std::collections::HashSet;
 
+use libp2p::PeerId;
 use log::*;
 use tari_dan_common_types::{Epoch, NumPreshards, PeerAddress, ShardGroup, SubstateAddress};
-use tari_dan_p2p::{proto, DanMessage, Message};
+use tari_dan_p2p::{proto, DanMessage, TariMessagingSpec};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
+use tari_networking::{NetworkingHandle, NetworkingService};
+use tokio::sync::mpsc;
 
-use crate::p2p::services::{mempool::MempoolError, messaging::Gossip};
+use crate::p2p::services::mempool::MempoolError;
 
 const LOG_TARGET: &str = "tari::validator_node::mempool::gossip";
 
@@ -16,25 +19,33 @@ const LOG_TARGET: &str = "tari::validator_node::mempool::gossip";
 pub(super) struct MempoolGossip<TAddr,> {
     num_preshards: NumPreshards,
     epoch_manager: EpochManagerHandle<TAddr>,
-    gossip: Gossip,
     is_subscribed: Option<ShardGroup>,
+    networking: NetworkingHandle<TariMessagingSpec>,
+    rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::network::DanMessage)>,
 }
 
 impl MempoolGossip<PeerAddress> {
-    pub fn new(num_preshards: NumPreshards, epoch_manager: EpochManagerHandle<PeerAddress>, outbound: Gossip) -> Self {
+    pub fn new(
+        num_preshards: NumPreshards,
+        epoch_manager: EpochManagerHandle<PeerAddress>,
+        networking: NetworkingHandle<TariMessagingSpec>,
+        rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::network::DanMessage)>
+    ) -> Self {
         Self {
             num_preshards,
             epoch_manager,
-            gossip: outbound,
             is_subscribed: None,
+            networking,
+            rx_gossip
         }
     }
 
     pub async fn next_message(&mut self) -> Option<Result<(PeerAddress, DanMessage), MempoolError>> {
-        self.gossip
-            .next_message::<DanMessage>()
-            .await
-            .map(|result| result.map_err(MempoolError::InvalidMessage))
+        let (from, msg) = self.rx_gossip.recv().await?;
+        match msg.try_into() {
+            Ok(msg) => Some(Ok((from.into(), msg))),
+            Err(e) => Some(Err(MempoolError::InvalidMessage(e))),
+        }
     }
 
     pub async fn subscribe(&mut self, epoch: Epoch) -> Result<(), MempoolError> {
@@ -49,7 +60,7 @@ impl MempoolGossip<PeerAddress> {
             None => {},
         }
 
-        self.gossip
+        self.networking
             .subscribe_topic(shard_group_to_topic(committee_shard.shard_group()))
             .await?;
         self.is_subscribed = Some(committee_shard.shard_group());
@@ -58,7 +69,7 @@ impl MempoolGossip<PeerAddress> {
 
     pub async fn unsubscribe(&mut self) -> Result<(), MempoolError> {
         if let Some(sg) = self.is_subscribed {
-            self.gossip.unsubscribe_topic(shard_group_to_topic(sg)).await?;
+            self.networking.unsubscribe_topic(shard_group_to_topic(sg)).await?;
             self.is_subscribed = None;
         }
         Ok(())
@@ -73,9 +84,8 @@ impl MempoolGossip<PeerAddress> {
             "forward_to_local_replicas: topic: {}", topic,
         );
 
-        let msg = Message::Dan(msg);
-        let msg = proto::network::Message::from(&msg);
-        self.gossip.publish_message(topic, msg).await?;
+        let msg = proto::network::DanMessage::from(&msg);
+        self.networking.publish_transaction_gossip(topic, msg).await?;
 
         Ok(())
     }
@@ -96,8 +106,7 @@ impl MempoolGossip<PeerAddress> {
             .filter(|sg| exclude_shard_group.as_ref() != Some(sg) && sg != &local_shard_group)
             .collect::<HashSet<_>>();
 
-        let msg = tari_dan_p2p::Message::from(msg.into());
-        let msg = proto::network::Message::from(&msg.into());
+        let msg = proto::network::DanMessage::from(&msg.into());
         for sg in shard_groups {
             let topic = shard_group_to_topic(sg);
             debug!(
@@ -105,7 +114,7 @@ impl MempoolGossip<PeerAddress> {
                 "forward_to_foreign_replicas: topic: {}", topic,
             );
 
-            self.gossip.publish_message(topic, msg.clone()).await?;
+            self.networking.publish_transaction_gossip(topic, msg.clone()).await?;
         }
 
         Ok(())

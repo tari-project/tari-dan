@@ -24,7 +24,8 @@ pub fn spawn<TMsg>(
 where
     TMsg: MessageSpec + 'static,
     TMsg::Message: messaging::prost::Message + Default + Clone + 'static,
-    TMsg::GossipMessage: messaging::prost::Message + Default + Clone + 'static,
+    TMsg::TransactionGossipMessage: messaging::prost::Message + Default + Clone + 'static,
+    TMsg::ConsensusGossipMessage: messaging::prost::Message + Default + Clone + 'static,
     TMsg: MessageSpec,
 {
     for (_, addr) in &seed_peers {
@@ -59,7 +60,8 @@ where
 pub enum MessagingMode<TMsg: MessageSpec> {
     Enabled {
         tx_messages: mpsc::UnboundedSender<(PeerId, TMsg::Message)>,
-        tx_gossip_messages: mpsc::UnboundedSender<(PeerId, TMsg::GossipMessage)>,
+        tx_transaction_gossip_messages: mpsc::UnboundedSender<(PeerId, TMsg::TransactionGossipMessage)>,
+        tx_consensus_gossip_messages: mpsc::UnboundedSender<(PeerId, TMsg::ConsensusGossipMessage)>,
     },
     Disabled,
 }
@@ -82,13 +84,24 @@ impl<TMsg: MessageSpec> MessagingMode<TMsg> {
         Ok(())
     }
 
-    pub fn send_gossip_message(
+    pub fn send_transaction_gossip_message(
         &self,
         peer_id: PeerId,
-        msg: TMsg::GossipMessage,
-    ) -> Result<(), mpsc::error::SendError<(PeerId, TMsg::GossipMessage)>> {
-        if let MessagingMode::Enabled { tx_gossip_messages, .. } = self {
-            tx_gossip_messages.send((peer_id, msg))?;
+        msg: TMsg::TransactionGossipMessage,
+    ) -> Result<(), mpsc::error::SendError<(PeerId, TMsg::TransactionGossipMessage)>> {
+        if let MessagingMode::Enabled { tx_transaction_gossip_messages, .. } = self {
+            tx_transaction_gossip_messages.send((peer_id, msg))?;
+        }
+        Ok(())
+    }
+
+    pub fn send_consensus_gossip_message(
+        &self,
+        peer_id: PeerId,
+        msg: TMsg::ConsensusGossipMessage,
+    ) -> Result<(), mpsc::error::SendError<(PeerId, TMsg::ConsensusGossipMessage)>> {
+        if let MessagingMode::Enabled { tx_consensus_gossip_messages, .. } = self {
+            tx_consensus_gossip_messages.send((peer_id, msg))?;
         }
         Ok(())
     }

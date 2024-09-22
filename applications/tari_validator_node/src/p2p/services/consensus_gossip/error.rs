@@ -34,8 +34,6 @@ pub enum ConsensusGossipError {
     EpochManagerError(#[from] EpochManagerError),
     #[error("Internal service request cancelled")]
     RequestCancelled,
-    #[error("Consensus channel closed")]
-    ConsensusChannelClosed,
     #[error("Network error: {0}")]
     NetworkingError(#[from] NetworkingError),
 }

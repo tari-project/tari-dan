@@ -2,7 +2,7 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use std::fmt::{Display, Formatter};
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use serde::Serialize;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::SubstateAddress;

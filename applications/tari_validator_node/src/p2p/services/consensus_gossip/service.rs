@@ -20,16 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashSet, fmt::Display};
+use std::fmt::Display;
 
+use libp2p::PeerId;
 use log::*;
 use tari_consensus::messages::HotstuffMessage;
-use tari_dan_common_types::{Epoch, PeerAddress, ShardGroup, SubstateAddress};
-use tari_dan_p2p::proto::{self, network::Message};
-use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, EpochManagerEvent, EpochManagerReader};
-use tari_networking::NetworkingError;
+use tari_dan_common_types::{Epoch, PeerAddress, ShardGroup};
+use tari_dan_p2p::{proto, TariMessagingSpec};
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerEvent, EpochManagerReader};
+use tari_networking::{NetworkingHandle, NetworkingService};
 use tokio::sync::{mpsc, oneshot};
-use crate::p2p::services::messaging::Gossip;
 
 use super::{ConsensusGossipError, ConsensusGossipRequest};
 
@@ -40,21 +40,24 @@ const LOG_TARGET: &str = "tari::validator_node::consensus_gossip::service";
 pub(super) struct ConsensusGossipService<TAddr> {
     requests: mpsc::Receiver<ConsensusGossipRequest>,
     epoch_manager: EpochManagerHandle<TAddr>,
-    gossip: Gossip,
     is_subscribed: Option<ShardGroup>,
+    networking: NetworkingHandle<TariMessagingSpec>,
+    rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::consensus::HotStuffMessage)>,
 }
 
 impl ConsensusGossipService<PeerAddress> {
     pub fn new(
         requests: mpsc::Receiver<ConsensusGossipRequest>,
         epoch_manager: EpochManagerHandle<PeerAddress>,
-        outbound: Gossip
+        networking: NetworkingHandle<TariMessagingSpec>,
+        rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::consensus::HotStuffMessage)>
     ) -> Self {
         Self {
             requests,
             epoch_manager,
-            gossip: outbound,
             is_subscribed: None,
+            networking,
+            rx_gossip,
         }
     }
 
@@ -64,11 +67,11 @@ impl ConsensusGossipService<PeerAddress> {
         loop {
             tokio::select! {
                 Some(req) = self.requests.recv() => self.handle_request(req).await,
-                Some(msg) = self.gossip.next_message() => {
-                    if let Err(e) = self.handle_new_message(msg).await {
+                Some(res) = self.rx_gossip.recv() => {
+                    if let Err(e) = self.handle_new_message(res).await {
                         warn!(target: LOG_TARGET, "Consensus gossip service rejected message: {}", e);
                     }
-                }
+                },
                 Ok(event) = events.recv() => {
                     if let EpochManagerEvent::EpochChanged(epoch) = event {
                         if self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await?{
@@ -79,7 +82,6 @@ impl ConsensusGossipService<PeerAddress> {
                         }
                     }
                 },
-
                 else => {
                     info!(target: LOG_TARGET, "Consensus gossip service shutting down");
                     break;
@@ -115,7 +117,7 @@ impl ConsensusGossipService<PeerAddress> {
         }
 
         let topic = shard_group_to_topic(shard_group);
-        self.gossip
+        self.networking
             .subscribe_topic(topic)
             .await?;
         self.is_subscribed = Some(committee_shard.shard_group());
@@ -126,7 +128,7 @@ impl ConsensusGossipService<PeerAddress> {
     async fn unsubscribe(&mut self) -> Result<(), ConsensusGossipError> {
         if let Some(sg) = self.is_subscribed {
             let topic = shard_group_to_topic(sg);
-            self.gossip.unsubscribe_topic(topic).await?;
+            self.networking.unsubscribe_topic(topic).await?;
             self.is_subscribed = None;
         }
 
@@ -135,9 +137,11 @@ impl ConsensusGossipService<PeerAddress> {
 
     async fn handle_new_message(
         &mut self,
-        result: Result<(PeerAddress, HotstuffMessage), anyhow::Error>,
+        result: (PeerId, proto::consensus::HotStuffMessage),
     ) -> Result<(), ConsensusGossipError> {
-        let (from, msg) = result?;
+        let (from, msg) = result;
+
+        let msg = msg.try_into().map_err(ConsensusGossipError::InvalidMessage)?;
 
         debug!(
             target: LOG_TARGET,
@@ -150,7 +154,7 @@ impl ConsensusGossipService<PeerAddress> {
         match msg {
             HotstuffMessage::NewView(_msg) => {},
             HotstuffMessage::Proposal(_msg) => {},
-            HotstuffMessage::ForeignProposal(msg) => {},
+            HotstuffMessage::ForeignProposal(_msg) => {},
             HotstuffMessage::Vote(_msg) => {},
             HotstuffMessage::MissingTransactionsRequest(_msg) => {},
             HotstuffMessage::MissingTransactionsResponse(_msg) => {},
@@ -161,9 +165,7 @@ impl ConsensusGossipService<PeerAddress> {
         Ok(())
     }
 
-    pub async fn multicast<T>(&mut self, shard_group: ShardGroup, message: T) -> Result<(), ConsensusGossipError>
-    where
-        T: Into<HotstuffMessage> + Send
+    pub async fn multicast(&mut self, shard_group: ShardGroup, message: HotstuffMessage) -> Result<(), ConsensusGossipError>
     {
         let topic = shard_group_to_topic(shard_group);
 
@@ -172,10 +174,9 @@ impl ConsensusGossipService<PeerAddress> {
             "multicast: topic: {}", topic,
         );
 
-        let message = HotstuffMessage::from(message.into());
-        let message = proto::network::Message::from(&message.into());
+        let message = proto::consensus::HotStuffMessage::from(&message);
 
-        self.gossip.publish_message(topic, message).await?;
+        self.networking.publish_consensus_gossip(topic, message).await?;
 
         Ok(())
     }

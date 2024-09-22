@@ -20,9 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use libp2p::PeerId;
 use log::*;
 use tari_dan_common_types::{NumPreshards, PeerAddress};
+use tari_dan_p2p::{proto, TariMessagingSpec};
 use tari_epoch_manager::base_layer::EpochManagerHandle;
+use tari_networking::NetworkingHandle;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::Transaction;
 use tokio::{sync::mpsc, task, task::JoinHandle};
@@ -31,10 +34,7 @@ use tokio::{sync::mpsc, task, task::JoinHandle};
 use super::metrics::PrometheusMempoolMetrics;
 use crate::{
     consensus::ConsensusHandle,
-    p2p::services::{
-        mempool::{handle::MempoolHandle, service::MempoolService},
-        messaging::Gossip,
-    },
+    p2p::services::mempool::{handle::MempoolHandle, service::MempoolService},
     transaction_validators::TransactionValidationError,
     validator::Validator,
 };
@@ -43,11 +43,12 @@ const LOG_TARGET: &str = "tari::dan::validator_node::mempool";
 
 pub fn spawn<TValidator>(
     num_preshards: NumPreshards,
-    gossip: Gossip,
     epoch_manager: EpochManagerHandle<PeerAddress>,
     transaction_validator: TValidator,
     state_store: SqliteStateStore<PeerAddress>,
     consensus_handle: ConsensusHandle,
+    networking: NetworkingHandle<TariMessagingSpec>,
+    rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::network::DanMessage)>,
     #[cfg(feature = "metrics")] metrics_registry: &prometheus::Registry,
 ) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
 where
@@ -62,11 +63,12 @@ where
     let mempool = MempoolService::new(
         num_preshards,
         rx_mempool_request,
-        gossip,
         epoch_manager,
         transaction_validator,
         state_store,
         consensus_handle,
+        networking,
+        rx_gossip,
         #[cfg(feature = "metrics")]
         metrics,
     );

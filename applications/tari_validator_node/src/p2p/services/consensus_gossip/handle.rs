@@ -22,10 +22,7 @@
 
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::ShardGroup;
-use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{mpsc, oneshot};
-
-use crate::p2p::services::mempool::MempoolError;
 
 use super::ConsensusGossipError;
 

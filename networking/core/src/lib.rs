@@ -58,10 +58,16 @@ pub trait NetworkingService<TMsg: MessageSpec> {
         message: TMsg::Message,
     ) -> Result<usize, NetworkingError>;
 
-    async fn publish_gossip<TTopic: Into<String> + Send>(
+    async fn publish_transaction_gossip<TTopic: Into<String> + Send>(
         &mut self,
         topic: TTopic,
-        message: TMsg::GossipMessage,
+        message: TMsg::TransactionGossipMessage,
+    ) -> Result<(), NetworkingError>;
+
+    async fn publish_consensus_gossip<TTopic: Into<String> + Send>(
+        &mut self,
+        topic: TTopic,
+        message: TMsg::ConsensusGossipMessage,
     ) -> Result<(), NetworkingError>;
 
     async fn subscribe_topic<T: Into<String> + Send>(&mut self, topic: T) -> Result<(), NetworkingError>;

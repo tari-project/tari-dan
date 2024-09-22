@@ -106,7 +106,7 @@ use crate::{
     p2p::{
         create_tari_validator_node_rpc_service,
         services::{
-            consensus_gossip::{self, ConsensusGossipHandle}, mempool::{self, MempoolHandle}, messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, Gossip}
+            consensus_gossip::{self, ConsensusGossipHandle}, mempool::{self, MempoolHandle}, messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging}
         },
         NopLogger,
     },
@@ -137,7 +137,8 @@ pub async fn spawn_services(
 
     // Networking
     let (tx_consensus_messages, rx_consensus_messages) = mpsc::unbounded_channel();
-    let (tx_gossip_messages, rx_gossip_messages) = mpsc::unbounded_channel();
+    let (tx_transaction_gossip_messages, rx_transaction_gossip_messages) = mpsc::unbounded_channel();
+    let (tx_consensus_gossip_messages, rx_consensus_gossip_messages) = mpsc::unbounded_channel();
     let identity = identity::Keypair::sr25519_from_bytes(keypair.secret_key().as_bytes().to_vec()).map_err(|e| {
         ExitError::new(
             ExitCode::ConfigError,
@@ -161,7 +162,8 @@ pub async fn spawn_services(
         identity,
         MessagingMode::Enabled {
             tx_messages: tx_consensus_messages,
-            tx_gossip_messages,
+            tx_transaction_gossip_messages,
+            tx_consensus_gossip_messages
         },
         tari_networking::Config {
             listener_port: config.validator_node.p2p.listener_port,
@@ -244,12 +246,10 @@ pub async fn spawn_services(
     };
 
     // Consensus gossip
-    // TODO: use channels linked to actual networking
-    let (_, rx_consensus_gossip_messages) = mpsc::unbounded_channel();
-    let consensus_gossip = Gossip::new(networking.clone(), rx_consensus_gossip_messages);
     let (consensus_gossip_service, join_handle) = consensus_gossip::spawn(
-        consensus_gossip,
         epoch_manager.clone(),
+        networking.clone(),
+        rx_consensus_gossip_messages
     );
     handles.push(join_handle);
 
@@ -298,15 +298,14 @@ pub async fn spawn_services(
     .await;
     handles.push(consensus_join_handle);
 
-    let mempool_gossip = Gossip::new(networking.clone(), rx_gossip_messages);
-
     let (mempool, join_handle) = mempool::spawn(
         consensus_constants.num_preshards,
-        mempool_gossip,
         epoch_manager.clone(),
         create_mempool_transaction_validator(&config.validator_node, template_manager.clone()),
         state_store.clone(),
         consensus_handle.clone(),
+        networking.clone(),
+        rx_transaction_gossip_messages,
         #[cfg(feature = "metrics")]
         metrics_registry,
     );
