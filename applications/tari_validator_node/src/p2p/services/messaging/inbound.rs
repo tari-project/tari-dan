@@ -46,7 +46,7 @@ impl<TMsgLogger: MessageLogger> ConsensusInboundMessaging<TMsgLogger> {
                         );
                        Some(Ok((from.into(), msg)))
                     }
-                    Err(err) => return Some(Err(InboundMessagingError::InvalidMessage{ reason: err.to_string() } )),
+                    Err(err) => Some(Err(InboundMessagingError::InvalidMessage{ reason: err.to_string() } )),
                 }
     }
 }

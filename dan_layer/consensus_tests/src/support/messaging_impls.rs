@@ -6,6 +6,7 @@ use tari_consensus::{
     messages::HotstuffMessage,
     traits::{InboundMessaging, InboundMessagingError, OutboundMessaging, OutboundMessagingError},
 };
+use tari_dan_common_types::ShardGroup;
 use tokio::sync::mpsc;
 
 use crate::support::TestAddress;
@@ -13,7 +14,7 @@ use crate::support::TestAddress;
 #[derive(Debug, Clone)]
 pub struct TestOutboundMessaging {
     tx_leader: mpsc::Sender<(TestAddress, HotstuffMessage)>,
-    tx_broadcast: mpsc::Sender<(Vec<TestAddress>, HotstuffMessage)>,
+    _tx_broadcast: mpsc::Sender<(Vec<TestAddress>, HotstuffMessage)>,
     loopback_sender: mpsc::Sender<HotstuffMessage>,
 }
 
@@ -26,7 +27,7 @@ impl TestOutboundMessaging {
         (
             Self {
                 tx_leader,
-                tx_broadcast,
+                _tx_broadcast: tx_broadcast,
                 loopback_sender,
             },
             loopback_receiver,
@@ -60,18 +61,12 @@ impl OutboundMessaging for TestOutboundMessaging {
             })
     }
 
-    async fn multicast<'a, I, T>(&mut self, committee: I, message: T) -> Result<(), OutboundMessagingError>
+    async fn multicast<'a, T>(&mut self, _shard_group: ShardGroup, _message: T) -> Result<(), OutboundMessagingError>
     where
         Self::Addr: 'a,
-        I: IntoIterator<Item = &'a Self::Addr> + Send,
         T: Into<HotstuffMessage> + Send,
     {
-        self.tx_broadcast
-            .send((committee.into_iter().cloned().collect(), message.into()))
-            .await
-            .map_err(|_| OutboundMessagingError::FailedToEnqueueMessage {
-                reason: "broadcast channel closed".to_string(),
-            })
+        Ok(())
     }
 }
 
