@@ -35,19 +35,21 @@ impl<TMsgLogger: MessageLogger> ConsensusInboundMessaging<TMsgLogger> {
         }
     }
 
-    fn handle_message(&self, from: PeerId, msg: proto::consensus::HotStuffMessage) -> Option<Result<(PeerAddress, HotstuffMessage), InboundMessagingError>>  {
-                match HotstuffMessage::try_from(msg) {
-                    Ok(msg) => {
-                        self.msg_logger.log_inbound_message(
-                           &from.to_string(),
-                           msg.as_type_str(),
-                           "",
-                           &msg,
-                        );
-                       Some(Ok((from.into(), msg)))
-                    }
-                    Err(err) => Some(Err(InboundMessagingError::InvalidMessage{ reason: err.to_string() } )),
-                }
+    fn handle_message(
+        &self,
+        from: PeerId,
+        msg: proto::consensus::HotStuffMessage,
+    ) -> Option<Result<(PeerAddress, HotstuffMessage), InboundMessagingError>> {
+        match HotstuffMessage::try_from(msg) {
+            Ok(msg) => {
+                self.msg_logger
+                    .log_inbound_message(&from.to_string(), msg.as_type_str(), "", &msg);
+                Some(Ok((from.into(), msg)))
+            },
+            Err(err) => Some(Err(InboundMessagingError::InvalidMessage {
+                reason: err.to_string(),
+            })),
+        }
     }
 }
 

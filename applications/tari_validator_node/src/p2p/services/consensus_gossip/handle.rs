@@ -26,7 +26,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::ConsensusGossipError;
 
-pub enum ConsensusGossipRequest{
+pub enum ConsensusGossipRequest {
     Multicast {
         shard_group: ShardGroup,
         message: HotstuffMessage,
@@ -35,7 +35,7 @@ pub enum ConsensusGossipRequest{
 }
 
 #[derive(Debug)]
-pub struct ConsensusGossipHandle{
+pub struct ConsensusGossipHandle {
     tx_consensus_request: mpsc::Sender<ConsensusGossipRequest>,
 }
 
@@ -52,13 +52,17 @@ impl ConsensusGossipHandle {
         Self { tx_consensus_request }
     }
 
-    pub async fn multicast(&self, shard_group: ShardGroup, message: HotstuffMessage) -> Result<(), ConsensusGossipError> {
+    pub async fn multicast(
+        &self,
+        shard_group: ShardGroup,
+        message: HotstuffMessage,
+    ) -> Result<(), ConsensusGossipError> {
         let (tx, rx) = oneshot::channel();
         self.tx_consensus_request
             .send(ConsensusGossipRequest::Multicast {
                 shard_group,
                 message,
-                reply: tx
+                reply: tx,
             })
             .await?;
 

@@ -32,7 +32,6 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::{ConsensusGossipError, ConsensusGossipRequest};
 
-
 const LOG_TARGET: &str = "tari::validator_node::consensus_gossip::service";
 
 #[derive(Debug)]
@@ -87,7 +86,11 @@ impl ConsensusGossipService<PeerAddress> {
 
     async fn handle_request(&mut self, request: ConsensusGossipRequest) {
         match request {
-            ConsensusGossipRequest::Multicast { shard_group, message, reply } => {
+            ConsensusGossipRequest::Multicast {
+                shard_group,
+                message,
+                reply,
+            } => {
                 handle(reply, self.multicast(shard_group, message).await);
             },
         }
@@ -108,9 +111,7 @@ impl ConsensusGossipService<PeerAddress> {
         }
 
         let topic = shard_group_to_topic(shard_group);
-        self.networking
-            .subscribe_topic(topic)
-            .await?;
+        self.networking.subscribe_topic(topic).await?;
         self.is_subscribed = Some(committee_shard.shard_group());
 
         Ok(())
@@ -126,8 +127,11 @@ impl ConsensusGossipService<PeerAddress> {
         Ok(())
     }
 
-    pub async fn multicast(&mut self, shard_group: ShardGroup, message: HotstuffMessage) -> Result<(), ConsensusGossipError>
-    {
+    pub async fn multicast(
+        &mut self,
+        shard_group: ShardGroup,
+        message: HotstuffMessage,
+    ) -> Result<(), ConsensusGossipError> {
         let topic = shard_group_to_topic(shard_group);
 
         debug!(

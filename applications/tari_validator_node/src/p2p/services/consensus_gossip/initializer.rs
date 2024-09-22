@@ -27,17 +27,14 @@ use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_networking::NetworkingHandle;
 use tokio::{sync::mpsc, task, task::JoinHandle};
 
-use crate::
-    p2p::services::consensus_gossip::{service::ConsensusGossipService, ConsensusGossipHandle}
-;
+use crate::p2p::services::consensus_gossip::{service::ConsensusGossipService, ConsensusGossipHandle};
 
 const LOG_TARGET: &str = "tari::dan::validator_node::mempool";
 
 pub fn spawn(
     epoch_manager: EpochManagerHandle<PeerAddress>,
     networking: NetworkingHandle<TariMessagingSpec>,
-) -> (ConsensusGossipHandle, JoinHandle<anyhow::Result<()>>)
-{
+) -> (ConsensusGossipHandle, JoinHandle<anyhow::Result<()>>) {
     let (tx_consensus_request, rx_consensus_request) = mpsc::channel(10);
 
     let consensus_gossip = ConsensusGossipService::new(rx_consensus_request, epoch_manager, networking);

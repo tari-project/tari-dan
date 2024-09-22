@@ -106,7 +106,9 @@ use crate::{
     p2p::{
         create_tari_validator_node_rpc_service,
         services::{
-            consensus_gossip::{self, ConsensusGossipHandle}, mempool::{self, MempoolHandle}, messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging}
+            consensus_gossip::{self, ConsensusGossipHandle},
+            mempool::{self, MempoolHandle},
+            messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
         },
         NopLogger,
     },
@@ -163,7 +165,7 @@ pub async fn spawn_services(
         MessagingMode::Enabled {
             tx_messages: tx_consensus_messages,
             tx_transaction_gossip_messages,
-            tx_consensus_gossip_messages
+            tx_consensus_gossip_messages,
         },
         tari_networking::Config {
             listener_port: config.validator_node.p2p.listener_port,
@@ -246,10 +248,7 @@ pub async fn spawn_services(
     };
 
     // Consensus gossip
-    let (consensus_gossip_service, join_handle) = consensus_gossip::spawn(
-        epoch_manager.clone(),
-        networking.clone(),
-    );
+    let (consensus_gossip_service, join_handle) = consensus_gossip::spawn(epoch_manager.clone(), networking.clone());
     handles.push(join_handle);
 
     // Messaging
@@ -263,8 +262,12 @@ pub async fn spawn_services(
         loopback_receiver,
         message_logger.clone(),
     );
-    let outbound_messaging =
-        ConsensusOutboundMessaging::new(loopback_sender, consensus_gossip_service.clone(), networking.clone(), message_logger.clone());
+    let outbound_messaging = ConsensusOutboundMessaging::new(
+        loopback_sender,
+        consensus_gossip_service.clone(),
+        networking.clone(),
+        message_logger.clone(),
+    );
 
     // Consensus
     let payload_processor = TariDanTransactionProcessor::new(config.network, template_manager.clone(), fee_table);

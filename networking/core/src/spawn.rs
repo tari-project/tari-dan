@@ -89,7 +89,11 @@ impl<TMsg: MessageSpec> MessagingMode<TMsg> {
         peer_id: PeerId,
         msg: TMsg::TransactionGossipMessage,
     ) -> Result<(), mpsc::error::SendError<(PeerId, TMsg::TransactionGossipMessage)>> {
-        if let MessagingMode::Enabled { tx_transaction_gossip_messages, .. } = self {
+        if let MessagingMode::Enabled {
+            tx_transaction_gossip_messages,
+            ..
+        } = self
+        {
             tx_transaction_gossip_messages.send((peer_id, msg))?;
         }
         Ok(())
@@ -100,7 +104,11 @@ impl<TMsg: MessageSpec> MessagingMode<TMsg> {
         peer_id: PeerId,
         msg: TMsg::ConsensusGossipMessage,
     ) -> Result<(), mpsc::error::SendError<(PeerId, TMsg::ConsensusGossipMessage)>> {
-        if let MessagingMode::Enabled { tx_consensus_gossip_messages, .. } = self {
+        if let MessagingMode::Enabled {
+            tx_consensus_gossip_messages,
+            ..
+        } = self
+        {
             tx_consensus_gossip_messages.send((peer_id, msg))?;
         }
         Ok(())

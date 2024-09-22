@@ -758,15 +758,15 @@ async fn broadcast_foreign_proposal_if_required<TConsensusSpec: ConsensusSpec>(
         );
 
         outbound_messaging
-        .multicast(
-            shard_group,
-            HotstuffMessage::ForeignProposal(ForeignProposalMessage {
-                block: block.clone(),
-                block_pledge: block_pledge.clone(),
-                justify_qc: justify_qc.clone(),
-            }),
-        )
-        .await?;
+            .multicast(
+                shard_group,
+                HotstuffMessage::ForeignProposal(ForeignProposalMessage {
+                    block: block.clone(),
+                    block_pledge: block_pledge.clone(),
+                    justify_qc: justify_qc.clone(),
+                }),
+            )
+            .await?;
     }
 
     Ok(())

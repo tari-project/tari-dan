@@ -670,11 +670,11 @@ where
                 info!(target: LOG_TARGET, "📢 Rx Transaction Gossipsub: {length} bytes from {source}");
                 let _ignore = self.messaging_mode.send_transaction_gossip_message(source, msg);
                 self.swarm.behaviour_mut().gossipsub.report_message_validation_result(
-                        &message_id,
-                        &propagation_source,
-                        gossipsub::MessageAcceptance::Accept,
-                    )?;
-            // the incoming gossip message is a consensus (hotstuff) one     
+                    &message_id,
+                    &propagation_source,
+                    gossipsub::MessageAcceptance::Accept,
+                )?;
+            // the incoming gossip message is a consensus (hotstuff) one
             } else if let Ok((length, msg)) = self
                 .consensus_gossip_message_codec
                 .decode_from(&mut message.data.as_slice())
@@ -683,10 +683,10 @@ where
                 info!(target: LOG_TARGET, "📢 Rx Consensus Gossipsub: {length} bytes from {source}");
                 let _ignore = self.messaging_mode.send_consensus_gossip_message(source, msg);
                 self.swarm.behaviour_mut().gossipsub.report_message_validation_result(
-                        &message_id,
-                        &propagation_source,
-                        gossipsub::MessageAcceptance::Accept,
-                    )?;
+                    &message_id,
+                    &propagation_source,
+                    gossipsub::MessageAcceptance::Accept,
+                )?;
             // the incoming gossip message has unknown type
             } else {
                 warn!(target: LOG_TARGET, "📢 Gossipsub message failed to decode");
@@ -695,7 +695,10 @@ where
                     &propagation_source,
                     gossipsub::MessageAcceptance::Reject,
                 )?;
-                return Err(NetworkingError::CodecError(std::io::Error::new(std::io::ErrorKind::Other, "Invalid message type")));
+                return Err(NetworkingError::CodecError(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Invalid message type",
+                )));
             }
         }
         Ok(())

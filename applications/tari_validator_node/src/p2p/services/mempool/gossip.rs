@@ -16,7 +16,7 @@ use crate::p2p::services::mempool::MempoolError;
 const LOG_TARGET: &str = "tari::validator_node::mempool::gossip";
 
 #[derive(Debug)]
-pub(super) struct MempoolGossip<TAddr,> {
+pub(super) struct MempoolGossip<TAddr> {
     num_preshards: NumPreshards,
     epoch_manager: EpochManagerHandle<TAddr>,
     is_subscribed: Option<ShardGroup>,
@@ -29,14 +29,14 @@ impl MempoolGossip<PeerAddress> {
         num_preshards: NumPreshards,
         epoch_manager: EpochManagerHandle<PeerAddress>,
         networking: NetworkingHandle<TariMessagingSpec>,
-        rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::network::DanMessage)>
+        rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::network::DanMessage)>,
     ) -> Self {
         Self {
             num_preshards,
             epoch_manager,
             is_subscribed: None,
             networking,
-            rx_gossip
+            rx_gossip,
         }
     }
 
