@@ -39,7 +39,6 @@ use crate::{
         TransactionValidationError,
     },
     validator::{BoxedValidator, Validator},
-    ValidatorNodeConfig,
 };
 
 mod block_transaction_executor;
@@ -130,26 +129,18 @@ pub async fn spawn(
 }
 
 pub fn create_transaction_validator(
-    config: &ValidatorNodeConfig,
     template_manager: TemplateManager<PeerAddress>,
-) -> ConsensusTransactionValidator {
-    let mut validator = WithContext::<ValidationContext, _, _>::new()
+) -> impl Validator<Transaction, Context = ValidationContext, Error = TransactionValidationError> {
+    WithContext::<ValidationContext, _, _>::new()
         .map_context(
             |_| (),
-            TransactionSignatureValidator.and_then(TemplateExistsValidator::new(template_manager)),
+            HasInputs::new()
+                .and_then(TransactionSignatureValidator)
+                .and_then(TemplateExistsValidator::new(template_manager)),
         )
         .map_context(
             |c| c.current_epoch,
             EpochRangeValidator::new().and_then(ClaimFeeTransactionValidator::new()),
         )
-        .boxed();
-    if !config.no_fees {
-        // A transaction without fee payment may have 0 inputs.
-        validator = WithContext::<ValidationContext, _, _>::new()
-            .map_context(|_| (), HasInputs::new())
-            .and_then(validator)
-            .map_context(|_| (), FeeTransactionValidator)
-            .boxed();
-    }
-    validator
+        .map_context(|_| (), FeeTransactionValidator)
 }

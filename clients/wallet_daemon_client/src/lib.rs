@@ -53,7 +53,6 @@ use types::{
     AuthLoginDenyResponse,
     AuthLoginRequest,
     AuthLoginResponse,
-    CallInstructionRequest,
     ClaimBurnRequest,
     ClaimBurnResponse,
     GetAccountNftRequest,
@@ -115,6 +114,8 @@ use crate::{
         TransactionGetResponse,
         TransactionGetResultRequest,
         TransactionGetResultResponse,
+        TransactionSubmitDryRunRequest,
+        TransactionSubmitDryRunResponse,
         TransactionSubmitRequest,
         TransactionSubmitResponse,
         TransactionWaitResultRequest,
@@ -274,12 +275,11 @@ impl WalletDaemonClient {
         self.send_request("transactions.submit", request.borrow()).await
     }
 
-    pub async fn submit_instruction<T: Borrow<CallInstructionRequest>>(
+    pub async fn submit_transaction_dry_run<T: Borrow<TransactionSubmitDryRunRequest>>(
         &mut self,
         request: T,
-    ) -> Result<TransactionSubmitResponse, WalletDaemonClientError> {
-        self.send_request("transactions.submit_instruction", request.borrow())
-            .await
+    ) -> Result<TransactionSubmitDryRunResponse, WalletDaemonClientError> {
+        self.send_request("transactions.submit_dry_run", request.borrow()).await
     }
 
     pub async fn create_account<T: Borrow<AccountsCreateRequest>>(

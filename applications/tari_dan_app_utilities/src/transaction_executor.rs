@@ -16,7 +16,7 @@ use tari_dan_common_types::{
 use tari_dan_engine::{
     fees::{FeeModule, FeeTable},
     runtime::{AuthParams, RuntimeModule},
-    state_store::{memory::MemoryStateStore, StateStoreError},
+    state_store::{memory::ReadOnlyMemoryStateStore, StateStoreError},
     template::LoadedTemplate,
     transaction::{TransactionError, TransactionProcessor},
 };
@@ -33,7 +33,7 @@ pub trait TransactionExecutor {
     fn execute(
         &self,
         transaction: Transaction,
-        state_store: MemoryStateStore,
+        state_store: ReadOnlyMemoryStateStore,
         virtual_substates: VirtualSubstates,
     ) -> Result<ExecutionOutput, Self::Error>;
 }
@@ -110,7 +110,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
     fn execute(
         &self,
         transaction: Transaction,
-        state_store: MemoryStateStore,
+        state_store: ReadOnlyMemoryStateStore,
         virtual_substates: VirtualSubstates,
     ) -> Result<ExecutionOutput, Self::Error> {
         // Include signature public key badges for all transaction signers in the initial auth scope
@@ -129,7 +129,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
 
         let processor = TransactionProcessor::new(
             self.template_provider.clone(),
-            state_store.clone(),
+            state_store,
             auth_params,
             virtual_substates,
             modules,

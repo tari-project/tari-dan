@@ -9,7 +9,6 @@ Feature: NFTs
 
     ###### Setup
     # Initialize a base node, wallet, miner and VN
-    Given fees are disabled
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
@@ -51,40 +50,39 @@ Feature: NFTs
 
     # Submit a transaction with NFT operations
     When I submit a transaction manifest via wallet daemon WALLET_D with inputs "NFT, ACC1, ACC2" named "TX1"
-    ```
-    let sparkle_nft = global!["NFT/components/SparkleNft"];
-    let sparkle_res = global!["NFT/resources/0"];
-    let mut acc1 = global!["ACC1/components/Account"];
-    let mut acc2 = global!["ACC2/components/Account"];
+  ```
+  let sparkle_nft = global!["NFT/components/SparkleNft"];
+  let sparkle_res = global!["NFT/resources/0"];
+  let mut acc1 = global!["ACC1/components/Account"];
+  let mut acc2 = global!["ACC2/components/Account"];
 
-    // mint a new nft with random id
-    let nft_bucket = sparkle_nft.mint("NFT1", "http://example.com");
-    acc1.deposit(nft_bucket);
+  // mint a new nft with random id
+  let nft_bucket = sparkle_nft.mint("NFT1", "http://example.com");
+  acc1.deposit(nft_bucket);
 
-    // mint a new nft with specific id
-    let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("SpecialNft"), "NFT2", "http://example.com");
-    acc1.deposit(nft_bucket);
+  // mint a new nft with specific id
+  let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("SpecialNft"), "NFT2", "http://example.com");
+  acc1.deposit(nft_bucket);
 
-    // transfer nft between accounts
-    let acc_bucket = acc1.withdraw_non_fungible(sparkle_res, NonFungibleId("SpecialNft"));
-    acc2.deposit(acc_bucket);
+  // transfer nft between accounts
+  let acc_bucket = acc1.withdraw_non_fungible(sparkle_res, NonFungibleId("SpecialNft"));
+  acc2.deposit(acc_bucket);
 
-    // mutate a nft
-    sparkle_nft.inc_brightness(NonFungibleId("SpecialNft"), 10u32);
+  // mutate a nft
+  sparkle_nft.inc_brightness(NonFungibleId("SpecialNft"), 10u32);
 
-    // burn a nft
-    let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("Burn!"), "NFT3", "http://example.com");
-    acc1.deposit(nft_bucket);
-    let acc_bucket = acc1.withdraw_non_fungible(sparkle_res, NonFungibleId("Burn!"));
-    sparkle_nft.burn(acc_bucket);
-    ```
+  // burn a nft
+  let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("Burn!"), "NFT3", "http://example.com");
+  acc1.deposit(nft_bucket);
+  let acc_bucket = acc1.withdraw_non_fungible(sparkle_res, NonFungibleId("Burn!"));
+  sparkle_nft.burn(acc_bucket);
+  ```
 
   @serial
   Scenario: Create resource and mint in one transaction
 
     ##### Setup
     # Initialize a base node, wallet, miner and VN
-    Given fees are disabled
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
@@ -121,11 +119,11 @@ Feature: NFTs
 
     # Check that the initial NFT was actually minted by trying to deposit it into an account
     When I submit a transaction manifest via wallet daemon WALLET_D with inputs "NFT, ACC1" named "TX1"
-    ```
-    let sparkle_nft = global!["NFT/components/SparkleNft"];
-    let mut acc1 = global!["ACC1/components/Account"];
+  ```
+  let sparkle_nft = global!["NFT/components/SparkleNft"];
+  let mut acc1 = global!["ACC1/components/Account"];
 
-    // get the initailly NFT from the component's vault
-    let nft_bucket = sparkle_nft.take_initial_nft();
-    acc1.deposit(nft_bucket);
-    ```
+  // get the initailly NFT from the component's vault
+  let nft_bucket = sparkle_nft.take_initial_nft();
+  acc1.deposit(nft_bucket);
+  ```

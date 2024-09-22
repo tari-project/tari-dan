@@ -6,8 +6,7 @@ Feature: Wallet Daemon
 
   @serial
   Scenario: Create account and transfer faucets via wallet daemon
-    Given fees are disabled
-        # Initialize a base node, wallet, miner and VN
+    # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
@@ -81,14 +80,13 @@ Feature: Wallet Daemon
         # TODO: remove the wait
     When I wait 5 seconds
         # Check balances
-        # Notice that `take_free_coins` extracts precisely 10000 faucet tokens
-    When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at least 10000
+        # `take_free_coins` deposits 10000 faucet tokens, allow up to 2000 in fees
+    When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at least 8000
     # TODO: Figure out why this is taking more than 10 seconds to update
     #        When I wait for ACC_2 on wallet daemon WALLET_D to have balance eq 50
 
   @serial
   Scenario: Claim and transfer confidential assets via wallet daemon
-    Given fees are disabled
         # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -132,7 +130,6 @@ Feature: Wallet Daemon
 
   @serial
   Scenario: Create and mint account NFT
-    Given fees are disabled
     # Initialize a base node, wallet, miner and VN
     Given a network with registered validator VAL_1 and wallet daemon WALLET_D
 

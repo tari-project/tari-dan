@@ -64,9 +64,6 @@ import {
   TransactionWaitResultResponse,
   WebRtcStartRequest,
   WebRtcStartResponse,
-} from "@tari-project/typescript-bindings/wallet-daemon-client";
-
-import {
   Arg,
   FinalizeResult,
   TemplateDef,
@@ -272,7 +269,7 @@ export class WalletDaemonClient {
     return this.__invokeRpc("transactions.get", params);
   }
 
-  public getTransactionResult(params: TransactionGetResultRequest): Promise<TransactionWaitResultResponse> {
+  public getTransactionResult(params: TransactionGetResultRequest): Promise<TransactionGetResultResponse> {
     return this.__invokeRpc("transactions.get_result", params);
   }
 

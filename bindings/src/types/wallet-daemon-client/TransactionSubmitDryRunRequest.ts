@@ -2,7 +2,7 @@
 import type { SubstateRequirement } from "../SubstateRequirement";
 import type { UnsignedTransaction } from "../UnsignedTransaction";
 
-export interface TransactionSubmitRequest {
+export interface TransactionSubmitDryRunRequest {
   transaction: UnsignedTransaction;
   signing_key_index: number | null;
   autofill_inputs: Array<SubstateRequirement>;
