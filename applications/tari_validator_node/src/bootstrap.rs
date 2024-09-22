@@ -249,7 +249,6 @@ pub async fn spawn_services(
     let (consensus_gossip_service, join_handle) = consensus_gossip::spawn(
         epoch_manager.clone(),
         networking.clone(),
-        rx_consensus_gossip_messages
     );
     handles.push(join_handle);
 
@@ -260,6 +259,7 @@ pub async fn spawn_services(
     let inbound_messaging = ConsensusInboundMessaging::new(
         local_address,
         rx_consensus_messages,
+        rx_consensus_gossip_messages,
         loopback_receiver,
         message_logger.clone(),
     );

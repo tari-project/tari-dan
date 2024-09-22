@@ -20,10 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use libp2p::PeerId;
 use log::*;
 use tari_dan_common_types::PeerAddress;
-use tari_dan_p2p::{proto, TariMessagingSpec};
+use tari_dan_p2p::TariMessagingSpec;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_networking::NetworkingHandle;
 use tokio::{sync::mpsc, task, task::JoinHandle};
@@ -37,12 +36,11 @@ const LOG_TARGET: &str = "tari::dan::validator_node::mempool";
 pub fn spawn(
     epoch_manager: EpochManagerHandle<PeerAddress>,
     networking: NetworkingHandle<TariMessagingSpec>,
-    rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::consensus::HotStuffMessage)>,
 ) -> (ConsensusGossipHandle, JoinHandle<anyhow::Result<()>>)
 {
     let (tx_consensus_request, rx_consensus_request) = mpsc::channel(10);
 
-    let consensus_gossip = ConsensusGossipService::new(rx_consensus_request, epoch_manager, networking, rx_gossip);
+    let consensus_gossip = ConsensusGossipService::new(rx_consensus_request, epoch_manager, networking);
     let handle = ConsensusGossipHandle::new(tx_consensus_request);
 
     let join_handle = task::spawn(consensus_gossip.run());

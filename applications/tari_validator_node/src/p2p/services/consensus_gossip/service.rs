@@ -22,7 +22,6 @@
 
 use std::fmt::Display;
 
-use libp2p::PeerId;
 use log::*;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::{Epoch, PeerAddress, ShardGroup};
@@ -42,7 +41,6 @@ pub(super) struct ConsensusGossipService<TAddr> {
     epoch_manager: EpochManagerHandle<TAddr>,
     is_subscribed: Option<ShardGroup>,
     networking: NetworkingHandle<TariMessagingSpec>,
-    rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::consensus::HotStuffMessage)>,
 }
 
 impl ConsensusGossipService<PeerAddress> {
@@ -50,14 +48,12 @@ impl ConsensusGossipService<PeerAddress> {
         requests: mpsc::Receiver<ConsensusGossipRequest>,
         epoch_manager: EpochManagerHandle<PeerAddress>,
         networking: NetworkingHandle<TariMessagingSpec>,
-        rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::consensus::HotStuffMessage)>
     ) -> Self {
         Self {
             requests,
             epoch_manager,
             is_subscribed: None,
             networking,
-            rx_gossip,
         }
     }
 
@@ -67,11 +63,6 @@ impl ConsensusGossipService<PeerAddress> {
         loop {
             tokio::select! {
                 Some(req) = self.requests.recv() => self.handle_request(req).await,
-                Some(res) = self.rx_gossip.recv() => {
-                    if let Err(e) = self.handle_new_message(res).await {
-                        warn!(target: LOG_TARGET, "Consensus gossip service rejected message: {}", e);
-                    }
-                },
                 Ok(event) = events.recv() => {
                     if let EpochManagerEvent::EpochChanged(epoch) = event {
                         if self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await?{
@@ -135,36 +126,6 @@ impl ConsensusGossipService<PeerAddress> {
         Ok(())
     }
 
-    async fn handle_new_message(
-        &mut self,
-        result: (PeerId, proto::consensus::HotStuffMessage),
-    ) -> Result<(), ConsensusGossipError> {
-        let (from, msg) = result;
-
-        let msg = msg.try_into().map_err(ConsensusGossipError::InvalidMessage)?;
-
-        debug!(
-            target: LOG_TARGET,
-            "Received NEW consensus gossip message from {}: {:?}",
-            from,
-            msg
-        );
-
-        // TODO
-        match msg {
-            HotstuffMessage::NewView(_msg) => {},
-            HotstuffMessage::Proposal(_msg) => {},
-            HotstuffMessage::ForeignProposal(_msg) => {},
-            HotstuffMessage::Vote(_msg) => {},
-            HotstuffMessage::MissingTransactionsRequest(_msg) => {},
-            HotstuffMessage::MissingTransactionsResponse(_msg) => {},
-            HotstuffMessage::CatchUpSyncRequest(_msg) => {},
-            HotstuffMessage::SyncResponse(_msg) => {},
-        }
-
-        Ok(())
-    }
-
     pub async fn multicast(&mut self, shard_group: ShardGroup, message: HotstuffMessage) -> Result<(), ConsensusGossipError>
     {
         let topic = shard_group_to_topic(shard_group);
@@ -189,7 +150,6 @@ fn shard_group_to_topic(shard_group: ShardGroup) -> String {
         shard_group.end().as_u32()
     )
 }
-
 
 fn handle<T, E: Display>(reply: oneshot::Sender<Result<T, E>>, result: Result<T, E>) {
     if let Err(ref e) = result {
