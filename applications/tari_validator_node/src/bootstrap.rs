@@ -264,7 +264,7 @@ pub async fn spawn_services(
         message_logger.clone(),
     );
     let outbound_messaging =
-        ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
+        ConsensusOutboundMessaging::new(loopback_sender, consensus_gossip_service.clone(), networking.clone(), message_logger.clone());
 
     // Consensus
     let payload_processor = TariDanTransactionProcessor::new(config.network, template_manager.clone(), fee_table);

@@ -746,33 +746,28 @@ async fn broadcast_foreign_proposal_if_required<TConsensusSpec: ConsensusSpec>(
     // substates we send to validators to only those that are applicable to the transactions that involve
     // them.
 
-    let mut addresses = HashSet::new();
     // TODO(perf): fetch only applicable committee addresses
-    let mut committees = epoch_manager.get_committees(block.epoch()).await?;
+
     for shard_group in non_local_shard_groups {
-        addresses.extend(
-            committees
-                .remove(&shard_group)
-                .into_iter()
-                .flat_map(|c| c.into_iter().map(|(addr, _)| addr)),
+        info!(
+            target: LOG_TARGET,
+            "🌿 FOREIGN PROPOSE: Broadcasting locked block {} with {} pledge(s) to shard group {}.",
+            &block,
+            &block_pledge.num_substates_pledged(),
+            shard_group,
         );
-    }
-    info!(
-        target: LOG_TARGET,
-        "🌿 FOREIGN PROPOSE: Broadcasting locked block {} with {} pledge(s) to {} foreign committees.",
-        block,
-        block_pledge.num_substates_pledged(),
-        addresses.len(),
-    );
-    outbound_messaging
+
+        outbound_messaging
         .multicast(
-            &addresses,
+            shard_group,
             HotstuffMessage::ForeignProposal(ForeignProposalMessage {
-                block,
-                block_pledge,
-                justify_qc,
+                block: block.clone(),
+                block_pledge: block_pledge.clone(),
+                justify_qc: justify_qc.clone(),
             }),
         )
         .await?;
+    }
+
     Ok(())
 }
