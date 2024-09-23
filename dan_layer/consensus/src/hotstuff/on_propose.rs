@@ -409,13 +409,13 @@ where TConsensusSpec: ConsensusSpec
 
         let justifies_parent = high_qc_certificate.block_id() == parent_block.block_id();
         let next_height = parent_block.height() + NodeHeight(1);
-        let start_of_chain_id = if justifies_parent || parent_block.height() == NodeHeight(1) {
+        let start_of_chain_id = if justifies_parent || high_qc_certificate.is_zero() {
             // Parent is justified - we can include its state in the MR calc, foreign propose etc
             parent_block.block_id()
         } else {
             // Parent is not justified which means we have dummy blocks between the parent and the justified block so we
             // can exclude them from the query. Also note that the query will fail if we used the parent
-            // block id, since the dummy blocks does not exist yet.
+            // block id, since the dummy blocks do not exist yet.
             high_qc_certificate.block_id()
         };
 

@@ -335,6 +335,18 @@ impl Test {
         .await
     }
 
+    pub async fn wait_for_pool_count(&self, dest: TestVnDestination, count: usize) {
+        self.wait_all_for_predicate("waiting for pool count", |vn| {
+            if !dest.is_for_vn(vn) {
+                return true;
+            }
+            let c = vn.get_transaction_pool_count();
+            log::info!("{} has {} transactions in pool", vn.address, c);
+            c >= count
+        })
+        .await
+    }
+
     pub fn with_all_validators(&self, f: impl FnMut(&Validator)) {
         self.validators.values().for_each(f);
     }

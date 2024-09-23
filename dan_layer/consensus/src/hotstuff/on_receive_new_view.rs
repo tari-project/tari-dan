@@ -148,7 +148,7 @@ where TConsensusSpec: ConsensusSpec
         if let Some(vote) = last_vote {
             debug!(
                 target: LOG_TARGET,
-                "🔥 Receive VOTE with NEWVIEW for node {} from {}", vote.block_id, from,
+                "🔥 Receive VOTE with NEWVIEW for node {} {} from {}", vote.block_height, vote.block_id, from,
             );
             self.vote_receiver
                 .handle(from.clone(), vote, false, local_committee_info)
@@ -185,16 +185,19 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "🌟 Received NEWVIEW {} (QC: {}) has {} votes out of {}",
-            new_height,
-            latest_high_qc,
+            "🌟 Received NEWVIEW (QUORUM: {}/{}) {} (QC: {})",
             newview_count,
             threshold,
+            new_height,
+            latest_high_qc,
         );
         // Once we have received enough (quorum) NEWVIEWS, we can create the dummy block(s) and propose the next block.
         // Any subsequent NEWVIEWs for this height/view are ignored.
         if newview_count == threshold {
             info!(target: LOG_TARGET, "🌟✅ NEWVIEW for block {} (high_qc: {}) has reached quorum ({}/{})", new_height, latest_high_qc.as_high_qc(), newview_count, threshold);
+            self.pacemaker
+                .update_view(epoch, new_height, high_qc.block_height())
+                .await?;
             if latest_high_qc.block_height() + NodeHeight(1) > new_height {
                 // CASE: the votes received from NEWVIEWS created a new high QC, so there are no dummy blocks to create
                 // We can force beat with our current leaf and the justified block is the parent.

@@ -615,7 +615,7 @@ impl Block {
         Self::record_exists(tx, self.parent())
     }
 
-    pub fn has_been_processed<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn has_been_justified<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &TTx,
         block_id: &BlockId,
     ) -> Result<bool, StorageError> {
@@ -1011,15 +1011,14 @@ impl Block {
     /// lockedQC. The predicate is true as long as either one of two rules holds.
     pub fn is_safe<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<bool, StorageError> {
         let locked = LockedBlock::get(tx, self.epoch())?;
-        let locked_block = locked.get_block(tx)?;
 
         // Liveness rules
-        if self.justify().block_height() > locked_block.height() {
+        if self.justify().block_height() > locked.height() {
             return Ok(true);
         }
 
         // Safety rule
-        if self.extends(tx, locked_block.id())? {
+        if self.extends(tx, locked.block_id())? {
             return Ok(true);
         }
 
@@ -1027,7 +1026,7 @@ impl Block {
             target: LOG_TARGET,
             "❌ Block {} does satisfy the liveness or safety rules of the safeNode predicate. Locked block {}",
             self,
-            locked_block,
+            locked,
         );
         Ok(false)
     }

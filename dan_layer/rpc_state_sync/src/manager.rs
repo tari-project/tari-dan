@@ -134,10 +134,12 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         }
 
         let mut current_version = persisted_version;
+        let mut prev_version = current_version.unwrap_or(0);
 
         info!(
             target: LOG_TARGET,
-            "🛜Syncing from state transition {last_state_transition_id}"
+            "🛜Syncing from v{} to state transition {last_state_transition_id}",
+            current_version.unwrap_or(0),
         );
 
         let mut state_stream = client
@@ -225,13 +227,15 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         },
                     };
 
-                    info!(target: LOG_TARGET, "🛜 Applying state update {transition} (v{} to v{})", current_version.unwrap_or(0), transition.state_tree_version);
                     if next_version != transition.state_tree_version {
                         let mut state_tree = SpreadPrefixStateTree::new(&mut store);
+                        info!(target: LOG_TARGET, "🛜 Committing {} state tree changes v{} to v{}", tree_changes.len(), current_version.unwrap_or(0), transition.state_tree_version);
                         state_tree.put_substate_changes(current_version, next_version, tree_changes.drain(..))?;
+                        prev_version = current_version.unwrap_or(0);
                         current_version = Some(next_version);
                         next_version = transition.state_tree_version;
                     }
+                    info!(target: LOG_TARGET, "🛜 Applying state update {transition} (v{} to v{})", prev_version, transition.state_tree_version);
                     tree_changes.push(change);
 
                     self.commit_update(store.transaction(), checkpoint, transition)?;
@@ -239,13 +243,11 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
                 if !tree_changes.is_empty() {
                     let mut state_tree = SpreadPrefixStateTree::new(&mut store);
+                    info!(target: LOG_TARGET, "🛜 Committing final {} state tree changes v{} to v{}", tree_changes.len(), current_version.unwrap_or(0), next_version);
                     state_tree.put_substate_changes(current_version, next_version, tree_changes.drain(..))?;
                 }
                 current_version = Some(next_version);
-
-                if let Some(v) = current_version {
-                    store.set_version(v)?;
-                }
+                store.set_version(next_version)?;
 
                 Ok::<_, CommsRpcConsensusSyncError>(())
             })?;

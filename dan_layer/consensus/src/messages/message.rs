@@ -45,7 +45,7 @@ impl HotstuffMessage {
             Self::Vote(msg) => msg.epoch,
             Self::MissingTransactionsRequest(msg) => msg.epoch,
             Self::MissingTransactionsResponse(msg) => msg.epoch,
-            Self::CatchUpSyncRequest(msg) => msg.epoch,
+            Self::CatchUpSyncRequest(msg) => msg.high_qc.epoch(),
             Self::SyncResponse(msg) => msg.epoch,
         }
     }

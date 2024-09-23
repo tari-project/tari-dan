@@ -4,7 +4,7 @@
 use tari_dan_common_types::{Epoch, NodeHeight};
 
 use crate::{
-    consensus_models::{Block, BlockId},
+    consensus_models::{Block, BlockId, LeafBlock},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -14,6 +14,15 @@ pub struct LastProposed {
     pub height: NodeHeight,
     pub block_id: BlockId,
     pub epoch: Epoch,
+}
+impl LastProposed {
+    pub fn as_leaf_block(&self) -> LeafBlock {
+        LeafBlock {
+            block_id: self.block_id,
+            height: self.height,
+            epoch: self.epoch,
+        }
+    }
 }
 
 impl LastProposed {

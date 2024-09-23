@@ -4,7 +4,7 @@
 use log::*;
 use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, Epoch};
 use tari_dan_storage::{
-    consensus_models::{Block, LastSentVote, LeafBlock},
+    consensus_models::{Block, LastProposed, LastSentVote, LeafBlock},
     StateStore,
 };
 use tokio::task;
@@ -39,12 +39,12 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
         epoch: Epoch,
         msg: SyncRequestMessage,
     ) {
-        if msg.epoch != epoch {
+        if msg.high_qc.epoch() != epoch {
             warn!(
                 target: LOG_TARGET,
                 "Received SyncRequest from {} for epoch {} but our epoch is {}. Ignoring request.",
                 from,
-                msg.epoch,
+                msg.high_qc.epoch(),
                 epoch
             );
             return;
@@ -55,7 +55,11 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
 
         task::spawn(async move {
             let result = store.with_read_tx(|tx| {
-                let leaf_block = LeafBlock::get(tx, epoch)?;
+                let mut leaf_block = LeafBlock::get(tx, epoch)?;
+                let last_proposed = LastProposed::get(tx)?;
+                if last_proposed.height > leaf_block.height() {
+                    leaf_block = last_proposed.as_leaf_block();
+                }
 
                 if leaf_block.height() < msg.high_qc.block_height() {
                     return Err(HotStuffError::InvalidSyncRequest {

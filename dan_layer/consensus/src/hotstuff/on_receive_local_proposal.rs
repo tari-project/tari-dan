@@ -109,11 +109,16 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
     ) -> Result<(), HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "OnReceiveLocalProposalHandler");
 
-        let exists = self.store.with_read_tx(|tx| msg.block.exists(tx))?;
-        if exists {
-            info!(target: LOG_TARGET, "🧊 Block {} already exists", msg.block);
+        let is_justified = self
+            .store
+            .with_read_tx(|tx| Block::has_been_justified(tx, msg.block.id()))
+            .optional()?
+            .unwrap_or(false);
+        if is_justified {
+            info!(target: LOG_TARGET, "🧊 Block {} has already been processed", msg.block);
             return Ok(());
         }
+
         // Do not trigger leader failures while processing a proposal.
         // Leader failures will be resumed after the proposal has been processed.
         // If we vote ACCEPT for the proposal, the leader failure timer will be reset and resume, otherwise (no vote)
@@ -431,7 +436,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         valid_block.block().save_foreign_send_counters(tx)?;
         valid_block.block().justify().save(tx)?;
         valid_block.save_all_dummy_blocks(tx)?;
-        valid_block.block().insert(tx)?;
+        valid_block.block().save(tx)?;
 
         let (_, high_qc) = valid_block.block().justify().check_high_qc(tx)?;
         Ok(high_qc)
@@ -584,13 +589,15 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         local_committee: &Committee<TConsensusSpec::Addr>,
         _local_committee_info: &CommitteeInfo,
     ) -> Result<ValidBlock, HotStuffError> {
-        if Block::has_been_processed(tx, candidate_block.id())? {
+        if Block::has_been_justified(tx, candidate_block.id())? {
             return Err(ProposalValidationError::BlockAlreadyProcessed {
                 block_id: *candidate_block.id(),
                 height: candidate_block.height(),
             }
             .into());
         }
+
+        let high_qc = HighQc::get(tx, candidate_block.epoch())?;
 
         // Check that details included in the justify match previously added blocks
         let Some(justify_block) = candidate_block.justify().get_block(tx).optional()? else {
@@ -635,7 +642,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         // if the block parent is not the justify parent, then we have experienced a leader failure
         // and should make dummy blocks to fill in the gaps.
-        if !justify_block.is_zero() && !candidate_block.justifies_parent() {
+        if !high_qc.block_id().is_zero() && !candidate_block.justifies_parent() {
             let dummy_blocks = calculate_dummy_blocks_from_justify(
                 &candidate_block,
                 &justify_block,
@@ -670,9 +677,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             return Ok(ValidBlock::with_dummy_blocks(candidate_block, dummy_blocks));
         }
 
-        // Now that we have all dummy blocks (if any) in place, we can check if the candidate block is safe.
-        // Specifically, it should extend the locked block via the dummy blocks.
-        if !candidate_block.is_safe(tx)? {
+        if !high_qc.block_id().is_zero() && !candidate_block.is_safe(tx)? {
             return Err(ProposalValidationError::NotSafeBlock {
                 proposed_by: candidate_block.proposed_by().to_string(),
                 hash: *candidate_block.id(),

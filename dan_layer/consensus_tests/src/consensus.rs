@@ -476,7 +476,6 @@ async fn multishard_local_inputs_foreign_outputs() {
 async fn multishard_local_inputs_and_outputs_foreign_outputs() {
     setup_logger();
     let mut test = Test::builder()
-        .debug_sql("/tmp/test{}.db")
         .add_committee(0, vec!["1", "2"])
         .add_committee(1, vec!["3", "4"])
         .add_committee(2, vec!["5", "6"])
@@ -894,6 +893,7 @@ async fn leader_failure_node_goes_down() {
         if committed_height == NodeHeight(1) {
             // This allows a few more leader failures to occur
             test.send_transaction_to_all(Decision::Commit, 1, 2, 1).await;
+            test.wait_for_pool_count(TestVnDestination::All, 1).await;
         }
 
         if test.validators().filter(|vn| vn.address != failure_node).all(|v| {
@@ -904,7 +904,7 @@ async fn leader_failure_node_goes_down() {
             break;
         }
 
-        if committed_height > NodeHeight(100) {
+        if committed_height > NodeHeight(50) {
             panic!("Not all transaction committed after {} blocks", committed_height);
         }
     }

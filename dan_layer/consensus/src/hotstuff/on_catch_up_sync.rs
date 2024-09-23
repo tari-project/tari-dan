@@ -41,6 +41,7 @@ impl<TConsensusSpec: ConsensusSpec> OnCatchUpSync<TConsensusSpec> {
             from,
             self.pacemaker.current_view()
         );
+
         // Reset leader timeout to previous height since we're behind and need to process catch up blocks. This is the
         // only case where the view is non-monotonic. TODO: is this correct?
         self.pacemaker
@@ -52,7 +53,7 @@ impl<TConsensusSpec: ConsensusSpec> OnCatchUpSync<TConsensusSpec> {
             .outbound_messaging
             .send(
                 from,
-                HotstuffMessage::CatchUpSyncRequest(SyncRequestMessage { epoch, high_qc }),
+                HotstuffMessage::CatchUpSyncRequest(SyncRequestMessage { high_qc }),
             )
             .await
             .is_err()

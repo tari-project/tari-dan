@@ -522,7 +522,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 // }
 
                 // If we can propose a block end, let's not wait for the block time to do it
-                self.pacemaker.beat();
+                // self.pacemaker.beat();
             },
             EpochManagerEvent::ThisValidatorIsRegistered { .. } => {},
         }
