@@ -109,19 +109,20 @@ impl ValidatorBuilder {
         let (tx_hs_message, rx_hs_message) = mpsc::channel(100);
         let (tx_leader, rx_leader) = mpsc::channel(100);
 
-        let (outbound_messaging, rx_loopback) = TestOutboundMessaging::create(tx_leader, tx_broadcast);
+        let epoch_manager = self.epoch_manager.as_ref().unwrap().clone_for(
+            self.address.clone(),
+            self.public_key.clone(),
+            self.shard_address,
+        );
+
+        let (outbound_messaging, rx_loopback) =
+            TestOutboundMessaging::create(epoch_manager.clone(), tx_leader, tx_broadcast);
         let inbound_messaging = TestInboundMessaging::new(self.address.clone(), rx_hs_message, rx_loopback);
 
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
         let signing_service = TestVoteSignatureService::new(self.address.clone());
         let transaction_pool = TransactionPool::new();
         let (tx_events, _) = broadcast::channel(100);
-
-        let epoch_manager = self.epoch_manager.as_ref().unwrap().clone_for(
-            self.address.clone(),
-            self.public_key.clone(),
-            self.shard_address,
-        );
 
         let transaction_executor = TestBlockTransactionProcessor::new(self.transaction_executions.clone());
 

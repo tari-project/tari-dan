@@ -7,27 +7,32 @@ use tari_consensus::{
     traits::{InboundMessaging, InboundMessagingError, OutboundMessaging, OutboundMessagingError},
 };
 use tari_dan_common_types::ShardGroup;
+use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
+use super::epoch_manager::TestEpochManager;
 use crate::support::TestAddress;
 
 #[derive(Debug, Clone)]
 pub struct TestOutboundMessaging {
+    epoch_manager: TestEpochManager,
     tx_leader: mpsc::Sender<(TestAddress, HotstuffMessage)>,
-    _tx_broadcast: mpsc::Sender<(Vec<TestAddress>, HotstuffMessage)>,
+    tx_broadcast: mpsc::Sender<(Vec<TestAddress>, HotstuffMessage)>,
     loopback_sender: mpsc::Sender<HotstuffMessage>,
 }
 
 impl TestOutboundMessaging {
     pub fn create(
+        epoch_manager: TestEpochManager,
         tx_leader: mpsc::Sender<(TestAddress, HotstuffMessage)>,
         tx_broadcast: mpsc::Sender<(Vec<TestAddress>, HotstuffMessage)>,
     ) -> (Self, mpsc::Receiver<HotstuffMessage>) {
         let (loopback_sender, loopback_receiver) = mpsc::channel(100);
         (
             Self {
+                epoch_manager,
                 tx_leader,
-                _tx_broadcast: tx_broadcast,
+                tx_broadcast,
                 loopback_sender,
             },
             loopback_receiver,
@@ -61,12 +66,30 @@ impl OutboundMessaging for TestOutboundMessaging {
             })
     }
 
-    async fn multicast<'a, T>(&mut self, _shard_group: ShardGroup, _message: T) -> Result<(), OutboundMessagingError>
+    async fn multicast<'a, T>(&mut self, shard_group: ShardGroup, message: T) -> Result<(), OutboundMessagingError>
     where
         Self::Addr: 'a,
         T: Into<HotstuffMessage> + Send,
     {
-        Ok(())
+        let epoch = self
+            .epoch_manager
+            .current_epoch()
+            .await
+            .map_err(|e| OutboundMessagingError::UpstreamError(e.into()))?;
+        let peers: Vec<TestAddress> = self
+            .epoch_manager
+            .get_committees_by_shard_group(epoch, shard_group)
+            .await
+            .map_err(|e| OutboundMessagingError::UpstreamError(e.into()))?
+            .values()
+            .flat_map(|c| c.addresses().cloned())
+            .collect();
+
+        self.tx_broadcast.send((peers, message.into())).await.map_err(|_| {
+            OutboundMessagingError::FailedToEnqueueMessage {
+                reason: "broadcast channel closed".to_string(),
+            }
+        })
     }
 }
 
