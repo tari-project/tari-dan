@@ -773,7 +773,7 @@ async fn broadcast_foreign_proposal_if_required<TConsensusSpec: ConsensusSpec>(
     epoch_manager: &TConsensusSpec::EpochManager,
     store: &TConsensusSpec::StateStore,
     num_preshards: NumPreshards,
-    local_committee_info: &CommitteeInfo,
+    _local_committee_info: &CommitteeInfo,
     block: Block,
     justify_qc: QuorumCertificate,
 ) -> Result<(), HotStuffError> {
@@ -787,7 +787,8 @@ async fn broadcast_foreign_proposal_if_required<TConsensusSpec: ConsensusSpec>(
         .filter_map(|c| {
             c.local_prepare()
                 // No need to broadcast LocalPrepare if the committee is output only
-                .filter(|atom| !atom.evidence.is_committee_output_only(local_committee_info))
+                // FIXME: this breaks free_coins transaction (see transaction_generator)
+                // .filter(|atom| !atom.evidence.is_committee_output_only(local_committee_info))
                 .or_else(|| c.local_accept())
         })
         .flat_map(|p| p.evidence.shard_groups_iter().copied())
