@@ -137,11 +137,7 @@ impl TryFrom<proto::rpc::StateTransition> for StateTransition {
             .update
             .ok_or_else(|| anyhow::anyhow!("Missing state transition update"))?;
         let update = SubstateUpdate::try_from(update)?;
-        Ok(Self {
-            id,
-            update,
-            state_tree_version: value.state_tree_version,
-        })
+        Ok(Self { id, update })
     }
 }
 
@@ -150,7 +146,6 @@ impl From<StateTransition> for proto::rpc::StateTransition {
         Self {
             id: Some(value.id.into()),
             update: Some(value.update.into()),
-            state_tree_version: value.state_tree_version,
         }
     }
 }
