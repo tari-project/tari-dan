@@ -2200,13 +2200,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         // 1. Must exist
         let unclaimed_output = self.tracker.take_unclaimed_confidential_output(output_address)?;
         // 2. owner_sig must be valid
-        let challenge = ownership_proof_hasher64(self.network)
+        let message = ownership_proof_hasher64(self.network)
             .chain(proof_of_knowledge.public_nonce())
             .chain(&unclaimed_output.commitment)
             .chain(&self.transaction_signer_public_key)
             .finalize();
 
-        if !proof_of_knowledge.verify_challenge(&unclaimed_output.commitment, &challenge, get_commitment_factory()) {
+        if !proof_of_knowledge.verify_challenge(&unclaimed_output.commitment, &message, get_commitment_factory()) {
             warn!(target: LOG_TARGET, "Claim burn failed - Invalid signature");
             return Err(RuntimeError::InvalidClaimingSignature);
         }

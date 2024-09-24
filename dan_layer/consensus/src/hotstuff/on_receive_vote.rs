@@ -1,30 +1,60 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::committee::CommitteeInfo;
+use log::*;
+use tari_dan_common_types::{committee::CommitteeInfo, Epoch};
 
-use super::vote_receiver::VoteReceiver;
-use crate::{hotstuff::error::HotStuffError, messages::VoteMessage, traits::ConsensusSpec};
+use super::vote_collector::VoteCollector;
+use crate::{
+    hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle},
+    messages::VoteMessage,
+    tracing::TraceTimer,
+    traits::ConsensusSpec,
+};
+
+const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_vote";
 
 pub struct OnReceiveVoteHandler<TConsensusSpec: ConsensusSpec> {
-    vote_receiver: VoteReceiver<TConsensusSpec>,
+    pacemaker: PaceMakerHandle,
+    vote_collector: VoteCollector<TConsensusSpec>,
 }
 
 impl<TConsensusSpec> OnReceiveVoteHandler<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
-    pub fn new(vote_receiver: VoteReceiver<TConsensusSpec>) -> Self {
-        Self { vote_receiver }
+    pub fn new(pacemaker: PaceMakerHandle, vote_collector: VoteCollector<TConsensusSpec>) -> Self {
+        Self {
+            vote_collector,
+            pacemaker,
+        }
     }
 
     pub async fn handle(
         &self,
         from: TConsensusSpec::Addr,
+        current_epoch: Epoch,
         message: VoteMessage,
         local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
-        self.vote_receiver
-            .handle(from, message, true, local_committee_info)
+        let _timer = TraceTimer::info(LOG_TARGET, "OnReceiveVote");
+        match self
+            .vote_collector
+            .check_and_collect_vote(from, current_epoch, message, local_committee_info)
             .await
+        {
+            Ok(Some(new_qc)) => {
+                self.pacemaker
+                    .update_view(new_qc.epoch(), new_qc.block_height(), new_qc.block_height())
+                    .await?;
+                // If we reached quorum, trigger a check to see if we should propose
+                self.pacemaker.beat();
+            },
+            Ok(None) => {},
+            Err(err) => {
+                // We don't want bad vote messages to kick us out of running mode
+                warn!(target: LOG_TARGET, "❌ Error handling vote: {}", err);
+            },
+        }
+        Ok(())
     }
 }

@@ -60,7 +60,6 @@ impl From<NewTransactionMessage> for proto::transaction::NewTransactionMessage {
     fn from(msg: NewTransactionMessage) -> Self {
         Self {
             transaction: Some((&msg.transaction).into()),
-            output_shards: msg.output_shards.into_iter().map(|s| s.as_bytes().to_vec()).collect(),
         }
     }
 }
@@ -74,11 +73,6 @@ impl TryFrom<proto::transaction::NewTransactionMessage> for NewTransactionMessag
                 .transaction
                 .ok_or_else(|| anyhow!("Transaction not provided"))?
                 .try_into()?,
-            output_shards: value
-                .output_shards
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<_, _>>()?,
         })
     }
 }

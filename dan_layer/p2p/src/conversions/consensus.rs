@@ -359,7 +359,7 @@ impl From<&VoteMessage> for proto::consensus::VoteMessage {
         Self {
             epoch: msg.epoch.as_u64(),
             block_id: msg.block_id.as_bytes().to_vec(),
-            block_height: msg.block_height.as_u64(),
+            block_height: msg.unverified_block_height.as_u64(),
             decision: i32::from(msg.decision.as_u8()),
             signature: Some((&msg.signature).into()),
         }
@@ -373,7 +373,7 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
         Ok(VoteMessage {
             epoch: Epoch(value.epoch),
             block_id: BlockId::try_from(value.block_id)?,
-            block_height: NodeHeight(value.block_height),
+            unverified_block_height: NodeHeight(value.block_height),
             decision: QuorumDecision::from_u8(u8::try_from(value.decision)?)
                 .ok_or_else(|| anyhow!("Invalid decision byte {}", value.decision))?,
             signature: value
@@ -658,7 +658,6 @@ impl From<&ForeignProposalAtom> for proto::consensus::ForeignProposalAtom {
         Self {
             block_id: value.block_id.as_bytes().to_vec(),
             shard_group: value.shard_group.encode_as_u32(),
-            base_layer_block_height: value.base_layer_block_height,
         }
     }
 }
@@ -671,7 +670,6 @@ impl TryFrom<proto::consensus::ForeignProposalAtom> for ForeignProposalAtom {
             block_id: BlockId::try_from(value.block_id)?,
             shard_group: ShardGroup::decode_from_u32(value.shard_group)
                 .ok_or_else(|| anyhow!("Block shard_group ({}) is not a valid", value.shard_group))?,
-            base_layer_block_height: value.base_layer_block_height,
         })
     }
 }

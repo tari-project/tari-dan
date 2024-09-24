@@ -20,13 +20,16 @@ impl Gossip {
     ) -> Self {
         Self { networking, rx_gossip }
     }
-}
 
-impl Gossip {
-    pub async fn next_message(&mut self) -> Option<Result<(PeerAddress, DanMessage), anyhow::Error>> {
+    pub fn get_num_incoming_messages(&self) -> usize {
+        self.rx_gossip.len()
+    }
+
+    pub async fn next_message(&mut self) -> Option<Result<(PeerAddress, DanMessage, usize), anyhow::Error>> {
         let (from, msg) = self.rx_gossip.recv().await?;
+        let len = self.rx_gossip.len();
         match msg.try_into() {
-            Ok(msg) => Some(Ok((from.into(), msg))),
+            Ok(msg) => Some(Ok((from.into(), msg, len))),
             Err(e) => Some(Err(e)),
         }
     }

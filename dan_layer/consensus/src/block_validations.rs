@@ -197,9 +197,9 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         vns.push(vn.get_node_hash(candidate_block.network()));
     }
 
-    for (sign, leaf) in qc.signatures().iter().zip(vns.iter()) {
-        let challenge = vote_signing_service.create_message(leaf, qc.block_id(), &qc.decision());
-        if !sign.verify(challenge) {
+    for sign in qc.signatures() {
+        let message = vote_signing_service.create_message(qc.block_id(), &qc.decision());
+        if !sign.verify(message) {
             return Err(ProposalValidationError::QCInvalidSignature { qc: qc.clone() }.into());
         }
     }
