@@ -157,9 +157,13 @@ impl SubstateRecord {
 }
 
 impl SubstateRecord {
-    pub fn lock_all<TTx: StateStoreWriteTransaction, I: IntoIterator<Item = (SubstateId, Vec<SubstateLock>)>>(
+    pub fn lock_all<
+        'a,
+        TTx: StateStoreWriteTransaction,
+        I: IntoIterator<Item = (&'a SubstateId, &'a Vec<SubstateLock>)>,
+    >(
         tx: &mut TTx,
-        block_id: BlockId,
+        block_id: &BlockId,
         locks: I,
     ) -> Result<(), StorageError> {
         tx.substate_locks_insert_all(block_id, locks)

@@ -62,8 +62,12 @@ impl BlockDiff {
 }
 
 impl BlockDiff {
-    pub fn insert<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        tx.block_diffs_insert(self)
+    pub fn insert_record<TTx: StateStoreWriteTransaction>(
+        tx: &mut TTx,
+        block_id: &BlockId,
+        changes: &[SubstateChange],
+    ) -> Result<(), StorageError> {
+        tx.block_diffs_insert(block_id, changes)
     }
 
     pub fn remove<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {

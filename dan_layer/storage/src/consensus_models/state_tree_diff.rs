@@ -48,7 +48,7 @@ impl PendingShardStateTreeDiff {
         tx: &mut TTx,
         block_id: BlockId,
         shard: Shard,
-        diff: VersionedStateHashTreeDiff,
+        diff: &VersionedStateHashTreeDiff,
     ) -> Result<(), StorageError>
     where
         TTx: Deref + StateStoreWriteTransaction,

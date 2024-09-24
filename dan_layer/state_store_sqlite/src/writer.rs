@@ -5,6 +5,7 @@ use std::{iter::Peekable, ops::Deref};
 
 use diesel::{
     dsl,
+    dsl::count_star,
     sql_types::Text,
     AsChangeset,
     ExpressionMethods,
@@ -30,7 +31,6 @@ use tari_dan_common_types::{
 use tari_dan_storage::{
     consensus_models::{
         Block,
-        BlockDiff,
         BlockId,
         BlockTransactionExecution,
         BurntUtxo,
@@ -53,6 +53,7 @@ use tari_dan_storage::{
         PendingShardStateTreeDiff,
         QcId,
         QuorumCertificate,
+        SubstateChange,
         SubstateLock,
         SubstatePledge,
         SubstatePledges,
@@ -334,12 +335,12 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn block_diffs_insert(&mut self, block_diff: &BlockDiff) -> Result<(), StorageError> {
+    fn block_diffs_insert(&mut self, block_id: &BlockId, changes: &[SubstateChange]) -> Result<(), StorageError> {
         use crate::schema::block_diffs;
 
-        let block_id = serialize_hex(block_diff.block_id);
+        let block_id = serialize_hex(block_id);
         // We commit in chunks because we can hit the SQL variable limit
-        for chunk in block_diff.changes.chunks(1000) {
+        for chunk in changes.chunks(1000) {
             let values = chunk
                 .iter()
                 .map(|ch| {
@@ -1378,23 +1379,34 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         if removed_ids.is_empty() {
             return Ok(vec![]);
         }
-
-        let num_remaining = foreign_missing_transactions::table
-            .filter(foreign_missing_transactions::parked_block_id.eq_any(&removed_ids))
-            .count()
-            .get_result::<i64>(self.connection())
+        let counts = foreign_parked_blocks::table
+            .select((
+                foreign_parked_blocks::id,
+                foreign_missing_transactions::table
+                    .select(count_star())
+                    .filter(foreign_missing_transactions::parked_block_id.eq(foreign_parked_blocks::id))
+                    .single_value(),
+            ))
+            .filter(foreign_parked_blocks::id.eq_any(&removed_ids))
+            .get_results::<(i32, Option<i64>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "foreign_parked_blocks_remove_all_by_transaction",
                 source: e,
             })?;
 
-        // If there are still missing transactions for the parked block, it is not yet unparked
-        if num_remaining > 0 {
+        let mut remaining = counts
+            .iter()
+            .filter(|(_, count)| count.map_or(true, |c| c == 0))
+            .map(|(id, _)| *id)
+            .peekable();
+
+        // If there are still missing transactions for ALL parked blocks, then we exit early
+        if remaining.peek().is_none() {
             return Ok(vec![]);
         }
 
         let blocks = diesel::delete(foreign_parked_blocks::table)
-            .filter(foreign_parked_blocks::id.eq_any(&removed_ids))
+            .filter(foreign_parked_blocks::id.eq_any(remaining))
             .get_results::<sql_models::ForeignParkedBlock>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "foreign_parked_blocks_remove_all_by_transaction",
@@ -1427,9 +1439,9 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
-    fn substate_locks_insert_all<I: IntoIterator<Item = (SubstateId, Vec<SubstateLock>)>>(
+    fn substate_locks_insert_all<'a, I: IntoIterator<Item = (&'a SubstateId, &'a Vec<SubstateLock>)>>(
         &mut self,
-        block_id: BlockId,
+        block_id: &BlockId,
         locks: I,
     ) -> Result<(), StorageError> {
         use crate::schema::substate_locks;
@@ -1442,9 +1454,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
                 .by_ref()
                 .take(CHUNK_SIZE)
                 .flat_map(|(id, locks)| {
-                    locks.into_iter().map(move |lock| {
+                    let block_id = serialize_hex(block_id);
+                    locks.iter().map(move |lock| {
                         (
-                            substate_locks::block_id.eq(serialize_hex(block_id)),
+                            substate_locks::block_id.eq(block_id.clone()),
                             substate_locks::substate_id.eq(id.to_string()),
                             substate_locks::version.eq(lock.version() as i32),
                             substate_locks::transaction_id.eq(serialize_hex(lock.transaction_id())),
@@ -1648,20 +1661,20 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
 
     fn foreign_substate_pledges_save(
         &mut self,
-        transaction_id: TransactionId,
+        transaction_id: &TransactionId,
         shard_group: ShardGroup,
-        pledges: SubstatePledges,
+        pledges: &SubstatePledges,
     ) -> Result<(), StorageError> {
         use crate::schema::foreign_substate_pledges;
         let tx_id_hex = serialize_hex(transaction_id);
 
-        let values = pledges.into_iter().map(|pledge| match pledge {
+        let values = pledges.iter().map(|pledge| match pledge {
             SubstatePledge::Input {
                 substate_id,
                 is_write,
                 substate,
             } => {
-                let lock_type = if is_write {
+                let lock_type = if *is_write {
                     SubstateLockType::Write
                 } else {
                     SubstateLockType::Read
@@ -1728,7 +1741,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         &mut self,
         block_id: BlockId,
         shard: Shard,
-        diff: VersionedStateHashTreeDiff,
+        diff: &VersionedStateHashTreeDiff,
     ) -> Result<(), StorageError> {
         use crate::schema::{blocks, pending_state_tree_diffs};
 

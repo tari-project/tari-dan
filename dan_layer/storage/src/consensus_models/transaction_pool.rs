@@ -15,7 +15,6 @@ use tari_dan_common_types::{
     committee::CommitteeInfo,
     optional::{IsNotFoundError, Optional},
     NumPreshards,
-    ShardGroup,
     ToSubstateAddress,
 };
 use tari_engine_types::transaction_receipt::TransactionReceiptAddress;
@@ -31,7 +30,6 @@ use crate::{
         LeafBlock,
         LockedBlock,
         QcId,
-        SubstatePledges,
         TransactionAtom,
         TransactionExecution,
         TransactionRecord,
@@ -93,12 +91,25 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         Ok(())
     }
 
+    pub fn insert_new_batched<'a, I: IntoIterator<Item = (&'a TransactionRecord, bool)>>(
+        &self,
+        tx: &mut TStateStore::WriteTransaction<'_>,
+        transactions: I,
+    ) -> Result<(), TransactionPoolError> {
+        // TODO(perf)
+        for (transaction, is_ready) in transactions {
+            tx.transaction_pool_insert_new(*transaction.id(), transaction.current_decision(), is_ready)?;
+        }
+        Ok(())
+    }
+
     pub fn get_batch_for_next_block(
         &self,
         tx: &TStateStore::ReadTransaction<'_>,
         max: usize,
+        block_id: &BlockId,
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
-        let recs = tx.transaction_pool_get_many_ready(max)?;
+        let recs = tx.transaction_pool_get_many_ready(max, block_id)?;
         Ok(recs)
     }
 
@@ -380,7 +391,7 @@ impl TransactionPoolRecord {
         }
     }
 
-    pub fn is_ready_for_next_stage(&self) -> bool {
+    pub fn is_ready_for_pending_stage(&self) -> bool {
         self.can_continue_to(self.current_stage())
     }
 
@@ -540,7 +551,8 @@ impl TransactionPoolRecord {
             let addr = lock.to_substate_address();
             let shard_group = addr.to_shard_group(num_preshards, num_committees);
             self.evidence_mut()
-                .add_shard_group_evidence(shard_group, addr, lock.lock_type());
+                .add_shard_group(shard_group)
+                .insert(addr, lock.lock_type());
         }
         // Only change the local decision if we haven't already decided to ABORT
         if self.local_decision().map_or(true, |d| d.is_commit()) {
@@ -631,17 +643,6 @@ impl TransactionPoolRecord {
 }
 
 impl TransactionPoolRecord {
-    #[allow(clippy::mutable_key_type)]
-    pub fn add_foreign_pledges<TTx: StateStoreWriteTransaction>(
-        &self,
-        tx: &mut TTx,
-        shard_group: ShardGroup,
-        foreign_pledges: SubstatePledges,
-    ) -> Result<(), TransactionPoolError> {
-        tx.foreign_substate_pledges_save(self.transaction_id, shard_group, foreign_pledges)?;
-        Ok(())
-    }
-
     pub fn remove<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), TransactionPoolError> {
         tx.transaction_pool_remove(&self.transaction_id)?;
         Ok(())

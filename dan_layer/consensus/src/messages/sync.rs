@@ -8,7 +8,6 @@ use tari_transaction::Transaction;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SyncRequestMessage {
-    pub epoch: Epoch,
     pub high_qc: HighQc,
 }
 

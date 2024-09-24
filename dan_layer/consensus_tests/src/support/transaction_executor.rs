@@ -82,7 +82,13 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
             .inputs
             .into_iter()
             .map(|spec| {
-                let substate = resolved_inputs[spec.substate_requirement()].clone();
+                let substate = resolved_inputs.get(spec.substate_requirement()).unwrap_or_else(|| {
+                    panic!(
+                        "Missing input substate for transaction {} with requirement {}",
+                        id,
+                        spec.substate_requirement()
+                    )
+                });
                 VersionedSubstateIdLockIntent::new(
                     VersionedSubstateId::new(spec.substate_id().clone(), substate.version()),
                     spec.lock_type(),

@@ -32,7 +32,7 @@ impl<TConsensusSpec: ConsensusSpec> OnCatchUpSync<TConsensusSpec> {
         }
     }
 
-    pub async fn request_sync(&mut self, epoch: Epoch, from: &TConsensusSpec::Addr) -> Result<(), HotStuffError> {
+    pub async fn request_sync(&mut self, epoch: Epoch, from: TConsensusSpec::Addr) -> Result<(), HotStuffError> {
         let high_qc = self.store.with_read_tx(|tx| HighQc::get(tx, epoch))?;
         info!(
             target: LOG_TARGET,
@@ -41,6 +41,7 @@ impl<TConsensusSpec: ConsensusSpec> OnCatchUpSync<TConsensusSpec> {
             from,
             self.pacemaker.current_view()
         );
+
         // Reset leader timeout to previous height since we're behind and need to process catch up blocks. This is the
         // only case where the view is non-monotonic. TODO: is this correct?
         self.pacemaker
@@ -51,8 +52,8 @@ impl<TConsensusSpec: ConsensusSpec> OnCatchUpSync<TConsensusSpec> {
         if self
             .outbound_messaging
             .send(
-                from.clone(),
-                HotstuffMessage::CatchUpSyncRequest(SyncRequestMessage { epoch, high_qc }),
+                from,
+                HotstuffMessage::CatchUpSyncRequest(SyncRequestMessage { high_qc }),
             )
             .await
             .is_err()

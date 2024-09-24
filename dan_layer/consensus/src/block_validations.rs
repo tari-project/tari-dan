@@ -27,7 +27,7 @@ pub async fn check_proposal<TConsensusSpec: ConsensusSpec>(
     check_sidechain_id(block, config)?;
     check_hash_and_height(block)?;
     let committee_for_block = epoch_manager
-        .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
+        .get_committee_by_validator_public_key(block.epoch(), block.proposed_by().clone())
         .await?;
     check_proposed_by_leader(leader_strategy, &committee_for_block, block)?;
     check_signature(block)?;
@@ -181,7 +181,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     let mut vns = vec![];
     for signature in qc.signatures() {
         let vn = epoch_manager
-            .get_validator_node_by_public_key(qc.epoch(), signature.public_key())
+            .get_validator_node_by_public_key(qc.epoch(), signature.public_key().clone())
             .await?;
         let committee_info = epoch_manager
             .get_committee_info_for_substate(qc.epoch(), vn.shard_key)
@@ -209,7 +209,8 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
             qc.signatures()
                 .first()
                 .ok_or::<HotStuffError>(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into())?
-                .public_key(),
+                .public_key()
+                .clone(),
         )
         .await?;
 

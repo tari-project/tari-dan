@@ -79,6 +79,10 @@ impl PaceMakerHandle {
         self.on_force_beat.beat(Some(parent_block));
     }
 
+    pub fn force_beat_current_leaf(&self) {
+        self.on_force_beat.beat(None);
+    }
+
     pub fn get_on_beat(&self) -> OnBeat {
         self.on_beat.clone()
     }

@@ -129,6 +129,7 @@ where TConsensusSpec: ConsensusSpec
         is_newview_propose: bool,
         propose_epoch_end: bool,
     ) -> Result<(), HotStuffError> {
+        let _timer = TraceTimer::info(LOG_TARGET, "OnPropose");
         if let Some(last_proposed) = self.store.with_read_tx(|tx| LastProposed::get(tx)).optional()? {
             if last_proposed.epoch == leaf_block.epoch && last_proposed.height > leaf_block.height {
                 // is_newview_propose means that a NEWVIEW has reached quorum and nodes are expecting us to propose.
@@ -178,6 +179,13 @@ where TConsensusSpec: ConsensusSpec
             on_propose.store.with_write_tx(|tx| {
                 let high_qc = HighQc::get(&**tx, epoch)?;
                 let high_qc_cert = high_qc.get_quorum_certificate(&**tx)?;
+
+                info!(
+                    target: LOG_TARGET,
+                    "🌿 PROPOSE local block with parent {}. HighQC: {}",
+                    leaf_block,
+                    high_qc_cert,
+                );
 
                 let next_block = on_propose.build_next_block(
                     tx,
@@ -303,7 +311,7 @@ where TConsensusSpec: ConsensusSpec
             // Leader thinks that all local nodes agree that all shard groups have prepared, we are ready to accept
             // locally
             TransactionPoolStage::AllPrepared => Ok(Some(Command::LocalAccept(
-                self.get_transaction_atom_with_leader_fee(local_committee_info, &mut tx_rec)?,
+                self.get_transaction_atom_with_leader_fee(&mut tx_rec)?,
             ))),
             // Leader thinks local nodes are ready to accept an ABORT
             TransactionPoolStage::SomePrepared => Ok(Some(Command::LocalAccept(tx_rec.get_current_transaction_atom()))),
@@ -374,7 +382,9 @@ where TConsensusSpec: ConsensusSpec
                 high_qc.qc_id
             );
 
-            change_set.set_next_transaction_update(pool_tx)?;
+            if cmd.is_local_prepare() || cmd.is_local_accept() {
+                change_set.set_next_transaction_update(pool_tx)?;
+            }
         }
 
         Ok(())
@@ -397,19 +407,24 @@ where TConsensusSpec: ConsensusSpec
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 500;
 
+        let justifies_parent = high_qc_certificate.block_id() == parent_block.block_id();
         let next_height = parent_block.height() + NodeHeight(1);
+        let start_of_chain_id = if justifies_parent || high_qc_certificate.is_zero() {
+            // Parent is justified - we can include its state in the MR calc, foreign propose etc
+            parent_block.block_id()
+        } else {
+            // Parent is not justified which means we have dummy blocks between the parent and the justified block so we
+            // can exclude them from the query. Also note that the query will fail if we used the parent
+            // block id, since the dummy blocks do not exist yet.
+            high_qc_certificate.block_id()
+        };
 
         let mut total_leader_fee = 0;
 
         let foreign_proposals = if propose_epoch_end {
             vec![]
         } else {
-            ForeignProposal::get_all_new(
-                tx,
-                base_layer_block_height,
-                parent_block.block_id(),
-                TARGET_BLOCK_SIZE / 4,
-            )?
+            ForeignProposal::get_all_new(tx, base_layer_block_height, start_of_chain_id, TARGET_BLOCK_SIZE / 4)?
         };
 
         if !foreign_proposals.is_empty() {
@@ -426,7 +441,7 @@ where TConsensusSpec: ConsensusSpec
             TARGET_BLOCK_SIZE
                 .checked_sub(foreign_proposals.len() * 4)
                 .filter(|n| *n > 0)
-                .map(|size| BurntUtxo::get_all_unproposed(tx, parent_block.block_id(), size))
+                .map(|size| BurntUtxo::get_all_unproposed(tx, start_of_chain_id, size))
                 .transpose()?
                 .unwrap_or_default()
         };
@@ -444,7 +459,7 @@ where TConsensusSpec: ConsensusSpec
                 // Each foreign proposal is "heavier" than a transaction command
                 .checked_sub(foreign_proposals.len() * 4 + burnt_utxos.len())
                 .filter(|n| *n > 0)
-                .map(|size| self.transaction_pool.get_batch_for_next_block(tx, size))
+                .map(|size| self.transaction_pool.get_batch_for_next_block(tx, size, parent_block.block_id()))
                 .transpose()?
                 .unwrap_or_default()
         };
@@ -499,6 +514,12 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
+        debug!(
+            target: LOG_TARGET,
+            "🌿 PROPOSE: {} (or less) transaction(s), {} foreign proposal(s), {} UTXOs for next block (justifies_parent = {})",
+            batch.len(), foreign_proposals.len() , burnt_utxos.len(), justifies_parent
+        );
+
         // batch is empty for is_empty, is_epoch_end and is_epoch_start blocks
         let mut substate_store = PendingSubstateStore::new(tx, *parent_block.block_id(), self.config.num_preshards);
         let mut executed_transactions = HashMap::new();
@@ -527,7 +548,7 @@ where TConsensusSpec: ConsensusSpec
         }
         timer.done();
 
-        // This relies on the UTXO commands being ordered last
+        // This relies on the UTXO commands being ordered after transaction commands
         for utxo in burnt_utxos {
             let id = VersionedSubstateId::new(utxo.substate_id.clone(), 0);
             let shard = id.to_substate_address().to_shard(local_committee_info.num_preshards());
@@ -549,8 +570,8 @@ where TConsensusSpec: ConsensusSpec
         );
 
         let timer = TraceTimer::info(LOG_TARGET, "Propose calculate state root");
-        let pending_tree_diffs =
-            PendingShardStateTreeDiff::get_all_up_to_commit_block(tx, high_qc_certificate.block_id())?;
+
+        let pending_tree_diffs = PendingShardStateTreeDiff::get_all_up_to_commit_block(tx, start_of_chain_id)?;
 
         let (state_root, _) = calculate_state_merkle_root(
             tx,
@@ -728,15 +749,14 @@ where TConsensusSpec: ConsensusSpec
                             // foreign inputs/outputs.
                             tx_rec.set_local_decision(Decision::Commit);
                             // Set partial evidence using local inputs and known outputs.
-                            tx_rec.set_evidence(multishard.to_initial_evidence(
-                                local_committee_info.num_preshards(),
-                                local_committee_info.num_committees(),
-                            ));
+                            tx_rec
+                                .evidence_mut()
+                                .update(&multishard.to_initial_evidence(local_committee_info));
                         }
                     },
                     Decision::Abort => {
                         // CASE: The transaction was ABORTed due to a lock conflict
-                        let execution = multishard.into_execution().expect("Abort should have execution");
+                        let execution = multishard.into_execution().expect("Abort must have execution");
                         tx_rec.update_from_execution(
                             local_committee_info.num_preshards(),
                             local_committee_info.num_committees(),
@@ -850,18 +870,16 @@ where TConsensusSpec: ConsensusSpec
             *tx_rec.transaction_id(),
             &filter_diff_for_committee(local_committee_info, diff),
         )?;
-        let atom = self.get_transaction_atom_with_leader_fee(local_committee_info, tx_rec)?;
+        let atom = self.get_transaction_atom_with_leader_fee(tx_rec)?;
         Ok(Some(Command::AllAccept(atom)))
     }
 
     fn get_transaction_atom_with_leader_fee(
         &self,
-        local_committee_info: &CommitteeInfo,
         tx_rec: &mut TransactionPoolRecord,
     ) -> Result<TransactionAtom, HotStuffError> {
         if tx_rec.current_decision().is_commit() {
-            let num_involved_shard_groups =
-                local_committee_info.count_distinct_shard_groups(tx_rec.evidence().substate_addresses_iter());
+            let num_involved_shard_groups = tx_rec.evidence().num_shard_groups();
             let involved = NonZeroU64::new(num_involved_shard_groups as u64).ok_or_else(|| {
                 HotStuffError::InvariantError(format!(
                     "PROPOSE: Transaction {} involves zero shard groups",

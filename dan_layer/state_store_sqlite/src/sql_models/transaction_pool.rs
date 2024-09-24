@@ -51,7 +51,7 @@ impl TransactionPoolRecord {
         let mut transaction_fee = self.transaction_fee;
 
         if let Some(update) = update {
-            evidence.merge(deserialize_json(&update.evidence)?);
+            evidence = deserialize_json(&update.evidence)?;
             is_ready = update.is_ready;
             pending_stage = Some(parse_from_string(&update.stage)?);
             local_decision = Some(update.local_decision);

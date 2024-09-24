@@ -173,7 +173,7 @@ function ExtraInfoVN({ name, url, addTxToPool, autoRefresh, state, horizontal }:
     }
     return (<>
         <hr />
-        <h3>Pool transaction</h3>
+        <h3>Pool transactions {pool.length}</h3>
         <table style={{
           width: "100%",
         }}>
@@ -493,8 +493,19 @@ export default function Main() {
       console.log("resp", resp);
     });
   };
+
+  const stopAll = () => {
+    jsonRpc("stop_all", { instance_type: "TariValidatorNode" }).then(getInfo);
+  };
+
+  const startAll = () => {
+    jsonRpc("start_all", { instance_type: "TariValidatorNode" }).then(getInfo);
+  };
+
   return (
     <div className="main">
+      <button onClick={() => stopAll()}>Stop all VNs</button>
+      <button onClick={() => startAll()}>Start all VNs</button>
       <button onClick={() => setShowLogs(!showLogs)}>{showLogs && "Hide" || "Show"} logs</button>
       <button onClick={() => setAutoRefresh(!autoRefresh)}>{autoRefresh && "Disable" || "Enable"} autorefresh
       </button>
