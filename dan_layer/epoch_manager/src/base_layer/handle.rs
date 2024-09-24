@@ -256,13 +256,13 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
     async fn get_validator_node_by_public_key(
         &self,
         epoch: Epoch,
-        public_key: &PublicKey,
+        public_key: PublicKey,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetValidatorNodeByPublicKey {
                 epoch,
-                public_key: public_key.clone(),
+                public_key,
                 reply: tx,
             })
             .await

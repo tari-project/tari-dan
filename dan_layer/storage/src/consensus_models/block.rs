@@ -391,8 +391,8 @@ impl Block {
             .filter_map(|cmd| cmd.transaction())
             .filter(|t| {
                 t.evidence
-                    .substate_addresses_iter()
-                    .any(|addr| committee_info.includes_substate_address(addr))
+                    .shard_groups_iter()
+                    .any(|sg| *sg == committee_info.shard_group())
             })
             .map(|t| t.id())
     }
@@ -615,7 +615,7 @@ impl Block {
         Self::record_exists(tx, self.parent())
     }
 
-    pub fn has_been_processed<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn has_been_justified<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &TTx,
         block_id: &BlockId,
     ) -> Result<bool, StorageError> {
@@ -676,6 +676,13 @@ impl Block {
             if block_id == *self.id() {
                 continue;
             }
+            info!(
+                target: LOG_TARGET,
+                "❗️🔗 Removing parallel chain block {} from epoch {} height {}",
+                block_id,
+                self.epoch(),
+                self.height()
+            );
             delete_block_and_children(tx, &block_id)?;
         }
         Ok(())
@@ -1004,15 +1011,14 @@ impl Block {
     /// lockedQC. The predicate is true as long as either one of two rules holds.
     pub fn is_safe<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<bool, StorageError> {
         let locked = LockedBlock::get(tx, self.epoch())?;
-        let locked_block = locked.get_block(tx)?;
 
         // Liveness rules
-        if self.justify().block_height() > locked_block.height() {
+        if self.justify().block_height() > locked.height() {
             return Ok(true);
         }
 
         // Safety rule
-        if self.extends(tx, locked_block.id())? {
+        if self.extends(tx, locked.block_id())? {
             return Ok(true);
         }
 
@@ -1020,7 +1026,7 @@ impl Block {
             target: LOG_TARGET,
             "❌ Block {} does satisfy the liveness or safety rules of the safeNode predicate. Locked block {}",
             self,
-            locked_block,
+            locked,
         );
         Ok(false)
     }
@@ -1053,15 +1059,14 @@ impl Block {
                 continue;
             }
 
-            let evidence = atom
-                .evidence
-                .get(&self.shard_group)
-                .ok_or_else(|| StorageError::DataInconsistency {
-                    details: format!(
-                        "invariant get_block_pledge: Local evidence for atom {} in block {} is missing",
-                        atom.id, self.id
-                    ),
-                })?;
+            let Some(evidence) = atom.evidence.get(&self.shard_group) else {
+                // CASE: The output-only shard group has sequenced this transaction
+                debug!(
+                    "get_block_pledge: Local evidence for atom {} is missing in block {}",
+                    atom.id, self
+                );
+                continue;
+            };
 
             // TODO(perf): O(n) queries
             let locked_values = tx.substate_locks_get_locked_substates_for_transaction(&atom.id)?;
@@ -1098,14 +1103,20 @@ impl Block {
 
 impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.is_dummy() {
+            write!(f, "Dummy")?;
+        }
         write!(
             f,
-            "[{}, {}, {}, {} cmd(s), {}]",
+            "[{}, justify: {} ({}), {}, {}, {} cmd(s), {}->{}]",
             self.height(),
+            self.justify().block_height(),
+            if self.justifies_parent() { "🟢" } else { "🟡" },
             self.epoch(),
             self.shard_group(),
             self.commands().len(),
             self.id(),
+            self.parent()
         )
     }
 }
@@ -1220,7 +1231,7 @@ where
     Ok(())
 }
 
-/// Deletes everything related to a block and any children
+/// Deletes everything related to a block as well as any child blocks
 fn delete_block_and_children<TTx>(tx: &mut TTx, block_id: &BlockId) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + Deref,

@@ -72,7 +72,6 @@ impl StateTransition {
         Ok(consensus_models::StateTransition {
             id: StateTransitionId::new(epoch, shard, seq),
             update,
-            state_tree_version: self.state_version as u64,
         })
     }
 }

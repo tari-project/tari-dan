@@ -206,6 +206,9 @@ impl Test {
     }
 
     pub async fn on_hotstuff_event(&mut self) -> (TestAddress, HotstuffEvent) {
+        if self.network.task_handle().is_finished() {
+            panic!("Network task exited while waiting for Hotstuff event");
+        }
         self.validators
             .values_mut()
             .map(|v| {
@@ -328,6 +331,18 @@ impl Test {
                 .unwrap();
             log::info!("{} has {} transactions in pool", vn.address, transactions.len());
             transactions.iter().filter(|tx| tx.is_finalized()).count() >= n
+        })
+        .await
+    }
+
+    pub async fn wait_for_pool_count(&self, dest: TestVnDestination, count: usize) {
+        self.wait_all_for_predicate("waiting for pool count", |vn| {
+            if !dest.is_for_vn(vn) {
+                return true;
+            }
+            let c = vn.get_transaction_pool_count();
+            log::info!("{} has {} transactions in pool", vn.address, c);
+            c >= count
         })
         .await
     }
@@ -459,6 +474,15 @@ impl Test {
             v.handle.await.unwrap();
         }
     }
+
+    pub async fn assert_clean_shutdown_except(&mut self, except: &[TestAddress]) {
+        self.shutdown.trigger();
+        for (_, v) in self.validators.drain() {
+            if !except.contains(&v.address) {
+                v.handle.await.unwrap();
+            }
+        }
+    }
 }
 
 pub struct TestBuilder {
@@ -466,6 +490,7 @@ pub struct TestBuilder {
     sql_address: String,
     timeout: Option<Duration>,
     debug_sql_file: Option<String>,
+    block_time: Duration,
     message_filter: Option<MessageFilter>,
 }
 
@@ -475,6 +500,7 @@ impl TestBuilder {
             committees: HashMap::new(),
             sql_address: ":memory:".to_string(),
             timeout: Some(Duration::from_secs(10)),
+            block_time: Duration::from_secs(5),
             debug_sql_file: None,
             message_filter: None,
         }
@@ -522,10 +548,16 @@ impl TestBuilder {
         self
     }
 
+    pub fn with_block_time(mut self, block_time: Duration) -> Self {
+        self.block_time = block_time;
+        self
+    }
+
     async fn build_validators(
         leader_strategy: &RoundRobinLeaderStrategy,
         epoch_manager: &TestEpochManager,
         sql_address: String,
+        block_time: Duration,
         shutdown_signal: ShutdownSignal,
     ) -> (Vec<ValidatorChannels>, HashMap<TestAddress, Validator>) {
         let num_committees = epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
@@ -539,6 +571,7 @@ impl TestBuilder {
 
                 let (channels, validator) = Validator::builder()
                     .with_sql_url(sql_address)
+                    .with_block_time(block_time)
                     .with_address_and_secret_key(address.clone(), sk)
                     .with_shard(shard_addr)
                     .with_shard_group(shard_group)
@@ -573,8 +606,14 @@ impl TestBuilder {
         let epoch_manager = TestEpochManager::new(tx_epoch_events);
         epoch_manager.add_committees(committees).await;
         let shutdown = Shutdown::new();
-        let (channels, validators) =
-            Self::build_validators(&leader_strategy, &epoch_manager, self.sql_address, shutdown.to_signal()).await;
+        let (channels, validators) = Self::build_validators(
+            &leader_strategy,
+            &epoch_manager,
+            self.sql_address,
+            self.block_time,
+            shutdown.to_signal(),
+        )
+        .await;
         let network = spawn_network(channels, shutdown.to_signal(), self.message_filter);
 
         Test {

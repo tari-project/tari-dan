@@ -250,7 +250,6 @@ message SyncStateResponse {
 message StateTransition {
   StateTransitionId id = 1;
   SubstateUpdate update = 2;
-  uint64 state_tree_version = 3;
 }
 
 message StateTransitionId {

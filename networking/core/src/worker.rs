@@ -901,7 +901,7 @@ where
         }
     }
 
-    /// Establishes a relay circuit for the given peer if the it is the selected relay peer. Returns true if the circuit
+    /// Establishes a relay circuit for the given peer if it is the selected relay peer. Returns true if the circuit
     /// was established from this call.
     fn establish_relay_circuit_on_connect(&mut self, peer_id: &PeerId) -> bool {
         let Some(relay) = self.relays.selected_relay() else {

@@ -888,11 +888,10 @@ impl From<SubstateDestroyed> for proto::consensus::SubstateDestroyed {
 impl From<&SyncRequestMessage> for proto::consensus::SyncRequest {
     fn from(value: &SyncRequestMessage) -> Self {
         Self {
-            epoch: value.epoch.as_u64(),
             high_qc: Some(proto::consensus::HighQc {
                 block_id: value.high_qc.block_id.as_bytes().to_vec(),
                 block_height: value.high_qc.block_height.as_u64(),
-                epoch: value.epoch.as_u64(),
+                epoch: value.high_qc.epoch.as_u64(),
                 qc_id: value.high_qc.qc_id.as_bytes().to_vec(),
             }),
         }
@@ -904,7 +903,6 @@ impl TryFrom<proto::consensus::SyncRequest> for SyncRequestMessage {
 
     fn try_from(value: proto::consensus::SyncRequest) -> Result<Self, Self::Error> {
         Ok(Self {
-            epoch: Epoch(value.epoch),
             high_qc: value
                 .high_qc
                 .map(|value| {

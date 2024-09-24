@@ -121,7 +121,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         Ok(executed)
     }
 
-    fn execute_or_fetch(
+    pub fn execute_or_fetch(
         &self,
         store: &mut PendingSubstateStore<TStateStore>,
         transaction: Transaction,

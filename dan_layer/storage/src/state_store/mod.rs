@@ -235,7 +235,11 @@ pub trait StateStoreReadTransaction: Sized {
     ) -> Result<TransactionPoolRecord, StorageError>;
     fn transaction_pool_exists(&self, transaction_id: &TransactionId) -> Result<bool, StorageError>;
     fn transaction_pool_get_all(&self) -> Result<Vec<TransactionPoolRecord>, StorageError>;
-    fn transaction_pool_get_many_ready(&self, max_txs: usize) -> Result<Vec<TransactionPoolRecord>, StorageError>;
+    fn transaction_pool_get_many_ready(
+        &self,
+        max_txs: usize,
+        block_id: &BlockId,
+    ) -> Result<Vec<TransactionPoolRecord>, StorageError>;
     fn transaction_pool_count(
         &self,
         stage: Option<TransactionPoolStage>,
@@ -343,6 +347,9 @@ pub trait StateStoreReadTransaction: Sized {
     ) -> Result<Vec<BurntUtxo>, StorageError>;
 
     fn burnt_utxos_count(&self) -> Result<u64, StorageError>;
+
+    // -------------------------------- Foreign parked block -------------------------------- //
+    fn foreign_parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -362,7 +369,7 @@ pub trait StateStoreWriteTransaction {
     ) -> Result<(), StorageError>;
 
     // -------------------------------- BlockDiff -------------------------------- //
-    fn block_diffs_insert(&mut self, block_diff: &BlockDiff) -> Result<(), StorageError>;
+    fn block_diffs_insert(&mut self, block_id: &BlockId, changes: &[SubstateChange]) -> Result<(), StorageError>;
     fn block_diffs_remove(&mut self, block_id: &BlockId) -> Result<(), StorageError>;
 
     // -------------------------------- QuorumCertificate -------------------------------- //
@@ -481,9 +488,9 @@ pub trait StateStoreWriteTransaction {
     fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;
 
     //---------------------------------- Substates --------------------------------------------//
-    fn substate_locks_insert_all<I: IntoIterator<Item = (SubstateId, Vec<SubstateLock>)>>(
+    fn substate_locks_insert_all<'a, I: IntoIterator<Item = (&'a SubstateId, &'a Vec<SubstateLock>)>>(
         &mut self,
-        block_id: BlockId,
+        block_id: &BlockId,
         locks: I,
     ) -> Result<(), StorageError>;
 
@@ -510,9 +517,9 @@ pub trait StateStoreWriteTransaction {
     #[allow(clippy::mutable_key_type)]
     fn foreign_substate_pledges_save(
         &mut self,
-        transaction_id: TransactionId,
+        transaction_id: &TransactionId,
         shard_group: ShardGroup,
-        pledges: SubstatePledges,
+        pledges: &SubstatePledges,
     ) -> Result<(), StorageError>;
 
     fn foreign_substate_pledges_remove_many<'a, I: IntoIterator<Item = &'a TransactionId>>(
@@ -525,7 +532,7 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         block_id: BlockId,
         shard: Shard,
-        diff: VersionedStateHashTreeDiff,
+        diff: &VersionedStateHashTreeDiff,
     ) -> Result<(), StorageError>;
     fn pending_state_tree_diffs_remove_by_block(&mut self, block_id: &BlockId) -> Result<(), StorageError>;
     fn pending_state_tree_diffs_remove_and_return_by_block(

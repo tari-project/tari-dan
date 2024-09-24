@@ -40,6 +40,7 @@ pub struct ValidatorBuilder {
     pub sql_url: String,
     pub leader_strategy: RoundRobinLeaderStrategy,
     pub num_committees: u32,
+    pub block_time: Duration,
     pub epoch_manager: Option<TestEpochManager>,
     pub transaction_executions: TestExecutionSpecStore,
 }
@@ -55,6 +56,7 @@ impl ValidatorBuilder {
             shard_group: ShardGroup::all_shards(TEST_NUM_PRESHARDS),
             sql_url: ":memory".to_string(),
             leader_strategy: RoundRobinLeaderStrategy::new(),
+            block_time: Duration::from_secs(5),
             epoch_manager: None,
             transaction_executions: TestExecutionSpecStore::new(),
         }
@@ -64,6 +66,11 @@ impl ValidatorBuilder {
         self.address = address;
         self.public_key = PublicKey::from_secret_key(&secret_key);
         self.secret_key = secret_key;
+        self
+    }
+
+    pub fn with_block_time(&mut self, block_time: Duration) -> &mut Self {
+        self.block_time = block_time;
         self
     }
 
@@ -132,7 +139,7 @@ impl ValidatorBuilder {
                 max_base_layer_blocks_ahead: 5,
                 max_base_layer_blocks_behind: 5,
                 network: Network::LocalNet,
-                pacemaker_max_base_time: Duration::from_secs(10),
+                pacemaker_max_base_time: self.block_time,
                 sidechain_id: None,
             },
             self.address.clone(),

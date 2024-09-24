@@ -240,8 +240,7 @@ message SubstateDestroyed {
 }
 
 message SyncRequest {
-  uint64 epoch = 1;
-  HighQc high_qc = 2;
+  HighQc high_qc = 1;
 }
 
 message HighQc {

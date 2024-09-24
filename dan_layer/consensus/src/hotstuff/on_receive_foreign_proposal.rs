@@ -46,20 +46,6 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "OnReceiveForeignProposal");
-        let foreign_committee_info = self
-            .epoch_manager
-            .get_committee_info_by_validator_public_key(message.block.epoch(), message.block.proposed_by())
-            .await?;
-        self.validate_and_save(message, local_committee_info, &foreign_committee_info)?;
-        Ok(())
-    }
-
-    pub fn validate_and_save(
-        &mut self,
-        message: ForeignProposalMessage,
-        local_committee_info: &CommitteeInfo,
-        foreign_committee_info: &CommitteeInfo,
-    ) -> Result<(), HotStuffError> {
         let proposal = ForeignProposal::from(message);
 
         if self.store.with_read_tx(|tx| proposal.exists(tx))? {
@@ -72,10 +58,24 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
+        let foreign_committee_info = self
+            .epoch_manager
+            .get_committee_info_by_validator_public_key(proposal.block.epoch(), proposal.block.proposed_by().clone())
+            .await?;
+        self.store
+            .with_write_tx(|tx| self.validate_and_save(tx, proposal, local_committee_info, &foreign_committee_info))?;
+        Ok(())
+    }
+
+    pub fn validate_and_save(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        proposal: ForeignProposal,
+        local_committee_info: &CommitteeInfo,
+        foreign_committee_info: &CommitteeInfo,
+    ) -> Result<(), HotStuffError> {
         // TODO: validate justify_qc
-        let mut foreign_receive_counter = self
-            .store
-            .with_read_tx(|tx| ForeignReceiveCounters::get_or_default(tx))?;
+        let mut foreign_receive_counter = ForeignReceiveCounters::get_or_default(&**tx)?;
 
         if let Err(err) = self.validate_proposed_block(
             proposal.block(),
@@ -107,15 +107,13 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "🧩 Receive FOREIGN PROPOSAL for block {}, justify_qc: {}",
+            "🧩 Receive FOREIGN PROPOSAL {}, justify_qc: {}",
             proposal.block(),
             proposal.justify_qc(),
         );
 
-        self.store.with_write_tx(|tx| {
-            foreign_receive_counter.save(tx)?;
-            proposal.upsert(tx, None)
-        })?;
+        foreign_receive_counter.save(tx)?;
+        proposal.upsert(tx, None)?;
 
         // Foreign proposals to propose
         self.pacemaker.on_beat();

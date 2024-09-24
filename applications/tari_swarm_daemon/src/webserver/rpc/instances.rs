@@ -8,6 +8,27 @@ use serde::{Deserialize, Serialize};
 
 use crate::{config::InstanceType, process_manager::InstanceId, webserver::context::HandlerContext};
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct StartAllRequest {
+    instance_type: Option<InstanceType>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StartAllResponse {
+    pub num_instances: u32,
+}
+
+pub async fn start_all(context: &HandlerContext, req: StartAllRequest) -> Result<StartAllResponse, anyhow::Error> {
+    let instances = context.process_manager().list_instances(req.instance_type).await?;
+
+    let num_instances = instances.len() as u32;
+    for instance in instances {
+        context.process_manager().start_instance(instance.id).await?;
+    }
+
+    Ok(StartAllResponse { num_instances })
+}
+
 pub type StartInstanceRequest = String;
 
 #[derive(Debug, Clone, Serialize)]
@@ -63,6 +84,27 @@ pub async fn stop(context: &HandlerContext, req: StopInstanceRequest) -> Result<
     context.process_manager().stop_instance(instance.id).await?;
 
     Ok(StopInstanceResponse { success: true })
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StopAllRequest {
+    instance_type: Option<InstanceType>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StopAllResponse {
+    pub num_instances: u32,
+}
+
+pub async fn stop_all(context: &HandlerContext, req: StopAllRequest) -> Result<StopAllResponse, anyhow::Error> {
+    let instances = context.process_manager().list_instances(req.instance_type).await?;
+
+    let num_instances = instances.len() as u32;
+    for instance in instances {
+        context.process_manager().stop_instance(instance.id).await?;
+    }
+
+    Ok(StopAllResponse { num_instances })
 }
 
 #[derive(Debug, Clone, Deserialize)]
