@@ -8,12 +8,54 @@ use log::*;
 use tari_dan_common_types::{Epoch, NumPreshards, PeerAddress, ShardGroup, SubstateAddress};
 use tari_dan_p2p::{proto, DanMessage, TariMessagingSpec};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
-use tari_networking::{NetworkingHandle, NetworkingService};
+use tari_networking::{GossipReceiver, GossipReceiverError, NetworkingHandle, NetworkingService};
+use tari_swarm::messaging::prost::ProstCodec;
 use tokio::sync::mpsc;
+use tari_swarm::messaging::Codec;
+use async_trait::async_trait;
 
 use crate::p2p::services::mempool::MempoolError;
 
 const LOG_TARGET: &str = "tari::validator_node::mempool::gossip";
+
+pub struct MempoolGossipReceiver {
+    codec:  ProstCodec<proto::network::DanMessage>,
+    tx_gossip: mpsc::UnboundedSender<(PeerId, proto::network::DanMessage)>,
+}
+
+impl MempoolGossipReceiver {
+    pub fn new(tx_gossip: mpsc::UnboundedSender<(PeerId, proto::network::DanMessage)>) -> Self {
+        Self {
+            codec: ProstCodec::default(),
+            tx_gossip
+        }
+    }
+
+    pub async fn encode(&self, message: proto::network::DanMessage) -> std::io::Result<Vec<u8>> {
+        let mut buf = Vec::with_capacity(1024);
+        self.codec
+            .encode_to(&mut buf, message)
+            .await?;
+        Ok(buf)
+    }
+}
+
+#[async_trait]
+impl GossipReceiver for MempoolGossipReceiver {
+    async fn receive_message(&self, from: PeerId, message: libp2p::gossipsub::Message) -> Result<usize, GossipReceiverError> {
+        let (length, message) = self
+            .codec
+            .decode_from(&mut message.data.as_slice())
+            .await
+            .map_err(GossipReceiverError::CodecError)?;
+
+        self.tx_gossip
+            .send((from, message))
+            .map_err(|e| GossipReceiverError::Other(e.to_string()))?;
+
+        Ok(length)
+    }
+}
 
 #[derive(Debug)]
 pub(super) struct MempoolGossip<TAddr> {

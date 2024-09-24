@@ -20,6 +20,7 @@ mod config;
 mod connection;
 mod event;
 mod global_ip;
+mod gossip;
 mod handle;
 mod message;
 mod notify;
@@ -29,6 +30,7 @@ mod spawn;
 
 pub use config::*;
 pub use connection::*;
+pub use gossip::*;
 pub use handle::*;
 pub use message::*;
 pub use spawn::*;
