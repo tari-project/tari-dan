@@ -415,8 +415,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
                     let checkpoint = match self.fetch_epoch_checkpoint(&mut client, current_epoch).await {
                         Ok(Some(cp)) => cp,
                         Ok(None) => {
-                            // EDGE-CASE: This may occur because the previous epoch had not started consensus, typically
-                            // in testing cases where transactions
+                            // EDGE-CASE: This may occur because the previous epoch had not started at the consensus
+                            // level.
                             warn!(
                                 target: LOG_TARGET,
                                 "❓No checkpoint for epoch {current_epoch}. This may mean that this is the first epoch in the network"
