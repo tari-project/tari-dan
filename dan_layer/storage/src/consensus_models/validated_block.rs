@@ -65,6 +65,7 @@ impl ValidBlock {
         TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
+        // TODO(perf)
         for block in &self.dummy_blocks {
             block.save(tx)?;
         }

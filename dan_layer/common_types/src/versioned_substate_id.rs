@@ -59,6 +59,10 @@ impl SubstateRequirement {
             .map(|v| SubstateAddress::from_substate_id(self.substate_id(), v))
     }
 
+    pub fn to_substate_address_zero_version(&self) -> SubstateAddress {
+        SubstateAddress::from_substate_id(self.substate_id(), 0)
+    }
+
     /// Calculates and returns the shard number that this SubstateAddress belongs.
     /// A shard is a fixed division of the 256-bit shard space.
     /// If the substate version is not known, None is returned.
@@ -118,7 +122,7 @@ impl Display for SubstateRequirement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.version {
             Some(v) => write!(f, "{}:{}", self.substate_id, v),
-            None => write!(f, "{}", self.substate_id),
+            None => write!(f, "{}:?", self.substate_id),
         }
     }
 }
@@ -178,16 +182,6 @@ impl VersionedSubstateId {
 
     pub fn version(&self) -> u32 {
         self.version
-    }
-
-    /// Calculates and returns the shard number that this SubstateAddress belongs.
-    /// A shard is an equal division of the 256-bit shard space.
-    pub fn to_shard(&self, num_shards: NumPreshards) -> Shard {
-        self.to_substate_address().to_shard(num_shards)
-    }
-
-    pub fn to_shard_group(&self, num_shards: NumPreshards, num_committees: u32) -> ShardGroup {
-        self.to_substate_address().to_shard_group(num_shards, num_committees)
     }
 
     pub fn to_previous_version(&self) -> Option<Self> {

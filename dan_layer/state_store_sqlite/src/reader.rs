@@ -261,6 +261,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
                 FROM blocks JOIN tree ON
                     block_id = tree.parent
                     AND tree.bid != ?
+                    AND tree.parent != '0000000000000000000000000000000000000000000000000000000000000000'
                 LIMIT 1000
             )
             SELECT bid FROM tree"#,
@@ -297,6 +298,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
                 FROM blocks JOIN tree ON
                     block_id = tree.parent
                     AND tree.bid != ?
+                    AND tree.parent != '0000000000000000000000000000000000000000000000000000000000000000'
                 LIMIT 1000
             )
             SELECT bid FROM tree where is_dummy = 0 AND command_count > 0"#,
@@ -335,18 +337,12 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
     }
 
     pub(crate) fn get_commit_block_id(&self) -> Result<BlockId, StorageError> {
-        use crate::schema::{blocks, locked_block};
+        use crate::schema::blocks;
 
         let block_id = blocks::table
-            .select(blocks::parent_block_id)
-            .filter(
-                blocks::block_id.eq(locked_block::table
-                    .select(locked_block::block_id)
-                    .order_by(locked_block::id.desc())
-                    .limit(1)
-                    .single_value()
-                    .assume_not_null()),
-            )
+            .select(blocks::block_id)
+            .filter(blocks::is_committed.eq(true))
+            .order_by(blocks::id.desc())
             .first::<String>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "get_commit_block_id",
@@ -563,17 +559,17 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         Ok(foreign_proposals > 0)
     }
 
-    fn foreign_proposals_has_unconfirmed(&self, max_base_layer_block_height: u64) -> Result<bool, StorageError> {
+    fn foreign_proposals_has_unconfirmed(&self, epoch: Epoch) -> Result<bool, StorageError> {
         use crate::schema::foreign_proposals;
 
         let foreign_proposals = foreign_proposals::table
-            .filter(foreign_proposals::base_layer_block_height.le(max_base_layer_block_height as i64))
+            .filter(foreign_proposals::epoch.eq(epoch.as_u64() as i64))
             .filter(foreign_proposals::status.ne(ForeignProposalStatus::Confirmed.to_string()))
             .count()
             .limit(1)
             .get_result::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "foreign_proposals_has_unproposed",
+                operation: "foreign_proposals_has_unconfirmed",
                 source: e,
             })?;
 
@@ -582,25 +578,29 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
     fn foreign_proposals_get_all_new(
         &self,
-        max_base_layer_block_height: u64,
         block_id: &BlockId,
         limit: usize,
     ) -> Result<Vec<ForeignProposal>, StorageError> {
         use crate::schema::{foreign_proposals, quorum_certificates};
+
+        if !self.blocks_exists(block_id)? {
+            return Err(StorageError::NotFound {
+                item: "foreign_proposals_get_all_new: Block".to_string(),
+                key: block_id.to_string(),
+            });
+        }
 
         let locked = self.get_current_locked_block()?;
         let pending_block_ids = self.get_block_ids_with_commands_between(&locked.block_id, block_id)?;
 
         let foreign_proposals = foreign_proposals::table
             .left_join(quorum_certificates::table.on(foreign_proposals::justify_qc_id.eq(quorum_certificates::qc_id)))
-            // Only propose the Foreign proposal if we have reached the base layer block height specified in the block
-            .filter(foreign_proposals::base_layer_block_height.le(max_base_layer_block_height as i64))
+            .filter(foreign_proposals::epoch.eq(locked.epoch.as_u64() as i64))
             .filter(
-                foreign_proposals::status.ne(ForeignProposalStatus::Confirmed.to_string())
-            )
-            .filter(
-                foreign_proposals::proposed_in_block.is_null()
-                    .or(foreign_proposals::proposed_in_block.ne_all(pending_block_ids)
+                foreign_proposals::proposed_in_block
+                    .is_null()
+                    .or(foreign_proposals::proposed_in_block
+                        .ne_all(pending_block_ids)
                         .and(foreign_proposals::proposed_in_block_height.gt(locked.height.as_u64() as i64))),
             )
             .limit(i64::try_from(limit).unwrap_or(i64::MAX))
@@ -790,15 +790,46 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         tx_id: &TransactionId,
         from_block_id: &BlockId,
     ) -> Result<BlockTransactionExecution, StorageError> {
-        use crate::schema::transaction_executions;
+        use crate::schema::{blocks, transaction_executions};
 
-        // TODO: This gets slower as the chain progresses.
-        let block_ids = self.get_block_ids_between(&BlockId::zero(), from_block_id)?;
+        if !self.blocks_exists(from_block_id)? {
+            return Err(StorageError::QueryError {
+                reason: format!(
+                    "transaction_executions_get_pending_for_block: Block {} does not exist",
+                    from_block_id
+                ),
+            });
+        }
+
+        let commit_block = self.get_commit_block_id()?;
+        let block_ids = self.get_block_ids_between(&commit_block, from_block_id)?;
+        let tx_id = serialize_hex(tx_id);
 
         let execution = transaction_executions::table
-            .filter(transaction_executions::transaction_id.eq(serialize_hex(tx_id)))
+            .filter(transaction_executions::transaction_id.eq(&tx_id))
             .filter(transaction_executions::block_id.eq_any(block_ids))
             // Get last execution
+            .order_by(transaction_executions::id.desc())
+            .first::<sql_models::TransactionExecution>(self.connection())
+            .optional()
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_executions_get_pending_for_block",
+                source: e,
+            })?;
+
+        if let Some(execution) = execution {
+            return execution.try_into();
+        }
+
+        // Otherwise look for executions after the commit block
+        let execution = transaction_executions::table
+            .select(transaction_executions::all_columns)
+            .inner_join(
+                blocks::table.on(transaction_executions::block_id
+                    .eq(blocks::block_id)
+                    .and(blocks::is_committed.eq(true))),
+            )
+            .filter(transaction_executions::transaction_id.eq(&tx_id))
             .order_by(transaction_executions::id.desc())
             .first::<sql_models::TransactionExecution>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -918,6 +949,18 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         include_dummy_blocks: bool,
     ) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
+
+        if !self.blocks_exists(start_block_id)? {
+            return Err(StorageError::QueryError {
+                reason: format!("blocks_all_between: Start block {} does not exist", start_block_id),
+            });
+        }
+
+        if !self.blocks_exists(end_block_id)? {
+            return Err(StorageError::QueryError {
+                reason: format!("blocks_all_between: End block {} does not exist", end_block_id),
+            });
+        }
 
         let block_ids = self.get_block_ids_between(start_block_id, end_block_id)?;
         if block_ids.is_empty() {
@@ -1483,6 +1526,21 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
     ) -> Result<TransactionPoolRecord, StorageError> {
         use crate::schema::transaction_pool;
 
+        if !self.blocks_exists(from_block_id)? {
+            return Err(StorageError::QueryError {
+                reason: format!(
+                    "transaction_pool_get_for_blocks: Block {} does not exist",
+                    from_block_id
+                ),
+            });
+        }
+
+        if !self.blocks_exists(to_block_id)? {
+            return Err(StorageError::QueryError {
+                reason: format!("transaction_pool_get_for_blocks: Block {} does not exist", to_block_id),
+            });
+        }
+
         let transaction_id = serialize_hex(transaction_id);
         let mut updates = self.get_transaction_atom_state_updates_between_blocks(
             from_block_id,
@@ -1538,8 +1596,18 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         txs.into_iter().map(|tx| tx.try_convert(None)).collect()
     }
 
-    fn transaction_pool_get_many_ready(&self, max_txs: usize) -> Result<Vec<TransactionPoolRecord>, StorageError> {
+    fn transaction_pool_get_many_ready(
+        &self,
+        max_txs: usize,
+        block_id: &BlockId,
+    ) -> Result<Vec<TransactionPoolRecord>, StorageError> {
         use crate::schema::{lock_conflicts, transaction_pool};
+
+        if !self.blocks_exists(block_id)? {
+            return Err(StorageError::QueryError {
+                reason: format!("transaction_pool_get_many_ready: block {block_id} does not exist"),
+            });
+        }
 
         let mut ready_txs = transaction_pool::table
             // Exclude new transactions
@@ -1551,6 +1619,13 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                 operation: "transaction_pool_get_many_ready",
                 source: e,
             })?;
+
+        debug!(
+            target: LOG_TARGET,
+            "🛢️ transaction_pool_get_many_ready: block_id={}, in progress ready_txs={}",
+            block_id,
+            ready_txs.len()
+        );
 
         let new_limit = max_txs.saturating_sub(ready_txs.len());
         if new_limit > 0 {
@@ -1566,6 +1641,14 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                     operation: "transaction_pool_get_many_ready",
                     source: e,
                 })?;
+
+            debug!(
+                target: LOG_TARGET,
+                "🛢️ transaction_pool_get_many_ready: block_id={}, new ready_txs={}, total ready_txs={}",
+                block_id,
+                new_txs.len(),
+                ready_txs.len() + new_txs.len()
+            );
             ready_txs.extend(new_txs);
         }
 
@@ -1575,11 +1658,10 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         // Fetch all applicable block ids between the locked block and the given block
         let locked = self.get_current_locked_block()?;
-        let leaf = self.leaf_block_get(locked.epoch)?;
 
         let mut updates = self.get_transaction_atom_state_updates_between_blocks(
             &locked.block_id,
-            &leaf.block_id,
+            block_id,
             ready_txs.iter().map(|s| s.transaction_id.as_str()),
         )?;
 
@@ -1587,7 +1669,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             target: LOG_TARGET,
             "transaction_pool_get_many_ready: locked.block_id={}, leaf.block_id={}, len(ready_txs)={}, updates={}",
             locked.block_id,
-            leaf.block_id,
+            block_id,
             ready_txs.len(),
             updates.len()
         );
@@ -2084,10 +2166,18 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
     ) -> Result<HashMap<Shard, Vec<PendingShardStateTreeDiff>>, StorageError> {
         use crate::schema::pending_state_tree_diffs;
 
+        if !self.blocks_exists(block_id)? {
+            return Err(StorageError::NotFound {
+                item: "pending_state_tree_diffs_get_all_up_to_commit_block: Block".to_string(),
+                key: block_id.to_string(),
+            });
+        }
+
         // Get the last committed block
         let committed_block_id = self.get_commit_block_id()?;
 
-        let block_ids = self.get_block_ids_with_commands_between(&committed_block_id, block_id)?;
+        // Block may modify state with zero commands because the justify a block that changes state
+        let block_ids = self.get_block_ids_between(&committed_block_id, block_id)?;
 
         if block_ids.is_empty() {
             return Ok(HashMap::new());
@@ -2111,10 +2201,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
                 .or_insert_with(Vec::new) //PendingStateTreeDiff::default)
                 .push(diff);
         }
-        // diffs
-        //     .into_iter()
-        //     .map(|diff| Ok((Shard::from(diff.shard as u32), diff.try_into()?)))
-        //     .collect()
+
         Ok(diffs)
     }
 
@@ -2300,6 +2387,13 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         limit: usize,
     ) -> Result<Vec<BurntUtxo>, StorageError> {
         use crate::schema::burnt_utxos;
+        if !self.blocks_exists(leaf_block)? {
+            return Err(StorageError::NotFound {
+                item: "Block".to_string(),
+                key: leaf_block.to_string(),
+            });
+        }
+
         if limit == 0 {
             return Ok(Vec::new());
         }
@@ -2337,6 +2431,21 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             })?;
 
         Ok(count as u64)
+    }
+
+    fn foreign_parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError> {
+        use crate::schema::foreign_parked_blocks;
+
+        let count = foreign_parked_blocks::table
+            .count()
+            .filter(foreign_parked_blocks::block_id.eq(serialize_hex(block_id)))
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_parked_blocks_exists",
+                source: e,
+            })?;
+
+        Ok(count > 0)
     }
 }
 

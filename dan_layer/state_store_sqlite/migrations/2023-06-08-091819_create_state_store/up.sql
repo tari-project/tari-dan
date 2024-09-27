@@ -23,6 +23,8 @@ create table blocks
     shard_group             integer   not NULL,
     proposed_by             text      not NULL,
     qc_id                   text      not NULL,
+    -- used for debugging purposes to make it easier to know which block is justified
+    qc_height               bigint    not NULL,
     command_count           bigint    not NULL,
     commands                text      not NULL,
     total_leader_fee        bigint    not NULL,
@@ -92,9 +94,8 @@ create table foreign_parked_blocks
     justify_qc    text      not NULL,
     created_at    timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
 -- block_id must be unique. Optimise fetching by block_id
-create unique index foreign_parked_blocks_uniq_idx_id on parked_blocks (block_id);
+create unique index foreign_parked_blocks_uniq_idx_id on foreign_parked_blocks (block_id);
 
 CREATE TABLE foreign_missing_transactions
 (
@@ -337,6 +338,7 @@ create table transaction_pool
 );
 create unique index transaction_pool_uniq_idx_transaction_id on transaction_pool (transaction_id);
 create index transaction_pool_idx_is_ready on transaction_pool (is_ready);
+create index transaction_pool_idx_stage_is_ready on transaction_pool (stage, is_ready);
 
 create table transaction_pool_state_updates
 (
@@ -370,6 +372,8 @@ create table votes
     signature        text      not NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX votes_idx_block_id ON votes (block_id);
 
 CREATE TABLE foreign_proposals
 (
@@ -439,7 +443,7 @@ CREATE TABLE state_tree
 -- Scoping by shard
 CREATE INDEX state_tree_idx_shard_key on state_tree (shard);
 -- Duplicate keys are not allowed
-CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (shard, key);
+-- CREATE UNIQUE INDEX state_tree_uniq_idx_key on state_tree (shard, key);
 
 create table state_tree_shard_versions
 (
@@ -520,6 +524,8 @@ create table diagnostic_deleted_blocks
     shard_group             integer   not NULL,
     proposed_by             text      not NULL,
     qc_id                   text      not NULL,
+    -- used for debugging purposes to make it easier to know which block is justified
+    qc_height               bigint    not NULL,
     command_count           bigint    not NULL,
     commands                text      not NULL,
     total_leader_fee        bigint    not NULL,

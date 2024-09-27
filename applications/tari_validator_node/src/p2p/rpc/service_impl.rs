@@ -66,6 +66,7 @@ use tari_validator_node_rpc::rpc_service::ValidatorNodeRpcService;
 use tokio::{sync::mpsc, task};
 
 use crate::{
+    consensus::ConsensusHandle,
     p2p::{
         rpc::{block_sync_task::BlockSyncTask, state_sync_task::StateSyncTask},
         services::mempool::MempoolHandle,
@@ -80,6 +81,7 @@ pub struct ValidatorNodeRpcServiceImpl {
     shard_state_store: SqliteStateStore<PeerAddress>,
     mempool: MempoolHandle,
     virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PeerAddress>, EpochManagerHandle<PeerAddress>>,
+    consensus: ConsensusHandle,
 }
 
 impl ValidatorNodeRpcServiceImpl {
@@ -91,12 +93,14 @@ impl ValidatorNodeRpcServiceImpl {
             SqliteStateStore<PeerAddress>,
             EpochManagerHandle<PeerAddress>,
         >,
+        consensus: ConsensusHandle,
     ) -> Self {
         Self {
             epoch_manager,
             shard_state_store,
             mempool,
             virtual_substate_manager,
+            consensus,
         }
     }
 }
@@ -315,11 +319,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
     }
 
     async fn get_high_qc(&self, _request: Request<GetHighQcRequest>) -> Result<Response<GetHighQcResponse>, RpcStatus> {
-        let current_epoch = self
-            .epoch_manager
-            .current_epoch()
-            .await
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+        let current_epoch = self.consensus.current_epoch();
         let high_qc = self
             .shard_state_store
             .with_read_tx(|tx| {
@@ -340,11 +340,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         request: Request<GetCheckpointRequest>,
     ) -> Result<Response<GetCheckpointResponse>, RpcStatus> {
         let msg = request.into_message();
-        let current_epoch = self
-            .epoch_manager
-            .current_epoch()
-            .await
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+        let current_epoch = self.consensus.current_epoch();
         if msg.current_epoch != current_epoch {
             // This may occur if one of the nodes has not fully scanned the base layer
             return Err(RpcStatus::bad_request(format!(

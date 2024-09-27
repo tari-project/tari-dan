@@ -211,15 +211,20 @@ impl QuorumCertificate {
         TTx: StateStoreWriteTransaction + Deref + ?Sized,
         TTx::Target: StateStoreReadTransaction,
     {
-        let (_, high_qc) = self.check_high_qc(tx)?;
+        let (is_new, high_qc) = self.check_high_qc(tx)?;
 
         info!(
             target: LOG_TARGET,
-            "🔥 UPDATE_HIGH_QC ({}, previous high QC: {} {})",
+            "🔥 {} HIGH_QC ({}, previous high QC: {} {})",
+            if is_new { "NEW " } else { "" },
             self,
             high_qc.block_id(),
             high_qc.block_height(),
         );
+
+        if !is_new {
+            return Ok(high_qc);
+        }
 
         self.save(tx)?;
         // This will fail if the block doesnt exist

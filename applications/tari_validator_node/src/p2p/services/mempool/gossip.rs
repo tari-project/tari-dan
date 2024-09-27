@@ -1,11 +1,11 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashSet;
+use std::{collections::HashSet, iter};
 
 use log::*;
-use tari_dan_common_types::{Epoch, NumPreshards, PeerAddress, ShardGroup, SubstateAddress};
-use tari_dan_p2p::{proto, DanMessage};
+use tari_dan_common_types::{Epoch, NumPreshards, PeerAddress, ShardGroup, ToSubstateAddress};
+use tari_dan_p2p::{proto, DanMessage, NewTransactionMessage};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 
 use crate::p2p::services::{mempool::MempoolError, messaging::Gossip};
@@ -30,7 +30,7 @@ impl MempoolGossip<PeerAddress> {
         }
     }
 
-    pub async fn next_message(&mut self) -> Option<Result<(PeerAddress, DanMessage), MempoolError>> {
+    pub async fn next_message(&mut self) -> Option<Result<(PeerAddress, DanMessage, usize), MempoolError>> {
         self.gossip
             .next_message()
             .await
@@ -79,19 +79,33 @@ impl MempoolGossip<PeerAddress> {
         Ok(())
     }
 
-    pub async fn forward_to_foreign_replicas<T: Into<DanMessage>>(
+    pub fn get_num_incoming_messages(&self) -> usize {
+        self.gossip.get_num_incoming_messages()
+    }
+
+    pub async fn forward_to_foreign_replicas(
         &mut self,
         epoch: Epoch,
-        substate_addresses: HashSet<SubstateAddress>,
-        msg: T,
+        msg: NewTransactionMessage,
         exclude_shard_group: Option<ShardGroup>,
     ) -> Result<(), MempoolError> {
         let n = self.epoch_manager.get_num_committees(epoch).await?;
         let committee_shard = self.epoch_manager.get_local_committee_info(epoch).await?;
         let local_shard_group = committee_shard.shard_group();
-        let shard_groups = substate_addresses
-            .into_iter()
-            .map(|s| s.to_shard_group(self.num_preshards, n))
+        let shard_groups = msg
+            .transaction
+            .all_inputs_iter()
+            .map(|s| {
+                s.or_zero_version()
+                    .to_substate_address()
+                    .to_shard_group(self.num_preshards, n)
+            })
+            .chain(iter::once(
+                msg.transaction
+                    .id()
+                    .to_substate_address()
+                    .to_shard_group(self.num_preshards, n),
+            ))
             .filter(|sg| exclude_shard_group.as_ref() != Some(sg) && sg != &local_shard_group)
             .collect::<HashSet<_>>();
 
@@ -106,16 +120,6 @@ impl MempoolGossip<PeerAddress> {
             self.gossip.publish_message(topic, msg.clone()).await?;
         }
 
-        Ok(())
-    }
-
-    pub async fn gossip_to_foreign_replicas<T: Into<DanMessage>>(
-        &mut self,
-        epoch: Epoch,
-        addresses: HashSet<SubstateAddress>,
-        msg: T,
-    ) -> Result<(), MempoolError> {
-        self.forward_to_foreign_replicas(epoch, addresses, msg, None).await?;
         Ok(())
     }
 }

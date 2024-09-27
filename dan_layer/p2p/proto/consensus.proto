@@ -130,7 +130,6 @@ message Command {
 message ForeignProposalAtom {
   bytes block_id = 1;
   uint32 shard_group = 2;
-  uint64 base_layer_block_height = 3;
 }
 
 message MintConfidentialOutputAtom {
@@ -240,8 +239,7 @@ message SubstateDestroyed {
 }
 
 message SyncRequest {
-  uint64 epoch = 1;
-  HighQc high_qc = 2;
+  HighQc high_qc = 1;
 }
 
 message HighQc {

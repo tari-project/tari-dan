@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::hotstuff::{ConsensusCurrentState, CurrentView, HotstuffEvent};
+use tari_dan_common_types::Epoch;
 use tari_transaction::Transaction;
 use tokio::sync::{broadcast, mpsc, watch};
 
@@ -28,6 +29,10 @@ impl ConsensusHandle {
             current_view,
             tx_new_transaction,
         }
+    }
+
+    pub fn current_epoch(&self) -> Epoch {
+        self.current_view.get_epoch()
     }
 
     pub async fn notify_new_transaction(

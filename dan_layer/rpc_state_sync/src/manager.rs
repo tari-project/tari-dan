@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::cmp;
+
 use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -55,6 +57,7 @@ use tari_validator_node_rpc::{
 
 use crate::error::CommsRpcConsensusSyncError;
 
+const BATCH_SIZE: usize = 100;
 const LOG_TARGET: &str = "tari::dan::comms_rpc_state_sync";
 
 pub struct RpcStateSyncManager<TConsensusSpec: ConsensusSpec> {
@@ -137,7 +140,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
         info!(
             target: LOG_TARGET,
-            "🛜Syncing from state transition {last_state_transition_id}"
+            "🛜Syncing from v{} to state transition {last_state_transition_id}",
+            current_version.unwrap_or(0),
         );
 
         let mut state_stream = client
@@ -148,6 +152,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 current_epoch: current_epoch.as_u64(),
             })
             .await?;
+
+        let mut tree_changes = vec![];
 
         while let Some(result) = state_stream.next().await {
             let msg = match result {
@@ -166,20 +172,18 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 )));
             }
 
+            tree_changes.reserve_exact(cmp::min(msg.transitions.len(), BATCH_SIZE));
+
             self.state_store.with_write_tx(|tx| {
-                let mut next_version = msg.transitions.first().expect("non-empty batch already checked").state_tree_version;
 
                 info!(
                     target: LOG_TARGET,
-                    "🛜 Next state updates batch of size {} (v{}-v{})",
+                    "🛜 Next state updates batch of size {} from v{}",
                     msg.transitions.len(),
                     current_version.unwrap_or(0),
-                    msg.transitions.last().unwrap().state_tree_version,
                 );
 
                 let mut store = ShardScopedTreeStoreWriter::new(tx, shard);
-                let mut tree_changes = vec![];
-
 
                 for transition in msg.transitions {
                     let transition =
@@ -189,15 +193,6 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                             "Received state transition for shard {} which is not the expected shard {}.",
                             transition.id.shard(),
                             shard
-                        )));
-                    }
-
-                    if current_version.map_or(false, |v| transition.state_tree_version < v) {
-                        return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow!(
-                            "Received state transition with version {} that is not monotonically increasing (expected \
-                             >= {})",
-                            transition.state_tree_version,
-                            persisted_version.unwrap_or(0)
                         )));
                     }
 
@@ -225,13 +220,15 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         },
                     };
 
-                    info!(target: LOG_TARGET, "🛜 Applying state update {transition} (v{} to v{})", current_version.unwrap_or(0), transition.state_tree_version);
-                    if next_version != transition.state_tree_version {
+                    if tree_changes.len() + 1 == BATCH_SIZE {
                         let mut state_tree = SpreadPrefixStateTree::new(&mut store);
+                        info!(target: LOG_TARGET, "🛜 Committing {} state tree changes v{} to v{}", tree_changes.len(), current_version.unwrap_or(0), current_version.unwrap_or(0) + 1);
+                        let next_version = current_version.unwrap_or(0) + 1;
                         state_tree.put_substate_changes(current_version, next_version, tree_changes.drain(..))?;
                         current_version = Some(next_version);
-                        next_version = transition.state_tree_version;
                     }
+
+                    info!(target: LOG_TARGET, "🛜 Applying state update {transition} v{}", current_version.unwrap_or(0));
                     tree_changes.push(change);
 
                     self.commit_update(store.transaction(), checkpoint, transition)?;
@@ -239,12 +236,11 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
                 if !tree_changes.is_empty() {
                     let mut state_tree = SpreadPrefixStateTree::new(&mut store);
+                    let next_version = current_version.unwrap_or(0) + 1;
+                    info!(target: LOG_TARGET, "🛜 Committing final {} state tree changes v{} to v{}", tree_changes.len(), current_version.unwrap_or(0), next_version);
                     state_tree.put_substate_changes(current_version, next_version, tree_changes.drain(..))?;
-                }
-                current_version = Some(next_version);
-
-                if let Some(v) = current_version {
-                    store.set_version(v)?;
+                    current_version = Some(next_version);
+                    store.set_version(next_version)?;
                 }
 
                 Ok::<_, CommsRpcConsensusSyncError>(())
@@ -419,8 +415,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
                     let checkpoint = match self.fetch_epoch_checkpoint(&mut client, current_epoch).await {
                         Ok(Some(cp)) => cp,
                         Ok(None) => {
-                            // EDGE-CASE: This may occur because the previous epoch had not started consensus, typically
-                            // in testing cases where transactions
+                            // EDGE-CASE: This may occur because the previous epoch had not started at the consensus
+                            // level.
                             warn!(
                                 target: LOG_TARGET,
                                 "❓No checkpoint for epoch {current_epoch}. This may mean that this is the first epoch in the network"

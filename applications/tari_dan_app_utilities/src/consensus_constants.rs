@@ -42,7 +42,7 @@ impl ConsensusConstants {
             committee_size: 7,
             max_base_layer_blocks_ahead: 5,
             max_base_layer_blocks_behind: 5,
-            num_preshards: NumPreshards::P64,
+            num_preshards: NumPreshards::P256,
             pacemaker_max_base_time: Duration::from_secs(10),
         }
     }

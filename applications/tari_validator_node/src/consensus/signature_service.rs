@@ -2,7 +2,7 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use rand::rngs::OsRng;
-use tari_common_types::types::{FixedHash, PublicKey};
+use tari_common_types::types::PublicKey;
 use tari_consensus::traits::{ValidatorSignatureService, VoteSignatureService};
 use tari_dan_app_utilities::keypair::RistrettoKeypair;
 use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSchnorrSignature, ValidatorSignature};
@@ -29,14 +29,8 @@ impl ValidatorSignatureService for TariSignatureService {
 }
 
 impl VoteSignatureService for TariSignatureService {
-    fn verify(
-        &self,
-        signature: &ValidatorSignature,
-        leaf_hash: &FixedHash,
-        block_id: &BlockId,
-        decision: &QuorumDecision,
-    ) -> bool {
-        let message = self.create_message(leaf_hash, block_id, decision);
+    fn verify(&self, signature: &ValidatorSignature, block_id: &BlockId, decision: &QuorumDecision) -> bool {
+        let message = self.create_message(block_id, decision);
         signature.verify(message)
     }
 }

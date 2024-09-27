@@ -76,22 +76,18 @@ impl Evidence {
             // may be implicit (null) if the local node is only involved in outputs (and therefore sequences using the LocalAccept
             // foreign proposal)
             .all(|e| {
-                if e.is_prepare_justified() || e.is_accept_justified() {
-                    true
-                } else {
-                    // TODO: we should only include input evidence in transactions, so we would only need to check justifies
-                    // At this point output-only shards may not be justified
-                    e.substates.values().all(|lock| lock.is_output())
-                }
+                e.is_prepare_justified() || e.is_accept_justified()
+
             })
     }
 
+    /// Returns true if all substates in the given shard group are output locks.
+    /// This assumes the provided evidence is complete before this is called.
+    /// If no evidence is present for the shard group, false is returned.
     pub fn is_committee_output_only(&self, committee_info: &CommitteeInfo) -> bool {
-        self.evidence
-            .iter()
-            .filter(|(sg, _)| committee_info.shard_group() == **sg)
-            .flat_map(|(_, e)| e.substates().values())
-            .all(|lock| lock.is_output())
+        self.evidence.get(&committee_info.shard_group()).map_or(false, |e| {
+            !e.substates().is_empty() && e.substates().values().all(|lock| lock.is_output())
+        })
     }
 
     pub fn is_empty(&self) -> bool {
@@ -150,28 +146,22 @@ impl Evidence {
             .map(|(_, e)| e)
     }
 
-    /// Returns an iterator over the substate addresses in this Evidence object.
-    /// NOTE: not all substates involved in the final transaction are necessarily included in this Evidence object until
-    /// the transaction has reached AllAccepted state.
-    pub fn substate_addresses_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
-        self.evidence.values().flat_map(|e| e.substates.keys())
-    }
-
     pub fn qc_ids_iter(&self) -> impl Iterator<Item = &QcId> + '_ {
         self.evidence
             .values()
             .flat_map(|e| e.prepare_qc.iter().chain(e.accept_qc.iter()))
     }
 
-    pub fn add_shard_group_evidence(
-        &mut self,
-        shard_group: ShardGroup,
-        address: SubstateAddress,
-        lock_type: SubstateLockType,
-    ) -> &mut Self {
-        let entry = self.evidence.entry(shard_group).or_default();
-        entry.substates.insert_sorted(address, lock_type);
-        self
+    pub fn add_shard_group(&mut self, shard_group: ShardGroup) -> &mut ShardGroupEvidence {
+        self.evidence.entry(shard_group).or_default()
+    }
+
+    pub fn shard_groups_iter(&self) -> impl Iterator<Item = &ShardGroup> {
+        self.evidence.keys()
+    }
+
+    pub fn num_shard_groups(&self) -> usize {
+        self.evidence.len()
     }
 
     /// Add or update shard groups, substates and locks into Evidence. Existing prepare/accept QC IDs are not changed.
@@ -182,23 +172,6 @@ impl Evidence {
                 .substates
                 .extend(evidence.substates.iter().map(|(addr, lock)| (*addr, *lock)));
             evidence_mut.sort_substates();
-        }
-        self.evidence.sort_keys();
-        self
-    }
-
-    /// Merges the other Evidence into this Evidence.
-    pub fn merge(&mut self, other: Evidence) -> &mut Self {
-        for (sg, evidence) in other.evidence {
-            let evidence_mut = self.evidence.entry(sg).or_default();
-            evidence_mut.substates.extend(evidence.substates);
-            evidence_mut.sort_substates();
-            if let Some(qc_id) = evidence.prepare_qc {
-                evidence_mut.prepare_qc = Some(qc_id);
-            }
-            if let Some(qc_id) = evidence.accept_qc {
-                evidence_mut.accept_qc = Some(qc_id);
-            }
         }
         self.evidence.sort_keys();
         self
@@ -241,12 +214,19 @@ pub struct ShardGroupEvidence {
 }
 
 impl ShardGroupEvidence {
+    pub fn insert(&mut self, address: SubstateAddress, lock: SubstateLockType) -> &mut Self {
+        self.substates.insert_sorted(address, lock);
+        self
+    }
+
     pub fn is_prepare_justified(&self) -> bool {
-        self.prepare_qc.is_some()
+        // No substates means that we have no pledges yet, so we cannot count this as justified
+        !self.substates.is_empty() && self.prepare_qc.is_some()
     }
 
     pub fn is_accept_justified(&self) -> bool {
-        self.accept_qc.is_some()
+        // No substates means that we have no pledges yet, so we cannot count this as justified
+        !self.substates.is_empty() && self.accept_qc.is_some()
     }
 
     pub fn substates(&self) -> &IndexMap<SubstateAddress, SubstateLockType> {
@@ -301,15 +281,25 @@ mod tests {
         let sg3 = ShardGroup::new(4, 5);
 
         let mut evidence1 = Evidence::empty();
-        evidence1.add_shard_group_evidence(sg1, seed_substate_address(1), SubstateLockType::Write);
-        evidence1.add_shard_group_evidence(sg1, seed_substate_address(2), SubstateLockType::Read);
+        evidence1
+            .add_shard_group(sg1)
+            .insert(seed_substate_address(1), SubstateLockType::Write);
+        evidence1
+            .add_shard_group(sg1)
+            .insert(seed_substate_address(2), SubstateLockType::Read);
 
         let mut evidence2 = Evidence::empty();
-        evidence2.add_shard_group_evidence(sg1, seed_substate_address(2), SubstateLockType::Output);
-        evidence2.add_shard_group_evidence(sg2, seed_substate_address(3), SubstateLockType::Output);
-        evidence2.add_shard_group_evidence(sg3, seed_substate_address(4), SubstateLockType::Output);
+        evidence2
+            .add_shard_group(sg1)
+            .insert(seed_substate_address(2), SubstateLockType::Output);
+        evidence2
+            .add_shard_group(sg2)
+            .insert(seed_substate_address(3), SubstateLockType::Output);
+        evidence2
+            .add_shard_group(sg3)
+            .insert(seed_substate_address(4), SubstateLockType::Output);
 
-        evidence1.merge(evidence2);
+        evidence1.update(&evidence2);
 
         assert_eq!(evidence1.len(), 3);
         assert_eq!(

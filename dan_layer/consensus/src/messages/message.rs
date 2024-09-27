@@ -45,7 +45,7 @@ impl HotstuffMessage {
             Self::Vote(msg) => msg.epoch,
             Self::MissingTransactionsRequest(msg) => msg.epoch,
             Self::MissingTransactionsResponse(msg) => msg.epoch,
-            Self::CatchUpSyncRequest(msg) => msg.epoch,
+            Self::CatchUpSyncRequest(msg) => msg.high_qc.epoch(),
             Self::SyncResponse(msg) => msg.epoch,
         }
     }
@@ -61,12 +61,23 @@ impl HotstuffMessage {
 impl Display for HotstuffMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            HotstuffMessage::NewView(msg) => write!(f, "NewView({})", msg.new_height),
+            HotstuffMessage::NewView(msg) => {
+                write!(
+                    f,
+                    "NewView({}, high-qc: {})",
+                    msg.new_height,
+                    msg.high_qc.block_height()
+                )
+            },
             HotstuffMessage::Proposal(msg) => {
                 write!(f, "Proposal(Epoch={},Height={})", msg.block.epoch(), msg.block.height(),)
             },
             HotstuffMessage::ForeignProposal(msg) => write!(f, "ForeignProposal({})", msg),
-            HotstuffMessage::Vote(msg) => write!(f, "Vote({}, {}, {})", msg.block_height, msg.block_id, msg.decision),
+            HotstuffMessage::Vote(msg) => write!(
+                f,
+                "Vote({}, {}, {})",
+                msg.unverified_block_height, msg.block_id, msg.decision
+            ),
             HotstuffMessage::MissingTransactionsRequest(msg) => {
                 write!(
                     f,

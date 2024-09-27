@@ -12,25 +12,15 @@ pub trait ValidatorSignatureService {
 }
 
 pub trait VoteSignatureService: ValidatorSignatureService {
-    fn create_message(&self, voter_leaf_hash: &FixedHash, block_id: &BlockId, decision: &QuorumDecision) -> FixedHash {
-        vote_signature_hasher()
-            .chain(voter_leaf_hash)
-            .chain(block_id)
-            .chain(decision)
-            .result()
+    fn create_message(&self, block_id: &BlockId, decision: &QuorumDecision) -> FixedHash {
+        vote_signature_hasher().chain(block_id).chain(decision).result()
     }
 
-    fn sign_vote(&self, leaf_hash: &FixedHash, block_id: &BlockId, decision: &QuorumDecision) -> ValidatorSignature {
-        let message = self.create_message(leaf_hash, block_id, decision);
+    fn sign_vote(&self, block_id: &BlockId, decision: &QuorumDecision) -> ValidatorSignature {
+        let message = self.create_message(block_id, decision);
         let signature = self.sign(message);
         ValidatorSignature::new(self.public_key().clone(), signature)
     }
 
-    fn verify(
-        &self,
-        signature: &ValidatorSignature,
-        leaf_hash: &FixedHash,
-        block_id: &BlockId,
-        decision: &QuorumDecision,
-    ) -> bool;
+    fn verify(&self, signature: &ValidatorSignature, block_id: &BlockId, decision: &QuorumDecision) -> bool;
 }

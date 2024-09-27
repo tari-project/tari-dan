@@ -251,7 +251,7 @@ where TSubstateCache: SubstateCache + 'static
             for (epoch, public_key) in claim_instructions {
                 let vn = self
                     .epoch_manager
-                    .get_validator_node_by_public_key(epoch, &public_key)
+                    .get_validator_node_by_public_key(epoch, public_key.clone())
                     .await?;
                 let address = VirtualSubstateId::UnclaimedValidatorFee {
                     epoch: epoch.as_u64(),

@@ -35,17 +35,17 @@ impl TransactionSignature {
 
     pub fn sign(secret_key: &RistrettoSecretKey, transaction: &UnsignedTransaction) -> Self {
         let public_key = RistrettoPublicKey::from_secret_key(secret_key);
-        let challenge = Self::create_challenge(transaction);
+        let message = Self::create_message(transaction);
 
         Self {
-            signature: Signature::sign(secret_key, challenge, &mut OsRng).unwrap(),
+            signature: Signature::sign(secret_key, message, &mut OsRng).unwrap(),
             public_key,
         }
     }
 
     pub fn verify(&self, transaction: &UnsignedTransaction) -> bool {
-        let challenge = Self::create_challenge(transaction);
-        self.signature.verify(&self.public_key, challenge)
+        let message = Self::create_message(transaction);
+        self.signature.verify(&self.public_key, message)
     }
 
     pub fn signature(&self) -> &Signature {
@@ -56,7 +56,7 @@ impl TransactionSignature {
         &self.public_key
     }
 
-    fn create_challenge(transaction: &UnsignedTransaction) -> [u8; 64] {
+    fn create_message(transaction: &UnsignedTransaction) -> [u8; 64] {
         let signature_fields = TransactionSignatureFields::from(transaction);
         hasher64(EngineHashDomainLabel::TransactionSignature)
             .chain(&signature_fields)

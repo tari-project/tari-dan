@@ -314,13 +314,13 @@ impl EpochManagerReader for TestEpochManager {
     async fn get_validator_node_by_public_key(
         &self,
         _epoch: Epoch,
-        public_key: &PublicKey,
+        public_key: PublicKey,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError> {
         let lock = self.state_lock().await;
         let (address, (_shard, shard_key, public_key, sidechain_id, registered_at, start_epoch, end_epoch)) = lock
             .validator_shards
             .iter()
-            .find(|(_, (_, _, pk, _, _, _, _))| pk == public_key)
+            .find(|(_, (_, _, pk, _, _, _, _))| *pk == public_key)
             .unwrap();
 
         Ok(ValidatorNode {

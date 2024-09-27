@@ -8,7 +8,6 @@ use std::{
 };
 
 use tari_dan_common_types::{shard::Shard, Epoch};
-use tari_state_tree::Version;
 
 use crate::{consensus_models::SubstateUpdate, StateStoreReadTransaction, StorageError};
 
@@ -16,7 +15,6 @@ use crate::{consensus_models::SubstateUpdate, StateStoreReadTransaction, Storage
 pub struct StateTransition {
     pub id: StateTransitionId,
     pub update: SubstateUpdate,
-    pub state_tree_version: Version,
 }
 
 impl StateTransition {

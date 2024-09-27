@@ -509,6 +509,7 @@ async fn multishard_local_inputs_and_outputs_foreign_outputs() {
         .await;
     test.send_transaction_to_destination(TestVnDestination::Committee(1), tx1.clone())
         .await;
+    // Don't send to committee 2 since they are not involved in inputs
 
     test.start_epoch(Epoch(1)).await;
 
@@ -866,25 +867,33 @@ async fn leader_failure_node_goes_down() {
     let mut test = Test::builder()
         // Allow enough time for leader failures
         .with_test_timeout(Duration::from_secs(60))
+        .with_block_time(Duration::from_secs(2))
         .add_committee(0, vec!["1", "2", "3", "4", "5"])
         .start()
         .await;
 
-    let failure_node = TestAddress::new("2");
+    let failure_node = TestAddress::new("4");
 
     for _ in 0..10 {
         test.send_transaction_to_all(Decision::Commit, 1, 2, 1).await;
     }
+
+    // Take the VN offline - if we do it in the loop below, all transactions may have already been finalized (local
+    // only) by committed block 1
+    log::info!("😴 {failure_node} is offline");
+    test.network()
+        .go_offline(TestVnDestination::Address(failure_node.clone()))
+        .await;
+
     test.start_epoch(Epoch(1)).await;
 
     loop {
         let (_, _, _, committed_height) = test.on_block_committed().await;
 
         if committed_height == NodeHeight(1) {
-            log::info!("😴 Node 2 goes offline");
-            test.network()
-                .go_offline(TestVnDestination::Address(failure_node.clone()))
-                .await;
+            // This allows a few more leader failures to occur
+            test.send_transaction_to_all(Decision::Commit, 1, 2, 1).await;
+            test.wait_for_pool_count(TestVnDestination::All, 1).await;
         }
 
         if test.validators().filter(|vn| vn.address != failure_node).all(|v| {
@@ -895,7 +904,7 @@ async fn leader_failure_node_goes_down() {
             break;
         }
 
-        if committed_height > NodeHeight(100) {
+        if committed_height > NodeHeight(50) {
             panic!("Not all transaction committed after {} blocks", committed_height);
         }
     }
@@ -908,7 +917,7 @@ async fn leader_failure_node_goes_down() {
     });
 
     log::info!("total messages sent: {}", test.network().total_messages_sent());
-    test.assert_clean_shutdown().await;
+    test.assert_clean_shutdown_except(&[failure_node]).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

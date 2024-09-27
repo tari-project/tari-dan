@@ -9330,7 +9330,6 @@ dependencies = [
  "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction",
- "tari_utilities",
  "tempfile",
  "thiserror",
  "ts-rs",
@@ -9846,7 +9845,6 @@ dependencies = [
  "libp2p-peersync",
  "libp2p-substream",
  "thiserror",
- "tokio",
 ]
 
 [[package]]

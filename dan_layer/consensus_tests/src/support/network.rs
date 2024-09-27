@@ -309,26 +309,26 @@ impl TestNetworkWorker {
         log::info!("🛑 Network stopped");
     }
 
-    pub async fn handle_broadcast(&mut self, from: TestAddress, to: Vec<TestAddress>, msg: HotstuffMessage) {
-        log::debug!("✉️ Broadcast {} from {} to {}", msg, from, to.iter().join(", "));
-        for vn in to {
+    pub async fn handle_broadcast(&mut self, from: TestAddress, to_addrs: Vec<TestAddress>, msg: HotstuffMessage) {
+        log::debug!("✉️ Broadcast {} from {} to {}", msg, from, to_addrs.iter().join(", "));
+        for to in to_addrs {
             if let Some(message_filter) = &self.message_filter {
-                if !message_filter(&from, &vn, &msg) {
+                if !message_filter(&from, &to, &msg) {
                     self.num_filtered_messages
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     continue;
                 }
             }
             // TODO: support for taking a whole committee bucket offline
-            if vn != from &&
-                self.is_offline_destination(&vn, ShardGroup::all_shards(TEST_NUM_PRESHARDS))
+            if to != from &&
+                self.is_offline_destination(&from, &to, ShardGroup::all_shards(TEST_NUM_PRESHARDS))
                     .await
             {
                 continue;
             }
 
             self.tx_hs_message
-                .get(&vn)
+                .get(&to)
                 .unwrap()
                 .send((from.clone(), msg.clone()))
                 .await
@@ -349,10 +349,10 @@ impl TestNetworkWorker {
         }
         log::debug!("✉️ Message {} from {} to {}", msg, from, to);
         if from != to &&
-            self.is_offline_destination(&from, ShardGroup::all_shards(TEST_NUM_PRESHARDS))
+            self.is_offline_destination(&from, &to, ShardGroup::all_shards(TEST_NUM_PRESHARDS))
                 .await
         {
-            log::info!("🛑 Discarding message {msg}. Leader {from} is offline");
+            log::info!("🗑️ Discarding message {msg}. Leader {from} is offline");
             return;
         }
         self.on_message.send(Some(msg.clone())).unwrap();
@@ -361,9 +361,10 @@ impl TestNetworkWorker {
         self.tx_hs_message.get(&to).unwrap().send((from, msg)).await.unwrap();
     }
 
-    async fn is_offline_destination(&self, addr: &TestAddress, shard: ShardGroup) -> bool {
+    async fn is_offline_destination(&self, from: &TestAddress, to: &TestAddress, shard: ShardGroup) -> bool {
         let lock = self.offline_destinations.read().await;
         // 99999 is not used TODO: support for taking entire shard group offline
-        lock.iter().any(|d| d.is_for(addr, shard, 99999))
+        lock.iter()
+            .any(|d| d.is_for(from, shard, 99999) || d.is_for(to, shard, 99999))
     }
 }

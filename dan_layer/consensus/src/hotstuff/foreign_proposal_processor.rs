@@ -46,7 +46,7 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
     );
     info!(
         target: LOG_TARGET,
-        "🧩 Processing FOREIGN PROPOSAL for block {}, justify_qc: {}",
+        "🧩 Processing FOREIGN PROPOSAL {}, justify_qc: {}",
         proposal.block(),
         proposal.justify_qc(),
     );
@@ -62,7 +62,11 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
     for cmd in block.commands() {
         match cmd {
             Command::LocalPrepare(atom) => {
-                if !local_committee_info.includes_any_address(atom.evidence.substate_addresses_iter()) {
+                if atom
+                    .evidence
+                    .shard_groups_iter()
+                    .all(|sg| *sg != local_committee_info.shard_group())
+                {
                     debug!(
                         target: LOG_TARGET,
                         "🧩 FOREIGN PROPOSAL: Command: LocalPrepare({}, {}), block: {} not relevant to local committee",
@@ -213,7 +217,11 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                 }
             },
             Command::LocalAccept(atom) => {
-                if !local_committee_info.includes_any_address(atom.evidence.substate_addresses_iter()) {
+                if atom
+                    .evidence
+                    .shard_groups_iter()
+                    .all(|sg| *sg != local_committee_info.shard_group())
+                {
                     continue;
                 }
 
@@ -248,7 +256,7 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                 }
 
                 let remote_decision = atom.decision;
-                let local_decision = tx_rec.current_local_decision();
+                let local_decision = tx_rec.current_decision();
                 if remote_decision.is_abort() && local_decision.is_commit() {
                     info!(
                         target: LOG_TARGET,
@@ -325,7 +333,7 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                         }
                         proposed_block_change_set.set_next_transaction_update(tx_rec)?;
                     }
-                } else if tx_rec.current_stage().is_local_prepared() && tx_rec.is_ready_for_next_stage() {
+                } else if tx_rec.current_stage().is_local_prepared() && tx_rec.is_ready_for_pending_stage() {
                     info!(
                         target: LOG_TARGET,
                         "🧩 FOREIGN PROPOSAL: Transaction is ready for propose ALL_PREPARED({}, {}) Local Stage: {}",
@@ -334,9 +342,11 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                         tx_rec.current_stage()
                     );
 
+                    // Set readiness according to the new evidence even if in LocalPrepared phase. We may get
+                    // LocalPrepared foreign proposal after this which is basically a no-op
                     tx_rec.set_next_stage(TransactionPoolStage::LocalPrepared)?;
                     proposed_block_change_set.set_next_transaction_update(tx_rec)?;
-                } else if tx_rec.current_stage().is_local_accepted() && tx_rec.is_ready_for_next_stage() {
+                } else if tx_rec.current_stage().is_local_accepted() && tx_rec.is_ready_for_pending_stage() {
                     info!(
                         target: LOG_TARGET,
                         "🧩 FOREIGN PROPOSAL: Transaction is ready for propose ALL_ACCEPT({}, {}) Local Stage: {}",
