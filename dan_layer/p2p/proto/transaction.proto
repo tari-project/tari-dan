@@ -9,7 +9,6 @@ import "common.proto";
 
 message NewTransactionMessage {
   Transaction transaction = 1;
-  repeated bytes output_shards = 2;
 }
 
 message CommitmentSignature {

@@ -12,8 +12,19 @@ use tari_dan_common_types::{
     ShardGroup,
 };
 use tari_dan_storage::{
-    consensus_models::{Block, HighQc, LastSentVote, QuorumCertificate, QuorumDecision, TransactionPool, ValidBlock},
+    consensus_models::{
+        Block,
+        ForeignProposal,
+        HighQc,
+        LastSentVote,
+        QuorumCertificate,
+        QuorumDecision,
+        TransactionPool,
+        ValidBlock,
+        Vote,
+    },
     StateStore,
+    StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tokio::{sync::broadcast, task};
@@ -282,7 +293,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
             let local_committee = self.epoch_manager.get_local_committee(valid_block.epoch()).await?;
 
-            let vote = self.generate_vote_message(valid_block.block(), decision).await?;
+            let vote = self.generate_vote_message(valid_block.block(), decision)?;
             self.send_vote_to_leader(&local_committee, vote, valid_block.block())
                 .await?;
         } else {
@@ -325,6 +336,9 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     genesis.as_last_executed().set(tx)?;
                     genesis.as_last_voted().set(tx)?;
                     genesis.justify().as_high_qc().set(tx)?;
+
+                    cleanup_epoch(tx, epoch)?;
+
                     Ok::<_, HotStuffError>(())
                 })?;
 
@@ -357,6 +371,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         let leader = self
             .leader_strategy
             .get_leader_for_next_block(local_committee, block.height());
+
         info!(
             target: LOG_TARGET,
             "🔥 VOTE {:?} for block {} proposed by {} to next leader {:.4}",
@@ -365,23 +380,21 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             block.proposed_by(),
             leader,
         );
-        let send = TraceTimer::debug(LOG_TARGET, "SendVoteToLeader(send)");
+
+        let last_sent_vote = LastSentVote {
+            epoch: vote.epoch,
+            block_id: vote.block_id,
+            block_height: block.height(),
+            decision: vote.decision,
+            signature: vote.signature.clone(),
+        };
+
         self.outbound_messaging
-            .send(leader.clone(), HotstuffMessage::Vote(vote.clone()))
+            .send(leader.clone(), HotstuffMessage::Vote(vote))
             .await?;
-        send.done();
-        let write = TraceTimer::debug(LOG_TARGET, "SendVoteToLeader(write last vote)");
-        self.store.with_write_tx(|tx| {
-            let last_sent_vote = LastSentVote {
-                epoch: vote.epoch,
-                block_id: vote.block_id,
-                block_height: vote.block_height,
-                decision: vote.decision,
-                signature: vote.signature,
-            };
-            last_sent_vote.set(tx)
-        })?;
-        write.done();
+
+        self.store.with_write_tx(|tx| last_sent_vote.set(tx))?;
+
         Ok(())
     }
 
@@ -405,24 +418,15 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         ));
     }
 
-    async fn generate_vote_message(
-        &self,
-        block: &Block,
-        decision: QuorumDecision,
-    ) -> Result<VoteMessage, HotStuffError> {
+    fn generate_vote_message(&self, block: &Block, decision: QuorumDecision) -> Result<VoteMessage, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "GenerateVoteMessage");
-        let vn = self
-            .epoch_manager
-            .get_validator_node_by_public_key(block.epoch(), self.vote_signing_service.public_key().clone())
-            .await?;
-        let leaf_hash = vn.get_node_hash(self.config.network);
 
-        let signature = self.vote_signing_service.sign_vote(&leaf_hash, block.id(), &decision);
+        let signature = self.vote_signing_service.sign_vote(block.id(), &decision);
 
         Ok(VoteMessage {
             epoch: block.epoch(),
             block_id: *block.id(),
-            block_height: block.height(),
+            unverified_block_height: block.height(),
             decision,
             signature,
         })
@@ -773,7 +777,7 @@ async fn broadcast_foreign_proposal_if_required<TConsensusSpec: ConsensusSpec>(
     epoch_manager: &TConsensusSpec::EpochManager,
     store: &TConsensusSpec::StateStore,
     num_preshards: NumPreshards,
-    _local_committee_info: &CommitteeInfo,
+    local_committee_info: &CommitteeInfo,
     block: Block,
     justify_qc: QuorumCertificate,
 ) -> Result<(), HotStuffError> {
@@ -787,8 +791,7 @@ async fn broadcast_foreign_proposal_if_required<TConsensusSpec: ConsensusSpec>(
         .filter_map(|c| {
             c.local_prepare()
                 // No need to broadcast LocalPrepare if the committee is output only
-                // FIXME: this breaks free_coins transaction (see transaction_generator)
-                // .filter(|atom| !atom.evidence.is_committee_output_only(local_committee_info))
+                .filter(|atom| !atom.evidence.is_committee_output_only(local_committee_info))
                 .or_else(|| c.local_accept())
         })
         .flat_map(|p| p.evidence.shard_groups_iter().copied())
@@ -845,5 +848,11 @@ async fn broadcast_foreign_proposal_if_required<TConsensusSpec: ConsensusSpec>(
             }),
         )
         .await?;
+    Ok(())
+}
+
+fn cleanup_epoch<TTx: StateStoreWriteTransaction>(tx: &mut TTx, epoch: Epoch) -> Result<(), HotStuffError> {
+    Vote::delete_all(tx)?;
+    ForeignProposal::delete_in_epoch(tx, epoch)?;
     Ok(())
 }

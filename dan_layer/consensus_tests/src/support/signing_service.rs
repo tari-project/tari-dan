@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use rand::rngs::OsRng;
-use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
+use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_consensus::traits::{ValidatorSignatureService, VoteSignatureService};
 use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSchnorrSignature, ValidatorSignature};
 
@@ -37,13 +37,7 @@ impl ValidatorSignatureService for TestVoteSignatureService {
 }
 
 impl VoteSignatureService for TestVoteSignatureService {
-    fn verify(
-        &self,
-        _signature: &ValidatorSignature,
-        _leaf_hash: &FixedHash,
-        _block_id: &BlockId,
-        _decision: &QuorumDecision,
-    ) -> bool {
+    fn verify(&self, _signature: &ValidatorSignature, _block_id: &BlockId, _decision: &QuorumDecision) -> bool {
         self.is_signature_valid
     }
 }

@@ -311,7 +311,6 @@ mod tests {
             Command::ForeignProposal(ForeignProposalAtom {
                 block_id: BlockId::zero(),
                 shard_group: ShardGroup::new(0, 64),
-                base_layer_block_height: 0,
             }),
             Command::Prepare(TransactionAtom {
                 id: TransactionId::default(),

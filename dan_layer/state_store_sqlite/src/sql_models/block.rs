@@ -26,6 +26,7 @@ pub struct Block {
     pub shard_group: i32,
     pub proposed_by: String,
     pub qc_id: String,
+    pub qc_height: i64,
     pub command_count: i64,
     pub commands: String,
     pub total_leader_fee: i64,

@@ -7,7 +7,7 @@ use prometheus::{core::Collector, IntCounter, IntGauge, IntGaugeVec, Opts, Regis
 use tari_consensus::{hotstuff::HotStuffError, messages::HotstuffMessage, traits::hooks::ConsensusHooks};
 use tari_dan_common_types::{NodeHeight, PeerAddress};
 use tari_dan_storage::{
-    consensus_models::{Decision, QuorumDecision, TransactionAtom, TransactionPool, ValidBlock},
+    consensus_models::{Decision, QuorumDecision, TransactionAtom, ValidBlock},
     StateStore,
 };
 use tari_state_store_sqlite::SqliteStateStore;
@@ -17,7 +17,7 @@ use crate::metrics::{CollectorRegister, LabelledCollector};
 
 #[derive(Debug, Clone)]
 pub struct PrometheusConsensusMetrics<S = SqliteStateStore<PeerAddress>> {
-    state_store: S,
+    _state_store: S,
     local_blocks_received: IntCounter,
     blocks_accepted: IntCounter,
     blocks_rejected: IntCounter,
@@ -33,7 +33,7 @@ pub struct PrometheusConsensusMetrics<S = SqliteStateStore<PeerAddress>> {
     pacemaker_leader_failures: IntCounter,
     needs_sync: IntCounter,
 
-    transactions_pool_size: IntGauge,
+    _transactions_pool_size: IntGauge,
     transactions_ready_for_consensus: IntCounter,
     transactions_finalized_committed: IntCounter,
     transactions_finalized_aborted: IntCounter,
@@ -42,7 +42,7 @@ pub struct PrometheusConsensusMetrics<S = SqliteStateStore<PeerAddress>> {
 impl<S: StateStore> PrometheusConsensusMetrics<S> {
     pub fn new(state_store: S, registry: &Registry) -> Self {
         Self {
-            state_store,
+            _state_store: state_store,
             local_blocks_received: IntCounter::new("consensus_blocks_received", "Number of blocks added")
                 .unwrap()
                 .register_at(registry),
@@ -97,9 +97,12 @@ impl<S: StateStore> PrometheusConsensusMetrics<S> {
             )
             .unwrap()
             .register_at(registry),
-            transactions_pool_size: IntGauge::new("consensus_transactions_pool_size", "Number of transactions in pool")
-                .unwrap()
-                .register_at(registry),
+            _transactions_pool_size: IntGauge::new(
+                "consensus_transactions_pool_size",
+                "Number of transactions in pool",
+            )
+            .unwrap()
+            .register_at(registry),
         }
     }
 
@@ -166,18 +169,6 @@ impl<S: StateStore> ConsensusHooks for PrometheusConsensusMetrics<S> {
 
     fn on_leader_timeout(&mut self, _new_height: NodeHeight) {
         self.pacemaker_leader_failures.inc()
-    }
-
-    fn on_beat(&mut self) {
-        let Some(count) = self
-            .state_store
-            .with_read_tx(|tx| TransactionPool::<S>::new().count(tx))
-            .ok()
-        else {
-            return;
-        };
-
-        self.transactions_pool_size.set(count as i64);
     }
 
     fn on_needs_sync(&mut self, _local_height: NodeHeight, _remote_qc_height: NodeHeight) {
