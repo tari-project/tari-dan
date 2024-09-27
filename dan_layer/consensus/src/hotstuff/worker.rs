@@ -45,7 +45,7 @@ use crate::{
         pacemaker::PaceMaker,
         pacemaker_handle::PaceMakerHandle,
         transaction_manager::ConsensusTransactionManager,
-        vote_receiver::VoteReceiver,
+        vote_collector::VoteCollector,
     },
     messages::{HotstuffMessage, ProposalMessage},
     tracing::TraceTimer,
@@ -105,13 +105,11 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     ) -> Self {
         let (tx_missing_transactions, rx_missing_transactions) = mpsc::unbounded_channel();
         let pacemaker = PaceMaker::new(config.pacemaker_max_base_time);
-        let vote_receiver = VoteReceiver::new(
+        let vote_receiver = VoteCollector::new(
             config.network,
             state_store.clone(),
-            leader_strategy.clone(),
             epoch_manager.clone(),
             signing_service.clone(),
-            pacemaker.clone_handle(),
         );
         let transaction_manager = ConsensusTransactionManager::new(transaction_executor.clone());
 
@@ -157,7 +155,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 epoch_manager.clone(),
                 pacemaker.clone_handle(),
             ),
-            on_receive_vote: OnReceiveVoteHandler::new(vote_receiver.clone()),
+            on_receive_vote: OnReceiveVoteHandler::new(pacemaker.clone_handle(), vote_receiver.clone()),
             on_receive_new_view: OnReceiveNewViewHandler::new(
                 config.network,
                 state_store.clone(),
@@ -280,7 +278,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 },
 
                 maybe_leaf_block = on_force_beat.wait() => {
-                    self.hooks.on_beat();
                     if let Err(e) = self.propose_if_leader(current_epoch, maybe_leaf_block, &local_committee_info).await {
                         self.on_failure("propose_if_leader", &e).await;
                         return Err(e);
@@ -388,15 +385,18 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                         .find(|(addr, _)| *addr != self.local_validator_addr)
                     {
                         Some((addr, _)) => {
-                            warn!(target: LOG_TARGET, "⚠️Requesting missing transactions from another validator {addr}
-                because we are (presumably) catching up (local_peer_id = {})", self.local_validator_addr);
+                            warn!(
+                                target: LOG_TARGET,
+                                "⚠️Requesting missing transactions from another validator {addr} because we are (presumably) catching up (local_peer_id = {})",
+                                self.local_validator_addr,
+                            );
                             request_from_address = addr;
                         },
                         None => {
                             warn!(
                                 target: LOG_TARGET,
-                                "❌NEVERHAPPEN: We're the only validator in the committee but we need to request missing
-                transactions."             );
+                                "❌NEVERHAPPEN: We're the only validator in the committee but we need to request missing transactions."
+                            );
                             return Ok(());
                         },
                     }
@@ -577,16 +577,16 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     }
 
     async fn on_beat(&mut self, epoch: Epoch, local_committee_info: &CommitteeInfo) -> Result<(), HotStuffError> {
-        self.hooks.on_beat();
-        let (base_layer_block_height, _) = self.epoch_manager.current_base_layer_block_info().await?;
-        if !self.state_store.with_read_tx(|tx| {
+        let propose_now = self.state_store.with_read_tx(|tx| {
             // Propose quickly if there are UTXOs to mint or transactions to propose
-            Ok::<_, HotStuffError>(
-                ForeignProposal::has_unconfirmed(tx, base_layer_block_height)? ||
-                    BurntUtxo::has_unproposed(tx)? ||
-                    self.transaction_pool.has_uncommitted_transactions(tx)?,
-            )
-        })? {
+            let propose_now = ForeignProposal::has_unconfirmed(tx, epoch)? ||
+                BurntUtxo::has_unproposed(tx)? ||
+                self.transaction_pool.has_uncommitted_transactions(tx)?;
+
+            Ok::<_, HotStuffError>(propose_now)
+        })?;
+
+        if !propose_now {
             let current_epoch = self.epoch_manager.current_epoch().await?;
             // Propose quickly if we should end the epoch (i.e base layer epoch > pacemaker epoch)
             if current_epoch == epoch {
@@ -606,7 +606,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         leaf_block: Option<LeafBlock>,
         local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
-        let is_newview_propose = leaf_block.is_some();
         let leaf_block = match leaf_block {
             Some(leaf_block) => leaf_block,
             None => self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?,
@@ -621,8 +620,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         );
         info!(
             target: LOG_TARGET,
-            "🔥 [on_beat{}] {} Is leader: {:?}, leaf_block: {}, local_committee: {}",
-            if is_newview_propose { " (NEWVIEW)"} else { "" },
+            "🔥 [on_beat{}] Is leader: {:?}, leaf_block: {}, local_committee: {}",
             self.local_validator_addr,
             is_leader,
             leaf_block,
@@ -639,17 +637,11 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     &local_committee,
                     *local_committee_info,
                     leaf_block,
-                    is_newview_propose,
                     propose_epoch_end,
                 )
                 .await?;
-        } else {
-            // We can make this a warn/error in future, but for now I want to be sure this never happens
-            debug_assert!(
-                !is_newview_propose,
-                "propose_if_leader called with is_newview_propose=true but we're not the leader"
-            );
         }
+
         Ok(())
     }
 
@@ -679,7 +671,9 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             ),
             HotstuffMessage::Vote(msg) => log_err(
                 "on_receive_vote",
-                self.on_receive_vote.handle(from, msg, local_committee_info).await,
+                self.on_receive_vote
+                    .handle(from, current_epoch, msg, local_committee_info)
+                    .await,
             ),
             HotstuffMessage::MissingTransactionsRequest(msg) => log_err(
                 "on_receive_request_missing_transactions",

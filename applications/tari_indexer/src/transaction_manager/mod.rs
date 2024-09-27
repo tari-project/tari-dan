@@ -85,7 +85,7 @@ where
             target: LOG_TARGET,
             "Submitting transaction with hash {} to the validator node", tx_hash
         );
-        let transaction_substate_address = SubstateAddress::for_transaction_receipt(tx_hash.into_array().into());
+        let transaction_substate_address = tx_hash.to_substate_address();
 
         if transaction.all_inputs_iter().next().is_none() {
             self.try_with_committee(iter::once(transaction_substate_address), 2, |mut client| {
@@ -122,7 +122,7 @@ where
         &self,
         transaction_id: TransactionId,
     ) -> Result<TransactionResultStatus, TransactionManagerError> {
-        let transaction_substate_address = SubstateAddress::for_transaction_receipt(transaction_id.into_array().into());
+        let transaction_substate_address = transaction_id.to_substate_address();
         self.try_with_committee(iter::once(transaction_substate_address), 1, |mut client| async move {
             client.get_finalized_transaction_result(transaction_id).await.optional()
         })

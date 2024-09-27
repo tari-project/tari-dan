@@ -42,7 +42,6 @@ use tari_dan_storage::{
     StateStore,
 };
 use tari_engine_types::{commit_result::RejectReason, substate::Substate};
-use tari_transaction::TransactionId;
 use tokio::sync::broadcast;
 
 use crate::{
@@ -121,21 +120,25 @@ where TConsensusSpec: ConsensusSpec
         );
 
         let block_decision = self.store.with_write_tx(|tx| {
-            let mut justified_block = valid_block.justify().get_block(&**tx)?;
-            // This comes before decide so that all evidence can be in place before LocalPrepare and LocalAccept
-            if !justified_block.is_justified() {
-                self.process_newly_justified_block(tx, &justified_block, local_committee_info, change_set)?;
-                justified_block.set_as_justified(tx)?;
-            }
+            if self.should_vote(tx, valid_block.block())? {
+                let mut justified_block = valid_block.justify().get_block(&**tx)?;
+                // This comes before decide so that all evidence can be in place before LocalPrepare and LocalAccept
+                if !justified_block.is_justified() {
+                    self.process_newly_justified_block(tx, &justified_block, local_committee_info, change_set)?;
+                    justified_block.set_as_justified(tx)?;
+                }
 
-            self.decide_on_block(
-                tx,
-                local_committee_info,
-                valid_block,
-                can_propose_epoch_end,
-                &foreign_committee_infos,
-                change_set,
-            )?;
+                self.decide_what_to_vote(
+                    tx,
+                    valid_block.block(),
+                    local_committee_info,
+                    can_propose_epoch_end,
+                    &foreign_committee_infos,
+                    change_set,
+                )?;
+            } else {
+                change_set.no_vote(NoVoteReason::ShouldNotVote);
+            }
 
             let mut locked_blocks = Vec::new();
             let mut finalized_transactions = Vec::new();
@@ -223,55 +226,36 @@ where TConsensusSpec: ConsensusSpec
             };
 
             if cmd.is_local_prepare() {
+                debug!(
+                    target: LOG_TARGET,
+                    "🔍 Updating evidence for LocalPrepare command in block {} for transaction {}",
+                    leaf,
+                    atom.id(),
+                );
                 pool_tx.add_prepare_qc_evidence(local_committee_info, justify_id);
             } else if cmd.is_local_accept() {
+                debug!(
+                    target: LOG_TARGET,
+                    "🔍 Updating evidence for LocalAccept command in block {} for transaction {}",
+                    leaf,
+                    atom.id(),
+                );
                 pool_tx.add_accept_qc_evidence(local_committee_info, justify_id);
             } else {
                 // Nothing
             }
 
-            if !pool_tx.is_ready() {
-                if pool_tx.current_stage().is_local_prepared() && pool_tx.is_ready_for_pending_stage() {
-                    pool_tx.set_next_stage(TransactionPoolStage::LocalPrepared)?;
-                } else if pool_tx.current_stage().is_local_accepted() && pool_tx.is_ready_for_pending_stage() {
-                    pool_tx.set_next_stage(TransactionPoolStage::LocalAccepted)?;
-                } else {
-                    // Nothing
-                }
+            // Set readiness
+            if !pool_tx.is_ready() && pool_tx.is_ready_for_pending_stage() {
+                pool_tx.set_ready(true);
             }
 
-            if cmd.is_local_prepare() || cmd.is_local_accept() {
-                change_set.set_next_transaction_update(pool_tx)?;
-            }
+            change_set.set_next_transaction_update(pool_tx)?;
         }
 
         timer.with_iterations(num_applicable_commands);
 
         Ok(())
-    }
-
-    fn decide_on_block(
-        &self,
-        tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
-        local_committee_info: &CommitteeInfo,
-        valid_block: &ValidBlock,
-        can_propose_epoch_end: bool,
-        foreign_committee_infos: &HashMap<ShardGroup, CommitteeInfo>,
-        proposed_block_change_set: &mut ProposedBlockChangeSet,
-    ) -> Result<(), HotStuffError> {
-        if !self.should_vote(tx, valid_block.block())? {
-            proposed_block_change_set.no_vote(NoVoteReason::ShouldNotVote);
-            return Ok(());
-        }
-
-        self.decide_what_to_vote(
-            tx,
-            valid_block.block(),
-            local_committee_info,
-            can_propose_epoch_end,
-            foreign_committee_infos,
-            proposed_block_change_set,
-        )
     }
 
     /// if b_new .height > vheight && (b_new extends b_lock || b_new .justify.node.height > b_lock .height)
@@ -954,7 +938,18 @@ where TConsensusSpec: ConsensusSpec
         let maybe_execution = if tx_rec.current_decision().is_commit() {
             // TODO: provide the current input locks to the executor, the executor must fail if a write lock is
             // requested for a read-locked substate.
-            let execution = self.execute_transaction(tx, block.id(), block.epoch(), tx_rec.transaction_id())?;
+
+            let transaction = tx_rec.get_transaction(tx)?;
+            if !transaction.has_all_foreign_input_pledges(tx, local_committee_info)? {
+                warn!(
+                    target: LOG_TARGET,
+                    "❌ NO VOTE AllPrepare: transaction {} in block {} has not received all foreign input pledges",
+                    tx_rec.transaction_id(),
+                    block,
+                );
+                return Ok(Some(NoVoteReason::NotAllForeignInputPledges));
+            }
+            let execution = self.execute_transaction(tx, block.id(), block.epoch(), transaction)?;
             let mut execution = execution.into_transaction_execution();
 
             // TODO: check the diff is valid against the provided input evidence (correct locks etc).
@@ -1023,7 +1018,7 @@ where TConsensusSpec: ConsensusSpec
         if tx_rec.current_decision() != atom.decision {
             warn!(
                 target: LOG_TARGET,
-                "❌ NO VOTE LocalAccept: decision disagreement for transaction {} in block {}. Leader proposed {}, we decided {}",
+                "❌ NO VOTE AllAccept: decision disagreement for transaction {} (after execute) in block {}. Leader proposed {}, we decided {}",
                 tx_rec.transaction_id(),
                 block,
                 atom.decision,
@@ -1038,7 +1033,7 @@ where TConsensusSpec: ConsensusSpec
         if tx_rec.transaction_fee() != atom.transaction_fee {
             warn!(
                 target: LOG_TARGET,
-                "❌ NO VOTE LocalAccept: transaction fee disagreement tx {} in block {}. Leader proposed {}, we calculated {}",
+                "❌ NO VOTE AllAccept: transaction fee disagreement tx {} in block {}. Leader proposed {}, we calculated {}",
                 tx_rec.transaction_id(),
                 block,
                 atom.transaction_fee,
@@ -1470,7 +1465,7 @@ where TConsensusSpec: ConsensusSpec
     fn evaluate_foreign_proposal_command(
         &self,
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
-        block: &Block,
+        local_block: &Block,
         locked_block: &LockedBlock,
         fp_atom: &ForeignProposalAtom,
         local_committee_info: &CommitteeInfo,
@@ -1513,7 +1508,7 @@ where TConsensusSpec: ConsensusSpec
 
         if let Err(err) = process_foreign_block(
             tx,
-            &block.as_leaf_block(),
+            &local_block.as_leaf_block(),
             locked_block,
             fp,
             // NB: dont put these args in the wrong order
@@ -1525,7 +1520,7 @@ where TConsensusSpec: ConsensusSpec
             warn!(
                 target: LOG_TARGET,
                 "❌ NO VOTE: Failed to process foreign proposal for local block {block} (foreign block: {foreign_block_id} shard group: {shard_group}). Error: {error}",
-                block = block,
+                block = local_block,
                 foreign_block_id = fp_atom.block_id,
                 error = err,
                 shard_group = foreign_committee_info.shard_group(),
@@ -1585,18 +1580,17 @@ where TConsensusSpec: ConsensusSpec
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         block_id: &BlockId,
         current_epoch: Epoch,
-        transaction_id: &TransactionId,
+        transaction: TransactionRecord,
     ) -> Result<BlockTransactionExecution, HotStuffError> {
         info!(
             target: LOG_TARGET,
             "👨‍🔧 DECIDE: Executing transaction {} in block {}",
-            transaction_id,
+            transaction.id(),
             block_id,
         );
-        let transaction = TransactionRecord::get(tx, transaction_id)?;
         // Might have been executed already in on propose
         if let Some(execution) =
-            BlockTransactionExecution::get_pending_for_block(tx, transaction_id, block_id).optional()?
+            BlockTransactionExecution::get_pending_for_block(tx, transaction.id(), block_id).optional()?
         {
             return Ok(execution);
         }
@@ -1718,10 +1712,10 @@ where TConsensusSpec: ConsensusSpec
         if total_transaction_fee > 0 {
             info!(
                 target: LOG_TARGET,
-                "🪙 Validator fee for block {} ({}, Total Fees Paid = {})",
-                block.proposed_by(),
+                "🪙 Validator fee ({}, Total Fees Paid = {}) for block {}",
                 block.total_leader_fee(),
-                total_transaction_fee
+                total_transaction_fee,
+                block,
             );
         }
 

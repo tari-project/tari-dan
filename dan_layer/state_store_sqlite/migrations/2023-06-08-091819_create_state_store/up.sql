@@ -23,6 +23,8 @@ create table blocks
     shard_group             integer   not NULL,
     proposed_by             text      not NULL,
     qc_id                   text      not NULL,
+    -- used for debugging purposes to make it easier to know which block is justified
+    qc_height               bigint    not NULL,
     command_count           bigint    not NULL,
     commands                text      not NULL,
     total_leader_fee        bigint    not NULL,
@@ -336,6 +338,7 @@ create table transaction_pool
 );
 create unique index transaction_pool_uniq_idx_transaction_id on transaction_pool (transaction_id);
 create index transaction_pool_idx_is_ready on transaction_pool (is_ready);
+create index transaction_pool_idx_stage_is_ready on transaction_pool (stage, is_ready);
 
 create table transaction_pool_state_updates
 (
@@ -369,6 +372,8 @@ create table votes
     signature        text      not NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX votes_idx_block_id ON votes (block_id);
 
 CREATE TABLE foreign_proposals
 (
@@ -519,6 +524,8 @@ create table diagnostic_deleted_blocks
     shard_group             integer   not NULL,
     proposed_by             text      not NULL,
     qc_id                   text      not NULL,
+    -- used for debugging purposes to make it easier to know which block is justified
+    qc_height               bigint    not NULL,
     command_count           bigint    not NULL,
     commands                text      not NULL,
     total_leader_fee        bigint    not NULL,

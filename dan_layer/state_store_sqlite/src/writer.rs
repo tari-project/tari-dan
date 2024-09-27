@@ -235,6 +235,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             blocks::commands.eq(serialize_json(block.commands())?),
             blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
+            blocks::qc_height.eq(block.justify().block_height().as_u64() as i64),
             blocks::is_dummy.eq(block.is_dummy()),
             blocks::is_justified.eq(block.is_justified()),
             blocks::signature.eq(block.signature().map(serialize_json).transpose()?),
@@ -639,6 +640,20 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         Ok(())
     }
 
+    fn foreign_proposals_delete_in_epoch(&mut self, epoch: Epoch) -> Result<(), StorageError> {
+        use crate::schema::foreign_proposals;
+
+        diesel::delete(foreign_proposals::table)
+            .filter(foreign_proposals::epoch.eq(epoch.as_u64() as i64))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposals_delete_in_epoch",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
     fn foreign_proposals_set_status(
         &mut self,
         block_id: &BlockId,
@@ -884,6 +899,15 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
         transactions: I,
     ) -> Result<(), StorageError> {
         use crate::schema::transactions;
+
+        if !self.blocks_exists(&block_id)? {
+            return Err(StorageError::QueryError {
+                reason: format!(
+                    "transactions_finalize_all: Cannot finalize transactions for non-existent block {}",
+                    block_id
+                ),
+            });
+        }
 
         let changes = transactions
             .into_iter()
@@ -1433,6 +1457,19 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for SqliteSta
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "votes_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn votes_delete_all(&mut self) -> Result<(), StorageError> {
+        use crate::schema::votes;
+
+        diesel::delete(votes::table)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "votes_delete_all",
                 source: e,
             })?;
 
