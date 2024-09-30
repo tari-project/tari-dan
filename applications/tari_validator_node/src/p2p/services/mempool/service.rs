@@ -24,14 +24,7 @@ use std::{collections::HashSet, fmt::Display, iter};
 
 use libp2p::{gossipsub, PeerId};
 use log::*;
-use tari_dan_common_types::{
-    optional::Optional,
-    NumPreshards,
-    PeerAddress,
-    ShardGroup,
-    SubstateAddress,
-    ToSubstateAddress,
-};
+use tari_dan_common_types::{optional::Optional, NumPreshards, PeerAddress, ShardGroup, ToSubstateAddress};
 use tari_dan_p2p::{DanMessage, NewTransactionMessage, TariMessagingSpec};
 use tari_dan_storage::{consensus_models::TransactionRecord, StateStore};
 use tari_engine_types::commit_result::RejectReason;
@@ -159,21 +152,19 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
             "🎱 Received NEW transaction from local: {transaction}",
         );
 
-        self.handle_new_transaction(transaction, vec![], None).await?;
+        self.handle_new_transaction(transaction, None, self.gossip.get_num_incoming_messages())
+            .await?;
 
         Ok(())
     }
 
     async fn handle_new_transaction_from_remote(
         &mut self,
-        result: Result<(PeerAddress, DanMessage), MempoolError>,
+        result: Result<(PeerAddress, DanMessage, usize), MempoolError>,
     ) -> Result<(), MempoolError> {
-        let (from, msg) = result?;
+        let (from, msg, num_pending) = result?;
         let DanMessage::NewTransaction(msg) = msg;
-        let NewTransactionMessage {
-            transaction,
-            output_shards: unverified_output_shards,
-        } = *msg;
+        let NewTransactionMessage { transaction } = *msg;
 
         if !self.consensus_handle.is_running() {
             info!(
@@ -202,26 +193,10 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
             .await
             .optional()?;
 
-        // Only input shards propagate transactions to output shards. Check that this is true.
-        if !unverified_output_shards.is_empty() {
-            let Some(sender_committee_info) = maybe_sender_committee_info else {
-                debug!(target: LOG_TARGET, "Sender {from} isn't registered but tried to send a new transaction with
-        output shards");
-                return Ok(());
-            };
-
-            let is_input_shard = transaction.is_involved_inputs(&sender_committee_info);
-            if !is_input_shard {
-                warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input
-        shard. Ignoring message.");
-                return Ok(());
-            }
-        }
-
         self.handle_new_transaction(
             transaction,
-            unverified_output_shards,
             maybe_sender_committee_info.map(|c| c.shard_group()),
+            num_pending,
         )
         .await?;
 
@@ -232,8 +207,8 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
     async fn handle_new_transaction(
         &mut self,
         transaction: Transaction,
-        unverified_output_shards: Vec<SubstateAddress>,
         sender_shard_group: Option<ShardGroup>,
+        num_pending: usize,
     ) -> Result<(), MempoolError> {
         #[cfg(feature = "metrics")]
         self.metrics.on_transaction_received(&transaction);
@@ -264,80 +239,47 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
             validator_nodes.values().map(|vn| vn.shard_key).collect::<HashSet<_>>()
         };
 
-        if transaction.num_unique_inputs() == 0 && claim_shards.is_empty() && unverified_output_shards.is_empty() {
+        if transaction.num_unique_inputs() == 0 && claim_shards.is_empty() {
             warn!(target: LOG_TARGET, "⚠ No involved shards for payload");
         }
 
         let current_epoch = self.consensus_handle.current_view().get_epoch();
-        let tx_substate_address = SubstateAddress::for_transaction_receipt(transaction.id().into_receipt_address());
+        let tx_substate_address = transaction.id().to_substate_address();
 
         let local_committee_shard = self.epoch_manager.get_local_committee_info(current_epoch).await?;
         let is_input_shard = transaction.is_involved_inputs(&local_committee_shard);
         let is_output_shard = local_committee_shard.includes_any_address(
             // Known output shards
-            // This is to allow for the txreceipt output
-            iter::once(&tx_substate_address)
-                .chain(unverified_output_shards.iter())
-                .chain(claim_shards.iter()),
+            // This is to allow for the txreceipt output and indicates shard involvement.
+            iter::once(&tx_substate_address).chain(claim_shards.iter()),
         );
 
         if is_input_shard || is_output_shard {
             debug!(target: LOG_TARGET, "🎱 New transaction {} in mempool", transaction.id());
-            // let transaction = TransactionRecord::new(transaction);
-            // self.state_store.with_write_tx(|tx| transaction.insert(tx))?;
-            // let transaction = transaction.into_transaction();
             self.transactions.insert(*transaction.id());
             self.consensus_handle
-                .notify_new_transaction(transaction.clone(), 0)
+                .notify_new_transaction(transaction.clone(), num_pending)
                 .await
                 .map_err(|_| MempoolError::ConsensusChannelClosed)?;
 
-            // This validator is involved, we to send the transaction to local replicas
-            if let Err(e) = self
-                .gossip
-                .forward_to_local_replicas(
-                    current_epoch,
-                    NewTransactionMessage {
-                        transaction: transaction.clone(),
-                        output_shards: unverified_output_shards, /* Or send to local only when we are input shard
-                                                                  * and if we are output send after execution */
-                    }
-                    .into(),
-                )
-                .await
-            {
-                warn!(
-                    target: LOG_TARGET,
-                    "Unable to propagate transaction among peers: {}",
-                    e
-                );
-            }
-
-            // Only input shards propagate to foreign shards
-            if is_input_shard {
-                // Forward to foreign replicas.
-                // We assume that at least f other local replicas receive this transaction and also forward to their
-                // matching replica(s)
-                let substate_addresses = transaction
-                    .all_inputs_iter()
-                    .map(|i| i.or_zero_version().to_substate_address())
-                    .collect();
+            // If we received the message from our local shard group, we don't need to gossip it again on the topic
+            // (prevents Duplicate errors)
+            if sender_shard_group != Some(local_committee_shard.shard_group()) {
+                // This validator is involved, we to send the transaction to local replicas
                 if let Err(e) = self
                     .gossip
-                    .forward_to_foreign_replicas(
+                    .forward_to_local_replicas(
                         current_epoch,
-                        substate_addresses,
                         NewTransactionMessage {
-                            transaction,
-                            output_shards: vec![],
-                        },
-                        sender_shard_group,
+                            transaction: transaction.clone(),
+                        }
+                        .into(),
                     )
                     .await
                 {
                     warn!(
                         target: LOG_TARGET,
-                        "Unable to propagate transaction among peers: {}",
+                        "⚠️ Failed to propagate transaction to local replicas: {}",
                         e
                     );
                 }
@@ -348,33 +290,24 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
                 "🙇 Not in committee for transaction {}",
                 transaction.id(),
             );
+        }
 
-            // This validator is not involved, so we forward the transaction to f + 1 replicas per distinct shard
-            // per input shard ID because we may be the only validator that has received this transaction.
-            let substate_addresses = transaction
-                .all_inputs_iter()
-                .map(|input| input.or_zero_version().to_substate_address())
-                .collect::<HashSet<_>>();
-            debug!(
+        debug!(
+            target: LOG_TARGET,
+            "🎱 Propagating transaction {} ({} input(s))",
+            transaction.id(),
+            transaction.num_unique_inputs(),
+        );
+        if let Err(e) = self
+            .gossip
+            .forward_to_foreign_replicas(current_epoch, NewTransactionMessage { transaction }, sender_shard_group)
+            .await
+        {
+            warn!(
                 target: LOG_TARGET,
-                "🎱 Propagating transaction {} ({} address(es))",
-                transaction.id(),
-                substate_addresses.len()
+                "⚠️ Failed to propagate transaction to foreign committee: {}",
+                e
             );
-            if let Err(e) = self
-                .gossip
-                .gossip_to_foreign_replicas(current_epoch, substate_addresses, NewTransactionMessage {
-                    transaction,
-                    output_shards: vec![],
-                })
-                .await
-            {
-                warn!(
-                    target: LOG_TARGET,
-                    "Unable to propagate transaction among peers: {}",
-                    e
-                );
-            }
         }
 
         Ok(())

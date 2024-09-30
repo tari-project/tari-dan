@@ -13,4 +13,3 @@ libp2p-substream = { workspace = true }
 libp2p-peersync = { workspace = true }
 
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["sync"] }

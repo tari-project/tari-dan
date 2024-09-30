@@ -256,7 +256,7 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                 }
 
                 let remote_decision = atom.decision;
-                let local_decision = tx_rec.current_local_decision();
+                let local_decision = tx_rec.current_decision();
                 if remote_decision.is_abort() && local_decision.is_commit() {
                     info!(
                         target: LOG_TARGET,
@@ -342,6 +342,8 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                         tx_rec.current_stage()
                     );
 
+                    // Set readiness according to the new evidence even if in LocalPrepared phase. We may get
+                    // LocalPrepared foreign proposal after this which is basically a no-op
                     tx_rec.set_next_stage(TransactionPoolStage::LocalPrepared)?;
                     proposed_block_change_set.set_next_transaction_update(tx_rec)?;
                 } else if tx_rec.current_stage().is_local_accepted() && tx_rec.is_ready_for_pending_stage() {

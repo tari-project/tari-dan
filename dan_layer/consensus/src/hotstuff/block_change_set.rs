@@ -209,9 +209,9 @@ impl ProposedBlockChangeSet {
         self
     }
 
-    pub fn apply_evidence(&self, tx_rec_mut: &mut TransactionPoolRecord) {
+    pub fn apply_transaction_update(&self, tx_rec_mut: &mut TransactionPoolRecord) {
         if let Some(update) = self.transaction_changes.get(tx_rec_mut.transaction_id()) {
-            update.apply_evidence(tx_rec_mut);
+            update.apply_update(tx_rec_mut);
         }
     }
 
@@ -416,9 +416,9 @@ struct TransactionChangeSet {
 }
 
 impl TransactionChangeSet {
-    pub fn apply_evidence(&self, tx_rec_mut: &mut TransactionPoolRecord) {
+    pub fn apply_update(&self, tx_rec_mut: &mut TransactionPoolRecord) {
         if let Some(update) = self.next_update.as_ref() {
-            update.apply_evidence(tx_rec_mut);
+            update.apply(tx_rec_mut);
         }
     }
 }

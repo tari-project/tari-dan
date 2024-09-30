@@ -10,7 +10,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct TransactionPoolStatusUpdate {
-    pub transaction: TransactionPoolRecord,
+    transaction: TransactionPoolRecord,
     ready_now: bool,
 }
 
@@ -59,8 +59,9 @@ impl TransactionPoolStatusUpdate {
         self.transaction.leader_fee()
     }
 
-    pub fn apply_evidence(&self, tx_rec_mut: &mut TransactionPoolRecord) {
+    pub fn apply(&self, tx_rec_mut: &mut TransactionPoolRecord) {
         tx_rec_mut.set_evidence(self.evidence().clone());
+        tx_rec_mut.set_ready(self.is_ready_now());
     }
 }
 
