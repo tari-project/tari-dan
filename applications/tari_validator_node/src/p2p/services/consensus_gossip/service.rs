@@ -22,17 +22,22 @@
 
 use std::fmt::Display;
 
+use libp2p::{gossipsub, PeerId};
 use log::*;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::{Epoch, PeerAddress, ShardGroup};
 use tari_dan_p2p::{proto, TariMessagingSpec};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerEvent, EpochManagerReader};
 use tari_networking::{NetworkingHandle, NetworkingService};
+use tari_swarm::messaging::prost::ProstCodec;
 use tokio::sync::{mpsc, oneshot};
+use tari_swarm::messaging::Codec;
 
 use super::{ConsensusGossipError, ConsensusGossipRequest};
 
 const LOG_TARGET: &str = "tari::validator_node::consensus_gossip::service";
+
+pub const TOPIC_PREFIX: &str = "consensus";
 
 #[derive(Debug)]
 pub(super) struct ConsensusGossipService<TAddr> {
@@ -40,6 +45,9 @@ pub(super) struct ConsensusGossipService<TAddr> {
     epoch_manager: EpochManagerHandle<TAddr>,
     is_subscribed: Option<ShardGroup>,
     networking: NetworkingHandle<TariMessagingSpec>,
+    codec:  ProstCodec<proto::consensus::HotStuffMessage>,
+    rx_gossip: mpsc::UnboundedReceiver<(PeerId, gossipsub::Message)>,
+    tx_consensus_gossip:  mpsc::Sender<(PeerId, proto::consensus::HotStuffMessage)>,
 }
 
 impl ConsensusGossipService<PeerAddress> {
@@ -47,12 +55,17 @@ impl ConsensusGossipService<PeerAddress> {
         requests: mpsc::Receiver<ConsensusGossipRequest>,
         epoch_manager: EpochManagerHandle<PeerAddress>,
         networking: NetworkingHandle<TariMessagingSpec>,
+        rx_gossip: mpsc::UnboundedReceiver<(PeerId, gossipsub::Message)>,
+        tx_consensus_gossip:  mpsc::Sender<(PeerId, proto::consensus::HotStuffMessage)>,
     ) -> Self {
         Self {
             requests,
             epoch_manager,
             is_subscribed: None,
             networking,
+            codec: ProstCodec::default(),
+            rx_gossip,
+            tx_consensus_gossip,
         }
     }
 
@@ -62,6 +75,11 @@ impl ConsensusGossipService<PeerAddress> {
         loop {
             tokio::select! {
                 Some(req) = self.requests.recv() => self.handle_request(req).await,
+                Some(msg) = self.rx_gossip.recv() => {
+                    if let Err(err) = self.handle_incoming_gossip_message(msg).await {
+                        warn!(target: LOG_TARGET, "Consensus gossip service error: {}", err);
+                    }
+                },
                 Ok(event) = events.recv() => {
                     if let EpochManagerEvent::EpochChanged(epoch) = event {
                         if self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await?{
@@ -94,6 +112,23 @@ impl ConsensusGossipService<PeerAddress> {
                 handle(reply, self.multicast(shard_group, message).await);
             },
         }
+    }
+
+    async fn handle_incoming_gossip_message(&mut self, msg: (PeerId, gossipsub::Message)) -> Result<(), ConsensusGossipError> {
+        let (from, msg) = msg;
+
+        let (_, msg) = self
+            .codec
+            .decode_from(&mut msg.data.as_slice())
+            .await
+            .map_err(|e| ConsensusGossipError::InvalidMessage(e.into()))?;
+
+        self.tx_consensus_gossip
+            .send((from, msg))
+            .await
+            .map_err(|e| ConsensusGossipError::InvalidMessage(e.into()))?;
+
+        Ok(())
     }
 
     async fn subscribe(&mut self, epoch: Epoch) -> Result<(), ConsensusGossipError> {
@@ -140,8 +175,13 @@ impl ConsensusGossipService<PeerAddress> {
         );
 
         let message = proto::consensus::HotStuffMessage::from(&message);
+        let mut buf = Vec::with_capacity(1024);
+        self.codec
+            .encode_to(&mut buf, message)
+            .await
+            .map_err(|e| ConsensusGossipError::InvalidMessage(e.into()))?;
 
-        self.networking.publish_consensus_gossip(topic, message).await?;
+        self.networking.publish_gossip(topic, buf).await?;
 
         Ok(())
     }
@@ -149,7 +189,8 @@ impl ConsensusGossipService<PeerAddress> {
 
 fn shard_group_to_topic(shard_group: ShardGroup) -> String {
     format!(
-        "consensus-{}-{}",
+        "{}-{}-{}",
+        TOPIC_PREFIX,
         shard_group.start().as_u32(),
         shard_group.end().as_u32()
     )

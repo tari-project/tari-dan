@@ -13,7 +13,7 @@ use crate::p2p::logging::MessageLogger;
 pub struct ConsensusInboundMessaging<TMsgLogger> {
     local_address: PeerAddress,
     rx_inbound_msg: mpsc::UnboundedReceiver<(PeerId, proto::consensus::HotStuffMessage)>,
-    rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::consensus::HotStuffMessage)>,
+    rx_gossip: mpsc::Receiver<(PeerId, proto::consensus::HotStuffMessage)>,
     rx_loopback: mpsc::UnboundedReceiver<HotstuffMessage>,
     msg_logger: TMsgLogger,
 }
@@ -22,7 +22,7 @@ impl<TMsgLogger: MessageLogger> ConsensusInboundMessaging<TMsgLogger> {
     pub fn new(
         local_address: PeerAddress,
         rx_inbound_msg: mpsc::UnboundedReceiver<(PeerId, proto::consensus::HotStuffMessage)>,
-        rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::consensus::HotStuffMessage)>,
+        rx_gossip: mpsc::Receiver<(PeerId, proto::consensus::HotStuffMessage)>,
         rx_loopback: mpsc::UnboundedReceiver<HotstuffMessage>,
         msg_logger: TMsgLogger,
     ) -> Self {

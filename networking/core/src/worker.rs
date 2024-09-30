@@ -38,7 +38,7 @@ use tari_shutdown::ShutdownSignal;
 use tari_swarm::{
     is_supported_multiaddr,
     messaging,
-    messaging::{prost, prost::ProstCodec, Codec},
+    messaging::{prost, prost::ProstCodec},
     peersync,
     substream,
     substream::{NegotiatedSubstream, ProtocolNotification, StreamId},
@@ -82,8 +82,6 @@ where
     active_connections: HashMap<PeerId, Vec<Connection>>,
     pending_substream_requests: HashMap<StreamId, ReplyTx<NegotiatedSubstream<Substream>>>,
     pending_dial_requests: HashMap<PeerId, Vec<ReplyTx<()>>>,
-    transaction_gossip_message_codec: ProstCodec<TMsg::TransactionGossipMessage>,
-    consensus_gossip_message_codec: ProstCodec<TMsg::ConsensusGossipMessage>,
     substream_notifiers: Notifiers<Substream>,
     swarm: TariSwarm<ProstCodec<TMsg::Message>>,
     config: crate::Config,
@@ -119,8 +117,6 @@ where
             active_connections: HashMap::new(),
             pending_substream_requests: HashMap::new(),
             pending_dial_requests: HashMap::new(),
-            transaction_gossip_message_codec: ProstCodec::default(),
-            consensus_gossip_message_codec: ProstCodec::default(),
             relays: RelayState::new(known_relay_nodes),
             swarm,
             config,
@@ -264,44 +260,18 @@ where
                 debug!(target: LOG_TARGET, "📢 Queued message to {num_sent} out of {len} peers");
                 let _ignore = reply_tx.send(Ok(num_sent));
             },
-            NetworkingRequest::PublishTransactionGossip {
+            NetworkingRequest::PublishGossip {
                 topic,
                 message,
                 reply_tx,
             } => {
-                let mut buf = Vec::with_capacity(1024);
-                self.transaction_gossip_message_codec
-                    .encode_to(&mut buf, message)
-                    .await
-                    .map_err(NetworkingError::CodecError)?;
-                match self.swarm.behaviour_mut().gossipsub.publish(topic, buf) {
+                match self.swarm.behaviour_mut().gossipsub.publish(topic, message) {
                     Ok(msg_id) => {
-                        debug!(target: LOG_TARGET, "📢 Published transaction gossipsub message: {}", msg_id);
+                        debug!(target: LOG_TARGET, "📢 Published gossipsub message: {}", msg_id);
                         let _ignore = reply_tx.send(Ok(()));
                     },
                     Err(err) => {
-                        debug!(target: LOG_TARGET, "🚨 Failed to publish transaction gossipsub message: {}", err);
-                        let _ignore = reply_tx.send(Err(err.into()));
-                    },
-                }
-            },
-            NetworkingRequest::PublishConsensusGossip {
-                topic,
-                message,
-                reply_tx,
-            } => {
-                let mut buf = Vec::with_capacity(1024);
-                self.consensus_gossip_message_codec
-                    .encode_to(&mut buf, message)
-                    .await
-                    .map_err(NetworkingError::CodecError)?;
-                match self.swarm.behaviour_mut().gossipsub.publish(topic, buf) {
-                    Ok(msg_id) => {
-                        debug!(target: LOG_TARGET, "📢 Published consensus gossipsub message: {}", msg_id);
-                        let _ignore = reply_tx.send(Ok(()));
-                    },
-                    Err(err) => {
-                        debug!(target: LOG_TARGET, "🚨 Failed to publish consensus gossipsub message: {}", err);
+                        debug!(target: LOG_TARGET, "🚨 Failed to publish gossipsub message: {}", err);
                         let _ignore = reply_tx.send(Err(err.into()));
                     },
                 }
@@ -661,44 +631,22 @@ where
                 },
             }
         } else {
-            // the incoming gossip message is a transaction
-            if let Ok((length, msg)) = self
-                .transaction_gossip_message_codec
-                .decode_from(&mut message.data.as_slice())
-                .await
-            {
-                info!(target: LOG_TARGET, "📢 Rx Transaction Gossipsub: {length} bytes from {source}");
-                let _ignore = self.messaging_mode.send_transaction_gossip_message(source, msg);
-                self.swarm.behaviour_mut().gossipsub.report_message_validation_result(
-                    &message_id,
-                    &propagation_source,
-                    gossipsub::MessageAcceptance::Accept,
-                )?;
-            // the incoming gossip message is a consensus (hotstuff) one
-            } else if let Ok((length, msg)) = self
-                .consensus_gossip_message_codec
-                .decode_from(&mut message.data.as_slice())
-                .await
-            {
-                info!(target: LOG_TARGET, "📢 Rx Consensus Gossipsub: {length} bytes from {source}");
-                let _ignore = self.messaging_mode.send_consensus_gossip_message(source, msg);
-                self.swarm.behaviour_mut().gossipsub.report_message_validation_result(
-                    &message_id,
-                    &propagation_source,
-                    gossipsub::MessageAcceptance::Accept,
-                )?;
-            // the incoming gossip message has unknown type
-            } else {
-                warn!(target: LOG_TARGET, "📢 Gossipsub message failed to decode");
-                self.swarm.behaviour_mut().gossipsub.report_message_validation_result(
-                    &message_id,
-                    &propagation_source,
-                    gossipsub::MessageAcceptance::Reject,
-                )?;
-                return Err(NetworkingError::CodecError(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Invalid message type",
-                )));
+            match self.messaging_mode.send_gossip_message(source, message) {
+                Ok(_) => {
+                    self.swarm.behaviour_mut().gossipsub.report_message_validation_result(
+                        &message_id,
+                        &propagation_source,
+                        gossipsub::MessageAcceptance::Accept,
+                    )?;
+                },
+                Err(e) => {
+                    warn!(target: LOG_TARGET, "📢 Gossipsub message failed to be handled: {}", e);
+                    self.swarm.behaviour_mut().gossipsub.report_message_validation_result(
+                        &message_id,
+                        &propagation_source,
+                        gossipsub::MessageAcceptance::Reject,
+                    )?;
+                }
             }
         }
         Ok(())

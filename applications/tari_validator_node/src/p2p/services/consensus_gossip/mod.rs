@@ -30,3 +30,4 @@ mod initializer;
 pub use initializer::spawn;
 
 mod service;
+pub use service::TOPIC_PREFIX;

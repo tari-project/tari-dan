@@ -67,14 +67,9 @@ pub enum NetworkingRequest<TMsg: MessageSpec> {
         message: TMsg::Message,
         reply_tx: oneshot::Sender<Result<usize, NetworkingError>>,
     },
-    PublishTransactionGossip {
+    PublishGossip {
         topic: IdentTopic,
-        message: TMsg::TransactionGossipMessage,
-        reply_tx: oneshot::Sender<Result<(), NetworkingError>>,
-    },
-    PublishConsensusGossip {
-        topic: IdentTopic,
-        message: TMsg::ConsensusGossipMessage,
+        message: Vec<u8>,
         reply_tx: oneshot::Sender<Result<(), NetworkingError>>,
     },
     SubscribeTopic {
@@ -339,31 +334,14 @@ impl<TMsg: MessageSpec + Send + 'static> NetworkingService<TMsg> for NetworkingH
         rx.await?
     }
 
-    async fn publish_transaction_gossip<TTopic: Into<String> + Send>(
+    async fn publish_gossip<TTopic: Into<String> + Send>(
         &mut self,
         topic: TTopic,
-        message: TMsg::TransactionGossipMessage,
+        message: Vec<u8>,
     ) -> Result<(), NetworkingError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(NetworkingRequest::PublishTransactionGossip {
-                topic: IdentTopic::new(topic),
-                message,
-                reply_tx: tx,
-            })
-            .await
-            .map_err(|_| NetworkingHandleError::ServiceHasShutdown)?;
-        rx.await?
-    }
-
-    async fn publish_consensus_gossip<TTopic: Into<String> + Send>(
-        &mut self,
-        topic: TTopic,
-        message: TMsg::ConsensusGossipMessage,
-    ) -> Result<(), NetworkingError> {
-        let (tx, rx) = oneshot::channel();
-        self.tx_request
-            .send(NetworkingRequest::PublishConsensusGossip {
+            .send(NetworkingRequest::PublishGossip {
                 topic: IdentTopic::new(topic),
                 message,
                 reply_tx: tx,

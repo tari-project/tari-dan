@@ -22,7 +22,7 @@
 
 use std::{collections::HashSet, fmt::Display, iter};
 
-use libp2p::PeerId;
+use libp2p::{gossipsub, PeerId};
 use log::*;
 use tari_dan_common_types::{
     optional::Optional,
@@ -32,7 +32,7 @@ use tari_dan_common_types::{
     SubstateAddress,
     ToSubstateAddress,
 };
-use tari_dan_p2p::{proto, DanMessage, NewTransactionMessage, TariMessagingSpec};
+use tari_dan_p2p::{DanMessage, NewTransactionMessage, TariMessagingSpec};
 use tari_dan_storage::{consensus_models::TransactionRecord, StateStore};
 use tari_engine_types::commit_result::RejectReason;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerEvent, EpochManagerReader};
@@ -77,7 +77,7 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
         state_store: SqliteStateStore<PeerAddress>,
         consensus_handle: ConsensusHandle,
         networking: NetworkingHandle<TariMessagingSpec>,
-        rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::network::DanMessage)>,
+        rx_gossip: mpsc::UnboundedReceiver<(PeerId, gossipsub::Message)>,
         #[cfg(feature = "metrics")] metrics: PrometheusMempoolMetrics,
     ) -> Self {
         Self {

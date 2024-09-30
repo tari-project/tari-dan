@@ -1,10 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::anyhow;
-use libp2p::{identity::Keypair, Multiaddr, PeerId};
+use libp2p::{gossipsub, identity::Keypair, Multiaddr, PeerId};
 use tari_shutdown::ShutdownSignal;
 use tari_swarm::{is_supported_multiaddr, messaging, messaging::prost::ProstCodec};
 use tokio::{
@@ -13,6 +13,16 @@ use tokio::{
 };
 
 use crate::{message::MessageSpec, worker::NetworkingWorker, NetworkingHandle};
+
+pub const TOPIC_DELIMITER: &str = "-";
+
+#[derive(Debug, thiserror::Error)]
+pub enum GossipSendError {
+    #[error("Invalid token topic: {0}")]
+    InvalidToken(String),
+    #[error("Send gossip error: {0}")]
+    SendError(#[from] mpsc::error::SendError<(PeerId, gossipsub::Message)>),
+}
 
 pub fn spawn<TMsg>(
     identity: Keypair,
@@ -60,8 +70,7 @@ where
 pub enum MessagingMode<TMsg: MessageSpec> {
     Enabled {
         tx_messages: mpsc::UnboundedSender<(PeerId, TMsg::Message)>,
-        tx_transaction_gossip_messages: mpsc::UnboundedSender<(PeerId, TMsg::TransactionGossipMessage)>,
-        tx_consensus_gossip_messages: mpsc::UnboundedSender<(PeerId, TMsg::ConsensusGossipMessage)>,
+        tx_gossip_messages_by_topic: HashMap<String, mpsc::UnboundedSender<(PeerId, gossipsub::Message)>>,
     },
     Disabled,
 }
@@ -84,32 +93,25 @@ impl<TMsg: MessageSpec> MessagingMode<TMsg> {
         Ok(())
     }
 
-    pub fn send_transaction_gossip_message(
+    pub fn send_gossip_message(
         &self,
         peer_id: PeerId,
-        msg: TMsg::TransactionGossipMessage,
-    ) -> Result<(), mpsc::error::SendError<(PeerId, TMsg::TransactionGossipMessage)>> {
+        msg: gossipsub::Message,
+    ) -> Result<(), GossipSendError> {
         if let MessagingMode::Enabled {
-            tx_transaction_gossip_messages,
+            tx_gossip_messages_by_topic,
             ..
         } = self
         {
-            tx_transaction_gossip_messages.send((peer_id, msg))?;
-        }
-        Ok(())
-    }
+            let (prefix, _) = msg.topic.as_str()
+                .split_once(TOPIC_DELIMITER)
+                .ok_or(GossipSendError::InvalidToken(msg.topic.clone().into_string()))?;
 
-    pub fn send_consensus_gossip_message(
-        &self,
-        peer_id: PeerId,
-        msg: TMsg::ConsensusGossipMessage,
-    ) -> Result<(), mpsc::error::SendError<(PeerId, TMsg::ConsensusGossipMessage)>> {
-        if let MessagingMode::Enabled {
-            tx_consensus_gossip_messages,
-            ..
-        } = self
-        {
-            tx_consensus_gossip_messages.send((peer_id, msg))?;
+            let tx_gossip_messages = tx_gossip_messages_by_topic
+                .get(prefix)
+                .ok_or(GossipSendError::InvalidToken(msg.topic.clone().into_string()))?;
+
+            tx_gossip_messages.send((peer_id, msg))?;
         }
         Ok(())
     }

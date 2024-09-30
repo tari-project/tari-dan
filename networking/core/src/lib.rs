@@ -20,7 +20,6 @@ mod config;
 mod connection;
 mod event;
 mod global_ip;
-mod gossip;
 mod handle;
 mod message;
 mod notify;
@@ -30,7 +29,6 @@ mod spawn;
 
 pub use config::*;
 pub use connection::*;
-pub use gossip::*;
 pub use handle::*;
 pub use message::*;
 pub use spawn::*;
@@ -60,16 +58,10 @@ pub trait NetworkingService<TMsg: MessageSpec> {
         message: TMsg::Message,
     ) -> Result<usize, NetworkingError>;
 
-    async fn publish_transaction_gossip<TTopic: Into<String> + Send>(
+    async fn publish_gossip<TTopic: Into<String> + Send>(
         &mut self,
         topic: TTopic,
-        message: TMsg::TransactionGossipMessage,
-    ) -> Result<(), NetworkingError>;
-
-    async fn publish_consensus_gossip<TTopic: Into<String> + Send>(
-        &mut self,
-        topic: TTopic,
-        message: TMsg::ConsensusGossipMessage,
+        message: Vec<u8>,
     ) -> Result<(), NetworkingError>;
 
     async fn subscribe_topic<T: Into<String> + Send>(&mut self, topic: T) -> Result<(), NetworkingError>;

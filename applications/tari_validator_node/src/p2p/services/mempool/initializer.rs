@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use libp2p::PeerId;
+use libp2p::{gossipsub, PeerId};
 use log::*;
 use tari_dan_common_types::{NumPreshards, PeerAddress};
-use tari_dan_p2p::{proto, TariMessagingSpec};
+use tari_dan_p2p::TariMessagingSpec;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_networking::NetworkingHandle;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -48,7 +48,7 @@ pub fn spawn<TValidator>(
     state_store: SqliteStateStore<PeerAddress>,
     consensus_handle: ConsensusHandle,
     networking: NetworkingHandle<TariMessagingSpec>,
-    rx_gossip: mpsc::UnboundedReceiver<(PeerId, proto::network::DanMessage)>,
+    rx_gossip: mpsc::UnboundedReceiver<(PeerId, gossipsub::Message)>,
     #[cfg(feature = "metrics")] metrics_registry: &prometheus::Registry,
 ) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
 where
