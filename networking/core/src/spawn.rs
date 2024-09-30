@@ -93,24 +93,20 @@ impl<TMsg: MessageSpec> MessagingMode<TMsg> {
         Ok(())
     }
 
-    pub fn send_gossip_message(
-        &self,
-        peer_id: PeerId,
-        msg: gossipsub::Message,
-    ) -> Result<(), GossipSendError> {
+    pub fn send_gossip_message(&self, peer_id: PeerId, msg: gossipsub::Message) -> Result<(), GossipSendError> {
         if let MessagingMode::Enabled {
             tx_gossip_messages_by_topic,
             ..
         } = self
         {
-            let (prefix, _) = msg.topic.as_str()
+            let (prefix, _) = msg
+                .topic
+                .as_str()
                 .split_once(TOPIC_DELIMITER)
                 .ok_or(GossipSendError::InvalidToken(msg.topic.clone().into_string()))?;
-
             let tx_gossip_messages = tx_gossip_messages_by_topic
                 .get(prefix)
                 .ok_or(GossipSendError::InvalidToken(msg.topic.clone().into_string()))?;
-
             tx_gossip_messages.send((peer_id, msg))?;
         }
         Ok(())

@@ -36,11 +36,21 @@ pub fn spawn(
     epoch_manager: EpochManagerHandle<PeerAddress>,
     networking: NetworkingHandle<TariMessagingSpec>,
     rx_gossip: mpsc::UnboundedReceiver<(PeerId, gossipsub::Message)>,
-) -> (ConsensusGossipHandle, JoinHandle<anyhow::Result<()>>, mpsc::Receiver<(PeerId, proto::consensus::HotStuffMessage)>) {
+) -> (
+    ConsensusGossipHandle,
+    JoinHandle<anyhow::Result<()>>,
+    mpsc::Receiver<(PeerId, proto::consensus::HotStuffMessage)>,
+) {
     let (tx_consensus_request, rx_consensus_request) = mpsc::channel(10);
     let (tx_consensus_gossip, rx_consensus_gossip) = mpsc::channel(10);
 
-    let consensus_gossip = ConsensusGossipService::new(rx_consensus_request, epoch_manager, networking, rx_gossip, tx_consensus_gossip);
+    let consensus_gossip = ConsensusGossipService::new(
+        rx_consensus_request,
+        epoch_manager,
+        networking,
+        rx_gossip,
+        tx_consensus_gossip,
+    );
     let handle = ConsensusGossipHandle::new(tx_consensus_request);
 
     let join_handle = task::spawn(consensus_gossip.run());

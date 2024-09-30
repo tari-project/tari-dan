@@ -165,7 +165,7 @@ pub async fn spawn_services(
             p.addresses.into_iter().map(move |a| (peer_id, a))
         })
         .collect();
-    
+
     let (mut networking, join_handle) = tari_networking::spawn(
         identity,
         MessagingMode::Enabled {
@@ -249,7 +249,8 @@ pub async fn spawn_services(
     };
 
     // Consensus gossip
-    let (consensus_gossip_service, join_handle, rx_consensus_gossip_messages) = consensus_gossip::spawn(epoch_manager.clone(), networking.clone(), rx_consensus_gossip_messages);
+    let (consensus_gossip_service, join_handle, rx_consensus_gossip_messages) =
+        consensus_gossip::spawn(epoch_manager.clone(), networking.clone(), rx_consensus_gossip_messages);
     handles.push(join_handle);
 
     // Messaging

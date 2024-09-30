@@ -29,9 +29,8 @@ use tari_dan_common_types::{Epoch, PeerAddress, ShardGroup};
 use tari_dan_p2p::{proto, TariMessagingSpec};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerEvent, EpochManagerReader};
 use tari_networking::{NetworkingHandle, NetworkingService};
-use tari_swarm::messaging::prost::ProstCodec;
+use tari_swarm::messaging::{prost::ProstCodec, Codec};
 use tokio::sync::{mpsc, oneshot};
-use tari_swarm::messaging::Codec;
 
 use super::{ConsensusGossipError, ConsensusGossipRequest};
 
@@ -45,9 +44,9 @@ pub(super) struct ConsensusGossipService<TAddr> {
     epoch_manager: EpochManagerHandle<TAddr>,
     is_subscribed: Option<ShardGroup>,
     networking: NetworkingHandle<TariMessagingSpec>,
-    codec:  ProstCodec<proto::consensus::HotStuffMessage>,
+    codec: ProstCodec<proto::consensus::HotStuffMessage>,
     rx_gossip: mpsc::UnboundedReceiver<(PeerId, gossipsub::Message)>,
-    tx_consensus_gossip:  mpsc::Sender<(PeerId, proto::consensus::HotStuffMessage)>,
+    tx_consensus_gossip: mpsc::Sender<(PeerId, proto::consensus::HotStuffMessage)>,
 }
 
 impl ConsensusGossipService<PeerAddress> {
@@ -56,7 +55,7 @@ impl ConsensusGossipService<PeerAddress> {
         epoch_manager: EpochManagerHandle<PeerAddress>,
         networking: NetworkingHandle<TariMessagingSpec>,
         rx_gossip: mpsc::UnboundedReceiver<(PeerId, gossipsub::Message)>,
-        tx_consensus_gossip:  mpsc::Sender<(PeerId, proto::consensus::HotStuffMessage)>,
+        tx_consensus_gossip: mpsc::Sender<(PeerId, proto::consensus::HotStuffMessage)>,
     ) -> Self {
         Self {
             requests,
@@ -114,7 +113,10 @@ impl ConsensusGossipService<PeerAddress> {
         }
     }
 
-    async fn handle_incoming_gossip_message(&mut self, msg: (PeerId, gossipsub::Message)) -> Result<(), ConsensusGossipError> {
+    async fn handle_incoming_gossip_message(
+        &mut self,
+        msg: (PeerId, gossipsub::Message),
+    ) -> Result<(), ConsensusGossipError> {
         let (from, msg) = msg;
 
         let (_, msg) = self

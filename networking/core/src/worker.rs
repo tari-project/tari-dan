@@ -264,17 +264,15 @@ where
                 topic,
                 message,
                 reply_tx,
-            } => {
-                match self.swarm.behaviour_mut().gossipsub.publish(topic, message) {
-                    Ok(msg_id) => {
-                        debug!(target: LOG_TARGET, "📢 Published gossipsub message: {}", msg_id);
-                        let _ignore = reply_tx.send(Ok(()));
-                    },
-                    Err(err) => {
-                        debug!(target: LOG_TARGET, "🚨 Failed to publish gossipsub message: {}", err);
-                        let _ignore = reply_tx.send(Err(err.into()));
-                    },
-                }
+            } => match self.swarm.behaviour_mut().gossipsub.publish(topic, message) {
+                Ok(msg_id) => {
+                    debug!(target: LOG_TARGET, "📢 Published gossipsub message: {}", msg_id);
+                    let _ignore = reply_tx.send(Ok(()));
+                },
+                Err(err) => {
+                    debug!(target: LOG_TARGET, "🚨 Failed to publish gossipsub message: {}", err);
+                    let _ignore = reply_tx.send(Err(err.into()));
+                },
             },
             NetworkingRequest::SubscribeTopic { topic, reply_tx } => {
                 match self.swarm.behaviour_mut().gossipsub.subscribe(&topic) {
@@ -646,7 +644,7 @@ where
                         &propagation_source,
                         gossipsub::MessageAcceptance::Reject,
                     )?;
-                }
+                },
             }
         }
         Ok(())
