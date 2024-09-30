@@ -111,18 +111,7 @@ impl<TMsgLogger: MessageLogger + Send> tari_consensus::traits::OutboundMessaging
     {
         let message = message.into();
 
-        // let (ours, theirs) = committee
-        // .into_iter()
-        // .partition::<Vec<&Self::Addr>, _>(|x| **x == self.our_node_addr);
-        //
-        // if ours.is_empty() && theirs.is_empty() {
-        // return Ok(());
-        // }
-        //
-        // send it once to ourselves
-        // if !ours.is_empty() {
-        // self.send_self(message.clone()).await?;
-        // }
+        self.send_self(message.clone()).await?;
 
         self.consensus_gossip
             .multicast(shard_group, message)
