@@ -111,7 +111,15 @@ impl<TMsgLogger: MessageLogger + Send> tari_consensus::traits::OutboundMessaging
     {
         let message = message.into();
 
-        self.send_self(message.clone()).await?;
+        // send it once to ourselves
+        let local_shard_group = self
+            .consensus_gossip
+            .get_local_shard_group()
+            .await
+            .map_err(OutboundMessagingError::from_error)?;
+        if local_shard_group == Some(shard_group) {
+            self.send_self(message.clone()).await?;
+        }
 
         self.consensus_gossip
             .multicast(shard_group, message)

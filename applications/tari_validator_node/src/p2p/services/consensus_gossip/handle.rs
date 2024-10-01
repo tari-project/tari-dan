@@ -32,6 +32,9 @@ pub enum ConsensusGossipRequest {
         message: HotstuffMessage,
         reply: oneshot::Sender<Result<(), ConsensusGossipError>>,
     },
+    GetLocalShardGroup {
+        reply: oneshot::Sender<Result<Option<ShardGroup>, ConsensusGossipError>>,
+    },
 }
 
 #[derive(Debug)]
@@ -64,6 +67,15 @@ impl ConsensusGossipHandle {
                 message,
                 reply: tx,
             })
+            .await?;
+
+        rx.await?
+    }
+
+    pub async fn get_local_shard_group(&self) -> Result<Option<ShardGroup>, ConsensusGossipError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_consensus_request
+            .send(ConsensusGossipRequest::GetLocalShardGroup { reply: tx })
             .await?;
 
         rx.await?

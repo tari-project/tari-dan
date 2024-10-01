@@ -110,6 +110,9 @@ impl ConsensusGossipService<PeerAddress> {
             } => {
                 handle(reply, self.multicast(shard_group, message).await);
             },
+            ConsensusGossipRequest::GetLocalShardGroup { reply } => {
+                handle(reply, self.get_local_shard_group().await);
+            },
         }
     }
 
@@ -186,6 +189,17 @@ impl ConsensusGossipService<PeerAddress> {
         self.networking.publish_gossip(topic, buf).await?;
 
         Ok(())
+    }
+
+    pub async fn get_local_shard_group(&self) -> Result<Option<ShardGroup>, ConsensusGossipError> {
+        let epoch = self.epoch_manager.current_epoch().await?;
+
+        if !self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await? {
+            return Ok(None);
+        }
+
+        let committee_shard = self.epoch_manager.get_local_committee_info(epoch).await?;
+        Ok(Some(committee_shard.shard_group()))
     }
 }
 
