@@ -89,7 +89,9 @@ async fn main() {
             Box::pin(future::ready(()))
         })
         .fail_on_skipped()
-        .filter_run("tests/features/", |_, _, sc| !sc.tags.iter().any(|t| t == "ignore"));
+        .filter_run("tests/features/", |_, _, sc| !sc.tags.iter().any(|t| t == "ignore") 
+            && sc.tags.iter().any(|t| t == "dev") // TODO: remove, only for testing
+        );
 
     let ctrl_c = tokio::signal::ctrl_c();
     pin_mut!(ctrl_c);
@@ -332,7 +334,7 @@ async fn call_wallet_daemon_method_and_check_result(
     expected_result: String,
 ) -> anyhow::Result<()> {
     let resp =
-        wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call).await?;
+        wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call, None).await?;
 
     let finalize_result = resp
         .result
@@ -361,7 +363,21 @@ async fn call_wallet_daemon_method(
     output_ref: String,
     method_call: String,
 ) -> anyhow::Result<()> {
-    wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call).await?;
+    wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call, None).await?;
+
+    Ok(())
+}
+
+#[when(expr = r#"I invoke on wallet daemon {word} on account {word} on component {word} the method call "{word}" named "{word}""#)]
+async fn call_wallet_daemon_method_with_output_name(
+    world: &mut TariWorld,
+    wallet_daemon_name: String,
+    account_name: String,
+    output_ref: String,
+    method_call: String,
+    new_output_name: String,
+) -> anyhow::Result<()> {
+    wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call, Some(new_output_name)).await?;
 
     Ok(())
 }

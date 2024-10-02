@@ -6,7 +6,6 @@ Feature: Epoch change
 
   @serial @current
   Scenario: EndEpoch command is used on epoch change
-    Given fees are disabled
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE

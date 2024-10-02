@@ -30,6 +30,7 @@ use tari_crypto::{
     signatures::CommitmentSignature,
     tari_utilities::ByteArray,
 };
+use tokio::task::JoinSet;
 use tari_dan_common_types::{Epoch, SubstateRequirement};
 use tari_dan_wallet_sdk::{
     apis::confidential_transfer::ConfidentialTransferInputSelection,
@@ -698,9 +699,10 @@ pub async fn call_component(
     output_ref: String,
     wallet_daemon_name: String,
     function_call: String,
+    new_outputs_name: Option<String>,
 ) -> anyhow::Result<TransactionWaitResultResponse> {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
-
+    
     let source_component_address = get_address_from_output(world, output_ref.clone())
         .as_component_address()
         .expect("Failed to get component address from output");
@@ -718,9 +720,15 @@ pub async fn call_component(
 
     let resp = submit_unsigned_tx_and_wait_for_response(client, tx, account).await;
 
+    let final_outputs_name = if let Some(name) = new_outputs_name {
+        name
+    } else {
+        output_ref
+    };
+    
     add_substate_ids(
         world,
-        output_ref,
+        final_outputs_name,
         &resp
             .as_ref()
             .unwrap()
@@ -754,32 +762,33 @@ pub async fn concurrent_call_component(
         .as_component_address()
         .expect("Failed to get account component address");
 
-    let mut handles = Vec::new();
+    let mut join_set = JoinSet::new();
     for _ in 0..times {
         let acc = account.clone();
         let clt = client.clone();
         let tx = Transaction::builder()
-            .fee_transaction_pay_from_component(account_component_address, Amount(2000))
+            .fee_transaction_pay_from_component(account_component_address, Amount(1000))
             .call_method(source_component_address, &function_call, vec![])
             .build_unsigned_transaction();
-        let handle = tokio::spawn(submit_unsigned_tx_and_wait_for_response(clt, tx, acc));
-        handles.push(handle);
+        join_set.spawn(submit_unsigned_tx_and_wait_for_response(clt, tx, acc));
     }
-
-    let mut last_resp = None;
-    for handle in handles {
-        let result = handle.await.map_err(|e| e.to_string());
-        if result.is_err() {
-            bail!("{}", result.as_ref().unwrap_err());
-        }
+    
+    while let Some(result) = join_set.join_next().await {
+        let result = result.map_err(|e| e.to_string());
         match result {
-            Ok(response) => last_resp = Some(response),
+            Ok(response) =>
+                match response {
+                    Ok(resp) => {
+                        add_substate_ids(
+                            world,
+                            output_ref.clone(),
+                            &resp.result.expect("no finalize result").result.expect("no transaction result"),
+                        );
+                    }
+                    Err(error) => bail!("Failed to submit transaction: {error:?}"),
+                },
             Err(e) => bail!("Failed to get response from handler: {}", e),
         }
-    }
-
-    if last_resp.is_none() {
-        bail!("No responses from any of the wallet daemon concurrent calls");
     }
 
     Ok(())
