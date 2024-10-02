@@ -172,6 +172,11 @@ impl ConsensusGossipService<PeerAddress> {
         shard_group: ShardGroup,
         message: HotstuffMessage,
     ) -> Result<(), ConsensusGossipError> {
+        // if we are alone in the local shard group, no need to broadcast
+        if self.num_shard_group_members().await? < 2 {
+            return Ok(());
+        }
+
         let topic = shard_group_to_topic(shard_group);
 
         debug!(
@@ -189,6 +194,18 @@ impl ConsensusGossipService<PeerAddress> {
         self.networking.publish_gossip(topic, buf).await?;
 
         Ok(())
+    }
+
+    async fn num_shard_group_members(&self) -> Result<u32, ConsensusGossipError> {
+        let epoch = self.epoch_manager.current_epoch().await?;
+
+        if self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await? {
+            let committee_shard = self.epoch_manager.get_local_committee_info(epoch).await?;
+            return Ok(committee_shard.num_shard_group_members());
+        }
+
+        // default value if the VN is not registered
+        Ok(0)
     }
 
     pub async fn get_local_shard_group(&self) -> Result<Option<ShardGroup>, ConsensusGossipError> {
