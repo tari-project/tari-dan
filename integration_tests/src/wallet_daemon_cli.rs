@@ -24,7 +24,6 @@ use std::{collections::HashMap, str::FromStr, time::Duration};
 
 use anyhow::{anyhow, bail};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use libp2p::futures::future::err;
 use serde_json::json;
 use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
