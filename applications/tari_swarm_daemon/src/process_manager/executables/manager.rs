@@ -170,6 +170,7 @@ fn cargo_build<P: AsRef<Path>>(working_dir: P, package: &str) -> io::Result<Chil
     Command::new("cargo")
         .args(["build", "--release", "--bin", package])
         .current_dir(working_dir)
+        .kill_on_drop(true)
         .spawn()
 }
 

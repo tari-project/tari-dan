@@ -11,7 +11,11 @@ use tari_dan_storage::consensus_models::{BlockId, LastSentVote, QuorumDecision, 
 pub struct VoteMessage {
     pub epoch: Epoch,
     pub block_id: BlockId,
-    pub block_height: NodeHeight,
+    /// The purported height of the block that this vote is for. This is informational only (on_inbound_message) and
+    /// should never be relied upon for any other purpose as it is not validated. The reason being that we may receive
+    /// a vote before the block, and we don't retrospectively check the height of all the votes after the block is
+    /// received.
+    pub unverified_block_height: NodeHeight,
     pub decision: QuorumDecision,
     pub signature: ValidatorSignature,
 }
@@ -21,7 +25,7 @@ impl From<LastSentVote> for VoteMessage {
         Self {
             epoch: value.epoch,
             block_id: value.block_id,
-            block_height: value.block_height,
+            unverified_block_height: value.block_height,
             decision: value.decision,
             signature: value.signature,
         }
@@ -33,7 +37,7 @@ impl Display for VoteMessage {
         write!(
             f,
             "VoteMessage: {}, block_id: {}, {}, decision: {:?}, voter: {:?}",
-            self.epoch, self.block_id, self.block_height, self.decision, self.signature.public_key
+            self.epoch, self.block_id, self.unverified_block_height, self.decision, self.signature.public_key
         )
     }
 }

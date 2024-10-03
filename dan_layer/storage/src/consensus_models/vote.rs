@@ -74,4 +74,8 @@ impl Vote {
     ) -> Result<Vec<Self>, StorageError> {
         tx.votes_get_for_block(block_id)
     }
+
+    pub fn delete_all<TTx: StateStoreWriteTransaction>(tx: &mut TTx) -> Result<(), StorageError> {
+        tx.votes_delete_all()
+    }
 }

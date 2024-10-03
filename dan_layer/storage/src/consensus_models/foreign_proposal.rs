@@ -9,7 +9,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::ShardGroup;
+use tari_dan_common_types::{Epoch, ShardGroup};
 
 use super::{Block, BlockId, BlockPledge, QuorumCertificate};
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
@@ -38,7 +38,6 @@ impl ForeignProposal {
         ForeignProposalAtom {
             shard_group: self.block.shard_group(),
             block_id: *self.block.id(),
-            base_layer_block_height: self.block.base_layer_block_height(),
         }
     }
 
@@ -80,6 +79,13 @@ impl ForeignProposal {
         tx.foreign_proposals_delete(block_id)
     }
 
+    pub fn delete_in_epoch<TTx: StateStoreWriteTransaction + ?Sized>(
+        tx: &mut TTx,
+        epoch: Epoch,
+    ) -> Result<(), StorageError> {
+        tx.foreign_proposals_delete_in_epoch(epoch)
+    }
+
     pub fn get_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a BlockId>>(
         tx: &TTx,
         block_ids: I,
@@ -93,11 +99,10 @@ impl ForeignProposal {
 
     pub fn get_all_new<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &TTx,
-        max_base_layer_block_height: u64,
         block_id: &BlockId,
         limit: usize,
     ) -> Result<Vec<Self>, StorageError> {
-        tx.foreign_proposals_get_all_new(max_base_layer_block_height, block_id, limit)
+        tx.foreign_proposals_get_all_new(block_id, limit)
     }
 
     pub fn set_proposed_in<TTx: StateStoreWriteTransaction + ?Sized>(
@@ -110,9 +115,9 @@ impl ForeignProposal {
 
     pub fn has_unconfirmed<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &TTx,
-        max_base_layer_block_height: u64,
+        epoch: Epoch,
     ) -> Result<bool, StorageError> {
-        tx.foreign_proposals_has_unconfirmed(max_base_layer_block_height)
+        tx.foreign_proposals_has_unconfirmed(epoch)
     }
 }
 
@@ -127,8 +132,6 @@ pub struct ForeignProposalAtom {
     pub block_id: BlockId,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub shard_group: ShardGroup,
-    #[cfg_attr(feature = "ts", ts(type = "number"))]
-    pub base_layer_block_height: u64,
 }
 
 impl ForeignProposalAtom {

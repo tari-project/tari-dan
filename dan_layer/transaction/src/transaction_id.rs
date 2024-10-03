@@ -9,6 +9,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHashSizeError;
 use tari_crypto::tari_utilities::hex::{from_hex, Hex};
+use tari_dan_common_types::{SubstateAddress, ToSubstateAddress};
 use tari_engine_types::{serde_with, transaction_receipt::TransactionReceiptAddress};
 use tari_template_lib::Hash;
 
@@ -48,6 +49,12 @@ impl TransactionId {
 
     pub fn is_empty(&self) -> bool {
         self.id.iter().all(|&b| b == 0)
+    }
+}
+
+impl ToSubstateAddress for TransactionId {
+    fn to_substate_address(&self) -> SubstateAddress {
+        SubstateAddress::for_transaction_receipt(self.into_receipt_address())
     }
 }
 

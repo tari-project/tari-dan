@@ -4,91 +4,78 @@
 use log::*;
 use tari_common::configuration::Network;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional};
+use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, Epoch};
 use tari_dan_storage::{
     consensus_models::{Block, QuorumCertificate, QuorumDecision, ValidatorSignature, Vote},
+    global::models::ValidatorNode,
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
-    hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle},
+    hotstuff::error::HotStuffError,
     messages::VoteMessage,
     tracing::TraceTimer,
-    traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
+    traits::{ConsensusSpec, VoteSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_vote";
 
 #[derive(Clone)]
-pub struct VoteReceiver<TConsensusSpec: ConsensusSpec> {
+pub struct VoteCollector<TConsensusSpec: ConsensusSpec> {
     network: Network,
     store: TConsensusSpec::StateStore,
-    leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
     vote_signature_service: TConsensusSpec::SignatureService,
-    pacemaker: PaceMakerHandle,
 }
 
-impl<TConsensusSpec> VoteReceiver<TConsensusSpec>
+impl<TConsensusSpec> VoteCollector<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         network: Network,
         store: TConsensusSpec::StateStore,
-        leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
         vote_signature_service: TConsensusSpec::SignatureService,
-        pacemaker: PaceMakerHandle,
     ) -> Self {
         Self {
             network,
             store,
-            leader_strategy,
             epoch_manager,
-            pacemaker,
             vote_signature_service,
         }
     }
 
-    pub async fn handle(
+    /// Returns Some if quorum is reached
+    pub async fn check_and_collect_vote(
         &self,
         from: TConsensusSpec::Addr,
+        current_epoch: Epoch,
         message: VoteMessage,
-        check_leadership: bool,
         local_committee_info: &CommitteeInfo,
-    ) -> Result<(), HotStuffError> {
-        let _timer = TraceTimer::debug(LOG_TARGET, "OnReceiveVote");
-        match self
-            .handle_vote(from, message, check_leadership, local_committee_info)
-            .await
-        {
-            Ok(true) => {
-                // If we reached quorum, trigger a check to see if we should propose
-                self.pacemaker.beat();
-            },
-            Ok(false) => {},
-            Err(err) => {
-                // We dont want bad vote messages to kick us out of running mode
-                warn!(target: LOG_TARGET, "❌ Error handling vote: {}", err);
-            },
-        }
-        Ok(())
-    }
-
-    /// Returns true if quorum is reached
-    #[allow(clippy::too_many_lines)]
-    async fn handle_vote(
-        &self,
-        from: TConsensusSpec::Addr,
-        message: VoteMessage,
-        check_leadership: bool,
-        local_committee_info: &CommitteeInfo,
-    ) -> Result<bool, HotStuffError> {
+    ) -> Result<Option<QuorumCertificate>, HotStuffError> {
+        let _timer = TraceTimer::debug(LOG_TARGET, "check_and_collect_vote");
         debug!(
             target: LOG_TARGET,
             "📬 Validating vote message from {from}: {message}"
         );
+
+        self.validate_vote_message(current_epoch, &message)?;
+        let sender_vn = self.check_eligibility(from, &message, local_committee_info).await?;
+        let maybe_qc = self.collect_vote(message, local_committee_info, sender_vn)?;
+        if let Some(ref qc) = maybe_qc {
+            info!(target: LOG_TARGET, "🔥 New QC {}", qc);
+        }
+
+        Ok(maybe_qc)
+    }
+
+    async fn check_eligibility(
+        &self,
+        from: <TConsensusSpec as ConsensusSpec>::Addr,
+        message: &VoteMessage,
+        local_committee_info: &CommitteeInfo,
+    ) -> Result<ValidatorNode<<TConsensusSpec as ConsensusSpec>::Addr>, HotStuffError> {
         // Is a local committee member that signed this vote?
         let sender_vn = self
             .epoch_manager
@@ -104,12 +91,7 @@ where TConsensusSpec: ConsensusSpec
         };
 
         // Get the sender shard, and check that they are in the local committee
-        let our_vn = self.epoch_manager.get_our_validator_node(message.epoch).await?;
-        let committee = self
-            .epoch_manager
-            .get_committee_for_substate(message.epoch, our_vn.shard_key)
-            .await?;
-        if !committee.contains(&sender_vn.address) {
+        if !local_committee_info.includes_substate_address(&sender_vn.shard_key) {
             return Err(HotStuffError::ReceivedVoteFromNonCommitteeMember {
                 epoch: message.epoch,
                 sender: sender_vn.address.to_string(),
@@ -117,11 +99,19 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
-        let sender_leaf_hash = sender_vn.get_node_hash(self.network);
-        self.validate_vote_message(&message, &sender_leaf_hash)?;
+        Ok(sender_vn)
+    }
 
-        let count = self.store.with_write_tx(|tx| {
-            Vote {
+    fn collect_vote(
+        &self,
+        message: VoteMessage,
+        local_committee_info: &CommitteeInfo,
+        sender_vn: ValidatorNode<TConsensusSpec::Addr>,
+    ) -> Result<Option<QuorumCertificate>, HotStuffError> {
+        self.store.with_write_tx(|tx| {
+            let sender_leaf_hash = sender_vn.get_node_hash(self.network);
+
+            let exists = Vote {
                 epoch: message.epoch,
                 block_id: message.block_id,
                 decision: message.decision,
@@ -130,66 +120,56 @@ where TConsensusSpec: ConsensusSpec
             }
             .save(tx)?;
 
+            if exists {
+                warn!(
+                    target: LOG_TARGET,
+                    "❓️ Received duplicate vote for block {} from {}",
+                    message.block_id,
+                    sender_vn.address
+                );
+                return Ok(None);
+            }
+
             let count = Vote::count_for_block(&**tx, &message.block_id)?;
-            Ok::<_, HotStuffError>(count)
-        })?;
+            // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not
+            // included in the QC.
 
-        // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
-        // in the QC.
+            info!(
+                target: LOG_TARGET,
+                "🔥 Received vote for block {} {} {} from {} ({} of {})",
+                message.epoch,
+                message.unverified_block_height,
+                message.block_id,
+                sender_vn.address,
+                count,
+                local_committee_info.quorum_threshold()
+            );
+            if count != local_committee_info.quorum_threshold() as usize {
+                return Ok(None);
+            }
 
-        info!(
-            target: LOG_TARGET,
-            "🔥 Received vote for block {} {} {} from {} ({} of {})",
-            message.epoch,
-            message.block_height,
-            message.block_id,
-            from,
-            count,
-            local_committee_info.quorum_threshold()
-        );
-        if count < local_committee_info.quorum_threshold() as usize {
-            return Ok(false);
-        }
-
-        let vote_data;
-        {
-            let tx = self.store.create_read_tx()?;
-            let Some(block) = Block::get(&tx, &message.block_id).optional()? else {
+            let Some(block) = Block::get(&**tx, &message.block_id).optional()? else {
                 warn!(
                     target: LOG_TARGET,
                     "❌ Received {} votes for unknown block {}", count, message.block_id,
                 );
-                return Ok(false);
+                return Ok(None);
             };
 
-            // Are we the leader for the block being voted for?
-            if check_leadership &&
-                !self
-                    .leader_strategy
-                    .is_leader_for_next_block(&our_vn.address, &committee, block.height())
-            {
-                return Err(HotStuffError::NotTheLeader {
-                    details: format!(
-                        "Not this leader for block {}, vote sent by {}",
-                        message.block_id, our_vn.address
-                    ),
-                });
-            }
-
-            if let Some(existing_qc_for_block) = QuorumCertificate::get_by_block_id(&tx, block.id()).optional()? {
+            if let Some(existing_qc_for_block) = QuorumCertificate::get_by_block_id(&**tx, block.id()).optional()? {
                 debug!(
                     target: LOG_TARGET,
                     "🔥 Received vote for block {} from {} ({} of {}), but we already have a QC for this block ({})",
                     message.block_id,
-                    from,
                     count,
+                    sender_vn.address,
                     local_committee_info.quorum_threshold(),
                     existing_qc_for_block
                 );
-                return Ok(true);
+                return Ok(None);
             }
 
-            let votes = block.get_votes(&tx)?;
+            let votes = block.get_votes(&**tx)?;
             let Some(quorum_decision) = Self::calculate_threshold_decision(&votes, local_committee_info) else {
                 warn!(
                     target: LOG_TARGET,
@@ -198,15 +178,8 @@ where TConsensusSpec: ConsensusSpec
                     count,
                     local_committee_info.quorum_threshold()
                 );
-                return Ok(false);
+                return Ok(None);
             };
-
-            // Wait for our own vote to make sure we've processed all transactions and we also have an up to date
-            // database
-            if votes.iter().all(|x| x.signature.public_key != our_vn.public_key) {
-                warn!(target: LOG_TARGET, "❓️ Received enough votes but not our own vote for block {}", message.block_id);
-                // return Ok(true);
-            }
 
             let mut signatures = Vec::with_capacity(votes.len());
             let mut leaf_hashes = Vec::with_capacity(votes.len());
@@ -219,26 +192,17 @@ where TConsensusSpec: ConsensusSpec
                 leaf_hashes.push(vote.sender_leaf_hash);
             }
 
-            signatures.sort_by(|a, b| a.public_key.cmp(&b.public_key));
-
-            vote_data = VoteData {
+            let vote_data = VoteData {
                 signatures,
                 leaf_hashes,
                 quorum_decision,
                 block,
             };
-        }
+            let new_qc = create_qc(vote_data);
+            new_qc.update_high_qc(tx)?;
 
-        let block_height = vote_data.block.height();
-        let qc = create_qc(vote_data);
-        info!(target: LOG_TARGET, "🔥 New QC {}", qc);
-        let high_qc = self.store.with_write_tx(|tx| qc.update_high_qc(tx))?;
-
-        self.pacemaker
-            .update_view(message.epoch, block_height, high_qc.block_height)
-            .await?;
-
-        Ok(true)
+            Ok(Some(new_qc))
+        })
     }
 
     fn calculate_threshold_decision(votes: &[Vote], local_committee_info: &CommitteeInfo) -> Option<QuorumDecision> {
@@ -262,8 +226,7 @@ where TConsensusSpec: ConsensusSpec
         None
     }
 
-    fn validate_vote_message(&self, message: &VoteMessage, sender_leaf_hash: &FixedHash) -> Result<(), HotStuffError> {
-        let current_epoch = self.pacemaker.current_view().get_epoch();
+    fn validate_vote_message(&self, current_epoch: Epoch, message: &VoteMessage) -> Result<(), HotStuffError> {
         if current_epoch != message.epoch {
             return Err(HotStuffError::InvalidVote {
                 signer_public_key: message.signature.public_key.to_string(),
@@ -274,12 +237,10 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
-        if !self.vote_signature_service.verify(
-            &message.signature,
-            sender_leaf_hash,
-            &message.block_id,
-            &message.decision,
-        ) {
+        if !self
+            .vote_signature_service
+            .verify(&message.signature, &message.block_id, &message.decision)
+        {
             return Err(HotStuffError::InvalidVoteSignature {
                 signer_public_key: message.signature.public_key().to_string(),
             });

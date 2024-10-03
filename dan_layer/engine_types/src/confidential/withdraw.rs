@@ -114,14 +114,14 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Comm
             .map(|output| output.commitment.as_public_key())
             .unwrap_or(&PublicKey::default());
 
-    let challenge = challenges::confidential_withdraw64(
+    let message = challenges::confidential_withdraw64(
         &public_excess,
         balance_proof.get_public_nonce(),
         input_revealed_amount,
         total_output_revealed_amount,
     );
 
-    if !balance_proof.verify_raw_uniform(&public_excess, &challenge) {
+    if !balance_proof.verify_raw_uniform(&public_excess, &message) {
         return Err(ResourceError::InvalidBalanceProof {
             details: "Balance proof was invalid".to_string(),
         });
