@@ -23,6 +23,7 @@
 mod steps;
 use std::{fs, future, io, panic, str::FromStr, time::Duration};
 
+use anyhow::bail;
 use cucumber::{gherkin::Step, given, then, when, writer, writer::Verbosity, World, WriterExt};
 use integration_tests::{
     http_server::{spawn_template_http_server, MockHttpServer},
@@ -41,6 +42,7 @@ use libp2p::{
     },
     Multiaddr,
 };
+use regex::Regex;
 use tari_common::initialize_logging;
 use tari_dan_engine::abi::Type;
 use tari_dan_storage::consensus_models::QuorumDecision;
@@ -89,8 +91,9 @@ async fn main() {
             Box::pin(future::ready(()))
         })
         .fail_on_skipped()
-        .filter_run("tests/features/", |_, _, sc| !sc.tags.iter().any(|t| t == "ignore") 
-            && sc.tags.iter().any(|t| t == "dev") // TODO: remove, only for testing
+        .filter_run(
+            "tests/features/",
+            |_, _, sc| !sc.tags.iter().any(|t| t == "ignore") && sc.tags.iter().any(|t| t == "dev"), // TODO: remove, only for testing
         );
 
     let ctrl_c = tokio::signal::ctrl_c();
@@ -334,7 +337,8 @@ async fn call_wallet_daemon_method_and_check_result(
     expected_result: String,
 ) -> anyhow::Result<()> {
     let resp =
-        wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call, None).await?;
+        wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call, None)
+            .await?;
 
     let finalize_result = resp
         .result
@@ -368,7 +372,9 @@ async fn call_wallet_daemon_method(
     Ok(())
 }
 
-#[when(expr = r#"I invoke on wallet daemon {word} on account {word} on component {word} the method call "{word}" named "{word}""#)]
+#[when(
+    expr = r#"I invoke on wallet daemon {word} on account {word} on component {word} the method call "{word}" named "{word}""#
+)]
 async fn call_wallet_daemon_method_with_output_name(
     world: &mut TariWorld,
     wallet_daemon_name: String,
@@ -377,7 +383,52 @@ async fn call_wallet_daemon_method_with_output_name(
     method_call: String,
     new_output_name: String,
 ) -> anyhow::Result<()> {
-    wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call, Some(new_output_name)).await?;
+    wallet_daemon_cli::call_component(
+        world,
+        account_name,
+        output_ref,
+        wallet_daemon_name,
+        method_call,
+        Some(new_output_name),
+    )
+    .await?;
+
+    Ok(())
+}
+
+#[when(
+    expr = r#"I invoke on wallet daemon {word} on account {word} on component {word} the method call "{word}" named "{word}", I expect it to fail with {string}"#
+)]
+async fn call_wallet_daemon_method_with_output_name_error_result(
+    world: &mut TariWorld,
+    wallet_daemon_name: String,
+    account_name: String,
+    output_ref: String,
+    method_call: String,
+    new_output_name: String,
+    error_message: String,
+) -> anyhow::Result<()> {
+    if let Err(error) = wallet_daemon_cli::call_component(
+        world,
+        account_name,
+        output_ref,
+        wallet_daemon_name,
+        method_call,
+        Some(new_output_name),
+    )
+    .await
+    {
+        let error_str = error.to_string();
+        let regex_pattern = format!("{}", error_message);
+        let re = Regex::new(regex_pattern.as_str()).expect("invalid regex for error message");
+        if re.find(error_str.as_str()).is_none() {
+            bail!(
+                "Error mismatch: \"{}\" does not contain \"{}\"",
+                error_str,
+                regex_pattern
+            );
+        }
+    }
 
     Ok(())
 }

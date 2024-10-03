@@ -1,7 +1,6 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
-  # TODO: Ignored, no inputs - replace with wallet daemon calls
 @substates
 Feature: Substates
 
@@ -41,14 +40,13 @@ Feature: Substates
     When I call function "new" on template "counter" using account ACC to pay fees via wallet daemon WALLET_D named "COUNTER_1"
     When I invoke on wallet daemon WALLET_D on account ACC on component COUNTER_1/components/Counter the method call "value" the result is "0"
 
-    # Increase the counter an check the value
+    # Increase the counter and check the value
     When I invoke on wallet daemon WALLET_D on account ACC on component COUNTER_1/components/Counter the method call "increase" named "TX1"
     When I invoke on wallet daemon WALLET_D on account ACC on component TX1/components/Counter the method call "value" the result is "1"
 
     # We should get an error if we se as inputs the same component version thas has already been downed from previous transactions
     # We can achieve this by reusing inputs from COUNTER_1 instead of the most recent TX1
-#    When I invoke on VAL_1 on component COUNTER_1/components/Counter the method call "increase" named "TX2" the result is error "Shard was rejected"
-    When I invoke on wallet daemon WALLET_D on account ACC on component COUNTER_1/components/Counter the method call "increase" named "TX2"
+    When I invoke on wallet daemon WALLET_D on account ACC on component COUNTER_1/components/Counter the method call "increase" named "TX2", I expect it to fail with "Substate .*? is DOWN"
 
     # Check that the counter has NOT been increased by the previous erroneous transaction
     When I invoke on wallet daemon WALLET_D on account ACC on component TX1/components/Counter the method call "value" the result is "1"

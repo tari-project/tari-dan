@@ -71,8 +71,12 @@ impl<TAddr> fmt::Debug for SqliteStateStore<TAddr> {
 
 impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStore for SqliteStateStore<TAddr> {
     type Addr = TAddr;
-    type ReadTransaction<'a> = SqliteStateStoreReadTransaction<'a, Self::Addr> where TAddr: 'a;
-    type WriteTransaction<'a> = SqliteStateStoreWriteTransaction<'a, Self::Addr> where TAddr: 'a;
+    type ReadTransaction<'a>
+        = SqliteStateStoreReadTransaction<'a, Self::Addr>
+    where TAddr: 'a;
+    type WriteTransaction<'a>
+        = SqliteStateStoreWriteTransaction<'a, Self::Addr>
+    where TAddr: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError> {
         let tx = SqliteTransaction::begin(self.connection.lock().unwrap())?;
