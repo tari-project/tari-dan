@@ -91,10 +91,7 @@ async fn main() {
             Box::pin(future::ready(()))
         })
         .fail_on_skipped()
-        .filter_run(
-            "tests/features/",
-            |_, _, sc| !sc.tags.iter().any(|t| t == "ignore") && sc.tags.iter().any(|t| t == "dev"), // TODO: remove, only for testing
-        );
+        .filter_run("tests/features/", |_, _, sc| !sc.tags.iter().any(|t| t == "ignore"));
 
     let ctrl_c = tokio::signal::ctrl_c();
     pin_mut!(ctrl_c);
@@ -178,6 +175,34 @@ async fn call_template_constructor_via_wallet_daemon_no_args(
     )
     .await;
 }
+
+#[when(
+    expr = r#"I call function "{word}" on template "{word}" with args {string} using account {word} to pay fees via wallet daemon {word} named "{word}""#
+)]
+async fn call_template_constructor_via_wallet_daemon_with_args(
+    world: &mut TariWorld,
+    function_call: String,
+    template_name: String,
+    args_raw: String,
+    account_name: String,
+    wallet_daemon_name: String,
+    outputs_name: String,
+) {
+    let args: Vec<String> = args_raw.split(',').map(|str| str.trim().to_string()).collect();
+    wallet_daemon_cli::create_component(
+        world,
+        outputs_name,
+        template_name,
+        account_name,
+        wallet_daemon_name,
+        function_call,
+        args,
+        None,
+        None,
+    )
+    .await;
+}
+
 #[when(expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" named "{word}""#)]
 async fn call_template_constructor(
     world: &mut TariWorld,

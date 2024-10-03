@@ -3,8 +3,7 @@
 
 @substates
 Feature: Substates
-
-  @dev
+  
   @serial
   Scenario: Transactions with DOWN local substates are rejected
     # Initialize a base node, wallet, miner and VN
@@ -33,7 +32,7 @@ Feature: Substates
     Given an indexer IDX connected to base node BASE
     Given a wallet daemon WALLET_D connected to indexer IDX
 
-    # A file-base CLI account must be created to sign future calls
+    # Create account
     When I create an account ACC via the wallet daemon WALLET_D with 10000 free coins
 
     # Create a new Counter component
