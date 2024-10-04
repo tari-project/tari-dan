@@ -24,7 +24,18 @@ mod steps;
 use std::{fs, future, io, panic, str::FromStr, time::Duration};
 
 use anyhow::bail;
-use cucumber::{gherkin::Step, given, then, when, writer, writer::Verbosity, World, WriterExt};
+use cucumber::{
+    gherkin::Step,
+    given,
+    runner::Basic,
+    then,
+    when,
+    writer,
+    writer::Verbosity,
+    ScenarioType,
+    World,
+    WriterExt,
+};
 use integration_tests::{
     http_server::{spawn_template_http_server, MockHttpServer},
     logging::{create_log_config_file, get_base_dir},
@@ -63,7 +74,7 @@ async fn main() {
 
     let file = fs::File::create("cucumber-output-junit.xml").unwrap();
     let cucumber_fut = TariWorld::cucumber()
-        .max_concurrent_scenarios(1)
+        .max_concurrent_scenarios(5)
         .with_writer(writer::Tee::new(
             writer::JUnit::new(file, Verbosity::ShowWorldAndDocString).normalized(),
             // following config needed to use eprint statements in the tests
@@ -91,6 +102,30 @@ async fn main() {
             Box::pin(future::ready(()))
         })
         .fail_on_skipped()
+        .which_scenario(|feature, _, scenario| {
+            let feature_has_concurrent_tag = feature.tags.iter().any(|tag| tag == "concurrent");
+            let feature_has_serial_tag = feature.tags.iter().any(|tag| tag == "serial");
+            let scenario_has_concurrent_tag = scenario.tags.iter().any(|tag| tag == "concurrent");
+            let scenario_has_serial_tag = scenario.tags.iter().any(|tag| tag == "serial");
+
+            if scenario_has_serial_tag {
+                return ScenarioType::Serial;
+            }
+
+            if scenario_has_concurrent_tag {
+                return ScenarioType::Concurrent;
+            }
+
+            if feature_has_serial_tag {
+                return ScenarioType::Serial;
+            }
+
+            if feature_has_concurrent_tag {
+                return ScenarioType::Concurrent;
+            }
+
+            ScenarioType::Serial
+        })
         .filter_run("tests/features/", |_, _, sc| !sc.tags.iter().any(|t| t == "ignore"));
 
     let ctrl_c = tokio::signal::ctrl_c();
@@ -444,15 +479,16 @@ async fn call_wallet_daemon_method_with_output_name_error_result(
     .await
     {
         let error_str = error.to_string();
-        let regex_pattern = format!("{}", error_message);
-        let re = Regex::new(regex_pattern.as_str()).expect("invalid regex for error message");
+        let re = Regex::new(error_message.as_str()).expect("invalid regex for error message");
         if re.find(error_str.as_str()).is_none() {
             bail!(
                 "Error mismatch: \"{}\" does not contain \"{}\"",
                 error_str,
-                regex_pattern
+                error_message.as_str()
             );
         }
+    } else {
+        bail!("Error expected, but none was happening!");
     }
 
     Ok(())

@@ -1,10 +1,10 @@
 # Copyright 2024 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
+@concurrent
 @nft
 Feature: NFTs
 
-  @serial
   Scenario: Mint, mutate and burn non fungible tokens
 
     ###### Setup
@@ -78,7 +78,6 @@ Feature: NFTs
   sparkle_nft.burn(acc_bucket);
   ```
 
-  @serial
   Scenario: Create resource and mint in one transaction
 
     ##### Setup

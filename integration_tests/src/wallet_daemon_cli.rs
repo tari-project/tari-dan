@@ -697,19 +697,15 @@ pub fn find_output_version(
     output_ref: &str,
     output_component_substate_id: SubstateId,
 ) -> anyhow::Result<Option<u32>> {
-    let outputs_name = output_ref
-        .split('/')
-        .next()
-        .ok_or(anyhow!("Failed to get component name"))?
-        .to_string();
+    let outputs_name = output_ref.split('/').next().ok_or(anyhow!("Output must have a name"))?;
     Ok(world
         .outputs
-        .entry(outputs_name)
+        .entry(outputs_name.to_string())
         .or_default()
         .iter()
         .filter(|(_, requirement)| requirement.substate_id == output_component_substate_id)
         .map(|(_, requirement)| requirement.version)
-        .next()
+        .last()
         .unwrap_or_default())
 }
 
@@ -726,6 +722,11 @@ pub async fn call_component(
     let source_component_address = get_address_from_output(world, output_ref.clone())
         .as_component_address()
         .expect("Failed to get component address from output");
+    let source_component_name = output_ref
+        .split('/')
+        .next()
+        .ok_or(anyhow!("Output must have a name"))?
+        .to_string();
 
     let account = get_account_from_name(&mut client, account_name).await;
     let account_component_address = account
@@ -753,7 +754,7 @@ pub async fn call_component(
     let final_outputs_name = if let Some(name) = new_outputs_name {
         name
     } else {
-        output_ref
+        source_component_name
     };
 
     add_substate_ids(

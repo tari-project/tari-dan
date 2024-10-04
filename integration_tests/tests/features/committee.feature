@@ -1,9 +1,11 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
+
+@concurrent
 @committee
 Feature: Committee scenarios
 
-  @serial @fixed
+  @fixed
   Scenario: Template registration and invocation in a 2-VN committee
     # Initialize a base node, wallet and miner
     Given a base node BASE

@@ -1,10 +1,10 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
+@concurrent
 @substates
 Feature: Substates
-  
-  @serial
+
   Scenario: Transactions with DOWN local substates are rejected
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE

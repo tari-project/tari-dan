@@ -1,10 +1,10 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
+@concurrent
 @epoch_change
 Feature: Epoch change
 
-  @serial
   Scenario: EndEpoch command is used on epoch change
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
