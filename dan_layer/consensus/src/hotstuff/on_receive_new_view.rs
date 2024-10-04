@@ -12,7 +12,7 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::EpochManagerReader;
 
-use super::vote_receiver::VoteReceiver;
+use super::vote_collector::VoteCollector;
 use crate::{
     hotstuff::{common::calculate_last_dummy_block, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::NewViewMessage,
@@ -29,7 +29,7 @@ pub struct OnReceiveNewViewHandler<TConsensusSpec: ConsensusSpec> {
     epoch_manager: TConsensusSpec::EpochManager,
     newview_message_counts: HashMap<(NodeHeight, BlockId), HashSet<TConsensusSpec::Addr>>,
     pacemaker: PaceMakerHandle,
-    vote_receiver: VoteReceiver<TConsensusSpec>,
+    vote_collector: VoteCollector<TConsensusSpec>,
 }
 
 impl<TConsensusSpec> OnReceiveNewViewHandler<TConsensusSpec>
@@ -41,7 +41,7 @@ where TConsensusSpec: ConsensusSpec
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
         pacemaker: PaceMakerHandle,
-        vote_receiver: VoteReceiver<TConsensusSpec>,
+        vote_receiver: VoteCollector<TConsensusSpec>,
     ) -> Self {
         Self {
             network,
@@ -50,7 +50,7 @@ where TConsensusSpec: ConsensusSpec
             epoch_manager,
             newview_message_counts: HashMap::default(),
             pacemaker,
-            vote_receiver,
+            vote_collector: vote_receiver,
         }
     }
 
@@ -64,6 +64,11 @@ where TConsensusSpec: ConsensusSpec
         new_height: NodeHeight,
         high_qc: &QuorumCertificate,
     ) -> usize {
+        self.newview_message_counts
+            .retain(|(height, _), _| *height >= new_height);
+        if self.newview_message_counts.len() <= 10 && self.newview_message_counts.capacity() > 10 {
+            self.newview_message_counts.shrink_to_fit();
+        }
         let entry = self
             .newview_message_counts
             .entry((new_height, *high_qc.block_id()))
@@ -145,16 +150,6 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
-        if let Some(vote) = last_vote {
-            debug!(
-                target: LOG_TARGET,
-                "🔥 Receive VOTE with NEWVIEW for node {} {} from {}", vote.block_height, vote.block_id, from,
-            );
-            self.vote_receiver
-                .handle(from.clone(), vote, false, local_committee_info)
-                .await?;
-        }
-
         // Are nodes requesting to create more than the minimum number of dummy blocks?
         let height_diff = high_qc.block_height().saturating_sub(new_height).as_u64();
         if height_diff > local_committee.len() as u64 {
@@ -167,6 +162,16 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
+        if let Some(vote) = last_vote {
+            debug!(
+                target: LOG_TARGET,
+                "🔥 Receive VOTE with NEWVIEW for node {} {} from {}", vote.unverified_block_height, vote.block_id, from,
+            );
+            self.vote_collector
+                .check_and_collect_vote(from.clone(), current_epoch, vote, local_committee_info)
+                .await?;
+        }
+
         // Take note of unique NEWVIEWs so that we can count them
         let newview_count = self.collect_new_views(from, new_height, &high_qc);
 
@@ -176,12 +181,7 @@ where TConsensusSpec: ConsensusSpec
             high_qc.get_quorum_certificate(&**tx)
         })?;
 
-        // if checked_high_qc.block_height() > high_qc.block_height() {
-        //     warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for because high QC is not higher than previous high QC,
-        // given high QC: {} current high QC: {}", high_qc.as_high_qc(), checked_high_qc);     return Ok(());
-        // }
-
-        let threshold = self.epoch_manager.get_local_threshold_for_epoch(epoch).await?;
+        let threshold = local_committee_info.quorum_threshold() as usize;
 
         info!(
             target: LOG_TARGET,
@@ -194,7 +194,7 @@ where TConsensusSpec: ConsensusSpec
         // Once we have received enough (quorum) NEWVIEWS, we can create the dummy block(s) and propose the next block.
         // Any subsequent NEWVIEWs for this height/view are ignored.
         if newview_count == threshold {
-            info!(target: LOG_TARGET, "🌟✅ NEWVIEW for block {} (high_qc: {}) has reached quorum ({}/{})", new_height, latest_high_qc.as_high_qc(), newview_count, threshold);
+            info!(target: LOG_TARGET, "🌟✅ NEWVIEW height {} (high_qc: {}) has reached quorum ({}/{})", new_height, latest_high_qc.as_high_qc(), newview_count, threshold);
             self.pacemaker
                 .update_view(epoch, new_height, high_qc.block_height())
                 .await?;

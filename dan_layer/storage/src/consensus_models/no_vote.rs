@@ -50,6 +50,8 @@ pub enum NoVoteReason {
     EndOfEpochWithOtherCommands,
     #[error("The Merkle root does not match")]
     MerkleRootMismatch,
+    #[error("Not all foreign input pledges are present")]
+    NotAllForeignInputPledges,
 }
 
 impl NoVoteReason {
@@ -76,6 +78,7 @@ impl NoVoteReason {
             Self::EndOfEpochWithOtherCommands => "EndOfEpochWithOtherCommands",
             Self::TotalLeaderFeeDisagreement => "TotalLeaderFeeDisagreement",
             Self::MerkleRootMismatch => "MerkleRootMismatch",
+            Self::NotAllForeignInputPledges => "NotAllForeignInputPledges",
         }
     }
 }

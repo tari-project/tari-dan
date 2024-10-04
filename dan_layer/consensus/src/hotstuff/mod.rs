@@ -29,7 +29,7 @@ mod pacemaker_handle;
 mod state_machine;
 pub mod substate_store;
 mod transaction_manager;
-mod vote_receiver;
+mod vote_collector;
 mod worker;
 
 pub use common::*;

@@ -124,10 +124,9 @@ pub trait StateStoreReadTransaction: Sized {
         block_ids: I,
     ) -> Result<Vec<ForeignProposal>, StorageError>;
     fn foreign_proposals_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
-    fn foreign_proposals_has_unconfirmed(&self, max_base_layer_block_height: u64) -> Result<bool, StorageError>;
+    fn foreign_proposals_has_unconfirmed(&self, epoch: Epoch) -> Result<bool, StorageError>;
     fn foreign_proposals_get_all_new(
         &self,
-        max_base_layer_block_height: u64,
         block_id: &BlockId,
         limit: usize,
     ) -> Result<Vec<ForeignProposal>, StorageError>;
@@ -391,6 +390,8 @@ pub trait StateStoreWriteTransaction {
         proposed_in_block: Option<BlockId>,
     ) -> Result<(), StorageError>;
     fn foreign_proposals_delete(&mut self, block_id: &BlockId) -> Result<(), StorageError>;
+
+    fn foreign_proposals_delete_in_epoch(&mut self, epoch: Epoch) -> Result<(), StorageError>;
     fn foreign_proposals_set_status(
         &mut self,
         block_id: &BlockId,
@@ -486,6 +487,8 @@ pub trait StateStoreWriteTransaction {
 
     // -------------------------------- Votes -------------------------------- //
     fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;
+
+    fn votes_delete_all(&mut self) -> Result<(), StorageError>;
 
     //---------------------------------- Substates --------------------------------------------//
     fn substate_locks_insert_all<'a, I: IntoIterator<Item = (&'a SubstateId, &'a Vec<SubstateLock>)>>(

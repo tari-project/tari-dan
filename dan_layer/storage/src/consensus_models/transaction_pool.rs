@@ -567,12 +567,13 @@ impl TransactionPoolRecord {
         self.check_pending_status_update(next_stage, is_ready)?;
         info!(
             target: LOG_TARGET,
-            "📝 Setting next update for transaction {} to {}->{},is_ready={}->{},{}",
+            "📝 Setting next update for transaction {} to {}->{},is_ready={}->{},{}->{}",
             self.transaction_id(),
             self.current_stage(),
             next_stage,
             self.is_ready,
             is_ready,
+            self.current_local_decision(),
             self.current_decision(),
         );
         self.pending_stage = Some(next_stage);
