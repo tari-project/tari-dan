@@ -24,17 +24,7 @@ mod steps;
 use std::{fs, future, io, panic, str::FromStr, time::Duration};
 
 use anyhow::bail;
-use cucumber::{
-    gherkin::Step,
-    given,
-    then,
-    when,
-    writer,
-    writer::Verbosity,
-    ScenarioType,
-    World,
-    WriterExt,
-};
+use cucumber::{gherkin::Step, given, then, when, writer, writer::Verbosity, ScenarioType, World, WriterExt};
 use integration_tests::{
     http_server::{spawn_template_http_server, MockHttpServer},
     logging::{create_log_config_file, get_base_dir},
@@ -131,7 +121,7 @@ async fn main() {
     pin_mut!(ctrl_c);
     pin_mut!(cucumber_fut);
     match select(cucumber_fut, ctrl_c).await {
-        Either::Left(_) => {}
+        Either::Left(_) => {},
         Either::Right((ctrl_c, _)) => ctrl_c.unwrap(),
     }
 
@@ -179,7 +169,7 @@ async fn call_template_constructor_via_wallet_daemon(
         None,
         None,
     )
-        .await;
+    .await;
 
     // give it some time between transactions
     // tokio::time::sleep(Duration::from_secs(4)).await;
@@ -207,7 +197,7 @@ async fn call_template_constructor_via_wallet_daemon_no_args(
         None,
         None,
     )
-        .await;
+    .await;
 }
 
 #[when(
@@ -234,12 +224,10 @@ async fn call_template_constructor_via_wallet_daemon_with_args(
         None,
         None,
     )
-        .await;
+    .await;
 }
 
-#[when(
-    expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" named "{word}""#
-)]
+#[when(expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" named "{word}""#)]
 async fn call_template_constructor(
     world: &mut TariWorld,
     function_call: String,
@@ -300,9 +288,7 @@ async fn call_component_method(
     // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(
-    expr = r#"I invoke on {word} on component {word} the method call "{word}" concurrently {int} times"#
-)]
+#[when(expr = r#"I invoke on {word} on component {word} the method call "{word}" concurrently {int} times"#)]
 async fn call_component_method_concurrently(
     world: &mut TariWorld,
     vn_name: String,
@@ -334,9 +320,7 @@ async fn call_component_method_must_error(
     }
 }
 
-#[when(
-    expr = r#"I invoke on all validator nodes on component {word} the method call "{word}" named "{word}""#
-)]
+#[when(expr = r#"I invoke on all validator nodes on component {word} the method call "{word}" named "{word}""#)]
 async fn call_component_method_on_all_vns(
     world: &mut TariWorld,
     component_name: String,
@@ -352,17 +336,15 @@ async fn call_component_method_on_all_vns(
             output_name.clone(),
             method_call.clone(),
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
         assert_eq!(resp.dry_run_result.unwrap().decision, QuorumDecision::Accept);
     }
     // give it some time between transactions
     // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(
-    expr = "I invoke on {word} on component {word} the method call \"{word}\" the result is \"{word}\""
-)]
+#[when(expr = "I invoke on {word} on component {word} the method call \"{word}\" the result is \"{word}\"")]
 async fn call_component_method_and_check_result(
     world: &mut TariWorld,
     vn_name: String,
@@ -383,7 +365,7 @@ async fn call_component_method_and_check_result(
         Type::U32 => {
             let u32_result: u32 = result.decode().unwrap();
             assert_eq!(u32_result.to_string(), expected_result);
-        }
+        },
         // TODO: handle other possible return types
         _ => todo!(),
     };
@@ -419,16 +401,14 @@ async fn call_wallet_daemon_method_and_check_result(
         Type::U32 => {
             let u32_result: u32 = result.decode().unwrap();
             assert_eq!(u32_result.to_string(), expected_result);
-        }
+        },
         _ => todo!(),
     };
 
     Ok(())
 }
 
-#[when(
-    expr = r#"I invoke on wallet daemon {word} on account {word} on component {word} the method call "{word}""#
-)]
+#[when(expr = r#"I invoke on wallet daemon {word} on account {word} on component {word} the method call "{word}""#)]
 async fn call_wallet_daemon_method(
     world: &mut TariWorld,
     wallet_daemon_name: String,
@@ -460,7 +440,7 @@ async fn call_wallet_daemon_method_with_output_name(
         method_call,
         Some(new_output_name),
     )
-        .await?;
+    .await?;
 
     Ok(())
 }
@@ -485,7 +465,7 @@ async fn call_wallet_daemon_method_with_output_name_error_result(
         method_call,
         Some(new_output_name),
     )
-        .await
+    .await
     {
         let error_str = error.to_string();
         let re = Regex::new(error_message.as_str()).expect("invalid regex for error message");
@@ -522,8 +502,8 @@ async fn call_wallet_daemon_method_concurrently(
         method_call,
         times,
     )
-        .await
-        .unwrap_or_else(|e| panic!("Concurrent wallet daemon call failed: {:?}", e));
+    .await
+    .unwrap_or_else(|e| panic!("Concurrent wallet daemon call failed: {:?}", e));
 }
 
 #[when(
@@ -544,8 +524,8 @@ async fn call_component_method_on_all_vns_and_check_result(
             "dummy_outputs".to_string(),
             method_call.clone(),
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
         let finalize_result = resp.dry_run_result.unwrap();
         assert_eq!(finalize_result.decision, QuorumDecision::Accept);
 
@@ -555,7 +535,7 @@ async fn call_component_method_on_all_vns_and_check_result(
             Type::U32 => {
                 let u32_result: u32 = result.decode().unwrap();
                 assert_eq!(u32_result.to_string(), expected_result);
-            }
+            },
             // TODO: handle other possible return types
             _ => todo!(),
         };
@@ -610,9 +590,7 @@ async fn reveal_burned_funds(world: &mut TariWorld, account_name: String, amount
     wallet_daemon_cli::reveal_burned_funds(world, account_name, amount, wallet_daemon_name).await;
 }
 
-#[when(
-    regex = r#"^I submit a transaction manifest via wallet daemon (\w+) with inputs "([^"]+)" named "(\w+)"$"#
-)]
+#[when(regex = r#"^I submit a transaction manifest via wallet daemon (\w+) with inputs "([^"]+)" named "(\w+)"$"#)]
 async fn submit_transaction_manifest_via_wallet_daemon(
     world: &mut TariWorld,
     step: &Step,
@@ -646,7 +624,7 @@ async fn submit_transaction_manifest_via_wallet_daemon_with_signing_keys(
         None,
         None,
     )
-        .await;
+    .await;
 }
 
 #[when(expr = "I mint a new non fungible token {word} on {word} using wallet daemon {word}")]
@@ -659,17 +637,13 @@ async fn mint_new_nft_on_account(
     wallet_daemon_cli::mint_new_nft_on_account(world, nft_name, account_name, wallet_daemon_name, None, None).await;
 }
 
-#[when(
-    expr = r#"I list all non fungible tokens on {word} using wallet daemon {word} the amount is {word}"#
-)]
+#[when(expr = r#"I list all non fungible tokens on {word} using wallet daemon {word} the amount is {word}"#)]
 async fn list_nfts_on_account(world: &mut TariWorld, account_name: String, wallet_daemon_name: String, amount: usize) {
     let nfts = wallet_daemon_cli::list_account_nfts(world, account_name, wallet_daemon_name).await;
     assert_eq!(amount, nfts.len());
 }
 
-#[when(
-    expr = "I mint a new non fungible token {word} on {word} using wallet daemon with metadata {word}"
-)]
+#[when(expr = "I mint a new non fungible token {word} on {word} using wallet daemon with metadata {word}")]
 async fn mint_new_nft_on_account_with_metadata(
     world: &mut TariWorld,
     nft_name: String,
@@ -718,8 +692,8 @@ async fn given_all_validator_connects_to_other_vns(world: &mut TariWorld) {
                 addresses: vec![addr],
                 wait_for_dial: true,
             })
-                .await
-                .unwrap();
+            .await
+            .unwrap();
         }
     }
 }
