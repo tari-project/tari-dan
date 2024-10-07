@@ -314,7 +314,9 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             if let Some(vn) = self.epoch_manager.get_our_validator_node(next_epoch).await.optional()? {
                 // TODO: Change VN db to include the shard group in the ValidatorNode struct.
                 let num_committees = self.epoch_manager.get_num_committees(next_epoch).await?;
-                let next_shard_group = vn.shard_key.to_shard_group(self.config.num_preshards, num_committees);
+                let next_shard_group = vn
+                    .shard_key
+                    .to_shard_group(self.config.consensus_constants.num_preshards, num_committees);
                 self.store.with_write_tx(|tx| {
                     // Generate checkpoint
                     create_epoch_checkpoint(tx, epoch, local_committee_info.shard_group())?;
@@ -412,7 +414,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             self.leader_strategy.clone(),
             self.outbound_messaging.clone(),
             self.store.clone(),
-            self.config.num_preshards,
+            self.config.consensus_constants.num_preshards,
             local_committee_info,
             blocks,
         ));
@@ -611,7 +613,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 block_description: candidate_block.to_string(),
                 justify_block: candidate_block.justify().as_leaf_block(),
             }
-            .into());
+                .into());
         };
 
         if justify_block.height() != candidate_block.justify().block_height() {
@@ -660,7 +662,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     justify_block_height: justify_block.height(),
                     candidate_block_height: candidate_block.height(),
                 }
-                .into());
+                    .into());
             };
 
             if candidate_block.parent() != last_dummy.id() {

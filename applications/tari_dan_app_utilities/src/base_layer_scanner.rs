@@ -30,6 +30,7 @@ use tari_base_node_client::{
     BaseNodeClientError,
 };
 use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError, PublicKey};
+use tari_consensus::consensus_constants::ConsensusConstants;
 use tari_core::transactions::{
     tari_amount::MicroMinotari,
     transaction_components::{
@@ -61,10 +62,7 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::models::{EncryptedData, TemplateAddress, UnclaimedConfidentialOutputAddress};
 use tokio::{task, task::JoinHandle, time};
 
-use crate::{
-    consensus_constants::ConsensusConstants,
-    template_manager::interface::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration},
-};
+use crate::template_manager::interface::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration};
 
 const LOG_TARGET: &str = "tari::dan::base_layer_scanner";
 

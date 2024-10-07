@@ -34,13 +34,13 @@ use tari_common::{
     configuration::Network,
     exit_codes::{ExitCode, ExitError},
 };
+use tari_consensus::consensus_constants::ConsensusConstants;
 #[cfg(not(feature = "metrics"))]
 use tari_consensus::traits::hooks::NoopHooks;
 use tari_core::transactions::transaction_components::ValidatorNodeSignature;
 use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
 use tari_dan_app_utilities::{
     base_layer_scanner,
-    consensus_constants::ConsensusConstants,
     keypair::RistrettoKeypair,
     seed_peer::SeedPeer,
     substate_file_cache::SubstateFileCache,

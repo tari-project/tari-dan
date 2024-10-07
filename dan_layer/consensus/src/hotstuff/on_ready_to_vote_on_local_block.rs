@@ -61,7 +61,6 @@ use crate::{
         },
         HotstuffConfig,
         ProposalValidationError,
-        EXHAUST_DIVISOR,
     },
     tracing::TraceTimer,
     traits::{ConsensusSpec, WriteableSubstateStore},
@@ -297,7 +296,8 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<(), HotStuffError> {
         // Store used for transactions that have inputs without specific versions.
         // It lives through the entire block so multiple transactions can be sequenced together in the same block
-        let mut substate_store = PendingSubstateStore::new(tx, *block.parent(), self.config.num_preshards);
+        let mut substate_store =
+            PendingSubstateStore::new(tx, *block.parent(), self.config.consensus_constants.num_preshards);
         let mut total_leader_fee = 0;
         let locked_block = LockedBlock::get(tx, block.epoch())?;
 
@@ -613,8 +613,10 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(Some(NoVoteReason::NoLeaderFee));
                     }
 
-                    let calculated_leader_fee =
-                        tx_rec.calculate_leader_fee(NonZeroU64::new(1).expect("1 > 0"), EXHAUST_DIVISOR);
+                    let calculated_leader_fee = tx_rec.calculate_leader_fee(
+                        NonZeroU64::new(1).expect("1 > 0"),
+                        self.config.consensus_constants.fee_exhaust_divisor,
+                    );
                     if calculated_leader_fee != *atom.leader_fee.as_ref().expect("None already checked") {
                         warn!(
                             target: LOG_TARGET,
@@ -1226,7 +1228,8 @@ where TConsensusSpec: ConsensusSpec
             let num_involved_shard_groups = tx_rec.evidence().num_shard_groups();
             let involved = NonZeroU64::new(num_involved_shard_groups as u64)
                 .ok_or_else(|| HotStuffError::InvariantError("Number of involved shard groups is 0".to_string()))?;
-            let calculated_leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);
+            let calculated_leader_fee =
+                tx_rec.calculate_leader_fee(involved, self.config.consensus_constants.fee_exhaust_divisor);
             if calculated_leader_fee != *leader_fee {
                 warn!(
                     target: LOG_TARGET,

@@ -22,7 +22,6 @@
 
 pub mod base_layer_scanner;
 pub mod configuration;
-pub mod consensus_constants;
 pub mod json_encoding;
 pub mod keypair;
 pub mod p2p_config;

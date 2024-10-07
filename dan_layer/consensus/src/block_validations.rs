@@ -79,7 +79,7 @@ pub async fn check_base_layer_block_hash<TConsensusSpec: ConsensusSpec>(
     //         current: current_height,
     //     })?;
     // }
-    if base_layer_block_height > current_height + config.max_base_layer_blocks_ahead {
+    if base_layer_block_height > current_height + config.consensus_constants.max_base_layer_blocks_ahead {
         Err(ProposalValidationError::BlockHeightTooHigh {
             proposed: base_layer_block_height,
             current: current_height,

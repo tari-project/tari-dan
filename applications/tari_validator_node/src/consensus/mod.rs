@@ -8,7 +8,6 @@ use tari_consensus::{
 };
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_app_utilities::{
-    consensus_constants::ConsensusConstants,
     template_manager::implementation::TemplateManager,
     transaction_executor::TariDanTransactionProcessor,
 };
@@ -52,6 +51,7 @@ mod spec;
 pub use block_transaction_executor::*;
 pub use handle::*;
 pub use signature_service::*;
+use tari_consensus::consensus_constants::ConsensusConstants;
 
 use crate::{p2p::NopLogger, transaction_validators::WithContext};
 
@@ -84,10 +84,7 @@ pub async fn spawn(
     let hs_config = HotstuffConfig {
         network,
         sidechain_id,
-        max_base_layer_blocks_behind: consensus_constants.max_base_layer_blocks_behind,
-        max_base_layer_blocks_ahead: consensus_constants.max_base_layer_blocks_ahead,
-        num_preshards: consensus_constants.num_preshards,
-        pacemaker_max_base_time: consensus_constants.pacemaker_max_base_time,
+        consensus_constants,
     };
 
     let hotstuff_worker = HotstuffWorker::<TariConsensusSpec>::new(

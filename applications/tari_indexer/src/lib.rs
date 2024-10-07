@@ -51,11 +51,8 @@ use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
-use tari_dan_app_utilities::{
-    consensus_constants::ConsensusConstants,
-    keypair::setup_keypair_prompt,
-    substate_file_cache::SubstateFileCache,
-};
+use tari_consensus::consensus_constants::ConsensusConstants;
+use tari_dan_app_utilities::{keypair::setup_keypair_prompt, substate_file_cache::SubstateFileCache};
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
@@ -179,6 +176,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         .map(TryInto::try_into)
         .collect::<Result<_, _>>()
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Invalid event filters: {}", e)))?;
+    let consensus_constants = ConsensusConstants::from(config.network);
     let event_scanner = Arc::new(EventScanner::new(
         config.network,
         config.indexer.sidechain_id,
@@ -186,6 +184,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         services.validator_node_client_factory.clone(),
         services.substate_store.clone(),
         event_filters,
+        consensus_constants,
     ));
 
     // Run the GraphQL API

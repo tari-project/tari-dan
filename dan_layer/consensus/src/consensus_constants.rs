@@ -33,6 +33,8 @@ pub struct ConsensusConstants {
     pub max_base_layer_blocks_behind: u64,
     pub num_preshards: NumPreshards,
     pub pacemaker_max_base_time: Duration,
+    /// The value that fees are divided by to determine the amount of fees to burn. 0 means no fees are burned.
+    pub fee_exhaust_divisor: u64,
 }
 
 impl ConsensusConstants {
@@ -44,6 +46,7 @@ impl ConsensusConstants {
             max_base_layer_blocks_behind: 5,
             num_preshards: NumPreshards::P256,
             pacemaker_max_base_time: Duration::from_secs(10),
+            fee_exhaust_divisor: 20, // 5%
         }
     }
 }
