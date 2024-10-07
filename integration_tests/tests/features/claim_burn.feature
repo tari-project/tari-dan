@@ -3,7 +3,9 @@
 @claim_burn
 Feature: Claim Burn
 
-  @serial @fixed
+  @concurrent
+#  @serial
+  @fixed
   Scenario: Claim base layer burn funds with wallet daemon
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -41,7 +43,8 @@ Feature: Claim Burn
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC via the wallet daemon WALLET_D
   # Then account ACC has one confidential bucket in it
 
-  @serial
+#  @serial
+  @concurrent
   Scenario: Double Claim base layer burn funds with wallet daemon. should fail
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE

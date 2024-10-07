@@ -23,7 +23,8 @@
 mod steps;
 use std::{fs, future, io, panic, str::FromStr, time::Duration};
 
-use cucumber::{gherkin::Step, given, then, when, writer, writer::Verbosity, World, WriterExt};
+use anyhow::bail;
+use cucumber::{gherkin::Step, given, then, when, writer, writer::Verbosity, ScenarioType, World, WriterExt};
 use integration_tests::{
     http_server::{spawn_template_http_server, MockHttpServer},
     logging::{create_log_config_file, get_base_dir},
@@ -41,6 +42,7 @@ use libp2p::{
     },
     Multiaddr,
 };
+use regex::Regex;
 use tari_common::initialize_logging;
 use tari_dan_engine::abi::Type;
 use tari_dan_storage::consensus_models::QuorumDecision;
@@ -61,7 +63,7 @@ async fn main() {
 
     let file = fs::File::create("cucumber-output-junit.xml").unwrap();
     let cucumber_fut = TariWorld::cucumber()
-        .max_concurrent_scenarios(1)
+        .max_concurrent_scenarios(5)
         .with_writer(writer::Tee::new(
             writer::JUnit::new(file, Verbosity::ShowWorldAndDocString).normalized(),
             // following config needed to use eprint statements in the tests
@@ -89,6 +91,30 @@ async fn main() {
             Box::pin(future::ready(()))
         })
         .fail_on_skipped()
+        .which_scenario(|feature, _, scenario| {
+            let feature_has_concurrent_tag = feature.tags.iter().any(|tag| tag == "concurrent");
+            let feature_has_serial_tag = feature.tags.iter().any(|tag| tag == "serial");
+            let scenario_has_concurrent_tag = scenario.tags.iter().any(|tag| tag == "concurrent");
+            let scenario_has_serial_tag = scenario.tags.iter().any(|tag| tag == "serial");
+
+            if scenario_has_serial_tag {
+                return ScenarioType::Serial;
+            }
+
+            if scenario_has_concurrent_tag {
+                return ScenarioType::Concurrent;
+            }
+
+            if feature_has_serial_tag {
+                return ScenarioType::Serial;
+            }
+
+            if feature_has_concurrent_tag {
+                return ScenarioType::Concurrent;
+            }
+
+            ScenarioType::Serial
+        })
         .filter_run("tests/features/", |_, _, sc| !sc.tags.iter().any(|t| t == "ignore"));
 
     let ctrl_c = tokio::signal::ctrl_c();
@@ -173,6 +199,34 @@ async fn call_template_constructor_via_wallet_daemon_no_args(
     )
     .await;
 }
+
+#[when(
+    expr = r#"I call function "{word}" on template "{word}" with args {string} using account {word} to pay fees via wallet daemon {word} named "{word}""#
+)]
+async fn call_template_constructor_via_wallet_daemon_with_args(
+    world: &mut TariWorld,
+    function_call: String,
+    template_name: String,
+    args_raw: String,
+    account_name: String,
+    wallet_daemon_name: String,
+    outputs_name: String,
+) {
+    let args: Vec<String> = args_raw.split(',').map(|str| str.trim().to_string()).collect();
+    wallet_daemon_cli::create_component(
+        world,
+        outputs_name,
+        template_name,
+        account_name,
+        wallet_daemon_name,
+        function_call,
+        args,
+        None,
+        None,
+    )
+    .await;
+}
+
 #[when(expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" named "{word}""#)]
 async fn call_template_constructor(
     world: &mut TariWorld,
@@ -332,7 +386,8 @@ async fn call_wallet_daemon_method_and_check_result(
     expected_result: String,
 ) -> anyhow::Result<()> {
     let resp =
-        wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call).await?;
+        wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call, None)
+            .await?;
 
     let finalize_result = resp
         .result
@@ -361,7 +416,69 @@ async fn call_wallet_daemon_method(
     output_ref: String,
     method_call: String,
 ) -> anyhow::Result<()> {
-    wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call).await?;
+    wallet_daemon_cli::call_component(world, account_name, output_ref, wallet_daemon_name, method_call, None).await?;
+
+    Ok(())
+}
+
+#[when(
+    expr = r#"I invoke on wallet daemon {word} on account {word} on component {word} the method call "{word}" named "{word}""#
+)]
+async fn call_wallet_daemon_method_with_output_name(
+    world: &mut TariWorld,
+    wallet_daemon_name: String,
+    account_name: String,
+    output_ref: String,
+    method_call: String,
+    new_output_name: String,
+) -> anyhow::Result<()> {
+    wallet_daemon_cli::call_component(
+        world,
+        account_name,
+        output_ref,
+        wallet_daemon_name,
+        method_call,
+        Some(new_output_name),
+    )
+    .await?;
+
+    Ok(())
+}
+
+#[when(
+    expr = r#"I invoke on wallet daemon {word} on account {word} on component {word} the method call "{word}" named "{word}", I expect it to fail with {string}"#
+)]
+async fn call_wallet_daemon_method_with_output_name_error_result(
+    world: &mut TariWorld,
+    wallet_daemon_name: String,
+    account_name: String,
+    output_ref: String,
+    method_call: String,
+    new_output_name: String,
+    error_message: String,
+) -> anyhow::Result<()> {
+    if let Err(error) = wallet_daemon_cli::call_component(
+        world,
+        account_name,
+        output_ref,
+        wallet_daemon_name,
+        method_call,
+        Some(new_output_name),
+    )
+    .await
+    {
+        let error_str = error.to_string();
+        let re = Regex::new(error_message.as_str()).expect("invalid regex for error message");
+        if re.find(error_str.as_str()).is_none() {
+            bail!(
+                "Error mismatch: \"{}\" does not contain \"{}\"",
+                error_str,
+                error_message.as_str()
+            );
+        }
+    } else {
+        bail!("Error expected, but none was happening!");
+    }
 
     Ok(())
 }

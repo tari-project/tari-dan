@@ -1,9 +1,11 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
+
+@concurrent
 @state_sync
 Feature: State Sync
 
-  @serial @fixed
+  @fixed
   Scenario: New validator node registers and syncs
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE

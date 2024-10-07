@@ -1,10 +1,10 @@
 # Copyright 2024 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
+@concurrent
 @indexer
 Feature: Indexer node
 
-  @serial
   Scenario: Wallet daemon is able to connect to indexer
 
     ##### Setup
@@ -88,7 +88,6 @@ Feature: Indexer node
     # Scan the network for the event emitted on ACC creation
     When indexer IDX scans the network events for account ACC with topics component-created,pay_fee,pay_fee,pay_fee,pay_fee,pay_fee,deposit,component-created,pay_fee,pay_fee,deposit,deposit,deposit,deposit,deposit,deposit
 
-  @serial
   Scenario: Indexer GraphQL requests work
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -99,7 +98,6 @@ Feature: Indexer node
     # Check GraphQL request
     Given IDX indexer GraphQL request works
 
-  @serial
   Scenario: Indexer GraphQL requests events over network substate indexing
 
     ##### Setup
@@ -132,7 +130,6 @@ Feature: Indexer node
     # Scan the network for the event emitted on ACC_2 creation
     When indexer IDX scans the network events for account ACC_2 with topics component-created,pay_fee,component-created,pay_fee
 
-  @serial
   Scenario: Indexer GraphQL filtering and pagination of events
 
     ##### Setup

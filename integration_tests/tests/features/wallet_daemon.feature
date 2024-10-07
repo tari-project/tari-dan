@@ -1,10 +1,10 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
+@concurrent
 @wallet_daemon
 Feature: Wallet Daemon
 
-  @serial
   Scenario: Create account and transfer faucets via wallet daemon
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -85,7 +85,6 @@ Feature: Wallet Daemon
     # TODO: Figure out why this is taking more than 10 seconds to update
     #        When I wait for ACC_2 on wallet daemon WALLET_D to have balance eq 50
 
-  @serial
   Scenario: Claim and transfer confidential assets via wallet daemon
         # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -127,8 +126,7 @@ Feature: Wallet Daemon
     When I check the confidential balance of ACCOUNT_1 on wallet daemon WALLET_D the amount is at least 10000
         # When account ACCOUNT_1 reveals 100 burned tokens via wallet daemon WALLET_D
     Then I make a confidential transfer with amount 5 from ACCOUNT_1 to ACCOUNT_2 creating output OUTPUT_TX1 via the wallet_daemon WALLET_D
-
-  @serial
+    
   Scenario: Create and mint account NFT
     # Initialize a base node, wallet, miner and VN
     Given a network with registered validator VAL_1 and wallet daemon WALLET_D
