@@ -52,6 +52,7 @@ use tari_transaction::TransactionId;
 use tokio::task;
 
 use crate::{
+    consensus_constants::ConsensusConstants,
     hotstuff::{
         block_change_set::ProposedBlockChangeSet,
         calculate_state_merkle_root,
@@ -66,7 +67,6 @@ use crate::{
             TransactionLockConflicts,
         },
         HotstuffConfig,
-        EXHAUST_DIVISOR,
     },
     messages::{HotstuffMessage, ProposalMessage},
     tracing::TraceTimer,
@@ -657,7 +657,8 @@ where TConsensusSpec: ConsensusSpec
 
                 if tx_rec.current_decision().is_commit() {
                     let involved = NonZeroU64::new(1).expect("1 > 0");
-                    let leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);
+                    let consensus_constants = ConsensusConstants::from(self.config.network);
+                    let leader_fee = tx_rec.calculate_leader_fee(involved, consensus_constants.fee_exhaust_divisor);
                     tx_rec.set_leader_fee(leader_fee);
                     let diff = execution.result().finalize.result.accept().ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
@@ -863,7 +864,8 @@ where TConsensusSpec: ConsensusSpec
                     tx_rec.transaction_id(),
                 ))
             })?;
-            let leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);
+            let consensus_constants = ConsensusConstants::from(self.config.network);
+            let leader_fee = tx_rec.calculate_leader_fee(involved, consensus_constants.fee_exhaust_divisor);
             tx_rec.set_leader_fee(leader_fee);
         }
         let atom = tx_rec.get_current_transaction_atom();

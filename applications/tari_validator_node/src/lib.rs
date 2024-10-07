@@ -48,7 +48,8 @@ use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
-use tari_dan_app_utilities::{consensus_constants::ConsensusConstants, keypair::setup_keypair_prompt};
+use tari_consensus::consensus_constants::ConsensusConstants;
+use tari_dan_app_utilities::keypair::setup_keypair_prompt;
 use tari_dan_common_types::SubstateAddress;
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;

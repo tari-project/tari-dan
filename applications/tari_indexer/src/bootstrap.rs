@@ -30,10 +30,10 @@ use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
+use tari_consensus::consensus_constants::ConsensusConstants;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_app_utilities::{
     base_layer_scanner,
-    consensus_constants::ConsensusConstants,
     keypair::RistrettoKeypair,
     seed_peer::SeedPeer,
     template_manager::{self, implementation::TemplateManager},

@@ -45,6 +45,7 @@ use tari_engine_types::{commit_result::RejectReason, substate::Substate};
 use tokio::sync::broadcast;
 
 use crate::{
+    consensus_constants::ConsensusConstants,
     hotstuff::{
         block_change_set::{BlockDecision, ProposedBlockChangeSet},
         calculate_state_merkle_root,
@@ -61,7 +62,6 @@ use crate::{
         },
         HotstuffConfig,
         ProposalValidationError,
-        EXHAUST_DIVISOR,
     },
     tracing::TraceTimer,
     traits::{ConsensusSpec, WriteableSubstateStore},
@@ -613,8 +613,11 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(Some(NoVoteReason::NoLeaderFee));
                     }
 
-                    let calculated_leader_fee =
-                        tx_rec.calculate_leader_fee(NonZeroU64::new(1).expect("1 > 0"), EXHAUST_DIVISOR);
+                    let consensus_constants = ConsensusConstants::from(self.config.network);
+                    let calculated_leader_fee = tx_rec.calculate_leader_fee(
+                        NonZeroU64::new(1).expect("1 > 0"),
+                        consensus_constants.fee_exhaust_divisor,
+                    );
                     if calculated_leader_fee != *atom.leader_fee.as_ref().expect("None already checked") {
                         warn!(
                             target: LOG_TARGET,
@@ -1226,7 +1229,8 @@ where TConsensusSpec: ConsensusSpec
             let num_involved_shard_groups = tx_rec.evidence().num_shard_groups();
             let involved = NonZeroU64::new(num_involved_shard_groups as u64)
                 .ok_or_else(|| HotStuffError::InvariantError("Number of involved shard groups is 0".to_string()))?;
-            let calculated_leader_fee = tx_rec.calculate_leader_fee(involved, EXHAUST_DIVISOR);
+            let consensus_constants = ConsensusConstants::from(self.config.network);
+            let calculated_leader_fee = tx_rec.calculate_leader_fee(involved, consensus_constants.fee_exhaust_divisor);
             if calculated_leader_fee != *leader_fee {
                 warn!(
                     target: LOG_TARGET,

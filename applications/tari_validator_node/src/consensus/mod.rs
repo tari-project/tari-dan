@@ -8,7 +8,6 @@ use tari_consensus::{
 };
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_app_utilities::{
-    consensus_constants::ConsensusConstants,
     template_manager::implementation::TemplateManager,
     transaction_executor::TariDanTransactionProcessor,
 };
@@ -52,6 +51,7 @@ mod spec;
 pub use block_transaction_executor::*;
 pub use handle::*;
 pub use signature_service::*;
+use tari_consensus::consensus_constants::ConsensusConstants;
 
 use crate::{p2p::NopLogger, transaction_validators::WithContext};
 
