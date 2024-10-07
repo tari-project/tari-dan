@@ -104,7 +104,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         shutdown: ShutdownSignal,
     ) -> Self {
         let (tx_missing_transactions, rx_missing_transactions) = mpsc::unbounded_channel();
-        let pacemaker = PaceMaker::new(config.pacemaker_max_base_time);
+        let pacemaker = PaceMaker::new(config.consensus_constants.pacemaker_max_base_time);
         let vote_receiver = VoteCollector::new(
             config.network,
             state_store.clone(),
@@ -735,7 +735,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             // The parent for genesis blocks refer to this zero block
             let mut zero_block = Block::zero_block(
                 self.config.network,
-                self.config.num_preshards,
+                self.config.consensus_constants.num_preshards,
                 self.config.sidechain_id.clone(),
             )?;
             if !zero_block.exists(&**tx)? {

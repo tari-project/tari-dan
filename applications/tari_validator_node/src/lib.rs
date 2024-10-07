@@ -117,13 +117,14 @@ pub async fn run_validator_node(
     #[cfg(feature = "metrics")]
     let metrics_registry = create_metrics_registry(keypair.public_key());
 
+    let consensus_constants = ConsensusConstants::from(config.network);
     let base_node_client = create_base_layer_client(config).await?;
     let services = spawn_services(
         config,
         shutdown_signal.clone(),
         keypair.clone(),
         global_db,
-        ConsensusConstants::devnet(), // TODO: change this eventually
+        consensus_constants,
         base_node_client.clone(),
         #[cfg(feature = "metrics")]
         &metrics_registry,

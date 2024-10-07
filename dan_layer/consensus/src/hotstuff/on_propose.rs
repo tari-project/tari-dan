@@ -52,7 +52,6 @@ use tari_transaction::TransactionId;
 use tokio::task;
 
 use crate::{
-    consensus_constants::ConsensusConstants,
     hotstuff::{
         block_change_set::ProposedBlockChangeSet,
         calculate_state_merkle_root,
@@ -497,7 +496,11 @@ where TConsensusSpec: ConsensusSpec
         );
 
         // batch is empty for is_empty, is_epoch_end and is_epoch_start blocks
-        let mut substate_store = PendingSubstateStore::new(tx, *parent_block.block_id(), self.config.num_preshards);
+        let mut substate_store = PendingSubstateStore::new(
+            tx,
+            *parent_block.block_id(),
+            self.config.consensus_constants.num_preshards,
+        );
         let mut executed_transactions = HashMap::new();
         let timer = TraceTimer::info(LOG_TARGET, "Generating commands").with_iterations(batch.len());
         let mut lock_conflicts = TransactionLockConflicts::new();
@@ -657,8 +660,8 @@ where TConsensusSpec: ConsensusSpec
 
                 if tx_rec.current_decision().is_commit() {
                     let involved = NonZeroU64::new(1).expect("1 > 0");
-                    let consensus_constants = ConsensusConstants::from(self.config.network);
-                    let leader_fee = tx_rec.calculate_leader_fee(involved, consensus_constants.fee_exhaust_divisor);
+                    let leader_fee =
+                        tx_rec.calculate_leader_fee(involved, self.config.consensus_constants.fee_exhaust_divisor);
                     tx_rec.set_leader_fee(leader_fee);
                     let diff = execution.result().finalize.result.accept().ok_or_else(|| {
                         HotStuffError::InvariantError(format!(
@@ -864,8 +867,7 @@ where TConsensusSpec: ConsensusSpec
                     tx_rec.transaction_id(),
                 ))
             })?;
-            let consensus_constants = ConsensusConstants::from(self.config.network);
-            let leader_fee = tx_rec.calculate_leader_fee(involved, consensus_constants.fee_exhaust_divisor);
+            let leader_fee = tx_rec.calculate_leader_fee(involved, self.config.consensus_constants.fee_exhaust_divisor);
             tx_rec.set_leader_fee(leader_fee);
         }
         let atom = tx_rec.get_current_transaction_atom();

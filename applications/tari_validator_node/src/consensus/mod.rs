@@ -84,10 +84,7 @@ pub async fn spawn(
     let hs_config = HotstuffConfig {
         network,
         sidechain_id,
-        max_base_layer_blocks_behind: consensus_constants.max_base_layer_blocks_behind,
-        max_base_layer_blocks_ahead: consensus_constants.max_base_layer_blocks_ahead,
-        num_preshards: consensus_constants.num_preshards,
-        pacemaker_max_base_time: consensus_constants.pacemaker_max_base_time,
+        consensus_constants,
     };
 
     let hotstuff_worker = HotstuffWorker::<TariConsensusSpec>::new(
