@@ -6,6 +6,7 @@ use std::time::Duration;
 use tari_common::configuration::Network;
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_consensus::{
+    consensus_constants::ConsensusConstants,
     hotstuff::{ConsensusCurrentState, ConsensusWorker, ConsensusWorkerContext, HotstuffConfig, HotstuffWorker},
     traits::hooks::NoopHooks,
 };
@@ -135,12 +136,17 @@ impl ValidatorBuilder {
 
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             HotstuffConfig {
-                num_preshards: TEST_NUM_PRESHARDS,
-                max_base_layer_blocks_ahead: 5,
-                max_base_layer_blocks_behind: 5,
                 network: Network::LocalNet,
-                pacemaker_max_base_time: self.block_time,
                 sidechain_id: None,
+                consensus_constants: ConsensusConstants {
+                    base_layer_confirmations: 0,
+                    committee_size: 0,
+                    max_base_layer_blocks_ahead: 5,
+                    max_base_layer_blocks_behind: 5,
+                    num_preshards: TEST_NUM_PRESHARDS,
+                    pacemaker_max_base_time: self.block_time,
+                    fee_exhaust_divisor: 0,
+                },
             },
             self.address.clone(),
             inbound_messaging,

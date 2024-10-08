@@ -1,13 +1,11 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
-  # TODO: Ignored, no inputs - replace with wallet daemon calls
+@concurrent
 @substates
 Feature: Substates
 
-  @serial
   Scenario: Transactions with DOWN local substates are rejected
-    Given fees are disabled
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -30,21 +28,26 @@ Feature: Substates
     Then the validator node VAL_1 is listed as registered
     Then the template "counter" is listed as registered by the validator node VAL_1
 
-    # A file-base CLI account must be created to sign future calls
-    When I use an account key named K1
+    # Initialize indexer and connect wallet daemon
+    Given an indexer IDX connected to base node BASE
+    Given a wallet daemon WALLET_D connected to indexer IDX
+
+    # Create account
+    When I create an account ACC via the wallet daemon WALLET_D with 10000 free coins
 
     # Create a new Counter component
-    When I create a component COUNTER_1 of template "counter" on VAL_1 using "new"
+    When I call function "new" on template "counter" using account ACC to pay fees via wallet daemon WALLET_D named "COUNTER_1"
+    When I invoke on wallet daemon WALLET_D on account ACC on component COUNTER_1/components/Counter the method call "value" the result is "0"
 
-    # Increase the counter an check the value
-    When I invoke on VAL_1 on component COUNTER_1/components/Counter the method call "increase" named "TX1"
-    When I invoke on VAL_1 on component TX1/components/Counter the method call "value" the result is "1"
+    # Increase the counter and check the value
+    When I invoke on wallet daemon WALLET_D on account ACC on component COUNTER_1/components/Counter the method call "increase" named "TX1"
+    When I invoke on wallet daemon WALLET_D on account ACC on component TX1/components/Counter the method call "value" the result is "1"
 
     # We should get an error if we se as inputs the same component version thas has already been downed from previous transactions
     # We can achieve this by reusing inputs from COUNTER_1 instead of the most recent TX1
-    When I invoke on VAL_1 on component COUNTER_1/components/Counter the method call "increase" named "TX2" the result is error "Shard was rejected"
+    When I invoke on wallet daemon WALLET_D on account ACC on component COUNTER_1/components/Counter the method call "increase" named "TX2", I expect it to fail with "Substate .*? is DOWN"
 
     # Check that the counter has NOT been increased by the previous erroneous transaction
-    When I invoke on VAL_1 on component TX1/components/Counter the method call "value" the result is "1"
+    When I invoke on wallet daemon WALLET_D on account ACC on component TX1/components/Counter the method call "value" the result is "1"
 
 

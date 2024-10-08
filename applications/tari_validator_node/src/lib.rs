@@ -48,7 +48,8 @@ use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
-use tari_dan_app_utilities::{consensus_constants::ConsensusConstants, keypair::setup_keypair_prompt};
+use tari_consensus::consensus_constants::ConsensusConstants;
+use tari_dan_app_utilities::keypair::setup_keypair_prompt;
 use tari_dan_common_types::SubstateAddress;
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
@@ -116,13 +117,14 @@ pub async fn run_validator_node(
     #[cfg(feature = "metrics")]
     let metrics_registry = create_metrics_registry(keypair.public_key());
 
+    let consensus_constants = ConsensusConstants::from(config.network);
     let base_node_client = create_base_layer_client(config).await?;
     let services = spawn_services(
         config,
         shutdown_signal.clone(),
         keypair.clone(),
         global_db,
-        ConsensusConstants::devnet(), // TODO: change this eventually
+        consensus_constants,
         base_node_client.clone(),
         #[cfg(feature = "metrics")]
         &metrics_registry,

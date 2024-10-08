@@ -41,6 +41,7 @@ use tari_dan_storage::{
 };
 use tari_engine_types::substate::hash_substate;
 use tari_epoch_manager::EpochManagerReader;
+use tari_rpc_framework::RpcError;
 use tari_state_tree::{
     memory_store::MemoryTreeStore,
     Hash,
@@ -107,6 +108,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 Ok(cp) => Ok(Some(cp)),
                 Err(err) => Err(CommsRpcConsensusSyncError::InvalidResponse(err)),
             },
+            Err(RpcError::RequestFailed(err)) if err.is_not_found() => Ok(None),
             Ok(GetCheckpointResponse { checkpoint: None }) => Ok(None),
             Err(err) => Err(err.into()),
         }

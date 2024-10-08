@@ -80,7 +80,7 @@ impl ProcessManager {
         for instance in self
             .instance_manager
             .instances_mut()
-            .filter(|i| !i.instance_type().is_tari_node())
+            .filter(|i| !i.instance_type().is_tari_node() && !i.instance_type().is_miner())
         {
             if let Some(status) = instance.check_running()? {
                 return Err(anyhow!(

@@ -26,8 +26,8 @@ use futures::StreamExt;
 use log::*;
 use tari_bor::decode;
 use tari_common::configuration::Network;
+use tari_consensus::consensus_constants::ConsensusConstants;
 use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::message_format::MessageFormat};
-use tari_dan_app_utilities::consensus_constants::ConsensusConstants;
 use tari_dan_common_types::{committee::Committee, Epoch, NumPreshards, PeerAddress, ShardGroup};
 use tari_dan_p2p::proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SyncBlocksRequest};
 use tari_dan_storage::consensus_models::{Block, BlockError, BlockId, Decision, TransactionRecord};
@@ -101,6 +101,7 @@ pub struct EventScanner {
     client_factory: TariValidatorNodeRpcClientFactory,
     substate_store: SqliteSubstateStore,
     event_filters: Vec<EventFilter>,
+    consensus_constants: ConsensusConstants,
 }
 
 impl EventScanner {
@@ -111,6 +112,7 @@ impl EventScanner {
         client_factory: TariValidatorNodeRpcClientFactory,
         substate_store: SqliteSubstateStore,
         event_filters: Vec<EventFilter>,
+        consensus_constants: ConsensusConstants,
     ) -> Self {
         Self {
             network,
@@ -119,6 +121,7 @@ impl EventScanner {
             client_factory,
             substate_store,
             event_filters,
+            consensus_constants,
         }
     }
 
@@ -476,10 +479,7 @@ impl EventScanner {
 
         let start_block_id = match start_block_id {
             Some(block_id) => block_id,
-            None => {
-                let consensus_constants = ConsensusConstants::from(self.network);
-                self.build_genesis_block_id(consensus_constants.num_preshards)?
-            },
+            None => self.build_genesis_block_id(self.consensus_constants.num_preshards)?,
         };
 
         committee.shuffle();

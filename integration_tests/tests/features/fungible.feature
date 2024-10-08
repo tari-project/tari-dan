@@ -1,10 +1,10 @@
 # Copyright 2024 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
+@concurrent
 @fungible
 Feature: Fungible tokens
-
-  @serial
+  
   Scenario: Mint fungible tokens
 
     ##### Setup

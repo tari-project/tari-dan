@@ -1,10 +1,10 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
+@concurrent
 @transfer
 Feature: Account transfers
 
-  @serial
   Scenario: Transfer tokens to unexisting account
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -82,7 +82,6 @@ Feature: Account transfers
   ```
     When I print the cucumber world
 
-  @serial
   Scenario: Transfer tokens to existing account
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -158,7 +157,6 @@ Feature: Account transfers
   ```
     When I print the cucumber world
 
-  @serial
   Scenario: Confidential transfer to unexisting account
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
