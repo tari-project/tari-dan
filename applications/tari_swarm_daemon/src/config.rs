@@ -147,6 +147,10 @@ impl InstanceType {
             InstanceType::TariValidatorNode | InstanceType::TariIndexer | InstanceType::TariWalletDaemon
         )
     }
+
+    pub fn is_miner(self) -> bool {
+        matches!(self, InstanceType::MinoTariMiner)
+    }
 }
 
 impl Display for InstanceType {
