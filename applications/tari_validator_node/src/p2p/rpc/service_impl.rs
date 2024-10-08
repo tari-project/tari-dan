@@ -341,17 +341,18 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
     ) -> Result<Response<GetCheckpointResponse>, RpcStatus> {
         let msg = request.into_message();
         let current_epoch = self.consensus.current_epoch();
+
+        let prev_epoch = current_epoch.saturating_sub(Epoch(1));
+        if prev_epoch.is_zero() {
+            return Err(RpcStatus::not_found("Cannot generate checkpoint for genesis epoch"));
+        }
+
         if msg.current_epoch != current_epoch {
             // This may occur if one of the nodes has not fully scanned the base layer
             return Err(RpcStatus::bad_request(format!(
                 "Peer requested checkpoint with epoch {} but current epoch is {}",
                 msg.current_epoch, current_epoch
             )));
-        }
-
-        let prev_epoch = current_epoch.saturating_sub(Epoch(1));
-        if prev_epoch.is_zero() {
-            return Err(RpcStatus::not_found("Cannot generate checkpoint for genesis epoch"));
         }
 
         let checkpoint = self
