@@ -1,4 +1,4 @@
-//  Copyright 2022. The Tari Project
+//  Copyright 2024. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,60 +20,24 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { Routes, Route } from "react-router-dom";
-import ValidatorNode from "./routes/VN/ValidatorNode";
-import Connections from "./routes/Connections/Connections";
-import RecentTransactions from "./routes/RecentTransactions/RecentTransactions";
-import NftGallery from "./routes/NftGallery/NftGallery";
-import Events from "./routes/Events/Events";
-import ErrorPage from "./routes/ErrorPage";
-import Layout from "./theme/LayoutMain";
+import PageHeading from "../../Components/PageHeading";
+import Grid from "@mui/material/Grid";
+import { StyledPaper } from "../../Components/StyledComponents";
+import RecentTransactions from "../VN/Components/RecentTransactions";
 
-export const breadcrumbRoutes = [
-  {
-    label: "Home",
-    path: "/",
-    dynamic: false,
-  },
-  {
-    label: "Connections",
-    path: "/connections",
-    dynamic: false,
-  },
-  {
-    label: "Transactions",
-    path: "/transactions",
-    dynamic: false,
-  },
-  {
-    label: "NFT Gallery",
-    path: "/nfts/:resourceAddress",
-    dynamic: true,
-  },
-  {
-    label: "Events",
-    path: "/events",
-    dynamic: false,
-  },
-  {
-    label: "Error",
-    path: "*",
-    dynamic: false,
-  },
-];
-export default function App() {
+function EventsLayout() {
   return (
-    <div>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<ValidatorNode />} />
-          <Route path="connections" element={<Connections />} />
-          <Route path="nfts/:resourceAddress" element={<NftGallery />} />
-          <Route path="transactions" element={<RecentTransactions />} />
-          <Route path="events" element={<Events />} />
-          <Route path="*" element={<ErrorPage />} />
-        </Route>
-      </Routes>
-    </div>
+    <>
+      <Grid item sm={12} md={12} xs={12}>
+        <PageHeading>Events</PageHeading>
+      </Grid>
+      <Grid item sm={12} md={12} xs={12}>
+        <StyledPaper>
+          <RecentTransactions />
+        </StyledPaper>
+      </Grid>
+    </>
   );
 }
+
+export default EventsLayout;

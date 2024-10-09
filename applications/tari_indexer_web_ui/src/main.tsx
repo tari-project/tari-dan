@@ -28,6 +28,7 @@ import App from "./App";
 import Connections from "./routes/Connections/Connections";
 import RecentTransactions from "./routes/RecentTransactions/RecentTransactions";
 import ErrorPage from "./routes/ErrorPage";
+import Events from "./routes/Events/Events";
 
 const router = createBrowserRouter([
   {
@@ -42,6 +43,10 @@ const router = createBrowserRouter([
       {
         path: "transactions",
         element: <RecentTransactions />,
+      },
+      {
+        path: "events",
+        element: <Events />,
       },
       {
         path: "app",

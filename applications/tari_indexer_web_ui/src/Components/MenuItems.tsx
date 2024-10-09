@@ -36,6 +36,7 @@ import {
   IoExtensionPuzzleOutline,
   IoExtensionPuzzle,
 } from "react-icons/io5";
+import { TbTimelineEventText } from "react-icons/tb";
 import Tooltip from "@mui/material/Tooltip";
 import Fade from "@mui/material/Fade";
 import theme from "../theme/theme";
@@ -63,6 +64,12 @@ const mainItems = [
     icon: <IoBarChartOutline style={iconStyle} />,
     activeIcon: <IoBarChart style={activeIconStyle} />,
     link: "transactions",
+  },
+  {
+    title: "Events",
+    icon: <TbTimelineEventText style={iconStyle} />,
+    activeIcon: <TbTimelineEventText style={activeIconStyle} />,
+    link: "events",
   },
   {
     title: "Connections",
