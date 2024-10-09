@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, io, ops::Deref, str::FromStr};
+use std::{collections::HashMap, fs, io, ops::Deref, str::FromStr};
 
 use anyhow::{anyhow, Context};
 use futures::{future, FutureExt};
@@ -106,8 +106,9 @@ use crate::{
     p2p::{
         create_tari_validator_node_rpc_service,
         services::{
+            consensus_gossip::{self, ConsensusGossipHandle},
             mempool::{self, MempoolHandle},
-            messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, Gossip},
+            messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
         },
         NopLogger,
     },
@@ -137,7 +138,14 @@ pub async fn spawn_services(
 
     // Networking
     let (tx_consensus_messages, rx_consensus_messages) = mpsc::unbounded_channel();
-    let (tx_gossip_messages, rx_gossip_messages) = mpsc::unbounded_channel();
+
+    // gossip channels
+    let (tx_transaction_gossip_messages, rx_transaction_gossip_messages) = mpsc::unbounded_channel();
+    let (tx_consensus_gossip_messages, rx_consensus_gossip_messages) = mpsc::unbounded_channel();
+    let mut tx_gossip_messages_by_topic = HashMap::new();
+    tx_gossip_messages_by_topic.insert(mempool::TOPIC_PREFIX.to_string(), tx_transaction_gossip_messages);
+    tx_gossip_messages_by_topic.insert(consensus_gossip::TOPIC_PREFIX.to_string(), tx_consensus_gossip_messages);
+
     let identity = identity::Keypair::sr25519_from_bytes(keypair.secret_key().as_bytes().to_vec()).map_err(|e| {
         ExitError::new(
             ExitCode::ConfigError,
@@ -157,11 +165,12 @@ pub async fn spawn_services(
             p.addresses.into_iter().map(move |a| (peer_id, a))
         })
         .collect();
+
     let (mut networking, join_handle) = tari_networking::spawn(
         identity,
         MessagingMode::Enabled {
             tx_messages: tx_consensus_messages,
-            tx_gossip_messages,
+            tx_gossip_messages_by_topic,
         },
         tari_networking::Config {
             listener_port: config.validator_node.p2p.listener_port,
@@ -239,6 +248,11 @@ pub async fn spawn_services(
         per_log_cost: 1,
     };
 
+    // Consensus gossip
+    let (consensus_gossip_service, join_handle, rx_consensus_gossip_messages) =
+        consensus_gossip::spawn(epoch_manager.clone(), networking.clone(), rx_consensus_gossip_messages);
+    handles.push(join_handle);
+
     // Messaging
     let message_logger = NopLogger; // SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
     let local_address = PeerAddress::from(keypair.public_key().clone());
@@ -246,11 +260,16 @@ pub async fn spawn_services(
     let inbound_messaging = ConsensusInboundMessaging::new(
         local_address,
         rx_consensus_messages,
+        rx_consensus_gossip_messages,
         loopback_receiver,
         message_logger.clone(),
     );
-    let outbound_messaging =
-        ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
+    let outbound_messaging = ConsensusOutboundMessaging::new(
+        loopback_sender,
+        consensus_gossip_service.clone(),
+        networking.clone(),
+        message_logger.clone(),
+    );
 
     // Consensus
     let payload_processor = TariDanTransactionProcessor::new(config.network, template_manager.clone(), fee_table);
@@ -284,15 +303,14 @@ pub async fn spawn_services(
     .await;
     handles.push(consensus_join_handle);
 
-    let gossip = Gossip::new(networking.clone(), rx_gossip_messages);
-
     let (mempool, join_handle) = mempool::spawn(
         consensus_constants.num_preshards,
-        gossip,
         epoch_manager.clone(),
         create_mempool_transaction_validator(template_manager.clone()),
         state_store.clone(),
         consensus_handle.clone(),
+        networking.clone(),
+        rx_transaction_gossip_messages,
         #[cfg(feature = "metrics")]
         metrics_registry,
     );
@@ -363,6 +381,7 @@ pub async fn spawn_services(
         dry_run_transaction_processor,
         handles,
         validator_node_client_factory,
+        consensus_gossip_service,
     })
 }
 
@@ -414,6 +433,7 @@ pub struct Services {
     pub global_db: GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
     pub validator_node_client_factory: TariValidatorNodeRpcClientFactory,
+    pub consensus_gossip_service: ConsensusGossipHandle,
     pub state_store: SqliteStateStore<PeerAddress>,
 
     pub handles: Vec<JoinHandle<Result<(), anyhow::Error>>>,

@@ -21,7 +21,7 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
-use tari_dan_common_types::NodeAddressable;
+use tari_dan_common_types::{NodeAddressable, ShardGroup};
 
 use crate::messages::HotstuffMessage;
 
@@ -37,10 +37,9 @@ pub trait OutboundMessaging {
         message: T,
     ) -> Result<(), OutboundMessagingError>;
 
-    async fn multicast<'a, I, T>(&mut self, committee: I, message: T) -> Result<(), OutboundMessagingError>
+    async fn multicast<'a, T>(&mut self, shard_group: ShardGroup, message: T) -> Result<(), OutboundMessagingError>
     where
         Self::Addr: 'a,
-        I: IntoIterator<Item = &'a Self::Addr> + Send,
         T: Into<HotstuffMessage> + Send;
 }
 

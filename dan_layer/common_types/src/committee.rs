@@ -204,6 +204,10 @@ impl CommitteeInfo {
         (len - 1) / 3
     }
 
+    pub fn num_shard_group_members(&self) -> u32 {
+        self.num_shard_group_members
+    }
+
     pub fn num_preshards(&self) -> NumPreshards {
         self.num_shards
     }

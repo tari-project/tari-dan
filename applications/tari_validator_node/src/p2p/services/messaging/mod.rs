@@ -4,8 +4,5 @@
 mod inbound;
 pub use inbound::*;
 
-mod gossip;
-pub use gossip::*;
-
 mod outbound;
 pub use outbound::*;

@@ -3,38 +3,81 @@
 
 use std::{collections::HashSet, iter};
 
+use libp2p::{gossipsub, PeerId};
 use log::*;
 use tari_dan_common_types::{Epoch, NumPreshards, PeerAddress, ShardGroup, ToSubstateAddress};
-use tari_dan_p2p::{proto, DanMessage, NewTransactionMessage};
+use tari_dan_p2p::{proto, DanMessage, NewTransactionMessage, TariMessagingSpec};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
+use tari_networking::{NetworkingHandle, NetworkingService};
+use tari_swarm::messaging::{prost::ProstCodec, Codec};
+use tokio::sync::mpsc;
 
-use crate::p2p::services::{mempool::MempoolError, messaging::Gossip};
+use crate::p2p::services::mempool::MempoolError;
 
 const LOG_TARGET: &str = "tari::validator_node::mempool::gossip";
+
+pub const TOPIC_PREFIX: &str = "transactions";
+
+#[derive(Debug)]
+pub struct MempoolGossipCodec {
+    codec: ProstCodec<proto::network::DanMessage>,
+}
+
+impl MempoolGossipCodec {
+    pub fn new() -> Self {
+        Self {
+            codec: ProstCodec::default(),
+        }
+    }
+
+    pub async fn encode(&self, message: DanMessage) -> std::io::Result<Vec<u8>> {
+        let mut buf = Vec::with_capacity(1024);
+        let message = proto::network::DanMessage::from(&message);
+        self.codec.encode_to(&mut buf, message).await?;
+        Ok(buf)
+    }
+
+    pub async fn decode(&self, message: gossipsub::Message) -> std::io::Result<(usize, DanMessage)> {
+        let (length, message) = self.codec.decode_from(&mut message.data.as_slice()).await?;
+        let message = DanMessage::try_from(message).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        Ok((length, message))
+    }
+}
 
 #[derive(Debug)]
 pub(super) struct MempoolGossip<TAddr> {
     num_preshards: NumPreshards,
     epoch_manager: EpochManagerHandle<TAddr>,
-    gossip: Gossip,
     is_subscribed: Option<ShardGroup>,
+    networking: NetworkingHandle<TariMessagingSpec>,
+    rx_gossip: mpsc::UnboundedReceiver<(PeerId, gossipsub::Message)>,
+    codec: MempoolGossipCodec,
 }
 
 impl MempoolGossip<PeerAddress> {
-    pub fn new(num_preshards: NumPreshards, epoch_manager: EpochManagerHandle<PeerAddress>, outbound: Gossip) -> Self {
+    pub fn new(
+        num_preshards: NumPreshards,
+        epoch_manager: EpochManagerHandle<PeerAddress>,
+        networking: NetworkingHandle<TariMessagingSpec>,
+        rx_gossip: mpsc::UnboundedReceiver<(PeerId, gossipsub::Message)>,
+    ) -> Self {
         Self {
             num_preshards,
             epoch_manager,
-            gossip: outbound,
             is_subscribed: None,
+            networking,
+            rx_gossip,
+            codec: MempoolGossipCodec::new(),
         }
     }
 
     pub async fn next_message(&mut self) -> Option<Result<(PeerAddress, DanMessage, usize), MempoolError>> {
-        self.gossip
-            .next_message()
-            .await
-            .map(|result| result.map_err(MempoolError::InvalidMessage))
+        let (from, msg) = self.rx_gossip.recv().await?;
+        match self.codec.decode(msg).await {
+            Ok((len, msg)) => Some(Ok((from.into(), msg, len))),
+            Err(e) => Some(Err(MempoolError::InvalidMessage(e.into()))),
+        }
     }
 
     pub async fn subscribe(&mut self, epoch: Epoch) -> Result<(), MempoolError> {
@@ -49,7 +92,7 @@ impl MempoolGossip<PeerAddress> {
             None => {},
         }
 
-        self.gossip
+        self.networking
             .subscribe_topic(shard_group_to_topic(committee_shard.shard_group()))
             .await?;
         self.is_subscribed = Some(committee_shard.shard_group());
@@ -58,7 +101,7 @@ impl MempoolGossip<PeerAddress> {
 
     pub async fn unsubscribe(&mut self) -> Result<(), MempoolError> {
         if let Some(sg) = self.is_subscribed {
-            self.gossip.unsubscribe_topic(shard_group_to_topic(sg)).await?;
+            self.networking.unsubscribe_topic(shard_group_to_topic(sg)).await?;
             self.is_subscribed = None;
         }
         Ok(())
@@ -73,14 +116,18 @@ impl MempoolGossip<PeerAddress> {
             "forward_to_local_replicas: topic: {}", topic,
         );
 
-        let msg = proto::network::DanMessage::from(&msg);
-        self.gossip.publish_message(topic, msg).await?;
+        let msg = self
+            .codec
+            .encode(msg)
+            .await
+            .map_err(|e| MempoolError::InvalidMessage(e.into()))?;
+        self.networking.publish_gossip(topic, msg).await?;
 
         Ok(())
     }
 
     pub fn get_num_incoming_messages(&self) -> usize {
-        self.gossip.get_num_incoming_messages()
+        self.rx_gossip.len()
     }
 
     pub async fn forward_to_foreign_replicas(
@@ -109,15 +156,19 @@ impl MempoolGossip<PeerAddress> {
             .filter(|sg| exclude_shard_group.as_ref() != Some(sg) && sg != &local_shard_group)
             .collect::<HashSet<_>>();
 
-        let msg = proto::network::DanMessage::from(&msg.into());
+        let msg = self
+            .codec
+            .encode(msg.into())
+            .await
+            .map_err(|e| MempoolError::InvalidMessage(e.into()))?;
+
         for sg in shard_groups {
             let topic = shard_group_to_topic(sg);
             debug!(
                 target: LOG_TARGET,
                 "forward_to_foreign_replicas: topic: {}", topic,
             );
-
-            self.gossip.publish_message(topic, msg.clone()).await?;
+            self.networking.publish_gossip(topic, msg.clone()).await?;
         }
 
         Ok(())
@@ -126,7 +177,8 @@ impl MempoolGossip<PeerAddress> {
 
 fn shard_group_to_topic(shard_group: ShardGroup) -> String {
     format!(
-        "transactions-{}-{}",
+        "{}-{}-{}",
+        TOPIC_PREFIX,
         shard_group.start().as_u32(),
         shard_group.end().as_u32()
     )
