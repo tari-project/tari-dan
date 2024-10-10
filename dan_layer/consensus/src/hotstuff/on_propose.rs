@@ -214,7 +214,7 @@ where TConsensusSpec: ConsensusSpec
             next_block.parent()
         );
 
-        self.broadcast_local_proposal(next_block, foreign_proposals, local_committee)
+        self.broadcast_local_proposal(next_block, foreign_proposals, &local_committee_info)
             .await?;
 
         Ok(())
@@ -224,19 +224,18 @@ where TConsensusSpec: ConsensusSpec
         &mut self,
         next_block: Block,
         foreign_proposals: Vec<ForeignProposal>,
-        local_committee: &Committee<TConsensusSpec::Addr>,
+        local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
         info!(
             target: LOG_TARGET,
-            "🌿 Broadcasting local proposal {} to {} local committees",
+            "🌿 Broadcasting local proposal {} to local committee",
             next_block,
-            local_committee.len(),
         );
 
         // Broadcast to local and foreign committees
         self.outbound_messaging
             .multicast(
-                local_committee.iter().map(|(addr, _)| addr),
+                local_committee_info.shard_group(),
                 HotstuffMessage::Proposal(ProposalMessage {
                     block: next_block,
                     foreign_proposals,

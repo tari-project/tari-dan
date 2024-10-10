@@ -61,7 +61,7 @@ pub trait NetworkingService<TMsg: MessageSpec> {
     async fn publish_gossip<TTopic: Into<String> + Send>(
         &mut self,
         topic: TTopic,
-        message: TMsg::GossipMessage,
+        message: Vec<u8>,
     ) -> Result<(), NetworkingError>;
 
     async fn subscribe_topic<T: Into<String> + Send>(&mut self, topic: T) -> Result<(), NetworkingError>;

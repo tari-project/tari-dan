@@ -28,7 +28,6 @@ pub enum MempoolError {
     StorageError(#[from] StorageError),
     #[error("Transaction validation error: {0}")]
     TransactionValidationError(#[from] TransactionValidationError),
-
     #[error("Network error: {0}")]
     NetworkingError(#[from] NetworkingError),
 }

@@ -69,7 +69,7 @@ pub enum NetworkingRequest<TMsg: MessageSpec> {
     },
     PublishGossip {
         topic: IdentTopic,
-        message: TMsg::GossipMessage,
+        message: Vec<u8>,
         reply_tx: oneshot::Sender<Result<(), NetworkingError>>,
     },
     SubscribeTopic {
@@ -337,7 +337,7 @@ impl<TMsg: MessageSpec + Send + 'static> NetworkingService<TMsg> for NetworkingH
     async fn publish_gossip<TTopic: Into<String> + Send>(
         &mut self,
         topic: TTopic,
-        message: TMsg::GossipMessage,
+        message: Vec<u8>,
     ) -> Result<(), NetworkingError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
