@@ -23,7 +23,7 @@
 import PageHeading from "../../Components/PageHeading";
 import Grid from "@mui/material/Grid";
 import { StyledPaper } from "../../Components/StyledComponents";
-import { Button, IconButton, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { Box, Button, IconButton, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import React, { useEffect, useState } from "react";
 import { toHexString } from "../VN/Components/helpers";
 import { truncateText } from "../../utils/helpers";
@@ -41,12 +41,24 @@ function EventsLayout() {
   const [page, setPage] = useState(0);
   const [jsonDialogOpen, setJsonDialogOpen] = React.useState(false);
   const [selectedPayload, setSelectedPayload] = useState({});
+  const [filter, setFilter] = useState({
+    topic: null,
+    substate_id: null,
+  });
 
   useEffect(() => {
-    get_events(page, PAGE_SIZE);
+    get_events(page, PAGE_SIZE, filter);
   }, []);
 
-  async function get_events(offset: number, limit: number) {
+  async function get_events(offset: number, limit: number, filter: object) {
+    let graphql_filters = "";
+    if (filter.topic) {
+      graphql_filters += `topic:"${filter.topic}", `;
+    }
+    if (filter.substate_id) {
+      graphql_filters += `substateId:"${filter.substate_id}", `;
+    }
+
     let res = await fetch(INDEXER_ADDRESS, {
       method: 'POST',
 
@@ -56,7 +68,7 @@ function EventsLayout() {
       },
 
       body: JSON.stringify({
-        query: `{ getEvents(offset:${offset}, limit:${limit}) {substateId, templateAddress, txHash, topic, payload } }`,
+        query: `{ getEvents(${graphql_filters} offset:${offset}, limit:${limit}) {substateId, templateAddress, txHash, topic, payload } }`,
         variables: {}
       })
     });
@@ -84,7 +96,7 @@ function EventsLayout() {
 
   async function handleChangePage(newPage: number) { 
     const offset = newPage * PAGE_SIZE;
-    await get_events(offset, PAGE_SIZE);
+    await get_events(offset, PAGE_SIZE, filter);
     setPage(newPage);
   };
 
@@ -105,10 +117,40 @@ function EventsLayout() {
     setJsonDialogOpen(false);
   };
 
+  const onFilterChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newFilter = {
+      ...filter,
+      [e.target.name]: e.target.value,
+    };
+
+    setFilter(newFilter);
+
+    const offset = 0;
+    await get_events(offset, PAGE_SIZE, newFilter);
+    setPage(0);
+  };
+
   return (
     <>
       <Grid item sm={12} md={12} xs={12}>
         <PageHeading>Events</PageHeading>
+      </Grid>
+      <Grid item>
+        <Box className="flex-container" sx={{ marginBottom: 4 }}>
+          <TextField
+            name="topic"
+            label="Topic"
+            value={filter.topic}
+            onChange={async (e) => onFilterChange(e)}
+            style={{ flexGrow: 1 }} />
+          <TextField
+            name="substate_id"
+            label="Substate Id"
+            value={filter.substate_id}
+            onChange={async (e) => onFilterChange(e)}
+            style={{ flexGrow: 1 }}
+          />
+      </Box>
       </Grid>
       <Grid item sm={12} md={12} xs={12}>
         <StyledPaper>
