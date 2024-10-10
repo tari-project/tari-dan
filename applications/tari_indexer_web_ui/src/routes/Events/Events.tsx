@@ -23,13 +23,14 @@
 import PageHeading from "../../Components/PageHeading";
 import Grid from "@mui/material/Grid";
 import { StyledPaper } from "../../Components/StyledComponents";
-import { IconButton, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { Button, IconButton, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
 import React, { useEffect, useState } from "react";
 import { toHexString } from "../VN/Components/helpers";
 import { truncateText } from "../../utils/helpers";
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import saveAs from "file-saver";
 
 const INDEXER_ADDRESS = "http://localhost:18301";
 const PAGE_SIZE = 10;
@@ -84,6 +85,14 @@ function EventsLayout() {
     setPage(newPage);
   };
 
+  const handlePayloadDownload = (event) => {
+    const data = event.payload;
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const filename = `event-${event.tx_hash}-${event.topic}.json`;
+    saveAs(blob, filename);
+  };
+
   return (
     <>
       <Grid item sm={12} md={12} xs={12}>
@@ -94,10 +103,11 @@ function EventsLayout() {
           <Table sx={{ minWidth: 650 }} aria-label="simple table">
             <TableHead>
               <TableRow>
-                <TableCell>Topic</TableCell>
-                <TableCell>Substate Id</TableCell>
-                <TableCell>Template Address</TableCell>
-                <TableCell>Payload</TableCell>
+                <TableCell><Typography variant="h3">Topic</Typography></TableCell>
+                <TableCell><Typography variant="h3">Transaction</Typography></TableCell>
+                <TableCell><Typography variant="h3">Substate Id</Typography></TableCell>
+                <TableCell><Typography variant="h3">Template</Typography></TableCell>
+                <TableCell><Typography variant="h3">Payload</Typography></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -106,6 +116,12 @@ function EventsLayout() {
                   sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
                 >
                   <TableCell>{row.topic}</TableCell>
+                  <TableCell>
+                    {truncateText(row.tx_hash, 20)}
+                    <IconButton aria-label="copy" onClick={() => handleCopyClick(row.tx_hash)}>
+                      <ContentCopyIcon />
+                    </IconButton>
+                  </TableCell>
                   <TableCell>
                     {truncateText(row.substateId, 20)}
                     <IconButton aria-label="copy" onClick={() => handleCopyClick(row.substateId)}>
@@ -118,7 +134,17 @@ function EventsLayout() {
                       <ContentCopyIcon />
                     </IconButton>
                   </TableCell>
-                  <TableCell>Payload</TableCell>
+                  <TableCell>
+                    <Stack direction="row" spacing={2} alignItems="left">
+                    <Button variant="outlined" onClick={() => handlePayloadDownload(row)}>
+                        View
+                    </Button>
+                    <Button variant="outlined" onClick={() => handlePayloadDownload(row)}>
+                        Download
+                    </Button>
+                    </Stack>
+                    
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
