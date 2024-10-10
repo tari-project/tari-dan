@@ -3,6 +3,27 @@
 
 use std::{collections::HashMap, num::NonZeroU64};
 
+use crate::{
+    hotstuff::{
+        block_change_set::{BlockDecision, ProposedBlockChangeSet},
+        calculate_state_merkle_root,
+        error::HotStuffError,
+        event::HotstuffEvent,
+        filter_diff_for_committee,
+        foreign_proposal_processor::process_foreign_block,
+        substate_store::{PendingSubstateStore, ShardedStateTree},
+        transaction_manager::{
+            ConsensusTransactionManager,
+            LocalPreparedTransaction,
+            PledgedTransaction,
+            PreparedTransaction,
+        },
+        HotstuffConfig,
+        ProposalValidationError,
+    },
+    tracing::TraceTimer,
+    traits::{ConsensusSpec, WriteableSubstateStore},
+};
 use log::*;
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::{
@@ -13,6 +34,7 @@ use tari_dan_common_types::{
     ToSubstateAddress,
     VersionedSubstateId,
 };
+use tari_dan_storage::consensus_models::AbortReason;
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -44,28 +66,6 @@ use tari_dan_storage::{
 use tari_engine_types::{commit_result::RejectReason, substate::Substate};
 use tokio::sync::broadcast;
 
-use crate::{
-    hotstuff::{
-        block_change_set::{BlockDecision, ProposedBlockChangeSet},
-        calculate_state_merkle_root,
-        error::HotStuffError,
-        event::HotstuffEvent,
-        filter_diff_for_committee,
-        foreign_proposal_processor::process_foreign_block,
-        substate_store::{PendingSubstateStore, ShardedStateTree},
-        transaction_manager::{
-            ConsensusTransactionManager,
-            LocalPreparedTransaction,
-            PledgedTransaction,
-            PreparedTransaction,
-        },
-        HotstuffConfig,
-        ProposalValidationError,
-    },
-    tracing::TraceTimer,
-    traits::{ConsensusSpec, WriteableSubstateStore},
-};
-
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_ready_to_vote_on_local_block";
 
 #[derive(Debug, Clone)]
@@ -79,7 +79,8 @@ pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
 }
 
 impl<TConsensusSpec> OnReadyToVoteOnLocalBlock<TConsensusSpec>
-where TConsensusSpec: ConsensusSpec
+where
+    TConsensusSpec: ConsensusSpec,
 {
     pub fn new(
         local_validator_pk: RistrettoPublicKey,
@@ -317,7 +318,7 @@ where TConsensusSpec: ConsensusSpec
                         proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
-                },
+                }
                 Command::Prepare(atom) => {
                     if let Some(reason) = self.evaluate_prepare_command(
                         tx,
@@ -331,7 +332,7 @@ where TConsensusSpec: ConsensusSpec
                         proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
-                },
+                }
                 Command::LocalPrepare(atom) => {
                     if let Some(reason) =
                         self.evaluate_local_prepare_command(tx, block, &locked_block, atom, proposed_block_change_set)?
@@ -339,7 +340,7 @@ where TConsensusSpec: ConsensusSpec
                         proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
-                },
+                }
                 Command::AllPrepare(atom) => {
                     // Execute here
                     if let Some(reason) = self.evaluate_all_prepare_command(
@@ -354,7 +355,7 @@ where TConsensusSpec: ConsensusSpec
                         proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
-                },
+                }
                 Command::SomePrepare(atom) => {
                     if let Some(reason) =
                         self.evaluate_some_prepare_command(tx, block, &locked_block, atom, proposed_block_change_set)?
@@ -362,7 +363,7 @@ where TConsensusSpec: ConsensusSpec
                         proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
-                },
+                }
                 Command::LocalAccept(atom) => {
                     if let Some(reason) =
                         self.evaluate_local_accept_command(tx, block, &locked_block, atom, proposed_block_change_set)?
@@ -370,7 +371,7 @@ where TConsensusSpec: ConsensusSpec
                         proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
-                },
+                }
                 Command::AllAccept(atom) => {
                     if let Some(reason) = self.evaluate_all_accept_command(
                         tx,
@@ -385,7 +386,7 @@ where TConsensusSpec: ConsensusSpec
                         proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
-                },
+                }
                 Command::SomeAccept(atom) => {
                     if let Some(reason) =
                         self.evaluate_some_accept_command(tx, block, &locked_block, atom, proposed_block_change_set)?
@@ -393,7 +394,7 @@ where TConsensusSpec: ConsensusSpec
                         proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
-                },
+                }
                 Command::ForeignProposal(fp_atom) => {
                     let Some(foreign_committee_info) = foreign_committee_infos.get(&fp_atom.shard_group) else {
                         warn!(
@@ -420,7 +421,7 @@ where TConsensusSpec: ConsensusSpec
                     }
 
                     continue;
-                },
+                }
                 Command::MintConfidentialOutput(atom) => {
                     if let Some(reason) = self.evaluate_mint_confidential_output_command(
                         tx,
@@ -432,7 +433,7 @@ where TConsensusSpec: ConsensusSpec
                         proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
-                },
+                }
                 Command::EndEpoch => {
                     if !can_propose_epoch_end {
                         warn!(
@@ -454,7 +455,7 @@ where TConsensusSpec: ConsensusSpec
                     }
 
                     continue;
-                },
+                }
             }
         }
 
@@ -633,7 +634,7 @@ where TConsensusSpec: ConsensusSpec
                 }
 
                 proposed_block_change_set.add_transaction_execution(execution)?;
-            },
+            }
             PreparedTransaction::LocalOnly(LocalPreparedTransaction::EarlyAbort { execution }) => {
                 if atom.decision.is_commit() {
                     warn!(
@@ -643,7 +644,7 @@ where TConsensusSpec: ConsensusSpec
                         block,
                     );
                     return Ok(Some(NoVoteReason::DecisionDisagreement {
-                        local: Decision::Abort,
+                        local: Decision::Abort(AbortReason::LockInputsOutputsFailed),
                         remote: Decision::Commit,
                     }));
                 }
@@ -662,7 +663,7 @@ where TConsensusSpec: ConsensusSpec
                     &execution,
                 );
                 proposed_block_change_set.add_transaction_execution(execution)?;
-            },
+            }
             PreparedTransaction::MultiShard(_) => {
                 warn!(
                     target: LOG_TARGET,
@@ -671,7 +672,7 @@ where TConsensusSpec: ConsensusSpec
                     block,
                 );
                 return Ok(Some(NoVoteReason::LocalOnlyProposedForMultiShard));
-            },
+            }
         }
 
         tx_rec.set_next_stage(TransactionPoolStage::LocalOnly)?;
@@ -743,7 +744,7 @@ where TConsensusSpec: ConsensusSpec
                     block,
                 );
                 return Ok(Some(NoVoteReason::MultiShardProposedForLocalOnly));
-            },
+            }
             PreparedTransaction::MultiShard(multishard) => {
                 if multishard.current_decision() != atom.decision {
                     warn!(
@@ -780,9 +781,10 @@ where TConsensusSpec: ConsensusSpec
                                 .evidence_mut()
                                 .update(&multishard.to_initial_evidence(local_committee_info));
                         }
-                    },
-                    Decision::Abort => {
+                    }
+                    Decision::Abort(reason) => {
                         // CASE: The transaction was ABORTed due to a lock conflict
+                        warn!(target: LOG_TARGET, "⚠️ Multi-shard prepared transaction aborted: {reason:?}");
                         let execution = multishard.into_execution().expect("Abort should have execution");
                         tx_rec.update_from_execution(
                             local_committee_info.num_preshards(),
@@ -790,9 +792,9 @@ where TConsensusSpec: ConsensusSpec
                             &execution,
                         );
                         proposed_block_change_set.add_transaction_execution(execution)?;
-                    },
+                    }
                 }
-            },
+            }
         }
 
         tx_rec.set_next_stage(TransactionPoolStage::Prepared)?;
@@ -983,7 +985,7 @@ where TConsensusSpec: ConsensusSpec
                             block,
                         );
                         return Ok(Some(NoVoteReason::DecisionDisagreement {
-                            local: Decision::Abort,
+                            local: Decision::Abort(AbortReason::LeaderProposalVsLocalDecisionMismatch),
                             remote: Decision::Commit,
                         }));
                     }
@@ -1082,7 +1084,7 @@ where TConsensusSpec: ConsensusSpec
                 block.id(),
             );
             return Ok(Some(NoVoteReason::DecisionDisagreement {
-                local: Decision::Abort,
+                local: Decision::Abort(AbortReason::TransactionAtomMustBeAbort),
                 remote: Decision::Commit,
             }));
         }
@@ -1110,7 +1112,7 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(Some(NoVoteReason::DecisionDisagreement {
                 local: Decision::Commit,
-                remote: Decision::Abort,
+                remote: Decision::Abort(AbortReason::LeaderProposalVsLocalDecisionMismatch),
             }));
         }
 
@@ -1271,7 +1273,7 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(Some(NoVoteReason::DecisionDisagreement {
                 local: Decision::Commit,
-                remote: Decision::Abort,
+                remote: Decision::Abort(AbortReason::TransactionAtomMustBeCommit),
             }));
         }
 
@@ -1309,7 +1311,7 @@ where TConsensusSpec: ConsensusSpec
                 block,
             );
             return Ok(Some(NoVoteReason::DecisionDisagreement {
-                local: Decision::Abort,
+                local: Decision::Abort(AbortReason::LeaderProposalVsLocalDecisionMismatch),
                 remote: Decision::Commit,
             }));
         }
@@ -1400,7 +1402,7 @@ where TConsensusSpec: ConsensusSpec
                 block.id(),
             );
             return Ok(Some(NoVoteReason::DecisionDisagreement {
-                local: Decision::Abort,
+                local: Decision::Abort(AbortReason::TransactionAtomMustBeAbort),
                 remote: Decision::Commit,
             }));
         }
@@ -1443,7 +1445,7 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(Some(NoVoteReason::DecisionDisagreement {
                 local: Decision::Commit,
-                remote: Decision::Abort,
+                remote: Decision::Abort(AbortReason::LeaderProposalVsLocalDecisionMismatch),
             }));
         }
 

@@ -53,8 +53,8 @@ impl<S: StateStore> PrometheusConsensusMetrics<S> {
                 "block_height",
                 "block_id",
             ])
-            .unwrap()
-            .register_at(registry),
+                .unwrap()
+                .register_at(registry),
             messages_received: IntCounter::new("consensus_messages_received", "Number of messages received")
                 .unwrap()
                 .register_at(registry),
@@ -71,8 +71,8 @@ impl<S: StateStore> PrometheusConsensusMetrics<S> {
                 "consensus_block_validation_failed",
                 "Number of block validation failures",
             )
-            .unwrap()
-            .register_at(registry),
+                .unwrap()
+                .register_at(registry),
             blocks_rejected: IntCounter::new("consensus_blocks_rejected", "Number of blocks rejected")
                 .unwrap()
                 .register_at(registry),
@@ -83,26 +83,26 @@ impl<S: StateStore> PrometheusConsensusMetrics<S> {
                 "consensus_transaction_ready_for_consensus",
                 "Number of transactions ready for consensus",
             )
-            .unwrap()
-            .register_at(registry),
+                .unwrap()
+                .register_at(registry),
             transactions_finalized_committed: IntCounter::new(
                 "consensus_transaction_finalized_committed",
                 "Number of committed transactions",
             )
-            .unwrap()
-            .register_at(registry),
+                .unwrap()
+                .register_at(registry),
             transactions_finalized_aborted: IntCounter::new(
                 "consensus_transaction_finalized_aborted",
                 "Number of aborted transactions",
             )
-            .unwrap()
-            .register_at(registry),
+                .unwrap()
+                .register_at(registry),
             _transactions_pool_size: IntGauge::new(
                 "consensus_transactions_pool_size",
                 "Number of transactions in pool",
             )
-            .unwrap()
-            .register_at(registry),
+                .unwrap()
+                .register_at(registry),
         }
     }
 
@@ -144,10 +144,10 @@ impl<S: StateStore> ConsensusHooks for PrometheusConsensusMetrics<S> {
                         .set(block.block().commands().len() as i64);
                 }
                 self.blocks_accepted.inc();
-            },
+            }
             Some(QuorumDecision::Reject) | None => {
                 self.blocks_rejected.inc();
-            },
+            }
         }
     }
 
@@ -183,10 +183,10 @@ impl<S: StateStore> ConsensusHooks for PrometheusConsensusMetrics<S> {
         match transaction.decision {
             Decision::Commit => {
                 self.transactions_finalized_committed.inc();
-            },
-            Decision::Abort => {
+            }
+            Decision::Abort(_) => {
                 self.transactions_finalized_aborted.inc();
-            },
+            }
         }
     }
 }

@@ -11,14 +11,7 @@ use tari_dan_common_types::ShardGroup;
 use tari_engine_types::substate::SubstateId;
 use tari_transaction::TransactionId;
 
-use super::{
-    BlockId,
-    ExecutedTransaction,
-    ForeignProposalAtom,
-    LeaderFee,
-    MintConfidentialOutputAtom,
-    TransactionRecord,
-};
+use super::{AbortReason, BlockId, ExecutedTransaction, ForeignProposalAtom, LeaderFee, MintConfidentialOutputAtom, TransactionRecord};
 use crate::{
     consensus_models::{evidence::Evidence, Decision},
     StateStoreReadTransaction,
@@ -57,9 +50,9 @@ impl TransactionAtom {
         ExecutedTransaction::get(tx, &self.id)
     }
 
-    pub fn abort(self) -> Self {
+    pub fn abort(self, reason: AbortReason) -> Self {
         Self {
-            decision: Decision::Abort,
+            decision: Decision::Abort(reason),
             leader_fee: None,
             ..self
         }
@@ -150,7 +143,7 @@ impl Command {
             Command::ForeignProposal(foreign_proposal) => {
                 // Order by shard group then by block id
                 CommandOrdering::ForeignProposal(foreign_proposal.shard_group, &foreign_proposal.block_id)
-            },
+            }
             Command::MintConfidentialOutput(mint) => CommandOrdering::MintConfidentialOutput(&mint.substate_id),
             Command::EndEpoch => CommandOrdering::EndEpoch,
         }

@@ -215,7 +215,7 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                     // Update the evidence
                     proposed_block_change_set.set_next_transaction_update(tx_rec)?;
                 }
-            },
+            }
             Command::LocalAccept(atom) => {
                 if atom
                     .evidence
@@ -369,7 +369,7 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                     // Still need to update the evidence
                     proposed_block_change_set.set_next_transaction_update(tx_rec)?;
                 }
-            },
+            }
             // Should never receive this
             Command::EndEpoch => {
                 warn!(
@@ -378,7 +378,7 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                     block.id()
                 );
                 continue;
-            },
+            }
             // TODO(perf): Can we find a way to exclude these unused commands to reduce message size?
             Command::AllAccept(_) |
             Command::SomeAccept(_) |
@@ -390,7 +390,7 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
             Command::MintConfidentialOutput(_) => {
                 // Disregard
                 continue;
-            },
+            }
         }
     }
 
@@ -473,7 +473,7 @@ fn validate_and_add_pledges(
                         transaction_id: atom.id,
                         details: format!("Pledge {pledge} is an input but evidence is an output for address {address}"),
                     }
-                    .into());
+                        .into());
                 }
                 if !lock_type.is_output() && pledge.is_output() {
                     return Err(ProposalValidationError::ForeignInvalidPledge {
@@ -481,7 +481,7 @@ fn validate_and_add_pledges(
                         transaction_id: atom.id,
                         details: format!("Pledge {pledge} is an output but evidence is an input for address {address}"),
                     }
-                    .into());
+                        .into());
                 }
             }
 
@@ -492,17 +492,18 @@ fn validate_and_add_pledges(
                 foreign_committee_info.shard_group(),
                 pledges,
             );
-        },
-        Decision::Abort => {
+        }
+        Decision::Abort(reason) => {
+            info!(target: LOG_TARGET, "⚠️ Remote decided ABORT({reason:?}) but provided pledges.");
             if block_pledge.contains(&atom.id) {
                 return Err(ProposalValidationError::ForeignInvalidPledge {
                     block_id: *foreign_block_id,
                     transaction_id: atom.id,
                     details: "Remote decided ABORT but provided pledges".to_string(),
                 }
-                .into());
+                    .into());
             }
-        },
+        }
     }
 
     Ok(())
