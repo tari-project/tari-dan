@@ -31,6 +31,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import saveAs from "file-saver";
+import JsonDialog from "../../Components/JsonDialog";
 
 const INDEXER_ADDRESS = "http://localhost:18301";
 const PAGE_SIZE = 10;
@@ -38,6 +39,8 @@ const PAGE_SIZE = 10;
 function EventsLayout() {
   const [events, setEvents] = useState([]);
   const [page, setPage] = useState(0);
+  const [jsonDialogOpen, setJsonDialogOpen] = React.useState(false);
+  const [selectedPayload, setSelectedPayload] = useState({});
 
   useEffect(() => {
     get_events(page, PAGE_SIZE);
@@ -93,6 +96,15 @@ function EventsLayout() {
     saveAs(blob, filename);
   };
 
+  const handlePayloadView = (event) => {
+    setSelectedPayload(event.payload);
+    setJsonDialogOpen(true);
+  };  
+
+  const handleJsonDialogClose = () => {
+    setJsonDialogOpen(false);
+  };
+
   return (
     <>
       <Grid item sm={12} md={12} xs={12}>
@@ -136,7 +148,7 @@ function EventsLayout() {
                   </TableCell>
                   <TableCell>
                     <Stack direction="row" spacing={2} alignItems="left">
-                    <Button variant="outlined" onClick={() => handlePayloadDownload(row)}>
+                    <Button variant="outlined" onClick={() => handlePayloadView(row)}>
                         View
                     </Button>
                     <Button variant="outlined" onClick={() => handlePayloadDownload(row)}>
@@ -160,6 +172,10 @@ function EventsLayout() {
           </Stack>
         </StyledPaper>
       </Grid>
+      <JsonDialog
+        open={jsonDialogOpen}
+        onClose={handleJsonDialogClose}
+        data={selectedPayload}/>
     </>
   );
 }
