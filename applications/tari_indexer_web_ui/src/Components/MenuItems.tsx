@@ -31,12 +31,9 @@ import {
   IoBarChart,
   IoGitNetworkOutline,
   IoGitNetwork,
-  IoImageOutline,
-  IoImage,
-  IoExtensionPuzzleOutline,
-  IoExtensionPuzzle,
 } from "react-icons/io5";
 import { TbTimelineEventText } from "react-icons/tb";
+import { PiPuzzlePiece } from "react-icons/pi";
 import Tooltip from "@mui/material/Tooltip";
 import Fade from "@mui/material/Fade";
 import theme from "../theme/theme";
@@ -70,6 +67,12 @@ const mainItems = [
     icon: <TbTimelineEventText style={iconStyle} />,
     activeIcon: <TbTimelineEventText style={activeIconStyle} />,
     link: "events",
+  },
+  {
+    title: "Substates",
+    icon: <PiPuzzlePiece style={iconStyle} />,
+    activeIcon: <PiPuzzlePiece style={activeIconStyle} />,
+    link: "substates",
   },
   {
     title: "Connections",

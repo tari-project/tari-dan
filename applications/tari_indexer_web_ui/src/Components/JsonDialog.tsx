@@ -37,7 +37,7 @@ interface JsonDialogProps {
 function JsonDialog(props: JsonDialogProps) {
 
   return (
-    <Dialog open={props.open} onClose={props.onClose} fullWidth={true}>
+    <Dialog open={props.open} onClose={props.onClose} fullWidth={true} maxWidth="lg">
       <Box sx={{ paddingX: 4, borderRadius: 4 }}>
         <Box>
           <DialogTitle sx={{ display: "flex", justifyContent: "right" }}>
