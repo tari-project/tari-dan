@@ -50,7 +50,7 @@ function EventsLayout() {
     get_events(page, PAGE_SIZE, filter);
   }, []);
 
-  async function get_events(offset: number, limit: number, filter: object) {
+  async function get_events(offset: number, limit: number, filter: any) {
     let graphql_filters = "";
     if (filter.topic) {
       graphql_filters += `topic:"${filter.topic}", `;
@@ -77,7 +77,7 @@ function EventsLayout() {
     console.log({ res_json });
     let events = res_json.data.getEvents;
 
-    let rows = events.map((event) => {
+    let rows = events.map((event: any) => {
       return {
         ...event,
         tx_hash: toHexString(event.txHash),
@@ -100,7 +100,7 @@ function EventsLayout() {
     setPage(newPage);
   };
 
-  const handlePayloadDownload = (event) => {
+  const handlePayloadDownload = (event: any) => {
     const data = event.payload;
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -108,7 +108,7 @@ function EventsLayout() {
     saveAs(blob, filename);
   };
 
-  const handlePayloadView = (event) => {
+  const handlePayloadView = (event: any) => {
     setSelectedPayload(event.payload);
     setJsonDialogOpen(true);
   };  
@@ -141,13 +141,13 @@ function EventsLayout() {
             name="topic"
             label="Topic"
             value={filter.topic}
-            onChange={async (e) => onFilterChange(e)}
+            onChange={async (e: React.ChangeEvent<HTMLInputElement>) => onFilterChange(e)}
             style={{ flexGrow: 1 }} />
           <TextField
             name="substate_id"
             label="Substate Id"
             value={filter.substate_id}
-            onChange={async (e) => onFilterChange(e)}
+            onChange={async (e: React.ChangeEvent<HTMLInputElement>) => onFilterChange(e)}
             style={{ flexGrow: 1 }}
           />
       </Box>
@@ -165,7 +165,7 @@ function EventsLayout() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {events.map((row) => (
+              {events.map((row: any) => (
                 <TableRow
                   sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
                 >

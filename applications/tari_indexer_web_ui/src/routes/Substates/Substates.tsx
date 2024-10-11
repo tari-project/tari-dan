@@ -43,7 +43,7 @@ const PAGE_SIZE = 10;
 const SUBSTATE_TYPES = ["Component", "Resource", "Vault", "UnclaimedConfidentialOutput", "NonFungible", "TransactionReceipt", "FeeClaim"] as const;
 
 function SubstatesLayout() {
-  const [substates, setSubstates] = useState([]);
+  const [substates, setSubstates] = useState<any []>([]);
   const [page, setPage] = useState(0);
   const [jsonDialogOpen, setJsonDialogOpen] = React.useState(false);
   const [selectedContent, setSelectedContent] = useState({});
@@ -56,9 +56,12 @@ function SubstatesLayout() {
     get_substates(page, PAGE_SIZE, filter);
   }, []);
 
-  async function get_substates(offset: number, limit: number, filter: object) {
+  async function get_substates(offset: number, limit: number, filter: any) {
     let params = {
-      limit, offset
+      limit,
+      offset,
+      filter_by_template: null,
+      filter_by_type: null,
     };
     if (filter.filter_by_template) {
       params.filter_by_template = filter.filter_by_template;
@@ -67,6 +70,8 @@ function SubstatesLayout() {
       params.filter_by_type = filter.filter_by_type;
     }
 
+    // Ignoring eslint about BintInt to number conversion, as BigInts break serialization
+    // @ts-ignore
     let resp = await listSubstates(params);
 
     console.log({resp});
@@ -75,7 +80,7 @@ function SubstatesLayout() {
       return {
         ...s,
         address: Object.values(s.substate_id)[0],
-        timestamp: (new Date(s.timestamp * 1000)).toDateString(),
+        timestamp: (new Date(Number(s.timestamp) * 1000)).toDateString(),
       };
     });
 
@@ -95,9 +100,11 @@ function SubstatesLayout() {
     setPage(newPage);
   };
 
-  const handleContentDownload = async (substate) => {
+  const handleContentDownload = async (substate: any) => {
     const data = await getSubstate({
-      address: substate.address
+      address: substate.address,
+      version: null,
+      local_search_only: false
     });
 
     const json = JSON.stringify(data, null, 2);
@@ -106,9 +113,11 @@ function SubstatesLayout() {
     saveAs(blob, filename);
   };
 
-  const handleContentView = async (substate) => {
+  const handleContentView = async (substate: any) => {
     const data = await getSubstate({
-      address: substate.address
+      address: substate.address,
+      version: null,
+      local_search_only: false
     });
     setSelectedContent(data);
     setJsonDialogOpen(true);
@@ -142,14 +151,14 @@ function SubstatesLayout() {
             name="filter_by_template"
             label="Template"
             value={filter.filter_by_template}
-            onChange={async (e) => onFilterChange(e)}
+            onChange={async (e: any) => onFilterChange(e)}
             style={{ flexGrow: 1 }} />
           <Select
             name="filter_by_type"
             label="Type"
             value={filter.filter_by_type}
             displayEmpty
-            onChange={async (e) => onFilterChange(e)}
+            onChange={async (e: any) => onFilterChange(e)}
             size="medium"
             renderValue={(value) => {
               if (!value) {
@@ -159,13 +168,13 @@ function SubstatesLayout() {
               return value;
             }}     
             style={{ flexGrow: 1, minWidth: "200px" }}>
-              <MenuItem key="All Types" value={null}>
-                Any type
+              <MenuItem key={"All Types"} value={undefined}>
+                {"All types"}
               </MenuItem>
               {SUBSTATE_TYPES.map((type) => (
                 <MenuItem key={type} value={type}>
                   {type}
-               </MenuItem>
+                </MenuItem>
               ))}
           </Select>
         </Box>
@@ -183,7 +192,7 @@ function SubstatesLayout() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {substates.map((row) => (
+              {substates.map((row: any) => (
                 <TableRow
                   sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
                 >
