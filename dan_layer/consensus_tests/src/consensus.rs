@@ -13,6 +13,7 @@ use std::time::Duration;
 use tari_common_types::types::PrivateKey;
 use tari_consensus::hotstuff::HotStuffError;
 use tari_dan_common_types::{optional::Optional, Epoch, LockIntent, NodeHeight, SubstateRequirement};
+use tari_dan_storage::consensus_models::AbortReason;
 use tari_dan_storage::{
     consensus_models::{
         BlockId,
@@ -91,7 +92,7 @@ async fn single_transaction_abort() {
     setup_logger();
     let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
     // First get transaction in the mempool
-    let (tx1, _, _) = test.send_transaction_to_all(Decision::Abort, 1, 1, 1).await;
+    let (tx1, _, _) = test.send_transaction_to_all(Decision::Abort(AbortReason::None), 1, 1, 1).await;
     test.start_epoch(Epoch(1)).await;
 
     loop {
@@ -107,7 +108,7 @@ async fn single_transaction_abort() {
     }
 
     test.assert_all_validators_at_same_height().await;
-    test.assert_all_validators_have_decision(tx1.id(), Decision::Abort)
+    test.assert_all_validators_have_decision(tx1.id(), Decision::Abort(AbortReason::None))
         .await;
 
     test.assert_clean_shutdown().await;
@@ -373,15 +374,15 @@ async fn foreign_shard_group_decides_to_abort() {
             .collect(),
         vec![],
     )
-    .create_execution_at_destination_for_transaction(
-        TestVnDestination::Committee(1),
-        &tx2,
-        inputs
-            .into_iter()
-            .map(|input| VersionedSubstateIdLockIntent::write(input, true).into())
-            .collect(),
-        vec![],
-    );
+        .create_execution_at_destination_for_transaction(
+            TestVnDestination::Committee(1),
+            &tx2,
+            inputs
+                .into_iter()
+                .map(|input| VersionedSubstateIdLockIntent::write(input, true).into())
+                .collect(),
+            vec![],
+        );
 
     test.send_transaction_to_destination(TestVnDestination::Committee(1), tx2.clone())
         .await;
@@ -406,7 +407,7 @@ async fn foreign_shard_group_decides_to_abort() {
     }
 
     test.assert_all_validators_at_same_height().await;
-    test.assert_all_validators_have_decision(tx2.id(), Decision::Abort)
+    test.assert_all_validators_have_decision(tx2.id(), Decision::Abort(AbortReason::None))
         .await;
 
     test.assert_clean_shutdown().await;
@@ -609,7 +610,7 @@ async fn multishard_output_conflict_abort() {
     test.assert_all_validators_at_same_height().await;
     test.assert_all_validators_have_decision(sorted_tx_ids[0], Decision::Commit)
         .await;
-    test.assert_all_validators_have_decision(sorted_tx_ids[1], Decision::Abort)
+    test.assert_all_validators_have_decision(sorted_tx_ids[1], Decision::Abort(AbortReason::None))
         .await;
     test.assert_all_validators_committed();
 
@@ -670,7 +671,7 @@ async fn single_shard_inputs_from_previous_outputs() {
     } else {
         test.assert_all_validators_have_decision(tx1.id(), Decision::Commit)
             .await;
-        test.assert_all_validators_have_decision(tx2.id(), Decision::Abort)
+        test.assert_all_validators_have_decision(tx2.id(), Decision::Abort(AbortReason::None))
             .await;
     }
 
@@ -732,7 +733,7 @@ async fn multishard_inputs_from_previous_outputs() {
     test.assert_all_validators_at_same_height().await;
     test.assert_all_validators_have_decision(tx1.id(), Decision::Commit)
         .await;
-    test.assert_all_validators_have_decision(tx2.id(), Decision::Abort)
+    test.assert_all_validators_have_decision(tx2.id(), Decision::Abort(AbortReason::None))
         .await;
     test.assert_all_validators_committed();
 
@@ -766,13 +767,13 @@ async fn single_shard_input_conflict() {
         inputs: vec![VersionedSubstateIdLockIntent::write(substate_id.clone(), true).into()],
         new_outputs: vec![],
     })
-    .add_execution_at_destination(TestVnDestination::All, ExecuteSpec {
-        transaction: tx2.transaction().clone(),
-        decision: Decision::Commit,
-        fee: 1,
-        inputs: vec![VersionedSubstateIdLockIntent::write(substate_id, true).into()],
-        new_outputs: vec![],
-    });
+        .add_execution_at_destination(TestVnDestination::All, ExecuteSpec {
+            transaction: tx2.transaction().clone(),
+            decision: Decision::Commit,
+            fee: 1,
+            inputs: vec![VersionedSubstateIdLockIntent::write(substate_id, true).into()],
+            new_outputs: vec![],
+        });
 
     test.network()
         .send_transaction(TestVnDestination::All, tx1.clone())
@@ -792,7 +793,7 @@ async fn single_shard_input_conflict() {
 
         let leaf1 = test.get_validator(&TestAddress::new("1")).get_leaf_block();
         if leaf1.height > NodeHeight(30) {
-            panic!("Not all transaction committed after {} blocks", leaf1.height,);
+            panic!("Not all transaction committed after {} blocks", leaf1.height, );
         }
     }
 
@@ -831,7 +832,7 @@ async fn epoch_change() {
 
         let leaf1 = test.get_validator(&TestAddress::new("1")).get_leaf_block();
         if leaf1.height > NodeHeight(30) {
-            panic!("Not all transaction committed after {} blocks", leaf1.height,);
+            panic!("Not all transaction committed after {} blocks", leaf1.height, );
         }
     }
 
@@ -1085,16 +1086,16 @@ async fn multi_shard_unversioned_input_conflict() {
         ],
         new_outputs: vec![],
     })
-    .add_execution_at_destination(TestVnDestination::All, ExecuteSpec {
-        transaction: tx2.transaction().clone(),
-        decision: Decision::Commit,
-        fee: 1,
-        inputs: vec![
-            VersionedSubstateIdLockIntent::write(id0, false).into(),
-            VersionedSubstateIdLockIntent::write(id1, false).into(),
-        ],
-        new_outputs: vec![],
-    });
+        .add_execution_at_destination(TestVnDestination::All, ExecuteSpec {
+            transaction: tx2.transaction().clone(),
+            decision: Decision::Commit,
+            fee: 1,
+            inputs: vec![
+                VersionedSubstateIdLockIntent::write(id0, false).into(),
+                VersionedSubstateIdLockIntent::write(id1, false).into(),
+            ],
+            new_outputs: vec![],
+        });
 
     // Transactions are sorted in the blocks, because we have a "first come first serve" policy for locking objects
     // the "first" will be Committed and the "last" Aborted

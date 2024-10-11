@@ -52,6 +52,7 @@ use tari_dan_storage::consensus_models::{AbortReason, BlockId, Command, Decision
 use tari_engine_types::substate::{SubstateId, SubstateValue};
 use tari_transaction::TransactionId;
 
+use crate::proto::consensus::{DecisionReason, DecisionResult};
 use crate::proto::{self};
 // -------------------------------- HotstuffMessage -------------------------------- //
 
@@ -585,7 +586,7 @@ impl From<&TransactionAtom> for proto::consensus::TransactionAtom {
     fn from(value: &TransactionAtom) -> Self {
         Self {
             id: value.id.as_bytes().to_vec(),
-            decision: proto::consensus::Decision::from(value.decision) as i32,
+            decision: Some(proto::consensus::Decision::from(value.decision)),
             evidence: Some((&value.evidence).into()),
             fee: value.transaction_fee,
             leader_fee: value.leader_fee.as_ref().map(|a| a.into()),
@@ -597,11 +598,10 @@ impl TryFrom<proto::consensus::TransactionAtom> for TransactionAtom {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::TransactionAtom) -> Result<Self, Self::Error> {
+        let proto_decision = value.decision.ok_or(anyhow!("Decision is missing!"))?;
         Ok(TransactionAtom {
             id: TransactionId::try_from(value.id)?,
-            decision: proto::consensus::Decision::try_from(value.decision)
-                .map_err(|e| anyhow!("Invalid decision value {}: {e}", value.decision))?
-                .try_into()?,
+            decision: Decision::try_from(proto_decision)?,
             evidence: value
                 .evidence
                 .ok_or_else(|| anyhow!("evidence not provided"))?
@@ -682,27 +682,59 @@ impl From<Decision> for proto::consensus::Decision {
     fn from(value: Decision) -> Self {
         match value {
             Decision::Commit => proto::consensus::Decision {
-                result: proto::consensus::DecisionResult::Commit.into(),
-                reason: proto::consensus::DecisionReason::None.into(),
+                result: DecisionResult::Commit.into(),
+                reason: DecisionReason::None.into(),
             },
-            Decision::Abort(reason) => proto::consensus::Decision {
-                result: proto::consensus::DecisionResult::Abort.into(),
-                reason: reason.into(),
-            },
+            Decision::Abort(reason) => {
+                let proto_reason: DecisionReason = reason.into();
+                proto::consensus::Decision {
+                    result: DecisionResult::Abort.into(),
+                    reason: proto_reason as i32,
+                }
+            }
         }
     }
 }
 
 // -------------------------------- Decision reason -------------------------------- //
-impl From<AbortReason> for proto::consensus::DecisionReason {
+impl From<AbortReason> for DecisionReason {
     fn from(value: AbortReason) -> Self {
         match value {
+            AbortReason::None => Self::None,
             AbortReason::TransactionAtomMustBeAbort => Self::TransactionAtomMustBeAbort,
             AbortReason::TransactionAtomMustBeCommit => Self::TransactionAtomMustBeCommit,
             AbortReason::InputLockConflict => Self::InputLockConflict,
             AbortReason::LockOutputsFailed => Self::LockOutputsFailed,
             AbortReason::LockInputsOutputsFailed => Self::LockInputsOutputsFailed,
             AbortReason::LeaderProposalVsLocalDecisionMismatch => Self::LeaderProposalVsLocalDecisionMismatch,
+            AbortReason::LockInputsFailed => Self::LockInputsFailed,
+            AbortReason::InvalidTransaction => Self::InvalidTransaction,
+            AbortReason::ExecutionFailure => Self::ExecutionFailure,
+            AbortReason::OneOrMoreInputsNotFound => Self::OneOrMoreInputsNotFound,
+            AbortReason::ForeignShardGroupDecidedToAbort => Self::ForeignShardGroupDecidedToAbort,
+            AbortReason::FeesNotPaid => Self::FeesNotPaid,
+            AbortReason::EarlyAbort => Self::EarlyAbort,
+        }
+    }
+}
+
+impl From<DecisionReason> for AbortReason {
+    fn from(proto_reason: DecisionReason) -> Self {
+        match proto_reason {
+            DecisionReason::None => Self::None,
+            DecisionReason::TransactionAtomMustBeAbort => Self::TransactionAtomMustBeAbort,
+            DecisionReason::TransactionAtomMustBeCommit => Self::TransactionAtomMustBeCommit,
+            DecisionReason::InputLockConflict => Self::InputLockConflict,
+            DecisionReason::LockInputsFailed => Self::LockInputsFailed,
+            DecisionReason::LockOutputsFailed => Self::LockOutputsFailed,
+            DecisionReason::LockInputsOutputsFailed => Self::LockInputsOutputsFailed,
+            DecisionReason::LeaderProposalVsLocalDecisionMismatch => Self::LeaderProposalVsLocalDecisionMismatch,
+            DecisionReason::InvalidTransaction => Self::InvalidTransaction,
+            DecisionReason::ExecutionFailure => Self::ExecutionFailure,
+            DecisionReason::OneOrMoreInputsNotFound => Self::OneOrMoreInputsNotFound,
+            DecisionReason::ForeignShardGroupDecidedToAbort => Self::ForeignShardGroupDecidedToAbort,
+            DecisionReason::FeesNotPaid => Self::FeesNotPaid,
+            DecisionReason::EarlyAbort => Self::EarlyAbort,
         }
     }
 }
@@ -711,10 +743,10 @@ impl TryFrom<proto::consensus::Decision> for Decision {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::Decision) -> Result<Self, Self::Error> {
-        match value {
-            proto::consensus::Decision::Commit => Ok(Decision::Commit),
-            proto::consensus::Decision::Abort => Ok(Decision::Abort),
-            proto::consensus::Decision::Unknown => Err(anyhow!("Decision not provided")),
+        match value.result() {
+            DecisionResult::Commit => Ok(Decision::Commit),
+            DecisionResult::Abort => Ok(Decision::Abort(value.reason().into())),
+            DecisionResult::Unknown => Err(anyhow!("Decision not provided")),
         }
     }
 }

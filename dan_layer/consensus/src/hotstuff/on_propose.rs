@@ -6,6 +6,26 @@ use std::{
     num::NonZeroU64,
 };
 
+use crate::{
+    hotstuff::{
+        block_change_set::ProposedBlockChangeSet,
+        calculate_state_merkle_root,
+        error::HotStuffError,
+        filter_diff_for_committee,
+        substate_store::PendingSubstateStore,
+        transaction_manager::{
+            ConsensusTransactionManager,
+            LocalPreparedTransaction,
+            PledgedTransaction,
+            PreparedTransaction,
+            TransactionLockConflicts,
+        },
+        HotstuffConfig,
+    },
+    messages::{HotstuffMessage, ProposalMessage},
+    tracing::TraceTimer,
+    traits::{ConsensusSpec, OutboundMessaging, ValidatorSignatureService, WriteableSubstateStore},
+};
 use indexmap::IndexMap;
 use log::*;
 use tari_common_types::types::{FixedHash, PublicKey};
@@ -19,6 +39,7 @@ use tari_dan_common_types::{
     ToSubstateAddress,
     VersionedSubstateId,
 };
+use tari_dan_storage::consensus_models::AbortReason;
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -50,27 +71,6 @@ use tari_engine_types::{commit_result::RejectReason, substate::Substate};
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::TransactionId;
 use tokio::task;
-
-use crate::{
-    hotstuff::{
-        block_change_set::ProposedBlockChangeSet,
-        calculate_state_merkle_root,
-        error::HotStuffError,
-        filter_diff_for_committee,
-        substate_store::PendingSubstateStore,
-        transaction_manager::{
-            ConsensusTransactionManager,
-            LocalPreparedTransaction,
-            PledgedTransaction,
-            PreparedTransaction,
-            TransactionLockConflicts,
-        },
-        HotstuffConfig,
-    },
-    messages::{HotstuffMessage, ProposalMessage},
-    tracing::TraceTimer,
-    traits::{ConsensusSpec, OutboundMessaging, ValidatorSignatureService, WriteableSubstateStore},
-};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_local_propose";
 
@@ -696,7 +696,7 @@ where
                     "⚠️ Transaction is LOCAL-ONLY EARLY ABORT, proposing LocalOnly({}, ABORT)",
                     tx_rec.transaction_id(),
                 );
-                tx_rec.set_local_decision(Decision::Abort);
+                tx_rec.set_local_decision(Decision::Abort(AbortReason::EarlyAbort));
 
                 info!(
                     target: LOG_TARGET,

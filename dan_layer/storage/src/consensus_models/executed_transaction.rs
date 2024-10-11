@@ -13,6 +13,7 @@ use tari_dan_common_types::{optional::Optional, SubstateAddress, ToSubstateAddre
 use tari_engine_types::commit_result::{ExecuteResult, RejectReason};
 use tari_transaction::{Transaction, TransactionId};
 
+use crate::consensus_models::AbortReason;
 use crate::{
     consensus_models::{
         BlockId,
@@ -85,8 +86,8 @@ impl ExecutedTransaction {
             return decision;
         }
 
-        if self.abort_reason.is_some() {
-            return Decision::Abort;
+        if let Some(reject_reason) = &self.abort_reason {
+            return Decision::Abort(AbortReason::from(reject_reason));
         }
 
         self.original_decision()
@@ -118,11 +119,11 @@ impl ExecutedTransaction {
         &self.result
     }
 
-    pub fn all_inputs_iter(&self) -> impl Iterator<Item = &VersionedSubstateId> + '_ {
+    pub fn all_inputs_iter(&self) -> impl Iterator<Item=&VersionedSubstateId> + '_ {
         self.resolved_inputs.iter().map(|input| input.versioned_substate_id())
     }
 
-    pub fn involved_addresses_iter(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+    pub fn involved_addresses_iter(&self) -> impl Iterator<Item=SubstateAddress> + '_ {
         self.resolved_inputs
             .iter()
             .map(|input| input.to_substate_address())
@@ -278,7 +279,7 @@ impl ExecutedTransaction {
         }
     }
 
-    pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+    pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item=&'a TransactionId>>(
         tx: &TTx,
         tx_ids: I,
     ) -> Result<(Vec<Self>, HashSet<&'a TransactionId>), StorageError> {
@@ -292,7 +293,7 @@ impl ExecutedTransaction {
         Ok((recs, tx_ids))
     }
 
-    pub fn get_all<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+    pub fn get_all<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item=&'a TransactionId>>(
         tx: &TTx,
         tx_ids: I,
     ) -> Result<Vec<Self>, StorageError> {
@@ -310,7 +311,7 @@ impl ExecutedTransaction {
         Ok(recs)
     }
 
-    pub fn get_involved_shards<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+    pub fn get_involved_shards<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item=&'a TransactionId>>(
         tx: &TTx,
         transactions: I,
     ) -> Result<HashMap<TransactionId, HashSet<SubstateAddress>>, StorageError> {

@@ -27,7 +27,7 @@ use crate::{rpc_service, ValidatorNodeRpcClientError};
 
 pub trait ValidatorNodeClientFactory: Send + Sync {
     type Addr: NodeAddressable;
-    type Client: ValidatorNodeRpcClient<Addr = Self::Addr>;
+    type Client: ValidatorNodeRpcClient<Addr=Self::Addr>;
 
     fn create_client(&self, address: &Self::Addr) -> Self::Client;
 }
@@ -153,7 +153,7 @@ impl<TMsg: MessageSpec> ValidatorNodeRpcClient for TariValidatorNodeRpcClient<TM
                         .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?,
                     created_by_tx: tx_hash,
                 })
-            },
+            }
             SubstateStatus::Down => {
                 let created_by_tx = resp.created_transaction_hash.try_into().map_err(|_| {
                     ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
@@ -172,7 +172,7 @@ impl<TMsg: MessageSpec> ValidatorNodeRpcClient for TariValidatorNodeRpcClient<TM
                     deleted_by_tx,
                     created_by_tx,
                 })
-            },
+            }
             SubstateStatus::DoesNotExist => Ok(SubstateResult::DoesNotExist),
         }
     }
@@ -207,12 +207,8 @@ impl<TMsg: MessageSpec> ValidatorNodeRpcClient for TariValidatorNodeRpcClient<TM
         match PayloadResultStatus::try_from(response.status) {
             Ok(PayloadResultStatus::Pending) => Ok(TransactionResultStatus::Pending),
             Ok(PayloadResultStatus::Finalized) => {
-                let proto_decision = proto::consensus::Decision::try_from(response.final_decision).map_err(|_| {
-                    ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
-                        "Invalid decision value {}",
-                        response.final_decision
-                    ))
-                })?;
+                let proto_decision = response.final_decision
+                    .ok_or(ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Missing decision!")))?;
                 let final_decision = proto_decision
                     .try_into()
                     .map_err(ValidatorNodeRpcClientError::InvalidResponse)?;
@@ -236,7 +232,7 @@ impl<TMsg: MessageSpec> ValidatorNodeRpcClient for TariValidatorNodeRpcClient<TM
                     finalized_time,
                     abort_details: Some(response.abort_details).filter(|s| s.is_empty()),
                 }))
-            },
+            }
             Err(_) => Err(ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
                 "Node returned invalid payload status {}",
                 response.status

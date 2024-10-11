@@ -1000,7 +1000,7 @@ where
 
                     execution.set_abort_reason(RejectReason::FailedToLockOutputs(err.to_string()));
 
-                    tx_rec.set_local_decision(Decision::Abort);
+                    tx_rec.set_local_decision(Decision::Abort(AbortReason::LockOutputsFailed));
                     tx_rec.set_transaction_fee(0);
                     tx_rec.set_next_stage(TransactionPoolStage::AllPrepared)?;
 

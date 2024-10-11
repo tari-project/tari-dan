@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, str::FromStr};
-
+use anyhow::anyhow;
 use futures::StreamExt;
 use log::*;
+use std::{collections::HashMap, str::FromStr};
 use tari_bor::decode;
 use tari_common::configuration::Network;
 use tari_consensus::consensus_constants::ConsensusConstants;
@@ -97,7 +97,7 @@ struct TransactionMetadata {
 pub struct EventScanner {
     network: Network,
     sidechain_id: Option<RistrettoPublicKey>,
-    epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
+    epoch_manager: Box<dyn EpochManagerReader<Addr=PeerAddress>>,
     client_factory: TariValidatorNodeRpcClientFactory,
     substate_store: SqliteSubstateStore,
     event_filters: Vec<EventFilter>,
@@ -108,7 +108,7 @@ impl EventScanner {
     pub fn new(
         network: Network,
         sidechain_id: Option<RistrettoPublicKey>,
-        epoch_manager: Box<dyn EpochManagerReader<Addr = PeerAddress>>,
+        epoch_manager: Box<dyn EpochManagerReader<Addr=PeerAddress>>,
         client_factory: TariValidatorNodeRpcClientFactory,
         substate_store: SqliteSubstateStore,
         event_filters: Vec<EventFilter>,
@@ -147,12 +147,12 @@ impl EventScanner {
                     // at this point we can assume the previous epochs have been fully scanned
                     self.delete_scanned_epochs_older_than(epoch).await?;
                 }
-            },
+            }
             None => {
                 // by default we start scanning since the current epoch
                 // TODO: it would be nice a new parameter in the indexer to spcify a custom starting epoch
                 event_count += self.scan_events_of_epoch(newest_epoch).await?;
-            },
+            }
         }
 
         info!(
@@ -366,7 +366,7 @@ impl EventScanner {
                         // The transaction is not successful, so we don't return any events
                         return Ok(vec![]);
                     }
-                },
+                }
                 Err(e) => {
                     // We do nothing on a single VN failure, we only log it
                     warn!(
@@ -375,7 +375,7 @@ impl EventScanner {
                         member,
                         e
                     );
-                },
+                }
             };
         }
 
@@ -402,7 +402,7 @@ impl EventScanner {
 
         match PayloadResultStatus::try_from(response.status) {
             Ok(PayloadResultStatus::Finalized) => {
-                let proto_decision = tari_dan_p2p::proto::consensus::Decision::try_from(response.final_decision)?;
+                let proto_decision = response.final_decision.ok_or(anyhow!("Missing final decision!"))?;
                 let final_decision = proto_decision.try_into()?;
                 if let Decision::Commit = final_decision {
                     Ok(Some(response.execution_result)
@@ -412,7 +412,7 @@ impl EventScanner {
                 } else {
                     Ok(None)
                 }
-            },
+            }
             _ => Ok(None),
         }
     }
@@ -524,7 +524,7 @@ impl EventScanner {
                         self.save_scanned_block_id(epoch, shard_group, last_block_id)?;
                     }
                     return Ok(blocks);
-                },
+                }
                 Err(e) => {
                     // We do nothing on a single VN failure, we only log it
                     warn!(
@@ -535,7 +535,7 @@ impl EventScanner {
                         shard_group,
                         e
                     );
-                },
+                }
             };
         }
 

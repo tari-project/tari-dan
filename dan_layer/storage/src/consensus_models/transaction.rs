@@ -16,6 +16,7 @@ use tari_engine_types::{
 };
 use tari_transaction::{Transaction, TransactionId};
 
+use crate::consensus_models::AbortReason;
 use crate::{
     consensus_models::{
         BlockId,
@@ -123,7 +124,7 @@ impl TransactionRecord {
 
     pub fn current_decision(&self) -> Decision {
         self.final_decision
-            .or_else(|| self.abort_reason.as_ref().map(|_| Decision::Abort))
+            .or_else(|| self.abort_reason.as_ref().map(|reason| Decision::Abort(AbortReason::from(reason))))
             .or_else(|| self.execution_decision())
             // We will choose to commit a transaction unless (1) we aborted it, (2) the execution has failed
             .unwrap_or(Decision::Commit)
@@ -253,7 +254,7 @@ impl TransactionRecord {
     where
         TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
-        I: IntoIterator<Item = &'a TransactionRecord>,
+        I: IntoIterator<Item=&'a TransactionRecord>,
     {
         tx.transactions_save_all(transactions)
     }
@@ -285,7 +286,7 @@ impl TransactionRecord {
         tx.transactions_exists(tx_id)
     }
 
-    pub fn exists_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a TransactionId>>(
+    pub fn exists_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item=&'a TransactionId>>(
         tx: &TTx,
         tx_ids: I,
     ) -> Result<bool, StorageError> {
@@ -298,7 +299,7 @@ impl TransactionRecord {
         Ok(false)
     }
 
-    pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+    pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item=&'a TransactionId>>(
         tx: &TTx,
         tx_ids: I,
     ) -> Result<(Vec<Self>, HashSet<TransactionId>), StorageError> {
@@ -311,7 +312,7 @@ impl TransactionRecord {
         Ok((recs, tx_ids))
     }
 
-    pub fn get_any_or_build<TTx: StateStoreReadTransaction, I: IntoIterator<Item = Transaction> + Clone>(
+    pub fn get_any_or_build<TTx: StateStoreReadTransaction, I: IntoIterator<Item=Transaction> + Clone>(
         tx: &TTx,
         transactions: I,
     ) -> Result<Vec<Self>, StorageError> {
@@ -329,7 +330,7 @@ impl TransactionRecord {
         Ok(recs)
     }
 
-    pub fn get_missing<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+    pub fn get_missing<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item=&'a TransactionId>>(
         tx: &TTx,
         tx_ids: I,
     ) -> Result<HashSet<TransactionId>, StorageError> {
@@ -372,7 +373,7 @@ impl TransactionRecord {
     where
         TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
-        I: IntoIterator<Item = &'a TransactionPoolRecord>,
+        I: IntoIterator<Item=&'a TransactionPoolRecord>,
     {
         tx.transactions_finalize_all(block_id, transactions)
     }

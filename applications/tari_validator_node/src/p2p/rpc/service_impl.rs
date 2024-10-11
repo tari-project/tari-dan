@@ -246,7 +246,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         Ok(Response::new(GetTransactionResultResponse {
             status: PayloadResultStatus::Finalized.into(),
 
-            final_decision: proto::consensus::Decision::from(final_decision) as i32,
+            final_decision: Some(proto::consensus::Decision::from(final_decision)),
             execution_time_ms: transaction
                 .execution_time()
                 .map(|t| u64::try_from(t.as_millis()).unwrap_or(u64::MAX))
@@ -312,7 +312,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
                 req.up_to_epoch.map(|epoch| epoch.into()),
                 sender,
             )
-            .run(),
+                .run(),
         );
 
         Ok(Streaming::new(receiver))
@@ -385,7 +385,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
                 last_state_transition_for_chain,
                 end_epoch,
             )
-            .run(),
+                .run(),
         );
 
         Ok(Streaming::new(receiver))

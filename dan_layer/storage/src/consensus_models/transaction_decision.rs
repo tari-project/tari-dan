@@ -2,16 +2,24 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::{
     fmt,
     fmt::{Display, Formatter},
     str::FromStr,
 };
-use std::slice::Iter;
-use tari_engine_types::commit_result::TransactionResult;
+use strum::ParseError;
+use strum_macros::{AsRefStr, EnumString};
+use tari_engine_types::commit_result::{RejectReason, TransactionResult};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
+
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum FromStrConversionError {
+    #[error("Invalid Decision string '{0}'")]
+    InvalidDecision(String),
+    #[error("Invalid Abort reason string '{0}': {1}")]
+    InvalidAbortReason(String, ParseError),
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
@@ -22,15 +30,49 @@ pub enum Decision {
     Abort(AbortReason),
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Deserialize,
+    Serialize,
+    AsRefStr,
+    EnumString
+)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum AbortReason {
+    None,
     TransactionAtomMustBeAbort,
     TransactionAtomMustBeCommit,
     InputLockConflict,
+    LockInputsFailed,
     LockOutputsFailed,
     LockInputsOutputsFailed,
     LeaderProposalVsLocalDecisionMismatch,
+    InvalidTransaction,
+    ExecutionFailure,
+    OneOrMoreInputsNotFound,
+    ForeignShardGroupDecidedToAbort,
+    FeesNotPaid,
+    EarlyAbort,
+}
+
+impl From<&RejectReason> for AbortReason {
+    fn from(reject_reason: &RejectReason) -> Self {
+        match reject_reason {
+            RejectReason::Unknown => Self::None,
+            RejectReason::InvalidTransaction(_) => Self::InvalidTransaction,
+            RejectReason::ExecutionFailure(_) => Self::ExecutionFailure,
+            RejectReason::OneOrMoreInputsNotFound(_) => Self::OneOrMoreInputsNotFound,
+            RejectReason::FailedToLockInputs(_) => Self::LockInputsFailed,
+            RejectReason::FailedToLockOutputs(_) => Self::LockOutputsFailed,
+            RejectReason::ForeignShardGroupDecidedToAbort { .. } => Self::ForeignShardGroupDecidedToAbort,
+            RejectReason::FeesNotPaid(_) => Self::FeesNotPaid,
+        }
+    }
 }
 
 impl Decision {
@@ -49,28 +91,17 @@ impl Decision {
         }
     }
 
-    pub const fn as_str(&self) -> &'static str {
+    pub fn as_string(&self) -> String {
         match self {
-            Decision::Commit => "Commit",
-            Decision::Abort(reason) => format!("Abort({:?})", reason).as_str(),
+            Decision::Commit => String::from("Commit"),
+            Decision::Abort(reason) => format!("Abort({})", reason.as_ref()),
         }
     }
 }
 
-// TransactionAtomMustBeAbort,
-//     TransactionAtomMustBeCommit,
-//     InputLockConflict,
-//     LockOutputsFailed,
-//     LockInputsOutputsFailed,
-//     LeaderProposalVsLocalDecisionMismatch,
-
-impl IntoIterator for AbortReason {
-    // TODO
-}
-
 impl Display for Decision {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
+        f.write_str(self.as_string().as_str())
     }
 }
 
@@ -78,63 +109,40 @@ impl FromStr for Decision {
     type Err = FromStrConversionError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s == "Commit" {
-            Ok(Decision::Commit)
-        } else {
-            if s.starts_with("Abort(") {
-                let mut reason = s.replace("Abort(", "");
-                reason.pop(); // remove last char ')'
-                return Ok(
-                    Decision::Abort(
-                        AbortReason::from_str(reason.as_str())?
-                    )
-                );
+        match s {
+            "Commit" => {
+                Ok(Decision::Commit)
             }
+            "Abort" => { // to stay compatible with previous messages
+                Ok(Decision::Abort(AbortReason::None))
+            }
+            _ => {
+                // abort with reason
+                if s.starts_with("Abort(") {
+                    let mut reason = s.replace("Abort(", "");
+                    reason.pop(); // remove last char ')'
+                    return Ok(
+                        Decision::Abort(
+                            AbortReason::from_str(reason.as_str())
+                                .map_err(|error| FromStrConversionError::InvalidAbortReason(s.to_string(), error))?
+                        )
+                    );
+                }
 
-            Err(FromStrConversionError::InvalidDecision(s.to_string()))
-        }
-    }
-}
-
-impl FromStr for AbortReason {
-    type Err = FromStrConversionError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut possible_matches: HashMap<&str, AbortReason> = HashMap::from([
-            (format!("{:?}", AbortReason::TransactionAtomMustBeAbort).as_str(), AbortReason::TransactionAtomMustBeAbort),
-            (format!("{:?}", AbortReason::TransactionAtomMustBeCommit).as_str(), AbortReason::TransactionAtomMustBeCommit),
-            (format!("{:?}", AbortReason::InputLockConflict).as_str(), AbortReason::InputLockConflict),
-            (format!("{:?}", AbortReason::LockOutputsFailed).as_str(), AbortReason::LockOutputsFailed),
-            (format!("{:?}", AbortReason::LockInputsOutputsFailed).as_str(), AbortReason::LockInputsOutputsFailed),
-            (format!("{:?}", AbortReason::LeaderProposalVsLocalDecisionMismatch).as_str(), AbortReason::LeaderProposalVsLocalDecisionMismatch),
-        ]);
-
-        for reason in AbortReason::
-
-        for (reason_str, reason) in possible_matches {
-            if s == reason_str.as_str() {
-                return Ok();
+                Err(FromStrConversionError::InvalidDecision(s.to_string()))
             }
         }
-
-        Err(FromStrConversionError::InvalidAbortReason(s.to_string()))
     }
-}
-
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum FromStrConversionError {
-    #[error("Invalid Decision string '{0}'")]
-    InvalidDecision(String),
-    #[error("Invalid Abort reason string '{0}'")]
-    InvalidAbortReason(String),
 }
 
 impl From<&TransactionResult> for Decision {
     fn from(result: &TransactionResult) -> Self {
         if result.is_accept() {
             Decision::Commit
+        } else if let TransactionResult::Reject(reject_reason) = result {
+            Decision::Abort(AbortReason::from(reject_reason))
         } else {
-            Decision::Abort
+            Decision::Abort(AbortReason::None)
         }
     }
 }
