@@ -1,4 +1,4 @@
-//  Copyright 2022. The Tari Project
+//  Copyright 2024. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,50 +20,45 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from "react";
-import ReactDOM from "react-dom/client";
-import "./theme/theme.css";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import App from "./App";
-import Connections from "./routes/Connections/Connections";
-import RecentTransactions from "./routes/RecentTransactions/RecentTransactions";
-import ErrorPage from "./routes/ErrorPage";
-import Events from "./routes/Events/Events";
-import Substates from "./routes/Substates/Substates";
+import { Dialog, DialogTitle } from "@mui/material";
+import IconButton from "@mui/material/IconButton";
+import DialogContent from "@mui/material/DialogContent";
+import CloseIcon from "@mui/icons-material/Close";
+import Box from "@mui/material/Box";
+import theme from "../theme/theme";
+import { renderJson } from "../utils/helpers";
 
-const router = createBrowserRouter([
-  {
-    path: "*",
-    element: <App />,
-    errorElement: <ErrorPage />,
-    children: [
-      {
-        path: "connections",
-        element: <Connections />,
-      },
-      {
-        path: "transactions",
-        element: <RecentTransactions />,
-      },
-      {
-        path: "events",
-        element: <Events />,
-      },
-      {
-        path: "substates",
-        element: <Substates />,
-      },
-      {
-        path: "app",
-        element: <App />,
-      },
-    ],
-  },
-]);
+interface JsonDialogProps {
+  open: boolean;
+  data: object,
+  onClose: () => void;
+}
 
-const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
-root.render(
-  <React.StrictMode>
-    <RouterProvider router={router} />
-  </React.StrictMode>,
-);
+function JsonDialog(props: JsonDialogProps) {
+
+  return (
+    <Dialog open={props.open} onClose={props.onClose} fullWidth={true} maxWidth="lg">
+      <Box sx={{ paddingX: 4, borderRadius: 4 }}>
+        <Box>
+          <DialogTitle sx={{ display: "flex", justifyContent: "right" }}>
+            <IconButton onClick={props.onClose}>
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+        </Box>
+        <DialogContent>
+          <Box
+            sx={{
+              padding: "2rem",
+              background: theme.palette.background.paper,
+            }}
+          >
+            {renderJson(props.data)}
+          </Box>
+        </DialogContent>
+      </Box>
+    </Dialog>
+  );
+}
+
+export default JsonDialog;

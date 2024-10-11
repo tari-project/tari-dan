@@ -42,6 +42,9 @@ import type {
   InspectSubstateRequest,
   InspectSubstateResponse,
   IndexerSubmitTransactionResponse,
+  ListSubstatesRequest,
+  ListSubstatesResponse,
+  SubstateType,
 } from "@tari-project/typescript-bindings";
 
 async function jsonRpc(method: string, params: any = null) {
@@ -84,6 +87,8 @@ export const getSubstate = (request: IndexerGetSubstateRequest): Promise<Indexer
   jsonRpc("get_substate", request);
 export const inspectSubstate = (request: InspectSubstateRequest): Promise<InspectSubstateResponse> =>
   jsonRpc("inspect_substate", request);
+export const listSubstates = (request: ListSubstatesRequest): Promise<ListSubstatesResponse> =>
+  jsonRpc("list_substates", request);
 export const getConnections = (): Promise<IndexerGetConnectionsResponse> => jsonRpc("get_connections");
 export const getNonFungibleCollections = (): Promise<GetNonFungibleCollectionsResponse> =>
   jsonRpc("get_non_fungible_collections");
