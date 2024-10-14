@@ -25,12 +25,12 @@
 
 use async_trait::async_trait;
 use tari_consensus::{messages::HotstuffMessage, traits::OutboundMessagingError};
-use tari_dan_common_types::PeerAddress;
+use tari_dan_common_types::{PeerAddress, ShardGroup};
 use tari_dan_p2p::{proto, TariMessagingSpec};
 use tari_networking::{NetworkingHandle, NetworkingService};
 use tokio::sync::mpsc;
 
-use crate::p2p::logging::MessageLogger;
+use crate::p2p::{logging::MessageLogger, services::consensus_gossip::ConsensusGossipHandle};
 
 const _LOG_TARGET: &str = "tari::dan::messages::outbound::validator_node";
 
@@ -38,6 +38,7 @@ const _LOG_TARGET: &str = "tari::dan::messages::outbound::validator_node";
 pub struct ConsensusOutboundMessaging<TMsgLogger> {
     our_node_addr: PeerAddress,
     loopback_sender: mpsc::UnboundedSender<HotstuffMessage>,
+    consensus_gossip: ConsensusGossipHandle,
     networking: NetworkingHandle<TariMessagingSpec>,
     msg_logger: TMsgLogger,
 }
@@ -45,12 +46,14 @@ pub struct ConsensusOutboundMessaging<TMsgLogger> {
 impl<TMsgLogger: MessageLogger> ConsensusOutboundMessaging<TMsgLogger> {
     pub fn new(
         loopback_sender: mpsc::UnboundedSender<HotstuffMessage>,
+        consensus_gossip: ConsensusGossipHandle,
         networking: NetworkingHandle<TariMessagingSpec>,
         msg_logger: TMsgLogger,
     ) -> Self {
         Self {
             our_node_addr: (*networking.local_peer_id()).into(),
             loopback_sender,
+            consensus_gossip,
             networking,
             msg_logger,
         }
@@ -101,37 +104,25 @@ impl<TMsgLogger: MessageLogger + Send> tari_consensus::traits::OutboundMessaging
         Ok(())
     }
 
-    async fn multicast<'a, I, T>(&mut self, committee: I, message: T) -> Result<(), OutboundMessagingError>
+    async fn multicast<'a, T>(&mut self, shard_group: ShardGroup, message: T) -> Result<(), OutboundMessagingError>
     where
         Self::Addr: 'a,
-        I: IntoIterator<Item = &'a Self::Addr> + Send,
         T: Into<HotstuffMessage> + Send,
     {
         let message = message.into();
 
-        let (ours, theirs) = committee
-            .into_iter()
-            .partition::<Vec<&Self::Addr>, _>(|x| **x == self.our_node_addr);
-
-        if ours.is_empty() && theirs.is_empty() {
-            return Ok(());
-        }
-
         // send it once to ourselves
-        if !ours.is_empty() {
+        let local_shard_group = self
+            .consensus_gossip
+            .get_local_shard_group()
+            .await
+            .map_err(OutboundMessagingError::from_error)?;
+        if local_shard_group == Some(shard_group) {
             self.send_self(message.clone()).await?;
         }
 
-        for to in &theirs {
-            self.msg_logger
-                .log_outbound_message("multicast", &to.to_string(), message.as_type_str(), "", &message);
-        }
-
-        self.networking
-            .send_multicast(
-                theirs.into_iter().map(|a| a.as_peer_id()).collect::<Vec<_>>(),
-                proto::consensus::HotStuffMessage::from(&message),
-            )
+        self.consensus_gossip
+            .multicast(shard_group, message)
             .await
             .map_err(OutboundMessagingError::from_error)?;
 

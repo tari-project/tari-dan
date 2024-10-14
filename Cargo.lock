@@ -10073,6 +10073,7 @@ dependencies = [
  "tari_rpc_state_sync",
  "tari_shutdown",
  "tari_state_store_sqlite",
+ "tari_swarm",
  "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction",

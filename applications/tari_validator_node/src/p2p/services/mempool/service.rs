@@ -22,12 +22,14 @@
 
 use std::{collections::HashSet, fmt::Display, iter};
 
+use libp2p::{gossipsub, PeerId};
 use log::*;
 use tari_dan_common_types::{optional::Optional, NumPreshards, PeerAddress, ShardGroup, ToSubstateAddress};
-use tari_dan_p2p::{DanMessage, NewTransactionMessage};
+use tari_dan_p2p::{DanMessage, NewTransactionMessage, TariMessagingSpec};
 use tari_dan_storage::{consensus_models::TransactionRecord, StateStore};
 use tari_engine_types::commit_result::RejectReason;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerEvent, EpochManagerReader};
+use tari_networking::NetworkingHandle;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{mpsc, oneshot};
@@ -37,10 +39,7 @@ use super::metrics::PrometheusMempoolMetrics;
 use super::MempoolError;
 use crate::{
     consensus::ConsensusHandle,
-    p2p::services::{
-        mempool::{gossip::MempoolGossip, handle::MempoolRequest},
-        messaging::Gossip,
-    },
+    p2p::services::mempool::{gossip::MempoolGossip, handle::MempoolRequest},
     transaction_validators::TransactionValidationError,
     validator::Validator,
 };
@@ -66,15 +65,16 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
     pub(super) fn new(
         num_preshards: NumPreshards,
         mempool_requests: mpsc::Receiver<MempoolRequest>,
-        gossip: Gossip,
         epoch_manager: EpochManagerHandle<PeerAddress>,
         before_execute_validator: TValidator,
         state_store: SqliteStateStore<PeerAddress>,
         consensus_handle: ConsensusHandle,
+        networking: NetworkingHandle<TariMessagingSpec>,
+        rx_gossip: mpsc::UnboundedReceiver<(PeerId, gossipsub::Message)>,
         #[cfg(feature = "metrics")] metrics: PrometheusMempoolMetrics,
     ) -> Self {
         Self {
-            gossip: MempoolGossip::new(num_preshards, epoch_manager.clone(), gossip),
+            gossip: MempoolGossip::new(num_preshards, epoch_manager.clone(), networking, rx_gossip),
             transactions: Default::default(),
             mempool_requests,
             epoch_manager,

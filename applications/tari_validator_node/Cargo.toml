@@ -42,6 +42,7 @@ tari_state_store_sqlite = { workspace = true }
 tari_networking = { workspace = true }
 tari_rpc_framework = { workspace = true }
 tari_template_builtin = { workspace = true }
+tari_swarm = { workspace = true }
 
 sqlite_message_logger = { workspace = true }
 

@@ -1,4 +1,4 @@
-//  Copyright 2022. The Tari Project
+//  Copyright 2024. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -22,60 +22,39 @@
 
 use libp2p::{gossipsub, PeerId};
 use log::*;
-use tari_dan_common_types::{NumPreshards, PeerAddress};
-use tari_dan_p2p::TariMessagingSpec;
+use tari_dan_common_types::PeerAddress;
+use tari_dan_p2p::{proto, TariMessagingSpec};
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_networking::NetworkingHandle;
-use tari_state_store_sqlite::SqliteStateStore;
-use tari_transaction::Transaction;
 use tokio::{sync::mpsc, task, task::JoinHandle};
 
-#[cfg(feature = "metrics")]
-use super::metrics::PrometheusMempoolMetrics;
-use crate::{
-    consensus::ConsensusHandle,
-    p2p::services::mempool::{handle::MempoolHandle, service::MempoolService},
-    transaction_validators::TransactionValidationError,
-    validator::Validator,
-};
+use crate::p2p::services::consensus_gossip::{service::ConsensusGossipService, ConsensusGossipHandle};
 
 const LOG_TARGET: &str = "tari::dan::validator_node::mempool";
 
-pub fn spawn<TValidator>(
-    num_preshards: NumPreshards,
+pub fn spawn(
     epoch_manager: EpochManagerHandle<PeerAddress>,
-    transaction_validator: TValidator,
-    state_store: SqliteStateStore<PeerAddress>,
-    consensus_handle: ConsensusHandle,
     networking: NetworkingHandle<TariMessagingSpec>,
     rx_gossip: mpsc::UnboundedReceiver<(PeerId, gossipsub::Message)>,
-    #[cfg(feature = "metrics")] metrics_registry: &prometheus::Registry,
-) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
-where
-    TValidator: Validator<Transaction, Context = (), Error = TransactionValidationError> + Send + Sync + 'static,
-{
-    // This channel only needs to be size 1, because each mempool request must wait for a reply and the mempool is
-    // running on a single task and so there is no benefit to buffering multiple requests.
-    let (tx_mempool_request, rx_mempool_request) = mpsc::channel(1);
+) -> (
+    ConsensusGossipHandle,
+    JoinHandle<anyhow::Result<()>>,
+    mpsc::Receiver<(PeerId, proto::consensus::HotStuffMessage)>,
+) {
+    let (tx_consensus_request, rx_consensus_request) = mpsc::channel(10);
+    let (tx_consensus_gossip, rx_consensus_gossip) = mpsc::channel(10);
 
-    #[cfg(feature = "metrics")]
-    let metrics = PrometheusMempoolMetrics::new(metrics_registry);
-    let mempool = MempoolService::new(
-        num_preshards,
-        rx_mempool_request,
+    let consensus_gossip = ConsensusGossipService::new(
+        rx_consensus_request,
         epoch_manager,
-        transaction_validator,
-        state_store,
-        consensus_handle,
         networking,
         rx_gossip,
-        #[cfg(feature = "metrics")]
-        metrics,
+        tx_consensus_gossip,
     );
-    let handle = MempoolHandle::new(tx_mempool_request);
+    let handle = ConsensusGossipHandle::new(tx_consensus_request);
 
-    let join_handle = task::spawn(mempool.run());
-    debug!(target: LOG_TARGET, "Spawning mempool service (task: {:?})", join_handle);
+    let join_handle = task::spawn(consensus_gossip.run());
+    debug!(target: LOG_TARGET, "Spawning consensus gossip service (task: {:?})", join_handle);
 
-    (handle, join_handle)
+    (handle, join_handle, rx_consensus_gossip)
 }

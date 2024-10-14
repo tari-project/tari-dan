@@ -5,5 +5,6 @@ use core::fmt;
 
 pub trait MessageSpec {
     type Message: fmt::Debug + Send;
-    type GossipMessage: fmt::Debug + Send;
+    type TransactionGossipMessage: fmt::Debug + Send;
+    type ConsensusGossipMessage: fmt::Debug + Send;
 }
