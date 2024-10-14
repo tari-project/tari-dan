@@ -91,7 +91,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         Ok(())
     }
 
-    pub fn insert_new_batched<'a, I: IntoIterator<Item=(&'a TransactionRecord, bool)>>(
+    pub fn insert_new_batched<'a, I: IntoIterator<Item = (&'a TransactionRecord, bool)>>(
         &self,
         tx: &mut TStateStore::WriteTransaction<'_>,
         transactions: I,
@@ -179,7 +179,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         Ok(())
     }
 
-    pub fn remove_all<'a, I: IntoIterator<Item=&'a TransactionId>>(
+    pub fn remove_all<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &self,
         tx: &mut TStateStore::WriteTransaction<'_>,
         tx_ids: I,
@@ -652,7 +652,7 @@ impl TransactionPoolRecord {
     pub fn remove_any<'a, TTx, I>(tx: &mut TTx, transaction_ids: I) -> Result<(), TransactionPoolError>
     where
         TTx: StateStoreWriteTransaction,
-        I: IntoIterator<Item=&'a TransactionId>,
+        I: IntoIterator<Item = &'a TransactionId>,
     {
         // TODO(perf): n queries
         for id in transaction_ids {
@@ -667,7 +667,7 @@ impl TransactionPoolRecord {
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError>
     where
         TTx: StateStoreWriteTransaction,
-        I: IntoIterator<Item=&'a TransactionId>,
+        I: IntoIterator<Item = &'a TransactionId>,
     {
         let recs = tx.transaction_pool_remove_all(transaction_ids)?;
         // Clear any related foreign pledges

@@ -48,12 +48,33 @@ use tari_dan_common_types::{
     ValidatorMetadata,
     VersionedSubstateId,
 };
-use tari_dan_storage::consensus_models::{AbortReason, BlockId, Command, Decision, Evidence, ForeignProposal, ForeignProposalAtom, HighQc, LeaderFee, MintConfidentialOutputAtom, QcId, QuorumCertificate, QuorumDecision, SubstateDestroyed, SubstatePledge, SubstatePledges, SubstateRecord, TransactionAtom};
+use tari_dan_storage::consensus_models::{
+    AbortReason,
+    BlockId,
+    Command,
+    Decision,
+    Evidence,
+    ForeignProposal,
+    ForeignProposalAtom,
+    HighQc,
+    LeaderFee,
+    MintConfidentialOutputAtom,
+    QcId,
+    QuorumCertificate,
+    QuorumDecision,
+    SubstateDestroyed,
+    SubstatePledge,
+    SubstatePledges,
+    SubstateRecord,
+    TransactionAtom,
+};
 use tari_engine_types::substate::{SubstateId, SubstateValue};
 use tari_transaction::TransactionId;
 
-use crate::proto::consensus::{DecisionReason, DecisionResult};
-use crate::proto::{self};
+use crate::proto::{
+    consensus::{DecisionReason, DecisionResult},
+    {self},
+};
 // -------------------------------- HotstuffMessage -------------------------------- //
 
 impl From<&HotstuffMessage> for proto::consensus::HotStuffMessage {
@@ -63,20 +84,20 @@ impl From<&HotstuffMessage> for proto::consensus::HotStuffMessage {
             HotstuffMessage::Proposal(msg) => proto::consensus::hot_stuff_message::Message::Proposal(msg.into()),
             HotstuffMessage::ForeignProposal(msg) => {
                 proto::consensus::hot_stuff_message::Message::ForeignProposal(msg.into())
-            }
+            },
             HotstuffMessage::Vote(msg) => proto::consensus::hot_stuff_message::Message::Vote(msg.into()),
             HotstuffMessage::MissingTransactionsRequest(msg) => {
                 proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg.into())
-            }
+            },
             HotstuffMessage::MissingTransactionsResponse(msg) => {
                 proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg.into())
-            }
+            },
             HotstuffMessage::CatchUpSyncRequest(msg) => {
                 proto::consensus::hot_stuff_message::Message::SyncRequest(msg.into())
-            }
+            },
             HotstuffMessage::SyncResponse(msg) => {
                 proto::consensus::hot_stuff_message::Message::SyncResponse(msg.into())
-            }
+            },
         };
         Self { message: Some(message) }
     }
@@ -92,20 +113,20 @@ impl TryFrom<proto::consensus::HotStuffMessage> for HotstuffMessage {
             proto::consensus::hot_stuff_message::Message::Proposal(msg) => HotstuffMessage::Proposal(msg.try_into()?),
             proto::consensus::hot_stuff_message::Message::ForeignProposal(msg) => {
                 HotstuffMessage::ForeignProposal(msg.try_into()?)
-            }
+            },
             proto::consensus::hot_stuff_message::Message::Vote(msg) => HotstuffMessage::Vote(msg.try_into()?),
             proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg) => {
                 HotstuffMessage::MissingTransactionsRequest(msg.try_into()?)
-            }
+            },
             proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg) => {
                 HotstuffMessage::MissingTransactionsResponse(msg.try_into()?)
-            }
+            },
             proto::consensus::hot_stuff_message::Message::SyncRequest(msg) => {
                 HotstuffMessage::CatchUpSyncRequest(msg.try_into()?)
-            }
+            },
             proto::consensus::hot_stuff_message::Message::SyncResponse(msg) => {
                 HotstuffMessage::SyncResponse(msg.try_into()?)
-            }
+            },
         })
     }
 }
@@ -544,10 +565,10 @@ impl From<&Command> for proto::consensus::Command {
             Command::SomeAccept(tx) => proto::consensus::command::Command::SomeAccept(tx.into()),
             Command::ForeignProposal(foreign_proposal) => {
                 proto::consensus::command::Command::ForeignProposal(foreign_proposal.into())
-            }
+            },
             Command::MintConfidentialOutput(atom) => {
                 proto::consensus::command::Command::MintConfidentialOutput(atom.into())
-            }
+            },
             Command::EndEpoch => proto::consensus::command::Command::EndEpoch(true),
         };
 
@@ -571,10 +592,10 @@ impl TryFrom<proto::consensus::Command> for Command {
             proto::consensus::command::Command::SomeAccept(tx) => Command::SomeAccept(tx.try_into()?),
             proto::consensus::command::Command::ForeignProposal(foreign_proposal) => {
                 Command::ForeignProposal(foreign_proposal.try_into()?)
-            }
+            },
             proto::consensus::command::Command::MintConfidentialOutput(atom) => {
                 Command::MintConfidentialOutput(atom.try_into()?)
-            }
+            },
             proto::consensus::command::Command::EndEpoch(_) => Command::EndEpoch,
         })
     }
@@ -691,7 +712,7 @@ impl From<Decision> for proto::consensus::Decision {
                     result: DecisionResult::Abort.into(),
                     reason: proto_reason as i32,
                 }
-            }
+            },
         }
     }
 }

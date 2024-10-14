@@ -6,9 +6,8 @@ use std::time::Duration;
 use tari_engine_types::commit_result::{ExecuteResult, RejectReason};
 use tari_transaction::TransactionId;
 
-use crate::consensus_models::AbortReason;
 use crate::{
-    consensus_models::{BlockId, Decision, VersionedSubstateIdLockIntent},
+    consensus_models::{AbortReason, BlockId, Decision, VersionedSubstateIdLockIntent},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,

@@ -312,7 +312,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
                 req.up_to_epoch.map(|epoch| epoch.into()),
                 sender,
             )
-                .run(),
+            .run(),
         );
 
         Ok(Streaming::new(receiver))
@@ -385,7 +385,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
                 last_state_transition_for_chain,
                 end_epoch,
             )
-                .run(),
+            .run(),
         );
 
         Ok(Streaming::new(receiver))

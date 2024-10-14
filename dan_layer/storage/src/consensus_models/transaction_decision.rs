@@ -1,12 +1,13 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fmt::{Display, Formatter},
     str::FromStr,
 };
+
+use serde::{Deserialize, Serialize};
 use strum::ParseError;
 use strum_macros::{AsRefStr, EnumString};
 use tari_engine_types::commit_result::{RejectReason, TransactionResult};
@@ -30,18 +31,7 @@ pub enum Decision {
     Abort(AbortReason),
 }
 
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    Deserialize,
-    Serialize,
-    AsRefStr,
-    EnumString
-)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize, AsRefStr, EnumString)]
 #[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../../bindings/src/types/"))]
 pub enum AbortReason {
     None,
@@ -110,27 +100,23 @@ impl FromStr for Decision {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Commit" => {
-                Ok(Decision::Commit)
-            }
-            "Abort" => { // to stay compatible with previous messages
+            "Commit" => Ok(Decision::Commit),
+            "Abort" => {
+                // to stay compatible with previous messages
                 Ok(Decision::Abort(AbortReason::None))
-            }
+            },
             _ => {
                 // abort with reason
                 if s.starts_with("Abort(") {
                     let mut reason = s.replace("Abort(", "");
                     reason.pop(); // remove last char ')'
-                    return Ok(
-                        Decision::Abort(
-                            AbortReason::from_str(reason.as_str())
-                                .map_err(|error| FromStrConversionError::InvalidAbortReason(s.to_string(), error))?
-                        )
-                    );
+                    return Ok(Decision::Abort(AbortReason::from_str(reason.as_str()).map_err(
+                        |error| FromStrConversionError::InvalidAbortReason(s.to_string(), error),
+                    )?));
                 }
 
                 Err(FromStrConversionError::InvalidDecision(s.to_string()))
-            }
+            },
         }
     }
 }

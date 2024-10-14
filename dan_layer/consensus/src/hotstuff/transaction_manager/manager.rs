@@ -51,7 +51,7 @@ pub struct ConsensusTransactionManager<TExecutor, TStateStore> {
 }
 
 impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
-ConsensusTransactionManager<TExecutor, TStateStore>
+    ConsensusTransactionManager<TExecutor, TStateStore>
 {
     pub fn new(executor: TExecutor) -> Self {
         Self {
@@ -81,12 +81,12 @@ ConsensusTransactionManager<TExecutor, TStateStore>
                     store.lock_assert_is_up(&id)?;
                     info!(target: LOG_TARGET, "Resolved LOCAL substate: {id}");
                     resolved_substates.insert(id.into(), version);
-                }
+                },
                 None => {
                     let version = store.get_latest_version(&input.substate_id)?;
                     info!(target: LOG_TARGET, "Resolved LOCAL unversioned substate: {input}");
                     resolved_substates.insert(input, version);
-                }
+                },
             }
         }
         Ok((resolved_substates, non_local_inputs))
@@ -203,7 +203,7 @@ ConsensusTransactionManager<TExecutor, TStateStore>
                         LockStatus::default(),
                     ));
                 }
-            }
+            },
         };
 
         if local_versions.is_empty() && non_local_inputs.is_empty() {
@@ -270,14 +270,14 @@ ConsensusTransactionManager<TExecutor, TStateStore>
                             all_outputs,
                             lock_status,
                         ))
-                    }
+                    },
                     Decision::Abort(reason) => {
                         // CASE: Multishard transaction, but all inputs are local, and we're aborting
                         // All outputs are local, and we're aborting, so this is a local-only transaction since no
                         // outputs need to be created
                         warn!(target: LOG_TARGET, "⚠️ PREPARE: Aborted: {reason:?}");
                         Ok(PreparedTransaction::new_local_early_abort(execution))
-                    }
+                    },
                 }
             }
         } else {

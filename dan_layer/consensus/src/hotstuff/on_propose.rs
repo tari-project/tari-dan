@@ -6,26 +6,6 @@ use std::{
     num::NonZeroU64,
 };
 
-use crate::{
-    hotstuff::{
-        block_change_set::ProposedBlockChangeSet,
-        calculate_state_merkle_root,
-        error::HotStuffError,
-        filter_diff_for_committee,
-        substate_store::PendingSubstateStore,
-        transaction_manager::{
-            ConsensusTransactionManager,
-            LocalPreparedTransaction,
-            PledgedTransaction,
-            PreparedTransaction,
-            TransactionLockConflicts,
-        },
-        HotstuffConfig,
-    },
-    messages::{HotstuffMessage, ProposalMessage},
-    tracing::TraceTimer,
-    traits::{ConsensusSpec, OutboundMessaging, ValidatorSignatureService, WriteableSubstateStore},
-};
 use indexmap::IndexMap;
 use log::*;
 use tari_common_types::types::{FixedHash, PublicKey};
@@ -39,9 +19,9 @@ use tari_dan_common_types::{
     ToSubstateAddress,
     VersionedSubstateId,
 };
-use tari_dan_storage::consensus_models::AbortReason;
 use tari_dan_storage::{
     consensus_models::{
+        AbortReason,
         Block,
         BlockId,
         BlockTransactionExecution,
@@ -72,6 +52,27 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::TransactionId;
 use tokio::task;
 
+use crate::{
+    hotstuff::{
+        block_change_set::ProposedBlockChangeSet,
+        calculate_state_merkle_root,
+        error::HotStuffError,
+        filter_diff_for_committee,
+        substate_store::PendingSubstateStore,
+        transaction_manager::{
+            ConsensusTransactionManager,
+            LocalPreparedTransaction,
+            PledgedTransaction,
+            PreparedTransaction,
+            TransactionLockConflicts,
+        },
+        HotstuffConfig,
+    },
+    messages::{HotstuffMessage, ProposalMessage},
+    tracing::TraceTimer,
+    traits::{ConsensusSpec, OutboundMessaging, ValidatorSignatureService, WriteableSubstateStore},
+};
+
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_local_propose";
 
 struct NextBlock {
@@ -93,8 +94,7 @@ pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
 }
 
 impl<TConsensusSpec> OnPropose<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec,
+where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         config: HotstuffConfig,
@@ -202,7 +202,7 @@ where
                 Ok::<_, HotStuffError>((next_block, foreign_proposals))
             })
         })
-            .await??;
+        .await??;
 
         info!(
             target: LOG_TARGET,
@@ -291,7 +291,7 @@ where
             // (COMMIT/ABORT)
             TransactionPoolStage::LocalAccepted => {
                 self.accept_transaction(tx, start_of_chain_id, &mut tx_rec, local_committee_info, substate_store)
-            }
+            },
             // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes
             // agreed with the Accept, more (possibly empty) blocks with QCs will be
             // proposed and accepted, otherwise the Accept block will not be committed.
@@ -302,7 +302,7 @@ where
                     "It is invalid for TransactionPoolStage::{} to be ready to propose",
                     tx_rec.current_stage()
                 )
-            }
+            },
         }
     }
 
@@ -688,7 +688,7 @@ where
 
                 let atom = tx_rec.get_current_transaction_atom();
                 Command::LocalOnly(atom)
-            }
+            },
             PreparedTransaction::LocalOnly(LocalPreparedTransaction::EarlyAbort { execution }) => {
                 info!(
                     target: LOG_TARGET,
@@ -711,7 +711,7 @@ where
                 executed_transactions.insert(*tx_rec.transaction_id(), execution);
                 let atom = tx_rec.get_current_transaction_atom();
                 Command::LocalOnly(atom)
-            }
+            },
 
             PreparedTransaction::MultiShard(multishard) => {
                 match multishard.current_decision() {
@@ -734,7 +734,7 @@ where
                                 .evidence_mut()
                                 .update(&multishard.to_initial_evidence(local_committee_info));
                         }
-                    }
+                    },
                     Decision::Abort(reason) => {
                         warn!(target: LOG_TARGET, "Prepare transaction abort: {reason:?}");
                         // CASE: The transaction was ABORTed due to a lock conflict
@@ -745,7 +745,7 @@ where
                             &execution,
                         );
                         executed_transactions.insert(*tx_rec.transaction_id(), execution);
-                    }
+                    },
                 }
 
                 info!(
@@ -757,7 +757,7 @@ where
 
                 let atom = tx_rec.get_local_transaction_atom();
                 Command::Prepare(atom)
-            }
+            },
         };
 
         Ok(Some(command))
