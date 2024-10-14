@@ -148,7 +148,7 @@ export default function TransactionDetails() {
     }
     const {result, transaction, finalized_time, final_decision} = state;
     const decision = typeof final_decision === 'object' ? "Abort" : final_decision;
-    // TODO: add abort reason to
+    const abortReason = final_decision !== null && typeof final_decision === 'object' ? final_decision.Abort : null;
     return (
         <>
             <Grid item xs={12} md={12} lg={12}>
@@ -186,9 +186,12 @@ export default function TransactionDetails() {
                                                             <DataTableCell>
                                                                 <StatusChip status={decision}/>
                                                             </DataTableCell>
-                                                            <DataTableCell>
-                                                                TODO: abort status here if any
-                                                            </DataTableCell>
+                                                        </TableRow>
+                                                    )}
+                                                    {abortReason && (
+                                                        <TableRow>
+                                                            <TableCell>Abort reason</TableCell>
+                                                            <DataTableCell>{abortReason}</DataTableCell>
                                                         </TableRow>
                                                     )}
                                                     <TableRow>
