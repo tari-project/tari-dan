@@ -110,7 +110,7 @@ async fn single_transaction_abort() {
     }
 
     test.assert_all_validators_at_same_height().await;
-    test.assert_all_validators_have_decision(tx1.id(), Decision::Abort(AbortReason::None))
+    test.assert_all_validators_have_decision(tx1.id(), Decision::Abort(AbortReason::ExecutionFailure))
         .await;
 
     test.assert_clean_shutdown().await;
@@ -409,7 +409,7 @@ async fn foreign_shard_group_decides_to_abort() {
     }
 
     test.assert_all_validators_at_same_height().await;
-    test.assert_all_validators_have_decision(tx2.id(), Decision::Abort(AbortReason::None))
+    test.assert_all_validators_have_decision(tx2.id(), Decision::Abort(AbortReason::ExecutionFailure))
         .await;
 
     test.assert_clean_shutdown().await;
@@ -612,7 +612,7 @@ async fn multishard_output_conflict_abort() {
     test.assert_all_validators_at_same_height().await;
     test.assert_all_validators_have_decision(sorted_tx_ids[0], Decision::Commit)
         .await;
-    test.assert_all_validators_have_decision(sorted_tx_ids[1], Decision::Abort(AbortReason::None))
+    test.assert_all_validators_have_decision(sorted_tx_ids[1], Decision::Abort(AbortReason::LockOutputsFailed))
         .await;
     test.assert_all_validators_committed();
 
@@ -735,7 +735,7 @@ async fn multishard_inputs_from_previous_outputs() {
     test.assert_all_validators_at_same_height().await;
     test.assert_all_validators_have_decision(tx1.id(), Decision::Commit)
         .await;
-    test.assert_all_validators_have_decision(tx2.id(), Decision::Abort(AbortReason::None))
+    test.assert_all_validators_have_decision(tx2.id(), Decision::Abort(AbortReason::OneOrMoreInputsNotFound))
         .await;
     test.assert_all_validators_committed();
 
