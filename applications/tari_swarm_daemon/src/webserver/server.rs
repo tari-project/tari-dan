@@ -105,6 +105,7 @@ async fn json_rpc_handler(Extension(context): Extension<Arc<HandlerContext>>, va
         "get_stdout" => call_handler(context, value, rpc::logs::list_stdout_files).await,
         "get_file" => call_handler(context, value, rpc::logs::get_log_file).await,
         "mine" => call_handler(context, value, rpc::miners::mine).await,
+        "start_mining" => call_handler(context, value, rpc::miners::mine).await,
         "add_base_node" | "add_minotari_node" => call_handler(context, value, rpc::minotari_nodes::create).await,
         "add_base_wallet" | "add_minotari_wallet" => call_handler(context, value, rpc::minotari_wallets::create).await,
         "add_asset_wallet" | "add_wallet_daemon" => call_handler(context, value, rpc::dan_wallets::create).await,
@@ -129,17 +130,17 @@ async fn call_handler<H, TReq, TResp>(
 where
     TReq: DeserializeOwned,
     TResp: Serialize,
-    H: for<'a> JrpcHandler<'a, TReq, Response = TResp>,
+    H: for<'a> JrpcHandler<'a, TReq, Response=TResp>,
 {
     let answer_id = value.get_answer_id();
     let params = value.parse_params().map_err(|e| {
         match &e.result {
             JsonRpcAnswer::Result(_) => {
                 unreachable!("parse_params() error should not return a result")
-            },
+            }
             JsonRpcAnswer::Error(e) => {
                 warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);
-            },
+            }
         }
         e
     })?;
