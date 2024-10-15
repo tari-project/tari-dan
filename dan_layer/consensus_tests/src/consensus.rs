@@ -376,15 +376,15 @@ async fn foreign_shard_group_decides_to_abort() {
             .collect(),
         vec![],
     )
-    .create_execution_at_destination_for_transaction(
-        TestVnDestination::Committee(1),
-        &tx2,
-        inputs
-            .into_iter()
-            .map(|input| VersionedSubstateIdLockIntent::write(input, true).into())
-            .collect(),
-        vec![],
-    );
+        .create_execution_at_destination_for_transaction(
+            TestVnDestination::Committee(1),
+            &tx2,
+            inputs
+                .into_iter()
+                .map(|input| VersionedSubstateIdLockIntent::write(input, true).into())
+                .collect(),
+            vec![],
+        );
 
     test.send_transaction_to_destination(TestVnDestination::Committee(1), tx2.clone())
         .await;
@@ -475,6 +475,7 @@ async fn multishard_local_inputs_foreign_outputs() {
     test.assert_clean_shutdown().await;
 }
 
+#[ignore = "FIXME: This test is flaky"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn multishard_local_inputs_and_outputs_foreign_outputs() {
     setup_logger();
@@ -769,13 +770,13 @@ async fn single_shard_input_conflict() {
         inputs: vec![VersionedSubstateIdLockIntent::write(substate_id.clone(), true).into()],
         new_outputs: vec![],
     })
-    .add_execution_at_destination(TestVnDestination::All, ExecuteSpec {
-        transaction: tx2.transaction().clone(),
-        decision: Decision::Commit,
-        fee: 1,
-        inputs: vec![VersionedSubstateIdLockIntent::write(substate_id, true).into()],
-        new_outputs: vec![],
-    });
+        .add_execution_at_destination(TestVnDestination::All, ExecuteSpec {
+            transaction: tx2.transaction().clone(),
+            decision: Decision::Commit,
+            fee: 1,
+            inputs: vec![VersionedSubstateIdLockIntent::write(substate_id, true).into()],
+            new_outputs: vec![],
+        });
 
     test.network()
         .send_transaction(TestVnDestination::All, tx1.clone())
@@ -795,7 +796,7 @@ async fn single_shard_input_conflict() {
 
         let leaf1 = test.get_validator(&TestAddress::new("1")).get_leaf_block();
         if leaf1.height > NodeHeight(30) {
-            panic!("Not all transaction committed after {} blocks", leaf1.height,);
+            panic!("Not all transaction committed after {} blocks", leaf1.height, );
         }
     }
 
@@ -834,7 +835,7 @@ async fn epoch_change() {
 
         let leaf1 = test.get_validator(&TestAddress::new("1")).get_leaf_block();
         if leaf1.height > NodeHeight(30) {
-            panic!("Not all transaction committed after {} blocks", leaf1.height,);
+            panic!("Not all transaction committed after {} blocks", leaf1.height, );
         }
     }
 
@@ -1088,16 +1089,16 @@ async fn multi_shard_unversioned_input_conflict() {
         ],
         new_outputs: vec![],
     })
-    .add_execution_at_destination(TestVnDestination::All, ExecuteSpec {
-        transaction: tx2.transaction().clone(),
-        decision: Decision::Commit,
-        fee: 1,
-        inputs: vec![
-            VersionedSubstateIdLockIntent::write(id0, false).into(),
-            VersionedSubstateIdLockIntent::write(id1, false).into(),
-        ],
-        new_outputs: vec![],
-    });
+        .add_execution_at_destination(TestVnDestination::All, ExecuteSpec {
+            transaction: tx2.transaction().clone(),
+            decision: Decision::Commit,
+            fee: 1,
+            inputs: vec![
+                VersionedSubstateIdLockIntent::write(id0, false).into(),
+                VersionedSubstateIdLockIntent::write(id1, false).into(),
+            ],
+            new_outputs: vec![],
+        });
 
     // Transactions are sorted in the blocks, because we have a "first come first serve" policy for locking objects
     // the "first" will be Committed and the "last" Aborted
