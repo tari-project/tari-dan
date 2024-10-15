@@ -673,7 +673,7 @@ async fn single_shard_inputs_from_previous_outputs() {
     } else {
         test.assert_all_validators_have_decision(tx1.id(), Decision::Commit)
             .await;
-        test.assert_all_validators_have_decision(tx2.id(), Decision::Abort(AbortReason::None))
+        test.assert_all_validators_have_decision(tx2.id(), Decision::Abort(AbortReason::OneOrMoreInputsNotFound))
             .await;
     }
 
