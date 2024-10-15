@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use crate::{config::Config, process_manager::ProcessManagerHandle};
+use anyhow::bail;
 use std::sync::Arc;
 use tari_shutdown::Shutdown;
 use tokio::sync::RwLock;
@@ -26,7 +27,30 @@ impl HandlerContext {
         &self.pm_handle
     }
 
-    pub fn change_mining_shutdown(&self, shutdown: Shutdown) {
-        // TODO: continue
+    pub async fn start_mining(&self, shutdown: Shutdown) -> anyhow::Result<()> {
+        let lock = self.mining_shutdown.read().await;
+        if lock.is_none() || lock.as_ref().is_some_and(|curr_shutdown| curr_shutdown.is_triggered()) {
+            drop(lock);
+            let mut lock = self.mining_shutdown.write().await;
+            if lock.is_none() || lock.as_ref().is_some_and(|curr_shutdown| curr_shutdown.is_triggered()) {
+                *lock = Some(shutdown);
+                return Ok(());
+            }
+        }
+
+        bail!("Mining already running!")
+    }
+
+    pub async fn stop_mining(&self) {
+        let mut lock = self.mining_shutdown.write().await;
+        if let Some(curr_shutdown) = lock.as_mut() {
+            curr_shutdown.trigger();
+        }
+        *lock = None;
+    }
+
+    pub async fn is_mining(&self) -> bool {
+        let lock = self.mining_shutdown.read().await;
+        lock.as_ref().is_some_and(|curr_shutdown| !curr_shutdown.is_triggered())
     }
 }

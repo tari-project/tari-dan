@@ -387,6 +387,7 @@ export default function Main() {
     const [autoRefresh, setAutoRefresh] = useState(true);
     const [horizontal, setHorizontal] = useState(false);
     const [instances, setInstances] = useState<any>([]);
+    const [isMining, setIsMining] = useState<boolean>(false);
 
     const getInfo = () => {
         jsonRpc("vns")
@@ -472,6 +473,10 @@ export default function Main() {
             setStdoutLogs((state: any) => ({...state, miner: resp}));
         });
         jsonRpc("list_instances", {by_type: null}).then(({instances}) => setInstances(instances));
+        jsonRpc("is_mining", {}).then((resp: any) => {
+            // TODO: fix this
+            setIsMining(resp.result);
+        });
     };
 
     useEffect(getInfo, []);
@@ -519,8 +524,10 @@ export default function Main() {
                           stdoutLogs={stdoutLogs?.miner} showLogs={showLogs} horizontal={horizontal}>
                     <button onClick={() => jsonRpc("mine", {num_blocks: 1})}>Mine</button>
                     {/*TODO: add an input box here to set interval_seconds*/}
-                    <button onClick={() => jsonRpc("start_mining", {interval_seconds: 10})}>Start Mining</button>
-                    <button onClick={() => jsonRpc("stop_mining", {})}>Stop Mining</button>
+                    <button onClick={() => jsonRpc("start_mining", {interval_seconds: 1})} disabled={isMining}>
+                        Start Mining
+                    </button>
+                    <button onClick={() => jsonRpc("stop_mining", {})} disabled={!isMining}>Stop Mining</button>
                 </ShowInfo>
             </div>
             <div>
