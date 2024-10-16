@@ -467,14 +467,14 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             "SELECT COUNT(distinct public_key) as cnt FROM validator_nodes WHERE start_epoch <= ? AND end_epoch >= ? \
              AND sidechain_id = ?",
         )
-        .bind::<BigInt, _>(epoch.as_u64() as i64)
-        .bind::<BigInt, _>(epoch.as_u64() as i64)
-        .bind::<diesel::sql_types::Binary, _>(db_sidechain_id)
-        .get_result::<Count>(tx.connection())
-        .map_err(|source| SqliteStorageError::DieselError {
-            source,
-            operation: "count_validator_nodes".to_string(),
-        })?;
+            .bind::<BigInt, _>(epoch.as_u64() as i64)
+            .bind::<BigInt, _>(epoch.as_u64() as i64)
+            .bind::<diesel::sql_types::Binary, _>(db_sidechain_id)
+            .get_result::<Count>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "count_validator_nodes".to_string(),
+            })?;
 
         Ok(count.cnt as u64)
     }

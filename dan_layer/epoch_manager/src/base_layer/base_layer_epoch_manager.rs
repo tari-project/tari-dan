@@ -60,7 +60,7 @@ pub struct BaseLayerEpochManager<TGlobalStore, TBaseNodeClient> {
 }
 
 impl<TAddr: NodeAddressable + DerivableFromPublicKey>
-    BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
+BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
 {
     pub fn new(
         config: EpochManagerConfig,
@@ -130,11 +130,16 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(())
     }
 
-    fn assign_validators_for_epoch(&mut self, epoch: Epoch) -> Result<(), EpochManagerError> {
+    /// Assigns validators for the given epoch (makes them active) from the database.
+    /// Max number of validators must be passed to limit the number of validators to make active in the given epoch.
+    fn assign_validators_for_epoch(&mut self, epoch: Epoch, max_validators_to_activate: i64) -> Result<(), EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_nodes = self.global_db.validator_nodes(&mut tx);
 
         let vns = validator_nodes.get_all_within_epoch(epoch, self.config.validator_node_sidechain_id.as_ref())?;
+
+        // TODO: continue
+        // let vns_to_activate = vns.as_slice().dra;
 
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
 
