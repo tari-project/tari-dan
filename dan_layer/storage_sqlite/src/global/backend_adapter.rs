@@ -1,3 +1,7 @@
+use diesel::{sql_query, sql_types::{BigInt, Bigint}, BoolExpressionMethods, ExpressionMethods, JoinOnDsl, NullableExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection, SqliteExpressionMethods};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
+use serde::{de::DeserializeOwned, Serialize};
+use std::ops::Add;
 //  Copyright 2022. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
@@ -27,20 +31,6 @@ use std::{
     ops::RangeInclusive,
     sync::{Arc, Mutex},
 };
-
-use diesel::{
-    sql_query,
-    sql_types::{BigInt, Bigint},
-    ExpressionMethods,
-    JoinOnDsl,
-    NullableExpressionMethods,
-    OptionalExtension,
-    QueryDsl,
-    RunQueryDsl,
-    SqliteConnection,
-};
-use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
-use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
     committee::Committee,
@@ -815,6 +805,24 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             Some(bmt) => Ok(Some(serde_json::from_slice(&bmt.bmt)?)),
             None => Ok(None),
         }
+    }
+
+    fn increment_vn_start_end_epochs(&self, tx: &mut Self::DbTransaction<'_>, vn_addresses: Vec<String>) -> Result<(), Self::Error> {
+        use crate::global::schema::validator_nodes;
+
+        let _ = diesel::update(validator_nodes::table)
+            .filter(validator_nodes::address.eq_any(vn_addresses.clone()))
+            .set((
+                validator_nodes::start_epoch.eq(validator_nodes::start_epoch + 1),
+                validator_nodes::end_epoch.eq(validator_nodes::end_epoch + 1)
+            ))
+            .execute(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: format!("increment_vn_start_end_epochs({:?})", vn_addresses),
+            })?;
+
+        Ok(())
     }
 }
 

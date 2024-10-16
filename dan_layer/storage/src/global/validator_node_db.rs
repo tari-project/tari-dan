@@ -143,4 +143,14 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
             .validator_nodes_set_committee_shard(self.tx, substate_address, shard_group, sidechain_id, epoch)
             .map_err(TGlobalDbAdapter::Error::into)
     }
+
+    /// Set new start/end epoch for the given validator nodes to let them available in the next epoch.
+    pub fn increment_vn_start_end_epochs(
+        &mut self,
+        vn_addresses: Vec<String>,
+    ) -> Result<(), TGlobalDbAdapter::Error> {
+        self.backend
+            .increment_vn_start_end_epochs(self.tx, vn_addresses)
+            .map_err(TGlobalDbAdapter::Error::into)
+    }
 }

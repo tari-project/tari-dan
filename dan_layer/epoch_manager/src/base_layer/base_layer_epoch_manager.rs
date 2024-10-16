@@ -125,32 +125,43 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
         // persist the epoch data including the validator node set
         self.insert_current_epoch(epoch, epoch_header)?;
         self.update_base_layer_consensus_constants(base_layer_constants)?;
-        self.assign_validators_for_epoch(epoch)?;
+        self.assign_validators_for_epoch(epoch, 2)?; // TODO: use value from `base_layer_constants`
 
         Ok(())
     }
 
     /// Assigns validators for the given epoch (makes them active) from the database.
     /// Max number of validators must be passed to limit the number of validators to make active in the given epoch.
-    fn assign_validators_for_epoch(&mut self, epoch: Epoch, max_validators_to_activate: i64) -> Result<(), EpochManagerError> {
+    fn assign_validators_for_epoch(&mut self, epoch: Epoch, max_validators_to_activate: usize) -> Result<(), EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_nodes = self.global_db.validator_nodes(&mut tx);
 
+        // TODO: fix logic
+        // TODO: collect all vns from `committees` table and exclude them from list
         let vns = validator_nodes.get_all_within_epoch(epoch, self.config.validator_node_sidechain_id.as_ref())?;
-
-        // TODO: continue
-        // let vns_to_activate = vns.as_slice().dra;
 
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
 
-        for vn in &vns {
+        // activate validator nodes by adding to committees
+        let mut activated_validators = vec![];
+        for vn in vns.iter().take(max_validators_to_activate) {
             validator_nodes.set_committee_shard(
                 vn.shard_key,
                 vn.shard_key.to_shard_group(self.config.num_preshards, num_committees),
                 self.config.validator_node_sidechain_id.as_ref(),
                 epoch,
             )?;
+            activated_validators.push(vn.address.to_string());
         }
+
+        // updating all other non-activated, but registered validators' start/end epoch
+        validator_nodes.increment_vn_start_end_epochs(
+            vns.iter()
+                .filter(|vn| !activated_validators.contains(&vn.address.to_string()))
+                .map(|vn| vn.address.to_string())
+                .collect()
+        )?;
+
         tx.commit()?;
         if let Some(vn) = vns.iter().find(|vn| vn.public_key == self.node_public_key) {
             self.publish_event(EpochManagerEvent::ThisValidatorIsRegistered {

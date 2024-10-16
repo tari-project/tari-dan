@@ -180,4 +180,10 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
     ) -> Result<Option<ValidatorNodeBalancedMerkleTree>, Self::Error>;
+
+    fn increment_vn_start_end_epochs(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        vn_addresses: Vec<String>,
+    ) -> Result<(), Self::Error>;
 }
