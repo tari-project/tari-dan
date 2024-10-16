@@ -1,13 +1,14 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use crate::webserver::context::HandlerContext;
-use log::warn;
-use nix::libc::select;
-use serde::{Deserialize, Serialize};
 use std::time::Duration;
+
+use log::warn;
+use serde::{Deserialize, Serialize};
 use tari_shutdown::Shutdown;
 use tokio::select;
+
+use crate::webserver::context::HandlerContext;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MineRequest {
@@ -30,7 +31,10 @@ pub struct StartMiningRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartMiningResponse {}
 
-pub async fn start_mining(context: &HandlerContext, req: StartMiningRequest) -> Result<StartMiningResponse, anyhow::Error> {
+pub async fn start_mining(
+    context: &HandlerContext,
+    req: StartMiningRequest,
+) -> Result<StartMiningResponse, anyhow::Error> {
     let shutdown = Shutdown::new();
     context.start_mining(shutdown.clone()).await?;
 
@@ -65,11 +69,9 @@ pub struct IsMiningResponse {
 }
 
 pub async fn is_mining(context: &HandlerContext, _req: IsMiningRequest) -> Result<IsMiningResponse, anyhow::Error> {
-    Ok(
-        IsMiningResponse {
-            result: context.is_mining().await,
-        }
-    )
+    Ok(IsMiningResponse {
+        result: context.is_mining().await,
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,7 +82,10 @@ pub struct StopMiningResponse {
     result: bool,
 }
 
-pub async fn stop_mining(context: &HandlerContext, _req: StopMiningRequest) -> Result<StopMiningResponse, anyhow::Error> {
+pub async fn stop_mining(
+    context: &HandlerContext,
+    _req: StopMiningRequest,
+) -> Result<StopMiningResponse, anyhow::Error> {
     context.stop_mining().await;
     Ok(StopMiningResponse { result: true })
 }

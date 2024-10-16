@@ -132,17 +132,17 @@ async fn call_handler<H, TReq, TResp>(
 where
     TReq: DeserializeOwned,
     TResp: Serialize,
-    H: for<'a> JrpcHandler<'a, TReq, Response=TResp>,
+    H: for<'a> JrpcHandler<'a, TReq, Response = TResp>,
 {
     let answer_id = value.get_answer_id();
     let params = value.parse_params().map_err(|e| {
         match &e.result {
             JsonRpcAnswer::Result(_) => {
                 unreachable!("parse_params() error should not return a result")
-            }
+            },
             JsonRpcAnswer::Error(e) => {
                 warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);
-            }
+            },
         }
         e
     })?;

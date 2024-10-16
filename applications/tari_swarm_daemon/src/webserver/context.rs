@@ -1,11 +1,13 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use crate::{config::Config, process_manager::ProcessManagerHandle};
-use anyhow::bail;
 use std::sync::Arc;
+
+use anyhow::bail;
 use tari_shutdown::Shutdown;
 use tokio::sync::RwLock;
+
+use crate::{config::Config, process_manager::ProcessManagerHandle};
 
 #[derive(Debug, Clone)]
 pub struct HandlerContext {
@@ -16,7 +18,11 @@ pub struct HandlerContext {
 
 impl HandlerContext {
     pub fn new(config: Config, pm_handle: ProcessManagerHandle) -> Self {
-        Self { config, pm_handle, mining_shutdown: Arc::new(RwLock::new(None)) }
+        Self {
+            config,
+            pm_handle,
+            mining_shutdown: Arc::new(RwLock::new(None)),
+        }
     }
 
     pub fn config(&self) -> &Config {

@@ -388,6 +388,7 @@ export default function Main() {
     const [horizontal, setHorizontal] = useState(false);
     const [instances, setInstances] = useState<any>([]);
     const [isMining, setIsMining] = useState<boolean>(false);
+    const [miningInterval, setMiningInterval] = useState<number>(120);
 
     const getInfo = () => {
         jsonRpc("vns")
@@ -473,8 +474,7 @@ export default function Main() {
             setStdoutLogs((state: any) => ({...state, miner: resp}));
         });
         jsonRpc("list_instances", {by_type: null}).then(({instances}) => setInstances(instances));
-        jsonRpc("is_mining", {}).then((resp: any) => {
-            // TODO: fix this
+        jsonRpc("is_mining", {}).then((resp: { result: boolean }) => {
             setIsMining(resp.result);
         });
     };
@@ -523,11 +523,21 @@ export default function Main() {
                 <ShowInfo executable={Executable.Miner} name="miner" logs={logs?.miner}
                           stdoutLogs={stdoutLogs?.miner} showLogs={showLogs} horizontal={horizontal}>
                     <button onClick={() => jsonRpc("mine", {num_blocks: 1})}>Mine</button>
-                    {/*TODO: add an input box here to set interval_seconds*/}
-                    <button onClick={() => jsonRpc("start_mining", {interval_seconds: 1})} disabled={isMining}>
+                    <h3>Periodic Mining</h3>
+                    <div>
+                        <input type="number" placeholder="Mining interval" disabled={isMining}
+                               onChange={(e) => setMiningInterval(Number(e.target.value))}
+                               value={miningInterval}/>sec/block
+                    </div>
+                    <br/>
+                    <button
+                        onClick={() => jsonRpc("start_mining", {interval_seconds: miningInterval}).then((_) => getInfo())}
+                        disabled={isMining}>
                         Start Mining
                     </button>
-                    <button onClick={() => jsonRpc("stop_mining", {})} disabled={!isMining}>Stop Mining</button>
+                    <button onClick={() => jsonRpc("stop_mining", {}).then((_) => getInfo())}
+                            disabled={!isMining}>Stop Mining
+                    </button>
                 </ShowInfo>
             </div>
             <div>
