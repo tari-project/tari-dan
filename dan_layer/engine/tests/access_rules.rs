@@ -1197,44 +1197,57 @@ mod resource_access_rules {
 }
 
 mod rules_macro {
-    use tari_template_lib::{auth::{AccessRule, RequireRule, RestrictedAccessRule, RuleRequirement}, crypto::RistrettoPublicKeyBytes, models::{ComponentAddress, NonFungibleAddress, ObjectKey, ResourceAddress, TemplateAddress}, rules};
+    use tari_template_lib::{
+        auth::{AccessRule, RequireRule, RestrictedAccessRule, RuleRequirement},
+        crypto::RistrettoPublicKeyBytes,
+        models::{ComponentAddress, NonFungibleAddress, ObjectKey, ResourceAddress, TemplateAddress},
+        rules,
+    };
 
     #[test]
     fn it_builds_correct_access_rules() {
-    // allow all
-    let rule = rules!( allow_all );
-    assert_eq!(rule, AccessRule::AllowAll);
+        // allow all
+        let rule = rules!(allow_all);
+        assert_eq!(rule, AccessRule::AllowAll);
 
-    // deny all
-    let rule = rules!( deny_all );
-    assert_eq!(rule, AccessRule::DenyAll);
+        // deny all
+        let rule = rules!(deny_all);
+        assert_eq!(rule, AccessRule::DenyAll);
 
-    // restricted to resource address
-    let resource_address = ResourceAddress::new(ObjectKey::default());
-    let rule = rules!( resource(resource_address) );
-    assert_eq!(rule, access_rule_from_requirement(RuleRequirement::Resource(resource_address)));
-    
-    // restricted to component
-    let component_address = ComponentAddress::new(ObjectKey::default());
-    let rule = rules!( component(component_address) );
-    assert_eq!(rule, access_rule_from_requirement(RuleRequirement::ScopedToComponent(component_address)));
+        // restricted to resource address
+        let resource_address = ResourceAddress::new(ObjectKey::default());
+        let rule = rules!(resource(resource_address));
+        assert_eq!(
+            rule,
+            access_rule_from_requirement(RuleRequirement::Resource(resource_address))
+        );
 
-    // restricted to template
-    let template_address = TemplateAddress::default();
-    let rule = rules!( template(template_address) );
-    assert_eq!(rule, access_rule_from_requirement(RuleRequirement::ScopedToTemplate(template_address)));
+        // restricted to component
+        let component_address = ComponentAddress::new(ObjectKey::default());
+        let rule = rules!(component(component_address));
+        assert_eq!(
+            rule,
+            access_rule_from_requirement(RuleRequirement::ScopedToComponent(component_address))
+        );
 
-    // restricted to non fungible
-    let non_fungible_address = NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::default());
-    let rule = rules!( non_fungible(non_fungible_address.clone()) );
-    assert_eq!(rule, access_rule_from_requirement(RuleRequirement::NonFungibleAddress(non_fungible_address)));
-}
+        // restricted to template
+        let template_address = TemplateAddress::default();
+        let rule = rules!(template(template_address));
+        assert_eq!(
+            rule,
+            access_rule_from_requirement(RuleRequirement::ScopedToTemplate(template_address))
+        );
 
-fn access_rule_from_requirement(requirement: RuleRequirement) -> AccessRule {
-    AccessRule::Restricted(
-        RestrictedAccessRule::Require(
-            RequireRule::Require(
-               requirement
-    )))
-}
+        // restricted to non fungible
+        let non_fungible_address = NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::default());
+        let rule = rules!(non_fungible(non_fungible_address.clone()));
+        assert_eq!(
+            rule,
+            access_rule_from_requirement(RuleRequirement::NonFungibleAddress(non_fungible_address))
+        );
+    }
+
+    fn access_rule_from_requirement(requirement: RuleRequirement) -> AccessRule {
+        AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(requirement)))
+    }
 }

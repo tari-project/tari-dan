@@ -6,7 +6,7 @@ use tari_template_abi::rust::collections::BTreeMap;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use crate::{crypto::RistrettoPublicKeyBytes, models::{ComponentAddress, NonFungibleAddress, NonFungibleId, ObjectKey, ResourceAddress, TemplateAddress}};
+use crate::models::{ComponentAddress, NonFungibleAddress, ResourceAddress, TemplateAddress};
 
 /// Represents the types of possible access control rules over a component method or resource
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -291,25 +291,19 @@ macro_rules! rules {
     };
 
     (resource($x: expr)) => {
-        rules! { @access_rule (RuleRequirement::Resource($x)) }  
+        rules! { @access_rule (RuleRequirement::Resource($x)) }
     };
     (non_fungible($x: expr)) => {
-        rules! { @access_rule (RuleRequirement::NonFungibleAddress($x)) }  
+        rules! { @access_rule (RuleRequirement::NonFungibleAddress($x)) }
     };
     (component($x: expr)) => {
-        rules! { @access_rule (RuleRequirement::ScopedToComponent($x)) }  
+        rules! { @access_rule (RuleRequirement::ScopedToComponent($x)) }
     };
     (template($x: expr)) => {
-        rules! { @access_rule (RuleRequirement::ScopedToTemplate($x)) }  
+        rules! { @access_rule (RuleRequirement::ScopedToTemplate($x)) }
     };
 
     (@access_rule ($x: expr)) => {
-        AccessRule::Restricted(
-            RestrictedAccessRule::Require(
-                RequireRule::Require(
-                    $x
-                )
-            )
-        )
+        AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require($x)))
     };
 }
