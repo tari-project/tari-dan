@@ -56,7 +56,7 @@ mod access_rules_template {
         }
 
         pub fn default_rules() -> Component<AccessRulesTest> {
-            let badges = create_badge_resource(AccessRule::DenyAll);
+            let badges = create_badge_resource(rule!(deny_all));
 
             let tokens = ResourceBuilder::fungible().initial_supply(1000);
 
@@ -70,7 +70,7 @@ mod access_rules_template {
         }
 
         pub fn with_auth_hook(allowed: bool, hook: String) -> Component<AccessRulesTest> {
-            let badges = create_badge_resource(AccessRule::DenyAll);
+            let badges = create_badge_resource(rule!(deny_all));
 
             let address_alloc = CallerContext::allocate_component_address(None);
 
@@ -86,12 +86,12 @@ mod access_rules_template {
                 attack_component: None,
             })
             .with_address_allocation(address_alloc)
-            .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
+            .with_access_rules(ComponentAccessRules::new().default(rule!(allow_all)))
             .create()
         }
 
         pub fn with_auth_hook_attack_component(component_address: ComponentAddress) -> Component<AccessRulesTest> {
-            let badges = create_badge_resource(AccessRule::DenyAll);
+            let badges = create_badge_resource(rule!(deny_all));
 
             let address_alloc = CallerContext::allocate_component_address(None);
 
@@ -110,35 +110,23 @@ mod access_rules_template {
                 attack_component: Some(component_address),
             })
             .with_address_allocation(address_alloc)
-            .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
+            .with_access_rules(ComponentAccessRules::new().default(rule!(allow_all)))
             .create()
         }
 
         pub fn using_badge_rules() -> Component<AccessRulesTest> {
-            let badges = create_badge_resource(AccessRule::AllowAll);
+            let badges = create_badge_resource(rule!(allow_all));
 
             let badge_resource = badges.resource_address();
             let tokens = ResourceBuilder::fungible()
-                .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                    RequireRule::Require(
-                        NonFungibleAddress::new(badge_resource, NonFungibleId::from_string("mint")).into(),
-                    ),
-                )))
-                .burnable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                    RequireRule::Require(
-                        NonFungibleAddress::new(badge_resource, NonFungibleId::from_string("burn")).into(),
-                    ),
-                )))
-                .withdrawable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                    RequireRule::Require(
-                        NonFungibleAddress::new(badge_resource, NonFungibleId::from_string("withdraw")).into(),
-                    ),
-                )))
-                .depositable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                    RequireRule::Require(
-                        NonFungibleAddress::new(badge_resource, NonFungibleId::from_string("deposit")).into(),
-                    ),
-                )))
+                .mintable(rule!(non_fungible(
+                    NonFungibleAddress::new(badge_resource, NonFungibleId::from_string("mint")))))
+                .burnable(rule!(non_fungible(
+                    NonFungibleAddress::new(badge_resource, NonFungibleId::from_string("burn")))))
+                .withdrawable(rule!(non_fungible(
+                    NonFungibleAddress::new(badge_resource, NonFungibleId::from_string("withdraw")))))
+                .depositable(rule!(non_fungible(
+                    NonFungibleAddress::new(badge_resource, NonFungibleId::from_string("deposit")))))
                 .initial_supply(1000);
 
             Component::new(Self {
@@ -148,27 +136,19 @@ mod access_rules_template {
                 allowed: true,
                 attack_component: None,
             })
-            .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
+            .with_access_rules(ComponentAccessRules::new().default(rule!(allow_all)))
             .create()
         }
 
         pub fn using_resource_rules() -> Component<AccessRulesTest> {
-            let badges = create_badge_resource(AccessRule::AllowAll);
+            let badges = create_badge_resource(rule!(allow_all));
 
             let badge_resource = badges.resource_address();
             let tokens = ResourceBuilder::fungible()
-                .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                    RequireRule::Require(badge_resource.into()),
-                )))
-                .burnable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                    RequireRule::Require(badge_resource.into()),
-                )))
-                .withdrawable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                    RequireRule::Require(badge_resource.into()),
-                )))
-                .depositable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                    RequireRule::Require(badge_resource.into()),
-                )))
+                .mintable(rule!(non_fungible(badge_resource)))
+                .burnable(rule!(non_fungible(badge_resource)))
+                .withdrawable(rule!(non_fungible(badge_resource)))
+                .depositable(rule!(non_fungible(badge_resource)))
                 .initial_supply(1000);
 
             Component::new(Self {
@@ -178,18 +158,16 @@ mod access_rules_template {
                 allowed: true,
                 attack_component: None,
             })
-            .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
+            .with_access_rules(ComponentAccessRules::new().default(rule!(allow_all)))
             .create()
         }
 
         pub fn resource_actions_restricted_to_component() -> Component<AccessRulesTest> {
-            let badges = create_badge_resource(AccessRule::AllowAll);
+            let badges = create_badge_resource(rule!(allow_all));
 
             let allocation = CallerContext::allocate_component_address(None);
             let tokens = ResourceBuilder::fungible()
-                .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                    RequireRule::Require(allocation.address().clone().into()),
-                )))
+                .mintable(rule!(non_fungible(allocation.address())))
                 // Only access rules apply, this just makes the test simpler because we do not need to change the transaction signer
                 .with_owner_rule(OwnerRule::None)
                 .initial_supply(1000);
@@ -202,7 +180,7 @@ mod access_rules_template {
                 attack_component: None,
             })
             .with_address_allocation(allocation)
-            .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
+            .with_access_rules(ComponentAccessRules::new().default(rule!(allow_all)))
             .create()
         }
 

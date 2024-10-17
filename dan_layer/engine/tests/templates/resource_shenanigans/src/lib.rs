@@ -13,7 +13,7 @@ mod template {
 
     impl Shenanigans {
         pub fn new() -> Component<Shenanigans> {
-            let resource = ResourceBuilder::non_fungible().mintable(AccessRule::AllowAll).build();
+            let resource = ResourceBuilder::non_fungible().mintable(rule!(allow_all)).build();
 
             Component::new(Self {
                 vault: Vault::new_empty(resource),

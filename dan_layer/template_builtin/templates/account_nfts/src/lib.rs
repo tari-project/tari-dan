@@ -39,13 +39,13 @@ mod account_non_fungible_template {
                 .unwrap_or_else(|| panic!("owner_token is not a valid public key: {}", owner_token));
 
             // only the owner of the token will be able to withdraw funds from the account
-            let mint_rule =
-                AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(owner_token.into())));
+            let mint_rule = rule!(non_fungible(owner_token));
+
             // create the resource
             let resource_address = ResourceBuilder::non_fungible().mintable(mint_rule.clone()).build();
 
             let rules = AccessRules::new()
-                .add_method_rule("non_fungible_token_get_resource_address", AccessRule::AllowAll)
+                .add_method_rule("non_fungible_token_get_resource_address", rule!(allow_all))
                 .default(mint_rule);
 
             Component::new(Self { resource_address })
