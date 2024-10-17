@@ -42,6 +42,7 @@ pub use crate::{
     info,
     invoke_args,
     log,
+    rule,
     models::{
         AddressAllocation,
         Amount,

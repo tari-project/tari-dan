@@ -28,6 +28,8 @@ use tari_template_test_tooling::{
 use tari_transaction::Transaction;
 
 mod component_access_rules {
+    use tari_template_lib::rules;
+
     use super::*;
 
     #[test]
@@ -149,9 +151,7 @@ mod component_access_rules {
                     ComponentAccessRules::new()
                         .add_method_rule(
                             "set_value",
-                            AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(
-                                user_proof.clone().into()
-                            )))
+                            rule!(non_fungible(user_proof.clone()))
                         )
                         .default(AccessRule::DenyAll)
                 ])
@@ -228,6 +228,7 @@ mod component_access_rules {
 
 mod resource_access_rules {
     use tari_dan_engine::runtime::LockError;
+    use tari_template_lib::rules;
 
     use super::*;
 
@@ -290,9 +291,9 @@ mod resource_access_rules {
         test.execute_expect_success(
             Transaction::builder()
                 .call_method(component_address, "set_tokens_access_rules", args![
-                    ResourceAccessRules::new().withdrawable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                        RequireRule::Require(user_proof.clone().into())
-                    )))
+                    ResourceAccessRules::new().withdrawable(
+                        rule!(non_fungible(user_proof.clone())
+                    ))
                 ])
                 .sign(&owner_key)
                 .build(),
@@ -330,9 +331,9 @@ mod resource_access_rules {
                     // Component
                     ComponentAccessRules::new().default(AccessRule::AllowAll),
                     // Resource
-                    ResourceAccessRules::new().withdrawable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                        RequireRule::Require(user_proof.clone().into())
-                    ))),
+                    ResourceAccessRules::new().withdrawable(
+                        rule!(non_fungible(user_proof.clone())
+                    )),
                     // Badge recall rule
                     AccessRule::DenyAll
                 ])
@@ -1201,22 +1202,22 @@ mod rules_macro {
         auth::{AccessRule, RequireRule, RestrictedAccessRule, RuleRequirement},
         crypto::RistrettoPublicKeyBytes,
         models::{ComponentAddress, NonFungibleAddress, ObjectKey, ResourceAddress, TemplateAddress},
-        rules,
+        rule,
     };
 
     #[test]
     fn it_builds_correct_access_rules() {
         // allow all
-        let rule = rules!(allow_all);
+        let rule = rule!(allow_all);
         assert_eq!(rule, AccessRule::AllowAll);
 
         // deny all
-        let rule = rules!(deny_all);
+        let rule = rule!(deny_all);
         assert_eq!(rule, AccessRule::DenyAll);
 
         // restricted to resource address
         let resource_address = ResourceAddress::new(ObjectKey::default());
-        let rule = rules!(resource(resource_address));
+        let rule = rule!(resource(resource_address));
         assert_eq!(
             rule,
             access_rule_from_requirement(RuleRequirement::Resource(resource_address))
@@ -1224,7 +1225,7 @@ mod rules_macro {
 
         // restricted to component
         let component_address = ComponentAddress::new(ObjectKey::default());
-        let rule = rules!(component(component_address));
+        let rule = rule!(component(component_address));
         assert_eq!(
             rule,
             access_rule_from_requirement(RuleRequirement::ScopedToComponent(component_address))
@@ -1232,7 +1233,7 @@ mod rules_macro {
 
         // restricted to template
         let template_address = TemplateAddress::default();
-        let rule = rules!(template(template_address));
+        let rule = rule!(template(template_address));
         assert_eq!(
             rule,
             access_rule_from_requirement(RuleRequirement::ScopedToTemplate(template_address))
@@ -1240,7 +1241,7 @@ mod rules_macro {
 
         // restricted to non fungible
         let non_fungible_address = NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::default());
-        let rule = rules!(non_fungible(non_fungible_address.clone()));
+        let rule = rule!(non_fungible(non_fungible_address.clone()));
         assert_eq!(
             rule,
             access_rule_from_requirement(RuleRequirement::NonFungibleAddress(non_fungible_address))

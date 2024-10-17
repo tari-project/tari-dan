@@ -282,7 +282,7 @@ impl Default for ResourceAccessRules {
 }
 
 #[macro_export]
-macro_rules! rules {
+macro_rules! rule {
     (allow_all) => {
         AccessRule::AllowAll
     };
@@ -291,16 +291,16 @@ macro_rules! rules {
     };
 
     (resource($x: expr)) => {
-        rules! { @access_rule (RuleRequirement::Resource($x)) }
+        rule! { @access_rule (RuleRequirement::Resource($x)) }
     };
     (non_fungible($x: expr)) => {
-        rules! { @access_rule (RuleRequirement::NonFungibleAddress($x)) }
+        rule! { @access_rule (RuleRequirement::NonFungibleAddress($x)) }
     };
     (component($x: expr)) => {
-        rules! { @access_rule (RuleRequirement::ScopedToComponent($x)) }
+        rule! { @access_rule (RuleRequirement::ScopedToComponent($x)) }
     };
     (template($x: expr)) => {
-        rules! { @access_rule (RuleRequirement::ScopedToTemplate($x)) }
+        rule! { @access_rule (RuleRequirement::ScopedToTemplate($x)) }
     };
 
     (@access_rule ($x: expr)) => {
